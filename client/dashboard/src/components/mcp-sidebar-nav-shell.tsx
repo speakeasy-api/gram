@@ -87,7 +87,10 @@ export function McpSidebarNavShell({
 
   return (
     <NavGroupProvider activeItem={activeItemTitle}>
-      <SidebarMenu className="gap-1 px-2 group-data-[collapsible=icon]:px-0">
+      {/* min-h-0 + overflow-y-auto: with the at-a-glance card expanded the
+          nav can exceed the viewport, so it must be allowed to scroll instead
+          of clipping the last items below the fold. */}
+      <SidebarMenu className="min-h-0 gap-1 overflow-y-auto px-2 group-data-[collapsible=icon]:px-0">
         <SidebarMenuItem>
           <SidebarFooterAction
             to={backHref}
@@ -103,7 +106,7 @@ export function McpSidebarNavShell({
             {topTitle && (
               <SidebarEyebrow align="card">{topTitle}</SidebarEyebrow>
             )}
-            <li className="pt-2 pb-4 group-data-[collapsible=icon]:hidden">
+            <li className="pt-1 pb-3 group-data-[collapsible=icon]:hidden">
               {topContent}
             </li>
             <SidebarDivider className="mb-2 group-data-[collapsible=icon]:hidden" />
@@ -113,8 +116,8 @@ export function McpSidebarNavShell({
         <SidebarEyebrow align="card">At a glance</SidebarEyebrow>
 
         {cardContent && (
-          <li className="pt-2 pb-4 group-data-[collapsible=icon]:hidden">
-            <div className="bg-card border-border flex flex-col gap-3 border px-4 py-3">
+          <li className="pt-1 pb-3 group-data-[collapsible=icon]:hidden">
+            <div className="bg-card border-border flex flex-col gap-2 border px-3 py-2.5">
               {cardContent}
             </div>
           </li>

@@ -39,7 +39,14 @@ type DetailRow = {
   color: string;
   series: number[];
   total: number;
+  // The label is an unresolved id (e.g. a deleted project's UUID): render it
+  // as a truncated mono chip instead of a raw UUID in running text.
+  mono?: boolean;
 };
+
+// A raw UUID label means the id could not be mapped to a display name.
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type DetailGroup = {
   heading: string;
@@ -129,12 +136,18 @@ function dimensionGroups(
         key === Dimension.Role
           ? "Users can hold multiple roles; rows overlap and can sum to more than the total token usage for the selected time period."
           : undefined,
-      rows: visible.map(({ row: r, rollup }, i) => ({
-        label: breakdownValueLabel(key, r.value, projectNames),
-        color: valueColor(rollup, i),
-        series: r.series,
-        total: r.totalTokens,
-      })),
+      rows: visible.map(({ row: r, rollup }, i) => {
+        const label = breakdownValueLabel(key, r.value, projectNames);
+        return {
+          label,
+          color: valueColor(rollup, i),
+          series: r.series,
+          total: r.totalTokens,
+          // A Project row still carrying its UUID is a project the name map
+          // doesn't know (e.g. deleted) — show a truncated mono id instead.
+          mono: key === Dimension.ProjectId && UUID_RE.test(label),
+        };
+      }),
     });
   }
   return groups;
@@ -206,7 +219,16 @@ function DetailRowItem({
         className="size-2 shrink-0 rounded-full"
         style={{ backgroundColor: row.color }}
       />
-      <span className="min-w-0 flex-1 truncate text-sm">{row.label}</span>
+      {row.mono ? (
+        <span
+          className="min-w-0 flex-1 truncate font-mono text-xs"
+          title={row.label}
+        >
+          {`${row.label.slice(0, 8)}…`}
+        </span>
+      ) : (
+        <span className="min-w-0 flex-1 truncate text-sm">{row.label}</span>
+      )}
       <span className="text-muted-foreground shrink-0">
         <Sparkline series={row.series} color={row.color} />
       </span>
@@ -363,6 +385,17 @@ export function TumDetailsTable({
   const scope = { client, orgId: organization.id, period };
   const { data, isFetching, isError } = useQuery(tumDetailsQuery(scope));
 
+  // The passed-in map comes from the projects list fetch; the session's own
+  // project entries fill any gaps (e.g. before that fetch resolves) so
+  // Project rows show names instead of raw UUIDs whenever possible.
+  const projectLabels = useMemo(() => {
+    const merged = new Map(projectNames);
+    for (const p of organization.projects) {
+      if (!merged.has(p.id)) merged.set(p.id, p.name);
+    }
+    return merged;
+  }, [projectNames, organization.projects]);
+
   // Sections collapsed via their header band, keyed by heading so the state
   // survives period switches.
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -437,9 +470,9 @@ export function TumDetailsTable({
           },
         ],
       },
-      ...dimensionGroups(data, LEAD_DIMENSION_SECTIONS, projectNames),
+      ...dimensionGroups(data, LEAD_DIMENSION_SECTIONS, projectLabels),
       { heading: "Token type", rows: TOKEN_TYPE_ROWS.map(measureRow) },
-      ...dimensionGroups(data, TAIL_DIMENSION_SECTIONS, projectNames),
+      ...dimensionGroups(data, TAIL_DIMENSION_SECTIONS, projectLabels),
     ];
 
     // Convert every row into billed units (see billedScale).
@@ -451,7 +484,7 @@ export function TumDetailsTable({
         series: row.series.map((v) => v * billedScale),
       })),
     }));
-  }, [data, billedScale, projectNames]);
+  }, [data, billedScale, projectLabels]);
 
   // Time-based overage attribution: tokens count as overage from the moment
   // the organization's cumulative usage crossed the included allowance. Days

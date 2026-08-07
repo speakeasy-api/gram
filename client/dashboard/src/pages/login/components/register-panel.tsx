@@ -140,7 +140,9 @@ export function RegisterPanel(): JSX.Element {
           }
           className={cn(
             AUTH_BUTTON_CLASSES,
-            "w-full disabled:cursor-not-allowed disabled:opacity-50",
+            // Deliberate disabled treatment: muted fill and text, no bevel,
+            // instead of dimming the solid-ink CTA with opacity.
+            "w-full disabled:cursor-not-allowed disabled:bg-[var(--edge)] disabled:text-[var(--muted)] disabled:shadow-none disabled:hover:bg-[var(--edge)]",
           )}
         >
           Create organization

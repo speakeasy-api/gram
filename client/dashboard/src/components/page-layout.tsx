@@ -262,7 +262,7 @@ export function EmptyState({
   if (isLoading) {
     CTA = (
       <Button disabled size="sm">
-        CHECKING PROJECT...
+        Checking project…
       </Button>
     );
   } else if (!isEmpty && nonEmptyProjectCTA) {
@@ -278,7 +278,7 @@ export function EmptyState({
         justify="center"
       >
         <XYFade
-          className={cn("h-[250px] w-full", graphicClassName)}
+          className={cn("h-[250px] w-full overflow-hidden", graphicClassName)}
           fadeColor="var(--background)"
         >
           {graphic}

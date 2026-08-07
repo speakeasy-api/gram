@@ -35,6 +35,32 @@ export const SERIES: string[] = [
   "hsl(0, 0%, 59%)", // neutral tail
 ];
 
+// Dark-surface counterpart of SERIES, index-aligned so a series keeps its
+// slot (and legend identity) across themes. Only the near-black entries are
+// lifted — ink becomes near-white, navy steps up to brand blue 300, maroon to
+// brand red 300 — because at 7–13% lightness they vanish against a dark
+// canvas. The mid-lightness brand hues (blue 600, green 500, orange,
+// chartreuse, ice blue) already read on dark and stay put; the neutral tail
+// lightens a step.
+export const SERIES_DARK: string[] = [
+  "hsl(0, 0%, 93%)", // ink -> near-white
+  "hsl(215, 71%, 40%)", // brand blue 600 (kept)
+  "hsl(108, 24%, 41%)", // brand green 500 (kept)
+  "hsl(23, 96%, 62%)", // brand orange (kept)
+  "hsl(215, 77%, 65%)", // navy -> brand blue 300
+  "hsl(68, 52%, 72%)", // brand chartreuse (kept)
+  "hsl(14, 74%, 54%)", // maroon -> brand red 300
+  "hsl(216, 100%, 80%)", // brand ice blue (kept)
+  "hsl(0, 0%, 72%)", // neutral tail, a step lighter
+];
+
+// The categorical ramp for the resolved theme. Chart.js paints to canvas and
+// cannot follow the CSS theme, so callers resolve the theme themselves (the
+// same way they already branch AXIS.grid vs AXIS.gridDark) and pass it here.
+export function seriesForTheme(isDark: boolean): string[] {
+  return isDark ? SERIES_DARK : SERIES;
+}
+
 // Lightest neutral for top-N "Other" rollup series, so the fold recedes
 // behind the named series.
 export const OTHER_SERIES = "hsl(0, 0%, 86%)";

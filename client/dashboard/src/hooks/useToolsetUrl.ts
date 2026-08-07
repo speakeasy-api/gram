@@ -100,6 +100,21 @@ export function useResolvedMcpServerUrl(
   };
 }
 
+// Path suffix for a toolset-backed MCP URL. Prefers the custom mcpSlug; the
+// legacy form appends the default environment only when the toolset has one,
+// so a missing slug never renders a literal "/undefined" segment.
+function mcpUrlSuffix(
+  project: { slug: string },
+  toolset: Pick<ToolsetEntry, "slug" | "mcpSlug" | "defaultEnvironmentSlug">,
+): string {
+  if (toolset.mcpSlug) return toolset.mcpSlug;
+  const segments = [project.slug, toolset.slug];
+  if (toolset.defaultEnvironmentSlug) {
+    segments.push(toolset.defaultEnvironmentSlug);
+  }
+  return segments.join("/");
+}
+
 export function useMcpUrl(
   toolset:
     | Pick<
@@ -131,9 +146,7 @@ export function useMcpUrl(
     customServerURL = `https://${domain.domain}`;
   }
 
-  const urlSuffix = toolset.mcpSlug
-    ? toolset.mcpSlug
-    : `${project.slug}/${toolset.slug}/${toolset.defaultEnvironmentSlug}`;
+  const urlSuffix = mcpUrlSuffix(project, toolset);
   const mcpUrl = `${
     toolset.mcpSlug && customServerURL ? customServerURL : getServerURL()
   }/mcp/${urlSuffix}`;
@@ -173,10 +186,7 @@ export function internalMcpUrl(
   project: { slug: string },
   toolset: Pick<ToolsetEntry, "slug" | "mcpSlug" | "defaultEnvironmentSlug">,
 ): string {
-  const urlSuffix = toolset.mcpSlug
-    ? toolset.mcpSlug
-    : `${project.slug}/${toolset.slug}/${toolset.defaultEnvironmentSlug}`;
-  return `${getServerURL()}/mcp/${urlSuffix}`;
+  return `${getServerURL()}/mcp/${mcpUrlSuffix(project, toolset)}`;
 }
 
 /**

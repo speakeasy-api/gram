@@ -234,7 +234,7 @@ export function OtelForwardingSection(): JSX.Element {
         <Stack direction="horizontal" justify="space-between" align="center">
           <RequireScope scope="org:admin" level="component">
             <Button
-              variant="destructive-primary"
+              variant="destructive-secondary"
               size="sm"
               onClick={handleDelete}
               disabled={!isConfigured || isMutating}

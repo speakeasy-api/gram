@@ -108,7 +108,7 @@ export default function SourceDetails(): JSX.Element {
     return assetsData.assets.find((a) => a.id === source.assetId) ?? null;
   }, [source, assetsData]);
 
-  const { data: toolsData } = useListTools(
+  const { data: toolsData, isPending: isToolsPending } = useListTools(
     { deploymentId: deployment?.deployment?.id },
     undefined,
     { enabled: !!deployment?.deployment?.id },
@@ -324,6 +324,7 @@ export default function SourceDetails(): JSX.Element {
             className="mt-0 flex min-h-0 flex-1 flex-col"
           >
             <SourceToolsTab
+              isLoading={isToolsPending}
               relatedTools={relatedTools}
               isOpenAPI={isOpenAPI}
               uniqueRuntimes={uniqueRuntimes}

@@ -35,6 +35,7 @@ import {
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useSession } from "@/contexts/Auth";
 import { resolveChatOwner } from "@/lib/chat-owner";
+import { getIdentityTint } from "@/components/gradient-colors";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import {
   useHideInsightsDock,
@@ -147,7 +148,7 @@ export function ChatLanding({
   const { user } = useSession();
   const navigate = useNavigate();
   const routes = useRoutes();
-  const { sendPrompt } = useInsightsState();
+  const { sendPrompt, assistantNeedsAdmin } = useInsightsState();
   const [value, setValue] = useState("");
   const [inputFocused, setInputFocused] = useState(false);
   const [activeCommand, setActiveCommand] = useState(0);
@@ -181,6 +182,11 @@ export function ChatLanding({
   const greeting = firstName
     ? `Hi ${firstName}, ask your Project Assistant about your AI usage`
     : "Ask your Project Assistant about your AI usage";
+  // Split off the last word so the BETA badge can be glued to it with
+  // whitespace-nowrap — the badge then never wraps onto a line of its own.
+  const greetingWords = greeting.split(" ");
+  const greetingLead = greetingWords.slice(0, -1).join(" ");
+  const greetingLast = greetingWords[greetingWords.length - 1];
 
   const startChat = (prompt: string) => {
     const trimmed = prompt.trim();
@@ -224,78 +230,87 @@ export function ChatLanding({
   return (
     <div className="flex w-full flex-col gap-6">
       <div className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <h1
-            className={cn(
-              "text-foreground font-display font-thin",
-              compact ? "text-2xl" : "text-4xl",
-            )}
-          >
-            {greeting}
-          </h1>
-          <ReleaseStageBadge stage="beta" />
-        </div>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            submit();
-          }}
-          className="border-border bg-card focus-within:border-foreground/30 relative border px-4 py-3 transition-colors"
+        <h1
+          className={cn(
+            "text-foreground font-display font-thin",
+            compact ? "text-2xl" : "text-4xl",
+          )}
         >
-          <input
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onFocus={() => setInputFocused(true)}
-            onBlur={() => setInputFocused(false)}
-            aria-label="Ask your Project Assistant about your AI usage"
-            role="combobox"
-            aria-expanded={slashOpen}
-            aria-controls="ask-slash-menu"
-            aria-activedescendant={
-              slashOpen ? `ask-slash-${activeCommand}` : undefined
-            }
-            autoFocus={autoFocusInput}
-            className="w-full bg-transparent text-base outline-none"
-          />
-          {/* Overlay placeholder so it can crossfade (native ::placeholder
+          {greetingLead}{" "}
+          <span className="whitespace-nowrap">
+            {greetingLast}
+            <ReleaseStageBadge stage="beta" className="ml-3 align-middle" />
+          </span>
+        </h1>
+        {assistantNeedsAdmin ? (
+          <p className="border-border bg-card text-muted-foreground border px-4 py-3 text-sm">
+            Ask an admin to enable the Project Assistant for this project.
+          </p>
+        ) : (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              submit();
+            }}
+            className="border-border bg-card focus-within:border-foreground/30 relative border px-4 py-3 transition-colors"
+          >
+            <input
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => setInputFocused(false)}
+              aria-label="Ask your Project Assistant about your AI usage"
+              role="combobox"
+              aria-expanded={slashOpen}
+              aria-controls="ask-slash-menu"
+              aria-activedescendant={
+                slashOpen ? `ask-slash-${activeCommand}` : undefined
+              }
+              autoFocus={autoFocusInput}
+              className="w-full bg-transparent text-base outline-none"
+            />
+            {/* Overlay placeholder so it can crossfade (native ::placeholder
               can't transition between values). Shown only while empty; the
               kbd hint advertises the slash menu. */}
-          {value === "" && (
-            <>
-              <span
-                aria-hidden="true"
-                className="text-muted-foreground pointer-events-none absolute top-1/2 right-36 left-4 -translate-y-1/2 truncate text-base transition-opacity duration-300"
-                style={{ opacity: placeholderVisible ? 1 : 0 }}
-              >
-                {placeholder}
-              </span>
-              <div className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 flex items-center gap-1.5 text-xs">
-                <kbd className="border-border border px-1.5 py-0.5 font-mono">
-                  /
-                </kbd>
-                for suggestions
-              </div>
-            </>
-          )}
-          {slashOpen && (
-            <SlashCommandMenu
-              commands={slashCommands}
-              activeIndex={activeCommand}
-              onHover={setActiveCommand}
-              onSelect={(command) => startChat(command.prompt)}
-            />
-          )}
-        </form>
+            {value === "" && (
+              <>
+                <span
+                  aria-hidden="true"
+                  className="text-muted-foreground pointer-events-none absolute top-1/2 right-36 left-4 -translate-y-1/2 truncate text-base transition-opacity duration-300"
+                  style={{ opacity: placeholderVisible ? 1 : 0 }}
+                >
+                  {placeholder}
+                </span>
+                <div className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 flex items-center gap-1.5 text-xs">
+                  <kbd className="border-border border px-1.5 py-0.5 font-mono">
+                    /
+                  </kbd>
+                  for suggestions
+                </div>
+              </>
+            )}
+            {slashOpen && (
+              <SlashCommandMenu
+                commands={slashCommands}
+                activeIndex={activeCommand}
+                onHover={setActiveCommand}
+                onSelect={(command) => startChat(command.prompt)}
+              />
+            )}
+          </form>
+        )}
       </div>
 
       {compact ? (
         // Side-by-side columns so the card stays short: starters on the left,
         // a peek at recent threads on the right.
         <div className="flex flex-col gap-6 md:flex-row md:gap-8">
-          <div className="flex min-w-0 flex-1 flex-col">
-            <ChatHomeSuggestions compact />
-          </div>
+          {!assistantNeedsAdmin && (
+            <div className="flex min-w-0 flex-1 flex-col">
+              <ChatHomeSuggestions compact />
+            </div>
+          )}
           <div className="flex min-w-0 flex-1 flex-col">
             <ChatHomeCompactRecents />
           </div>
@@ -304,7 +319,7 @@ export function ChatLanding({
         <>
           <ChatHomePinned />
           <ChatHomeRecents />
-          <ChatHomeSuggestions />
+          {!assistantNeedsAdmin && <ChatHomeSuggestions />}
         </>
       )}
     </div>
@@ -488,18 +503,25 @@ function useProjectAssistantChats(pinned: Pinned): {
     projectSlug ?? "",
     true,
   );
-  const { data } = useListChats(
+  const enabled = Boolean(ready && assistantId);
+  const { data, isPending } = useListChats(
     {
       assistantId: assistantId || undefined,
+      // Mirror the Elements runtime request: hide onboarding/warmup threads
+      // from the recents lists.
+      excludeSourceKind: "setup",
       pinned,
       sortBy: SortBy.LastMessageTimestamp,
       sortOrder: SortOrder.Desc,
       limit: 50,
     },
     undefined,
-    { enabled: Boolean(ready && assistantId), throwOnError: false },
+    { enabled, throwOnError: false },
   );
-  return { chats: data?.chats ?? [], loading: !data };
+  // A disabled query (no resolvable assistant) is never "loading" — report it
+  // as settled-empty so the UI shows the empty state instead of spinning
+  // forever.
+  return { chats: data?.chats ?? [], loading: enabled && isPending };
 }
 
 // Pinned conversations, shown above recents. Hidden entirely when none exist.
@@ -510,7 +532,7 @@ function ChatHomePinned(): ReactElement | null {
   }
   return (
     <section className="flex flex-col gap-2">
-      <h2 className="text-muted-foreground px-3 text-sm font-medium">Pinned</h2>
+      <h2 className="text-eyebrow px-3">Pinned</h2>
       <div className="flex flex-col">
         {chats.map((chat) => (
           <RecentRow key={chat.id} chat={chat} pinned />
@@ -528,9 +550,7 @@ function ChatHomeRecents(): ReactElement {
   return (
     <section className="flex flex-col gap-2">
       <div className="flex items-center justify-between px-3">
-        <h2 className="text-muted-foreground text-sm font-medium">
-          Recent Chats
-        </h2>
+        <h2 className="text-eyebrow">Recent Chats</h2>
         {chats.length > RECENTS_COLLAPSED_COUNT && (
           <button
             type="button"
@@ -570,9 +590,7 @@ function ChatHomeCompactRecents(): ReactElement {
   return (
     <section className="flex flex-col gap-2">
       <div className="flex items-center justify-between px-3">
-        <h2 className="text-muted-foreground text-sm font-medium">
-          Recent Chats
-        </h2>
+        <h2 className="text-eyebrow">Recent Chats</h2>
         {chats.length > COMPACT_RECENTS_COUNT && (
           <Link
             to={routes.chat.href()}
@@ -647,11 +665,7 @@ function RecentsBody({
 
 function RecentEntryView({ entry }: { entry: RecentEntry }): ReactElement {
   if (entry.type === "header") {
-    return (
-      <h3 className="text-muted-foreground px-3 pt-4 pb-1 text-sm font-medium">
-        {entry.label}
-      </h3>
-    );
+    return <h3 className="text-eyebrow px-3 pt-4 pb-1">{entry.label}</h3>;
   }
   return <RecentRow chat={entry.chat} pinned={false} />;
 }
@@ -701,7 +715,10 @@ function RecentRowIcon({
         {member.photoUrl ? (
           <AvatarImage src={member.photoUrl} alt={display} />
         ) : null}
-        <AvatarFallback className="border-border bg-card text-muted-foreground border text-xs font-medium">
+        <AvatarFallback
+          className="text-xs font-medium"
+          style={getIdentityTint(display)}
+        >
           {initialsOf(display)}
         </AvatarFallback>
       </Avatar>
@@ -816,9 +833,7 @@ function ChatHomeSuggestions({
     : CHAT_LANDING_SUGGESTIONS;
   return (
     <section className="flex flex-col gap-3">
-      <h2 className={cn("text-muted-foreground text-sm font-medium", inset)}>
-        Suggestions
-      </h2>
+      <h2 className={cn("text-eyebrow", inset)}>Suggestions</h2>
       <div className={cn("flex flex-wrap gap-x-2 gap-y-2.5", inset)}>
         {suggestions.map((suggestion) => {
           const SuggestionIcon =

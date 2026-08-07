@@ -48,6 +48,38 @@ interface EnvironmentVariableRowProps {
   onHeaderBlur: () => void;
 }
 
+// Maps a stored config entry's providedBy value back to the row state it
+// represents, for comparing against the row's current state.
+function stateForProvidedBy(providedBy: string): EnvVarState {
+  switch (providedBy) {
+    case "user":
+      return "user-provided";
+    case "none":
+      return "omitted";
+    default:
+      return "system";
+  }
+}
+
+// Whether the user actually edited this row (mode change or header rename).
+// The hasUnsavedChanges prop also counts required variables that were never
+// configured, which would paint the unsaved indicator on pristine rows.
+function hasRowEdits(
+  envVar: EnvironmentVariable,
+  environmentConfigs: EnvironmentVariableRowProps["environmentConfigs"],
+  editingState: Map<string, { headerDisplayName?: string }>,
+): boolean {
+  const entry = environmentConfigs.find((e) => e.variableName === envVar.key);
+  if (entry && envVar.state !== stateForProvidedBy(entry.providedBy)) {
+    return true;
+  }
+  const editing = editingState.get(envVar.id);
+  if (editing?.headerDisplayName !== undefined) {
+    return editing.headerDisplayName !== (entry?.headerDisplayName || "");
+  }
+  return false;
+}
+
 const MODE_OPTIONS: Array<{
   value: EnvVarState;
   label: string;
@@ -166,17 +198,19 @@ export function EnvironmentVariableRow({
     });
   }
 
+  const showUnsavedIndicator =
+    hasUnsavedChanges && hasRowEdits(envVar, environmentConfigs, editingState);
+
   return (
     <div
       className={cn(
         "group relative grid grid-cols-[auto_1fr_auto] items-center gap-4 px-4 py-4 transition-colors",
         index !== totalCount - 1 && "border-b",
-        hasUnsavedChanges && "bg-amber-50/50 dark:bg-amber-950/20",
       )}
     >
       {/* Unsaved changes indicator */}
-      {hasUnsavedChanges && (
-        <div className="absolute top-0 bottom-0 left-0 w-0.5 bg-amber-500" />
+      {showUnsavedIndicator && (
+        <div className="bg-warning absolute top-0 bottom-0 left-0 w-0.5" />
       )}
       {/* Status indicator / Delete button */}
       <div className="relative flex items-center">

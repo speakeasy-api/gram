@@ -3,6 +3,20 @@ import type { ChallengeBucket } from "@gram/client/models/components/challengebu
 import { Building2, ChevronRight, FolderOpen, Plug } from "lucide-react";
 import { Link } from "react-router";
 
+// Fallback for resource ids we cannot resolve to a display name (deleted
+// rows, kinds with no org-level lookup): a truncated mono chip with the full
+// id on hover, instead of a raw UUID in running text.
+function IdChip({ id }: { id: string }): JSX.Element {
+  return (
+    <code
+      className="bg-muted text-muted-foreground shrink-0 px-1.5 py-0.5 font-mono text-xs"
+      title={id}
+    >
+      {id.length > 12 ? `${id.slice(0, 8)}…` : id}
+    </code>
+  );
+}
+
 export function ResourceLink({
   challenge,
   orgSlug,
@@ -42,7 +56,7 @@ export function ResourceLink({
     label = proj?.name ?? resourceId;
     IconEl = FolderOpen;
     to = proj ? `/${orgSlug}/projects/${proj.slug}` : null;
-  } else if (resourceKind === "mcp") {
+  } else if (resourceKind === "mcp" || resourceKind === "toolset") {
     IconEl = Plug;
     // Grants store the toolset id for toolset-backed servers and the
     // mcp_servers row id for remote/tunneled ones, so try both maps.
@@ -82,7 +96,11 @@ export function ResourceLink({
   return (
     <span className="text-muted-foreground inline-flex items-center gap-1.5 truncate text-sm">
       {IconEl && <IconEl className="h-3.5 w-3.5 shrink-0" />}
-      <span className="truncate">{label}</span>
+      {label === resourceId ? (
+        <IdChip id={resourceId} />
+      ) : (
+        <span className="truncate">{label}</span>
+      )}
     </span>
   );
 }

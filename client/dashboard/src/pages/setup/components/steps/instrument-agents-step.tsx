@@ -45,7 +45,7 @@ export function InstrumentAgentsStep({
           <Terminal className="text-foreground h-6 w-6" />
         </div>
       }
-      title="Instrument agent platforms"
+      title="Instrument agents"
       description="Choose how your team's AI coding assistants get instrumented. Deploy the Speakeasy device agent to manage every platform centrally, or set up hooks per platform by hand."
       onContinue={onComplete}
       continueLabel="Continue"
@@ -204,7 +204,7 @@ function ChoiceTab({
   return (
     <TabsTrigger
       value={value}
-      className="border-border data-[state=active]:border-primary/40 h-auto flex-col items-start justify-start gap-2 border p-5 text-left whitespace-normal"
+      className="border-border data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:ring-1 data-[state=active]:ring-primary h-auto flex-col items-start justify-start gap-2 border p-5 text-left whitespace-normal"
     >
       <div className="flex w-full items-center gap-2">
         <span className="text-foreground">{icon}</span>

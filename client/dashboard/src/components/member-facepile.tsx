@@ -1,5 +1,5 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
-import { getGradientColors } from "@/components/gradient-colors";
+import { getIdentityTint } from "@/components/gradient-colors";
 import {
   Popover,
   PopoverContent,
@@ -39,19 +39,14 @@ function MemberAvatar({
   member: FacepileMember;
   className?: string;
 }): React.JSX.Element {
-  // Deterministic per-member gradient so each fallback face is unique.
-  const gradient = getGradientColors(member.id || member.name);
+  // Deterministic per-member flat tint so each fallback face is unique.
+  const tint = getIdentityTint(member.id || member.name);
   return (
     <Avatar className={className}>
       {member.photoUrl && (
         <AvatarImage src={member.photoUrl} alt={member.name} />
       )}
-      <AvatarFallback
-        className="text-[10px] font-semibold text-white"
-        style={{
-          backgroundImage: `linear-gradient(${gradient.angle}deg, ${gradient.from}, ${gradient.to})`,
-        }}
-      >
+      <AvatarFallback className="text-[10px] font-semibold" style={tint}>
         {initials(member.name)}
       </AvatarFallback>
     </Avatar>

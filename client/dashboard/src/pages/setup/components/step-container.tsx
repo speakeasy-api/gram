@@ -73,7 +73,7 @@ export function StepContainer({
           <Button
             onClick={onContinue}
             disabled={!canContinue || isLoading}
-            className="bg-accent hover:bg-accent/90 text-accent-foreground gap-1.5"
+            className="gap-1.5"
           >
             {isLoading ? "Loading..." : continueLabel}
             {!isLoading && <ArrowRight className="h-4 w-4" />}

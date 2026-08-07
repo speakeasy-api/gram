@@ -2,6 +2,7 @@ import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { ToolVariationBadge } from "@/components/tool-variation-badge";
 import { MoreActions } from "@/components/ui/MoreActions";
 import { SearchBar } from "@/components/ui/SearchBar";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { ToolUpdateFields } from "@/hooks/useToolUpdate";
 import type { Tool } from "@/lib/toolTypes";
@@ -257,16 +258,28 @@ export function SourceToolsTab({
   relatedTools,
   isOpenAPI,
   uniqueRuntimes,
+  isLoading,
   onToolUpdate,
   isToolUpdating,
 }: {
   relatedTools: Tool[];
   isOpenAPI: boolean;
   uniqueRuntimes: string[];
+  /** True while the tools query is still pending, so an empty list doesn't
+   * flash the "no tools" empty state during load. */
+  isLoading?: boolean;
 } & ToolActionsProps): JSX.Element {
   const [methodFilter, setMethodFilter] = useState<string | null>(null);
   const [runtimeFilter, setRuntimeFilter] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+
+  if (isLoading && relatedTools.length === 0) {
+    return (
+      <div className="mx-auto w-full max-w-[1270px] px-8 py-6">
+        <SkeletonTable />
+      </div>
+    );
+  }
 
   if (relatedTools.length === 0) {
     return (

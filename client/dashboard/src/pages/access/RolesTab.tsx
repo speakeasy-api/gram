@@ -35,17 +35,16 @@ import { cn } from "@/lib/utils";
 import { visiblePermissionCount } from "./roleDialogState";
 
 // Single source of truth for the per-role actions: the "⋯" dropdown and the
-// row's right-click context menu both render from this list. Edit always;
-// Delete only for non-system roles.
+// row's right-click context menu both render from this list. System roles are
+// fixed (their grants aren't editable), so they get no actions at all.
 function roleActions(
   role: Role,
   { onEdit, onDelete }: { onEdit: () => void; onDelete: () => void },
 ): Action[] {
+  if (role.isSystem) return [];
   return [
     { label: "Edit", onClick: onEdit },
-    ...(!role.isSystem
-      ? [{ label: "Delete", destructive: true, onClick: onDelete }]
-      : []),
+    { label: "Delete", destructive: true, onClick: onDelete },
   ];
 }
 
@@ -129,20 +128,21 @@ function RoleRow({
       photoUrl: m.photoUrl,
     }));
 
-  // Mirror the row-actions menu via the shared builder. Without org:admin the
-  // menu is empty and the row stays unwrapped.
+  // Mirror the row-actions menu via the shared builder. Without org:admin —
+  // or for a fixed system role — the menu is empty and the row stays unwrapped.
   const actions: Action[] = canManageRoles
     ? roleActions(role, { onEdit, onDelete })
     : [];
+  const canEdit = canManageRoles && !role.isSystem;
 
   return (
     <TableRowContextMenu actions={actions}>
       <div
-        role={canManageRoles ? "button" : undefined}
-        tabIndex={canManageRoles ? 0 : undefined}
-        onClick={canManageRoles ? onEdit : undefined}
+        role={canEdit ? "button" : undefined}
+        tabIndex={canEdit ? 0 : undefined}
+        onClick={canEdit ? onEdit : undefined}
         onKeyDown={
-          canManageRoles
+          canEdit
             ? (e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
@@ -153,7 +153,7 @@ function RoleRow({
         }
         className={cn(
           "border-border col-span-full grid grid-cols-subgrid items-center gap-x-6 border-b px-4 py-3 last:border-b-0",
-          canManageRoles && "hover:bg-muted/50 cursor-pointer",
+          canEdit && "hover:bg-muted/50 cursor-pointer",
         )}
       >
         <div className="flex items-center gap-2">
@@ -169,11 +169,19 @@ function RoleRow({
         <Text variant="body" className="text-muted-foreground min-w-0 truncate">
           {role.description}
         </Text>
-        <Text variant="body">{visiblePermissionCount(role.grants)}</Text>
+        <Text variant="body">
+          {role.isSystem
+            ? role.name === "Admin"
+              ? "All"
+              : "System"
+            : visiblePermissionCount(role.grants)}
+        </Text>
         <MemberFacepile members={roleMembers} />
         <div aria-hidden />
         <div onClick={(e) => e.stopPropagation()} className="flex justify-end">
-          <RoleActionsMenu role={role} onEdit={onEdit} onDelete={onDelete} />
+          {!role.isSystem && (
+            <RoleActionsMenu role={role} onEdit={onEdit} onDelete={onDelete} />
+          )}
         </div>
       </div>
     </TableRowContextMenu>
@@ -202,7 +210,9 @@ export function RolesTab(): JSX.Element {
     if (editRoleId && roles.length > 0) {
       const role = roles.find((r) => r.id === editRoleId);
       if (role) {
-        setEditingRole(role);
+        // System roles are fixed — never deep-link them into the edit sheet
+        // (still consume the param so it doesn't linger in the URL).
+        if (!role.isSystem) setEditingRole(role);
         setSearchParams(
           (prev) => {
             prev.delete("editRole");

@@ -140,9 +140,10 @@ function EnvironmentsInner() {
         onOpenChange={setCreateEnvironmentDialogOpen}
         title="Create an Environment"
         description="Give your environment a name."
+        submitButtonText="Create"
         inputs={{
           label: "Environment name",
-          placeholder: "Environment name",
+          placeholder: "e.g. Production",
           value: environmentName,
           onChange: (value) => setEnvironmentName(value),
           onSubmit: createEnvironment,

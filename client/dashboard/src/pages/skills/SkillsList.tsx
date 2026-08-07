@@ -648,7 +648,7 @@ function AddSkillButton({ onClick }: { onClick: () => void }): JSX.Element {
       reason="You need write access to add skills."
     >
       <Button icon="plus" onClick={onClick}>
-        Add skill
+        Add Skill
       </Button>
     </RequireScope>
   );
@@ -657,7 +657,7 @@ function AddSkillButton({ onClick }: { onClick: () => void }): JSX.Element {
 function SkillsEmptyState({ onAdd }: { onAdd: () => void }): JSX.Element {
   return (
     <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16">
-      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+      <div className="border-border mb-4 flex h-12 w-12 items-center justify-center border">
         <Icon name="terminal" className="text-muted-foreground h-6 w-6" />
       </div>
       <Text variant="subheading" className="mb-1">

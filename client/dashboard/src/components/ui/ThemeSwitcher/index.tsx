@@ -1,11 +1,12 @@
 "use client";
 
-import { ReactNode, useId } from "react";
+import { ReactNode, useEffect, useId } from "react";
 import { cn } from "@/lib/utils";
 import { Moon, Sun } from "lucide-react";
 import { useIsMounted } from "@/components/ui/hooks/useIsMounted";
 import { useConfig } from "@/components/ui/hooks/useConfig";
 import { Theme } from "@/components/ui/context/theme";
+import { PREFERRED_THEME_STORAGE_KEY } from "@/lib/local-storage-keys";
 
 const THEMES: { key: Theme; icon: ReactNode }[] = [
   { key: "light", icon: <Sun /> },
@@ -26,6 +27,20 @@ export function ThemeSwitcher({
   const isMounted = useIsMounted();
   const { theme, setTheme } = useConfig();
   const rId = useId();
+
+  // Re-derive the theme when another tab/document writes the storage key —
+  // without this, this document's <html> class (and so the whole UI, sidebar
+  // included) stays on the old theme while storage says otherwise. Routing
+  // through the provider's setTheme keeps the class, favicon, and React state
+  // in one code path.
+  useEffect(() => {
+    const onStorage = (event: StorageEvent): void => {
+      if (event.key !== PREFERRED_THEME_STORAGE_KEY) return;
+      setTheme(event.newValue === "dark" ? "dark" : "light");
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [setTheme]);
 
   const isVertical = orientation === "vertical";
   const segmentSizeRem = 2.125;

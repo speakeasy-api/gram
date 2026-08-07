@@ -66,9 +66,7 @@ export const InitialChoiceStep = ({
   return (
     <>
       <Stack gap={1}>
-        <span className="font-display text-2xl font-thin">
-          Get Started with the platform
-        </span>
+        <span className="font-display text-2xl font-thin">Get started</span>
         <span className="text-body-sm">What would you like to do?</span>
       </Stack>
       <div className="grid grid-cols-1 gap-4">

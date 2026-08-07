@@ -139,7 +139,14 @@ export function WorkspaceSwitcher(): JSX.Element {
                       className="flex cursor-pointer items-center gap-2"
                     >
                       <ProjectAvatar project={p} className="h-5 w-5 shrink-0" />
-                      <span className="flex-1 truncate">{p.slug}</span>
+                      <span className="flex-1 truncate">
+                        {p.name || p.slug}
+                      </span>
+                      {p.name && p.name !== p.slug && (
+                        <span className="text-muted-foreground max-w-[80px] truncate font-mono text-xs">
+                          {p.slug}
+                        </span>
+                      )}
                       {p.id === project.id && (
                         <CheckIcon className="h-4 w-4 shrink-0" />
                       )}

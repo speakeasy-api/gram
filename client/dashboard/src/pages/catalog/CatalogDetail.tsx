@@ -18,6 +18,7 @@ import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useMcpRegistriesGetServerDetails } from "@gram/client/react-query/mcpRegistriesGetServerDetails.js";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { CopyButton } from "@/components/ui/CopyButton";
 import { Stack } from "@/components/ui/Stack";
 import { useMutation } from "@tanstack/react-query";
 import {
@@ -445,7 +446,18 @@ export default function CatalogDetail(): JSX.Element {
 
                     <DetailGroup label="Registry">
                       <DetailRow label="Registry">
-                        <Text className="text-right">{server.registryId}</Text>
+                        <div className="flex min-w-0 items-center gap-1">
+                          <Text className="truncate font-mono text-xs">
+                            {server.registryId}
+                          </Text>
+                          {server.registryId && (
+                            <CopyButton
+                              text={server.registryId}
+                              size="xs"
+                              tooltip="Copy registry ID"
+                            />
+                          )}
+                        </div>
                       </DetailRow>
                       <DetailRow label="Specifier">
                         <Text className="text-right font-mono text-xs break-all">
@@ -481,7 +493,7 @@ function DetailGroup({
 }) {
   return (
     <div className="space-y-3 py-4 first:pt-0 last:pb-0">
-      <Card.Title>{label}</Card.Title>
+      <div className="text-eyebrow">{label}</div>
       {children}
     </div>
   );
@@ -518,6 +530,17 @@ type Tool = {
   };
 };
 
+// Registry descriptions are often markdown; strip the common inline syntax
+// (heading #s, bold markers, backticks) so the collapsed one-line summary
+// reads as plain text.
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .trim();
+}
+
 function getFirstSentence(text: string): string {
   // Find the first period followed by a space or end of string
   const match = text.match(/^[^.]*\./);
@@ -531,11 +554,14 @@ function getFirstSentence(text: string): string {
 function ToolCard({ tool }: { tool: Tool }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const hasDescription = !!tool.description;
-  const firstSentence = tool.description
-    ? getFirstSentence(tool.description)
+  const plainDescription = tool.description
+    ? stripMarkdown(tool.description)
+    : "";
+  const firstSentence = plainDescription
+    ? getFirstSentence(plainDescription)
     : "";
   const hasMoreContent =
-    tool.description && tool.description.length > firstSentence.length;
+    !!plainDescription && plainDescription.length > firstSentence.length;
 
   return (
     <div className="bg-muted/50 flex flex-col gap-1 overflow-hidden p-3">

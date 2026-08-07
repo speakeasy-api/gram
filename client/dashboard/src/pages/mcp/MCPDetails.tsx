@@ -7,6 +7,7 @@ import {
   type UseMcpMetadataMetadataFormResult,
 } from "@/components/mcp_install_page/useMcpMetadataForm";
 import { Textarea } from "@/components/moon/textarea";
+import { PageEyebrow } from "@/components/page-eyebrow";
 import { Page } from "@/components/page-layout";
 import { PublicMcpWarningDialog } from "@/components/public-mcp-warning-dialog";
 import { ServerEnableDialog } from "@/components/server-enable-dialog";
@@ -1053,7 +1054,10 @@ function MCPToolsTab({ toolset }: { toolset: Toolset }) {
           align="center"
           className="mb-4"
         >
-          <Heading variant="h3">Tools</Heading>
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <PageEyebrow />
+            <h1 className="text-display-sm font-thin">Tools</h1>
+          </div>
           <Stack direction="horizontal" gap={2}>
             {canWrite && (
               <routes.customTools.Link>
@@ -1486,6 +1490,10 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
 
   return (
     <Stack gap={0} className="mb-4">
+      <div className="mb-8 flex min-w-0 flex-col gap-1.5">
+        <PageEyebrow />
+        <h1 className="text-display-sm font-thin">Settings</h1>
+      </div>
       <PageSection
         heading="Server Instructions"
         description="Instructions returned to LLMs when they connect to your MCP server. Describe how your tools work together, required workflows, and any constraints."
@@ -1517,7 +1525,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
               {!toolset.customDomainId ? (
                 <Input
                   className="w-full border px-2 py-1"
-                  placeholder="Enter MCP Slug"
+                  placeholder="my-server"
                   value={mcpSlug}
                   onChange={handleMcpSlugChange}
                   maxLength={40}
@@ -1527,7 +1535,7 @@ function MCPSettingsTab({ toolset }: { toolset: Toolset }) {
               ) : (
                 <Input
                   className="w-full border px-2 py-1"
-                  placeholder="Enter MCP Slug"
+                  placeholder="my-server"
                   value={mcpSlug}
                   onChange={handleMcpSlugChange}
                   maxLength={40}

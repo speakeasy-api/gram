@@ -121,9 +121,9 @@ export default function AssistantsIndex(): JSX.Element {
       <Page.Section>
         <Page.Section.Title stage="beta">Assistants</Page.Section.Title>
         <Page.Section.Description className="max-w-xl">
-          Openclaw-inspired secure Assistants. Every assistant connects through
-          the MCPs and Skills your org already uses, with identity, guardrails,
-          and audit built in. Deployed to Slack.
+          Secure assistants that connect through the MCPs and Skills your org
+          already uses, with identity, guardrails, and audit built in. Deployed
+          to Slack.
         </Page.Section.Description>
         <Page.Section.CTA>
           <RequireScope

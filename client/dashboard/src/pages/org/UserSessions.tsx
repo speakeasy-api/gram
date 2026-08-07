@@ -212,7 +212,14 @@ function UserSessionsInner(): JSX.Element {
     );
   } else if (sessions.length === 0) {
     listBody = (
-      <p className="text-muted-foreground text-sm">No sessions found</p>
+      <div className="flex flex-col items-center justify-center border border-dashed px-8 py-16">
+        <Text variant="subheading" className="mb-1">
+          No connections yet
+        </Text>
+        <Text small muted className="max-w-md text-center">
+          Connections agents establish with your MCP servers will appear here.
+        </Text>
+      </div>
     );
   } else if (filteredSessions.length === 0) {
     listBody = (
