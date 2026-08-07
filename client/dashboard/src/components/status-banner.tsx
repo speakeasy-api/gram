@@ -5,9 +5,9 @@ import { cn } from "@/lib/utils";
 // (a server going from unpublished to published) transition the strip color
 // rather than snapping.
 const BANNER_TONES = {
-  warning: "bg-warning",
-  success: "bg-success",
-  destructive: "bg-destructive",
+  warning: "bg-warning-default",
+  success: "bg-success-default",
+  destructive: "bg-destructive-default",
 } as const;
 
 export type StatusBannerTone = keyof typeof BANNER_TONES;

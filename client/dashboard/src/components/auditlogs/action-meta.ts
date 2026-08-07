@@ -15,6 +15,7 @@ import {
   Trash2,
   type LucideIcon,
 } from "lucide-react";
+import { getActionCategory } from "@/lib/audit-log-colors";
 
 /**
  * Icon + semantic dot for an audit action, shared by every surface that
@@ -24,11 +25,10 @@ import {
 export type ActionMeta = { icon: LucideIcon; dot?: string };
 
 export function getActionMeta(action: string): ActionMeta {
-  if (
-    action.includes(":delete") ||
-    action.includes(":revoke") ||
-    action.includes(":remove")
-  ) {
+  // Same destructive detection as getActionCategory (substring match within
+  // the verb), so toolset:detach_* / plugin:server_remove read as destructive
+  // here too.
+  if (getActionCategory(action) === "destructive") {
     return { icon: Trash2, dot: "bg-destructive-default" };
   }
   if (action.startsWith("deployments:")) {

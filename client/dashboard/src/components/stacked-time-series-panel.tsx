@@ -22,9 +22,12 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { ToggleButton } from "@/components/ui/ToggleButton";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { AXIS, TOOLTIP, withAlpha } from "@/components/chart/palette";
-import { useSeriesColors } from "@/components/chart/useSeriesColors";
+import {
+  useOtherSeriesColor,
+  useSeriesColors,
+} from "@/components/chart/useSeriesColors";
 import { cn } from "@/lib/utils";
-import { OTHER_COLOR, type TimeSeriesStack } from "./stacked-time-series";
+import { type TimeSeriesStack } from "./stacked-time-series";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ChartTooltip, Legend);
 
@@ -120,15 +123,16 @@ function rolledUpStacks(
 }
 
 // The bar color for a stack: an explicitly-flagged top-N roll-up stays
-// neutral, everything else walks the palette — a real group that merely
-// DISPLAYS as "Other" keeps its own color, so callers must mark their rollup
-// series (see TimeSeriesStack.rollup).
+// neutral (the theme-resolved rollup color), everything else walks the
+// palette — a real group that merely DISPLAYS as "Other" keeps its own color,
+// so callers must mark their rollup series (see TimeSeriesStack.rollup).
 function stackColor(
   stack: { label: string; rollup?: boolean },
   index: number,
   colors: string[],
+  otherColor: string,
 ): string {
-  if (stack.rollup) return OTHER_COLOR;
+  if (stack.rollup) return otherColor;
   return colors[index % colors.length]!;
 }
 
@@ -195,9 +199,10 @@ export function StackedTimeSeriesPanel({
   const dragTeardownRef = useRef<(() => void) | null>(null);
   useEffect(() => () => dragTeardownRef.current?.(), []);
 
-  // Theme-resolved series ramp; a stable per-theme array, so the memo below
-  // only rebuilds when the theme actually flips.
+  // Theme-resolved series ramp and rollup neutral; stable per-theme values,
+  // so the memo below only rebuilds when the theme actually flips.
   const seriesColors = useSeriesColors();
+  const otherColor = useOtherSeriesColor();
 
   // The expensive pass — granularity roll-up, axis derivation, cumulative
   // sums, base colors — keyed on the data inputs only. Hover/toggle state
@@ -220,7 +225,7 @@ export function StackedTimeSeriesPanel({
       return {
         label: s.label,
         data: values,
-        base: stackColor(s, i, seriesColors),
+        base: stackColor(s, i, seriesColors, otherColor),
       };
     });
 
@@ -230,7 +235,7 @@ export function StackedTimeSeriesPanel({
       // Bucket start times parallel to the axis, for bar-click drill-down.
       buckets,
     };
-  }, [bucketsMs, stacks, granularity, cumulative, seriesColors]);
+  }, [bucketsMs, stacks, granularity, cumulative, seriesColors, otherColor]);
 
   // The resolved hover spotlight, computed outside the chart memo so legend
   // TOGGLES (hiddenLabels churn) don't rebuild the data object while nothing

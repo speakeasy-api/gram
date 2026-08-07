@@ -56,10 +56,11 @@ export function ResourceLink({
     label = proj?.name ?? resourceId;
     IconEl = FolderOpen;
     to = proj ? `/${orgSlug}/projects/${proj.slug}` : null;
-  } else if (resourceKind === "mcp" || resourceKind === "toolset") {
+  } else if (resourceKind === "mcp") {
     IconEl = Plug;
-    // Grants store the toolset id for toolset-backed servers and the
-    // mcp_servers row id for remote/tunneled ones, so try both maps.
+    // Grants use resource_kind "mcp" for both server flavors: the resource id
+    // is the toolset id for toolset-backed servers and the mcp_servers row id
+    // for remote/tunneled ones, so try both maps.
     const toolset = toolsetMap.get(resourceId);
     const mcpServer = toolset ? undefined : mcpServerMap.get(resourceId);
     if (toolset) {

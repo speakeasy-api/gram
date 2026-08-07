@@ -101,18 +101,16 @@ export function useResolvedMcpServerUrl(
 }
 
 // Path suffix for a toolset-backed MCP URL. Prefers the custom mcpSlug; the
-// legacy form appends the default environment only when the toolset has one,
-// so a missing slug never renders a literal "/undefined" segment.
+// legacy form requires the default environment — without both there is no
+// routable MCP URL, so return undefined rather than an invalid
+// /mcp/<project>/<toolset> path.
 function mcpUrlSuffix(
   project: { slug: string },
   toolset: Pick<ToolsetEntry, "slug" | "mcpSlug" | "defaultEnvironmentSlug">,
-): string {
+): string | undefined {
   if (toolset.mcpSlug) return toolset.mcpSlug;
-  const segments = [project.slug, toolset.slug];
-  if (toolset.defaultEnvironmentSlug) {
-    segments.push(toolset.defaultEnvironmentSlug);
-  }
-  return segments.join("/");
+  if (!toolset.defaultEnvironmentSlug) return undefined;
+  return [project.slug, toolset.slug, toolset.defaultEnvironmentSlug].join("/");
 }
 
 export function useMcpUrl(
@@ -147,6 +145,9 @@ export function useMcpUrl(
   }
 
   const urlSuffix = mcpUrlSuffix(project, toolset);
+  if (!urlSuffix) {
+    return { url: undefined, customServerURL, installPageUrl: "" };
+  }
   const mcpUrl = `${
     toolset.mcpSlug && customServerURL ? customServerURL : getServerURL()
   }/mcp/${urlSuffix}`;
@@ -181,12 +182,15 @@ export function useInternalMcpUrl(
 /**
  * Non-hook variant of {@link useInternalMcpUrl}. Use this when the project and
  * toolset are already in scope (e.g. when mapping over an array of toolsets).
+ * Returns undefined when the toolset has no routable MCP URL (no mcpSlug and
+ * no default environment).
  */
 export function internalMcpUrl(
   project: { slug: string },
   toolset: Pick<ToolsetEntry, "slug" | "mcpSlug" | "defaultEnvironmentSlug">,
-): string {
-  return `${getServerURL()}/mcp/${mcpUrlSuffix(project, toolset)}`;
+): string | undefined {
+  const suffix = mcpUrlSuffix(project, toolset);
+  return suffix ? `${getServerURL()}/mcp/${suffix}` : undefined;
 }
 
 /**

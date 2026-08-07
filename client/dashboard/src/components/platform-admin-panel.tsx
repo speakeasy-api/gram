@@ -44,7 +44,7 @@ function StatusPill({ enabled }: { enabled: boolean }): ReactElement {
       Enabled
     </span>
   ) : (
-    <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
+    <span className="bg-muted text-muted-foreground inline-flex items-center px-2 py-0.5 font-mono text-[10px] uppercase">
       Disabled
     </span>
   );

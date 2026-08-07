@@ -144,7 +144,7 @@ export function OpenApiSourceInput({
             <p className="text-muted-foreground mb-1.5 text-xs">
               Direct upload
             </p>
-            <CodeBlock language="bash" className="!bg-muted/50 !!border-0">
+            <CodeBlock language="bash" className="!bg-muted/50 !border-0">
               {`gram upload --type openapiv3 \\\n  --slug ${documentSlug} \\\n  --name "${documentSlug}" \\\n  --location ./path/to/spec.yaml`}
             </CodeBlock>
           </div>
@@ -152,7 +152,7 @@ export function OpenApiSourceInput({
             <p className="text-muted-foreground mb-1.5 text-xs">
               Or stage and push (useful for CI/CD)
             </p>
-            <CodeBlock language="bash" className="!bg-muted/50 !!border-0">
+            <CodeBlock language="bash" className="!bg-muted/50 !border-0">
               {`gram stage openapi \\\n  --slug ${documentSlug} \\\n  --location ./path/to/spec.yaml\n\ngram push`}
             </CodeBlock>
           </div>

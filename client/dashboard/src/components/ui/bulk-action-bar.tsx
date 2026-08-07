@@ -26,8 +26,8 @@ export interface BulkAction {
  * stays fully uncovered and clickable — it already clears the selection
  * when all rows are checked, so the bar itself carries no separate "Clear"
  * control. Sized to its own content (not stretched to the table's full
- * width) and rounded, so it reads as a small floating pill rather than a
- * bar spanning the whole row.
+ * width), a square hairline-bordered chip rather than a bar spanning the
+ * whole row.
  *
  * Both current callers (RiskEvents.tsx, RiskOverviewCategoryDetail.tsx)
  * already render this outside the selectable list's own scrolling

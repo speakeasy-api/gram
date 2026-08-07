@@ -509,7 +509,8 @@ function RiskActivitySection({ children }: { children: ReactNode }) {
 
   return (
     <Page.Section>
-      <Page.Section.Title>Policy Activity</Page.Section.Title>
+      {/* Secondary section on the overview page: suppress the area eyebrow. */}
+      <Page.Section.Title area="">Policy Activity</Page.Section.Title>
       <Page.Section.Description>
         Review where policy findings are concentrated and how risk activity
         changes over time.

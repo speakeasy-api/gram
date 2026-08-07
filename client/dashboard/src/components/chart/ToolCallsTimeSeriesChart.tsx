@@ -10,9 +10,11 @@ import {
   TOOLTIP,
   withAlpha,
 } from "@/components/chart/palette";
-import { useSeriesColors } from "@/components/chart/useSeriesColors";
+import {
+  useIsDarkTheme,
+  useSeriesColors,
+} from "@/components/chart/useSeriesColors";
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
-import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
 import { formatCompact } from "@/lib/format";
 import type { TimeSeriesBucket } from "@gram/client/models/components/timeseriesbucket.js";
 import {
@@ -91,7 +93,8 @@ export function ToolCallsTimeSeriesChart({
       {
         label: "Successful",
         data: successData,
-        backgroundColor: withAlpha(seriesColors[5]!, 0.6),
+        // The ramp's neutral tail — quiet on both canvases.
+        backgroundColor: withAlpha(seriesColors[8]!, 0.6),
         stack: "stack",
         order: 2,
       },
@@ -123,11 +126,11 @@ export function ToolCallsTimeSeriesChart({
 
   // Chart.js paints the canvas with static defaults that ignore the CSS
   // theme, so gridlines and tick labels need explicit dark-mode colors.
-  const { theme } = useMoonshineConfig();
-  const isDark = theme === "dark";
+  const isDark = useIsDarkTheme();
 
-  const options = useMemo<ChartOptions<"bar">>(
-    () => ({
+  const options = useMemo<ChartOptions<"bar">>(() => {
+    const textColor = isDark ? AXIS.faded : AXIS.label;
+    return {
       responsive: true,
       maintainAspectRatio: false,
       interaction: { mode: "index", intersect: false },
@@ -161,21 +164,20 @@ export function ToolCallsTimeSeriesChart({
             display: true,
             color: isDark ? AXIS.gridDark : AXIS.grid,
           },
-          ticks: { maxTicksLimit: 8, color: AXIS.label },
+          ticks: { maxTicksLimit: 8, color: textColor },
         },
         y: {
           stacked: true,
           beginAtZero: true,
           grid: { color: isDark ? AXIS.gridDark : AXIS.grid },
           ticks: {
-            color: AXIS.label,
+            color: textColor,
             callback: (value) => formatCompact(Number(value)),
           },
         },
       },
-    }),
-    [isDark],
-  );
+    };
+  }, [isDark]);
 
   return (
     <ChartCard

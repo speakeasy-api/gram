@@ -218,7 +218,7 @@ export function AssistantsAuditLog(): React.JSX.Element {
             </Text>
           </div>
         ) : (
-          <div>
+          <div className="divide-border divide-y">
             {dateGroups.map((group) => (
               <React.Fragment key={group.key}>
                 <DateGroupHeader date={group.date} mode={TIMESTAMP_MODE} />

@@ -41,12 +41,19 @@ export function DateGroupHeader({
  */
 export function ActionIconTile({
   action,
+  className,
 }: {
   action: string;
+  className?: string;
 }): React.JSX.Element {
   const meta = getActionMeta(action);
   return (
-    <div className="border-border bg-card relative flex size-8 shrink-0 items-center justify-center border">
+    <div
+      className={cn(
+        "border-border bg-card relative flex size-8 shrink-0 items-center justify-center border",
+        className,
+      )}
+    >
       <meta.icon className="text-muted-foreground size-4" />
       {meta.dot && (
         <span

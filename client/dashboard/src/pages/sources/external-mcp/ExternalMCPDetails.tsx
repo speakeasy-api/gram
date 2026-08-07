@@ -159,9 +159,11 @@ export default function ExternalMCPDetails(): JSX.Element {
           <div className="from-foreground/50 via-foreground/20 absolute inset-0 bg-linear-to-t to-transparent" />
           <div className="absolute right-0 bottom-0 left-0 mx-auto w-full max-w-[1270px] px-8 py-8">
             <Stack gap={2}>
-              <Page.Eyebrow className="text-background/70 ml-1" />
+              <Page.Eyebrow className="text-background/70! ml-1" />
               <div className="ml-1 flex items-center gap-3">
-                <Heading variant="h1" className="text-background">
+                {/* `!` needed: Heading h1's text-display-sm carries its own
+                    color token, which would otherwise win over this override. */}
+                <Heading variant="h1" className="text-background!">
                   {source?.name || sourceSlug}
                 </Heading>
                 <Badge variant="neutral">
@@ -185,7 +187,7 @@ export default function ExternalMCPDetails(): JSX.Element {
         >
           <div className="shrink-0 border-b">
             <div className="mx-auto max-w-[1270px] px-8">
-              <TabsList className="h-auto gap-6 bg-transparent p-0">
+              <TabsList className="h-auto gap-6 divide-x-0 border-0 bg-transparent p-0">
                 <TabsTrigger
                   value="overview"
                   className="text-muted-foreground data-[state=active]:text-foreground data-[state=active]:after:bg-primary relative h-11 border-none bg-transparent! px-1 pt-3 pb-3 shadow-none! after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-transparent data-[state=active]:bg-transparent!"

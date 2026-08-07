@@ -291,6 +291,18 @@ export const ProjectProvider = ({
 };
 
 /**
+ * Minimal centered pending state shown while the session check resolves on
+ * routes that always redirect (root "/", /login, setup). Mirrors the
+ * thin-serif treatment CliCallback uses; the copy stays a neutral "Loading…"
+ * because on /login itself no redirect is coming.
+ */
+const AuthPendingScreen = () => (
+  <div className="flex h-screen items-center justify-center">
+    <h1 className="text-display-sm font-thin">Loading…</h1>
+  </div>
+);
+
+/**
  * Lightweight shell that mirrors the real AppLayout structure,
  * shown while the auth session is still loading so the user
  * sees the app chrome immediately instead of a blank screen.
@@ -299,17 +311,6 @@ export const ProjectProvider = ({
  * inside SidebarHeader, not a sibling header. The sidebar renders as a
  * `fixed inset-y-0 z-10` container, so a sibling header would sit under it.
  */
-/**
- * Minimal centered pending state shown while the session check resolves on
- * routes that always redirect (root "/", /login, setup). Mirrors the
- * thin-serif "Redirecting…" treatment CliCallback uses.
- */
-const AuthPendingScreen = () => (
-  <div className="flex h-screen items-center justify-center">
-    <h1 className="text-display-sm font-thin">Redirecting…</h1>
-  </div>
-);
-
 const AppLoadingShell = () => (
   <SidebarProvider
     style={{ "--sidebar-width": "16rem" } as React.CSSProperties}

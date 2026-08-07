@@ -61,9 +61,19 @@ export function seriesForTheme(isDark: boolean): string[] {
   return isDark ? SERIES_DARK : SERIES;
 }
 
-// Lightest neutral for top-N "Other" rollup series, so the fold recedes
-// behind the named series.
-export const OTHER_SERIES = "hsl(0, 0%, 86%)";
+// Light neutral for top-N "Other" rollup series — legible against the white
+// canvas but still receding behind the named series.
+export const OTHER_SERIES = "hsl(0, 0%, 78%)";
+
+// Dark-surface counterpart: a mid-gray that recedes on a dark canvas the way
+// OTHER_SERIES does on light.
+const OTHER_SERIES_DARK = "hsl(0, 0%, 33%)";
+
+// The rollup neutral for the resolved theme, mirroring seriesForTheme —
+// Chart.js paints to canvas, so callers resolve the theme and pass it here.
+export function otherSeriesForTheme(isDark: boolean): string {
+  return isDark ? OTHER_SERIES_DARK : OTHER_SERIES;
+}
 
 // Severity bands: critical = brand red, high = feedback-orange-600,
 // medium = feedback-orange-400, low/info = neutral (never blue).

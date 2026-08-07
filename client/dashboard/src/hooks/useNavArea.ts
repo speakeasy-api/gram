@@ -25,6 +25,7 @@ const AREA_BY_PAGE_SLUG: Record<string, NavArea> = {
   "risk-events": "Secure",
   "shadow-mcp": "Secure",
   "request-access": "Secure",
+  "approval-requests": "Secure",
   "detection-rules": "Secure",
   // Connect
   sources: "Connect",
@@ -51,9 +52,14 @@ const ORG_AREA_EXCLUDED = new Set(["login", "register", "explore-demo", "cli"]);
 export function useNavArea(): NavArea | undefined {
   const { pathname } = useLocation();
 
-  const projectPage = pathname.match(/\/projects\/[^/]+\/([^/?#]+)/)?.[1];
+  // Anchored to the fixed /:orgSlug/projects/:projectSlug/:page shape so an
+  // org or project literally slugged "projects" can't shift which segment is
+  // read as the page.
+  const projectPage = pathname.match(
+    /^\/[^/]+\/projects\/[^/]+\/([^/?#]+)/,
+  )?.[1];
   if (projectPage) return AREA_BY_PAGE_SLUG[projectPage];
-  if (pathname.includes("/projects/")) return undefined;
+  if (/^\/[^/]+\/projects(\/|$)/.test(pathname)) return undefined;
 
   const firstSegment = pathname.split("/").filter(Boolean)[0];
   if (!firstSegment || ORG_AREA_EXCLUDED.has(firstSegment)) return undefined;

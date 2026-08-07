@@ -142,7 +142,7 @@ const ImpersonationBanner = () => {
       <button
         type="button"
         onClick={exit}
-        className="border-neutral-softest text-default-fixed-light hover:bg-surface-secondary-inverse ml-2 border px-2 py-0.5 font-mono text-[11px] tracking-[0.08em] uppercase"
+        className="border-neutral-softest text-default-fixed-light ml-2 border px-2 py-0.5 font-mono text-[11px] tracking-[0.08em] uppercase hover:bg-white/10"
       >
         {isDemo ? "Exit demo" : "Stop impersonating"}
       </button>

@@ -227,7 +227,7 @@ function StatusSummaryCards({
       : 0;
 
   return (
-    <MetricCardGroup>
+    <MetricCardGroup className="flex-wrap">
       <MetricCard
         title="Spend vs budget"
         value={overview.totalSpendUsd}

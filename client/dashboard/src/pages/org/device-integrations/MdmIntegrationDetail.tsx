@@ -224,7 +224,8 @@ function MdmIntegrationDetailInner({
       </Page.Section>
 
       <Page.Section>
-        <Page.Section.Title>
+        {/* Secondary section: suppress the area eyebrow (primary title above). */}
+        <Page.Section.Title area="">
           {sink ? "Push schedules" : "Sync schedules"}
         </Page.Section.Title>
         <Page.Section.Description>
@@ -240,7 +241,7 @@ function MdmIntegrationDetailInner({
           org-wide coverage above, sourced from the inventory note. */}
       {sink ? null : (
         <Page.Section>
-          <Page.Section.Title>Managed devices</Page.Section.Title>
+          <Page.Section.Title area="">Managed devices</Page.Section.Title>
           <Page.Section.Description>
             The device inventory synced from {provider.displayName}, with each
             device's agent coverage.

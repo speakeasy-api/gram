@@ -52,9 +52,7 @@ export const Block = ({
         )}
       </Stack>
 
-      <div className={cn("h-full w-full p-1", blockBackground, labelRHS && "")}>
-        {children}
-      </div>
+      <div className={cn("h-full w-full p-1", blockBackground)}>{children}</div>
     </Stack>
   );
 };

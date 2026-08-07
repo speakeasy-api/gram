@@ -8,8 +8,10 @@ import { useMemo, useState } from "react";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
-import { useSeriesColors } from "@/components/chart/useSeriesColors";
-import { OTHER_COLOR } from "@/components/stacked-time-series";
+import {
+  useOtherSeriesColor,
+  useSeriesColors,
+} from "@/components/chart/useSeriesColors";
 import {
   type BilledDays,
   type BillingCycle,
@@ -106,8 +108,9 @@ function valueColor(
   rollup: boolean,
   index: number,
   chartColors: string[],
+  otherColor: string,
 ): string {
-  if (rollup) return OTHER_COLOR;
+  if (rollup) return otherColor;
   return chartColors[index % chartColors.length]!;
 }
 
@@ -119,6 +122,7 @@ function dimensionGroups(
   keys: string[],
   projectNames: Map<string, string>,
   chartColors: string[],
+  otherColor: string,
 ): DetailGroup[] {
   const byKey = new Map(
     (data?.breakdowns ?? []).map((b) => [b.key, b.rows] as const),
@@ -148,7 +152,7 @@ function dimensionGroups(
         const label = breakdownValueLabel(key, r.value, projectNames);
         return {
           label,
-          color: valueColor(rollup, i, chartColors),
+          color: valueColor(rollup, i, chartColors, otherColor),
           series: r.series,
           total: r.totalTokens,
           // A Project row still carrying its UUID is a project the name map
@@ -392,8 +396,10 @@ export function TumDetailsTable({
   const organization = useOrganization();
   const scope = { client, orgId: organization.id, period };
   const { data, isFetching, isError } = useQuery(tumDetailsQuery(scope));
-  // Theme-resolved series ramp, matching the chart the table sits under.
+  // Theme-resolved series ramp and rollup neutral, matching the chart the
+  // table sits under.
   const chartColors = useSeriesColors();
+  const otherColor = useOtherSeriesColor();
 
   // The passed-in map comes from the projects list fetch; the session's own
   // project entries fill any gaps (e.g. before that fetch resolves) so
@@ -485,6 +491,7 @@ export function TumDetailsTable({
         LEAD_DIMENSION_SECTIONS,
         projectLabels,
         chartColors,
+        otherColor,
       ),
       { heading: "Token type", rows: TOKEN_TYPE_ROWS.map(measureRow) },
       ...dimensionGroups(
@@ -492,6 +499,7 @@ export function TumDetailsTable({
         TAIL_DIMENSION_SECTIONS,
         projectLabels,
         chartColors,
+        otherColor,
       ),
     ];
 
@@ -504,7 +512,7 @@ export function TumDetailsTable({
         series: row.series.map((v) => v * billedScale),
       })),
     }));
-  }, [data, billedScale, projectLabels, chartColors]);
+  }, [data, billedScale, projectLabels, chartColors, otherColor]);
 
   // Time-based overage attribution: tokens count as overage from the moment
   // the organization's cumulative usage crossed the included allowance. Days

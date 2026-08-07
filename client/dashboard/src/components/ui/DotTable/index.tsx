@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 
 /**
- * Table wrapper that matches the DotCard aesthetic — rounded border,
+ * Table wrapper that matches the DotCard aesthetic — square hairline border,
  * subtle background, and consistent spacing with the card grid.
  */
 export function DotTable({

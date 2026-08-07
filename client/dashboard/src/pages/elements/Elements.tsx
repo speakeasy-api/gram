@@ -370,7 +370,7 @@ function ChatElementsInner() {
               className="gap-0"
             >
               <div className="w-full bg-stone-200 px-4 py-2 dark:bg-stone-800">
-                <TabsList className="h-auto bg-transparent p-0">
+                <TabsList className="h-auto divide-x-0 border-0 bg-transparent p-0">
                   <TabsTrigger value="manual">Manual installation</TabsTrigger>
                   <TabsTrigger value="hosted">Hosted</TabsTrigger>
                 </TabsList>

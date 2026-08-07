@@ -342,11 +342,17 @@ function AuditLogsInsightsWrapper({ children }: { children: React.ReactNode }) {
       return undefined;
     }
 
-    return toolsetsData.toolsets.map((toolset) => ({
-      url: internalMcpUrl({ slug: projectSlug }, toolset),
-      name: toolset.slug,
-      environment: toolset.defaultEnvironmentSlug,
-    }));
+    return toolsetsData.toolsets.flatMap((toolset) => {
+      const url = internalMcpUrl({ slug: projectSlug }, toolset);
+      if (!url) return [];
+      return [
+        {
+          url,
+          name: toolset.slug,
+          environment: toolset.defaultEnvironmentSlug,
+        },
+      ];
+    });
   }, [toolsetsData?.toolsets, projectSlug, isLoadingToolsets]);
 
   const auditToolsFilter = useCallback(

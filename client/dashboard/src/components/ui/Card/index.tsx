@@ -255,6 +255,18 @@ const CardEntity: FC<CardEntityProps> = ({
 }) => (
   <div
     onClick={onClick}
+    // Clickable cards are plain divs, so give them button semantics for
+    // keyboard and assistive-tech users; non-interactive cards stay plain.
+    {...(onClick && {
+      role: "button",
+      tabIndex: 0,
+      onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick(e as unknown as React.MouseEvent<HTMLDivElement>);
+        }
+      },
+    })}
     className={cn(
       "group flex h-full min-h-[156px] flex-row overflow-hidden border bg-card text-card-foreground transition-colors",
       "hover:border-neutral-hover",

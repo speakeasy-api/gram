@@ -3,7 +3,6 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Button } from "@/components/ui/Button";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
-import { cn } from "@/lib/utils";
 import { useCallback, useState } from "react";
 
 export const TopUpCTA = (): JSX.Element => {
@@ -64,10 +63,7 @@ export const UsageProgress = ({
 
   const includedProgress = (
     <div
-      className={cn(
-        "bg-muted relative h-4 overflow-hidden dark:bg-neutral-800",
-        anyOverage && "",
-      )}
+      className="bg-muted relative h-4 overflow-hidden dark:bg-neutral-800"
       style={{ width: `${includedWidth}%` }}
     >
       <div

@@ -38,7 +38,7 @@ function ExpandableTrigger({
   return (
     <AccordionTrigger
       className={cn(
-        "w-full items-center border-1 px-4 py-2 text-base [&[data-state=open]]:",
+        "w-full items-center border-1 px-4 py-2 text-base",
         className,
       )}
     >

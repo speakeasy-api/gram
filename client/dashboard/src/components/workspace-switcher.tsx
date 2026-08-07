@@ -116,7 +116,12 @@ export function WorkspaceSwitcher(): JSX.Element {
             variant="tertiary"
             className="h-auto w-full justify-start gap-2 border px-2 py-1.5 font-sans group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-1"
           >
-            <ProjectAvatar project={project} className="h-5 w-5 shrink-0" />
+            {/* rounded-none: keep the square tile idiom over ProjectAvatar's
+                rounded-full default. */}
+            <ProjectAvatar
+              project={project}
+              className="h-5 w-5 shrink-0 rounded-none"
+            />
             <span className="truncate text-sm font-medium group-data-[collapsible=icon]:hidden">
               {project?.name || project?.slug || projectSlug}
             </span>
@@ -135,10 +140,15 @@ export function WorkspaceSwitcher(): JSX.Element {
                     <CommandItem
                       key={p.id}
                       value={p.slug}
+                      // Let search match the display name as well as the slug.
+                      keywords={p.name ? [p.name] : undefined}
                       onSelect={() => handleProjectSelect(p.slug)}
                       className="flex cursor-pointer items-center gap-2"
                     >
-                      <ProjectAvatar project={p} className="h-5 w-5 shrink-0" />
+                      <ProjectAvatar
+                        project={p}
+                        className="h-5 w-5 shrink-0 rounded-none"
+                      />
                       <span className="flex-1 truncate">
                         {p.name || p.slug}
                       </span>

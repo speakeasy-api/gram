@@ -53,7 +53,7 @@ export function InstrumentAgentsStep({
       onBack={onBack}
     >
       <Tabs defaultValue="manual" className="gap-8">
-        <TabsList className="grid h-auto w-full grid-cols-1 items-stretch gap-4 bg-transparent p-0 sm:grid-cols-2">
+        <TabsList className="grid h-auto w-full grid-cols-1 items-stretch gap-4 divide-x-0 border-0 bg-transparent p-0 sm:grid-cols-2">
           <ChoiceTab
             value="manual"
             icon={<Wrench className="h-5 w-5" />}

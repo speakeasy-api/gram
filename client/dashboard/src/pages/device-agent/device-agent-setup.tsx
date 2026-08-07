@@ -828,7 +828,7 @@ function IdentityStep() {
         for an org; personal enrollment is handy for testing.
       </Text>
       <Tabs defaultValue="fleet" className="gap-6">
-        <TabsList className="grid h-auto w-full grid-cols-2 items-stretch gap-3 bg-transparent p-0">
+        <TabsList className="grid h-auto w-full grid-cols-2 items-stretch gap-3 divide-x-0 border-0 bg-transparent p-0">
           <SetupTab
             value="fleet"
             icon="building-2"

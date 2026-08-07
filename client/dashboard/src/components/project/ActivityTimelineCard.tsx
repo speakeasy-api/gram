@@ -2,10 +2,9 @@ import { ChevronRight } from "lucide-react";
 import { Link } from "react-router";
 import { DashboardCard } from "@/components/ui/DashboardCard";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { getActionMeta } from "@/components/auditlogs/action-meta";
+import { ActionIconTile } from "@/components/auditlogs/feed";
 import { subjectHref } from "@/components/auditlogs/subject-href";
 import { useSlugs } from "@/contexts/Sdk";
-import { cn } from "@/lib/utils";
 import { format, formatDistanceToNow, isToday, isYesterday } from "date-fns";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 
@@ -52,7 +51,6 @@ export function ActivityTimelineCard({
               <p className="text-eyebrow mb-2">{group.label}</p>
               <ul className="divide-border divide-y">
                 {group.logs.map((log) => {
-                  const meta = getActionMeta(log.action);
                   const actor =
                     log.actorDisplayName ?? log.actorSlug ?? "Unknown";
                   const actionLabel = getActionLabel(log);
@@ -62,17 +60,7 @@ export function ActivityTimelineCard({
                       key={log.id}
                       className="flex items-start gap-3 py-2.5 first:pt-0 last:pb-0"
                     >
-                      <div className="border-border bg-card relative mt-0.5 flex size-8 shrink-0 items-center justify-center border">
-                        <meta.icon className="text-muted-foreground size-4" />
-                        {meta.dot && (
-                          <span
-                            className={cn(
-                              "absolute top-1 right-1 size-1.5 rounded-full",
-                              meta.dot,
-                            )}
-                          />
-                        )}
-                      </div>
+                      <ActionIconTile action={log.action} className="mt-0.5" />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm">
                           <span className="font-medium">{actor}</span>{" "}

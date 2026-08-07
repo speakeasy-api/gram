@@ -347,7 +347,8 @@ export function SessionTable({
                   onClick={() => onSort(c.sortKey!)}
                 />
               ) : (
-                label
+                // Match SortHeader's uppercase treatment on sortable columns.
+                <span className="uppercase">{label}</span>
               )}
               {c.id === "cost" && (
                 <EstimatedCostIndicator billingMode={billingMode} />
