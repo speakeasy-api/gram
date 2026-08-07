@@ -110,7 +110,6 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 		parsed := time.Duration(*payload.SessionDurationHours) * time.Hour
 		durPtr = &parsed
 	}
-
 	// Validated in app code: the column carries no CHECK constraint by
 	// convention, and the Goa Enum only guards the generated client. A
 	// direct API caller can still send anything.

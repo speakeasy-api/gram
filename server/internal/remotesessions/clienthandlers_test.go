@@ -811,12 +811,13 @@ func TestDeleteRemoteSessionClient(t *testing.T) {
 	userIssuerUUID, err := uuid.Parse(userIssuerID)
 	require.NoError(t, err)
 
-	_, err = repo.New(ti.conn).InsertRemoteSession(ctx, repo.InsertRemoteSessionParams{
+	_, err = repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
 		SubjectUrn:            urn.NewUserSubject("test-principal"),
 		UserSessionIssuerID:   userIssuerUUID,
 		RemoteSessionClientID: clientUUID,
 		AccessTokenEncrypted:  "ciphertext",
 		AccessExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		Scopes:                []string{},
 	})
 	require.NoError(t, err)
 

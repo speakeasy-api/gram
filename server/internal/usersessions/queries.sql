@@ -316,8 +316,8 @@ LEFT JOIN api_keys AS k
            END
 WHERE iss.project_id = @project_id
   AND iss.deleted IS FALSE
-  -- "active"/"expired" are keyed off refresh_expires_at (the session/refresh
-  -- lifetime), NOT expires_at (the ~1h access-token lifetime). An active MCP
+  -- "active"/"expired" are keyed off refresh_expires_at (the authorization
+  -- deadline), NOT expires_at (the ~1h access-token lifetime). An active MCP
   -- connection only refreshes its access token on demand, so a live session
   -- routinely has a past expires_at while its refresh token is still valid;
   -- keying "active" off expires_at would drop those sessions and make the

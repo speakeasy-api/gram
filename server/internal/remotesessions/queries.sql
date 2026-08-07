@@ -568,23 +568,6 @@ SELECT COUNT(*)
 FROM remote_sessions
 WHERE remote_session_client_id = @remote_session_client_id AND deleted IS FALSE;
 
--- name: InsertRemoteSession :one
-INSERT INTO remote_sessions (
-    subject_urn,
-    user_session_issuer_id,
-    remote_session_client_id,
-    access_token_encrypted,
-    access_expires_at
-)
-VALUES (
-    @subject_urn,
-    @user_session_issuer_id,
-    @remote_session_client_id,
-    @access_token_encrypted,
-    @access_expires_at
-)
-RETURNING *;
-
 -- name: UpsertRemoteSession :one
 -- Used by /mcp/remote_login_callback to materialise (or refresh) the
 -- remote_session for a (subject, client) pair. Conflict target matches the
@@ -599,8 +582,11 @@ INSERT INTO remote_sessions (
     access_token_encrypted,
     access_expires_at,
     refresh_token_encrypted,
+    authorization_expires_at,
     refresh_expires_at,
-    scopes
+    scopes,
+    resource,
+    auto_refresh
 )
 VALUES (
     @subject_urn,
@@ -609,16 +595,21 @@ VALUES (
     @access_token_encrypted,
     @access_expires_at,
     @refresh_token_encrypted,
+    @authorization_expires_at,
     @refresh_expires_at,
-    @scopes
+    @scopes,
+    @resource,
+    @auto_refresh
 )
 ON CONFLICT (subject_urn, remote_session_client_id) WHERE deleted IS FALSE
 DO UPDATE SET
     access_token_encrypted = EXCLUDED.access_token_encrypted,
     access_expires_at = EXCLUDED.access_expires_at,
     refresh_token_encrypted = EXCLUDED.refresh_token_encrypted,
+    authorization_expires_at = EXCLUDED.authorization_expires_at,
     refresh_expires_at = EXCLUDED.refresh_expires_at,
     scopes = EXCLUDED.scopes,
+    resource = EXCLUDED.resource,
     updated_at = clock_timestamp()
 RETURNING *;
 
@@ -631,6 +622,7 @@ SET
     access_token_encrypted = @access_token_encrypted,
     access_expires_at = @access_expires_at,
     refresh_token_encrypted = @refresh_token_encrypted,
+    authorization_expires_at = @authorization_expires_at,
     refresh_expires_at = @refresh_expires_at,
     scopes = @scopes,
     updated_at = clock_timestamp()
@@ -651,12 +643,18 @@ WHERE subject_urn = @subject_urn
   AND remote_session_client_id = @remote_session_client_id
   AND deleted IS FALSE;
 
--- name: RevokeRemoteSessionAfterInvalidGrant :one
--- A definitive upstream invalid_grant means this session can no longer renew.
+-- name: ClearRemoteSessionRefreshTokenAfterInvalidGrant :one
+-- A definitive upstream invalid_grant invalidates the refresh grant, not
+-- necessarily the current access token. Clear the dead grant so scheduled
+-- refresh does not retry it; a known-expired access token will then fail the
+-- lazy gate and prompt for re-authentication.
 -- Compare-and-swap against the snapshot used for the refresh so a delayed
--- failure cannot evict tokens that a concurrent refresh already rotated.
+-- failure cannot clear tokens that a concurrent refresh already rotated.
 UPDATE remote_sessions
-SET deleted_at = clock_timestamp()
+SET
+  refresh_token_encrypted = NULL,
+  refresh_expires_at = NULL,
+  updated_at = clock_timestamp()
 WHERE id = @id
   AND subject_urn = @subject_urn
   AND user_session_issuer_id = @user_session_issuer_id
@@ -675,39 +673,57 @@ RETURNING *;
 -- DISTINCT. A soft-deleted row is absent here entirely (truly disconnected).
 --
 -- The 'active' predicate mirrors validateAndRefresh in tokenservice.go: a
--- session is usable when its access token is unexpired, or it is a NULL-expiry
--- token with no refresh path (non-expiring, e.g. Slack non-rotating xoxp), or
--- it carries a refresh token that is not itself known-expired to renew with. A
--- NULL access_expires_at counts as usable on its own ONLY when there is no
--- refresh token: with a refresh token present the gate re-validates on an
--- hourly cadence, so usability defers to the refresh-token clause. A
--- refresh_expires_at of NULL is a non-expiring refresh token. A
+-- session is usable while the upstream authorization remains valid and its
+-- access token is unexpired, has no reported expiry, or can be renewed with a
+-- refresh token whose idle timeout is still valid. NULL deadlines mean only
+-- that the provider did not report that lifetime. A
 -- present-but-unusable row is 'expired' rather than dropped, so the consent UI
 -- can distinguish "reconnect this expired link" from "never connected" — and
 -- so the runtime gate (which rejects the same row as ErrNoValidToken) stops
 -- disagreeing with a green "Connected" badge.
 SELECT
-  remote_session_client_id,
+  s.remote_session_client_id,
+  s.auto_refresh,
+  s.access_expires_at,
+  s.authorization_expires_at,
+  s.refresh_expires_at,
+  (s.refresh_token_encrypted IS NOT NULL
+    AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
+    AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))::boolean AS can_refresh,
   (CASE
-    WHEN access_expires_at > now()
-      OR (access_expires_at IS NULL AND refresh_token_encrypted IS NULL)
-      OR (refresh_token_encrypted IS NOT NULL
-          AND (refresh_expires_at IS NULL OR refresh_expires_at > now())) THEN 'active'
+    WHEN (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
+      AND (
+        s.access_expires_at IS NULL
+        OR s.access_expires_at > now()
+        OR (s.refresh_token_encrypted IS NOT NULL
+            AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))
+      ) THEN 'active'
     ELSE 'expired'
   END)::text AS status
-FROM remote_sessions
-WHERE subject_urn = @subject_urn
-  AND user_session_issuer_id = @user_session_issuer_id
-  AND deleted IS FALSE;
+FROM remote_sessions AS s
+JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
+WHERE s.subject_urn = @subject_urn
+  AND s.user_session_issuer_id = @user_session_issuer_id
+  AND usi.project_id = @project_id
+  AND usi.deleted IS FALSE
+  AND s.deleted IS FALSE;
 
 -- name: SetRemoteSessionUpdatedAt :exec
 -- Sets updated_at on a remote session. Scoped through the owning
 -- remote_session_client's project so the write cannot cross tenant boundaries.
--- Currently used by tests to backdate updated_at and exercise the
--- application-layer refresh cadence in validateAndRefresh (NULL
--- access_expires_at with a refresh token) without waiting wall-clock time.
+-- Used by refresh-sweep tests to make a session due without waiting.
 UPDATE remote_sessions s
 SET updated_at = @updated_at
+FROM remote_session_clients c
+WHERE s.id = @id
+  AND s.remote_session_client_id = c.id
+  AND c.project_id = @project_id;
+
+-- name: SetRemoteSessionAccessExpiresAt :exec
+-- Test helper for exercising lazy refresh without waiting for a real token
+-- lifetime. Scoped through the owning remote_session_client's project.
+UPDATE remote_sessions s
+SET access_expires_at = @access_expires_at
 FROM remote_session_clients c
 WHERE s.id = @id
   AND s.remote_session_client_id = c.id
@@ -824,6 +840,125 @@ WHERE s.id = @id
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
 RETURNING s.*;
+
+-- name: SetRemoteSessionAutoRefresh :execrows
+-- Records the subject's consent-screen auto-refresh choice. Deliberately does
+-- NOT touch updated_at: that column doubles as the refresh CAS token-version
+-- signal and keepalive clock, and a preference toggle must not perturb either.
+-- Scoped through the endpoint's user_session_issuer project so the write
+-- cannot cross tenant boundaries. A client may be bound to several
+-- user_session_issuers; the issuer predicate pins the write to the binding the
+-- consent screen displayed (reads filter by issuer the same way).
+UPDATE remote_sessions AS s
+SET auto_refresh = @auto_refresh
+FROM user_session_issuers AS usi
+WHERE s.subject_urn = @subject_urn
+  AND s.remote_session_client_id = @remote_session_client_id
+  AND s.user_session_issuer_id = @user_session_issuer_id
+  AND usi.id = s.user_session_issuer_id
+  AND usi.project_id = @project_id
+  AND usi.deleted IS FALSE
+  AND s.deleted IS FALSE;
+
+-- name: SoftDeleteRemoteSessionBySubjectAndClient :execrows
+-- Consent-screen disconnect: soft-deletes the subject's own binding for one
+-- upstream client. Subject, client and issuer all derived server-side from
+-- the challenge state and the endpoint's bindings, never from the form;
+-- scoped through the issuer's project so the write cannot cross tenants.
+UPDATE remote_sessions AS s
+SET deleted_at = clock_timestamp()
+FROM user_session_issuers AS usi
+WHERE s.subject_urn = @subject_urn
+  AND s.remote_session_client_id = @remote_session_client_id
+  AND s.user_session_issuer_id = @user_session_issuer_id
+  AND usi.id = s.user_session_issuer_id
+  AND usi.project_id = @project_id
+  AND usi.deleted IS FALSE
+  AND s.deleted IS FALSE;
+
+-- Best-effort refresh-grant keepalive. Each hourly workflow chain drains
+-- cross-project batches. Claiming stamps an independent attempt clock before
+-- any network call, so failed sessions rotate out for 24 hours instead of
+-- pinning the oldest batch. The organization product feature is UI-only; the
+-- persisted per-session preference is the runtime opt-in.
+
+-- name: ClaimDueRemoteSessionRefreshCandidates :many
+WITH due AS (
+  SELECT s.id, s.updated_at, p.organization_id, i.token_endpoint
+  FROM remote_sessions AS s
+  JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND c.deleted IS FALSE
+  JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
+  JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id AND usi.deleted IS FALSE
+  JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
+  WHERE s.deleted IS FALSE
+    AND s.refresh_token_encrypted IS NOT NULL
+    AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > @now_ts::timestamptz)
+    AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > @now_ts::timestamptz)
+    AND s.updated_at <= @keepalive_cutoff::timestamptz
+    AND (
+      s.last_refresh_attempt_at IS NULL
+      OR s.last_refresh_attempt_at <= @attempt_cutoff::timestamptz
+    )
+    AND s.auto_refresh IS TRUE
+    AND EXISTS (
+      SELECT 1 FROM remote_session_client_user_session_issuers AS link
+      WHERE link.remote_session_client_id = c.id
+        AND link.user_session_issuer_id = s.user_session_issuer_id
+    )
+    AND EXISTS (
+      SELECT 1 FROM user_sessions AS gs
+      WHERE gs.project_id = usi.project_id
+        AND gs.user_session_issuer_id = s.user_session_issuer_id
+        AND gs.subject_urn = s.subject_urn
+        AND gs.deleted IS FALSE
+        AND gs.refresh_expires_at > @now_ts::timestamptz
+    )
+  ORDER BY s.updated_at, s.id
+  LIMIT @limit_value
+  FOR UPDATE OF s SKIP LOCKED
+),
+claimed AS (
+  UPDATE remote_sessions AS s
+  SET last_refresh_attempt_at = @now_ts::timestamptz
+  FROM due
+  WHERE s.id = due.id
+  RETURNING s.id, due.updated_at, due.organization_id, due.token_endpoint
+)
+SELECT id, organization_id, token_endpoint
+FROM claimed
+ORDER BY updated_at, id;
+
+-- name: GetDueRemoteSessionRefreshCandidate :one
+-- Authoritative re-check immediately before a scheduled refresh: the row was
+-- claimed earlier in the pass and may have been refreshed, revoked, or re-linked
+-- since. No row means "no longer due" — the activity records a skip.
+SELECT sqlc.embed(s)
+FROM remote_sessions AS s
+JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND c.deleted IS FALSE
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
+JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id AND usi.deleted IS FALSE
+JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
+WHERE s.id = @id
+  AND p.organization_id = @organization_id
+  AND s.deleted IS FALSE
+  AND s.refresh_token_encrypted IS NOT NULL
+  AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > @now_ts::timestamptz)
+  AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > @now_ts::timestamptz)
+  AND s.updated_at <= @keepalive_cutoff::timestamptz
+  AND s.auto_refresh IS TRUE
+  AND EXISTS (
+    SELECT 1 FROM remote_session_client_user_session_issuers AS link
+    WHERE link.remote_session_client_id = c.id
+      AND link.user_session_issuer_id = s.user_session_issuer_id
+  )
+  AND EXISTS (
+    SELECT 1 FROM user_sessions AS gs
+    WHERE gs.project_id = usi.project_id
+      AND gs.user_session_issuer_id = s.user_session_issuer_id
+      AND gs.subject_urn = s.subject_urn
+      AND gs.deleted IS FALSE
+      AND gs.refresh_expires_at > @now_ts::timestamptz
+  );
 
 -- Organization administrator surface (AIS-119) — cross-project visibility into
 -- remote_session_issuers, their clients, and sessions for an org. Every query is

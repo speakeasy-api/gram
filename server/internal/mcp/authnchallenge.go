@@ -153,7 +153,12 @@ type UserSessionGrant struct {
 	CodeChallenge       string             `json:"code_challenge"`
 	CodeChallengeMethod string             `json:"code_challenge_method"`
 	Subject             urn.SessionSubject `json:"subject"`
-	CreatedAt           time.Time          `json:"created_at"`
+	// DesiredSessionDurationHours is the subject's consent-screen session
+	// length choice. Token minting clamps it to the issuer maximum. Zero means
+	// "no explicit choice" and the mint uses that maximum. Keep the JSON key
+	// stable so grants survive rolling deploys.
+	DesiredSessionDurationHours int       `json:"session_duration_hours,omitempty"`
+	CreatedAt                   time.Time `json:"created_at"`
 }
 
 var _ cache.CacheableObject[UserSessionGrant] = (*UserSessionGrant)(nil)

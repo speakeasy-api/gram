@@ -20,7 +20,7 @@ type CreateUserSessionIssuerRequestBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// How multi-remote authn challenges are presented: chain | interactive.
 	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
-	// Issued user session lifetime, in hours.
+	// Maximum issued user session lifetime, in hours.
 	SessionDurationHours int `form:"session_duration_hours" json:"session_duration_hours" xml:"session_duration_hours"`
 }
 
@@ -33,7 +33,7 @@ type UpdateUserSessionIssuerRequestBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// chain | interactive.
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
-	// Issued user session lifetime, in hours.
+	// Maximum issued user session lifetime, in hours.
 	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
 	// Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits.
 	// 'presets' admits Gram's curated catalog plus this issuer's custom URLs;
@@ -65,7 +65,7 @@ type CreateUserSessionIssuerResponseBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// chain | interactive.
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
-	// Issued user session lifetime, in hours.
+	// Maximum issued user session lifetime, in hours.
 	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
 	// The EFFECTIVE CIMD admission policy in force for this issuer: disabled |
 	// presets | reporting | open. Always populated, so clients never have to
@@ -90,7 +90,7 @@ type UpdateUserSessionIssuerResponseBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// chain | interactive.
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
-	// Issued user session lifetime, in hours.
+	// Maximum issued user session lifetime, in hours.
 	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
 	// The EFFECTIVE CIMD admission policy in force for this issuer: disabled |
 	// presets | reporting | open. Always populated, so clients never have to
@@ -123,7 +123,7 @@ type GetUserSessionIssuerResponseBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// chain | interactive.
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
-	// Issued user session lifetime, in hours.
+	// Maximum issued user session lifetime, in hours.
 	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
 	// The EFFECTIVE CIMD admission policy in force for this issuer: disabled |
 	// presets | reporting | open. Always populated, so clients never have to
@@ -1297,7 +1297,7 @@ type UserSessionIssuerResponseBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// chain | interactive.
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
-	// Issued user session lifetime, in hours.
+	// Maximum issued user session lifetime, in hours.
 	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
 	// The EFFECTIVE CIMD admission policy in force for this issuer: disabled |
 	// presets | reporting | open. Always populated, so clients never have to

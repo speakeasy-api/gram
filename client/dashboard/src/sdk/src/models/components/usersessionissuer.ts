@@ -47,7 +47,7 @@ export type UserSessionIssuer = {
    */
   projectId: string;
   /**
-   * Issued user session lifetime, in hours.
+   * Maximum issued user session lifetime, in hours.
    */
   sessionDurationHours: number;
   /**

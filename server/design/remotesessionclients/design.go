@@ -559,7 +559,6 @@ var CreateRemoteSessionClientForm = Type("CreateRemoteSessionClientForm", func()
 		ScopeAttribute("Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
 	})
 	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange.", AudienceAttribute)
-
 	Required("remote_session_issuer_id", "client_id")
 })
 

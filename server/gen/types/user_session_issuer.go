@@ -18,7 +18,7 @@ type UserSessionIssuer struct {
 	Slug string
 	// chain | interactive.
 	AuthnChallengeMode string
-	// Issued user session lifetime, in hours.
+	// Maximum issued user session lifetime, in hours.
 	SessionDurationHours int
 	// The EFFECTIVE CIMD admission policy in force for this issuer: disabled |
 	// presets | reporting | open. Always populated, so clients never have to

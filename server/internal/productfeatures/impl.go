@@ -252,6 +252,7 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		AiPlatformPushIntegrationsEnabled:    isEnabled(FeatureAIPlatformPushIntegrations),
 		PlatformMcpEnabled:                   isEnabled(FeaturePlatformMCP),
 		CustomerManagedEncryptionKeysEnabled: isEnabled(FeatureCustomerManagedEncryptionKeys),
+		RemoteSessionAutoRefreshEnabled:      isEnabled(FeatureRemoteSessionAutoRefresh),
 		DeviceAgent:                          deviceAgent,
 	}, nil
 }

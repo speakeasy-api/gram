@@ -56775,7 +56775,7 @@ components:
             - interactive
         session_duration_hours:
           type: integer
-          description: Issued user session lifetime, in hours.
+          description: Maximum issued user session lifetime, in hours.
           format: int64
         slug:
           type: string
@@ -59346,6 +59346,9 @@ components:
         platform_mcp_enabled:
           type: boolean
           description: Whether the organization is eligible for the Gram Platform MCP capability
+        remote_session_auto_refresh_enabled:
+          type: boolean
+          description: Whether consent screens expose automatic remote-session refresh for the organization
         scim_enabled:
           type: boolean
           description: Whether SCIM/directory sync setup is enabled for the organization
@@ -59379,6 +59382,7 @@ components:
         - ai_platform_push_integrations_enabled
         - platform_mcp_enabled
         - customer_managed_encryption_keys_enabled
+        - remote_session_auto_refresh_enabled
         - device_agent
     GetProjectForm:
       type: object
@@ -68430,6 +68434,7 @@ components:
             - ai_platform_push_integrations
             - platform_mcp
             - customer_managed_encryption_keys
+            - remote_session_auto_refresh
           maxLength: 60
       required:
         - feature_name
@@ -73872,7 +73877,7 @@ components:
           format: uuid
         session_duration_hours:
           type: integer
-          description: Issued user session lifetime, in hours.
+          description: Maximum issued user session lifetime, in hours.
           format: int64
         slug:
           type: string
@@ -74459,7 +74464,7 @@ components:
           format: uuid
         session_duration_hours:
           type: integer
-          description: Issued user session lifetime, in hours.
+          description: Maximum issued user session lifetime, in hours.
           format: int64
         slug:
           type: string
