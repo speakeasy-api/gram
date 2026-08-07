@@ -3,25 +3,28 @@
 
 -- name: ListPrincipalGrantsByOrg :many
 -- Returns all grant rows for an organization, optionally filtered by principal URN.
-SELECT id, organization_id, principal_urn, principal_type, scope, effect, selectors, created_at, updated_at
+SELECT id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at
 FROM principal_grants
 WHERE organization_id = @organization_id
+  AND COALESCE(effect, 'allow') = 'allow'
   AND (@principal_urn::text = '' OR principal_urn = @principal_urn)
 ORDER BY principal_urn, scope;
 
 -- name: GetPrincipalGrants :many
 -- Returns all grant rows matching a set of principal URNs within an org.
 -- Used by the access resolver to load grants for a user+role in a single query.
-SELECT principal_urn, scope, effect, selectors
+SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = @organization_id
+  AND COALESCE(effect, 'allow') = 'allow'
   AND principal_urn = ANY(@principal_urns::text[]);
 
 -- name: ListPrincipalGrantsByResource :many
 -- Returns grant rows for a single resource selector.
-SELECT principal_urn, scope, effect, selectors
+SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = @organization_id
+  AND COALESCE(effect, 'allow') = 'allow'
   AND scope = @scope
   AND selectors @> jsonb_build_object(
     'resource_kind', sqlc.arg(resource_kind)::text,
@@ -34,9 +37,10 @@ ORDER BY principal_urn;
 -- form of ListPrincipalGrantsByResource that stays scoped to the caller's
 -- resource ids, so listing one project's resources never loads the whole org.
 -- Callers group the results by the selector's resource_id.
-SELECT principal_urn, scope, effect, selectors
+SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = @organization_id
+  AND COALESCE(effect, 'allow') = 'allow'
   AND scope = @scope
   AND selectors @> jsonb_build_object(
     'resource_kind', sqlc.arg(resource_kind)::text
@@ -45,18 +49,18 @@ WHERE organization_id = @organization_id
 ORDER BY principal_urn;
 
 -- name: UpsertPrincipalGrant :one
--- Creates or updates a single grant row. On conflict (same org/principal/scope/effect/selectors),
+-- Creates or updates a single grant row. On conflict (same org/principal/scope/selectors),
 -- the updated_at is refreshed. Uses COALESCE to match the functional unique index.
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
-VALUES (@organization_id, @principal_urn, @scope, @effect, @selectors)
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+VALUES (@organization_id, @principal_urn, @scope, @selectors)
 ON CONFLICT (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), selectors)
 DO UPDATE SET updated_at = clock_timestamp()
-RETURNING id, organization_id, principal_urn, principal_type, scope, effect, selectors, created_at, updated_at;
+RETURNING id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at;
 
 -- name: InsertPrincipalGrantIfAbsent :execrows
 -- Creates a single grant row and leaves existing identical rows untouched.
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
-VALUES (@organization_id, @principal_urn, @scope, @effect, @selectors)
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+VALUES (@organization_id, @principal_urn, @scope, @selectors)
 ON CONFLICT (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), selectors)
 DO NOTHING;
 
@@ -67,12 +71,11 @@ WHERE id = @id
   AND organization_id = @organization_id;
 
 -- name: DeletePrincipalGrantByIdentity :execrows
--- Removes a specific grant row by principal, scope, effect, and selector.
+-- Removes a specific grant row by principal, scope, and selector.
 DELETE FROM principal_grants
 WHERE organization_id = @organization_id
   AND principal_urn = @principal_urn
   AND scope = @scope
-  AND COALESCE(effect, 'allow') = COALESCE(sqlc.arg(effect)::text, 'allow')
   AND selectors = @selectors;
 
 -- name: DeletePrincipalGrantsByTarget :execrows
@@ -81,7 +84,6 @@ WHERE organization_id = @organization_id
 DELETE FROM principal_grants
 WHERE organization_id = @organization_id
   AND scope = @scope
-  AND COALESCE(effect, 'allow') = COALESCE(sqlc.arg(effect)::text, 'allow')
   AND selectors = @selectors;
 
 -- name: DeletePrincipalGrantsByResource :execrows

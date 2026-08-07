@@ -216,7 +216,6 @@ func grantRiskPolicyToAllUsers(t *testing.T, ti *testInstance, ctx context.Conte
 			Scope:          authz.ScopeRiskPolicyEvaluate,
 			ResourceID:     policyID.String(),
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: []urn.Principal{authz.AllUsersPrincipal()},
 		Selector:   nil,
 	}))

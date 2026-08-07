@@ -604,7 +604,6 @@ func seedUserMCPConnectGrant(t *testing.T, ctx context.Context, conn *pgxpool.Po
 		OrganizationID: organizationID,
 		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeUser, userID),
 		Scope:          string(authz.ScopeMCPConnect),
-		Effect:         pgtype.Text{},
 		Selectors:      selectors,
 	})
 	require.NoError(t, err)

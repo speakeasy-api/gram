@@ -532,7 +532,6 @@ func roleGrantPayloads(grants []*gen.RoleGrant) []*authz.RoleGrant {
 
 		out = append(out, &authz.RoleGrant{
 			Scope:     grant.Scope,
-			Effect:    authz.PolicyEffectAllow,
 			Selectors: selectors,
 		})
 	}

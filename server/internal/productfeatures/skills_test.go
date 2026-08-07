@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -160,7 +159,6 @@ func upsertGrant(t *testing.T, ctx context.Context, q *accessrepo.Queries, organ
 		OrganizationID: organizationID,
 		PrincipalUrn:   principal,
 		Scope:          string(scope),
-		Effect:         pgtype.Text{String: string(authz.PolicyEffectAllow), Valid: true},
 		Selectors:      selector,
 	})
 	require.NoError(t, err)
