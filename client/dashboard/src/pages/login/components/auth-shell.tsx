@@ -130,7 +130,7 @@ export function AuthShell({
           {showTerms && (
             <TermsFooter
               className="absolute right-12 bottom-7 left-12 text-[var(--muted-strong)]"
-              linkClassName="text-[var(--link)] hover:text-[var(--focus)]"
+              linkClassName="text-[var(--muted-strong)] hover:text-black"
             />
           )}
         </section>

@@ -335,7 +335,7 @@ export function MCPServerStatusDropdown({
   // and the readiness checklist report for the same server.
   if (server.unproxiedMcpServerId) {
     return (
-      <span className="text-foreground border-border flex w-fit items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium">
+      <span className="text-foreground border-border flex w-fit items-center gap-2 border px-3 py-1.5 text-sm font-medium">
         <span
           className={cn("h-2 w-2 shrink-0 rounded-full", currentDotClass)}
         />
@@ -350,7 +350,7 @@ export function MCPServerStatusDropdown({
         <button
           type="button"
           disabled={!canWrite || update.isPending}
-          className="text-foreground hover:bg-muted trans border-border flex w-fit items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
+          className="text-foreground hover:bg-muted trans border-border flex w-fit items-center gap-2 border px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
         >
           <span
             className={cn("h-2 w-2 shrink-0 rounded-full", currentDotClass)}
@@ -373,7 +373,7 @@ export function MCPServerStatusDropdown({
                 if (publicBlocked) return;
                 handleSelect(option.value);
               }}
-              className="group flex cursor-pointer items-start gap-2.5 rounded-md p-2 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"
+              className="group flex cursor-pointer items-start gap-2.5 p-2 data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"
             >
               {option.value === server.visibility ? (
                 <span

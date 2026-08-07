@@ -15,7 +15,7 @@ import {
   PageTabsTrigger,
   Tabs,
   TabsContent,
-  TabsList,
+  PageTabsList,
 } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
@@ -161,7 +161,7 @@ export default function RemoteMCPDetails(): JSX.Element {
         >
           <div className="shrink-0 border-b">
             <div className="mx-auto max-w-[1270px] px-8">
-              <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
+              <PageTabsList className="h-auto gap-6 bg-transparent p-0">
                 <PageTabsTrigger value="overview">Overview</PageTabsTrigger>
                 <PageTabsTrigger value="mcp-servers">
                   MCP Servers
@@ -169,7 +169,7 @@ export default function RemoteMCPDetails(): JSX.Element {
                     ` (${linkedMcpServers.length})`}
                 </PageTabsTrigger>
                 <PageTabsTrigger value="settings">Settings</PageTabsTrigger>
-              </TabsList>
+              </PageTabsList>
             </div>
           </div>
 
@@ -236,8 +236,9 @@ function RemoteMcpHero({ server }: { server: RemoteMcpServer | undefined }) {
   return (
     <DetailHero>
       <Stack gap={2}>
+        <Page.Eyebrow />
         <Stack direction="horizontal" gap={3} align="center">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 dark:bg-violet-500/20">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-violet-500/10 dark:bg-violet-500/20">
             <Network className="h-5 w-5 text-violet-600 dark:text-violet-400" />
           </div>
           <Heading variant="h1" className="break-all normal-case">
@@ -470,12 +471,12 @@ function McpServersSkeleton() {
   return (
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
       {[1, 2, 3].map((i) => (
-        <div key={i} className="bg-card animate-pulse rounded-xl border p-6">
+        <div key={i} className="bg-card animate-pulse border p-6">
           <div className="mb-4 flex items-center gap-3">
-            <div className="bg-muted h-10 w-10 rounded-lg" />
+            <div className="bg-muted h-10 w-10" />
             <div className="flex-1">
-              <div className="bg-muted mb-2 h-4 w-24 rounded" />
-              <div className="bg-muted h-3 w-32 rounded" />
+              <div className="bg-muted mb-2 h-4 w-24" />
+              <div className="bg-muted h-3 w-32" />
             </div>
           </div>
         </div>
@@ -561,7 +562,7 @@ function NameSection({
   };
 
   return (
-    <div className="rounded-lg border p-6">
+    <div className="border p-6">
       <Text variant="subheading" className="mb-1">
         Display Name
       </Text>
@@ -672,7 +673,7 @@ function UrlSection({
   };
 
   return (
-    <div className="rounded-lg border p-6">
+    <div className="border p-6">
       <Text variant="subheading" className="mb-1">
         Remote URL
       </Text>
@@ -752,7 +753,7 @@ function DangerZoneSection({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   return (
-    <div className="border-destructive/30 rounded-lg border p-6">
+    <div className="border-destructive/30 border p-6">
       <Text variant="subheading" className="text-destructive mb-1">
         Danger Zone
       </Text>

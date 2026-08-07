@@ -254,7 +254,7 @@ function AttachedSkillRow({
   const skillLabel = skill?.displayName ?? `Unknown skill ${skillRef.skillId}`;
 
   return (
-    <div className="border-border rounded-md border px-3 py-2">
+    <div className="border-border border px-3 py-2">
       <div className="flex items-start justify-between gap-2">
         <Stack gap={0} className="min-w-0">
           <Text small className="truncate font-medium">

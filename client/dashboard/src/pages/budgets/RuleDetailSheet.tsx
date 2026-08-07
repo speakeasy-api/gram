@@ -200,7 +200,7 @@ function RuleDetail({
               No budget events recorded for this rule yet.
             </p>
           ) : (
-            <ul className="divide-border rounded-lg border divide-y">
+            <ul className="divide-border border divide-y">
               {events.map((event) => {
                 const version = parseRuleUrn(event.ruleUrn)?.version;
                 const fromOldVersion =
@@ -309,7 +309,7 @@ function PeopleSection({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search people"
             aria-label="Search people"
-            className="border-input focus-visible:border-ring focus-visible:ring-ring/50 h-8 w-full rounded-md border bg-transparent pr-3 pl-8 text-xs outline-none focus-visible:ring-[3px]"
+            className="border-input focus-visible:border-ring focus-visible:ring-ring/50 h-8 w-full border bg-transparent pr-3 pl-8 text-xs outline-none focus-visible:ring-[3px]"
           />
         </div>
       )}
@@ -396,7 +396,7 @@ function PeopleSectionBody({
     );
   }
   return (
-    <ul className="divide-border rounded-lg border divide-y">
+    <ul className="divide-border border divide-y">
       {visible.map((actor) => (
         <ActorRow key={actor.email} actor={actor} />
       ))}

@@ -240,7 +240,7 @@ export function NavGroupProvider({
       >
         {highlightRect && (
           <motion.div
-            className="bg-card ring-border/50 pointer-events-none absolute rounded-lg ring-1"
+            className="bg-card border-border pointer-events-none absolute border"
             animate={{
               top: highlightRect.top,
               left: highlightRect.left,
@@ -417,7 +417,7 @@ export function NavButton({
       target={target}
       onClick={handleClick}
       className={cn(
-        "relative z-1 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors hover:no-underline",
+        "relative z-1 flex w-full items-center gap-2 px-2 py-1.5 text-sm transition-colors hover:no-underline",
         "group-data-[collapsible=icon]:min-w-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:p-2!",
         active
           ? "text-foreground font-semibold"
@@ -517,7 +517,7 @@ export function CollapsibleNavGroup({
             to={defaultHref ?? "#"}
             onClick={handleClick}
             className={cn(
-              "relative z-1 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 pr-7 text-left text-sm transition-colors hover:no-underline",
+              "relative z-1 flex w-full items-center gap-2 px-2 py-1.5 pr-7 text-left text-sm transition-colors hover:no-underline",
               "group-data-[collapsible=icon]:min-w-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:p-2!",
               "cursor-pointer outline-hidden",
               isOpen
@@ -546,7 +546,7 @@ export function CollapsibleNavGroup({
             <button
               type="button"
               aria-label={isOpen ? `Collapse ${label}` : `Expand ${label}`}
-              className="text-muted-foreground hover:text-foreground absolute top-1/2 right-1 z-1 flex size-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded-sm transition-colors group-data-[collapsible=icon]:hidden"
+              className="text-muted-foreground hover:text-foreground absolute top-1/2 right-1 z-1 flex size-5 -translate-y-1/2 cursor-pointer items-center justify-center transition-colors group-data-[collapsible=icon]:hidden"
             >
               <ChevronRightIcon
                 className={cn(
@@ -644,7 +644,7 @@ export function CollapsibleNavItem({
           to={item.href()}
           onClick={handleClick}
           className={cn(
-            "relative z-1 flex items-center gap-2 rounded-md px-2 py-1 text-sm transition-colors hover:no-underline",
+            "relative z-1 flex items-center gap-2 px-2 py-1 text-sm transition-colors hover:no-underline",
             item.active
               ? "text-foreground font-semibold"
               : "text-muted-foreground hover:text-foreground",

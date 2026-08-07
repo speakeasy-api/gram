@@ -50,7 +50,7 @@ export function UserSessionsList({
       ) : sessions.length === 0 ? (
         <p className="text-muted-foreground text-sm">No active sessions</p>
       ) : (
-        <ul className="divide-border divide-y rounded-md border">
+        <ul className="divide-border divide-y border">
           {sessions.map((s) => (
             <SessionRow
               key={s.id}

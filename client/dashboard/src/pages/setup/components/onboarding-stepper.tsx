@@ -54,7 +54,7 @@ export function OnboardingStepper({
             <div className="relative z-10 flex-shrink-0">
               {isCurrent ? (
                 /* Active step: dark filled rounded rectangle */
-                <div className="flex h-[28px] w-[28px] items-center justify-center rounded-[8px] bg-foreground text-sm font-semibold text-background">
+                <div className="flex h-[28px] w-[28px] items-center justify-center bg-foreground text-sm font-semibold text-background">
                   {index + 1}
                 </div>
               ) : isCompleted ? (

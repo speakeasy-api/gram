@@ -45,7 +45,7 @@ export function EnableLoggingOverlay({
   };
 
   return (
-    <div className="bg-background/70 absolute inset-0 z-10 flex items-center justify-center rounded-lg backdrop-blur-[2px]">
+    <div className="bg-background/70 absolute inset-0 z-10 flex items-center justify-center backdrop-blur-[2px]">
       <div className="flex max-w-md flex-col items-center gap-4 p-8 text-center">
         <div className="bg-muted flex size-14 items-center justify-center rounded-full">
           <Icon name="activity" className="text-muted-foreground size-7" />
@@ -58,7 +58,7 @@ export function EnableLoggingOverlay({
             system metrics to power the observability dashboard.
           </p>
         </div>
-        <div className="border-border bg-muted/30 w-full rounded-lg border p-4 text-left">
+        <div className="border-border bg-muted/30 w-full border p-4 text-left">
           <div className="flex items-start gap-2">
             <Icon
               name="info"

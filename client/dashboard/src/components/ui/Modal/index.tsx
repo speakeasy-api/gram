@@ -47,7 +47,7 @@ export const Modal = ({
         {layout === "default" ? (
           <DialogContent
             className={cn(
-              "fixed top-1/2 left-1/2 z-20 flex h-auto max-h-[85vh] min-h-[40vh] w-[90vw] max-w-[800px] -translate-x-1/2 -translate-y-1/2 flex-col gap-3 overflow-y-auto rounded-md border-neutral-default bg-surface-primary p-10 shadow-lg outline-none",
+              "fixed top-1/2 left-1/2 z-20 flex h-auto max-h-[85vh] min-h-[40vh] w-[90vw] max-w-[800px] -translate-x-1/2 -translate-y-1/2 flex-col gap-3 overflow-y-auto border-neutral-default bg-surface-primary p-10 shadow-lg outline-none",
               className,
             )}
           >
@@ -79,7 +79,7 @@ export const Modal = ({
         ) : (
           <DialogContent
             className={cn(
-              "fixed top-1/2 left-1/2 z-20 flex h-auto max-h-[85vh] min-h-[40vh] w-[90vw] max-w-[800px] -translate-x-1/2 -translate-y-1/2 flex-col gap-3 overflow-y-auto rounded-md border-neutral-default bg-surface-primary p-10 shadow-lg outline-none",
+              "fixed top-1/2 left-1/2 z-20 flex h-auto max-h-[85vh] min-h-[40vh] w-[90vw] max-w-[800px] -translate-x-1/2 -translate-y-1/2 flex-col gap-3 overflow-y-auto border-neutral-default bg-surface-primary p-10 shadow-lg outline-none",
               className,
             )}
           >

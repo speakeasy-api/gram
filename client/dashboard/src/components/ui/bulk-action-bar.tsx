@@ -26,8 +26,8 @@ export interface BulkAction {
  * stays fully uncovered and clickable — it already clears the selection
  * when all rows are checked, so the bar itself carries no separate "Clear"
  * control. Sized to its own content (not stretched to the table's full
- * width) and rounded, so it reads as a small floating pill rather than a
- * bar spanning the whole row.
+ * width), a square hairline-bordered chip rather than a bar spanning the
+ * whole row.
  *
  * Both current callers (RiskEvents.tsx, RiskOverviewCategoryDetail.tsx)
  * already render this outside the selectable list's own scrolling
@@ -89,7 +89,7 @@ export function BulkActionBar({
       aria-hidden={!visible}
       style={{ left: leftOffsetPx + 16, height: heightPx }}
       className={cn(
-        "bg-background absolute top-0 z-20 flex w-fit items-center gap-3 rounded-lg border px-3 text-sm shadow-md",
+        "bg-background absolute top-0 z-20 flex w-fit items-center gap-3 border px-3 text-sm shadow-md",
         heightPx == null && "py-2",
         visible ? "visible" : "invisible",
       )}

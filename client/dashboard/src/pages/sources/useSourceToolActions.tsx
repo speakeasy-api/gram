@@ -273,7 +273,7 @@ export function useSourceToolActions({
               />
               {tool.variation?.description &&
                 tool.variation?.description !== tool.canonical?.description && (
-                  <Stack className="border-border/70 rounded-md border p-2">
+                  <Stack className="border-border/70 border p-2">
                     <Text small muted className="inline font-medium">
                       <Icon
                         name="layers-2"

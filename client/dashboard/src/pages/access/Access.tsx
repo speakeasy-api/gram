@@ -1,13 +1,11 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/Heading";
 import {
   PageTabsList,
   PageTabsTrigger,
   Tabs,
   TabsContent,
 } from "@/components/ui/Tabs";
-import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useOrgRoutes } from "@/routes";
 import { Alert } from "@/components/ui/Alert";
@@ -104,15 +102,13 @@ function AccessInner() {
 
   return (
     <>
-      <div className="-mt-4">
-        <Heading variant="h4" className="mb-2">
-          Roles &amp; Permissions
-        </Heading>
-        <Text variant="body" className="text-muted-foreground mb-2">
+      <Page.Section>
+        <Page.Section.Title>Roles &amp; Permissions</Page.Section.Title>
+        <Page.Section.Description>
           Manage access control for your team by defining roles and assigning
           permissions. View past authorization challenges.
-        </Text>
-      </div>
+        </Page.Section.Description>
+      </Page.Section>
 
       {organization.scimEnabled && (
         <Alert variant="info" dismissible={false} className="mb-6 text-sm">

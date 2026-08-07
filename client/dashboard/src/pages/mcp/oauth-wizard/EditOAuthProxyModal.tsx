@@ -192,7 +192,7 @@ function EditOAuthProxyForm({
           <div>
             <Text className="mb-2 font-medium">Token Endpoint Auth Method</Text>
             <select
-              className="bg-background w-full rounded border px-3 py-2"
+              className="bg-background w-full border px-3 py-2"
               value={tokenAuthMethod}
               onChange={(e) => setTokenAuthMethod(e.target.value)}
             >

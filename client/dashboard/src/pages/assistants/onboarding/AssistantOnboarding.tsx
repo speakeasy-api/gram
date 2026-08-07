@@ -175,8 +175,10 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
     for (const ref of draft.assistant?.toolsets ?? []) {
       const toolset = toolsetBySlug.get(ref.toolsetSlug);
       if (!toolset) continue;
+      const url = internalMcpUrl({ slug: project.slug }, toolset);
+      if (!url) continue;
       entries.push({
-        url: internalMcpUrl({ slug: project.slug }, toolset),
+        url,
         name: capMcpEntryName(toolset.slug),
         environment: ref.environmentSlug ?? fallbackEnv,
       });

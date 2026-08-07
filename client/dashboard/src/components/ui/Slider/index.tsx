@@ -40,7 +40,7 @@ const Slider = forwardRef<HTMLInputElement, SliderProps>(
         max={max}
         step={step}
         className={cn(
-          "relative z-10 h-2 w-full cursor-pointer appearance-none rounded-lg",
+          "relative z-10 h-2 w-full cursor-pointer appearance-none",
           // The ticks variant draws its own track behind the input, so the
           // input's own track must stay transparent; otherwise show a solid
           // track so the thumb sits on a visible line.
@@ -77,7 +77,7 @@ const Slider = forwardRef<HTMLInputElement, SliderProps>(
         {/* Track + tick marks sit behind the (transparent-track) input. Ticks
             are inset by half the 16px thumb so their centers line up with the
             thumb center across the full range. */}
-        <div className="bg-muted pointer-events-none absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 rounded-lg">
+        <div className="bg-muted pointer-events-none absolute inset-x-0 top-1/2 h-2 -translate-y-1/2">
           {ticks.map((t) => {
             const frac = max === min ? 0 : (t - min) / (max - min);
             const active = value >= t;

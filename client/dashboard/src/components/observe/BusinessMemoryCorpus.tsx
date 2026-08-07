@@ -255,7 +255,7 @@ export function BusinessMemoryCorpus(): JSX.Element {
           {loading ? (
             <SkeletonTable />
           ) : error ? (
-            <div className="border-border rounded-md border p-6">
+            <div className="border-border border p-6">
               <Text className="text-destructive">
                 {error.message || "Failed to load business memories."}
               </Text>

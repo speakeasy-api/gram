@@ -31,7 +31,7 @@ const meta: Meta<typeof Button> = {
       control: { type: "select" },
       options: ["product", "marketing"],
       description:
-        "Context determines styling - product uses rounded corners, marketing uses full pills",
+        "Context determines styling - product uses corners, marketing uses full pills",
     },
   },
 };
@@ -473,7 +473,7 @@ export const BrandButtonInStackingContexts: Story = {
         <div>
           <h4 className="mb-3 text-sm font-medium">Flex Containers</h4>
           <div className="space-y-3">
-            <div className="flex items-center gap-3 rounded border bg-surface-secondary p-3">
+            <div className="flex items-center gap-3 border bg-surface-secondary p-3">
               <span>Navigation:</span>
               <Button variant="brand" size="sm">
                 <Button.LeftIcon>
@@ -483,12 +483,12 @@ export const BrandButtonInStackingContexts: Story = {
               </Button>
             </div>
 
-            <div className="flex min-h-8 max-w-full items-center gap-1.5 truncate rounded border bg-surface-secondary p-2">
-              <a className="cursor-pointer rounded px-1.5 text-muted-foreground hover:text-foreground">
+            <div className="flex min-h-8 max-w-full items-center gap-1.5 truncate border bg-surface-secondary p-2">
+              <a className="cursor-pointer px-1.5 text-muted-foreground hover:text-foreground">
                 Home
               </a>
               <span className="text-muted-foreground">/</span>
-              <a className="cursor-pointer rounded px-1.5 text-muted-foreground hover:text-foreground">
+              <a className="cursor-pointer px-1.5 text-muted-foreground hover:text-foreground">
                 Projects
               </a>
               <div className="ml-auto">
@@ -518,7 +518,7 @@ export const BrandButtonInStackingContexts: Story = {
 
         <div>
           <h4 className="mb-3 text-sm font-medium">Grid Layouts</h4>
-          <div className="grid grid-cols-[1fr_auto] items-center gap-4 rounded border bg-surface-secondary p-3">
+          <div className="grid grid-cols-[1fr_auto] items-center gap-4 border bg-surface-secondary p-3">
             <div>
               <h5 className="font-medium">Project Settings</h5>
               <p className="text-sm text-muted">Configure your project</p>
@@ -531,7 +531,7 @@ export const BrandButtonInStackingContexts: Story = {
 
         <div>
           <h4 className="mb-3 text-sm font-medium">High Z-Index Contexts</h4>
-          <div className="relative z-[9999] rounded border bg-surface-secondary p-3">
+          <div className="relative z-[9999] border bg-surface-secondary p-3">
             <div className="flex items-center justify-between">
               <span>Modal Header</span>
               <Button variant="brand" size="sm">
@@ -543,7 +543,7 @@ export const BrandButtonInStackingContexts: Story = {
 
         <div>
           <h4 className="mb-3 text-sm font-medium">Transform Contexts</h4>
-          <div className="scale-100 transform rounded border bg-surface-secondary p-3">
+          <div className="scale-100 transform border bg-surface-secondary p-3">
             <div className="flex items-center gap-3">
               <span>Transformed container:</span>
               <Button variant="brand" size="sm">
@@ -557,7 +557,7 @@ export const BrandButtonInStackingContexts: Story = {
           <h4 className="mb-3 text-sm font-medium">
             Overflow Hidden Containers
           </h4>
-          <div className="overflow-hidden rounded border bg-surface-secondary p-3">
+          <div className="overflow-hidden border bg-surface-secondary p-3">
             <div className="flex items-center gap-3">
               <span>Clipped container:</span>
               <Button variant="brand" size="sm">
@@ -569,8 +569,8 @@ export const BrandButtonInStackingContexts: Story = {
 
         <div>
           <h4 className="mb-3 text-sm font-medium">Complex Nested Layouts</h4>
-          <div className="rounded-lg bg-surface-secondary p-4">
-            <div className="rounded border bg-surface-primary">
+          <div className="bg-surface-secondary p-4">
+            <div className="border bg-surface-primary">
               <div className="flex items-center justify-between border-b p-4">
                 <div className="flex items-center gap-2">
                   <span className="font-medium">Complex Layout</span>
@@ -584,11 +584,11 @@ export const BrandButtonInStackingContexts: Story = {
               </div>
               <div className="p-4 pb-6">
                 <div className="flex min-h-8 max-w-full items-center gap-1.5">
-                  <a className="cursor-pointer rounded px-1.5 text-muted-foreground hover:text-foreground">
+                  <a className="cursor-pointer px-1.5 text-muted-foreground hover:text-foreground">
                     Workspace
                   </a>
                   <span className="text-muted-foreground">/</span>
-                  <a className="cursor-pointer rounded px-1.5 text-muted-foreground hover:text-foreground">
+                  <a className="cursor-pointer px-1.5 text-muted-foreground hover:text-foreground">
                     Project
                   </a>
                   <span className="text-muted-foreground">/</span>
@@ -652,7 +652,7 @@ export const BrandButtonAsChild: Story = {
           <Heading variant="h4">Brand Button as Child</Heading>
           <Text>
             The following is a hyperlink element using the Button's{" "}
-            <pre className="mx-1 inline-block rounded bg-surface-secondary px-1.5">
+            <pre className="mx-1 inline-block bg-surface-secondary px-1.5">
               asChild
             </pre>
             prop.

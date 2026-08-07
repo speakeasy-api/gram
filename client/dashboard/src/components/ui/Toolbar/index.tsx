@@ -70,9 +70,9 @@ import {
 // Shared height for every control in the toolbar (40px).
 const CONTROL_HEIGHT = "h-10";
 
-// The toolbar's shell (the grey rounded bar) — one definition whether the bar
+// The toolbar's shell (the grey bar) — one definition whether the bar
 // lays out a single row or composes Toolbar.Row children.
-const TOOLBAR_SHELL = "border-border bg-muted/40 w-full rounded-lg border p-2";
+const TOOLBAR_SHELL = "border-border bg-muted/40 w-full border p-2";
 
 // One row of clusters: the left holds the controls that narrow the data
 // (search + filters + leading), spaced apart (justify-between) from the right,
@@ -215,7 +215,7 @@ function ToolbarSearch({
   return (
     <div
       className={cn(
-        "border-border bg-card focus-within:border-ring flex shrink-0 items-center gap-2 rounded-md border px-3",
+        "border-border bg-card focus-within:border-ring flex shrink-0 items-center gap-2 border px-3",
         CONTROL_HEIGHT,
         className ?? "w-64",
       )}
@@ -402,7 +402,7 @@ function ToolbarSortBy({
   return (
     <div
       className={cn(
-        "border-border bg-card flex shrink-0 items-center rounded-md border",
+        "border-border bg-card flex shrink-0 items-center border",
         CONTROL_HEIGHT,
         className,
       )}

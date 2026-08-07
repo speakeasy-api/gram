@@ -162,34 +162,30 @@ function LogDetailContent({
 
   return (
     <div className="flex flex-col gap-6 px-5 pt-6 pb-6">
-      {/* Header with span info */}
+      {/* Header — severity word + headline, then a hairline-ruled meta list */}
       <div className="flex flex-col gap-4">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-1.5">
           {blockReason ? (
-            <div className="inline-flex items-center gap-1.5 rounded bg-amber-500/10 px-2 py-1 text-xs font-semibold text-amber-700 uppercase dark:text-amber-300">
+            <div className="inline-flex items-center gap-1.5 font-mono text-xs tracking-wide uppercase text-[var(--color-feedback-orange-600)] dark:text-[var(--color-feedback-orange-400)]">
               <Icon name="shield-alert" className="size-3" />
               Blocked
             </div>
           ) : (
             <div
-              className={`rounded px-2 py-1 text-xs font-semibold uppercase ${severityClass} bg-muted`}
+              className={`font-mono text-xs tracking-wide uppercase ${severityClass}`}
             >
               {log.severityText || "INFO"}
             </div>
           )}
-          <SheetTitle className="text-base font-medium tracking-tight">
+          <SheetTitle className="font-display text-xl font-light tracking-tight">
             {log.body?.slice(0, 80) || "(no message)"}
           </SheetTitle>
         </div>
 
         {blockReason && (
-          <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
-            <Icon
-              name="shield-alert"
-              className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400"
-            />
+          <div className="flex items-start gap-3 border-l-2 border-l-[var(--color-feedback-orange-600)] py-1 pl-3">
             <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <div className="text-xs font-semibold tracking-wide text-amber-700 uppercase dark:text-amber-300">
+              <div className="font-mono text-xs tracking-wide uppercase text-[var(--color-feedback-orange-600)] dark:text-[var(--color-feedback-orange-400)]">
                 Block Reason
               </div>
               <div className="text-foreground text-sm break-words">
@@ -199,37 +195,31 @@ function LogDetailContent({
           </div>
         )}
 
-        {/* Metadata badges */}
-        <div className="flex flex-wrap gap-2">
-          <MetadataBadge
-            label="Service"
-            value={log.service?.name || "Unknown"}
-          />
+        {/* Meta — definition-list rows with eyebrow keys and mono values */}
+        <div className="border-border divide-border flex flex-col divide-y border-y">
+          <MetadataRow label="Service" value={log.service?.name || "Unknown"} />
           {gramUrn && (
-            <MetadataBadge
+            <MetadataRow
               label="Platform URN"
               value={gramUrn}
-              mono
               copyValue={gramUrn}
             />
           )}
           {log.traceId && (
-            <MetadataBadge
+            <MetadataRow
               label="Trace ID"
               value={log.traceId}
-              mono
               copyValue={log.traceId}
             />
           )}
           {log.spanId && (
-            <MetadataBadge
+            <MetadataRow
               label="Span ID"
               value={log.spanId}
-              mono
               copyValue={log.spanId}
             />
           )}
-          <MetadataBadge
+          <MetadataRow
             label="Time"
             value={formatNanoTimestamp(log.timeUnixNano)}
           />
@@ -248,15 +238,11 @@ function LogDetailContent({
         </TabsList>
 
         <TabsContent value="details" className="mt-5 flex flex-col gap-5">
-          {/* Tool Error — destructive styling so failures pop visually */}
+          {/* Tool Error — red left edge so failures pop without a tint wash */}
           {toolError && (
-            <div className="border-destructive/40 bg-destructive/10 flex items-start gap-3 rounded-lg border p-3">
-              <Icon
-                name="circle-alert"
-                className="text-destructive-default mt-0.5 size-4 shrink-0"
-              />
+            <div className="border-l-destructive flex items-start gap-3 border-l-2 py-1 pl-3">
               <div className="flex min-w-0 flex-1 flex-col gap-1">
-                <div className="text-destructive-default text-xs font-semibold tracking-wide uppercase">
+                <div className="text-destructive-default font-mono text-xs tracking-wide uppercase">
                   Tool Error
                 </div>
                 <div className="text-foreground text-sm break-words">
@@ -268,14 +254,14 @@ function LogDetailContent({
 
           {/* Highlights — prominent labeled rows pulled out of attributes */}
           {highlights.length > 0 && (
-            <div className="border-border bg-muted/40 grid grid-cols-1 gap-x-4 gap-y-2 rounded-lg border p-4 sm:grid-cols-[max-content_minmax(0,1fr)]">
+            <div className="border-border divide-border flex flex-col divide-y border-y">
               {highlights.map((h) => (
                 <div
                   key={h.path}
-                  className="[&>div:first-child]:text-muted-foreground contents [&>div:first-child]:self-center [&>div:first-child]:text-xs [&>div:first-child]:font-medium [&>div:first-child]:tracking-wide [&>div:first-child]:uppercase"
+                  className="flex items-baseline justify-between gap-4 py-2"
                 >
-                  <div>{h.label}</div>
-                  <div className="text-foreground font-mono text-sm break-all">
+                  <div className="text-eyebrow shrink-0">{h.label}</div>
+                  <div className="text-foreground min-w-0 font-mono text-xs break-all">
                     {h.value}
                   </div>
                 </div>
@@ -288,7 +274,7 @@ function LogDetailContent({
             <CollapsibleBodySection title="Tool Input" content={toolInput} />
           )}
           {showToolIOHiddenMessage && (
-            <div className="text-muted-foreground bg-muted/30 border-border rounded-lg border px-3 py-2 text-sm">
+            <div className="text-muted-foreground border-border border px-3 py-2 text-sm">
               Tool arguments are not shown when tool_io_logs are disabled.
             </div>
           )}
@@ -332,11 +318,9 @@ function LogDetailContent({
 
         <TabsContent value="raw" className="mt-5 flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-              Full Log Record
-            </div>
+            <div className="text-eyebrow">Full Log Record</div>
             <button
-              className="hover:bg-muted rounded p-1.5"
+              className="hover:bg-muted p-1.5"
               onClick={() => {
                 void navigator.clipboard.writeText(
                   JSON.stringify(log, null, 2),
@@ -346,7 +330,7 @@ function LogDetailContent({
               <Copy className="size-4" />
             </button>
           </div>
-          <div className="bg-muted/40 border-border flex-1 overflow-y-auto rounded-lg border p-4">
+          <div className="border-border flex-1 overflow-y-auto border p-4">
             <pre className="font-mono text-sm break-all whitespace-pre-wrap">
               {JSON.stringify(log, null, 2)}
             </pre>
@@ -387,9 +371,7 @@ function CollapsibleBodySection({
         onClick={() => setIsOpen((open) => !open)}
         className="group flex min-h-7 items-center justify-between pr-12"
       >
-        <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-          {title}
-        </span>
+        <span className="text-eyebrow">{title}</span>
         <ChevronDown
           aria-hidden="true"
           className={cn(
@@ -401,7 +383,7 @@ function CollapsibleBodySection({
       <button
         type="button"
         aria-label={`Copy ${title}`}
-        className="hover:bg-muted absolute top-0 right-5 z-10 rounded p-1.5"
+        className="hover:bg-muted absolute top-0 right-5 z-10 p-1.5"
         onClick={() => void navigator.clipboard.writeText(content)}
       >
         <Copy aria-hidden="true" className="size-4" />
@@ -409,7 +391,7 @@ function CollapsibleBodySection({
       {isOpen && (
         <div
           id={contentId}
-          className="bg-muted/40 border-border max-h-96 overflow-y-auto rounded-lg border p-4"
+          className="border-border max-h-96 overflow-y-auto border p-4"
         >
           <pre className="font-mono text-sm break-words whitespace-pre-wrap">
             {displayContent}
@@ -420,31 +402,28 @@ function CollapsibleBodySection({
   );
 }
 
-function MetadataBadge({
+function MetadataRow({
   label,
   value,
-  mono = false,
   copyValue,
 }: {
   label: string;
   value: string;
-  mono?: boolean;
   copyValue?: string;
 }) {
   return (
     <button
-      className="bg-muted/50 hover:bg-muted flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors"
+      className="hover:bg-muted/50 flex items-center justify-between gap-4 py-2 text-left transition-colors"
       onClick={() => {
         if (copyValue) {
           void navigator.clipboard.writeText(copyValue);
         }
       }}
       disabled={!copyValue}
+      title={copyValue ? `Copy ${label}` : undefined}
     >
-      <span className="text-muted-foreground shrink-0">{label}:</span>
-      <span className={mono ? "font-mono text-xs" : "font-medium"}>
-        {value}
-      </span>
+      <span className="text-eyebrow shrink-0">{label}</span>
+      <span className="min-w-0 truncate font-mono text-xs">{value}</span>
     </button>
   );
 }
@@ -541,11 +520,9 @@ function AttributesSection({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-          {title}
-        </div>
+        <div className="text-eyebrow">{title}</div>
         <button
-          className="hover:bg-muted rounded p-1.5"
+          className="hover:bg-muted p-1.5"
           onClick={() => {
             void navigator.clipboard.writeText(JSON.stringify(data, null, 2));
           }}
@@ -553,7 +530,7 @@ function AttributesSection({
           <Copy className="size-4" />
         </button>
       </div>
-      <div className="bg-muted/40 border-border divide-border divide-y rounded-lg border">
+      <div className="border-border divide-border divide-y border-y">
         {flatEntries.map((entry) => {
           const isFilterable = entry.filterValue !== null;
 
@@ -570,7 +547,7 @@ function AttributesSection({
             return (
               <div
                 key={entry.key}
-                className="hover:bg-muted/50 flex flex-col gap-1 px-4 py-2.5 transition-colors"
+                className="hover:bg-muted/50 flex flex-col gap-1 px-2 py-2.5 transition-colors"
               >
                 {rowContent}
               </div>
@@ -585,7 +562,7 @@ function AttributesSection({
             >
               <DropdownMenuTrigger asChild>
                 <button
-                  className="hover:bg-muted/50 flex w-full cursor-pointer flex-col gap-1 px-4 py-2.5 text-left transition-colors"
+                  className="hover:bg-muted/50 flex w-full cursor-pointer flex-col gap-1 px-2 py-2.5 text-left transition-colors"
                   aria-label={`Attribute actions for ${entry.key}`}
                 >
                   {rowContent}
