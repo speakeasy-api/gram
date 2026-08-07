@@ -90,61 +90,6 @@ func (q *Queries) CreateApprovalDecision(ctx context.Context, arg CreateApproval
 	return i, err
 }
 
-const createApprovalRequestRequester = `-- name: CreateApprovalRequestRequester :one
-INSERT INTO mcp_approval_request_requesters (
-  organization_id
-  , project_id
-  , mcp_approval_request_id
-  , user_id
-  , user_email
-  , note
-) VALUES (
-  $1
-  , $2
-  , $3
-  , $4
-  , $5::text
-  , $6::text
-)
-RETURNING id, organization_id, project_id, mcp_approval_request_id, user_id, user_email, note, requested_at, created_at, updated_at, deleted_at, deleted
-`
-
-type CreateApprovalRequestRequesterParams struct {
-	OrganizationID       string
-	ProjectID            uuid.UUID
-	McpApprovalRequestID uuid.UUID
-	UserID               string
-	UserEmail            pgtype.Text
-	Note                 pgtype.Text
-}
-
-func (q *Queries) CreateApprovalRequestRequester(ctx context.Context, arg CreateApprovalRequestRequesterParams) (McpApprovalRequestRequester, error) {
-	row := q.db.QueryRow(ctx, createApprovalRequestRequester,
-		arg.OrganizationID,
-		arg.ProjectID,
-		arg.McpApprovalRequestID,
-		arg.UserID,
-		arg.UserEmail,
-		arg.Note,
-	)
-	var i McpApprovalRequestRequester
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.McpApprovalRequestID,
-		&i.UserID,
-		&i.UserEmail,
-		&i.Note,
-		&i.RequestedAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
-}
-
 const createResearchReport = `-- name: CreateResearchReport :one
 INSERT INTO mcp_research_reports (
   organization_id
@@ -333,6 +278,56 @@ func (q *Queries) GetApprovalRequestForDecision(ctx context.Context, arg GetAppr
 		&i.Status,
 		&i.CurrentEvidence,
 		&i.EvidenceVersion,
+	)
+	return i, err
+}
+
+const getBypassRequestForPromotion = `-- name: GetBypassRequestForPromotion :one
+SELECT id, organization_id, project_id, target_kind, target_label, target_key,
+       target_dimensions, requester_user_id, requester_email, note
+FROM risk_policy_bypass_requests
+WHERE id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+`
+
+type GetBypassRequestForPromotionParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type GetBypassRequestForPromotionRow struct {
+	ID               uuid.UUID
+	OrganizationID   string
+	ProjectID        uuid.UUID
+	TargetKind       pgtype.Text
+	TargetLabel      pgtype.Text
+	TargetKey        pgtype.Text
+	TargetDimensions []byte
+	RequesterUserID  string
+	RequesterEmail   pgtype.Text
+	Note             pgtype.Text
+}
+
+// Resolved under the caller's project, never by id alone: the id arrives from
+// the caller, and promotion of another project's bypass request into this
+// project's queue is the exact horizontal escalation the org standard forbids.
+// There is deliberately no database-level pin for this pair (see AIS-470), so
+// this predicate is the primary control.
+func (q *Queries) GetBypassRequestForPromotion(ctx context.Context, arg GetBypassRequestForPromotionParams) (GetBypassRequestForPromotionRow, error) {
+	row := q.db.QueryRow(ctx, getBypassRequestForPromotion, arg.ID, arg.ProjectID)
+	var i GetBypassRequestForPromotionRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.TargetKind,
+		&i.TargetLabel,
+		&i.TargetKey,
+		&i.TargetDimensions,
+		&i.RequesterUserID,
+		&i.RequesterEmail,
+		&i.Note,
 	)
 	return i, err
 }
@@ -659,6 +654,7 @@ INSERT INTO mcp_approval_requests (
   , artifact_ref
   , version_pinned
   , status
+  , risk_policy_bypass_request_id
 ) VALUES (
   $1
   , $2
@@ -668,6 +664,7 @@ INSERT INTO mcp_approval_requests (
   , $6::text
   , $7
   , $8
+  , $9::uuid
 )
 ON CONFLICT (project_id, target_kind, target_key) WHERE deleted IS FALSE DO UPDATE
 SET updated_at = clock_timestamp()
@@ -675,18 +672,22 @@ SET updated_at = clock_timestamp()
       WHEN mcp_approval_requests.status = 'denied' THEN EXCLUDED.status
       ELSE mcp_approval_requests.status
     END
+  -- A later promotion links its bypass request onto an existing review; a
+  -- proactive re-request never clears an existing link.
+  , risk_policy_bypass_request_id = COALESCE(EXCLUDED.risk_policy_bypass_request_id, mcp_approval_requests.risk_policy_bypass_request_id)
 RETURNING id, organization_id, project_id, target_kind, target_raw, target_key, artifact_ref, version_pinned, risk_policy_bypass_request_id, status, current_evidence, evidence_version, evidence_collected_at, created_at, updated_at, deleted_at, deleted
 `
 
 type UpsertApprovalRequestParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	TargetKind     string
-	TargetRaw      string
-	TargetKey      string
-	ArtifactRef    pgtype.Text
-	VersionPinned  bool
-	Status         string
+	OrganizationID            string
+	ProjectID                 uuid.UUID
+	TargetKind                string
+	TargetRaw                 string
+	TargetKey                 string
+	ArtifactRef               pgtype.Text
+	VersionPinned             bool
+	Status                    string
+	RiskPolicyBypassRequestID uuid.NullUUID
 }
 
 // Re-requesting a server reuses the same row rather than starting a second
@@ -707,6 +708,7 @@ func (q *Queries) UpsertApprovalRequest(ctx context.Context, arg UpsertApprovalR
 		arg.ArtifactRef,
 		arg.VersionPinned,
 		arg.Status,
+		arg.RiskPolicyBypassRequestID,
 	)
 	var i McpApprovalRequest
 	err := row.Scan(
@@ -723,6 +725,70 @@ func (q *Queries) UpsertApprovalRequest(ctx context.Context, arg UpsertApprovalR
 		&i.CurrentEvidence,
 		&i.EvidenceVersion,
 		&i.EvidenceCollectedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const upsertApprovalRequestRequester = `-- name: UpsertApprovalRequestRequester :one
+INSERT INTO mcp_approval_request_requesters (
+  organization_id
+  , project_id
+  , mcp_approval_request_id
+  , user_id
+  , user_email
+  , note
+) VALUES (
+  $1
+  , $2
+  , $3
+  , $4
+  , $5::text
+  , $6::text
+)
+ON CONFLICT (mcp_approval_request_id, user_id) WHERE deleted IS FALSE DO UPDATE
+SET note = COALESCE(EXCLUDED.note, mcp_approval_request_requesters.note)
+  , user_email = COALESCE(EXCLUDED.user_email, mcp_approval_request_requesters.user_email)
+  , requested_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+RETURNING id, organization_id, project_id, mcp_approval_request_id, user_id, user_email, note, requested_at, created_at, updated_at, deleted_at, deleted
+`
+
+type UpsertApprovalRequestRequesterParams struct {
+	OrganizationID       string
+	ProjectID            uuid.UUID
+	McpApprovalRequestID uuid.UUID
+	UserID               string
+	UserEmail            pgtype.Text
+	Note                 pgtype.Text
+}
+
+// One row per person per request: ten people wanting the same server is one
+// review with ten requesters, and one person asking twice is still one. A
+// repeat ask keeps the freshest justification without erasing an earlier one
+// when the new ask carries none.
+func (q *Queries) UpsertApprovalRequestRequester(ctx context.Context, arg UpsertApprovalRequestRequesterParams) (McpApprovalRequestRequester, error) {
+	row := q.db.QueryRow(ctx, upsertApprovalRequestRequester,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.McpApprovalRequestID,
+		arg.UserID,
+		arg.UserEmail,
+		arg.Note,
+	)
+	var i McpApprovalRequestRequester
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.McpApprovalRequestID,
+		&i.UserID,
+		&i.UserEmail,
+		&i.Note,
+		&i.RequestedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

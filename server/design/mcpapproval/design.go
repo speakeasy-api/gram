@@ -69,6 +69,63 @@ var _ = Service("mcpApproval", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetMcpApprovalRequest"}`)
 	})
 
+	Method("createRequest", func() {
+		Description("Ask for an MCP server to be reviewed. Repeat asks for the same server attach to the existing review rather than opening a second one.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+			Attribute("target_kind", String, func() {
+				Description("The namespace of the reference.")
+				Enum("server_url", "stdio_command")
+			})
+			Attribute("target", String, "The server reference: a URL, or the stdio command that launches it.")
+			Attribute("note", String, "Why the requester wants it. The one input no automated evidence supplies, so it cannot be blank.")
+			Required("target_kind", "target", "note")
+		})
+
+		Result(ApprovalRequestSummary)
+
+		HTTP(func() {
+			POST("/rpc/mcpApproval.createRequest")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createMcpApprovalRequest")
+		Meta("openapi:extension:x-speakeasy-name-override", "createRequest")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateMcpApprovalRequest"}`)
+	})
+
+	Method("promote", func() {
+		Description("Promote a risk-policy bypass request into an approval request, carrying its requester and justification into the review queue.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+			Attribute("risk_policy_bypass_request_id", String, "The bypass request to promote.")
+			Required("risk_policy_bypass_request_id")
+		})
+
+		Result(ApprovalRequestSummary)
+
+		HTTP(func() {
+			POST("/rpc/mcpApproval.promote")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "promoteMcpApprovalRequest")
+		Meta("openapi:extension:x-speakeasy-name-override", "promote")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "PromoteMcpApprovalRequest"}`)
+	})
+
 	Method("recordDecision", func() {
 		Description("Approve or deny an MCP approval request, recording the rationale and who it applies to.")
 

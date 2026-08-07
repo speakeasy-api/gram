@@ -182,6 +182,20 @@ func remoteIdentity(u *url.URL) Identity {
 	}
 }
 
+// RedactServerURL renders a server URL reference with everything per-install
+// or secret removed — userinfo, query, fragment — keeping the readable
+// scheme, host, and path. This is the form safe to persist and show: a
+// long-lived token pasted into a request URL must not reach every reader of
+// the review queue or the audit feed.
+func RedactServerURL(raw string) (string, bool) {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return "", false
+	}
+
+	return redactedURL(u), true
+}
+
 // redactedURL renders a URL with everything that is per-install or secret
 // removed: credentials in the userinfo, the query string, and the fragment.
 // What remains is the part two references to the same server share, and it is

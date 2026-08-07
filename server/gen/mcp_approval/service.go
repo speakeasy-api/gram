@@ -20,6 +20,12 @@ type Service interface {
 	ListRequests(context.Context, *ListRequestsPayload) (res *ListApprovalRequestsResult, err error)
 	// Fetch one MCP approval request with its evidence and decision history.
 	GetRequest(context.Context, *GetRequestPayload) (res *ApprovalRequestDetail, err error)
+	// Ask for an MCP server to be reviewed. Repeat asks for the same server attach
+	// to the existing review rather than opening a second one.
+	CreateRequest(context.Context, *CreateRequestPayload) (res *ApprovalRequestSummary, err error)
+	// Promote a risk-policy bypass request into an approval request, carrying its
+	// requester and justification into the review queue.
+	Promote(context.Context, *PromotePayload) (res *ApprovalRequestSummary, err error)
 	// Approve or deny an MCP approval request, recording the rationale and who it
 	// applies to.
 	RecordDecision(context.Context, *RecordDecisionPayload) (res *ApprovalDecision, err error)
@@ -45,7 +51,7 @@ const ServiceName = "mcpApproval"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [3]string{"listRequests", "getRequest", "recordDecision"}
+var MethodNames = [5]string{"listRequests", "getRequest", "createRequest", "promote", "recordDecision"}
 
 // ApprovalDecision is the result type of the mcpApproval service
 // recordDecision method.
@@ -96,7 +102,8 @@ type ApprovalRequestDetail struct {
 	ResearchReports []*ResearchReport
 }
 
-// One MCP server awaiting a decision.
+// ApprovalRequestSummary is the result type of the mcpApproval service
+// createRequest method.
 type ApprovalRequestSummary struct {
 	// The approval request ID.
 	ID string
@@ -133,6 +140,21 @@ type ApprovalRequester struct {
 	RequestedAt string
 }
 
+// CreateRequestPayload is the payload type of the mcpApproval service
+// createRequest method.
+type CreateRequestPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The namespace of the reference.
+	TargetKind string
+	// The server reference: a URL, or the stdio command that launches it.
+	Target string
+	// Why the requester wants it. The one input no automated evidence supplies, so
+	// it cannot be blank.
+	Note string
+}
+
 // GetRequestPayload is the payload type of the mcpApproval service getRequest
 // method.
 type GetRequestPayload struct {
@@ -164,6 +186,15 @@ type ListRequestsPayload struct {
 	Cursor *string
 	// The number of requests to return per page
 	Limit *int32
+}
+
+// PromotePayload is the payload type of the mcpApproval service promote method.
+type PromotePayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The bypass request to promote.
+	RiskPolicyBypassRequestID string
 }
 
 // RecordDecisionPayload is the payload type of the mcpApproval service

@@ -115,6 +115,7 @@ INSERT INTO mcp_approval_requests (
   , artifact_ref
   , version_pinned
   , status
+  , risk_policy_bypass_request_id
 ) VALUES (
   @organization_id
   , @project_id
@@ -124,6 +125,7 @@ INSERT INTO mcp_approval_requests (
   , sqlc.narg(artifact_ref)::text
   , @version_pinned
   , @status
+  , sqlc.narg(risk_policy_bypass_request_id)::uuid
 )
 ON CONFLICT (project_id, target_kind, target_key) WHERE deleted IS FALSE DO UPDATE
 SET updated_at = clock_timestamp()
@@ -131,9 +133,16 @@ SET updated_at = clock_timestamp()
       WHEN mcp_approval_requests.status = 'denied' THEN EXCLUDED.status
       ELSE mcp_approval_requests.status
     END
+  -- A later promotion links its bypass request onto an existing review; a
+  -- proactive re-request never clears an existing link.
+  , risk_policy_bypass_request_id = COALESCE(EXCLUDED.risk_policy_bypass_request_id, mcp_approval_requests.risk_policy_bypass_request_id)
 RETURNING *;
 
--- name: CreateApprovalRequestRequester :one
+-- name: UpsertApprovalRequestRequester :one
+-- One row per person per request: ten people wanting the same server is one
+-- review with ten requesters, and one person asking twice is still one. A
+-- repeat ask keeps the freshest justification without erasing an earlier one
+-- when the new ask carries none.
 INSERT INTO mcp_approval_request_requesters (
   organization_id
   , project_id
@@ -149,6 +158,11 @@ INSERT INTO mcp_approval_request_requesters (
   , sqlc.narg(user_email)::text
   , sqlc.narg(note)::text
 )
+ON CONFLICT (mcp_approval_request_id, user_id) WHERE deleted IS FALSE DO UPDATE
+SET note = COALESCE(EXCLUDED.note, mcp_approval_request_requesters.note)
+  , user_email = COALESCE(EXCLUDED.user_email, mcp_approval_request_requesters.user_email)
+  , requested_at = clock_timestamp()
+  , updated_at = clock_timestamp()
 RETURNING *;
 
 -- name: SetApprovalRequestEvidence :exec
@@ -211,3 +225,16 @@ INSERT INTO mcp_research_reports (
   , sqlc.narg(error)::text
 )
 RETURNING *;
+
+-- name: GetBypassRequestForPromotion :one
+-- Resolved under the caller's project, never by id alone: the id arrives from
+-- the caller, and promotion of another project's bypass request into this
+-- project's queue is the exact horizontal escalation the org standard forbids.
+-- There is deliberately no database-level pin for this pair (see AIS-470), so
+-- this predicate is the primary control.
+SELECT id, organization_id, project_id, target_kind, target_label, target_key,
+       target_dimensions, requester_user_id, requester_email, note
+FROM risk_policy_bypass_requests
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
