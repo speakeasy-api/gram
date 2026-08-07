@@ -705,7 +705,7 @@ func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][
 		cursorPlugins = append(cursorPlugins, marketplaceEntry{
 			Name:        cursorObservability,
 			DisplayName: "", // Cursor carries the display name in its own plugin.json.
-			Source:      path.Join(cursorPluginRoot, cursorObservability),
+			Source:      cursorObservability,
 			Description: "Required: Speakeasy observability hooks for " + cfg.OrgName + ".",
 		})
 		codexObservability := CodexObservabilitySlug(cfg)
@@ -732,30 +732,23 @@ func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][
 	}
 
 	for _, p := range plugins {
-		compatible := classifyAgentPlugin(p).Compatible
 		claudePlugins = append(claudePlugins, marketplaceEntry{
 			Name:        p.Slug,
 			DisplayName: p.Name,
 			Source:      "./" + p.Slug,
 			Description: p.Description,
 		})
-		cursorSource := path.Join(cursorPluginRoot, p.Slug+"-cursor")
-		codexSource := "./" + p.Slug + "-codex"
-		if compatible {
-			cursorSource = path.Join(agentPluginRoot, p.Slug)
-			codexSource = "./" + path.Join(agentPluginRoot, p.Slug)
-		}
 		cursorPlugins = append(cursorPlugins, marketplaceEntry{
 			Name:        p.Slug + "-cursor",
 			DisplayName: "", // Cursor carries the display name in its own plugin.json.
-			Source:      cursorSource,
+			Source:      p.Slug + "-cursor",
 			Description: p.Description,
 		})
 		codexPlugins = append(codexPlugins, codexMarketplaceEntry{
 			Name: p.Slug + "-codex",
 			Source: codexMarketplaceSource{
 				Source: "local",
-				Path:   codexSource,
+				Path:   "./" + p.Slug + "-codex",
 			},
 			Policy: codexMarketplacePolicy{
 				Installation:   "AVAILABLE",
@@ -781,7 +774,7 @@ func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][
 	cursorManifest, err := marshalJSON(marketplaceManifest{
 		Name:     marketplaceName,
 		Owner:    owner,
-		Metadata: nil,
+		Metadata: &marketplaceMetadata{PluginRoot: cursorPluginRoot},
 		Plugins:  cursorPlugins,
 	})
 	if err != nil {

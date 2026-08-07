@@ -1056,19 +1056,19 @@ func TestPluginsService_PublishAgentPluginCompatibilityTransitions(t *testing.T)
 
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
-	assertSources("agent-plugins/portable-transition", "./agent-plugins/portable-transition", true)
+	assertSources("portable-transition-cursor", "./portable-transition-codex", true)
 
 	err = toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: false, ID: toolset.ID, ProjectID: toolset.ProjectID})
 	require.NoError(t, err)
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
-	assertSources("cursor-plugins/portable-transition-cursor", "./portable-transition-codex", false)
+	assertSources("portable-transition-cursor", "./portable-transition-codex", false)
 
 	err = toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: toolset.ID, ProjectID: toolset.ProjectID})
 	require.NoError(t, err)
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
-	assertSources("agent-plugins/portable-transition", "./agent-plugins/portable-transition", true)
+	assertSources("portable-transition-cursor", "./portable-transition-codex", true)
 }
 
 func TestPluginsService_GetPublishStatus_NotConfigured(t *testing.T) {

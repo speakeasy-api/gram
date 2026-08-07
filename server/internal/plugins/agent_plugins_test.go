@@ -89,7 +89,7 @@ func TestCompileAgentPluginUsesPinnedSchemasAndKeylessMode(t *testing.T) {
 	}
 }
 
-func TestAgentPluginMarketplaceTransitionPreservesIdentity(t *testing.T) {
+func TestAgentPluginMarketplaceKeepsNativeSources(t *testing.T) {
 	t.Parallel()
 
 	cfg := GenerateConfig{OrgName: "Example", OrgEmail: "", OrgID: "", ServerURL: "https://app.getgram.ai", APIKey: "", HooksAPIKey: "", ProjectSlug: "default", IsDefaultProject: true, Version: "", PlatformMCPEnabled: false, MarketplaceName: "", BrowserLogin: false, HooksOrgName: "", InstallFailOpen: false}
@@ -107,14 +107,14 @@ func TestAgentPluginMarketplaceTransitionPreservesIdentity(t *testing.T) {
 	require.NoError(t, json.Unmarshal(sharedFiles[".cursor-plugin/marketplace.json"], &sharedCursor))
 	require.NoError(t, json.Unmarshal(legacyFiles[".cursor-plugin/marketplace.json"], &legacyCursor))
 	require.Equal(t, legacyCursor.Plugins[0].Name, sharedCursor.Plugins[0].Name)
-	require.Equal(t, "agent-plugins/tools", sharedCursor.Plugins[0].Source)
-	require.Equal(t, "cursor-plugins/tools-cursor", legacyCursor.Plugins[0].Source)
+	require.Equal(t, "tools-cursor", sharedCursor.Plugins[0].Source)
+	require.Equal(t, "tools-cursor", legacyCursor.Plugins[0].Source)
 
 	var sharedCodex, legacyCodex codexMarketplaceManifest
 	require.NoError(t, json.Unmarshal(sharedFiles[".agents/plugins/marketplace.json"], &sharedCodex))
 	require.NoError(t, json.Unmarshal(legacyFiles[".agents/plugins/marketplace.json"], &legacyCodex))
 	require.Equal(t, legacyCodex.Plugins[0].Name, sharedCodex.Plugins[0].Name)
-	require.Equal(t, "./agent-plugins/tools", sharedCodex.Plugins[0].Source.Path)
+	require.Equal(t, "./tools-codex", sharedCodex.Plugins[0].Source.Path)
 	require.Equal(t, "./tools-codex", legacyCodex.Plugins[0].Source.Path)
 
 	sharedFingerprint, err := MCPFingerprints([]PluginInfo{compatible}, cfg)
@@ -122,7 +122,7 @@ func TestAgentPluginMarketplaceTransitionPreservesIdentity(t *testing.T) {
 	legacyFingerprint, err := MCPFingerprints([]PluginInfo{incompatible}, cfg)
 	require.NoError(t, err)
 	require.NotEqual(t, sharedFingerprint["tools"], legacyFingerprint["tools"])
-	require.NotEqual(t, sharedFingerprint[mcpSharedFingerprintKey], legacyFingerprint[mcpSharedFingerprintKey])
+	require.Equal(t, sharedFingerprint[mcpSharedFingerprintKey], legacyFingerprint[mcpSharedFingerprintKey])
 }
 
 func TestAgentPluginZipIsDeterministicAndExecutable(t *testing.T) {
