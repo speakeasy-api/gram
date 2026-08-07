@@ -4,9 +4,20 @@
 # their cwd are skipped. cmux persists workspaces across restarts, so this is
 # a one-time (or occasional) sync, not a startup requirement.
 #
-# Run from any terminal while cmux is running (needs the cmux CLI on PATH and
-# its socket at the default /tmp/cmux.sock or $CMUX_SOCKET_PATH).
+# Run from any terminal while cmux is running. Requirements:
+#   - socket control mode must allow external clients:
+#       defaults write com.cmuxterm.app socketControlMode automation
+#     (default `cmuxOnly` rejects any process not started inside cmux)
+#   - the CLI ships inside the app bundle, not on PATH; resolved below
+#   - the socket lives under Application Support, not /tmp
 set -euo pipefail
+
+cmux() {
+  local bin
+  bin=$(type -P cmux || true)
+  [ -n "$bin" ] || bin="/Applications/cmux.app/Contents/Resources/bin/cmux"
+  CMUX_SOCKET_PATH="${CMUX_SOCKET_PATH:-$HOME/Library/Application Support/cmux/cmux.sock}" "$bin" "$@"
+}
 
 repo="${1:-$(git rev-parse --show-toplevel)}"
 
