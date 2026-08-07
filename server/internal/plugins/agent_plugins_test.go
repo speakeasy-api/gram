@@ -83,6 +83,10 @@ func TestCompileAgentPluginUsesPinnedSchemasAndKeylessMode(t *testing.T) {
 	require.Contains(t, published, ".cursor-plugin/plugin.json")
 	require.Contains(t, published, ".codex-plugin/plugin.json")
 	require.Contains(t, published, ".mcp.json")
+	for path, content := range published {
+		require.NotContains(t, string(content), cfg.APIKey, path)
+		require.NotContains(t, string(content), cfg.HooksAPIKey, path)
+	}
 }
 
 func TestAgentPluginMarketplaceTransitionPreservesIdentity(t *testing.T) {

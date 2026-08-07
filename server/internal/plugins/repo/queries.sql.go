@@ -629,6 +629,12 @@ WITH intended AS (
       WHEN ps.toolset_id IS NOT NULL AND t.project_id <> p.project_id THEN 'toolset_wrong_project'
       WHEN ps.toolset_id IS NOT NULL AND t.deleted IS TRUE THEN 'toolset_deleted'
       WHEN ps.toolset_id IS NOT NULL AND (t.mcp_enabled IS FALSE OR t.mcp_slug IS NULL) THEN 'toolset_disabled_or_unresolved'
+	  WHEN ps.toolset_id IS NOT NULL AND EXISTS (
+		SELECT 1
+		FROM mcp_metadata md
+		JOIN mcp_environment_configs ec ON ec.mcp_metadata_id = md.id AND ec.project_id = p.project_id
+		WHERE md.toolset_id = t.id AND md.project_id = p.project_id AND ec.provided_by = 'user'
+	  ) THEN 'toolset_requires_user_header'
       WHEN ps.mcp_server_id IS NOT NULL AND s.id IS NULL THEN 'mcp_server_missing'
       WHEN ps.mcp_server_id IS NOT NULL AND s.project_id <> p.project_id THEN 'mcp_server_wrong_project'
       WHEN ps.mcp_server_id IS NOT NULL AND s.deleted IS TRUE THEN 'mcp_server_deleted'
@@ -694,7 +700,7 @@ WITH intended AS (
 ), unresolved_skills AS (
   SELECT p.id AS plugin_id, sd.id AS server_id, 'skill_distribution_unresolved'::text AS reason
   FROM plugins p
-  JOIN skill_distributions sd ON sd.plugin_id = p.id
+  JOIN skill_distributions sd ON sd.plugin_id = p.id AND sd.project_id = p.project_id
   LEFT JOIN skills sk ON sk.id = sd.skill_id AND sk.project_id = p.project_id AND sk.archived_at IS NULL
   WHERE p.project_id = $1
     AND p.deleted IS FALSE

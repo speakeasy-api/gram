@@ -211,10 +211,8 @@ func compileAgentPlugin(p PluginInfo, cfg GenerateConfig, mode agentPluginCreden
 	if compatibility := classifyAgentPlugin(p); !compatibility.Compatible {
 		return nil, fmt.Errorf("%w: %s", ErrAgentPluginsV1Incompatible, strings.Join(compatibility.Reasons, ", "))
 	}
-	if mode == agentPluginCredentialsKeyless {
-		cfg.APIKey = ""
-		cfg.HooksAPIKey = ""
-	}
+	cfg.APIKey = ""
+	cfg.HooksAPIKey = ""
 
 	files := make(map[string][]byte)
 	manifest := agentPluginManifest{

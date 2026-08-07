@@ -893,12 +893,65 @@ func TestPluginsService_DownloadAgentPluginIsFlatAndKeyless(t *testing.T) {
 	zr, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
 	require.NoError(t, err)
 	paths := make([]string, 0, len(zr.File))
+	var contents bytes.Buffer
 	for _, file := range zr.File {
 		paths = append(paths, file.Name)
+		entry, err := file.Open()
+		require.NoError(t, err)
+		_, err = io.Copy(&contents, entry)
+		require.NoError(t, err)
+		require.NoError(t, entry.Close())
 	}
 	require.Equal(t, []string{"mcp.json", "plugin.json"}, paths)
-	require.NotContains(t, string(archive), "Authorization")
-	require.NotContains(t, string(archive), "hooks_api_key")
+	require.NotContains(t, contents.String(), "Authorization")
+	require.NotContains(t, contents.String(), "hooks_api_key")
+}
+
+func TestPluginsService_DirectToolsetUserConfigFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "User Config"})
+	require.NoError(t, err)
+	toolset := createTestToolset(t, ctx, ti.conn, "user-config")
+	require.NoError(t, toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolset.ID,
+		ProjectID:   toolset.ProjectID,
+	}))
+
+	metadata, err := mcpmetarepo.New(ti.conn).UpsertMetadata(ctx, mcpmetarepo.UpsertMetadataParams{
+		ToolsetID:                 uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		ProjectID:                 *authCtx.ProjectID,
+		ExternalDocumentationUrl:  pgtype.Text{},
+		ExternalDocumentationText: pgtype.Text{},
+		LogoID:                    uuid.NullUUID{},
+		Instructions:              pgtype.Text{},
+		DefaultEnvironmentID:      uuid.NullUUID{},
+		InstallationOverrideUrl:   pgtype.Text{},
+	})
+	require.NoError(t, err)
+	_, err = mcpmetarepo.New(ti.conn).UpsertEnvironmentConfig(ctx, mcpmetarepo.UpsertEnvironmentConfigParams{
+		ProjectID:         *authCtx.ProjectID,
+		McpMetadataID:     metadata.ID,
+		VariableName:      "USER_TOKEN",
+		HeaderDisplayName: pgtype.Text{},
+		ProvidedBy:        "user",
+	})
+	require.NoError(t, err)
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:  plugin.ID,
+		ToolsetID: conv.PtrEmpty(toolset.ID.String()),
+		Policy:    "required",
+		SortOrder: 0,
+	})
+	require.NoError(t, err)
+
+	plugin, err = ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
+	require.NoError(t, err)
+	require.False(t, plugin.AgentPluginsV1Compatible)
 }
 
 func TestPluginsService_TombstonedAttachmentIsNotIntended(t *testing.T) {
