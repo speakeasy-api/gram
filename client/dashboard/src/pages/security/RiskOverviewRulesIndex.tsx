@@ -102,7 +102,7 @@ function RiskOverviewRulesIndexContent() {
             </span>
           </div>
         ) : (
-          <ul className="divide-border divide-y rounded-lg border">
+          <ul className="divide-border divide-y border">
             {rules.map((r, i) => {
               const label = r.ruleId
                 ? getRuleTitleFallback(r.ruleId)

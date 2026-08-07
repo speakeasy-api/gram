@@ -1,28 +1,30 @@
 import { ProductTier } from "@/hooks/useProductTier";
 
+// Editorial tier chips: hairline border on the card surface, tier expressed
+// through text color only — no filled washes.
 export const productTierColors = (
   tier: ProductTier,
 ): { bg: string; text: string; ring: string } => {
   return {
     base: {
-      bg: "bg-neutral-600",
-      text: "text-white",
-      ring: "ring-neutral-600/50",
+      bg: "border-border bg-card border",
+      text: "text-muted-foreground",
+      ring: "ring-border/50",
     },
     base_PAID: {
-      bg: "bg-violet-500",
-      text: "text-white",
-      ring: "ring-violet-500/50",
+      bg: "border-border bg-card border",
+      text: "text-default-information",
+      ring: "ring-border/50",
     },
     __deprecated__pro: {
-      bg: "bg-violet-500",
-      text: "text-white",
-      ring: "ring-violet-500/50",
+      bg: "border-border bg-card border",
+      text: "text-default-information",
+      ring: "ring-border/50",
     },
     enterprise: {
-      bg: "bg-success-foreground dark:bg-success",
-      text: "text-success dark:text-white",
-      ring: "ring-success-foreground/50 dark:ring-success/50",
+      bg: "border-border bg-card border",
+      text: "text-default-success",
+      ring: "ring-border/50",
     },
   }[tier];
 };

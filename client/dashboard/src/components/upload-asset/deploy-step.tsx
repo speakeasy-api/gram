@@ -265,7 +265,7 @@ function DeploymentDetailsCollapsible({
         Deployment details
       </CollapsibleTrigger>
       <CollapsibleContent className="mt-2">
-        <div className="bg-muted/30 space-y-2 rounded-md border p-3">
+        <div className="bg-muted/30 space-y-2 border p-3">
           <div className="max-h-60 space-y-1 overflow-y-scroll font-mono text-xs">
             {logs.map((log) => (
               <div

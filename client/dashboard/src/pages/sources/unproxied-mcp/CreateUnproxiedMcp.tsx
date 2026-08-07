@@ -105,7 +105,7 @@ function CreateUnproxiedMcpForm() {
     <div className="max-w-2xl">
       <Stack gap={3} className="mb-8">
         <Stack direction="horizontal" gap={3} align="center">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 dark:bg-amber-500/20">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-amber-500/10 dark:bg-amber-500/20">
             <Server className="h-5 w-5 text-amber-600 dark:text-amber-400" />
           </div>
           <Stack direction="horizontal" gap={2} align="center">

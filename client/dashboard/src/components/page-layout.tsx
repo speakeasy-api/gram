@@ -15,6 +15,7 @@ import { MoreActions } from "@/components/ui/MoreActions";
 import { Toolbar } from "@/components/ui/Toolbar";
 import { Text } from "@/components/ui/Text";
 import { XYFade } from "@/components/ui/XyFade";
+import { PageEyebrow } from "./page-eyebrow";
 
 function PageLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -141,26 +142,38 @@ function PageSectionTitle({
   children,
   className,
   stage,
+  area,
 }: {
   children: React.ReactNode;
   className?: string;
   stage?: ReleaseStage;
+  /** Override the auto-derived area eyebrow; pass "" to suppress it. */
+  area?: string;
 }) {
-  if (stage) {
-    return (
-      <Stack direction="horizontal" align="center" gap={2}>
-        <Heading variant="h3" className={className}>
-          {children}
-        </Heading>
-        <ReleaseStageBadge stage={stage} />
-      </Stack>
-    );
-  }
+  // Primary page title: area eyebrow + thin display serif (Tobias) per the
+  // editorial idiom. text-display-sm carries the font family, thin weight,
+  // tight tracking, and display text color token; font-thin re-asserts weight
+  // over Heading's font-normal base.
+  const titleClassName = cn("text-display-sm font-thin", className);
 
-  return (
-    <Heading variant="h3" className={className}>
+  const title = stage ? (
+    <Stack direction="horizontal" align="center" gap={2}>
+      <Heading variant="h3" className={titleClassName}>
+        {children}
+      </Heading>
+      <ReleaseStageBadge stage={stage} />
+    </Stack>
+  ) : (
+    <Heading variant="h3" className={titleClassName}>
       {children}
     </Heading>
+  );
+
+  return (
+    <Stack gap={2}>
+      {area === "" ? null : <PageEyebrow area={area} />}
+      {title}
+    </Stack>
   );
 }
 
@@ -204,6 +217,7 @@ export const Page = Object.assign(PageLayout, {
   Body: PageBody,
   Section: PageSection,
   Toolbar: Toolbar,
+  Eyebrow: PageEyebrow,
 });
 
 export function EmptyState({
@@ -241,14 +255,14 @@ export function EmptyState({
   // For non-empty projects or loading state, show the standard empty state
   let CTA: React.ReactNode = (
     <routes.sources.Link>
-      <Button size="sm">Get Started</Button>
+      <Button size="sm">Get started</Button>
     </routes.sources.Link>
   );
 
   if (isLoading) {
     CTA = (
       <Button disabled size="sm">
-        CHECKING PROJECT...
+        Checking project…
       </Button>
     );
   } else if (!isEmpty && nonEmptyProjectCTA) {
@@ -256,7 +270,7 @@ export function EmptyState({
   }
 
   return (
-    <div className="bg-background flex h-[600px] w-full items-center justify-center rounded-xl border">
+    <div className="bg-background flex h-[600px] w-full items-center justify-center border">
       <Stack
         gap={1}
         className="m-8 w-full max-w-sm"
@@ -264,7 +278,7 @@ export function EmptyState({
         justify="center"
       >
         <XYFade
-          className={cn("h-[250px] w-full", graphicClassName)}
+          className={cn("h-[250px] w-full overflow-hidden", graphicClassName)}
           fadeColor="var(--background)"
         >
           {graphic}

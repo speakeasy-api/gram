@@ -154,7 +154,7 @@ function EmptyServerSelection({
   subtitle: string;
 }) {
   return (
-    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-6 py-8 text-center">
+    <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-6 py-8 text-center">
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
         <Icon
           aria-hidden="true"
@@ -436,7 +436,7 @@ export function ShadowMCPPolicyServerSelector({
     );
   } else if (error) {
     selectionContent = (
-      <div className="border-border bg-muted/20 flex items-center justify-between gap-4 rounded-md border px-4 py-3">
+      <div className="border-border bg-muted/20 flex items-center justify-between gap-4 border px-4 py-3">
         <Text muted small>
           Shadow MCP inventory could not be loaded.
         </Text>

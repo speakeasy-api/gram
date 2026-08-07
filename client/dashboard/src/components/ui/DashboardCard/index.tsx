@@ -16,10 +16,10 @@ export function DashboardCard({
   tooltip,
 }: DashboardCardProps): JSX.Element {
   return (
-    <div className="bg-card text-card-foreground relative flex h-full w-full flex-col rounded-lg border">
+    <div className="bg-card text-card-foreground relative flex h-full w-full flex-col border">
       <div className="flex w-full flex-row items-center justify-between gap-4 border-b px-6 py-4">
         <div className="flex items-center gap-1.5">
-          <h3 className="text-sm font-semibold">{title}</h3>
+          <h3 className="text-eyebrow">{title}</h3>
           {tooltip && (
             <SimpleTooltip tooltip={tooltip}>
               <button

@@ -1,5 +1,5 @@
-import { MiniCard } from "@/components/ui/CardMini";
-import { Heading } from "@/components/ui/Heading";
+import { Card } from "@/components/ui/Card";
+import { MoreActions } from "@/components/ui/MoreActions";
 import {
   Tooltip,
   TooltipContent,
@@ -52,7 +52,7 @@ export const AssetsTabContent = (): React.JSX.Element => {
       {errAll.length > 0 && (
         <div>
           <Stack gap={2} className="mb-6">
-            <Heading variant="h2">Invalid Assets</Heading>
+            <h2 className="text-eyebrow">Invalid Assets</h2>
             <Text variant="small">
               The following assets caused this deployment to fail. Correct these
               errors by managing assets in the{" "}
@@ -86,9 +86,7 @@ export const AssetsTabContent = (): React.JSX.Element => {
 
       {okFunctions.length > 0 ? (
         <div>
-          <Heading variant="h2" className="mb-6">
-            Functions
-          </Heading>
+          <h2 className="text-eyebrow mb-6">Functions</h2>
 
           <ul className="flex flex-col flex-wrap gap-4">
             {okFunctions.map((asset) => {
@@ -104,9 +102,7 @@ export const AssetsTabContent = (): React.JSX.Element => {
 
       {okOpenAPI.length > 0 ? (
         <div>
-          <Heading variant="h2" className="mb-6">
-            OpenAPI
-          </Heading>
+          <h2 className="text-eyebrow mb-6">OpenAPI</h2>
           <ul className="flex flex-col flex-wrap gap-4">
             {okOpenAPI.map((asset) => {
               return (
@@ -144,9 +140,9 @@ const AssetItem = ({ asset }: AssetItemProps) => {
   }
 
   return (
-    <MiniCard className="bg-surface-secondary-default border-neutral-softest w-full max-w-full p-6">
-      <MiniCard.Title>
-        <div className="flex w-full items-center gap-4">
+    <Card className="bg-card border-border h-auto w-full max-w-full">
+      <div className="flex w-full items-center justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-4">
           {icon}
           <div className="flex flex-col">
             <span className="text-base leading-7">{asset.name}</span>
@@ -156,17 +152,17 @@ const AssetItem = ({ asset }: AssetItemProps) => {
             </div>
           </div>
         </div>
-      </MiniCard.Title>
-      <MiniCard.Actions
-        actions={[
-          {
-            label: "Download",
-            icon: "download",
-            onClick: () => handleDownload(asset.assetId, asset.name),
-          },
-        ]}
-      />
-    </MiniCard>
+        <MoreActions
+          actions={[
+            {
+              label: "Download",
+              icon: "download",
+              onClick: () => handleDownload(asset.assetId, asset.name),
+            },
+          ]}
+        />
+      </div>
+    </Card>
   );
 };
 

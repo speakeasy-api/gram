@@ -333,7 +333,7 @@ function PolicyKindChooser(): JSX.Element {
             <button
               type="button"
               onClick={() => void setKind("standard")}
-              className="hover:bg-muted/40 rounded-xl border p-5 text-left transition-colors"
+              className="hover:bg-muted/40 border p-5 text-left transition-colors"
             >
               <Shield className="text-muted-foreground mb-3 h-5 w-5" />
               <Text className="font-medium">Built-in detector</Text>
@@ -345,7 +345,7 @@ function PolicyKindChooser(): JSX.Element {
             <button
               type="button"
               onClick={() => void setKind("prompt")}
-              className="hover:bg-muted/40 rounded-xl border p-5 text-left transition-colors"
+              className="hover:bg-muted/40 border p-5 text-left transition-colors"
             >
               <Sparkles className="text-muted-foreground mb-3 h-5 w-5" />
               <Text className="font-medium">Prompt-based</Text>
@@ -385,7 +385,7 @@ function HorizontalStepper({
             <button
               type="button"
               onClick={() => onStep(index)}
-              className="group flex shrink-0 items-center gap-2 rounded-md py-1 pr-1 text-left"
+              className="group flex shrink-0 items-center gap-2 py-1 pr-1 text-left"
             >
               <span
                 className={cn(
@@ -440,7 +440,7 @@ function StepperShell({
     // standard page width).
     <Stack gap={6} className="w-full">
       {header}
-      <div className="bg-muted/20 rounded-lg border px-4 py-3">
+      <div className="bg-muted/20 border px-4 py-3">
         <HorizontalStepper steps={steps} current={current} onStep={onStep} />
       </div>
       <Stack gap={6}>{children}</Stack>
@@ -1140,7 +1140,7 @@ function LegacyScopeNotice({
   }
   if (parts.length === 0) return null;
   return (
-    <div className="border-border bg-muted/20 rounded-md border px-3 py-2">
+    <div className="border-border bg-muted/20 border px-3 py-2">
       <Text small muted>
         A legacy policy-level scope still narrows this policy in addition to the
         category scopes above ({parts.join("; ")}). It is preserved as-is and
@@ -1394,7 +1394,7 @@ function RecommendedScopeRow({
 
   if (!category.recommendedScopeApplicable) {
     return (
-      <div className="border-border bg-muted/20 flex items-center justify-between gap-3 rounded-md border px-3 py-2.5">
+      <div className="border-border bg-muted/20 flex items-center justify-between gap-3 border px-3 py-2.5">
         <div className="flex min-w-0 items-center gap-2">
           <Text small className="font-medium">
             {category.label}
@@ -1430,7 +1430,7 @@ function RecommendedScopeRow({
   };
 
   return (
-    <div className="border-border rounded-md border px-3 py-2.5">
+    <div className="border-border border px-3 py-2.5">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <Text small className="font-medium">
@@ -1696,7 +1696,7 @@ function RecommendedScopeCodeLine({
   return (
     <div className="grid gap-1 sm:grid-cols-[4.5rem_minmax(0,1fr)]">
       <span className="text-muted-foreground text-xs">{label}</span>
-      <pre className="bg-muted/50 text-muted-foreground overflow-x-auto rounded px-2 py-1 font-mono text-[11px] leading-tight whitespace-pre">
+      <pre className="bg-muted/50 text-muted-foreground overflow-x-auto px-2 py-1 font-mono text-[11px] leading-tight whitespace-pre">
         {expr}
       </pre>
     </div>
@@ -2522,7 +2522,7 @@ function ScoreStat({
         onClick={() => onSelect(verdict)}
         aria-pressed={active}
         className={cn(
-          "rounded-lg border p-3 text-left transition-colors",
+          "border p-3 text-left transition-colors",
           active
             ? "border-foreground/40 bg-muted/70"
             : "hover:bg-muted/40 hover:border-foreground/30",
@@ -2533,7 +2533,7 @@ function ScoreStat({
     );
   }
 
-  return <div className="rounded-lg border p-3">{content}</div>;
+  return <div className="border p-3">{content}</div>;
 }
 
 function verdictForAgreement(
@@ -2607,7 +2607,7 @@ function highlightQuery(text: string, query: string): ReactNode {
   return (
     <>
       {text.slice(0, matchIndex)}
-      <mark className="rounded-sm bg-yellow-200 px-0.5 text-foreground dark:bg-yellow-700/60">
+      <mark className="bg-yellow-200 px-0.5 text-foreground dark:bg-yellow-700/60">
         {text.slice(matchIndex, matchIndex + query.length)}
       </mark>
       {text.slice(matchIndex + query.length)}
@@ -2827,7 +2827,7 @@ function SessionReview({
             />
             <ReevaluatingIndicator show={reevaluating} />
           </div>
-          <div className="border-border inline-flex self-start rounded-md border p-0.5">
+          <div className="border-border inline-flex self-start border p-0.5">
             {(
               [
                 { key: "all", label: "All" },
@@ -2840,7 +2840,7 @@ function SessionReview({
                 type="button"
                 onClick={() => setFilter(opt.key)}
                 className={cn(
-                  "rounded px-3 py-1 text-xs font-medium transition-colors",
+                  "px-3 py-1 text-xs font-medium transition-colors",
                   filter === opt.key
                     ? "bg-foreground text-background"
                     : "text-muted-foreground hover:text-foreground",
@@ -2853,7 +2853,7 @@ function SessionReview({
         </Stack>
 
         {/* Results list */}
-        <div className="min-h-0 flex-1 overflow-auto rounded-lg border">
+        <div className="min-h-0 flex-1 overflow-auto border">
           {reviewVerdictFilter ? (
             <ReviewedSessionRows
               chatIds={reviewedChatIds}
@@ -2917,7 +2917,7 @@ function ReevaluatingIndicator({
   if (!show) return null;
 
   return (
-    <div className="border-border bg-muted/30 text-muted-foreground flex h-9 items-center gap-1.5 rounded-md border px-2.5">
+    <div className="border-border bg-muted/30 text-muted-foreground flex h-9 items-center gap-1.5 border px-2.5">
       <Loader2 className="h-3.5 w-3.5 animate-spin" />
       <Text small muted>
         Re-evaluating…
@@ -3058,7 +3058,7 @@ function EvalJudgeVerdictBlock({
   verdict: PromptGuardrailMessageVerdict;
 }): JSX.Element {
   return (
-    <div className="border-warning bg-warning/10 rounded-sm border-l-[3px] px-3 py-2.5">
+    <div className="border-warning bg-warning/10 border-l-[3px] px-3 py-2.5">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-xs font-semibold">
           <TriangleAlert className="text-warning size-4 shrink-0" />
@@ -3311,7 +3311,7 @@ function SessionTranscript({
           </div>
           <button
             onClick={onClose}
-            className="hover:bg-muted rounded-md p-1 transition-colors"
+            className="hover:bg-muted p-1 transition-colors"
             aria-label="Close panel"
           >
             <X className="size-5" />

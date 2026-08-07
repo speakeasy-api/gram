@@ -30,7 +30,7 @@ export function PluginAssignmentsList({
   const facepileMembers = individualMemberFacepile(assignments, memberByUrn);
 
   return (
-    <div className="border-border divide-border divide-y rounded-xl border px-4">
+    <div className="border-border divide-border divide-y border px-4">
       {rowAssignments.map((assignment) => (
         <PluginAssignmentRow
           key={assignment.id}
@@ -44,7 +44,7 @@ export function PluginAssignmentsList({
         // line up; the face-stack sits at the row's trailing edge where its
         // variable width can't shift the text column.
         <div className="flex items-center gap-3 py-3">
-          <div className="bg-muted text-muted-foreground flex h-9 w-9 shrink-0 items-center justify-center rounded-lg">
+          <div className="bg-muted text-muted-foreground flex h-9 w-9 shrink-0 items-center justify-center">
             <Users className="h-4 w-4" />
           </div>
           <div className="min-w-0 flex-1">

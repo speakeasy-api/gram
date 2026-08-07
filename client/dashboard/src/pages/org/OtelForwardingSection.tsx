@@ -146,7 +146,7 @@ export function OtelForwardingSection(): JSX.Element {
         </Text>
       </div>
 
-      <div className="border-border bg-card flex flex-col gap-4 rounded-lg border p-4">
+      <div className="border-border bg-card flex flex-col gap-4 border p-4">
         <Stack direction="horizontal" justify="space-between" align="center">
           <Stack gap={1}>
             <Stack direction="horizontal" align="center" gap={2}>
@@ -203,7 +203,7 @@ export function OtelForwardingSection(): JSX.Element {
           {headers.length === 0 ? (
             <Text variant="body" className="text-muted-foreground text-sm">
               No headers. Add any required authorization headers (e.g.
-              <code className="bg-muted ml-1 rounded px-1">Authorization</code>
+              <code className="bg-muted ml-1 px-1">Authorization</code>
               ).
             </Text>
           ) : (
@@ -234,7 +234,7 @@ export function OtelForwardingSection(): JSX.Element {
         <Stack direction="horizontal" justify="space-between" align="center">
           <RequireScope scope="org:admin" level="component">
             <Button
-              variant="destructive-primary"
+              variant="destructive-secondary"
               size="sm"
               onClick={handleDelete}
               disabled={!isConfigured || isMutating}

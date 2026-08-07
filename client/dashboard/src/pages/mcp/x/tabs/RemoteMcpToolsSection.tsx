@@ -338,7 +338,7 @@ function RemoteMcpToolsList({
 
   return (
     <>
-      <div className="border-neutral-softest w-full overflow-hidden rounded-lg border">
+      <div className="border-neutral-softest w-full overflow-hidden border">
         {toolEntries.map(([name, tool]) => (
           <RemoteToolRow
             key={name}
@@ -517,7 +517,7 @@ function EmptyState({
   children?: ReactNode;
 }): JSX.Element {
   return (
-    <div className="border-border flex flex-col items-start gap-2 rounded-md border border-dashed px-4 py-6">
+    <div className="border-border flex flex-col items-start gap-2 border border-dashed px-4 py-6">
       <Text muted small>
         {message}
       </Text>
@@ -537,7 +537,7 @@ function EmptyState({
 
 function ToolsListSkeleton(): JSX.Element {
   return (
-    <div className="border-neutral-softest w-full overflow-hidden rounded-lg border">
+    <div className="border-neutral-softest w-full overflow-hidden border">
       {Array.from({ length: 5 }).map((_, index) => (
         <ToolRowSkeleton key={index} />
       ))}
@@ -565,7 +565,7 @@ function RemoteMcpToolsConnectPrompt({
   onConnect?: () => void;
 }): JSX.Element {
   return (
-    <div className="border-neutral-softest flex flex-col items-center gap-3 rounded-lg border px-6 py-12 text-center">
+    <div className="border-neutral-softest flex flex-col items-center gap-3 border px-6 py-12 text-center">
       <PlugZap className="text-muted-foreground/70 size-8" />
       <Text muted small>
         Connect to this MCP to view the tools.

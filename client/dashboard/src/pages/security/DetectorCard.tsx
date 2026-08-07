@@ -50,7 +50,7 @@ export function DetectorCard({
   return (
     <div
       className={cn(
-        "flex gap-3 rounded-lg border p-3 transition-colors",
+        "flex gap-3 border p-3 transition-colors",
         selected ? "border-foreground bg-muted/40" : "border-border",
       )}
     >

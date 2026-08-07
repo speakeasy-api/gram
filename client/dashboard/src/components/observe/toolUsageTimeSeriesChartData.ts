@@ -1,22 +1,18 @@
 import { formatChartLabel } from "@/components/chart/chartUtils";
+import {
+  otherSeriesForTheme,
+  SERIES,
+  seriesForTheme,
+  withAlpha,
+} from "@/components/chart/palette";
 import type { ChartDataset } from "chart.js";
 
-const DEFAULT_TIME_SERIES_COLORS = [
-  "#60a5fa",
-  "#fb923c",
-  "#34d399",
-  "#f87171",
-  "#a78bfa",
-  "#facc15",
-  "#22d3ee",
-  "#f472b6",
-  "#a3e635",
-];
+// The shared editorial series ramp (ink + stepped neutrals).
+const DEFAULT_TIME_SERIES_COLORS = SERIES;
 
 // Series beyond the palette fold into a single neutral "Other" bucket instead
 // of cycling colors — two series sharing a hue are indistinguishable.
 const OTHER_SERIES_LABEL = "Other";
-const OTHER_SERIES_COLOR = "#9ca3af";
 
 export type TimeSeriesDataset = ChartDataset<"bar", number[]>;
 
@@ -83,6 +79,7 @@ export function buildToolUsageTimeSeries<
   to: Date,
   valueFn: (p: T) => number = (p) => p.eventCount,
   colors: readonly string[] = DEFAULT_TIME_SERIES_COLORS,
+  otherColor?: string,
 ): {
   timestamps: number[];
   labels: string[];
@@ -165,16 +162,23 @@ export function buildToolUsageTimeSeries<
     });
   }
 
+  // The rollup neutral matching the ramp's theme: callers pass one of the two
+  // stable seriesForTheme arrays (via useSeriesColors), so identity against
+  // the dark ramp resolves the theme without threading a separate flag.
+  // Custom ramps (e.g. [ACCENT_RED]) fall back to the light neutral.
+  const rollupColor =
+    otherColor ?? otherSeriesForTheme(colors === seriesForTheme(true));
+
   const datasets: TimeSeriesDataset[] = visible.map(({ key, data }, i) => {
     const isOther = overflow.length > 0 && i === visible.length - 1;
     const color = isOther
-      ? OTHER_SERIES_COLOR
+      ? rollupColor
       : (colors[i] ?? DEFAULT_TIME_SERIES_COLORS[0]!);
     return {
       label: key,
       data,
       backgroundColor: color,
-      hoverBackgroundColor: color + "cc",
+      hoverBackgroundColor: withAlpha(color, 0.8),
       stack: "total",
       maxBarThickness: 32,
     };

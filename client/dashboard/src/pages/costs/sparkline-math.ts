@@ -2,9 +2,7 @@
 // component module (Sparkline.tsx) so that file can satisfy the react-refresh
 // "only export components" rule; shared by Sparkline, CostTable, and CostWidgets.
 
-const UP_COLOR = "#f43f5e"; // rising cost → rose-500
-const DOWN_COLOR = "#10b981"; // falling cost → emerald-500
-const FLAT_COLOR = "#94a3b8"; // no clear trend → grey
+import { TREND } from "@/components/chart/palette";
 
 // Moving-average window applied before drawing / trend detection.
 export const SMOOTH_WINDOW = 11;
@@ -13,11 +11,9 @@ export const DRAW_POINTS = 9;
 
 export type TrendDirection = "up" | "down" | "flat";
 
-export const TREND_COLOR: Record<TrendDirection, string> = {
-  up: UP_COLOR,
-  down: DOWN_COLOR,
-  flat: FLAT_COLOR,
-};
+// Shared editorial trend tokens: rising cost = brand red, falling = muted
+// green, no clear trend = neutral.
+export const TREND_COLOR: Record<TrendDirection, string> = TREND;
 
 function mean(xs: number[]): number {
   if (xs.length === 0) return 0;

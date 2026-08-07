@@ -24,7 +24,7 @@ function TabsList({
     <TabsPrimitive.List
       data-slot="tabs-list"
       className={cn(
-        "text-muted-foreground bg-muted inline-flex h-9 w-fit items-center justify-center rounded-lg p-1",
+        "text-muted-foreground border-border bg-card divide-border inline-flex h-9 w-fit items-center justify-center divide-x border",
         className,
       )}
       {...props}
@@ -40,7 +40,7 @@ function TabsTrigger({
     <TabsPrimitive.Trigger
       data-slot="tabs-trigger"
       className={cn(
-        "data-[state=active]:bg-background dark:data-[state=active]:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:outline-ring dark:data-[state=active]:border-input dark:data-[state=active]:bg-input text-foreground dark:text-muted-foreground inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-md border border-transparent px-2 py-1 text-sm font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:ring-[3px] focus-visible:outline-1 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:shadow-sm [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "data-[state=active]:bg-primary data-[state=active]:text-primary-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:outline-ring text-muted-foreground data-[state=inactive]:hover:text-foreground inline-flex h-full flex-1 items-center justify-center gap-1.5 px-3 py-1 font-mono text-xs tracking-[0.08em] uppercase whitespace-nowrap transition-[color,box-shadow] focus-visible:ring-[3px] focus-visible:outline-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className,
       )}
       {...props}
@@ -69,7 +69,9 @@ function PageTabsList({
   return (
     <TabsList
       className={cn(
-        "h-auto justify-start gap-4 rounded-none bg-transparent p-0 text-sm",
+        // Flush page-level tabs: undo the boxed track TabsList draws
+        // (border + dividers) — page tabs are underline-style, not segments.
+        "h-auto justify-start gap-4 divide-x-0 border-0 bg-transparent p-0 text-sm",
         className,
       )}
       {...props}
@@ -86,7 +88,7 @@ function PageTabsTrigger({
     <TabsPrimitive.Trigger
       data-slot="tabs-trigger"
       className={cn(
-        "text-muted-foreground data-[state=active]:text-foreground data-[state=active]:after:bg-primary relative h-11 rounded-none border-none bg-transparent! px-1 pt-3 pb-3 text-sm shadow-none! after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-transparent data-[state=active]:bg-transparent!",
+        "text-muted-foreground data-[state=active]:text-foreground data-[state=active]:after:bg-primary relative h-11 border-none bg-transparent! px-1 pt-3 pb-3 font-mono text-xs tracking-[0.08em] uppercase shadow-none! after:absolute after:right-0 after:bottom-0 after:left-0 after:h-0.5 after:bg-transparent data-[state=active]:bg-transparent!",
         className,
       )}
       {...props}

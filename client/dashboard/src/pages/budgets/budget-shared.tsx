@@ -43,7 +43,7 @@ export function TabEmptyState({
   return (
     <div
       role={role}
-      className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16"
+      className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16"
     >
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
         <Icon className="text-muted-foreground h-6 w-6" />

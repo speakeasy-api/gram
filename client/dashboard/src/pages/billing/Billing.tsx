@@ -410,7 +410,8 @@ const UsageTiers = () => {
 
   return (
     <Page.Section>
-      <Page.Section.Title>Pricing</Page.Section.Title>
+      {/* Secondary section below Usage: suppress the area eyebrow. */}
+      <Page.Section.Title area="">Pricing</Page.Section.Title>
       <Page.Section.Description>
         A breakdown of our pricing tiers.
       </Page.Section.Description>

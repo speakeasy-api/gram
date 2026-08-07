@@ -300,7 +300,7 @@ function CreateCollectionForm() {
                 <button
                   type="button"
                   className={cn(
-                    "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
+                    "flex items-center gap-1.5 border px-3 py-1.5 text-sm transition-colors",
                     visibility === "public"
                       ? "border-foreground/30 bg-accent"
                       : "border-border hover:bg-accent/50",
@@ -313,7 +313,7 @@ function CreateCollectionForm() {
                 <button
                   type="button"
                   className={cn(
-                    "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
+                    "flex items-center gap-1.5 border px-3 py-1.5 text-sm transition-colors",
                     visibility === "private"
                       ? "border-foreground/30 bg-accent"
                       : "border-border hover:bg-accent/50",
@@ -335,7 +335,7 @@ function CreateCollectionForm() {
               <label className="mb-2 block text-sm font-medium">
                 MCP Servers ({selectedCount} selected)
               </label>
-              <div className="rounded-md border">
+              <div className="border">
                 <div className="relative border-b">
                   <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
                   <input
