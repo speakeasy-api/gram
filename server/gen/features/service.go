@@ -80,6 +80,8 @@ type GetProductFeaturesResult struct {
 	SkillCaptureMetadataOnly bool
 	// Whether the organization can provision push integrations for AI platforms
 	AiPlatformPushIntegrationsEnabled bool
+	// Whether the organization is eligible for the Gram Platform MCP capability
+	PlatformMcpEnabled bool
 	// Whether the organization can manage the external credentials and cloud KMS
 	// keys backing customer-managed encryption
 	CustomerManagedEncryptionKeysEnabled bool

@@ -28,10 +28,12 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/auditapi"
 	"github.com/speakeasy-api/gram/server/internal/external"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 
 	"github.com/speakeasy-api/gram/server/internal/about"
 	"github.com/speakeasy-api/gram/server/internal/access"
@@ -1284,6 +1286,36 @@ func newStartCommand() *cli.Command {
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, authzEngine, serverURL))
 			collections.Attach(mux, collections.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, serverURL))
+			platformGate := platformmcp.NewOrganizationGate(productFeatures, featureFlags)
+			platformAuthorizer := platformmcp.NewLiveOrgAdminAuthorizer(db, authzEngine)
+			platformOAuth, err := platformmcp.NewOAuthHTTP(platformmcp.OAuthHTTPConfig{
+				BaseURL:       serverURL,
+				Environment:   c.String("environment"),
+				Cache:         cache.NewRedisCacheAdapter(redisClient),
+				Store:         platformmcp.NewPostgresOAuthStore(db),
+				Identity:      identityResolver,
+				Gate:          platformGate,
+				Authorizer:    platformAuthorizer,
+				Organizations: platformmcp.NewLiveOrganizationSelector(db, platformAuthorizer),
+				Signer:        sessiontokens.NewSigner(c.String(usersessions.JWTSigningKeyFlag)),
+				Encryption:    encryptionClient,
+			})
+			if err != nil {
+				return fmt.Errorf("create platform mcp oauth service: %w", err)
+			}
+			platformAuthenticator, err := platformmcp.NewJWTAuthenticator(sessiontokens.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), db, encryptionClient, platformOAuth.Issuer(), platformOAuth.Audience())
+			if err != nil {
+				return fmt.Errorf("create platform mcp authenticator: %w", err)
+			}
+			platformRuntime := platformmcp.NewRuntime(
+				platformAuthenticator,
+				platformGate,
+				platformAuthorizer,
+				platformOAuth.ProtectedResourceURL(),
+				platformmcp.NewPostgresReader(db),
+			)
+			platformOAuth.Attach(mux)
+			o11y.AttachHandler(mux, "POST", platformmcp.Path, platformRuntime.Handler().ServeHTTP)
 			mcp.Attach(mux, mcpService, mcpMetadataService)
 			chat.Attach(mux, chatService)
 			variations.Attach(mux, variations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))

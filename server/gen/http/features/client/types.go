@@ -51,6 +51,8 @@ type GetProductFeaturesResponseBody struct {
 	SkillCaptureMetadataOnly *bool `form:"skill_capture_metadata_only,omitempty" json:"skill_capture_metadata_only,omitempty" xml:"skill_capture_metadata_only,omitempty"`
 	// Whether the organization can provision push integrations for AI platforms
 	AiPlatformPushIntegrationsEnabled *bool `form:"ai_platform_push_integrations_enabled,omitempty" json:"ai_platform_push_integrations_enabled,omitempty" xml:"ai_platform_push_integrations_enabled,omitempty"`
+	// Whether the organization is eligible for the Gram Platform MCP capability
+	PlatformMcpEnabled *bool `form:"platform_mcp_enabled,omitempty" json:"platform_mcp_enabled,omitempty" xml:"platform_mcp_enabled,omitempty"`
 	// Whether the organization can manage the external credentials and cloud KMS
 	// keys backing customer-managed encryption
 	CustomerManagedEncryptionKeysEnabled *bool `form:"customer_managed_encryption_keys_enabled,omitempty" json:"customer_managed_encryption_keys_enabled,omitempty" xml:"customer_managed_encryption_keys_enabled,omitempty"`
@@ -459,6 +461,7 @@ func NewGetProductFeaturesResultOK(body *GetProductFeaturesResponseBody) *featur
 		SkillsEnabled:                        *body.SkillsEnabled,
 		SkillCaptureMetadataOnly:             *body.SkillCaptureMetadataOnly,
 		AiPlatformPushIntegrationsEnabled:    *body.AiPlatformPushIntegrationsEnabled,
+		PlatformMcpEnabled:                   *body.PlatformMcpEnabled,
 		CustomerManagedEncryptionKeysEnabled: *body.CustomerManagedEncryptionKeysEnabled,
 		DeviceAgent:                          *body.DeviceAgent,
 	}
@@ -804,6 +807,9 @@ func ValidateGetProductFeaturesResponseBody(body *GetProductFeaturesResponseBody
 	}
 	if body.AiPlatformPushIntegrationsEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("ai_platform_push_integrations_enabled", "body"))
+	}
+	if body.PlatformMcpEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("platform_mcp_enabled", "body"))
 	}
 	if body.CustomerManagedEncryptionKeysEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("customer_managed_encryption_keys_enabled", "body"))
