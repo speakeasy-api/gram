@@ -28,6 +28,8 @@ type Service struct {
 	siteURL   string
 }
 
+var _ Notifier = (*Service)(nil)
+
 // NewService constructs a trial lifecycle email synchronizer.
 func NewService(db *pgxpool.Pool, workflows loops.WorkflowClient, logger *slog.Logger, siteURL string) *Service {
 	return &Service{

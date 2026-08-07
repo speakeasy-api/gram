@@ -98,7 +98,31 @@ type testInstance struct {
 	conn    *pgxpool.Pool
 	orgs    *MockOrganizationProvider
 	loops   *MockLoopsClient
+	trial   *fakeTrialNotifier
 	svixSrv *svixtest.MockServer
+}
+
+type fakeTrialNotifier struct {
+	adminAddedErr error
+	adminAdded    []adminAddedNotification
+}
+
+type adminAddedNotification struct {
+	organizationID string
+	userID         string
+}
+
+func (f *fakeTrialNotifier) TrialStarted(context.Context, string) error {
+	return nil
+}
+
+func (f *fakeTrialNotifier) AdminAdded(_ context.Context, organizationID, userID string) error {
+	f.adminAdded = append(f.adminAdded, adminAddedNotification{organizationID: organizationID, userID: userID})
+	return f.adminAddedErr
+}
+
+func (f *fakeTrialNotifier) TrialInactive(context.Context, string) error {
+	return nil
 }
 
 func newTestOrganizationsService(t *testing.T) (context.Context, *testInstance) {
@@ -145,12 +169,14 @@ func newTestOrganizationsService(t *testing.T) (context.Context, *testInstance) 
 	svixClient, err := svix.New("test-token", &svix.SvixOptions{ServerUrl: svixSrv.URL()})
 	require.NoError(t, err)
 
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, stubOrgFeatures{}, nil, authzEngine, nil, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
+	trialNotifier := &fakeTrialNotifier{}
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, stubOrgFeatures{}, nil, authzEngine, nil, trialNotifier, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
 
 	return ctx, &testInstance{
 		service: svc,
 		conn:    conn,
 		orgs:    orgs,
+		trial:   trialNotifier,
 		svixSrv: svixSrv,
 	}
 }
@@ -201,12 +227,14 @@ func newTestOrganizationsServiceRBAC(t *testing.T) (context.Context, *testInstan
 	svixClient, err := svix.New("test-token", &svix.SvixOptions{ServerUrl: svixSrv.URL()})
 	require.NoError(t, err)
 
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, stubOrgFeaturesEnabled{}, nil, authzEngine, nil, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
+	trialNotifier := &fakeTrialNotifier{}
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, stubOrgFeaturesEnabled{}, nil, authzEngine, nil, trialNotifier, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
 
 	return ctx, &testInstance{
 		service: svc,
 		conn:    conn,
 		orgs:    orgs,
+		trial:   trialNotifier,
 		svixSrv: svixSrv,
 	}
 }
@@ -256,13 +284,15 @@ func newTestOrganizationsServiceWithEmail(t *testing.T) (context.Context, *testI
 	require.NoError(t, err)
 
 	emailService := email.NewService(logger, loopsMock)
-	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, stubOrgFeatures{}, nil, authzEngine, emailService, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
+	trialNotifier := &fakeTrialNotifier{}
+	svc := organizations.NewService(logger, tracerProvider, conn, sessionManager, orgs, stubUserProvisioner{}, stubOrgFeatures{}, nil, authzEngine, emailService, trialNotifier, "http://localhost:35291", "http://localhost:5173", auditLogger, svixClient)
 
 	return ctx, &testInstance{
 		service: svc,
 		conn:    conn,
 		orgs:    orgs,
 		loops:   loopsMock,
+		trial:   trialNotifier,
 		svixSrv: svixSrv,
 	}
 }
