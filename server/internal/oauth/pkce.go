@@ -2,7 +2,6 @@ package oauth
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
@@ -12,22 +11,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
-
-// generateCodeVerifier generates a random PKCE code verifier
-func generateCodeVerifier() (string, error) {
-	// Generate 32 bytes of random data (will be 43 chars when base64url encoded)
-	bytes := make([]byte, 32)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", fmt.Errorf("generate random bytes: %w", err)
-	}
-	return base64.RawURLEncoding.EncodeToString(bytes), nil
-}
-
-// generateCodeChallenge generates a PKCE code challenge using S256 method
-func generateCodeChallenge(verifier string) string {
-	hash := sha256.Sum256([]byte(verifier))
-	return base64.RawURLEncoding.EncodeToString(hash[:])
-}
 
 // PKCEService handles PKCE (Proof Key for Code Exchange) operations
 type PKCEService struct {

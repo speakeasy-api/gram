@@ -92,6 +92,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
+	redisCache := cache.NewRedisCacheAdapter(redisClient)
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
@@ -123,7 +124,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		conn:           conn,
 		sessionManager: sessionManager,
 		envEntries:     envEntries,
-		redisCache:     cache.NewRedisCacheAdapter(redisClient),
+		redisCache:     redisCache,
 	}
 }
 

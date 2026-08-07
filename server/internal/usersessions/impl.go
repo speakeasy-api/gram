@@ -144,6 +144,11 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	// Tombstone for the retired OAuth proxy token endpoint: answers
 	// invalid_grant so a client holding a proxy refresh token re-authorizes
 	// against the user_session_issuer these endpoints serve.
+	//
+	// Removable once no client still exchanges a pre-migration proxy refresh
+	// token here. Two sessions still rely on the signal as of 2026-08-07 and are
+	// expected to be resolved within the week; revisit and drop this after
+	// ~2026-08-14.
 	attachRetiredProxy(mux, service)
 }
 
