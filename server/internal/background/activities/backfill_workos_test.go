@@ -500,6 +500,7 @@ func TestBackfillWorkOSOrganization_SoftDeletedRowEmailMismatchStillDeprovisions
 	)
 	seedLinkedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
 	seedWorkOSUser(t, ctx, conn, userID, workosUserID)
+	seedOrganizationRole(t, ctx, conn, organizationID, "member")
 
 	err := orgrepo.New(conn).UpsertWorkOSMembership(ctx, orgrepo.UpsertWorkOSMembershipParams{
 		OrganizationID:     organizationID,
@@ -508,6 +509,16 @@ func TestBackfillWorkOSOrganization_SoftDeletedRowEmailMismatchStillDeprovisions
 		WorkosMembershipID: conv.ToPGText(membershipID),
 		WorkosUpdatedAt:    conv.ToPGTimestamptz(time.Date(2026, 5, 12, 12, 0, 0, 0, time.UTC)),
 		WorkosLastEventID:  conv.ToPGText("event_00SEED"),
+	})
+	require.NoError(t, err)
+	err = orgrepo.New(conn).SyncUserOrganizationRoleAssignments(ctx, orgrepo.SyncUserOrganizationRoleAssignmentsParams{
+		OrganizationID:     organizationID,
+		WorkosUserID:       workosUserID,
+		UserID:             conv.ToPGText(userID),
+		WorkosMembershipID: conv.ToPGText(membershipID),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(time.Date(2026, 5, 12, 12, 0, 0, 0, time.UTC)),
+		WorkosLastEventID:  conv.ToPGText("event_00SEED"),
+		WorkosRoleSlugs:    []string{"member"},
 	})
 	require.NoError(t, err)
 
@@ -564,6 +575,100 @@ func TestBackfillWorkOSOrganization_SoftDeletedRowEmailMismatchStillDeprovisions
 		UpdatedAt:        "2026-05-12T13:00:00Z",
 	})
 
+	capturingCache := newCaptureCache()
+	activity := activities.NewBackfillWorkOSOrganization(logger, conn, workosClient, capturingCache)
+
+	err = activity.Do(ctx, activities.BackfillWorkOSOrganizationParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+
+	// The directory row stays soft-deleted.
+	_, err = workosrepo.New(conn).GetDirectoryUserByWorkOSID(ctx, directoryUserID)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	relationship, err := orgrepo.New(conn).GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(userID),
+	})
+	require.NoError(t, err)
+	require.True(t, relationship.Deleted)
+
+	assignments, err := orgrepo.New(conn).ListOrganizationRoleAssignmentsByWorkOSUser(ctx, orgrepo.ListOrganizationRoleAssignmentsByWorkOSUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   workosUserID,
+	})
+	require.NoError(t, err)
+	require.Len(t, assignments, 1)
+	require.True(t, assignments[0].DeletedAt.Valid)
+
+	deletedKeys := capturingCache.Deleted()
+	require.Len(t, deletedKeys, 1)
+	require.Contains(t, deletedKeys[0], sessions.UserInfoCacheKey(userID))
+}
+
+func TestBackfillWorkOSOrganization_RelationshipNewerThanSnapshotNotDeprovisioned(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_backfill_directory_user_newer_rel")
+	logger := testenv.NewLogger(t)
+
+	const (
+		organizationID  = "gram_org_backfill_dsync_newer_rel"
+		workosOrgID     = "org_01JBACKFILLDSYNCNEWREL"
+		userID          = "user_backfill_dsync_newer_rel"
+		workosUserID    = "user_01JBACKFILLDSYNCNEWREL"
+		membershipID    = "mem_01JBACKFILLDSYNCNEWREL"
+		directoryID     = "directory_01JBACKFILLNEWREL"
+		directoryUserID = "directory_user_backfill_newer_rel"
+	)
+	seedLinkedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+	seedWorkOSUser(t, ctx, conn, userID, workosUserID)
+	email := userID + "@example.com"
+
+	// A relationship stamped after the snapshot fetch models a concurrent
+	// membership event (e.g. a re-add) the snapshot could not have seen —
+	// the backfill must leave it alone.
+	err := orgrepo.New(conn).UpsertWorkOSMembership(ctx, orgrepo.UpsertWorkOSMembershipParams{
+		OrganizationID:     organizationID,
+		UserID:             conv.ToPGText(userID),
+		WorkosUserID:       conv.ToPGText(workosUserID),
+		WorkosMembershipID: conv.ToPGText(membershipID),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(time.Now().UTC().Add(time.Hour)),
+		WorkosLastEventID:  conv.ToPGText("event_99CONCURRENT"),
+	})
+	require.NoError(t, err)
+
+	workosClient := newWorkOSSnapshotClient(t, ctx,
+		workos.Organization{
+			ID:         workosOrgID,
+			Name:       "Backfill Directory Newer Rel",
+			ExternalID: organizationID,
+			CreatedAt:  "2026-05-12T11:00:00Z",
+			UpdatedAt:  "2026-05-12T11:00:00Z",
+		},
+		nil,
+		nil,
+	)
+	workosClient.SetDirectories(workosOrgID, workos.Directory{
+		ID:             directoryID,
+		OrganizationID: workosOrgID,
+		Type:           "okta scim v2.0",
+		Name:           "Okta",
+		State:          "linked",
+		CreatedAt:      "2026-05-12T11:00:00Z",
+		UpdatedAt:      "2026-05-12T11:00:00Z",
+	})
+	workosClient.SetDirectoryUsers(directoryID, workos.DirectoryUser{
+		ID:               directoryUserID,
+		DirectoryID:      directoryID,
+		OrganizationID:   workosOrgID,
+		Email:            email,
+		State:            "inactive",
+		CustomAttributes: nil,
+		CreatedAt:        "2026-05-12T12:00:00Z",
+		UpdatedAt:        "2026-05-12T12:00:00Z",
+	})
+
 	activity := activities.NewBackfillWorkOSOrganization(logger, conn, workosClient, cache.NoopCache)
 
 	err = activity.Do(ctx, activities.BackfillWorkOSOrganizationParams{WorkOSOrganizationID: workosOrgID})
@@ -574,7 +679,8 @@ func TestBackfillWorkOSOrganization_SoftDeletedRowEmailMismatchStillDeprovisions
 		UserID:         conv.ToPGText(userID),
 	})
 	require.NoError(t, err)
-	require.True(t, relationship.Deleted)
+	require.False(t, relationship.Deleted)
+	require.Equal(t, "event_99CONCURRENT", relationship.WorkosLastEventID.String)
 }
 
 func TestBackfillWorkOSOrganization_ActiveDirectoryUserUpserted(t *testing.T) {

@@ -111,6 +111,10 @@ func (b *BackfillWorkOSOrganization) Do(ctx context.Context, params BackfillWork
 		parsedMembers = append(parsedMembers, backfillWorkOSMember{member: member, updatedAt: updatedAt})
 	}
 
+	// Captured before the directory fetch: any relationship state stamped
+	// after this instant was written by an event the snapshot cannot have
+	// seen, and must win over the snapshot.
+	snapshotAt := time.Now().UTC()
 	directories, err := b.workos.ListDirectories(ctx, params.WorkOSOrganizationID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "list WorkOS directories").LogError(ctx, logger)
@@ -168,7 +172,7 @@ func (b *BackfillWorkOSOrganization) Do(ctx context.Context, params BackfillWork
 
 	var effects []postCommitEffects
 	for _, directoryUser := range directoryUsers {
-		userEffects, err := backfillDirectoryUser(ctx, logger, tx, org.ID, directoryUser)
+		userEffects, err := backfillDirectoryUser(ctx, logger, tx, org.ID, directoryUser, snapshotAt)
 		if err != nil {
 			return err
 		}
@@ -197,7 +201,7 @@ func (b *BackfillWorkOSOrganization) Do(ctx context.Context, params BackfillWork
 // rows this backfill exists to repair. The snapshot is a fresh read of
 // current WorkOS state, so the staleness that cursors defend against does not
 // apply.
-func backfillDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, organizationID string, rec backfillWorkOSDirectoryUser) (postCommitEffects, error) {
+func backfillDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, organizationID string, rec backfillWorkOSDirectoryUser, snapshotAt time.Time) (postCommitEffects, error) {
 	var none postCommitEffects
 	repo := workosrepo.New(dbtx)
 
@@ -210,7 +214,7 @@ func backfillDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx databa
 	}
 
 	if rec.user.State != "" && rec.user.State != string(directorysync.Active) {
-		return backfillDeactivatedDirectoryUser(ctx, logger, dbtx, organizationID, rec, existing.UserID)
+		return backfillDeactivatedDirectoryUser(ctx, logger, dbtx, organizationID, rec, existing.UserID, snapshotAt)
 	}
 
 	var userID pgtype.Text
@@ -258,7 +262,7 @@ func backfillDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx databa
 // relationship, mirroring deactivateDirectoryUser. Directory state is
 // authoritative for access here, so only an already-deleted relationship
 // short-circuits the deprovision.
-func backfillDeactivatedDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, organizationID string, rec backfillWorkOSDirectoryUser, storedUserID pgtype.Text) (postCommitEffects, error) {
+func backfillDeactivatedDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, organizationID string, rec backfillWorkOSDirectoryUser, storedUserID pgtype.Text, snapshotAt time.Time) (postCommitEffects, error) {
 	var none postCommitEffects
 	repo := workosrepo.New(dbtx)
 
@@ -310,6 +314,14 @@ func backfillDeactivatedDirectoryUser(ctx context.Context, logger *slog.Logger, 
 		return none, fmt.Errorf("get organization relationship for directory user: %w", err)
 	}
 	if rel.Deleted {
+		return none, nil
+	}
+	// Relationship state written after the snapshot was fetched comes from a
+	// concurrent event (e.g. a re-add) the snapshot cannot have observed —
+	// that state is newer truth and must not be revoked. Older relationship
+	// timestamps do NOT block the deprovision: directory state wins over
+	// membership state for anything the snapshot did see.
+	if rel.WorkosUpdatedAt.Valid && rel.WorkosUpdatedAt.Time.After(snapshotAt) {
 		return none, nil
 	}
 
