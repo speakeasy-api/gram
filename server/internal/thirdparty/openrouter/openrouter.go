@@ -519,26 +519,33 @@ type keyUsageResponse struct {
 }
 
 func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string, keyType KeyType) (float64, int, error) {
-	org, err := o.orgRepo.GetOrganizationMetadata(ctx, orgID)
-	if err != nil {
-		return 0, 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
-	}
-	limit := o.defaultLimitForOrg(ctx, o.db, org)
-
-	key, err := o.repo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+	// The key carries the ceiling the customer actually spends against, which a
+	// raise or a tier change can move away from the policy amount. Read it
+	// first: resolving the policy amount costs two more queries, and only a key
+	// minted before the column existed needs them.
+	key, keyErr := o.repo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
 		KeyType:        string(keyType.OrDefault()),
 	})
-	if err != nil {
-		return 0, limit, nil // the key doesn't exist yet
+
+	limit := 0
+	if keyErr == nil {
+		limit = int(key.MonthlyCredits)
 	}
 
-	// The key carries the ceiling the customer actually spends against, which a
-	// raise or a tier change can move away from the policy amount. Keys minted
-	// before the column existed hold zero, and those fall back to the policy
-	// amount rather than reporting a ceiling of nothing.
-	if key.MonthlyCredits > 0 {
-		limit = int(key.MonthlyCredits)
+	// A key with no recorded ceiling reports the policy amount rather than a
+	// ceiling of nothing.
+	if limit <= 0 {
+		org, err := o.orgRepo.GetOrganizationMetadata(ctx, orgID)
+		if err != nil {
+			return 0, 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
+		}
+
+		limit = o.defaultLimitForOrg(ctx, o.db, org)
+	}
+
+	if keyErr != nil {
+		return 0, limit, nil // the key doesn't exist yet
 	}
 
 	used, _, err := o.GetKeyUsage(ctx, key.Key)
