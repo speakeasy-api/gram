@@ -454,42 +454,22 @@ func (s *Service) insertUncorrelatedAgentPrompt(
 		return false, fmt.Errorf("lock prompt correlation: %w", err)
 	}
 
-	latest, latestErr := queries.GetLatestChatUserPrompt(ctx, chatRepo.GetLatestChatUserPromptParams{
-		ChatID:    msgParams.ChatID,
-		ProjectID: projectID,
-	})
-	if latestErr != nil && !errors.Is(latestErr, pgx.ErrNoRows) {
-		return false, fmt.Errorf("get latest chat user prompt: %w", latestErr)
-	}
-
-	if !native && latestErr == nil && latest.Source.Valid && usesNativeTranscriptFallback(latest.Source.String) {
-		s.markNativePromptSession(ctx, projectID.String(), metadata.SessionID, latest.Source.String)
-		return false, nil
-	}
-	if native && latestErr == nil && latest.Source.String == "litellm" && latest.Content == msgParams.Content {
-		n, promoteErr := queries.PromoteLiteLLMPrompt(ctx, chatRepo.PromoteLiteLLMPromptParams{
-			Source:         msgParams.Source,
-			UserID:         msgParams.UserID,
-			ExternalUserID: msgParams.ExternalUserID,
-			Model:          msgParams.Model,
-			Replayed:       msgParams.Replayed,
-			CreatedAt:      msgParams.CreatedAt,
-			ID:             latest.ID,
-			ProjectID:      projectID,
-			Content:        msgParams.Content,
+	if !native {
+		latestSource, latestErr := queries.GetLatestChatUserPromptSource(ctx, chatRepo.GetLatestChatUserPromptSourceParams{
+			ChatID:    msgParams.ChatID,
+			ProjectID: projectID,
 		})
-		if promoteErr != nil {
-			return false, fmt.Errorf("promote LiteLLM prompt: %w", promoteErr)
+		if latestErr != nil && !errors.Is(latestErr, pgx.ErrNoRows) {
+			return false, fmt.Errorf("get latest chat user prompt source: %w", latestErr)
 		}
-		if n > 0 {
-			if err := tx.Commit(ctx); err != nil {
-				return false, fmt.Errorf("commit promoted LiteLLM prompt: %w", err)
-			}
-			s.writer.NotifyStored(ctx, projectID)
-			s.markNativePromptSession(ctx, projectID.String(), metadata.SessionID, msgParams.Source.String)
-			return true, nil
+		if latestErr == nil && latestSource.Valid && usesNativeTranscriptFallback(latestSource.String) {
+			s.markNativePromptSession(ctx, projectID.String(), metadata.SessionID, latestSource.String)
+			return false, nil
 		}
 	}
+	// Claude and Cursor have no turn ID shared with LiteLLM. If LiteLLM won the
+	// lock, keep both rows rather than guessing from prompt text and losing or
+	// misattributing a legitimate repeated native turn.
 
 	_, err = repo.New(tx).UpsertClaudeCodeSession(ctx, repo.UpsertClaudeCodeSessionParams{
 		ID:             msgParams.ChatID,
@@ -513,9 +493,6 @@ func (s *Service) insertUncorrelatedAgentPrompt(
 	}
 	if n > 0 {
 		s.writer.NotifyStoredRows(ctx, projectID, params)
-	}
-	if native && n > 0 {
-		s.markNativePromptSession(ctx, projectID.String(), metadata.SessionID, msgParams.Source.String)
 	}
 	return n > 0, nil
 }

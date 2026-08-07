@@ -253,7 +253,7 @@ func TestChatMessageWriter_CorrelatedMessageStampsMissingCreatedAt(t *testing.T)
 		Model:      conv.ToPGTextEmpty(""),
 		MessageID:  conv.ToPGText("agent-prompt:v1:test"),
 		ToolCallID: conv.ToPGTextEmpty(""),
-		Source:     conv.ToPGText("claude"),
+		Source:     conv.ToPGText("codex"),
 		CreatedAt:  conv.ToPGTimestamptz(eventTime),
 	}, "agent-prompt:v1:test")
 	require.NoError(t, err)

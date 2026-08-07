@@ -333,7 +333,7 @@ func sessionOf(base *agenthooks.Event) *components.HookIngestSession {
 			}
 		}
 	}
-	if turnID != "" {
+	if turnID != "" && (base.Provider == agenthooks.ProviderCodex || base.Provider == agenthooks.ProviderOpenCode) {
 		turnID = agentTurnPrefix + adapterSlug(base.Provider) + ":" + turnID
 	}
 	s := &components.HookIngestSession{

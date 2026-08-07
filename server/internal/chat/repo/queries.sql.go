@@ -982,8 +982,8 @@ func (q *Queries) GetLLMClientBreakdownByMessages(ctx context.Context, arg GetLL
 	return items, nil
 }
 
-const getLatestChatUserPrompt = `-- name: GetLatestChatUserPrompt :one
-SELECT id, content, source
+const getLatestChatUserPromptSource = `-- name: GetLatestChatUserPromptSource :one
+SELECT source
 FROM chat_messages
 WHERE chat_id = $1
   AND project_id = $2::uuid
@@ -992,24 +992,18 @@ ORDER BY created_at DESC, seq DESC
 LIMIT 1
 `
 
-type GetLatestChatUserPromptParams struct {
+type GetLatestChatUserPromptSourceParams struct {
 	ChatID    uuid.UUID
 	ProjectID uuid.UUID
 }
 
-type GetLatestChatUserPromptRow struct {
-	ID      uuid.UUID
-	Content string
-	Source  pgtype.Text
-}
-
 // The chat_id/created_at index serves this backward LIMIT 1 scan. Unlike a
 // source-filtered EXISTS, a negative result does not walk the full transcript.
-func (q *Queries) GetLatestChatUserPrompt(ctx context.Context, arg GetLatestChatUserPromptParams) (GetLatestChatUserPromptRow, error) {
-	row := q.db.QueryRow(ctx, getLatestChatUserPrompt, arg.ChatID, arg.ProjectID)
-	var i GetLatestChatUserPromptRow
-	err := row.Scan(&i.ID, &i.Content, &i.Source)
-	return i, err
+func (q *Queries) GetLatestChatUserPromptSource(ctx context.Context, arg GetLatestChatUserPromptSourceParams) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, getLatestChatUserPromptSource, arg.ChatID, arg.ProjectID)
+	var source pgtype.Text
+	err := row.Scan(&source)
+	return source, err
 }
 
 const getMaxGenerationForChat = `-- name: GetMaxGenerationForChat :one
@@ -2713,52 +2707,6 @@ func (q *Queries) ListUserFeedbackForChat(ctx context.Context, chatID uuid.UUID)
 	return items, nil
 }
 
-const promoteLiteLLMPrompt = `-- name: PromoteLiteLLMPrompt :execrows
-UPDATE chat_messages
-SET source = $1
-  , user_id = COALESCE($2, user_id)
-  , external_user_id = COALESCE($3, external_user_id)
-  , model = COALESCE($4, model)
-  , replayed = replayed OR $5
-  , created_at = $6
-  , risk_analyzed_at = NULL
-WHERE id = $7
-  AND project_id = $8::uuid
-  AND role = 'user'
-  AND content = $9
-  AND source = 'litellm'
-`
-
-type PromoteLiteLLMPromptParams struct {
-	Source         pgtype.Text
-	UserID         pgtype.Text
-	ExternalUserID pgtype.Text
-	Model          pgtype.Text
-	Replayed       bool
-	CreatedAt      pgtype.Timestamptz
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
-	Content        string
-}
-
-func (q *Queries) PromoteLiteLLMPrompt(ctx context.Context, arg PromoteLiteLLMPromptParams) (int64, error) {
-	result, err := q.db.Exec(ctx, promoteLiteLLMPrompt,
-		arg.Source,
-		arg.UserID,
-		arg.ExternalUserID,
-		arg.Model,
-		arg.Replayed,
-		arg.CreatedAt,
-		arg.ID,
-		arg.ProjectID,
-		arg.Content,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const renameChat = `-- name: RenameChat :exec
 UPDATE chats
 SET title = $1,
@@ -3414,7 +3362,7 @@ DO UPDATE SET
   , created_at = EXCLUDED.created_at
   , risk_analyzed_at = NULL
 WHERE chat_messages.project_id = EXCLUDED.project_id
-  AND EXCLUDED.source IN ('claude', 'claude-code', 'claude-code-desktop', 'cowork', 'codex', 'cursor', 'opencode')
+  AND EXCLUDED.source IN ('codex', 'opencode')
   AND chat_messages.source = 'litellm'
 `
 

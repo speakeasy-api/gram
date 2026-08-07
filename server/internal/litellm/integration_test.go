@@ -473,11 +473,16 @@ func TestRealHooksCorrelatesAgentTurnsAcrossNativeHooksAndLiteLLM(t *testing.T) 
 	liteLLMFirstFallbackSession := uuid.NewString()
 	ingestLiteLLMPrompt(liteLLMFirstFallbackSession, nil)
 	ingestNativePrompt("claude", liteLLMFirstFallbackSession, "")
+	ingestNativePrompt("claude", liteLLMFirstFallbackSession, "")
 	messages = requireChatMessages(t, ctx, ti.conn, chatrepo.ListChatMessagesParams{
 		ChatID:    chat.SessionIDToChatID(liteLLMFirstFallbackSession),
 		ProjectID: *authCtx.ProjectID,
-	}, 1)
-	require.Equal(t, "claude", messages[0].Source.String)
+	}, 3)
+	// Claude has no turn ID shared with LiteLLM. LiteLLM-first therefore keeps
+	// both observations, and repeated identical native prompts remain distinct.
+	require.Equal(t, "litellm", messages[0].Source.String)
+	require.Equal(t, "claude", messages[1].Source.String)
+	require.Equal(t, "claude", messages[2].Source.String)
 
 	startedOnlySession := uuid.NewString()
 	_, err := ti.hooks.IngestAuthenticated(ctx, authCtx, &hooksgen.IngestPayload{
@@ -507,7 +512,7 @@ func TestRealHooksCorrelatesAgentTurnsAcrossNativeHooksAndLiteLLM(t *testing.T) 
 	require.Equal(t, "litellm", messages[0].Source.String)
 }
 
-func TestRealHooksConcurrentUncorrelatedPromptsConverge(t *testing.T) {
+func TestRealHooksConcurrentUncorrelatedPromptsPreserveNative(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newRealTestService(t, nil)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -566,11 +571,26 @@ func TestRealHooksConcurrentUncorrelatedPromptsConverge(t *testing.T) {
 	}
 
 	for _, sessionID := range sessionIDs {
-		messages := requireChatMessages(t, ctx, ti.conn, chatrepo.ListChatMessagesParams{
+		messages, err := chatrepo.New(ti.conn).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{
 			ChatID:    chat.SessionIDToChatID(sessionID),
 			ProjectID: *authCtx.ProjectID,
-		}, 1)
-		require.Equal(t, "claude", messages[0].Source.String)
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, messages)
+		require.LessOrEqual(t, len(messages), 2)
+		nativeCount := 0
+		liteLLMCount := 0
+		for _, message := range messages {
+			switch message.Source.String {
+			case "claude":
+				nativeCount++
+			case "litellm":
+				liteLLMCount++
+			}
+		}
+		require.Equal(t, 1, nativeCount)
+		require.LessOrEqual(t, liteLLMCount, 1)
+		require.Equal(t, len(messages), nativeCount+liteLLMCount)
 	}
 }
 

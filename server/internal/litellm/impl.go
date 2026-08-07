@@ -454,7 +454,7 @@ func codexTurnMetadataFromHeaders(headers map[string]string) (codexTurnMetadata,
 func agentTurnFromHeaders(headers map[string]string) (string, string) {
 	provider := strings.ToLower(requestHeader(headers, "x-gram-agent-provider"))
 	turnID := requestHeader(headers, "x-gram-agent-turn-id")
-	if isCorrelatableAgentProvider(provider) && turnID != "" {
+	if (provider == "codex" || provider == "opencode") && turnID != "" {
 		return provider, turnID
 	}
 
@@ -466,15 +466,6 @@ func agentTurnFromHeaders(headers map[string]string) (string, string) {
 		return "opencode", turnID
 	}
 	return "", ""
-}
-
-func isCorrelatableAgentProvider(provider string) bool {
-	switch provider {
-	case "claude", "codex", "cursor", "opencode":
-		return true
-	default:
-		return false
-	}
 }
 
 func requestHeader(headers map[string]string, name string) string {

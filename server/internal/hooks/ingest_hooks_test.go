@@ -655,6 +655,14 @@ func TestCanonicalAgentTurnIDRejectsSpoofedProviderPrefix(t *testing.T) {
 	require.Empty(t, canonicalAgentTurnID(payload))
 }
 
+func TestCanonicalAgentTurnIDRejectsProviderWithoutSharedIdentity(t *testing.T) {
+	t.Parallel()
+
+	payload := canonicalIngestPayload("claude", "prompt.submitted", "claude-session")
+	payload.Session.TurnID = new("turn-1")
+	require.Empty(t, canonicalAgentTurnID(payload))
+}
+
 func TestIngest_SkillActivationIsAcceptedAsFeatureEvent(t *testing.T) {
 	t.Parallel()
 

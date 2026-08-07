@@ -1510,14 +1510,14 @@ func TestEnvelopeReportsBinaryVersion(t *testing.T) {
 	require.Equal(t, "9.9.9", *payload.Source.AdapterVersion)
 }
 
-func TestSessionOfNamespacesNativeTurnIDs(t *testing.T) {
+func TestSessionOfNamespacesSharedTurnIDs(t *testing.T) {
 	claude := sessionOf(&agenthooks.Event{
 		Provider: agenthooks.ProviderClaudeCode,
 		Kind:     agenthooks.KindPromptSubmitted,
 		Session:  agenthooks.SessionInfo{ID: "claude-session", TurnID: "prompt-1"},
 	})
 	require.NotNil(t, claude.TurnID)
-	require.Equal(t, "agent-turn:v1:claude:prompt-1", *claude.TurnID)
+	require.Equal(t, "prompt-1", *claude.TurnID)
 
 	codex := sessionOf(&agenthooks.Event{
 		Provider: agenthooks.ProviderCodex,
@@ -1533,7 +1533,7 @@ func TestSessionOfNamespacesNativeTurnIDs(t *testing.T) {
 		Session:  agenthooks.SessionInfo{ID: "cursor-session", TurnID: "generation-1"},
 	})
 	require.NotNil(t, cursor.TurnID)
-	require.Equal(t, "agent-turn:v1:cursor:generation-1", *cursor.TurnID)
+	require.Equal(t, "generation-1", *cursor.TurnID)
 }
 
 func TestMCPInventoryEnvelopeRedactsCredentials(t *testing.T) {

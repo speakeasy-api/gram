@@ -323,6 +323,13 @@ func TestAgentTurnFromHeadersUsesCodexMetadataAndOpenCodeFallback(t *testing.T) 
 	provider, turnID = agentTurnFromHeaders(map[string]string{"X-OpenCode-Request": "message-1"})
 	require.Equal(t, "opencode", provider)
 	require.Equal(t, "message-1", turnID)
+
+	provider, turnID = agentTurnFromHeaders(map[string]string{
+		"X-Gram-Agent-Provider": "claude",
+		"X-Gram-Agent-Turn-ID":  "turn-1",
+	})
+	require.Empty(t, provider)
+	require.Empty(t, turnID)
 }
 
 func TestIngestResponseUsesCachedActorAndSession(t *testing.T) {
