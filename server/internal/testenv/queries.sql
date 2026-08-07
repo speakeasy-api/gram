@@ -270,6 +270,19 @@ UPDATE device_integration_configs
 SET credentials_encrypted = 'not-a-valid-ciphertext'
 WHERE id = @id;
 
+-- name: InsertLegacyDenyPrincipalGrantFixture :exec
+-- Test-only fixture for exercising allow-only writes against legacy rows.
+INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
+VALUES (@organization_id, @principal_urn, @scope, 'deny', @selectors);
+
+-- name: GetPrincipalGrantEffectFixture :one
+SELECT effect
+FROM principal_grants
+WHERE organization_id = @organization_id
+  AND principal_urn = @principal_urn
+  AND scope = @scope
+  AND selectors = @selectors;
+
 -- name: InsertChatContentPartFixture :one
 -- Test-only fixture: seeds a minimal chat content part so tests can anchor a
 -- risk_results row to it.

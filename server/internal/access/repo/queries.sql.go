@@ -594,8 +594,11 @@ func (q *Queries) InsertChallengeResolutions(ctx context.Context, arg InsertChal
 const insertPrincipalGrantIfAbsent = `-- name: InsertPrincipalGrantIfAbsent :execrows
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES ($1, $2, $3, $4)
-ON CONFLICT (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), selectors)
-DO NOTHING
+ON CONFLICT (organization_id, principal_urn, scope, selectors)
+DO UPDATE SET
+  effect = NULL,
+  updated_at = clock_timestamp()
+WHERE principal_grants.effect IS NOT NULL
 `
 
 type InsertPrincipalGrantIfAbsentParams struct {
@@ -605,7 +608,8 @@ type InsertPrincipalGrantIfAbsentParams struct {
 	Selectors      []byte
 }
 
-// Creates a single grant row and leaves existing identical rows untouched.
+// Creates a single grant row, leaves existing allow rows untouched, and converts
+// a conflicting legacy effect row to the allow-only NULL representation.
 func (q *Queries) InsertPrincipalGrantIfAbsent(ctx context.Context, arg InsertPrincipalGrantIfAbsentParams) (int64, error) {
 	result, err := q.db.Exec(ctx, insertPrincipalGrantIfAbsent,
 		arg.OrganizationID,
@@ -1931,8 +1935,10 @@ func (q *Queries) UpsertOrganizationRoleAssignment(ctx context.Context, arg Upse
 const upsertPrincipalGrant = `-- name: UpsertPrincipalGrant :one
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES ($1, $2, $3, $4)
-ON CONFLICT (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), selectors)
-DO UPDATE SET updated_at = clock_timestamp()
+ON CONFLICT (organization_id, principal_urn, scope, selectors)
+DO UPDATE SET
+  effect = NULL,
+  updated_at = clock_timestamp()
 RETURNING id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at
 `
 
@@ -1955,7 +1961,7 @@ type UpsertPrincipalGrantRow struct {
 }
 
 // Creates or updates a single grant row. On conflict (same org/principal/scope/selectors),
-// the updated_at is refreshed. Uses COALESCE to match the functional unique index.
+// any legacy effect is normalized to the allow-only NULL representation.
 func (q *Queries) UpsertPrincipalGrant(ctx context.Context, arg UpsertPrincipalGrantParams) (UpsertPrincipalGrantRow, error) {
 	row := q.db.QueryRow(ctx, upsertPrincipalGrant,
 		arg.OrganizationID,

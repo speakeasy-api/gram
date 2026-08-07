@@ -50,19 +50,25 @@ ORDER BY principal_urn;
 
 -- name: UpsertPrincipalGrant :one
 -- Creates or updates a single grant row. On conflict (same org/principal/scope/selectors),
--- the updated_at is refreshed. Uses COALESCE to match the functional unique index.
+-- any legacy effect is normalized to the allow-only NULL representation.
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES (@organization_id, @principal_urn, @scope, @selectors)
-ON CONFLICT (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), selectors)
-DO UPDATE SET updated_at = clock_timestamp()
+ON CONFLICT (organization_id, principal_urn, scope, selectors)
+DO UPDATE SET
+  effect = NULL,
+  updated_at = clock_timestamp()
 RETURNING id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at;
 
 -- name: InsertPrincipalGrantIfAbsent :execrows
--- Creates a single grant row and leaves existing identical rows untouched.
+-- Creates a single grant row, leaves existing allow rows untouched, and converts
+-- a conflicting legacy effect row to the allow-only NULL representation.
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES (@organization_id, @principal_urn, @scope, @selectors)
-ON CONFLICT (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), selectors)
-DO NOTHING;
+ON CONFLICT (organization_id, principal_urn, scope, selectors)
+DO UPDATE SET
+  effect = NULL,
+  updated_at = clock_timestamp()
+WHERE principal_grants.effect IS NOT NULL;
 
 -- name: DeletePrincipalGrant :execrows
 -- Removes a specific grant row by ID, scoped to the organization for safety.
