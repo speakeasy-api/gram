@@ -88,6 +88,7 @@ func buildDynamicSessionTools(
 			Description: findDescription,
 			InputSchema: buildDynamicSearchToolsSchema(availableTags),
 			Meta:        nil,
+			synthetic:   true,
 		},
 		describeToolsTool,
 		{
@@ -95,6 +96,7 @@ func buildDynamicSessionTools(
 			Description: executeDescription,
 			InputSchema: dynamicExecuteToolSchema,
 			Meta:        nil,
+			synthetic:   true,
 		},
 	}, nil
 }
@@ -139,6 +141,8 @@ func buildDescribeToolsTool(tools []*types.Tool) (*toolListEntry, error) {
 		InputSchema: json.RawMessage(schemaJSON),
 		Meta:        nil,
 		Annotations: nil,
+		fromProxy:   false,
+		synthetic:   true,
 	}, nil
 }
 
@@ -230,6 +234,8 @@ func handleSearchToolsCall(
 			Meta:        meta,
 			InputSchema: nil, // Intentional don't return to keep token usage down
 			Annotations: nil,
+			fromProxy:   false,
+			synthetic:   false,
 		})
 	}
 

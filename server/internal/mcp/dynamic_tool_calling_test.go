@@ -83,6 +83,17 @@ func TestBuildDescribeToolsTool(t *testing.T) {
 		require.Contains(t, entry.Description, "Describe a set of tools by name")
 	})
 
+	t.Run("marks_entry_synthetic", func(t *testing.T) {
+		t.Parallel()
+		// The dynamic-mode helper must be flagged synthetic so tools/list omits
+		// the tool_annotations RBAC dimension for it — otherwise a classification
+		// gate (deny none) would strip it and break dynamic mode.
+		entry, err := buildDescribeToolsTool([]*types.Tool{})
+		require.NoError(t, err)
+		require.NotNil(t, entry)
+		require.True(t, entry.synthetic)
+	})
+
 	t.Run("builds_tool_with_empty_tools_list", func(t *testing.T) {
 		t.Parallel()
 		tools := []*types.Tool{}
