@@ -169,7 +169,7 @@ For empty and loading states, use the Table's built-in empty surface and the sha
 />
 ```
 
-Search and filter controls are siblings above the table. Keep filter state outside the table, derive filtered rows with `useMemo`, and pass the result to `data`. Use existing controls such as `SearchBar`, `MultiSelect`, `Select`, or page-specific filter pills; do not put form controls inside `Table.Header` unless they are truly column headers. If the table is paginated, reset the page index when filters change.
+Search and filter controls are siblings above the table. On pages, wrap them in `Page.Toolbar` (see the `page-toolbar` skill); the bare `Stack` form below is for non-page surfaces like dialogs and sheets. Keep filter state outside the table, derive filtered rows with `useMemo`, and pass the result to `data`. Use existing controls such as `SearchBar`, `MultiSelect`, `Select`, or page-specific filter pills; do not put form controls inside `Table.Header` unless they are truly column headers. If the table is paginated, reset the page index when filters change.
 
 ```tsx
 const [search, setSearch] = useState("");
@@ -424,6 +424,60 @@ The `@/components/ui/link` wrapper sets `target="_blank"` when `external` is tru
 - **Preserve dynamic tokens.** Page subtext often interpolates state like `{rangeLabel}`, `{periodUsage.credits}`, or `{projectName}`. When rewording copy that contains a token, keep the token in place — replace it with the literal current value (e.g. "the last 30 days") only when the data fetch itself is locked to that value. Otherwise the copy starts lying as soon as the user changes a filter.
 - **Don't fight the Tailwind class sorter.** Prettier's `prettier-plugin-tailwindcss` reorders classes on save. Write classes in any order; the formatter will normalize them and the diff stays clean across the codebase.
 - **AI context strings shadow user-visible names.** When renaming a chart or card (e.g. "Most Used LLM Clients" → "Most Used Agents"), search for the old name in nearby `contextInfo=` / `suggestions=` props passed to `ExploreWithAI` / `InsightsConfig`. Those strings are sent to the LLM as analytical context; if they drift from the visible label, the AI assistant talks about a card the user can't see.
+
+### Building a new page (required pattern)
+
+Every new dashboard page follows the same skeleton — no exceptions, no bespoke headers:
+
+```tsx
+import { Page } from "@/components/page-layout";
+
+export default function MyNewPage(): JSX.Element {
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+      </Page.Header>
+      <Page.Body>
+        <Page.Section>
+          {/* Renders the area eyebrow (OBSERVE/SECURE/CONNECT/DISTRIBUTE/
+              ORGANIZATION, derived from the URL) above a thin serif title
+              automatically. Pass area="..." to override, area="" to suppress. */}
+          <Page.Section.Title>My New Page</Page.Section.Title>
+          <Page.Section.Description>One-line purpose.</Page.Section.Description>
+          <Page.Section.Body>{/* content */}</Page.Section.Body>
+        </Page.Section>
+      </Page.Body>
+    </Page>
+  );
+}
+```
+
+Checklist for the content below the title:
+
+- **One page title per page.** Secondary sections get `text-eyebrow` overlines (utility groupings, table/list sections) or a smaller serif `text-display-xs` (content subsections with their own body) — never a second eyebrow + full-size serif stack.
+- Stat rows → `MetricCard` in `MetricCard.Group` with explicit `tone`s:
+
+  ```tsx
+  <MetricCard.Group>
+    <MetricCard label="Total rules" value={total} tone="information" />
+    <MetricCard
+      label="Violations"
+      value={violations}
+      tone={violations > 0 ? "destructive" : "neutral"}
+      delta="+3"
+      description="last 7 days"
+    />
+  </MetricCard.Group>
+  ```
+
+- Tables → design-system `Table` (headers come out as eyebrows for free); hand-rolled grids use `text-eyebrow` header labels.
+- List/filter controls → `Page.Toolbar` (see the `page-toolbar` skill), mono uppercase segments for mode switches.
+- Empty states → the `EmptyState` component exported from `@/components/page-layout` (graphic + heading + description + CTA) for full-page voids; inline ones follow the same idiom by hand: square dashed hairline frame, square hairline icon tile (no gray circle blobs), sentence-case CTA.
+- Loading → content-shaped skeletons (`SkeletonTable`, geometry-matched rows), never a lone spinner or a premature empty state.
+- Cards white (`bg-card`), page gutter gray, hairline borders, no shadows/gradients/washes, square corners — per the styling rules below.
+
+A page that renders its own `<h1>` instead of this pattern is a defect; if a custom header is unavoidable, it must still render `<PageEyebrow />` + `text-display-sm font-thin`.
 
 ### Styling and Design System
 
