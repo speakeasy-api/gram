@@ -4,7 +4,6 @@ import {
   Boxes,
   Check,
   Loader2,
-  Search,
   Server as ServerIcon,
 } from "lucide-react";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -382,10 +381,10 @@ export function DistributeServersStep({
           <label className="text-foreground text-sm font-medium">
             Select servers from the catalog
           </label>
-          <div className="relative mt-3">
-            <Search className="text-muted-foreground pointer-events-none absolute top-[18px] left-3 h-4 w-4 -translate-y-1/2" />
+          <div className="mt-3">
             <Input
               type="search"
+              icon="search"
               value={query}
               onChange={(value) => {
                 setQuery(value);
@@ -401,7 +400,6 @@ export function DistributeServersStep({
                 }
               }}
               placeholder="Search MCP servers"
-              className="pl-9"
             />
           </div>
 
