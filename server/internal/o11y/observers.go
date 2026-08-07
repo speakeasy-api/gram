@@ -12,9 +12,11 @@ import (
 )
 
 const (
-	observableOrganizationsCount                  = "organizations.count"
-	observableProjectsCount                       = "projects.count"
-	observableDeploymentsHttpSecuritySchemesCount = "deployments.http_security_schemes.count"
+	observableOrganizationsCount                             = "organizations.count"
+	observableProjectsCount                                  = "projects.count"
+	observableDeploymentsHttpSecuritySchemesCount            = "deployments.http_security_schemes.count"
+	observableOrganizationMembershipsCount                   = "organization_memberships.count"
+	observableOrganizationMembershipsMissingWorkosMembership = "organization_memberships.missing_workos_membership_id.count"
 )
 
 var recognizedSecuritySchemeType = map[string]struct{}{
@@ -76,6 +78,24 @@ func StartObservers(provider metric.MeterProvider, db *pgxpool.Pool) error {
 		return fmt.Errorf("create observable gauge %q: %w", observableDeploymentsHttpSecuritySchemesCount, err)
 	}
 
+	if gauges[observableOrganizationMembershipsCount], err = meter.Int64ObservableGauge(
+		observableOrganizationMembershipsCount,
+		metric.WithDescription("Count of non-deleted organization memberships"),
+		metric.WithUnit("{#}"),
+		metric.WithInt64Callback(o.observeOrganizationMembershipsCount),
+	); err != nil {
+		return fmt.Errorf("create observable gauge %q: %w", observableOrganizationMembershipsCount, err)
+	}
+
+	if gauges[observableOrganizationMembershipsMissingWorkosMembership], err = meter.Int64ObservableGauge(
+		observableOrganizationMembershipsMissingWorkosMembership,
+		metric.WithDescription("Count of non-deleted organization memberships with no WorkOS membership ID, indicating a WorkOS/Speakeasy reconciliation gap"),
+		metric.WithUnit("{#}"),
+		metric.WithInt64Callback(o.observeOrganizationMembershipsMissingWorkosMembership),
+	); err != nil {
+		return fmt.Errorf("create observable gauge %q: %w", observableOrganizationMembershipsMissingWorkosMembership, err)
+	}
+
 	return nil
 }
 
@@ -129,6 +149,32 @@ func (o *observers) observeProjectsCount(ctx context.Context, observer metric.In
 	count, err := r.StatProjectsCount(ctx)
 	if err != nil {
 		return fmt.Errorf("observer: stat projects count: %w", err)
+	}
+
+	observer.Observe(count)
+
+	return nil
+}
+
+func (o *observers) observeOrganizationMembershipsCount(ctx context.Context, observer metric.Int64Observer) error {
+	r := repo.New(o.db)
+
+	count, err := r.StatOrganizationMembershipsCount(ctx)
+	if err != nil {
+		return fmt.Errorf("observer: stat organization memberships count: %w", err)
+	}
+
+	observer.Observe(count)
+
+	return nil
+}
+
+func (o *observers) observeOrganizationMembershipsMissingWorkosMembership(ctx context.Context, observer metric.Int64Observer) error {
+	r := repo.New(o.db)
+
+	count, err := r.StatOrganizationMembershipsMissingWorkosMembershipCount(ctx)
+	if err != nil {
+		return fmt.Errorf("observer: stat organization memberships missing workos membership id: %w", err)
 	}
 
 	observer.Observe(count)
