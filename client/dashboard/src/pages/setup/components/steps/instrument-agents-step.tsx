@@ -206,7 +206,9 @@ function ChoiceTab({
       value={value}
       // Neutralize the segmented TabsTrigger base (mono/uppercase/tracked) for
       // the card body; the title span re-applies the mono eyebrow look itself.
-      className="border-border data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:ring-1 data-[state=active]:ring-primary h-auto flex-col items-start justify-start gap-2 border p-5 text-left font-sans text-sm tracking-normal normal-case whitespace-normal"
+      // The active card reads as the "front sheet": white fill on the gray
+      // page, ink border + ring; inactive cards stay transparent and recede.
+      className="border-border data-[state=active]:border-primary data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:ring-1 data-[state=active]:ring-primary h-auto flex-col items-start justify-start gap-2 border bg-transparent p-5 text-left font-sans text-sm tracking-normal normal-case whitespace-normal"
     >
       <div className="flex w-full items-center gap-2">
         <span className="text-foreground">{icon}</span>
