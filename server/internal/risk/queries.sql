@@ -489,6 +489,9 @@ WHERE rr.project_id = @project_id
   AND rr.risk_policy_version = @risk_policy_version;
 
 -- name: CountFindingsByPolicy :one
+-- Reported next to CountAnalyzedMessages, so it stays message-scoped: a
+-- skill-anchored finding has no message behind it and would inflate the
+-- numerator over a denominator that never counted it. (cubic)
 SELECT COUNT(*)::BIGINT
 FROM risk_results
 WHERE project_id = @project_id
@@ -496,14 +499,18 @@ WHERE project_id = @project_id
   AND risk_policy_version = @risk_policy_version
   AND found IS TRUE
   AND excluded_at IS NULL
-  AND false_positive_at IS NULL;
+  AND false_positive_at IS NULL
+  AND skill_version_id IS NULL;
 
 -- name: CountAllFindings :one
+-- Total for ListRiskResultsByProjectFound, which drops skill-anchored rows;
+-- counting them here would page an empty list against a non-zero total.
 SELECT COUNT(*)::BIGINT
 FROM risk_results rr
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE rr.project_id = @project_id
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL;
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+  AND rr.skill_version_id IS NULL;
 
 -- name: CountRiskResultsByProjectAndPolicy :one
 -- Matches the filter semantics of ListRiskResultsByProjectAndPolicy: a
@@ -514,7 +521,8 @@ FROM risk_results rr
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
 WHERE rr.project_id = @project_id
   AND rr.risk_policy_id = @risk_policy_id
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL;
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+  AND rr.skill_version_id IS NULL;
 
 -- name: GetRiskOverviewScanCounts :one
 -- messages_scanned counts every scanned message in the window regardless of
@@ -1021,6 +1029,16 @@ SELECT EXISTS (
       WHERE rr.skill_version_id = @skill_version_id
         AND rr.risk_policy_id = p.id
     )
+    -- Same anchor/project pin as RecordSkillPromptInjectionScan. Without it a
+    -- foreign version id opens the gate and burns a judge call on content the
+    -- record query will refuse to write. (cubic)
+    AND EXISTS (
+      SELECT 1
+      FROM skill_versions sv
+      JOIN skills sk ON sk.id = sv.skill_id
+      WHERE sv.id = @skill_version_id
+        AND sk.project_id = p.project_id
+    )
 );
 
 -- name: RecordSkillPromptInjectionScan :exec
@@ -1516,10 +1534,12 @@ ORDER BY rr.false_positive_at DESC, rr.id DESC
 LIMIT @page_limit;
 
 -- name: CountFalsePositiveRiskResults :one
+-- Total for ListFalsePositiveRiskResults, which drops skill-anchored rows.
 SELECT COUNT(*)::BIGINT
 FROM risk_results
 WHERE project_id = @project_id
-  AND false_positive_at IS NOT NULL;
+  AND false_positive_at IS NOT NULL
+  AND skill_version_id IS NULL;
 
 -- Exclusion reconcile sweep -------------------------------------------------
 -- All batches are keyset-paginated by id (id > @cursor, ORDER BY id, LIMIT

@@ -307,8 +307,11 @@ FROM risk_results rr
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE rr.project_id = $1
   AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+  AND rr.skill_version_id IS NULL
 `
 
+// Total for ListRiskResultsByProjectFound, which drops skill-anchored rows;
+// counting them here would page an empty list against a non-zero total.
 func (q *Queries) CountAllFindings(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, countAllFindings, projectID)
 	var column_1 int64
@@ -366,8 +369,10 @@ SELECT COUNT(*)::BIGINT
 FROM risk_results
 WHERE project_id = $1
   AND false_positive_at IS NOT NULL
+  AND skill_version_id IS NULL
 `
 
+// Total for ListFalsePositiveRiskResults, which drops skill-anchored rows.
 func (q *Queries) CountFalsePositiveRiskResults(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, countFalsePositiveRiskResults, projectID)
 	var column_1 int64
@@ -384,6 +389,7 @@ WHERE project_id = $1
   AND found IS TRUE
   AND excluded_at IS NULL
   AND false_positive_at IS NULL
+  AND skill_version_id IS NULL
 `
 
 type CountFindingsByPolicyParams struct {
@@ -392,6 +398,9 @@ type CountFindingsByPolicyParams struct {
 	RiskPolicyVersion int64
 }
 
+// Reported next to CountAnalyzedMessages, so it stays message-scoped: a
+// skill-anchored finding has no message behind it and would inflate the
+// numerator over a denominator that never counted it. (cubic)
 func (q *Queries) CountFindingsByPolicy(ctx context.Context, arg CountFindingsByPolicyParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countFindingsByPolicy, arg.ProjectID, arg.RiskPolicyID, arg.RiskPolicyVersion)
 	var column_1 int64
@@ -425,6 +434,7 @@ JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
 WHERE rr.project_id = $1
   AND rr.risk_policy_id = $2
   AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+  AND rr.skill_version_id IS NULL
 `
 
 type CountRiskResultsByProjectAndPolicyParams struct {
@@ -4649,6 +4659,16 @@ SELECT EXISTS (
       FROM risk_results rr
       WHERE rr.skill_version_id = $2
         AND rr.risk_policy_id = p.id
+    )
+    -- Same anchor/project pin as RecordSkillPromptInjectionScan. Without it a
+    -- foreign version id opens the gate and burns a judge call on content the
+    -- record query will refuse to write. (cubic)
+    AND EXISTS (
+      SELECT 1
+      FROM skill_versions sv
+      JOIN skills sk ON sk.id = sv.skill_id
+      WHERE sv.id = $2
+        AND sk.project_id = p.project_id
     )
 )
 `
