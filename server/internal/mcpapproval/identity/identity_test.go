@@ -454,3 +454,57 @@ func TestResolve_CredentialsInAURLPackageSpecAreStripped(t *testing.T) {
 	require.NotContains(t, got.PackageName, "tok3n")
 	require.NotContains(t, got.PackageName, "s3cret")
 }
+
+// pipx names the package with --spec, not uv's --from. Sharing one selector
+// across the PyPI registry keyed the invocation to the command name.
+func TestResolve_PipxSpecSelector(t *testing.T) {
+	t.Parallel()
+
+	got := identity.Resolve("pipx run --spec mcp-thing==1.0.0 some-command")
+	require.Equal(t, identity.KindPackage, got.Kind)
+	require.Equal(t, "mcp-thing", got.PackageName)
+	require.Equal(t, "1.0.0", got.PackageVersion)
+	require.True(t, got.VersionPinned)
+
+	joined := identity.Resolve("pipx run --spec=mcp-thing==1.0.0 some-command")
+	require.Equal(t, "mcp-thing", joined.PackageName)
+}
+
+// A selector belongs to the launcher that defines it. uvx has no --spec and
+// pipx has no --from, so neither may be read for the other.
+func TestResolve_SelectorsAreLauncherSpecific(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "real-pkg", identity.Resolve("uvx --from real-pkg some-command").PackageName)
+	require.Equal(t, "real-pkg", identity.Resolve("pipx run --spec real-pkg some-command").PackageName)
+}
+
+// npm resolves a partial version as a range: `pkg@1.2` installs the newest
+// 1.2.x, so it names no single release.
+func TestResolve_NpmPartialVersionsAreNotPinned(t *testing.T) {
+	t.Parallel()
+
+	for _, spec := range []string{"npx pkg@1", "npx pkg@1.2"} {
+		require.False(t, identity.Resolve(spec).VersionPinned, "%s floats", spec)
+	}
+
+	require.True(t, identity.Resolve("npx pkg@1.2.3").VersionPinned)
+}
+
+// PyPI has no partial-version rule: a version only arrives through ==, which
+// is exact at whatever precision it names.
+func TestResolve_PyPIPartialExactVersionStaysPinned(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, identity.Resolve("uvx mcp-thing==1.2").VersionPinned)
+}
+
+// A port is a number, so a zero-padded default is still the default.
+func TestResolve_ZeroPaddedDefaultPortIsDropped(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t,
+		identity.Resolve("https://mcp.example.com/sse").ArtifactRef,
+		identity.Resolve("https://mcp.example.com:0443/sse").ArtifactRef,
+	)
+}
