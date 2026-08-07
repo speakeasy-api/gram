@@ -782,3 +782,23 @@ func marshalMcpapprovalApprovalDecisionToApprovalDecisionResponseBody(v *mcpappr
 
 	return res
 }
+
+// marshalMcpapprovalResearchReportToResearchReportResponseBody builds a value
+// of type *ResearchReportResponseBody from a value of type
+// *mcpapproval.ResearchReport.
+func marshalMcpapprovalResearchReportToResearchReportResponseBody(v *mcpapproval.ResearchReport) *ResearchReportResponseBody {
+	res := &ResearchReportResponseBody{
+		ID:            v.ID,
+		Status:        v.Status,
+		Report:        v.Report,
+		ReportVersion: v.ReportVersion,
+		Model:         v.Model,
+		RequestedBy:   v.RequestedBy,
+		StartedAt:     v.StartedAt,
+		CompletedAt:   v.CompletedAt,
+		Error:         v.Error,
+		CreatedAt:     v.CreatedAt,
+	}
+
+	return res
+}

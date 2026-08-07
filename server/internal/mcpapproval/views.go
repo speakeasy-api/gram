@@ -81,6 +81,21 @@ func decisionView(decision repo.McpApprovalDecision) *gen.ApprovalDecision {
 	}
 }
 
+func researchReportView(report repo.McpResearchReport) *gen.ResearchReport {
+	return &gen.ResearchReport{
+		ID:            report.ID.String(),
+		Status:        report.Status,
+		Report:        rawEvidence(report.Report),
+		ReportVersion: int(report.ReportVersion),
+		Model:         fromPGText(report.Model),
+		RequestedBy:   fromPGText(report.RequestedBy),
+		StartedAt:     optionalTime(report.StartedAt),
+		CompletedAt:   optionalTime(report.CompletedAt),
+		Error:         fromPGText(report.Error),
+		CreatedAt:     report.CreatedAt.Time.Format(timeFormat),
+	}
+}
+
 // rawEvidence decodes the stored evidence document for the API boundary.
 //
 // A payload that will not decode yields nil rather than a partial value: the

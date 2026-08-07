@@ -14,6 +14,10 @@ func TestValidateGrantSurface(t *testing.T) {
 		{Scope: string(ScopeProjectRead)},
 		{Scope: string(ScopeSkillWrite)},
 		{Scope: string(ScopeSkillBlockedRead)},
+		{Scope: string(ScopeMCPApprovalRead)},
+		{Scope: string(ScopeMCPApprovalBlockedRead)},
+		{Scope: string(ScopeMCPApprovalDecide)},
+		{Scope: string(ScopeMCPApprovalBlockedDecide)},
 	}))
 	require.NoError(t, ValidateGrantSurface(GrantSurfaceRiskPolicy, []*RoleGrant{
 		{Scope: string(ScopeRiskPolicyEvaluate)},

@@ -7,6 +7,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_approval"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -64,10 +65,11 @@ func TestGetRequest_OtherProjectIsNotFound(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
-// Requesters and decisions are fetched under their own predicates, so a
-// request id belonging to another project must not drag its children out
-// even when the parent lookup is what fails.
-func TestGetRequest_DoesNotLeakOtherProjectRequesters(t *testing.T) {
+// The child queries carry their own project predicates. The handler's parent
+// lookup 404s before they run, so the predicates are exercised directly at
+// the repo layer: another project's request id under this project's bound
+// must yield nothing, whatever the handler above happens to check first.
+func TestGetRequest_ChildQueriesAreProjectBounded(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -79,11 +81,19 @@ func TestGetRequest_DoesNotLeakOtherProjectRequesters(t *testing.T) {
 	_, err := ti.service.GetRequest(ctx, getPayload(theirs.String()))
 	requireOopsCode(t, err, oops.CodeNotFound)
 
-	// And the same id read from the granted project yields nothing either.
-	mine := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "https://mine.example.com", status: "", evidence: "", version: 0})
-	detail, err := ti.service.GetRequest(ctx, getPayload(mine.String()))
+	requesters, err := ti.repo.ListRequestersForApprovalRequest(ctx, repo.ListRequestersForApprovalRequestParams{
+		McpApprovalRequestID: theirs,
+		ProjectID:            ti.projectID,
+	})
 	require.NoError(t, err)
-	require.Empty(t, detail.Requesters)
+	require.Empty(t, requesters)
+
+	decisions, err := ti.repo.ListDecisionsForApprovalRequest(ctx, repo.ListDecisionsForApprovalRequestParams{
+		McpApprovalRequestID: theirs,
+		ProjectID:            ti.projectID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, decisions)
 }
 
 func TestGetRequest_UnknownID(t *testing.T) {
@@ -127,4 +137,33 @@ func TestGetRequest_ReadScopeSuffices(t *testing.T) {
 	detail, err := ti.service.GetRequest(readOnly, getPayload(requestID.String()))
 	require.NoError(t, err)
 	require.Equal(t, requestID.String(), detail.Request.ID)
+}
+
+// Research reports ride along on the detail, newest first, so the admin sees
+// every run without a second call.
+func TestGetRequest_IncludesResearchReports(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "", evidence: "", version: 0})
+	seedResearchReport(t, ctx, ti, ti.projectID, requestID, "completed", `{"claims":[{"text":"vendor is real","tier":"independently_reported"}]}`)
+	seedResearchReport(t, ctx, ti, ti.projectID, requestID, "running", `{}`)
+
+	detail, err := ti.service.GetRequest(ctx, getPayload(requestID.String()))
+	require.NoError(t, err)
+	require.Len(t, detail.ResearchReports, 2)
+
+	// Newest first, and the payload arrives as a structure the surface walks.
+	require.Equal(t, "running", detail.ResearchReports[0].Status)
+	require.Equal(t, "completed", detail.ResearchReports[1].Status)
+	report, ok := detail.ResearchReports[1].Report.(map[string]any)
+	require.True(t, ok)
+	require.Contains(t, report, "claims")
+
+	// A request with no runs reports none rather than failing.
+	bare := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "", evidence: "", version: 0})
+	bareDetail, err := ti.service.GetRequest(ctx, getPayload(bare.String()))
+	require.NoError(t, err)
+	require.Empty(t, bareDetail.ResearchReports)
 }

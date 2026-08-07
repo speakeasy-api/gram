@@ -19,9 +19,9 @@ type RecordDecisionRequestBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// Either approved or denied.
 	Decision string `form:"decision" json:"decision" xml:"decision"`
-	// Why the decision was made. This is the artifact cited when explaining a
-	// denial.
-	Rationale *string `form:"rationale,omitempty" json:"rationale,omitempty" xml:"rationale,omitempty"`
+	// Why the decision was made. This is the artifact cited when explaining the
+	// decision to the requester, so it cannot be blank.
+	Rationale string `form:"rationale" json:"rationale" xml:"rationale"`
 	// Principals the approval covers. Empty for a denial.
 	GrantedPrincipalUrns []string `form:"granted_principal_urns,omitempty" json:"granted_principal_urns,omitempty" xml:"granted_principal_urns,omitempty"`
 }
@@ -54,6 +54,8 @@ type GetRequestResponseBody struct {
 	// Every decision made on this server, newest first. A repeat request starts
 	// from the last rationale rather than from zero.
 	Decisions []*ApprovalDecisionResponseBody `form:"decisions,omitempty" json:"decisions,omitempty" xml:"decisions,omitempty"`
+	// Every research-agent run for this request, newest first.
+	ResearchReports []*ResearchReportResponseBody `form:"research_reports,omitempty" json:"research_reports,omitempty" xml:"research_reports,omitempty"`
 }
 
 // RecordDecisionResponseBody is the type of the "mcpApproval" service
@@ -694,6 +696,31 @@ type ApprovalDecisionResponseBody struct {
 	DecidedAt *string `form:"decided_at,omitempty" json:"decided_at,omitempty" xml:"decided_at,omitempty"`
 }
 
+// ResearchReportResponseBody is used to define fields on response body types.
+type ResearchReportResponseBody struct {
+	// The report ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The run's lifecycle state, such as running, completed, or failed.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// The structured findings. Every claim carries a provenance tier and its
+	// citations.
+	Report any `form:"report,omitempty" json:"report,omitempty" xml:"report,omitempty"`
+	// Shape version of the report payload.
+	ReportVersion *int `form:"report_version,omitempty" json:"report_version,omitempty" xml:"report_version,omitempty"`
+	// The model that produced the report.
+	Model *string `form:"model,omitempty" json:"model,omitempty" xml:"model,omitempty"`
+	// Who asked for the research run.
+	RequestedBy *string `form:"requested_by,omitempty" json:"requested_by,omitempty" xml:"requested_by,omitempty"`
+	// When the run started.
+	StartedAt *string `form:"started_at,omitempty" json:"started_at,omitempty" xml:"started_at,omitempty"`
+	// When the run finished.
+	CompletedAt *string `form:"completed_at,omitempty" json:"completed_at,omitempty" xml:"completed_at,omitempty"`
+	// Why the run failed, when it did.
+	Error *string `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
+	// When the run was requested.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+}
+
 // NewRecordDecisionRequestBody builds the HTTP request body from the payload
 // of the "recordDecision" endpoint of the "mcpApproval" service.
 func NewRecordDecisionRequestBody(p *mcpapproval.RecordDecisionPayload) *RecordDecisionRequestBody {
@@ -903,6 +930,14 @@ func NewGetRequestApprovalRequestDetailOK(body *GetRequestResponseBody) *mcpappr
 			continue
 		}
 		v.Decisions[i] = unmarshalApprovalDecisionResponseBodyToMcpapprovalApprovalDecision(val)
+	}
+	v.ResearchReports = make([]*mcpapproval.ResearchReport, len(body.ResearchReports))
+	for i, val := range body.ResearchReports {
+		if val == nil {
+			v.ResearchReports[i] = nil
+			continue
+		}
+		v.ResearchReports[i] = unmarshalResearchReportResponseBodyToMcpapprovalResearchReport(val)
 	}
 
 	return v
@@ -1258,6 +1293,9 @@ func ValidateGetRequestResponseBody(body *GetRequestResponseBody) (err error) {
 	if body.Decisions == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("decisions", "body"))
 	}
+	if body.ResearchReports == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("research_reports", "body"))
+	}
 	if body.Request != nil {
 		if err2 := ValidateApprovalRequestSummaryResponseBody(body.Request); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -1276,6 +1314,13 @@ func ValidateGetRequestResponseBody(body *GetRequestResponseBody) (err error) {
 	for _, e := range body.Decisions {
 		if e != nil {
 			if err2 := ValidateApprovalDecisionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.ResearchReports {
+		if e != nil {
+			if err2 := ValidateResearchReportResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -2092,6 +2137,33 @@ func ValidateApprovalDecisionResponseBody(body *ApprovalDecisionResponseBody) (e
 	}
 	if body.DecidedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.decided_at", *body.DecidedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateResearchReportResponseBody runs the validations defined on
+// ResearchReportResponseBody
+func ValidateResearchReportResponseBody(body *ResearchReportResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.ReportVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("report_version", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.StartedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.started_at", *body.StartedAt, goa.FormatDateTime))
+	}
+	if body.CompletedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.completed_at", *body.CompletedAt, goa.FormatDateTime))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
 	return
 }

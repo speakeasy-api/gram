@@ -90,6 +90,8 @@ type ApprovalRequestDetail struct {
 	// Every decision made on this server, newest first. A repeat request starts
 	// from the last rationale rather than from zero.
 	Decisions []*ApprovalDecision
+	// Every research-agent run for this request, newest first.
+	ResearchReports []*ResearchReport
 }
 
 // One MCP server awaiting a decision.
@@ -172,11 +174,38 @@ type RecordDecisionPayload struct {
 	ID string
 	// Either approved or denied.
 	Decision string
-	// Why the decision was made. This is the artifact cited when explaining a
-	// denial.
-	Rationale *string
+	// Why the decision was made. This is the artifact cited when explaining the
+	// decision to the requester, so it cannot be blank.
+	Rationale string
 	// Principals the approval covers. Empty for a denial.
 	GrantedPrincipalUrns []string
+}
+
+// One research-agent run over a request's server. Findings are gathered and
+// cited, never adjudicated — and web-sourced claims may be inaccurate,
+// incomplete, or deliberately seeded.
+type ResearchReport struct {
+	// The report ID.
+	ID string
+	// The run's lifecycle state, such as running, completed, or failed.
+	Status string
+	// The structured findings. Every claim carries a provenance tier and its
+	// citations.
+	Report any
+	// Shape version of the report payload.
+	ReportVersion int
+	// The model that produced the report.
+	Model *string
+	// Who asked for the research run.
+	RequestedBy *string
+	// When the run started.
+	StartedAt *string
+	// When the run finished.
+	CompletedAt *string
+	// Why the run failed, when it did.
+	Error *string
+	// When the run was requested.
+	CreatedAt string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -200,6 +201,14 @@ func (s *Service) GetRequest(ctx context.Context, payload *gen.GetRequestPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "error reading approval decisions").LogError(ctx, s.logger)
 	}
 
+	reportRows, err := queries.ListResearchReportsForApprovalRequest(ctx, repo.ListResearchReportsForApprovalRequestParams{
+		McpApprovalRequestID: requestID,
+		ProjectID:            projectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading research reports").LogError(ctx, s.logger)
+	}
+
 	requesters := make([]*gen.ApprovalRequester, 0, len(requesterRows))
 	for _, requester := range requesterRows {
 		requesters = append(requesters, &gen.ApprovalRequester{
@@ -215,6 +224,11 @@ func (s *Service) GetRequest(ctx context.Context, payload *gen.GetRequestPayload
 		decisions = append(decisions, decisionView(decision))
 	}
 
+	reports := make([]*gen.ResearchReport, 0, len(reportRows))
+	for _, report := range reportRows {
+		reports = append(reports, researchReportView(report))
+	}
+
 	return &gen.ApprovalRequestDetail{
 		Request:             summaryView(fromGetRow(row)),
 		Requesters:          requesters,
@@ -222,6 +236,7 @@ func (s *Service) GetRequest(ctx context.Context, payload *gen.GetRequestPayload
 		EvidenceVersion:     evidenceVersion(row.EvidenceVersion),
 		EvidenceCollectedAt: optionalTime(row.EvidenceCollectedAt),
 		Decisions:           decisions,
+		ResearchReports:     reports,
 	}, nil
 }
 
@@ -233,6 +248,13 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 
 	if payload.Decision != decisionApproved && payload.Decision != decisionDenied {
 		return nil, oops.E(oops.CodeBadRequest, nil, "decision must be approved or denied")
+	}
+
+	// The rationale is the artifact cited when explaining the decision to the
+	// requester, so a blank one is rejected rather than recorded.
+	rationale := strings.TrimSpace(payload.Rationale)
+	if rationale == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "a rationale is required")
 	}
 
 	requestID, err := uuid.Parse(payload.ID)
@@ -256,8 +278,11 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 	// Read the request under the project id before writing anything. The
 	// predicate on the insert would scope it too, but resolving ownership
 	// explicitly is what stops a forgotten predicate becoming a tenancy
-	// crossing — the failure mode behind AIS-424.
-	request, err := queries.GetApprovalRequest(ctx, repo.GetApprovalRequestParams{ID: requestID, ProjectID: projectID})
+	// crossing — the failure mode behind AIS-424. The read locks the row so
+	// concurrent decisions serialise: the request's status always ends up
+	// matching the newest decision rather than whichever transaction happened
+	// to commit last.
+	request, err := queries.GetApprovalRequestForDecision(ctx, repo.GetApprovalRequestForDecisionParams{ID: requestID, ProjectID: projectID})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "approval request not found")
@@ -287,7 +312,7 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 		McpApprovalRequestID: requestID,
 		Decision:             payload.Decision,
 		DecidedBy:            authCtx.UserID,
-		Rationale:            pgText(payload.Rationale),
+		Rationale:            pgText(&rationale),
 		EvidenceSnapshot:     request.CurrentEvidence,
 		EvidenceVersion:      request.EvidenceVersion,
 		GrantedPrincipalUrns: granted,

@@ -1,6 +1,7 @@
 package mcpapproval_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -81,8 +82,12 @@ func TestListRequests_CapsPageSize(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	for range 3 {
-		seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "", evidence: "", version: 0})
+	// One more request than the cap, so the clamp is what bounds the result
+	// rather than the data running out first.
+	for i := range 201 {
+		seedRequest(t, ctx, ti, ti.projectID, seededRequest{
+			targetKey: fmt.Sprintf("https://mcp.example.com/%03d", i), status: "", evidence: "", version: 0,
+		})
 	}
 
 	payload := listPayload()
@@ -96,7 +101,7 @@ func TestListRequests_CapsPageSize(t *testing.T) {
 	payload.Limit = new(int32(100000))
 	result, err = ti.service.ListRequests(ctx, payload)
 	require.NoError(t, err)
-	require.Len(t, result.Requests, 3)
+	require.Len(t, result.Requests, 200)
 }
 
 // The queue must never carry another project's requests, whatever the caller

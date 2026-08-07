@@ -19,9 +19,9 @@ export type RecordDecisionRequestBody = {
    */
   id: string;
   /**
-   * Why the decision was made. This is the artifact cited when explaining a denial.
+   * Why the decision was made. This is the artifact cited when explaining the decision to the requester, so it cannot be blank.
    */
-  rationale?: string | undefined;
+  rationale: string;
 };
 
 /** @internal */
@@ -29,7 +29,7 @@ export type RecordDecisionRequestBody$Outbound = {
   decision: string;
   granted_principal_urns?: Array<string> | undefined;
   id: string;
-  rationale?: string | undefined;
+  rationale: string;
 };
 
 /** @internal */
@@ -41,7 +41,7 @@ export const RecordDecisionRequestBody$outboundSchema: z.ZodMiniType<
     decision: z.string(),
     grantedPrincipalUrns: z.optional(z.array(z.string())),
     id: z.string(),
-    rationale: z.optional(z.string()),
+    rationale: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
