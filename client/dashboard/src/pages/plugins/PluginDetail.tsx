@@ -1,4 +1,5 @@
 import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
 import { MCPStatusIndicator } from "@/components/mcp/MCPStatusIndicator";
@@ -71,7 +72,10 @@ import { useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { toast } from "sonner";
 import { DEFAULT_PLUGIN_DESCRIPTION } from "./default-plugin";
-import { downloadPluginPackage } from "./downloadPluginPackage";
+import {
+  downloadPluginPackage,
+  type PluginPackagePlatform,
+} from "./downloadPluginPackage";
 import { InstallInstructionsDialog } from "./InstallInstructionsDialog";
 import { PluginInstallButton } from "./PluginInstallButton";
 import { PluginAssignmentsSheet } from "./PluginAssignmentsSheet";
@@ -125,6 +129,8 @@ export default function PluginDetail(): JSX.Element | null {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isAddServerOpen, setIsAddServerOpen] = useState(false);
   const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const isDownloadingRef = useRef(false);
   const [isInstallSheetOpen, setIsInstallSheetOpen] = useState(false);
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
   const [isManageCollaboratorsOpen, setIsManageCollaboratorsOpen] =
@@ -385,12 +391,18 @@ export default function PluginDetail(): JSX.Element | null {
     });
   };
 
-  const handleDownload = async (platform: "claude" | "cursor" | "codex") => {
+  const handleDownload = async (platform: PluginPackagePlatform) => {
+    if (isDownloadingRef.current) return;
+    isDownloadingRef.current = true;
     setIsDownloadMenuOpen(false);
+    setIsDownloading(true);
     try {
       await downloadPluginPackage(client, pluginId!, platform);
     } catch (_err) {
       toast.error("Failed to download plugin package");
+    } finally {
+      isDownloadingRef.current = false;
+      setIsDownloading(false);
     }
   };
 
@@ -566,16 +578,22 @@ export default function PluginDetail(): JSX.Element | null {
                       name: plugin.name,
                       slug: plugin.slug,
                       description: plugin.description,
+                      agentPluginsV1Compatible: plugin.agentPluginsV1Compatible,
                     }}
                     publishStatus={publishStatus}
                     isDownloadMenuOpen={isDownloadMenuOpen}
                     onDownloadMenuOpenChange={setIsDownloadMenuOpen}
                     onDownload={(platform) => void handleDownload(platform)}
+                    isDownloading={isDownloading}
                     isInstallSheetOpen={isInstallSheetOpen}
                     onInstallSheetOpenChange={setIsInstallSheetOpen}
                   />
                 </Stack>
               </div>
+
+              <AgentPluginCompatibilityWarning
+                compatible={plugin.agentPluginsV1Compatible}
+              />
 
               <MetricCardGroup>
                 <MetricCard
@@ -1029,20 +1047,27 @@ function MarketplaceSyncButton({
 // Install affordance for the plugin overview: a download menu offering the
 // preferred GitHub-marketplace install (when the marketplace is set up) and
 // per-platform zip downloads, plus the install-instructions sheet.
-function PluginInstallControl({
+export function PluginInstallControl({
   plugin,
   publishStatus,
   isDownloadMenuOpen,
   onDownloadMenuOpenChange,
   onDownload,
+  isDownloading,
   isInstallSheetOpen,
   onInstallSheetOpenChange,
 }: {
-  plugin: { name: string; slug: string; description?: string };
+  plugin: {
+    name: string;
+    slug: string;
+    description?: string;
+    agentPluginsV1Compatible: boolean;
+  };
   publishStatus: PublishStatusResult | undefined;
   isDownloadMenuOpen: boolean;
   onDownloadMenuOpenChange: (open: boolean) => void;
-  onDownload: (platform: "claude" | "cursor" | "codex") => void;
+  onDownload: (platform: PluginPackagePlatform) => void;
+  isDownloading: boolean;
   isInstallSheetOpen: boolean;
   onInstallSheetOpenChange: (open: boolean) => void;
 }): JSX.Element {
@@ -1059,7 +1084,7 @@ function PluginInstallControl({
         onOpenChange={onDownloadMenuOpenChange}
       >
         <DropdownMenuTrigger asChild>
-          <PluginInstallButton />
+          <PluginInstallButton loading={isDownloading} />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem
@@ -1081,15 +1106,32 @@ function PluginInstallControl({
             </div>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => onDownload("claude")}>
+          <DropdownMenuItem
+            disabled={isDownloading}
+            onClick={() => onDownload("claude")}
+          >
             Download as zip — Claude
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => onDownload("cursor")}>
+          <DropdownMenuItem
+            disabled={isDownloading}
+            onClick={() => onDownload("cursor")}
+          >
             Download as zip — Cursor
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => onDownload("codex")}>
+          <DropdownMenuItem
+            disabled={isDownloading}
+            onClick={() => onDownload("codex")}
+          >
             Download as zip — Codex
           </DropdownMenuItem>
+          {plugin.agentPluginsV1Compatible && (
+            <DropdownMenuItem
+              disabled={isDownloading}
+              onClick={() => onDownload("agent-plugin")}
+            >
+              Download Agent Plugin 1.0 ZIP
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
       {marketplaceReady && publishStatus && (
@@ -1109,6 +1151,28 @@ function PluginInstallControl({
         />
       )}
     </Stack>
+  );
+}
+
+export function AgentPluginCompatibilityWarning({
+  compatible,
+}: {
+  compatible: boolean;
+}): JSX.Element | null {
+  if (compatible) return null;
+
+  return (
+    <Alert variant="warning" dismissible={false}>
+      <div>
+        <AlertTitle>Unavailable in Agent Plugins 1.0.0</AlertTitle>
+        <AlertDescription>
+          At least one included MCP server is private without OAuth, requires
+          user-provided credentials, uses an unsupported transport, or otherwise
+          can't be represented safely. Export is all-or-nothing, so Cursor and
+          Codex continue using the existing package formats for this plugin.
+        </AlertDescription>
+      </div>
+    </Alert>
   );
 }
 

@@ -1,4 +1,7 @@
 import { Gram } from "@gram/client";
+import type { QueryParamPlatform } from "@gram/client/models/operations/downloadpluginpackage.js";
+
+export type PluginPackagePlatform = QueryParamPlatform;
 
 // The SDK returns headers as a plain Record<string, string[]>, not a Fetch
 // Headers instance, so lookups must be done case-insensitively by hand — the
@@ -17,7 +20,7 @@ function getHeader(
 export async function downloadPluginPackage(
   client: Gram,
   pluginId: string,
-  platform: "claude" | "cursor" | "codex",
+  platform: PluginPackagePlatform,
 ): Promise<void> {
   const { headers, result } = await client.plugins.downloadPluginPackage({
     pluginId,

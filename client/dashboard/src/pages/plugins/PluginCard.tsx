@@ -9,6 +9,7 @@ import type { Plugin } from "@gram/client/models/components/plugin.js";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,11 +19,14 @@ import {
 } from "@/components/ui/Dropdown";
 import { Icon } from "@/components/ui/Icon";
 import { ArrowRight, Puzzle, Server } from "lucide-react";
-import { Fragment, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { DEFAULT_PLUGIN_DESCRIPTION } from "./default-plugin";
-import { downloadPluginPackage } from "./downloadPluginPackage";
+import {
+  downloadPluginPackage,
+  type PluginPackagePlatform,
+} from "./downloadPluginPackage";
 import { InstallInstructionsDialog } from "./InstallInstructionsDialog";
 import { PluginInstallButton } from "./PluginInstallButton";
 
@@ -44,6 +48,8 @@ export function PluginCard({
     plugin.description ?? (isDefault ? DEFAULT_PLUGIN_DESCRIPTION : undefined);
   const [isInstallOpen, setIsInstallOpen] = useState(false);
   const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const isDownloadingRef = useRef(false);
   const installTarget =
     publishStatus?.connected &&
     publishStatus.repoOwner &&
@@ -55,12 +61,18 @@ export function PluginCard({
         }
       : undefined;
 
-  const handleDownload = async (platform: "claude" | "cursor" | "codex") => {
+  const handleDownload = async (platform: PluginPackagePlatform) => {
+    if (isDownloadingRef.current) return;
+    isDownloadingRef.current = true;
     setIsDownloadMenuOpen(false);
+    setIsDownloading(true);
     try {
       await downloadPluginPackage(client, plugin.id, platform);
     } catch (_err) {
       toast.error("Failed to download plugin package");
+    } finally {
+      isDownloadingRef.current = false;
+      setIsDownloading(false);
     }
   };
 
@@ -82,22 +94,36 @@ export function PluginCard({
     {
       label: "Download as zip — Claude",
       separatorBefore: true,
+      disabled: isDownloading,
       onClick: () => {
         void handleDownload("claude");
       },
     },
     {
       label: "Download as zip — Cursor",
+      disabled: isDownloading,
       onClick: () => {
         void handleDownload("cursor");
       },
     },
     {
       label: "Download as zip — Codex",
+      disabled: isDownloading,
       onClick: () => {
         void handleDownload("codex");
       },
     },
+    ...(plugin.agentPluginsV1Compatible
+      ? [
+          {
+            label: "Download Agent Plugin 1.0 ZIP",
+            disabled: isDownloading,
+            onClick: () => {
+              void handleDownload("agent-plugin");
+            },
+          },
+        ]
+      : []),
   ];
 
   const actions: Action[] = [
@@ -142,6 +168,15 @@ export function PluginCard({
                   <Badge variant="warning">
                     <Badge.Text>Needs syncing</Badge.Text>
                   </Badge>
+                )}
+                {!plugin.agentPluginsV1Compatible && (
+                  <SimpleTooltip tooltip="At least one included server can't be represented safely in Agent Plugins 1.0.0. Cursor and Codex continue using their existing package formats.">
+                    <span tabIndex={0} aria-label="Agent Plugins unavailable">
+                      <Badge variant="warning">
+                        <Badge.Text>Agent Plugins unavailable</Badge.Text>
+                      </Badge>
+                    </span>
+                  </SimpleTooltip>
                 )}
               </div>
               <Text
@@ -201,7 +236,7 @@ export function PluginCard({
                   onOpenChange={setIsDownloadMenuOpen}
                 >
                   <DropdownMenuTrigger asChild>
-                    <PluginInstallButton size="sm" />
+                    <PluginInstallButton size="sm" loading={isDownloading} />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     {installActions.map((action) => (
