@@ -4,12 +4,18 @@
 // only reads or also acts on their behalf — from two sources: the MCP
 // annotations a server publishes, and the shape of each tool's input schema.
 //
-// Everything here is a **declaration**, never an observation. The MCP
-// specification is explicit that "clients MUST consider tool annotations to be
-// untrusted unless they come from trusted servers", and a server is free to
-// declare readOnlyHint and write anyway. The value of an assessment is that it
-// tells an admin what authority a server is asking for, so they can grant
-// narrowly; it is not evidence of what the server does.
+// Everything here is a **declaration**, never an observation — including the
+// schema-derived half. Both inputs are documents the server wrote about
+// itself: it may declare readOnlyHint and write anyway, and it may accept a
+// shell command through a parameter it named `message`. The MCP specification
+// is explicit on the point: "clients MUST consider tool annotations to be
+// untrusted unless they come from trusted servers".
+//
+// So an assessment is useful in one direction only. A tool declaring
+// destructive capability, or advertising a parameter that takes a command, is
+// telling you what authority it wants — which is what lets an admin grant
+// narrowly. A tool declaring nothing has told you nothing, and must never be
+// read as declaring itself harmless.
 package capability
 
 import (
@@ -118,10 +124,13 @@ type Assessment struct {
 	// Declared holds capabilities the server stated through annotations.
 	Declared []Capability
 
-	// SchemaImplied holds capabilities inferred from parameter shape. These
-	// are heuristics over names and formats: a parameter called `command` is
-	// probably a command, but nothing guarantees it, and a tool can accept a
-	// dangerous input under an innocuous name.
+	// SchemaImplied holds capabilities inferred from parameter shape.
+	//
+	// Inferred from the *declaration*, not from behaviour: the schema is
+	// another document the server wrote, so a tool is free to take a shell
+	// command through a parameter called `message`. These are heuristics over
+	// names and formats, they improve how legible an honest server is, and
+	// they offer no protection against a dishonest one.
 	SchemaImplied []Capability
 
 	// ActsOnBehalf reports whether the tool declares it does more than read.
@@ -171,6 +180,13 @@ func Assess(declaration Declaration) Assessment {
 // to draw an approver's eye to a tool that accepts a command or a path, not to
 // prove anything: a server can accept the same input under any name it likes,
 // so a miss here is expected and a hit is a prompt to look closer.
+//
+// Generic names are a known blind spot, and chasing them is not worth much.
+// The reference filesystem server's move_file takes `source` and `destination`
+// and matches nothing here, but adding those two words would flag every data
+// source and message destination in the catalogue. Since the whole signal is
+// server-controlled anyway, wider matching buys legibility on honest servers
+// rather than protection against dishonest ones.
 var parameterSignals = []struct {
 	capability Capability
 	substrings []string
@@ -183,7 +199,7 @@ var parameterSignals = []struct {
 	},
 	{
 		capability: CapabilityFilesystemPath,
-		substrings: []string{"path", "filename", "filepath", "directory", "dirname"},
+		substrings: []string{"path", "filename", "filepath", "directory", "dirname", "folder"},
 		formats:    []string{"path"},
 	},
 	{
