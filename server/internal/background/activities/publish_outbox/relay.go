@@ -15,7 +15,7 @@
 //
 // Failure handling splits three ways:
 //
-//   - Permanent failures (unregistered topic, oversized payload, exhausted
+//   - Permanent failures (oversized payload, undecodable attributes, exhausted
 //     retry budget) move to publish_outbox_dead_letters.
 //   - Transient failures record an error and a jittered retry_after, releasing
 //     the lease so the row is picked up again later.
@@ -35,9 +35,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
-	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/infra/pkg/topics"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -102,14 +102,14 @@ type Relay struct {
 	logger      *slog.Logger
 	tracer      trace.Tracer
 	db          *pgxpool.Pool
-	publisher   gcp.RawPublisher
+	publisher   topics.Publisher
 	maxAttempts int32
 
 	publishedRows    metric.Int64Counter
 	deadLetteredRows metric.Int64Counter
 }
 
-func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, publisher gcp.RawPublisher) *Relay {
+func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, publisher topics.Publisher) *Relay {
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/background/activities/publish_outbox")
 
 	publishedRows, err := meter.Int64Counter(
@@ -228,7 +228,7 @@ func (r *Relay) publishAll(ctx context.Context, rows []repo.ClaimPublishOutboxBa
 			continue
 		}
 
-		handles[i] = r.publisher.PublishRaw(ctx, protoreflect.FullName(row.Topic), row.Message, attributes)
+		handles[i] = r.publisher.Publish(ctx, row.Topic, row.Message, attributes)
 	}
 
 	for i, handle := range handles {

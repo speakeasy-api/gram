@@ -1572,7 +1572,7 @@ func TestParseCodexMCPInventory(t *testing.T) {
 	// Verbatim `codex mcp list --json` from the shipped 0.146 build (server
 	// names and the disabled entry are ours; every key, the null-heavy
 	// transport fields, and the auth_status values are as Codex emitted them).
-	entries := parseCodexMCPInventory([]byte(`[
+	entries, parsed := parseCodexMCPInventory([]byte(`[
 	  {
 	    "name": "everything",
 	    "enabled": true,
@@ -1615,6 +1615,7 @@ func TestParseCodexMCPInventory(t *testing.T) {
 	  }
 	]`))
 
+	require.True(t, parsed)
 	require.Len(t, entries, 2)
 	require.Equal(t, "everything", entries[0].Name)
 	require.Equal(t, "npx -y @modelcontextprotocol/server-everything", entries[0].Command)
@@ -1623,8 +1624,21 @@ func TestParseCodexMCPInventory(t *testing.T) {
 	require.Equal(t, "https://mcp.example.test/mcp", entries[1].URL)
 	require.Empty(t, entries[1].Command)
 
-	require.Empty(t, parseCodexMCPInventory([]byte("not json")))
-	require.Empty(t, parseCodexMCPInventory(nil))
+	// An empty document IS readable, and saying so is the whole point: the
+	// server may only treat an empty inventory as proof of absence when the
+	// sender confirms it read one.
+	emptyDoc, ok := parseCodexMCPInventory([]byte("[]"))
+	require.Empty(t, emptyDoc)
+	require.True(t, ok, "an empty but valid list is a successful read")
+
+	// An unreadable document is not an empty one: reporting it as parsed would
+	// let the guard treat it as proof the session has no MCP servers.
+	unparseable, ok := parseCodexMCPInventory([]byte("not json"))
+	require.Empty(t, unparseable)
+	require.False(t, ok)
+	absent, ok := parseCodexMCPInventory(nil)
+	require.Empty(t, absent)
+	require.False(t, ok)
 }
 
 // TestEnvelopeReportsBinaryVersion: the server reads adapter_version's presence
@@ -1696,4 +1710,41 @@ func TestCodexSessionStartRelaysMCPInventoryFromSessionCWD(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, cwd, strings.TrimSpace(string(invocationCWD)),
 		"codex mcp list must run from the session cwd so the project config layer resolves")
+}
+
+// TestAttachMCPInventoryReportsWhetherTheListWasRead covers the sender half of
+// the contract the server gates on. The server tests inject the flag by hand,
+// so without this a regression here would disable enforcement fleet-wide with
+// every test still green.
+func TestAttachMCPInventoryReportsWhetherTheListWasRead(t *testing.T) {
+	read := mcpInventoryEntry{Name: "gram", URL: "https://app.example.test/mcp"}
+
+	// Read the list, found nothing: no entries, but the read must be reported —
+	// this is the case the whole field exists for.
+	var emptyRead components.IngestRequestBody
+	attachMCPInventory(&emptyRead, nil, true)
+	require.NotNil(t, emptyRead.Data, "a successful read must build Data even with no servers")
+	require.NotNil(t, emptyRead.Data.McpInventoryCollected)
+	require.True(t, *emptyRead.Data.McpInventoryCollected)
+	require.Empty(t, emptyRead.Data.McpInventory)
+
+	// Could not read: nothing to say, nothing attached.
+	var unread components.IngestRequestBody
+	attachMCPInventory(&unread, nil, false)
+	require.Nil(t, unread.Data, "an unreadable list with no entries must not build a data block")
+
+	// Partial read: relay what was seen, but do not claim the listing is
+	// complete — the server must not treat it as proof of absence.
+	var partial components.IngestRequestBody
+	attachMCPInventory(&partial, []mcpInventoryEntry{read}, false)
+	require.NotNil(t, partial.Data)
+	require.Len(t, partial.Data.McpInventory, 1)
+	require.NotNil(t, partial.Data.McpInventoryCollected)
+	require.False(t, *partial.Data.McpInventoryCollected, "a partial read must be reported as unread")
+
+	// Complete read with servers.
+	var full components.IngestRequestBody
+	attachMCPInventory(&full, []mcpInventoryEntry{read}, true)
+	require.Len(t, full.Data.McpInventory, 1)
+	require.True(t, *full.Data.McpInventoryCollected)
 }

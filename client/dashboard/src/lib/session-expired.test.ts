@@ -3,11 +3,25 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 async function loadModule(pathname: string, search = "") {
   vi.resetModules();
   const assign = vi.fn();
+  const localStorage = {
+    clear: vi.fn(),
+    getItem: vi.fn(),
+    key: vi.fn(),
+    length: 0,
+    removeItem: vi.fn(),
+    setItem: vi.fn(),
+  };
+  const sessionStorage = {
+    ...localStorage,
+    clear: vi.fn(),
+  };
   vi.stubGlobal("window", {
+    localStorage,
     location: { origin: "https://app.example", pathname, search, assign },
+    sessionStorage,
   });
   const mod = await import("./session-expired");
-  return { assign, ...mod };
+  return { assign, localStorage, sessionStorage, ...mod };
 }
 
 describe("safeRedirectPath", () => {
@@ -45,15 +59,38 @@ describe("redirectToLoginOnUnauthorized", () => {
   });
 
   it("redirects to login and preserves the current location", async () => {
-    const { assign, redirectToLoginOnUnauthorized } = await loadModule(
-      "/acme/projects/default/insights",
-      "?range=7d",
+    const {
+      assign,
+      localStorage,
+      redirectToLoginOnUnauthorized,
+      sessionStorage,
+    } = await loadModule("/acme/projects/default/insights", "?range=7d");
+
+    redirectToLoginOnUnauthorized();
+
+    expect(localStorage.clear).toHaveBeenCalledOnce();
+    expect(sessionStorage.clear).toHaveBeenCalledOnce();
+    expect(assign).toHaveBeenCalledWith(
+      `/login?redirect=${encodeURIComponent("/acme/projects/default/insights?range=7d")}`,
     );
+  });
+
+  it("still redirects when the browser blocks storage access", async () => {
+    const { assign, redirectToLoginOnUnauthorized } =
+      await loadModule("/acme/toolsets");
+    for (const name of ["localStorage", "sessionStorage"]) {
+      Object.defineProperty(window, name, {
+        configurable: true,
+        get: () => {
+          throw new DOMException("Storage disabled", "SecurityError");
+        },
+      });
+    }
 
     redirectToLoginOnUnauthorized();
 
     expect(assign).toHaveBeenCalledWith(
-      `/login?redirect=${encodeURIComponent("/acme/projects/default/insights?range=7d")}`,
+      `/login?redirect=${encodeURIComponent("/acme/toolsets")}`,
     );
   });
 
