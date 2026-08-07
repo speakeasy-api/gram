@@ -1083,17 +1083,19 @@ export function DeviceAgentSetup(): React.JSX.Element {
       </Page.Section.Description>
       <Page.Section.Body>
         <div className="flex flex-col gap-4">
-          <Alert variant="info">
-            <AlertTitle>Rolling out to more than a few machines?</AlertTitle>
-            <AlertDescription>
-              We recommend deploying the agent through your MDM (Kandji, Jamf,
-              Intune, or similar). It installs the binaries and drops a{" "}
-              <code>managed.json</code> so identity and enrollment are set
-              centrally — no per-user setup. The{" "}
-              <strong className="font-medium">Fleet (MDM)</strong> path in each
-              platform's walkthrough covers it.
-            </AlertDescription>
-          </Alert>
+          <div className="border-border bg-card border p-4">
+            <p className="text-eyebrow mb-2">Fleet rollout</p>
+            <Text small muted>
+              Rolling out to more than a few machines? We recommend deploying
+              the agent through your MDM (Kandji, Jamf, Intune, or similar). It
+              installs the binaries and drops a <code>managed.json</code> so
+              identity and enrollment are set centrally — no per-user setup. The{" "}
+              <strong className="text-foreground font-medium">
+                Fleet (MDM)
+              </strong>{" "}
+              path in each platform's walkthrough covers it.
+            </Text>
+          </div>
           <Text small muted>
             Pick the platform you're installing on to walk through setup.
           </Text>
