@@ -236,6 +236,14 @@ func (c *Client) lookupNPM(ctx context.Context, name string) (*Metadata, error) 
 		return nil, err
 	}
 
+	// A 200 whose document carries no name is not a package the registry
+	// published — it is a response this client does not recognize, and
+	// presenting it as metadata would put an empty package in front of an
+	// approver as if it were a finding.
+	if doc.Name == "" {
+		return nil, fmt.Errorf("unrecognized npm metadata response for %q", name)
+	}
+
 	latest := doc.DistTags.Latest
 	meta := &Metadata{
 		Registry:        identity.RegistryNPM,
@@ -340,6 +348,10 @@ func (c *Client) lookupPyPI(ctx context.Context, name string) (*Metadata, error)
 	found, err := c.get(ctx, endpoint, &doc)
 	if err != nil || !found {
 		return nil, err
+	}
+
+	if doc.Info.Name == "" {
+		return nil, fmt.Errorf("unrecognized pypi metadata response for %q", name)
 	}
 
 	first, last := pypiPublishWindow(doc)
