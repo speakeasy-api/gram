@@ -125,7 +125,6 @@ func provisionSkillsSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orga
 	if _, err := authz.PatchRoleGrantsTx(ctx, dbtx, organizationID, authz.SystemRoleMember, "", []*authz.RoleGrant{
 		{
 			Scope:     string(authz.ScopeSkillRead),
-			Effect:    authz.PolicyEffectAllow,
 			Selectors: nil,
 		},
 	}, nil); err != nil {
@@ -135,12 +134,10 @@ func provisionSkillsSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, orga
 	if _, err := authz.PatchRoleGrantsTx(ctx, dbtx, organizationID, authz.SystemRoleAdmin, "", []*authz.RoleGrant{
 		{
 			Scope:     string(authz.ScopeSkillRead),
-			Effect:    authz.PolicyEffectAllow,
 			Selectors: nil,
 		},
 		{
 			Scope:     string(authz.ScopeSkillWrite),
-			Effect:    authz.PolicyEffectAllow,
 			Selectors: nil,
 		},
 	}, nil); err != nil {

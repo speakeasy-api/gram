@@ -664,9 +664,6 @@ func shadowMCPInventoryPolicyAudiencePrincipals(ctx context.Context, db riskrepo
 
 	principals := make([]urn.Principal, 0, len(grants))
 	for _, grant := range grants {
-		if grant.Effect != authz.PolicyEffectAllow {
-			continue
-		}
 		if !maps.Equal(grant.Selector, authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policyID)) {
 			continue
 		}
@@ -956,9 +953,6 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 				return state, fmt.Errorf("listing block grants for shadow mcp policy: %w", err)
 			}
 			for _, grant := range blockGrants {
-				if grant.Effect != authz.PolicyEffectAllow {
-					continue
-				}
 				serverURL := grant.Selector[authz.SelectorKeyServerURL]
 				if _, ok := canonicalURLSet[serverURL]; !ok {
 					continue
@@ -978,9 +972,6 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 			return state, fmt.Errorf("listing grants for shadow mcp policy: %w", err)
 		}
 		for _, grant := range grants {
-			if grant.Effect != authz.PolicyEffectAllow {
-				continue
-			}
 			serverURL := grant.Selector[authz.SelectorKeyServerURL]
 			if _, ok := canonicalURLSet[serverURL]; !ok {
 				continue
