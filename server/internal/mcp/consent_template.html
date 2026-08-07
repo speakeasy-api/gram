@@ -507,9 +507,9 @@
                 class="tooltip-content"
                 role="tooltip"
               >
-                Gram periodically exercises renewal while your session is
-                active so it stays available. Access with a known expiry still
-                renews on use when this is off.
+                Renews connections in the background so they don't expire
+                from inactivity. When off, idle connections lapse and need
+                reconnecting.
               </span>
             </span>
           </dt>
@@ -591,35 +591,31 @@
             <div class="remote-actions">
               {{if .Connected}} {{if .CanRefresh}}
               <span
-                {{if or .AccessExpiresIn
-                .RefreshExpiresIn}}class="tooltip tooltip--align-end"{{end}}
+                {{if .RefreshExpiresIn}}class="tooltip
+                tooltip--align-end"{{end}}
               >
                 <button
                   type="submit"
                   name="action"
                   value="refresh"
                   class="btn-link"
-                  {{if or .AccessExpiresIn .RefreshExpiresIn}}
+                  {{if .RefreshExpiresIn}}
                   aria-describedby="refresh-expiry-{{.ClientID}}"
                   {{end}}
                   data-refresh-link
                 >
                   Refresh now
                 </button>
-                {{if or .AccessExpiresIn .RefreshExpiresIn}}
+                {{if .RefreshExpiresIn}}
                 <span
                   id="refresh-expiry-{{.ClientID}}"
                   class="tooltip-content"
                   role="tooltip"
                 >
-                  {{if .AccessExpiresIn}}Current access expires in
-                  <time datetime="{{.AccessExpiresAt}}"
-                    >{{.AccessExpiresIn}}</time
-                  >. It renews on use. {{end}} {{if .RefreshExpiresIn}}The
-                  connection can be renewed for
+                  Renews on use. If unused, this connection expires in
                   <time datetime="{{.RefreshExpiresAt}}"
                     >{{.RefreshExpiresIn}}</time
-                  >. {{end}}
+                  >.
                 </span>
                 {{end}}
               </span>

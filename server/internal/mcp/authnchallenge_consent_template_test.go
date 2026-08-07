@@ -140,12 +140,12 @@ func TestConsentTemplateShowsAutoRefreshAndServiceExpiry(t *testing.T) {
 	require.Contains(t, html, `class="tooltip"`)
 	require.Contains(t, html, `tabindex="0"`)
 	require.Equal(t, 2, strings.Count(html, `role="tooltip"`))
-	require.Contains(t, html, "Gram periodically exercises renewal")
-	require.Contains(t, html, "Access with a known expiry still")
+	require.Contains(t, normalizedHTML, "don't expire from inactivity")
+	require.Contains(t, normalizedHTML, "idle connections lapse and need reconnecting")
 	require.Contains(t, html, `aria-describedby="refresh-expiry-client-id"`)
 	require.Contains(t, html, `id="refresh-expiry-client-id"`)
-	require.Contains(t, html, `datetime="2026-08-05T18:00:00Z"`)
-	require.Contains(t, html, "3 hours 12 minutes")
+	require.NotContains(t, html, `datetime="2026-08-05T18:00:00Z"`)
+	require.NotContains(t, html, "3 hours 12 minutes")
 	require.Contains(t, html, `datetime="2026-09-05T18:00:00Z"`)
 	require.Contains(t, html, "31 days")
 	require.Contains(t, html, "✓ Auto refresh on")
@@ -157,8 +157,8 @@ func TestConsentTemplateShowsAutoRefreshAndServiceExpiry(t *testing.T) {
 	require.NotEqual(t, -1, metaStart)
 	require.Greater(t, actionsStart, metaStart)
 	require.NotContains(t, html[metaStart:actionsStart], "expires in")
-	require.Contains(t, html[actionsStart:], "Current access expires in")
-	require.Contains(t, normalizedHTML, "The connection can be renewed for")
+	require.Contains(t, html[actionsStart:], "Renews on use. If unused, this connection expires in")
+	require.NotContains(t, html, "Current access expires in")
 }
 
 func TestConsentTemplateHidesAutoRefreshWhenOrganizationFeatureDisabled(t *testing.T) {
@@ -195,8 +195,9 @@ func TestConsentTemplateHidesAutoRefreshWhenOrganizationFeatureDisabled(t *testi
 	require.NotContains(t, html, `aria-label="Auto refresh"`)
 	require.NotContains(t, html, "Auto refresh on")
 	require.Contains(t, html, "Refresh now")
-	require.Contains(t, html, "Current access expires in")
-	require.NotContains(t, html, "The connection can be renewed for")
+	// Refresh lifetime unknown: no expiry tooltip at all.
+	require.NotContains(t, html, `role="tooltip"`)
+	require.NotContains(t, html, "Renews on use")
 	require.NotContains(t, html, "The provider did not report")
 }
 
@@ -234,8 +235,7 @@ func TestConsentTemplateOmitsExpiryTooltipWhenNoExpiryReported(t *testing.T) {
 	require.Contains(t, html, "Refresh now")
 	require.NotContains(t, html, `aria-describedby="refresh-expiry-client-id"`)
 	require.NotContains(t, html, `id="refresh-expiry-client-id"`)
-	require.NotContains(t, html, "Current access expires")
-	require.NotContains(t, html, "The connection can be renewed")
+	require.NotContains(t, html, "Renews on use")
 	require.NotContains(t, html, "The provider did not report")
 	require.NotContains(t, html, `role="tooltip"`)
 }
