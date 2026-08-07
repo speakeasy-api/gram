@@ -1,7 +1,7 @@
 // Package devidptest spins up a real dev-idp HTTP server inside a test.
 //
-// Launch wires bootstrap.Open + keystore.New + the oauth2 / oauth2-1 (and
-// optionally mock-workos) mode handlers under an httptest.NewServer,
+// Launch wires bootstrap.Open + keystore.New + the OAuth 2.1 handler (and
+// optionally the WorkOS emulator) under an httptest.NewServer,
 // returning an Instance with the addressable issuer URLs, a *sql.DB handle,
 // a *repo.Queries for direct sqlc seeding, and helpers for fetching
 // authorization-server metadata and seeding refresh tokens.
@@ -29,29 +29,33 @@ import (
 	"github.com/speakeasy-api/gram/dev-idp/internal/bootstrap"
 	"github.com/speakeasy-api/gram/dev-idp/internal/config"
 	"github.com/speakeasy-api/gram/dev-idp/internal/database/repo"
+	"github.com/speakeasy-api/gram/dev-idp/internal/ema"
 	"github.com/speakeasy-api/gram/dev-idp/internal/keystore"
 	"github.com/speakeasy-api/gram/dev-idp/internal/modes/mockworkos"
-	"github.com/speakeasy-api/gram/dev-idp/internal/modes/oauth2"
 	"github.com/speakeasy-api/gram/dev-idp/internal/modes/oauth21"
+	"github.com/speakeasy-api/gram/dev-idp/internal/modes/resourceas"
+	workosmode "github.com/speakeasy-api/gram/dev-idp/internal/modes/workos"
 	"github.com/speakeasy-api/gram/plog"
 )
 
 const (
 	defaultUserEmail       = "test@devidptest.local"
 	defaultUserDisplayName = "Test User"
+
+	// LoginClientID is the statically provisioned first-party client id the
+	// launched instance accepts without dynamic client registration, mirroring
+	// GRAM_IDP_CLIENT_ID in local dev. Use it to drive the non-interactive
+	// login flow; any other client_id must register first.
+	LoginClientID = "devidptest-login-client"
 )
 
-// Mode discriminator strings persisted by dev-idp on its auth_codes,
-// tokens, and current_users rows.
+// currentUser slot names persisted on dev-idp's current_users rows.
 const (
-	// OAuth20Mode is the discriminator for OAuth 2.0 mode rows.
-	OAuth20Mode = oauth2.Mode
-
 	// OAuth21Mode is the discriminator for OAuth 2.1 mode rows.
 	OAuth21Mode = oauth21.Mode
 
-	// MockWorkosMode is the discriminator for mock-workos mode rows.
-	MockWorkosMode = mockworkos.Mode
+	// WorkOSMode is the currentUser slot holding a real WorkOS subject.
+	WorkOSMode = workosmode.Mode
 )
 
 // Instance is a running dev-idp server with everything tests need to drive
@@ -62,22 +66,16 @@ type Instance struct {
 	// without any mode prefix (e.g. "http://127.0.0.1:38291").
 	Issuer string
 
-	// OAuth20URL is the issuer URL of the OAuth 2.0 mode handler
-	// (Issuer + "/oauth2"). Use this wherever a Gram toolset or
-	// external_oauth_server_metadata row references the upstream OAuth
-	// 2.0 authorization server.
-	OAuth20URL string
-
 	// OAuth21URL is the issuer URL of the OAuth 2.1 mode handler
 	// (Issuer + "/oauth2-1"). Use this wherever a Gram toolset or
 	// external_oauth_server_metadata row references the upstream OAuth
 	// 2.1 authorization server.
 	OAuth21URL string
 
-	// MockWorkosURL is the prefix mounted for the mock-workos mode
-	// (Issuer + "/mock-workos"). Empty when
-	// LaunchOpts.EnableMockWorkos is false.
-	MockWorkosURL string
+	// WorkOSURL is the prefix mounted for the WorkOS surface
+	// (Issuer + "/workos"), served by the local emulator. Empty when
+	// LaunchOpts.EnableWorkOS is false.
+	WorkOSURL string
 
 	// DB is the dev-idp's in-memory SQLite handle. Most tests should
 	// reach for Repo instead; DB is exposed for tests that need to drop
@@ -100,13 +98,12 @@ type Instance struct {
 	rsaKey *rsa.PrivateKey
 }
 
-// LaunchOpts configures Launch. The zero value is valid: oauth2 + oauth2-1
-// mounted, mock-workos disabled, shared package-level RSA key.
+// LaunchOpts configures Launch. The zero value is valid: OAuth 2.1 mounted,
+// WorkOS emulator disabled, shared package-level RSA key.
 type LaunchOpts struct {
-	// EnableMockWorkos mounts the mock-workos mode under
-	// Instance.MockWorkosURL. Disabled by default — most OAuth flow
-	// tests don't need it.
-	EnableMockWorkos bool
+	// EnableWorkOS mounts the WorkOS emulator under Instance.WorkOSURL.
+	// Disabled by default — most OAuth flow tests don't need it.
+	EnableWorkOS bool
 
 	// Key, when non-nil, overrides the shared package-level RSA key. Use
 	// this for tests that need a distinct signing key (JWKS rotation,
@@ -124,7 +121,7 @@ func Launch(t *testing.T, opts LaunchOpts) *Instance {
 	logger := plog.NewLogger(io.Discard)
 	var tp trace.TracerProvider = tracenoop.NewTracerProvider()
 
-	db, err := bootstrap.Open(ctx, config.DB{Mode: config.DBModeMemory})
+	db, err := bootstrap.Open(ctx, config.DB{Mode: config.DBModeMemory}, logger)
 	require.NoError(t, err, "open dev-idp in-memory sqlite")
 
 	// httptest.Server.Close drains in-flight requests but does not block
@@ -157,19 +154,22 @@ func Launch(t *testing.T, opts LaunchOpts) *Instance {
 	server := httptest.NewUnstartedServer(outer)
 	pubURL := "http://" + server.Listener.Addr().String()
 
-	oauth21H := oauth21.NewHandler(oauth21.Config{ExternalURL: pubURL}, ks, logger, tp, db)
+	oauth21H := oauth21.NewHandler(oauth21.Config{ExternalURL: pubURL, LoginClientID: LoginClientID}, ks, logger, tp, db)
 	outer.Handle(oauth21.Prefix+"/", http.StripPrefix(oauth21.Prefix, oauth21H.Handler()))
 	oauth21H.RegisterRootRoutes(outer)
 
-	oauth2H := oauth2.NewHandler(oauth2.Config{ExternalURL: pubURL}, ks, logger, tp, db)
-	outer.Handle(oauth2.Prefix+"/", http.StripPrefix(oauth2.Prefix, oauth2H.Handler()))
-	oauth2H.RegisterRootRoutes(outer)
+	// Resource authorization servers are always mounted, mirroring the real
+	// binary. With no ema_resources rows seeded every slug simply 404s, so
+	// tests that do not exercise enterprise-managed authorization are unaffected.
+	resourceASH := resourceas.NewHandler(resourceas.Config{ExternalURL: pubURL}, ks, logger, tp, db)
+	outer.Handle(resourceas.Prefix+"/", http.StripPrefix(resourceas.Prefix, resourceASH.Handler()))
+	resourceASH.RegisterRootRoutes(outer)
 
-	var mockWorkosURL string
-	if opts.EnableMockWorkos {
+	var workosURL string
+	if opts.EnableWorkOS {
 		mwH := mockworkos.NewHandler(logger, tp, db)
-		outer.Handle(mockworkos.Prefix+"/", http.StripPrefix(mockworkos.Prefix, mwH.Handler()))
-		mockWorkosURL = pubURL + mockworkos.Prefix
+		outer.Handle(workosmode.Prefix+"/", http.StripPrefix(workosmode.Prefix, mwH.Handler()))
+		workosURL = pubURL + workosmode.Prefix
 	}
 
 	server.Start()
@@ -188,7 +188,7 @@ func Launch(t *testing.T, opts LaunchOpts) *Instance {
 	})
 	require.NoError(t, err, "seed default user")
 
-	for _, mode := range currentUserModes(opts.EnableMockWorkos) {
+	for _, mode := range currentUserModes(opts.EnableWorkOS) {
 		_, err := queries.UpsertCurrentUser(ctx, repo.UpsertCurrentUserParams{
 			Mode:       mode,
 			SubjectRef: user.ID.String(),
@@ -198,15 +198,14 @@ func Launch(t *testing.T, opts LaunchOpts) *Instance {
 	}
 
 	return &Instance{
-		Issuer:        pubURL,
-		OAuth20URL:    pubURL + oauth2.Prefix,
-		OAuth21URL:    pubURL + oauth21.Prefix,
-		MockWorkosURL: mockWorkosURL,
-		DB:            db,
-		Repo:          queries,
-		DefaultUser:   user,
-		server:        server,
-		rsaKey:        rsaKey,
+		Issuer:      pubURL,
+		OAuth21URL:  pubURL + oauth21.Prefix,
+		WorkOSURL:   workosURL,
+		DB:          db,
+		Repo:        queries,
+		DefaultUser: user,
+		server:      server,
+		rsaKey:      rsaKey,
 	}
 }
 
@@ -222,11 +221,20 @@ func (i *Instance) OAuth21Metadata(t *testing.T) []byte {
 	return fetchMetadata(t, i.Issuer, oauth21.Prefix)
 }
 
-// OAuth20Metadata fetches the dev-idp's RFC 8414 authorization-server
-// metadata for the oauth2 mode.
-func (i *Instance) OAuth20Metadata(t *testing.T) []byte {
+// ResourceASURL is the issuer identifier of the resource authorization server
+// serving `slug`. This is the value an ID-JAG must carry in `aud`, and the
+// base for that server's /token and /introspect endpoints.
+//
+// The resource itself still has to exist -- seed one with CreateResource.
+func (i *Instance) ResourceASURL(slug string) string {
+	return ema.ResourceASIssuer(i.Issuer, slug)
+}
+
+// ResourceASMetadata fetches the RFC 8414 authorization-server metadata for
+// one resource authorization server.
+func (i *Instance) ResourceASMetadata(t *testing.T, slug string) []byte {
 	t.Helper()
-	return fetchMetadata(t, i.Issuer, oauth2.Prefix)
+	return fetchMetadata(t, i.Issuer, resourceas.Prefix+"/"+slug)
 }
 
 // fetchMetadata reads the RFC 8414 authorization-server metadata for an
@@ -252,10 +260,10 @@ func fetchMetadata(t *testing.T, host, issuerPath string) []byte {
 // currentUserModes lists the per-mode discriminator strings whose
 // current_users rows need to point at Instance.DefaultUser. Mirrors the
 // modes Launch actually mounts.
-func currentUserModes(enableMockWorkos bool) []string {
-	modes := []string{oauth21.Mode, oauth2.Mode}
-	if enableMockWorkos {
-		modes = append(modes, mockworkos.Mode)
+func currentUserModes(enableWorkOS bool) []string {
+	modes := []string{oauth21.Mode}
+	if enableWorkOS {
+		modes = append(modes, workosmode.Mode)
 	}
 	return modes
 }

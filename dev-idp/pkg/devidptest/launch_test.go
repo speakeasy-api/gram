@@ -21,8 +21,7 @@ func TestLaunch_ExposesOAuth21Metadata(t *testing.T) {
 
 	require.NotEmpty(t, inst.Issuer)
 	require.Equal(t, inst.Issuer+"/oauth2-1", inst.OAuth21URL)
-	require.Equal(t, inst.Issuer+"/oauth2", inst.OAuth20URL)
-	require.Empty(t, inst.MockWorkosURL, "mock-workos is opt-in")
+	require.Empty(t, inst.WorkOSURL, "the WorkOS surface is opt-in")
 
 	body := inst.OAuth21Metadata(t)
 	var meta map[string]any
@@ -32,29 +31,15 @@ func TestLaunch_ExposesOAuth21Metadata(t *testing.T) {
 	require.Equal(t, inst.OAuth21URL+"/register", meta["registration_endpoint"])
 }
 
-func TestLaunch_ExposesOAuth20Metadata(t *testing.T) {
+func TestLaunch_EnableWorkOS(t *testing.T) {
 	t.Parallel()
 
-	inst := devidptest.Launch(t, devidptest.LaunchOpts{})
+	inst := devidptest.Launch(t, devidptest.LaunchOpts{EnableWorkOS: true})
 
-	body := inst.OAuth20Metadata(t)
-	var meta map[string]any
-	require.NoError(t, json.Unmarshal(body, &meta))
-	require.Equal(t, inst.OAuth20URL, meta["issuer"])
-	require.Equal(t, inst.OAuth20URL+"/token", meta["token_endpoint"])
-	require.NotContains(t, meta, "registration_endpoint",
-		"oauth2 mode does not advertise DCR")
-}
+	require.Equal(t, inst.Issuer+"/workos", inst.WorkOSURL)
 
-func TestLaunch_EnableMockWorkos(t *testing.T) {
-	t.Parallel()
-
-	inst := devidptest.Launch(t, devidptest.LaunchOpts{EnableMockWorkos: true})
-
-	require.Equal(t, inst.Issuer+"/mock-workos", inst.MockWorkosURL)
-
-	cu, err := inst.Repo.GetCurrentUser(t.Context(), devidptest.MockWorkosMode)
-	require.NoError(t, err, "current_users for mock-workos should be seeded when enabled")
+	cu, err := inst.Repo.GetCurrentUser(t.Context(), devidptest.WorkOSMode)
+	require.NoError(t, err, "the workos currentUser slot should be seeded when enabled")
 	require.Equal(t, inst.DefaultUser.ID.String(), cu.SubjectRef)
 }
 
@@ -66,7 +51,6 @@ func TestCreateRefreshToken_OAuth21RefreshSucceeds(t *testing.T) {
 	const seeded = "seeded-refresh-token"
 	devidptest.CreateRefreshToken(t, t.Context(), inst.Repo, devidptest.RefreshTokenOpts{
 		Token:  seeded,
-		Mode:   devidptest.OAuth21Mode,
 		UserID: inst.DefaultUser.ID,
 	})
 
@@ -93,35 +77,6 @@ func TestCreateRefreshToken_OAuth21RefreshSucceeds(t *testing.T) {
 	require.NoError(t, json.Unmarshal(body, &tokResp))
 	require.NotEmpty(t, tokResp["access_token"])
 	require.Equal(t, "Bearer", tokResp["token_type"])
-}
-
-func TestCreateRefreshToken_OAuth20RefreshSucceeds(t *testing.T) {
-	t.Parallel()
-
-	inst := devidptest.Launch(t, devidptest.LaunchOpts{})
-
-	const seeded = "seeded-oauth2-refresh"
-	devidptest.CreateRefreshToken(t, t.Context(), inst.Repo, devidptest.RefreshTokenOpts{
-		Token:  seeded,
-		Mode:   devidptest.OAuth20Mode,
-		UserID: inst.DefaultUser.ID,
-	})
-
-	form := url.Values{}
-	form.Set("grant_type", "refresh_token")
-	form.Set("refresh_token", seeded)
-	form.Set("client_id", "ignored")
-
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
-		inst.OAuth20URL+"/token", strings.NewReader(form.Encode()))
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	resp, err := http.DefaultClient.Do(req)
-	require.NoError(t, err)
-	defer func() { _ = resp.Body.Close() }()
-
-	require.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
 func TestFactories_UserOrgMembership(t *testing.T) {
@@ -154,9 +109,5 @@ func TestLaunch_SeedsDefaultUserAndCurrentUsers(t *testing.T) {
 
 	cu, err := inst.Repo.GetCurrentUser(t.Context(), devidptest.OAuth21Mode)
 	require.NoError(t, err, "current_users for oauth2-1 should be seeded")
-	require.Equal(t, inst.DefaultUser.ID.String(), cu.SubjectRef)
-
-	cu, err = inst.Repo.GetCurrentUser(t.Context(), devidptest.OAuth20Mode)
-	require.NoError(t, err, "current_users for oauth2 should be seeded")
 	require.Equal(t, inst.DefaultUser.ID.String(), cu.SubjectRef)
 }
