@@ -4555,6 +4555,8 @@ CREATE TABLE IF NOT EXISTS risk_results (
   risk_policy_version BIGINT NOT NULL,
   chat_message_id uuid,
   chat_content_part_id uuid,
+  -- Anchor for findings scanned off a captured skill manifest rather than chat.
+  skill_version_id uuid,
   source TEXT NOT NULL,
 
   found BOOLEAN NOT NULL,
@@ -4597,7 +4599,8 @@ CREATE TABLE IF NOT EXISTS risk_results (
   CONSTRAINT risk_results_risk_policy_id_fkey FOREIGN KEY (risk_policy_id) REFERENCES risk_policies(id) ON DELETE CASCADE,
   CONSTRAINT risk_results_chat_message_id_fkey FOREIGN KEY (chat_message_id) REFERENCES chat_messages(id) ON DELETE CASCADE,
   CONSTRAINT risk_results_chat_content_part_id_fkey FOREIGN KEY (chat_content_part_id) REFERENCES chat_content_parts(id) ON DELETE CASCADE,
-  CONSTRAINT risk_results_anchor_check CHECK ((chat_message_id IS NULL) <> (chat_content_part_id IS NULL))
+  CONSTRAINT risk_results_skill_version_id_fkey FOREIGN KEY (skill_version_id) REFERENCES skill_versions(id) ON DELETE CASCADE,
+  CONSTRAINT risk_results_anchor_check CHECK (num_nonnulls(chat_message_id, chat_content_part_id, skill_version_id) = 1)
 ) WITH (
   -- This table is append-heavy and rarely updated, so the only autovacuum
   -- trigger that ever fires is the insert one. With the global 0.2 scale
@@ -4624,6 +4627,24 @@ ON risk_results (project_id, chat_message_id);
 
 CREATE INDEX IF NOT EXISTS risk_results_project_chat_content_part_idx
 ON risk_results (project_id, chat_content_part_id);
+
+-- The skill_version_id anchor needs the same index cover its chat siblings
+-- have. Leads with skill_version_id rather than project_id because the
+-- ON DELETE CASCADE from skill_versions looks rows up by that column alone;
+-- without it every version delete seq-scans this table. Trailing
+-- risk_policy_id serves the per-version, per-policy lookups (findings for
+-- this version, has this version already been scanned under this policy).
+-- Partial: the column is NULL on every chat-anchored row, which is nearly
+-- all of them.
+--
+-- UNIQUE because one version is scanned at most once per policy: content is
+-- immutable per version, so a second row is always a duplicate. The writer
+-- gates on a NOT EXISTS check, which is not atomic against a concurrent
+-- upload of the same content; this is what makes that race collapse to one
+-- row instead of two.
+CREATE UNIQUE INDEX IF NOT EXISTS risk_results_skill_version_id_risk_policy_id_key
+ON risk_results (skill_version_id, risk_policy_id)
+WHERE skill_version_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS risk_results_project_found_idx
 ON risk_results (project_id, created_at DESC)
