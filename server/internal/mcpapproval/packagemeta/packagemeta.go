@@ -1,0 +1,334 @@
+// Package packagemeta looks up what a package registry publishes about an MCP
+// server distributed as a package.
+//
+// It exists because the MCP registry is the weaker source for the servers this
+// workflow actually receives. A request usually arrives as a shadow-MCP block
+// or a proactive ask, naming a server no curated catalogue lists, and the MCP
+// registry carries no license field for any server at all. npm and PyPI carry
+// license, publish history, version count and maintainer count for exactly
+// that population, over public endpoints needing no credential.
+//
+// As with the rest of the evidence pipeline, everything returned is what a
+// publisher declared. A license field is a claim about licensing, not a
+// verified one, and a maintainer count says how many accounts can publish —
+// not who they are or whether they are still trusted.
+package packagemeta
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/identity"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+)
+
+// maxResponseBytes bounds a registry response. npm returns the full document
+// for every published version, which for a large package runs to megabytes and
+// is mostly irrelevant here.
+const maxResponseBytes = 8 << 20
+
+// Doer issues HTTP requests. `*guardian.HTTPClient` satisfies it, which is what
+// the composition root supplies so lookups inherit egress protection.
+type Doer interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
+// Metadata is what a package registry publishes about one package.
+//
+// Every field is a publisher declaration. Zero values mean the registry
+// published nothing, which must surface as unknown rather than as a finding.
+type Metadata struct {
+	// Registry is the index the metadata came from.
+	Registry identity.Registry
+
+	// Name is the package as the registry names it.
+	Name string
+
+	// License is the declared license, empty when none is published. The MCP
+	// registry carries no license for any server, so for a package-distributed
+	// server this is the only place it comes from.
+	//
+	// Not necessarily a tidy SPDX identifier: the reference filesystem server
+	// publishes "SEE LICENSE IN LICENSE", which is a valid expression telling
+	// you to go read a file. Render it as the string the publisher chose
+	// rather than parsing it into a known-licenses set.
+	License string
+
+	// LatestVersion is the version the registry currently resolves as latest.
+	LatestVersion string
+
+	// FirstPublished is when the package first appeared. A package first
+	// published days ago is a materially different proposition from one with
+	// years of history.
+	FirstPublished time.Time
+
+	// LastPublished is the most recent release, which is the maintenance
+	// signal an approver reads.
+	LastPublished time.Time
+
+	// VersionCount is how many versions have been published.
+	VersionCount int
+
+	// MaintainerCount is how many accounts can publish the package. A single
+	// maintainer is a bus factor and an account-takeover surface; it is not by
+	// itself a problem.
+	MaintainerCount int
+
+	// Deprecated reports that the publisher marked the package deprecated
+	// (npm) or the release yanked (PyPI).
+	Deprecated bool
+
+	// DeprecationReason is the publisher's stated reason, if any.
+	DeprecationReason string
+}
+
+// Client looks packages up over the public registry APIs.
+type Client struct {
+	http    Doer
+	npmURL  string
+	pypiURL string
+}
+
+// Option overrides a client default.
+type Option func(*Client)
+
+// WithNPMBaseURL points npm lookups at a different host, for a self-hosted
+// mirror such as Verdaccio or Artifactory, or for a test server.
+func WithNPMBaseURL(base string) Option {
+	return func(c *Client) { c.npmURL = strings.TrimSuffix(base, "/") }
+}
+
+// WithPyPIBaseURL points PyPI lookups at a different host, for a self-hosted
+// index or a test server.
+func WithPyPIBaseURL(base string) Option {
+	return func(c *Client) { c.pypiURL = strings.TrimSuffix(base, "/") }
+}
+
+// NewClient builds a client against the public registries. The Doer should be
+// guardian-backed in production so lookups are subject to egress policy.
+func NewClient(doer Doer, options ...Option) *Client {
+	client := &Client{
+		http:    doer,
+		npmURL:  "https://registry.npmjs.org",
+		pypiURL: "https://pypi.org",
+	}
+	for _, option := range options {
+		option(client)
+	}
+
+	return client
+}
+
+// Lookup fetches what the registry publishes about a package.
+//
+// A package the registry does not know returns (nil, nil): an unknown package
+// is an ordinary outcome for a server nobody has catalogued, not an error, and
+// it must reach the approver as "not published there" rather than as a failure.
+func (c *Client) Lookup(ctx context.Context, registry identity.Registry, name string) (*Metadata, error) {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return nil, nil
+	}
+
+	switch registry {
+	case identity.RegistryNPM:
+		return c.lookupNPM(ctx, trimmed)
+	case identity.RegistryPyPI:
+		return c.lookupPyPI(ctx, trimmed)
+	default:
+		return nil, nil
+	}
+}
+
+// get fetches and decodes a registry document, reporting whether the package
+// exists.
+func (c *Client) get(ctx context.Context, endpoint string, into any) (bool, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return false, fmt.Errorf("build package metadata request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("fetch package metadata: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+
+	if resp.StatusCode == http.StatusNotFound {
+		return false, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("fetch package metadata: %s", resp.Status)
+	}
+
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponseBytes)).Decode(into); err != nil {
+		return false, fmt.Errorf("decode package metadata: %w", err)
+	}
+
+	return true, nil
+}
+
+type npmDocument struct {
+	Name     string `json:"name"`
+	DistTags struct {
+		Latest string `json:"latest"`
+	} `json:"dist-tags"`
+	Time        map[string]string `json:"time"`
+	Versions    map[string]any    `json:"versions"`
+	Maintainers []struct {
+		Name string `json:"name"`
+	} `json:"maintainers"`
+	License any `json:"license"`
+}
+
+func (c *Client) lookupNPM(ctx context.Context, name string) (*Metadata, error) {
+	// A scoped name contains a slash that must survive as one path segment.
+	endpoint := c.npmURL + "/" + strings.ReplaceAll(url.PathEscape(name), "%2F", "/")
+
+	var doc npmDocument
+	found, err := c.get(ctx, endpoint, &doc)
+	if err != nil || !found {
+		return nil, err
+	}
+
+	latest := doc.DistTags.Latest
+	meta := &Metadata{
+		Registry:        identity.RegistryNPM,
+		Name:            doc.Name,
+		License:         npmLicense(doc.License),
+		LatestVersion:   latest,
+		FirstPublished:  npmTime(doc.Time["created"]),
+		LastPublished:   npmTime(doc.Time["modified"]),
+		VersionCount:    len(doc.Versions),
+		MaintainerCount: len(doc.Maintainers),
+		// npm marks deprecation per version. The latest version being
+		// deprecated is what an approver cares about — an old deprecated
+		// release says nothing about what installs today.
+		Deprecated:        false,
+		DeprecationReason: "",
+	}
+
+	if version, ok := doc.Versions[latest].(map[string]any); ok {
+		if reason, ok := version["deprecated"].(string); ok {
+			meta.Deprecated = true
+			meta.DeprecationReason = reason
+		}
+	}
+
+	return meta, nil
+}
+
+// npmLicense reads npm's license field, which is a string on modern packages
+// and an object on older ones.
+func npmLicense(raw any) string {
+	switch value := raw.(type) {
+	case string:
+		return value
+	case map[string]any:
+		if name, ok := value["type"].(string); ok {
+			return name
+		}
+	}
+
+	return ""
+}
+
+func npmTime(raw string) time.Time {
+	parsed, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return time.Time{}
+	}
+
+	return parsed
+}
+
+type pypiDocument struct {
+	Info struct {
+		Name         string   `json:"name"`
+		Version      string   `json:"version"`
+		License      string   `json:"license"`
+		Yanked       bool     `json:"yanked"`
+		YankedReason string   `json:"yanked_reason"`
+		Classifiers  []string `json:"classifiers"`
+	} `json:"info"`
+	Releases map[string][]struct {
+		UploadTime string `json:"upload_time_iso_8601"`
+	} `json:"releases"`
+}
+
+func (c *Client) lookupPyPI(ctx context.Context, name string) (*Metadata, error) {
+	endpoint := c.pypiURL + "/pypi/" + url.PathEscape(name) + "/json"
+
+	var doc pypiDocument
+	found, err := c.get(ctx, endpoint, &doc)
+	if err != nil || !found {
+		return nil, err
+	}
+
+	first, last := pypiPublishWindow(doc)
+
+	return &Metadata{
+		Registry:       identity.RegistryPyPI,
+		Name:           doc.Info.Name,
+		License:        pypiLicense(doc),
+		LatestVersion:  doc.Info.Version,
+		FirstPublished: first,
+		LastPublished:  last,
+		VersionCount:   len(doc.Releases),
+		// PyPI publishes no maintainer list on this endpoint, so the count is
+		// unknown rather than zero. Zero must not be rendered as "no
+		// maintainers".
+		MaintainerCount:   0,
+		Deprecated:        doc.Info.Yanked,
+		DeprecationReason: doc.Info.YankedReason,
+	}, nil
+}
+
+// pypiLicense prefers the explicit license field and falls back to the
+// Trove classifier, which is where well-formed packages put the SPDX-ish name
+// and which is often populated when the free-text field is not.
+func pypiLicense(doc pypiDocument) string {
+	if license := strings.TrimSpace(doc.Info.License); license != "" {
+		return license
+	}
+
+	const prefix = "License :: "
+	for _, classifier := range doc.Info.Classifiers {
+		if !strings.HasPrefix(classifier, prefix) {
+			continue
+		}
+		parts := strings.Split(classifier, " :: ")
+		return parts[len(parts)-1]
+	}
+
+	return ""
+}
+
+// pypiPublishWindow finds the earliest and latest upload across every release,
+// since PyPI publishes no package-level created or modified timestamp.
+func pypiPublishWindow(doc pypiDocument) (time.Time, time.Time) {
+	var first, last time.Time
+	for _, files := range doc.Releases {
+		for _, file := range files {
+			uploaded, err := time.Parse(time.RFC3339, file.UploadTime)
+			if err != nil {
+				continue
+			}
+			if first.IsZero() || uploaded.Before(first) {
+				first = uploaded
+			}
+			if uploaded.After(last) {
+				last = uploaded
+			}
+		}
+	}
+
+	return first, last
+}
