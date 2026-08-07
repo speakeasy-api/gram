@@ -2120,6 +2120,150 @@ func TestCanonicalMCPInventoryEntriesCarryCodexToolPrefix(t *testing.T) {
 	require.Empty(t, canonicalMCPInventoryEntries(payload)[0].ToolPrefix)
 }
 
+func TestIngestStoresExplicitEmptyMCPInventory(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	sessionID := uuid.NewString()
+	stale := []MCPServerEntry{{Name: "stale-server", URL: "https://stale.example.test/mcp"}}
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), stale, sessionMCPListTTL))
+
+	payload := canonicalIngestPayload("claude", "mcp.inventory", sessionID)
+	payload.Data = &gen.HookIngestData{
+		McpInventory:          []*gen.HookMCPData{},
+		McpInventoryCollected: new(true),
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	entries, err := ti.service.getCachedMCPList(ctx, sessionID)
+	require.NoError(t, err)
+	require.NotNil(t, entries)
+	require.Empty(t, entries)
+	require.True(t, ti.service.canonicalClientReportsMCPInventory(ctx, payload))
+}
+
+func TestIngestPartialMCPInventoryWithoutAuthoritativeSnapshot(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	sessionID := uuid.NewString()
+	name := "partial-server"
+	url := "https://mcp.example.test/partial"
+	payload := canonicalIngestPayload("codex", "mcp.inventory", sessionID)
+	payload.Data = &gen.HookIngestData{
+		McpInventory:          []*gen.HookMCPData{{ServerName: &name, URL: &url}},
+		McpInventoryCollected: new(false),
+	}
+
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	_, err = ti.service.getCachedMCPList(ctx, sessionID)
+	require.Error(t, err)
+	require.False(t, ti.service.canonicalClientReportsMCPInventory(ctx, payload))
+
+	toolName := "read_mcp_resource"
+	callID := "call-1"
+	call := canonicalIngestPayload("codex", "tool.requested", sessionID)
+	call.Data = &gen.HookIngestData{ToolCall: &gen.HookToolCallData{
+		ID: &callID, Name: &toolName, Input: map[string]any{"server": name},
+	}}
+	result, err = ti.service.Ingest(ctx, call)
+	require.NoError(t, err)
+	require.NotEqual(t, "deny", result.Decision,
+		"a partial inventory must not enable enforcement without complete evidence")
+}
+
+func TestIngestPartialMCPInventoryPreservesAuthoritativeSnapshot(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.riskScanner = stubBlockingShadowMCPScanner{}
+	sessionID := uuid.NewString()
+	name := "speakeasy-team"
+	hostedURL := "https://app.getgram.ai/mcp/speakeasy-team"
+	want := []MCPServerEntry{{Source: "codex", Name: name, URL: hostedURL, Status: "unknown", ToolPrefix: "speakeasy_team"}}
+	complete := canonicalIngestPayload("codex", "mcp.inventory", sessionID)
+	complete.Data = &gen.HookIngestData{
+		McpInventory:          []*gen.HookMCPData{{ServerName: &name, URL: &hostedURL}},
+		McpInventoryCollected: new(true),
+	}
+	_, err := ti.service.Ingest(ctx, complete)
+	require.NoError(t, err)
+
+	partialURL := "https://mcp.example.test/partial"
+	partial := canonicalIngestPayload("codex", "mcp.inventory", sessionID)
+	partial.Data = &gen.HookIngestData{
+		McpInventory:          []*gen.HookMCPData{{ServerName: &name, URL: &partialURL}},
+		McpInventoryCollected: new(false),
+	}
+	_, err = ti.service.Ingest(ctx, partial)
+	require.NoError(t, err)
+
+	entries, err := ti.service.getCachedMCPList(ctx, sessionID)
+	require.NoError(t, err)
+	require.Equal(t, want, entries)
+	require.True(t, ti.service.canonicalClientReportsMCPInventory(ctx, partial))
+
+	toolName := "read_mcp_resource"
+	callID := "call-1"
+	call := canonicalIngestPayload("codex", "tool.requested", sessionID)
+	call.Data = &gen.HookIngestData{ToolCall: &gen.HookToolCallData{
+		ID: &callID, Name: &toolName, Input: map[string]any{"server": name},
+	}}
+	result, err := ti.service.Ingest(ctx, call)
+	require.NoError(t, err)
+	require.NotEqual(t, "deny", result.Decision,
+		"a partial inventory must not replace the complete Gram-hosted target")
+}
+
+func TestIngestStoresCollectedEmptyMCPInventory(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	sessionID := uuid.NewString()
+	stale := []MCPServerEntry{{Name: "stale-server", URL: "https://stale.example.test/mcp"}}
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID), stale, sessionMCPListTTL))
+
+	payload := canonicalIngestPayload("claude", "session.updated", sessionID)
+	payload.Data = &gen.HookIngestData{McpInventoryCollected: new(true)}
+	result, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	entries, err := ti.service.getCachedMCPList(ctx, sessionID)
+	require.NoError(t, err)
+	require.Empty(t, entries)
+}
+
+func TestIngestPreservesMCPInventoryForUnrelatedExplicitEmptyEvent(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	sessionID := uuid.NewString()
+	name := "current-server"
+	url := "https://current.example.test/mcp"
+	want := []MCPServerEntry{{Source: "claude", Name: name, URL: url, Status: "unknown"}}
+	snapshot := canonicalIngestPayload("claude", "session.started", sessionID)
+	snapshot.Data = &gen.HookIngestData{
+		McpInventory:          []*gen.HookMCPData{{ServerName: &name, URL: &url}},
+		McpInventoryCollected: new(true),
+	}
+	result, err := ti.service.Ingest(ctx, snapshot)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	payload := canonicalIngestPayload("claude", "session.updated", sessionID)
+	payload.Data = &gen.HookIngestData{McpInventory: []*gen.HookMCPData{}}
+	result, err = ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	entries, err := ti.service.getCachedMCPList(ctx, sessionID)
+	require.NoError(t, err)
+	require.Equal(t, want, entries)
+	require.True(t, ti.service.canonicalClientReportsMCPInventory(ctx, payload))
+}
+
 // TestIngest_ShadowMCPMetaToolGateDegradesWithoutAReadInventory: the guard
 // denies a meta-tool call it cannot clear against an inventory, so an empty
 // inventory only justifies a deny when the sender actually read the list. A
@@ -2174,10 +2318,14 @@ func TestIngest_ShadowMCPMetaToolGateReadsSessionState(t *testing.T) {
 
 	sessionID := "codex-session-state-gate"
 
-	// session.started: the sender read the list and found no servers.
-	start := canonicalIngestPayload("codex", "session.started", sessionID)
-	start.Data = &gen.HookIngestData{McpInventoryCollected: new(true)}
-	_, err := ti.service.Ingest(ctx, start)
+	// The ordered inventory event says the sender read the list and found no
+	// servers before the related tool request arrives.
+	inventory := canonicalIngestPayload("codex", "mcp.inventory", sessionID)
+	inventory.Data = &gen.HookIngestData{
+		McpInventory:          []*gen.HookMCPData{},
+		McpInventoryCollected: new(true),
+	}
+	_, err := ti.service.Ingest(ctx, inventory)
 	require.NoError(t, err)
 
 	// tool.requested: a meta-tool call, with no inventory fields of its own.

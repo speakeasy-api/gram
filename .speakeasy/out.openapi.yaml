@@ -60020,6 +60020,7 @@ components:
             - session.started
             - session.updated
             - session.ended
+            - mcp.inventory
             - prompt.submitted
             - tool.requested
             - tool.completed
@@ -60475,6 +60476,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OrganizationEntry'
+        trial:
+          allOf:
+            - $ref: "#/components/schemas/Trial"
+          nullable: true
         user_display_name:
           type: string
         user_email:
@@ -60497,6 +60502,7 @@ components:
         - gram_account_type
         - has_active_subscription
         - whitelisted
+        - trial
     IngestHookPayload:
       type: object
       properties:
@@ -71999,6 +72005,18 @@ components:
         - user_id
         - user_type
         - activity_count
+    Trial:
+      type: object
+      properties:
+        ends_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+      required:
+        - started_at
+        - ends_at
     TriggerAnalysisResponseBody:
       type: object
       properties:

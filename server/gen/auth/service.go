@@ -105,6 +105,7 @@ type InfoResult struct {
 	HasActiveSubscription bool
 	// Whether the organization is whitelisted to access the platform
 	Whitelisted   bool
+	Trial         *Trial `json:"trial"`
 	Organizations []*OrganizationEntry
 	// The authentication session
 	SessionToken string
@@ -181,6 +182,11 @@ type SwitchScopesResult struct {
 	SessionToken string
 	// The authentication session
 	SessionCookie string
+}
+
+type Trial struct {
+	StartedAt string
+	EndsAt    string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

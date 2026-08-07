@@ -36,6 +36,7 @@ type InfoResponseBody struct {
 	HasActiveSubscription *bool `form:"has_active_subscription,omitempty" json:"has_active_subscription,omitempty" xml:"has_active_subscription,omitempty"`
 	// Whether the organization is whitelisted to access the platform
 	Whitelisted   *bool                            `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
+	Trial         *TrialResponseBody               `json:"trial"`
 	Organizations []*OrganizationEntryResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
 }
 
@@ -1300,6 +1301,12 @@ type InfoGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// TrialResponseBody is used to define fields on response body types.
+type TrialResponseBody struct {
+	StartedAt *string `form:"started_at,omitempty" json:"started_at,omitempty" xml:"started_at,omitempty"`
+	EndsAt    *string `form:"ends_at,omitempty" json:"ends_at,omitempty" xml:"ends_at,omitempty"`
+}
+
 // OrganizationEntryResponseBody is used to define fields on response body
 // types.
 type OrganizationEntryResponseBody struct {
@@ -2275,6 +2282,9 @@ func NewInfoResultOK(body *InfoResponseBody, sessionToken string, sessionCookie 
 		HasActiveSubscription: *body.HasActiveSubscription,
 		Whitelisted:           *body.Whitelisted,
 	}
+	if body.Trial != nil {
+		v.Trial = unmarshalTrialResponseBodyToAuthTrial(body.Trial)
+	}
 	v.Organizations = make([]*auth.OrganizationEntry, len(body.Organizations))
 	for i, val := range body.Organizations {
 		if val == nil {
@@ -2456,6 +2466,11 @@ func ValidateInfoResponseBody(body *InfoResponseBody) (err error) {
 	}
 	if body.Whitelisted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("whitelisted", "body"))
+	}
+	if body.Trial != nil {
+		if err2 := ValidateTrialResponseBody(body.Trial); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	for _, e := range body.Organizations {
 		if e != nil {
@@ -4143,6 +4158,23 @@ func ValidateInfoGatewayErrorResponseBody(body *InfoGatewayErrorResponseBody) (e
 	}
 	if body.Fault == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateTrialResponseBody runs the validations defined on TrialResponseBody
+func ValidateTrialResponseBody(body *TrialResponseBody) (err error) {
+	if body.StartedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("started_at", "body"))
+	}
+	if body.EndsAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("ends_at", "body"))
+	}
+	if body.StartedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.started_at", *body.StartedAt, goa.FormatDateTime))
+	}
+	if body.EndsAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.ends_at", *body.EndsAt, goa.FormatDateTime))
 	}
 	return
 }
