@@ -329,7 +329,7 @@ func (c *Client) lookupPyPI(ctx context.Context, name string) (*Metadata, error)
 	// finds no project and surfaces as unknown, which is the honest outcome.
 	if open := strings.IndexByte(name, '['); open >= 0 {
 		inner, closed := strings.CutSuffix(name[open+1:], "]")
-		if closed && !strings.ContainsAny(inner, "[]") {
+		if closed && inner != "" && !strings.ContainsAny(inner, "[]") {
 			name = strings.TrimSpace(name[:open])
 		}
 	}
