@@ -208,3 +208,33 @@ func TestCreateRequest_ReopensADeniedReview(t *testing.T) {
 	require.Equal(t, "requested", pendingAgain.Status)
 	require.Len(t, decisionsFor(t, ctx, ti, ti.projectID, uuid.MustParse(created.ID)), 2, "the history is intact")
 }
+
+// Intake assembles the evidence document, so it is already on the request by
+// the time an admin looks — and by the time the optional research agent is
+// asked to brief itself from it.
+func TestCreateRequest_AssemblesEvidenceAtIntake(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateRequest(ctx, createPayload("stdio_command", "npx -y @scope/mcp-server@1.2.3", "for review"))
+	require.NoError(t, err)
+
+	detail, err := ti.service.GetRequest(ctx, getPayload(created.ID))
+	require.NoError(t, err)
+	require.NotNil(t, detail.EvidenceVersion)
+	require.Equal(t, 1, *detail.EvidenceVersion)
+	require.NotNil(t, detail.EvidenceCollectedAt)
+
+	doc, ok := detail.Evidence.(map[string]any)
+	require.True(t, ok)
+	identitySection, ok := doc["identity"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "package", identitySection["kind"])
+	require.Equal(t, "npm:@scope/mcp-server@1.2.3", identitySection["artifact_ref"])
+
+	// The test registry knows nothing, and that is a finding: the registry
+	// has no such package, distinct from a failed lookup.
+	require.Equal(t, true, doc["package_not_published"])
+	require.NotContains(t, doc, "gaps")
+}
