@@ -5,7 +5,10 @@ import { MCPCard, MCPCardSkeleton } from "@/components/mcp/MCPCard";
 import { MCPServerCard } from "@/components/mcp/MCPServerCard";
 import { MCPServerTableRow } from "@/components/mcp/MCPServerTableRow";
 import { MCPTableRow, MCPTableRowSkeleton } from "@/components/mcp/MCPTableRow";
+import { ApprovalQueue } from "@/components/mcp-approvals/ApprovalQueue";
 import { Page } from "@/components/page-layout";
+import { ReleaseStageBadge } from "@/components/release-stage-badge";
+import { PageTabsList, PageTabsTrigger, Tabs } from "@/components/ui/Tabs";
 import { DotTable } from "@/components/ui/DotTable";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
@@ -26,7 +29,7 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Outlet } from "react-router";
+import { Outlet, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useToolsets } from "../toolsets/useToolsets";
 import { MCPEmptyState } from "./MCPEmptyState";
@@ -79,16 +82,64 @@ export function MCPRoot(): JSX.Element {
   return <Outlet />;
 }
 
+const MCP_TAB_PARAM = "tab";
+
 export const MCPPage = (): JSX.Element => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab =
+    searchParams.get(MCP_TAB_PARAM) === "requests" ? "requests" : "servers";
+
+  const selectTab = (value: string) => {
+    setSearchParams(
+      (params) => {
+        if (value === "requests") {
+          params.set(MCP_TAB_PARAM, "requests");
+        } else {
+          params.delete(MCP_TAB_PARAM);
+        }
+        return params;
+      },
+      { replace: true },
+    );
+  };
+
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
+      <Tabs value={activeTab} onValueChange={selectTab}>
+        <div className="border-border shrink-0 border-b px-8">
+          <PageTabsList className="h-auto gap-6 bg-transparent p-0">
+            <PageTabsTrigger value="servers">Servers</PageTabsTrigger>
+            <PageTabsTrigger value="requests">
+              <span className="inline-flex items-center gap-2">
+                Access Requests
+                <ReleaseStageBadge stage="preview" noTooltip />
+              </span>
+            </PageTabsTrigger>
+          </PageTabsList>
+        </div>
+      </Tabs>
       <Page.Body>
-        <RequireScope scope={["mcp:read", "mcp:write"]} level="page">
-          <MCPOverview />
-        </RequireScope>
+        {activeTab === "servers" ? (
+          <RequireScope scope={["mcp:read", "mcp:write"]} level="page">
+            <MCPOverview />
+          </RequireScope>
+        ) : (
+          <RequireScope scope="mcp_approval:read" level="page">
+            <Page.Section>
+              <Page.Section.Title>MCP Access Requests</Page.Section.Title>
+              <Page.Section.Description>
+                Your team's requests to use MCP servers. Evidence is gathered
+                for each request — the decision stays yours.
+              </Page.Section.Description>
+              <Page.Section.Body>
+                <ApprovalQueue />
+              </Page.Section.Body>
+            </Page.Section>
+          </RequireScope>
+        )}
       </Page.Body>
     </Page>
   );
