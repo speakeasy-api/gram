@@ -36,19 +36,13 @@ type CreateAwsKmsKeyRequestBody struct {
 type UpdateAwsKmsKeyRequestBody struct {
 	// The ID of the key to update.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The ARN of the AWS KMS key.
-	KeyArn *string `form:"key_arn,omitempty" json:"key_arn,omitempty" xml:"key_arn,omitempty"`
-	// The external credential Gram uses to authenticate to the key. Must belong to
-	// the same organization and matching cloud family (an aws_kms key requires an
-	// aws_iam credential; a gcp_kms key requires a gcp_iam credential).
+	// The external credential Gram uses to authenticate to the key. Must be an
+	// aws_iam credential belonging to the same organization.
 	ExternalCredentialID *string `form:"external_credential_id,omitempty" json:"external_credential_id,omitempty" xml:"external_credential_id,omitempty"`
-	// The signing algorithm of the key.
-	Algorithm *string `form:"algorithm,omitempty" json:"algorithm,omitempty" xml:"algorithm,omitempty"`
 	// A human-readable name for the key.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// Optional. The Gram identity (GCP service-account email or AWS principal ARN)
-	// the customer granted on the key for the key-policy / IAM-grant model. Not a
-	// secret.
+	// Optional. The AWS principal ARN the customer granted on the key in its key
+	// policy. Not a secret.
 	CustomerGrantReference *string `form:"customer_grant_reference,omitempty" json:"customer_grant_reference,omitempty" xml:"customer_grant_reference,omitempty"`
 }
 
@@ -76,19 +70,13 @@ type CreateGcpKmsKeyRequestBody struct {
 type UpdateGcpKmsKeyRequestBody struct {
 	// The ID of the key to update.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The resource name of the GCP KMS key (projects/.../cryptoKeyVersions/...).
-	ResourceName *string `form:"resource_name,omitempty" json:"resource_name,omitempty" xml:"resource_name,omitempty"`
-	// The external credential Gram uses to authenticate to the key. Must belong to
-	// the same organization and matching cloud family (an aws_kms key requires an
-	// aws_iam credential; a gcp_kms key requires a gcp_iam credential).
+	// The external credential Gram uses to authenticate to the key. Must be a
+	// gcp_iam credential belonging to the same organization.
 	ExternalCredentialID *string `form:"external_credential_id,omitempty" json:"external_credential_id,omitempty" xml:"external_credential_id,omitempty"`
-	// The signing algorithm of the key.
-	Algorithm *string `form:"algorithm,omitempty" json:"algorithm,omitempty" xml:"algorithm,omitempty"`
 	// A human-readable name for the key.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// Optional. The Gram identity (GCP service-account email or AWS principal ARN)
-	// the customer granted on the key for the key-policy / IAM-grant model. Not a
-	// secret.
+	// Optional. The Gram service-account email the customer granted on the key in
+	// an IAM binding. Not a secret.
 	CustomerGrantReference *string `form:"customer_grant_reference,omitempty" json:"customer_grant_reference,omitempty" xml:"customer_grant_reference,omitempty"`
 }
 
@@ -4123,9 +4111,7 @@ func NewCreateAwsKmsKeyPayload(body *CreateAwsKmsKeyRequestBody, sessionToken *s
 func NewUpdateAwsKmsKeyPayload(body *UpdateAwsKmsKeyRequestBody, sessionToken *string) *externalkeys.UpdateAwsKmsKeyPayload {
 	v := &externalkeys.UpdateAwsKmsKeyPayload{
 		ID:                     *body.ID,
-		KeyArn:                 *body.KeyArn,
 		ExternalCredentialID:   *body.ExternalCredentialID,
-		Algorithm:              *body.Algorithm,
 		Name:                   *body.Name,
 		CustomerGrantReference: body.CustomerGrantReference,
 	}
@@ -4154,9 +4140,7 @@ func NewCreateGcpKmsKeyPayload(body *CreateGcpKmsKeyRequestBody, sessionToken *s
 func NewUpdateGcpKmsKeyPayload(body *UpdateGcpKmsKeyRequestBody, sessionToken *string) *externalkeys.UpdateGcpKmsKeyPayload {
 	v := &externalkeys.UpdateGcpKmsKeyPayload{
 		ID:                     *body.ID,
-		ResourceName:           *body.ResourceName,
 		ExternalCredentialID:   *body.ExternalCredentialID,
-		Algorithm:              *body.Algorithm,
 		Name:                   *body.Name,
 		CustomerGrantReference: body.CustomerGrantReference,
 	}
@@ -4265,14 +4249,8 @@ func ValidateUpdateAwsKmsKeyRequestBody(body *UpdateAwsKmsKeyRequestBody) (err e
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
-	if body.KeyArn == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("key_arn", "body"))
-	}
 	if body.ExternalCredentialID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("external_credential_id", "body"))
-	}
-	if body.Algorithm == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("algorithm", "body"))
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
@@ -4282,11 +4260,6 @@ func ValidateUpdateAwsKmsKeyRequestBody(body *UpdateAwsKmsKeyRequestBody) (err e
 	}
 	if body.ExternalCredentialID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.external_credential_id", *body.ExternalCredentialID, goa.FormatUUID))
-	}
-	if body.Algorithm != nil {
-		if !(*body.Algorithm == "RS256" || *body.Algorithm == "ES256") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.algorithm", *body.Algorithm, []any{"RS256", "ES256"}))
-		}
 	}
 	return
 }
@@ -4323,14 +4296,8 @@ func ValidateUpdateGcpKmsKeyRequestBody(body *UpdateGcpKmsKeyRequestBody) (err e
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
-	if body.ResourceName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("resource_name", "body"))
-	}
 	if body.ExternalCredentialID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("external_credential_id", "body"))
-	}
-	if body.Algorithm == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("algorithm", "body"))
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
@@ -4340,11 +4307,6 @@ func ValidateUpdateGcpKmsKeyRequestBody(body *UpdateGcpKmsKeyRequestBody) (err e
 	}
 	if body.ExternalCredentialID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.external_credential_id", *body.ExternalCredentialID, goa.FormatUUID))
-	}
-	if body.Algorithm != nil {
-		if !(*body.Algorithm == "RS256" || *body.Algorithm == "ES256") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.algorithm", *body.Algorithm, []any{"RS256", "ES256"}))
-		}
 	}
 	return
 }

@@ -59,9 +59,10 @@ var GcpKmsKey = Type("GcpKmsKey", func() {
 	Required("resource_name")
 })
 
-// CreateExternalKeyFields holds the provider-independent inputs shared by every
-// create/update form: the backing credential, algorithm, name, and the optional
-// customer grant reference.
+// CreateExternalKeyFields holds the provider-independent inputs shared by the
+// create forms: the backing credential, algorithm, name, and the optional
+// customer grant reference. The update forms deliberately do not extend this —
+// see UpdateAwsKmsKeyForm.
 var CreateExternalKeyFields = Type("CreateExternalKeyFields", func() {
 	Attribute("external_credential_id", String, "The external credential Gram uses to authenticate to the key. Must belong to the same organization and matching cloud family (an aws_kms key requires an aws_iam credential; a gcp_kms key requires a gcp_iam credential).", func() {
 		Format(FormatUUID)
@@ -75,7 +76,7 @@ var CreateExternalKeyFields = Type("CreateExternalKeyFields", func() {
 	Required("external_credential_id", "algorithm", "name")
 })
 
-// CreateAwsKmsKeyForm is the input for creating (or replacing) an AWS KMS key.
+// CreateAwsKmsKeyForm is the input for creating an AWS KMS key.
 var CreateAwsKmsKeyForm = Type("CreateAwsKmsKeyForm", func() {
 	Extend(CreateExternalKeyFields)
 
@@ -84,13 +85,67 @@ var CreateAwsKmsKeyForm = Type("CreateAwsKmsKeyForm", func() {
 	Required("key_arn")
 })
 
-// CreateGcpKmsKeyForm is the input for creating (or replacing) a GCP KMS key.
+// CreateGcpKmsKeyForm is the input for creating a GCP KMS key.
 var CreateGcpKmsKeyForm = Type("CreateGcpKmsKeyForm", func() {
 	Extend(CreateExternalKeyFields)
 
 	Attribute("resource_name", String, "The resource name of the GCP KMS key (projects/.../cryptoKeyVersions/...).")
 
 	Required("resource_name")
+})
+
+// UpdateAwsKmsKeyForm is the input for updating an AWS KMS key's mutable
+// configuration. It is deliberately a strict subset of CreateAwsKmsKeyForm
+// rather than an extension of it: a key's provider identity (key_arn) and its
+// algorithm are set at creation and never change, because an external_keys row
+// must identify exactly one signable key permanently. A published JWK pins its
+// kid to the row it was minted from, so re-pointing the row would silently make
+// every already-published kid sign with the wrong key. Changing what a key is
+// means delete and recreate, which mints a new id.
+//
+// external_credential_id stays editable on purpose: repairing which credential
+// reaches a key does not change the key material being signed with. Note the
+// guarantee is narrower than it looks — validateBackingCredential only checks
+// the cloud family (aws_kms needs aws_iam, gcp_kms needs gcp_iam), so a
+// credential for a different AWS account or GCP project still passes.
+//
+// Within that subset the update replaces rather than patches: the optional
+// customer_grant_reference is cleared when omitted. That is what makes clearing
+// it possible at all, since an absent field and an explicit null are
+// indistinguishable once decoded.
+//
+// The AWS and GCP update forms spell their attributes out separately instead of
+// extending a shared parent, which is deliberate and worth not "cleaning up".
+// A shared parent forces one set of descriptions on both providers, and Extend
+// does not let a child override an inherited attribute — the parent's definition
+// wins. Writing them out is what allows the provider-specific wording, which
+// documents each provider better than one sentence covering both.
+//
+// Separately, the two forms are structurally identical, and Goa's OpenAPI
+// emitter deduplicates request bodies by shape, so the update methods carry an
+// explicit `openapi:typename` to keep their generated schemas (and so their SDK
+// types) distinct. Descriptions alone do not break that tie.
+var UpdateAwsKmsKeyForm = Type("UpdateAwsKmsKeyForm", func() {
+	Attribute("external_credential_id", String, "The external credential Gram uses to authenticate to the key. Must be an aws_iam credential belonging to the same organization.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "A human-readable name for the key.")
+	Attribute("customer_grant_reference", String, "Optional. The AWS principal ARN the customer granted on the key in its key policy. Not a secret.")
+
+	Required("external_credential_id", "name")
+})
+
+// UpdateGcpKmsKeyForm is the input for updating a GCP KMS key's mutable
+// configuration. See UpdateAwsKmsKeyForm for why the two forms do not share a
+// parent type.
+var UpdateGcpKmsKeyForm = Type("UpdateGcpKmsKeyForm", func() {
+	Attribute("external_credential_id", String, "The external credential Gram uses to authenticate to the key. Must be a gcp_iam credential belonging to the same organization.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "A human-readable name for the key.")
+	Attribute("customer_grant_reference", String, "Optional. The Gram service-account email the customer granted on the key in an IAM binding. Not a secret.")
+
+	Required("external_credential_id", "name")
 })
 
 // ListExternalKeysResult wraps the generic, supertype-only list items.

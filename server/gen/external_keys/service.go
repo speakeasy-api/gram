@@ -19,11 +19,23 @@ import (
 type Service interface {
 	// Create an AWS KMS external key. Requires org:admin.
 	CreateAwsKmsKey(context.Context, *CreateAwsKmsKeyPayload) (res *AwsKmsKey, err error)
-	// Replace an AWS KMS external key's configuration. Requires org:admin.
+	// Update an AWS KMS external key's name, backing credential and customer grant
+	// reference. Requires org:admin. These three fields are replaced, not patched:
+	// omitting the optional customer_grant_reference clears it. The key ARN and
+	// algorithm are immutable: an external key identifies exactly one signable key
+	// permanently, so changing what the key is means deleting it and creating a
+	// new one. The backing credential stays editable because repairing the path to
+	// a key does not change the key material Gram signs with.
 	UpdateAwsKmsKey(context.Context, *UpdateAwsKmsKeyPayload) (res *AwsKmsKey, err error)
 	// Create a GCP KMS external key. Requires org:admin.
 	CreateGcpKmsKey(context.Context, *CreateGcpKmsKeyPayload) (res *GcpKmsKey, err error)
-	// Replace a GCP KMS external key's configuration. Requires org:admin.
+	// Update a GCP KMS external key's name, backing credential and customer grant
+	// reference. Requires org:admin. These three fields are replaced, not patched:
+	// omitting the optional customer_grant_reference clears it. The resource name
+	// and algorithm are immutable: an external key identifies exactly one signable
+	// crypto key version permanently, so changing what the key is means deleting
+	// it and creating a new one. The backing credential stays editable because
+	// repairing the path to a key does not change the key material Gram signs with.
 	UpdateGcpKmsKey(context.Context, *UpdateGcpKmsKeyPayload) (res *GcpKmsKey, err error)
 	// List the organization's external keys (provider-independent summary).
 	// Optionally filter by provider. Requires org:read.
@@ -36,9 +48,15 @@ type Service interface {
 	GetAwsKmsKey(context.Context, *GetAwsKmsKeyPayload) (res *AwsKmsKey, err error)
 	// Get a GCP KMS external key by ID. Requires org:read.
 	GetGcpKmsKey(context.Context, *GetGcpKmsKeyPayload) (res *GcpKmsKey, err error)
-	// Soft-delete an AWS KMS external key by ID. Requires org:admin.
+	// Soft-delete an AWS KMS external key by ID. Requires org:admin. Refused with
+	// a conflict while any JSON Web Key Set or published JSON Web Key still
+	// references the key, since deleting it would break verification for every
+	// already-published kid.
 	DeleteAwsKmsKey(context.Context, *DeleteAwsKmsKeyPayload) (err error)
-	// Soft-delete a GCP KMS external key by ID. Requires org:admin.
+	// Soft-delete a GCP KMS external key by ID. Requires org:admin. Refused with a
+	// conflict while any JSON Web Key Set or published JSON Web Key still
+	// references the key, since deleting it would break verification for every
+	// already-published kid.
 	DeleteGcpKmsKey(context.Context, *DeleteGcpKmsKeyPayload) (err error)
 }
 
@@ -247,19 +265,13 @@ type UpdateAwsKmsKeyPayload struct {
 	// The ID of the key to update.
 	ID           string
 	SessionToken *string
-	// The ARN of the AWS KMS key.
-	KeyArn string
-	// The external credential Gram uses to authenticate to the key. Must belong to
-	// the same organization and matching cloud family (an aws_kms key requires an
-	// aws_iam credential; a gcp_kms key requires a gcp_iam credential).
+	// The external credential Gram uses to authenticate to the key. Must be an
+	// aws_iam credential belonging to the same organization.
 	ExternalCredentialID string
-	// The signing algorithm of the key.
-	Algorithm string
 	// A human-readable name for the key.
 	Name string
-	// Optional. The Gram identity (GCP service-account email or AWS principal ARN)
-	// the customer granted on the key for the key-policy / IAM-grant model. Not a
-	// secret.
+	// Optional. The AWS principal ARN the customer granted on the key in its key
+	// policy. Not a secret.
 	CustomerGrantReference *string
 }
 
@@ -269,19 +281,13 @@ type UpdateGcpKmsKeyPayload struct {
 	// The ID of the key to update.
 	ID           string
 	SessionToken *string
-	// The resource name of the GCP KMS key (projects/.../cryptoKeyVersions/...).
-	ResourceName string
-	// The external credential Gram uses to authenticate to the key. Must belong to
-	// the same organization and matching cloud family (an aws_kms key requires an
-	// aws_iam credential; a gcp_kms key requires a gcp_iam credential).
+	// The external credential Gram uses to authenticate to the key. Must be a
+	// gcp_iam credential belonging to the same organization.
 	ExternalCredentialID string
-	// The signing algorithm of the key.
-	Algorithm string
 	// A human-readable name for the key.
 	Name string
-	// Optional. The Gram identity (GCP service-account email or AWS principal ARN)
-	// the customer granted on the key for the key-policy / IAM-grant model. Not a
-	// secret.
+	// Optional. The Gram service-account email the customer granted on the key in
+	// an IAM binding. Not a secret.
 	CustomerGrantReference *string
 }
 

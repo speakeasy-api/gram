@@ -39,15 +39,19 @@ var _ = Service("externalKeys", func() {
 	})
 
 	Method("updateAwsKmsKey", func() {
-		Description("Replace an AWS KMS external key's configuration. Requires org:admin.")
+		Description("Update an AWS KMS external key's name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The key ARN and algorithm are immutable: an external key identifies exactly one signable key permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Gram signs with.")
 
 		Payload(func() {
 			Attribute("id", String, "The ID of the key to update.", func() {
 				Format(FormatUUID)
 			})
-			Extend(CreateAwsKmsKeyForm)
+			Extend(UpdateAwsKmsKeyForm)
 			Required("id")
 			security.SessionPayload()
+			// Named explicitly for the same reason as updateGcpKmsKey below: the
+			// two payloads are structurally identical and Goa deduplicates
+			// request bodies by shape.
+			Meta("openapi:typename", "UpdateAwsKmsKeyRequestBody")
 		})
 
 		Result(AwsKmsKey)
@@ -85,15 +89,21 @@ var _ = Service("externalKeys", func() {
 	})
 
 	Method("updateGcpKmsKey", func() {
-		Description("Replace a GCP KMS external key's configuration. Requires org:admin.")
+		Description("Update a GCP KMS external key's name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The resource name and algorithm are immutable: an external key identifies exactly one signable crypto key version permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Gram signs with.")
 
 		Payload(func() {
 			Attribute("id", String, "The ID of the key to update.", func() {
 				Format(FormatUUID)
 			})
-			Extend(CreateGcpKmsKeyForm)
+			Extend(UpdateGcpKmsKeyForm)
 			Required("id")
 			security.SessionPayload()
+			// The AWS and GCP update payloads are structurally identical, and
+			// Goa's OpenAPI emitter deduplicates request bodies by shape (not by
+			// description), so without an explicit name both methods share one
+			// UpdateAwsKmsKeyRequestBody schema and the generated SDK has
+			// updateGcpKms taking an AWS-named body type.
+			Meta("openapi:typename", "UpdateGcpKmsKeyRequestBody")
 		})
 
 		Result(GcpKmsKey)
@@ -224,7 +234,7 @@ var _ = Service("externalKeys", func() {
 	})
 
 	Method("deleteAwsKmsKey", func() {
-		Description("Soft-delete an AWS KMS external key by ID. Requires org:admin.")
+		Description("Soft-delete an AWS KMS external key by ID. Requires org:admin. Refused with a conflict while any JSON Web Key Set or published JSON Web Key still references the key, since deleting it would break verification for every already-published kid.")
 
 		Payload(func() {
 			Attribute("id", String, "The ID of the key to delete.", func() {
@@ -247,7 +257,7 @@ var _ = Service("externalKeys", func() {
 	})
 
 	Method("deleteGcpKmsKey", func() {
-		Description("Soft-delete a GCP KMS external key by ID. Requires org:admin.")
+		Description("Soft-delete a GCP KMS external key by ID. Requires org:admin. Refused with a conflict while any JSON Web Key Set or published JSON Web Key still references the key, since deleting it would break verification for every already-published kid.")
 
 		Payload(func() {
 			Attribute("id", String, "The ID of the key to delete.", func() {
