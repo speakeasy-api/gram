@@ -8,6 +8,7 @@ import type {
   EvidenceExposure,
   EvidenceIdentity,
   EvidencePackage,
+  EvidenceProvenance,
 } from "./evidence";
 import { gapLabel } from "./evidence";
 
@@ -42,17 +43,22 @@ export function EvidencePanel({
       {collectedAt && (
         <p className="text-muted-foreground text-xs">
           Gathered <HumanizeDateTime date={collectedAt} />. Everything below is
-          declared by the server or observed in this organization's traffic —
-          nothing is verified behavior.
+          declared by the server or its registry, or observed in this
+          organization's traffic — nothing is verified behavior.
         </p>
       )}
       <TrustSection identity={document.identity} pkg={document.package} />
       <AuthoritySection authority={document.authority} />
-      <DeclaredCapabilitySection capabilities={document.capabilities} />
+      <DeclaredCapabilitySection
+        capabilities={document.capabilities}
+        source={document.capabilitiesSource}
+      />
       <MaturitySection
         pkg={document.package}
         notPublished={document.packageNotPublished}
         packageName={document.identity.packageName}
+        provenance={document.provenance}
+        identityKind={document.identity.kind}
       />
       <ExposureSection
         exposure={document.exposure}
@@ -317,10 +323,21 @@ function capabilityLabel(value: string): string {
   }
 }
 
+function capabilitySourceNote(
+  source: "server" | "registry" | undefined,
+): string {
+  if (source === "registry") {
+    return "The registry catalog's copy of the server's declarations — the server itself did not answer without credentials, so this is one step removed from the source. It may declare read-only and write anyway.";
+  }
+  return "Declarations by the server about itself. It may declare read-only and write anyway — this shows what it asks for, not what it is limited to.";
+}
+
 function DeclaredCapabilitySection({
   capabilities,
+  source,
 }: {
   capabilities: EvidenceCapability[];
+  source: "server" | "registry" | undefined;
 }): JSX.Element {
   if (capabilities.length === 0) {
     return (
@@ -337,8 +354,7 @@ function DeclaredCapabilitySection({
   return (
     <EvidenceGroup question="What does it say it can do?">
       <p className="text-muted-foreground text-xs">
-        Declarations by the server about itself. It may declare read-only and
-        write anyway — this shows what it asks for, not what it is limited to.
+        {capabilitySourceNote(source)}
       </p>
       {actingTools.length > 0 && (
         <div className="border-warning border px-3 py-2 text-sm">
@@ -381,15 +397,89 @@ function DeclaredCapabilitySection({
   );
 }
 
+function ProvenanceFacts({
+  provenance,
+}: {
+  provenance: EvidenceProvenance;
+}): JSX.Element {
+  const facts: Array<{ label: string; value: React.ReactNode }> = [];
+  if (provenance.registry) {
+    facts.push({ label: "Catalogued in", value: provenance.registry });
+  }
+  if (provenance.specifier) {
+    facts.push({ label: "Catalog entry", value: provenance.specifier });
+  }
+  facts.push({
+    label: "Publisher vouched by the registry",
+    value: provenance.official ? "yes" : "no",
+  });
+  if (provenance.status) {
+    facts.push({ label: "Entry status", value: provenance.status });
+  }
+  if (provenance.updatedAt) {
+    facts.push({
+      label: "Entry last updated",
+      value: (
+        <HumanizeDateTime
+          date={new Date(provenance.updatedAt)}
+          includeTime={false}
+        />
+      ),
+    });
+  }
+  if (
+    provenance.visitorsLastFourWeeks !== undefined &&
+    provenance.visitorsLastFourWeeks > 0
+  ) {
+    facts.push({
+      label: "Catalog visitors, last 4 weeks",
+      value: provenance.visitorsLastFourWeeks.toLocaleString(),
+    });
+  }
+
+  return (
+    <>
+      <p className="text-muted-foreground text-xs">
+        The registry catalog's claims about this entry, not ours. A visitor
+        count is a popularity proxy — a widely used server and one nobody has
+        touched are different decisions, but neither is evidence about behavior.
+      </p>
+      <FactList facts={facts} />
+    </>
+  );
+}
+
 function MaturitySection({
   pkg,
   notPublished,
   packageName,
+  provenance,
+  identityKind,
 }: {
   pkg: EvidencePackage | undefined;
   notPublished: boolean;
   packageName: string | undefined;
+  provenance: EvidenceProvenance | undefined;
+  identityKind: EvidenceIdentity["kind"];
 }): JSX.Element {
+  if (identityKind === "remote" && provenance) {
+    if (!provenance.catalogued) {
+      return (
+        <EvidenceGroup question="Is it real and maintained?">
+          <div className="border-border border px-4 py-3 text-sm">
+            No configured MCP registry catalogs this URL. The lookup ran cleanly
+            — this is absence from the catalog, not a failed check.
+          </div>
+        </EvidenceGroup>
+      );
+    }
+    return (
+      <EvidenceGroup question="Is it real and maintained?">
+        <ProvenanceFacts provenance={provenance} />
+      </EvidenceGroup>
+    );
+  }
+
   if (notPublished) {
     return (
       <EvidenceGroup question="Is it real and maintained?">

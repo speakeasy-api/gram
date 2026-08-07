@@ -6,15 +6,22 @@ import {
 import { parseEvidenceDocument } from "@/components/mcp-approvals/evidence";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { Button } from "@/components/ui/Button";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { useProject } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
 import type { ApprovalDecision } from "@gram/client/models/components/approvaldecision.js";
 import type { ApprovalRequester } from "@gram/client/models/components/approvalrequester.js";
 import type { ResearchReport } from "@gram/client/models/components/researchreport.js";
+import { invalidateGetMcpApprovalRequest } from "@gram/client/react-query/getMcpApprovalRequest.js";
 import { useGetMcpApprovalRequest } from "@gram/client/react-query/getMcpApprovalRequest.js";
+import { invalidateAllListMcpApprovalRequests } from "@gram/client/react-query/listMcpApprovalRequests.js";
+import { useRefreshMcpApprovalEvidenceMutation } from "@gram/client/react-query/refreshMcpApprovalEvidence.js";
+import { useQueryClient } from "@tanstack/react-query";
+import { RefreshCw } from "lucide-react";
 import { useMemo } from "react";
 import { useParams } from "react-router";
+import { toast } from "sonner";
 
 /**
  * One approval request: the evidence, everyone who asked, every prior
@@ -49,6 +56,13 @@ export default function MCPApprovalDetail(): JSX.Element {
             <Page.Section.Title stage="preview">
               {detail?.request.targetRaw ?? "Approval request"}
             </Page.Section.Title>
+            <Page.Section.CTA>
+              <RefreshEvidenceButton
+                requestId={requestId}
+                projectSlug={project.slug}
+                ready={detail !== undefined}
+              />
+            </Page.Section.CTA>
             <Page.Section.Description>
               {detail
                 ? `Requested by ${detail.request.requesterCount} ${detail.request.requesterCount === 1 ? "person" : "people"}.`
@@ -91,6 +105,56 @@ export default function MCPApprovalDetail(): JSX.Element {
         </RequireScope>
       </Page.Body>
     </Page>
+  );
+}
+
+/**
+ * Re-runs every evidence source and swaps in the fresh gather. Decisions
+ * freeze their own snapshots, so refreshing never rewrites what a prior
+ * reviewer saw.
+ */
+function RefreshEvidenceButton({
+  requestId,
+  projectSlug,
+  ready,
+}: {
+  requestId: string;
+  projectSlug: string;
+  ready: boolean;
+}): JSX.Element {
+  const queryClient = useQueryClient();
+  const refresh = useRefreshMcpApprovalEvidenceMutation();
+
+  const run = async () => {
+    try {
+      await refresh.mutateAsync({
+        request: { id: requestId, gramProject: projectSlug },
+      });
+    } catch {
+      toast.error("Evidence refresh failed — the stored evidence is unchanged");
+      return;
+    }
+    await Promise.all([
+      invalidateGetMcpApprovalRequest(queryClient, [{ id: requestId }]),
+      invalidateAllListMcpApprovalRequests(queryClient),
+    ]);
+    toast.success("Evidence re-gathered");
+  };
+
+  return (
+    <Button
+      variant="secondary"
+      size="sm"
+      onClick={() => void run()}
+      disabled={!ready || refresh.isPending}
+    >
+      <Button.LeftIcon>
+        <RefreshCw className={refresh.isPending ? "animate-spin" : undefined} />
+      </Button.LeftIcon>
+      <Button.Text>
+        {refresh.isPending ? "Re-gathering" : "Refresh evidence"}
+      </Button.Text>
+    </Button>
   );
 }
 

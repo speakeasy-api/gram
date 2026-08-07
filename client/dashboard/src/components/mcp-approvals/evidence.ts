@@ -75,6 +75,20 @@ export type EvidenceCapability = {
   unannotated: boolean;
 };
 
+export type EvidenceProvenance = {
+  registry?: string;
+  specifier?: string;
+  catalogued: boolean;
+  official: boolean;
+  status?: string;
+  isLatest: boolean;
+  publishedAt?: string;
+  updatedAt?: string;
+  visitorsLastWeek?: number;
+  visitorsLastFourWeeks?: number;
+  visitorsTotal?: number;
+};
+
 export type EvidenceDocument = {
   identity: EvidenceIdentity;
   package?: EvidencePackage;
@@ -82,6 +96,13 @@ export type EvidenceDocument = {
   exposure?: EvidenceExposure;
   authority?: EvidenceAuthority;
   capabilities: EvidenceCapability[];
+  /**
+   * Where the capability declarations came from: the server's own
+   * unauthenticated tools/list, or the registry catalog's copy of them —
+   * one step further from the source, and the panel must say so.
+   */
+  capabilitiesSource?: "server" | "registry";
+  provenance?: EvidenceProvenance;
   gaps: string[];
 };
 
@@ -95,7 +116,9 @@ export function gapLabel(gap: string): string {
     case "authority_probe_failed":
       return "The server's authentication metadata could not be read, so what it asks for is unknown";
     case "tool_declarations_probe_failed":
-      return "The server did not answer an unauthenticated tool listing, so its declared capabilities are unknown";
+      return "Neither the server nor a registry catalog supplied a tool listing, so its declared capabilities are unknown";
+    case "catalog_lookup_failed":
+      return "The MCP registry catalog could not be consulted, so whether this server is catalogued is unknown";
     default:
       return `A source could not be consulted (${gap})`;
   }
@@ -223,6 +246,24 @@ export function parseEvidenceDocument(
     }
   }
 
+  let provenance: EvidenceProvenance | undefined;
+  const provenanceRecord = asRecord(root["provenance"]);
+  if (provenanceRecord) {
+    provenance = {
+      registry: str(provenanceRecord, "registry"),
+      specifier: str(provenanceRecord, "specifier"),
+      catalogued: bool(provenanceRecord, "catalogued"),
+      official: bool(provenanceRecord, "official"),
+      status: str(provenanceRecord, "status"),
+      isLatest: bool(provenanceRecord, "is_latest"),
+      publishedAt: str(provenanceRecord, "published_at"),
+      updatedAt: str(provenanceRecord, "updated_at"),
+      visitorsLastWeek: num(provenanceRecord, "visitors_last_week"),
+      visitorsLastFourWeeks: num(provenanceRecord, "visitors_last_four_weeks"),
+      visitorsTotal: num(provenanceRecord, "visitors_total"),
+    };
+  }
+
   return {
     identity,
     package: packageSection,
@@ -230,8 +271,17 @@ export function parseEvidenceDocument(
     exposure,
     authority,
     capabilities,
+    capabilitiesSource: capabilitiesSource(str(root, "capabilities_source")),
+    provenance,
     gaps: strings(root["gaps"]),
   };
+}
+
+function capabilitiesSource(
+  value: string | undefined,
+): "server" | "registry" | undefined {
+  if (value === "server" || value === "registry") return value;
+  return undefined;
 }
 
 function strings(value: unknown): string[] {
