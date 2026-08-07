@@ -22,6 +22,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"go.opentelemetry.io/otel/codes"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
 var funcs functions.ToolCaller
@@ -1738,7 +1741,9 @@ func TestToolProxy_Do_PlatformTool_PreservesCallerFaultAttribution(t *testing.T)
 	t.Parallel()
 
 	ctx := context.Background()
-	tracerProvider := testenv.NewTracerProvider(t)
+	recorder := tracetest.NewSpanRecorder()
+	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	t.Cleanup(func() { require.NoError(t, tracerProvider.Shutdown(context.Background())) })
 	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 
@@ -1772,6 +1777,9 @@ func TestToolProxy_Do_PlatformTool_PreservesCallerFaultAttribution(t *testing.T)
 	}, toolCallPlan, tm.HTTPLogAttributes{})
 	require.Error(t, err)
 	require.True(t, oops.IsClientFault(err))
+	spans := recorder.Ended()
+	require.Len(t, spans, 1)
+	require.Equal(t, codes.Unset, spans[0].Status().Code, "caller faults must not mark gateway spans as errors")
 }
 
 func TestToolProxy_Do_HTTPTool_UserConfigVariablesSent(t *testing.T) {
