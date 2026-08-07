@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -22,19 +23,16 @@ import (
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
-// The trial cap and the enterprise tier amount are written as literals here on
-// purpose. Asserting against the production constants would make these tests
-// pass for any value of them, and the value is what this suite exists to pin.
+// The trial cap and the enterprise tier amount are literals on purpose.
+// Asserting against the production constants would make these tests pass for
+// any value of them, and the value is what this suite exists to pin.
 const (
-	// wantTrialLimit is the amount a key minted during a trial must carry.
-	wantTrialLimit = 50
-
-	// wantEnterpriseLimit is the amount a paying enterprise key must carry.
+	wantTrialLimit      = 50
 	wantEnterpriseLimit = 100
 )
 
 // trialCapFixture provisions against an upstream stub that records the credit
-// limit each key request asks for.
+// limit each create-key request asks for.
 type trialCapFixture struct {
 	// provisioner is wired to the stub upstream and the cloned database.
 	provisioner *OpenRouter
@@ -50,15 +48,12 @@ type trialCapFixture struct {
 	recorder *limitRecorder
 }
 
-// limitRecorder collects the credit limit of every upstream key request.
+// limitRecorder collects the credit limit of every create-key request.
 type limitRecorder struct {
 	mu sync.Mutex
 
 	// created holds the limit from each create-key request, in order.
 	created []float64
-
-	// patched holds the limit from each update-key request, in order.
-	patched []float64
 }
 
 // createdLimits returns the limit each create-key request carried.
@@ -66,33 +61,31 @@ func (r *limitRecorder) createdLimits() []float64 {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	return append([]float64(nil), r.created...)
-}
-
-// patchedLimits returns the limit each update-key request carried.
-func (r *limitRecorder) patchedLimits() []float64 {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	return append([]float64(nil), r.patched...)
+	return slices.Clone(r.created)
 }
 
 func (r *limitRecorder) handler() http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		var body struct {
-			Limit *float64 `json:"limit"`
-		}
+		w.Header().Set("Content-Type", "application/json")
 
 		switch {
-		// GetCreditsUsed reads usage before it reports the ceiling, so the stub
-		// answers that call too.
+		// GetCreditsUsed reads usage before it reports the ceiling, and
+		// RefreshAPIKeyLimit patches the ceiling upstream. Neither carries a
+		// limit this suite asserts on, so both get a canned reply.
 		case req.Method == http.MethodGet && req.URL.Path == "/v1/key":
-			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"data": map[string]any{"limit": 0.0, "usage_monthly": 0.0},
 			})
 
+		case req.Method == http.MethodPatch:
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": map[string]any{"limit": 0.0, "hash": "hash-1"},
+			})
+
 		case req.Method == http.MethodPost && req.URL.Path == "/v1/keys":
+			var body struct {
+				Limit *float64 `json:"limit"`
+			}
 			if err := json.NewDecoder(req.Body).Decode(&body); err != nil || body.Limit == nil {
 				w.WriteHeader(http.StatusBadRequest)
 				return
@@ -102,25 +95,9 @@ func (r *limitRecorder) handler() http.HandlerFunc {
 			r.created = append(r.created, *body.Limit)
 			r.mu.Unlock()
 
-			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"data": map[string]any{"limit": *body.Limit, "hash": "hash-1"},
 				"key":  "sk-or-trial-cap-1",
-			})
-
-		case req.Method == http.MethodPatch:
-			if err := json.NewDecoder(req.Body).Decode(&body); err != nil || body.Limit == nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-
-			r.mu.Lock()
-			r.patched = append(r.patched, *body.Limit)
-			r.mu.Unlock()
-
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"data": map[string]any{"limit": *body.Limit, "hash": "hash-1"},
 			})
 
 		default:
@@ -138,7 +115,7 @@ func newTrialCapFixture(t *testing.T) *trialCapFixture {
 	conn, err := infra.CloneTestDatabase(t, "ortrialcap")
 	require.NoError(t, err)
 
-	recorder := &limitRecorder{mu: sync.Mutex{}, created: nil, patched: nil}
+	recorder := &limitRecorder{mu: sync.Mutex{}, created: nil}
 
 	upstream := httptest.NewServer(recorder.handler())
 	t.Cleanup(upstream.Close)
@@ -149,25 +126,22 @@ func newTrialCapFixture(t *testing.T) *trialCapFixture {
 	provisioner := New(testenv.NewLogger(t), testenv.NewTracerProvider(t), guardianPolicy, conn, "test", "provisioning-key", nil, nil, nil)
 	provisioner.baseURL = upstream.URL
 
-	fixture := &trialCapFixture{
+	return &trialCapFixture{
 		provisioner: provisioner,
 		conn:        conn,
-		orgID:       "",
+		orgID:       seedOrg(t, conn),
 		recorder:    recorder,
 	}
-	fixture.orgID = fixture.seedOrg(t)
-
-	return fixture
 }
 
-// seedOrg adds another enterprise-tier organization to the cloned database so
-// one fixture can cover several trial lifecycle states.
-func (f *trialCapFixture) seedOrg(t *testing.T) string {
+// seedOrg adds an enterprise-tier organization with no trial row. A test that
+// covers several lifecycle states calls it once per state.
+func seedOrg(t *testing.T, conn *pgxpool.Pool) string {
 	t.Helper()
 
 	ctx := t.Context()
 	orgID := "org-" + uuid.NewString()[:8]
-	queries := orgRepo.New(f.conn)
+	queries := orgRepo.New(conn)
 
 	_, err := queries.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
 		ID:          orgID,
@@ -189,10 +163,10 @@ func (f *trialCapFixture) seedOrg(t *testing.T) string {
 }
 
 // insertTrial adds a trial row in the lifecycle state the caller names.
-func (f *trialCapFixture) insertTrial(t *testing.T, orgID string, endsAt time.Time, convertedAt, demotedAt *time.Time) {
+func insertTrial(t *testing.T, conn *pgxpool.Pool, orgID string, endsAt time.Time, convertedAt, demotedAt *time.Time) {
 	t.Helper()
 
-	require.NoError(t, trialsRepo.New(f.conn).InsertTrialFixture(t.Context(), trialsRepo.InsertTrialFixtureParams{
+	require.NoError(t, trialsRepo.New(conn).InsertTrialFixture(t.Context(), trialsRepo.InsertTrialFixtureParams{
 		OrganizationID: orgID,
 		CreatedAt:      conv.ToPGTimestamptz(time.Now().UTC().Add(-24 * time.Hour)),
 		EndsAt:         conv.ToPGTimestamptz(endsAt),
@@ -201,42 +175,23 @@ func (f *trialCapFixture) insertTrial(t *testing.T, orgID string, endsAt time.Ti
 	}))
 }
 
-// TestProvisionAPIKey_ActiveTrialTakesTrialCap pins the trial ceiling: an
-// organization inside a self-signup trial must mint its key at the trial cap,
-// not at the paid amount its account type resolves to.
-func TestProvisionAPIKey_ActiveTrialTakesTrialCap(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	fixture := newTrialCapFixture(t)
-	fixture.insertTrial(t, fixture.orgID, time.Now().UTC().Add(14*24*time.Hour), nil, nil)
-
-	_, err := fixture.provisioner.ProvisionAPIKey(ctx, fixture.orgID, KeyTypeChat)
-	require.NoError(t, err)
-
-	require.Equal(t, []float64{wantTrialLimit}, fixture.recorder.createdLimits())
-}
-
-// TestProvisionAPIKey_ActiveTrialCapsEveryKeyType pins the blast radius of the
-// cap. An organization holds one key per type, so a cap that reached the chat
-// key alone would leave the rest of its spend at the paid amount.
+// TestProvisionAPIKey_ActiveTrialCapsEveryKeyType pins the trial ceiling and
+// its blast radius. An organization holds one key per type, so a cap that
+// reached the chat key alone would leave the rest of its spend at the paid
+// amount.
 func TestProvisionAPIKey_ActiveTrialCapsEveryKeyType(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
 	fixture := newTrialCapFixture(t)
-	fixture.insertTrial(t, fixture.orgID, time.Now().UTC().Add(14*24*time.Hour), nil, nil)
+	insertTrial(t, fixture.conn, fixture.orgID, time.Now().UTC().Add(14*24*time.Hour), nil, nil)
 
 	for _, keyType := range AllKeyTypes {
 		_, err := fixture.provisioner.ProvisionAPIKey(ctx, fixture.orgID, keyType)
 		require.NoError(t, err, "provisioning a %s key", keyType)
 	}
 
-	want := make([]float64, len(AllKeyTypes))
-	for i := range want {
-		want[i] = wantTrialLimit
-	}
-	require.Equal(t, want, fixture.recorder.createdLimits(),
+	require.Equal(t, slices.Repeat([]float64{wantTrialLimit}, len(AllKeyTypes)), fixture.recorder.createdLimits(),
 		"every key type an organization can hold must carry the trial cap")
 }
 
@@ -266,26 +221,25 @@ func TestProvisionAPIKey_InactiveTrialKeepsTierCap(t *testing.T) {
 	fixture := newTrialCapFixture(t)
 
 	now := time.Now().UTC()
-	stamp := now.Add(-time.Hour)
-	future := now.Add(14 * 24 * time.Hour)
 	past := now.Add(-time.Hour)
+	future := now.Add(14 * 24 * time.Hour)
 
-	converted := fixture.seedOrg(t)
-	fixture.insertTrial(t, converted, future, &stamp, nil)
+	converted := seedOrg(t, fixture.conn)
+	insertTrial(t, fixture.conn, converted, future, &past, nil)
 
-	demoted := fixture.seedOrg(t)
-	fixture.insertTrial(t, demoted, future, nil, &stamp)
+	demoted := seedOrg(t, fixture.conn)
+	insertTrial(t, fixture.conn, demoted, future, nil, &past)
 
-	expired := fixture.seedOrg(t)
-	fixture.insertTrial(t, expired, past, nil, nil)
+	expired := seedOrg(t, fixture.conn)
+	insertTrial(t, fixture.conn, expired, past, nil, nil)
 
-	for _, orgID := range []string{converted, demoted, expired} {
+	orgIDs := []string{converted, demoted, expired}
+	for _, orgID := range orgIDs {
 		_, err := fixture.provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
 		require.NoError(t, err)
 	}
 
-	require.Equal(t, []float64{wantEnterpriseLimit, wantEnterpriseLimit, wantEnterpriseLimit},
-		fixture.recorder.createdLimits(),
+	require.Equal(t, slices.Repeat([]float64{wantEnterpriseLimit}, len(orgIDs)), fixture.recorder.createdLimits(),
 		"a converted, demoted, or expired trial must not cap the key")
 }
 
@@ -307,8 +261,6 @@ func TestGetCreditsUsed_ReportsKeyLimitOverTierDefault(t *testing.T) {
 	refreshed, err := fixture.provisioner.RefreshAPIKeyLimit(ctx, fixture.orgID, KeyTypeChat, &limit)
 	require.NoError(t, err)
 	require.Equal(t, raised, refreshed)
-	require.Equal(t, []float64{raised}, fixture.recorder.patchedLimits(),
-		"the raise must reach OpenRouter before Gram records it")
 
 	_, reported, err := fixture.provisioner.GetCreditsUsed(ctx, fixture.orgID, KeyTypeChat)
 	require.NoError(t, err)

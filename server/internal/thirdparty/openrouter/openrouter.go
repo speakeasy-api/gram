@@ -190,19 +190,13 @@ var creditsAccountTypeMap = map[string]int{
 	"":           5, // safety default
 }
 
-// trialCreditLimit caps each key an organization inside a trial holds. An
-// organization holds one key per KeyType, so its total trial exposure is this
-// amount multiplied by len(AllKeyTypes).
+// trialCreditLimit caps each key an organization inside a trial holds, so its
+// total trial exposure is this amount multiplied by len(AllKeyTypes). A trial
+// is armed without verified intent and the credit-balance gate hard-stops the
+// free tier only, so these key limits are its only spend ceiling.
 //
-// A trial is armed without verified intent, and the chat credit-balance gate
-// hard-stops the free tier only, so these key limits are the only spend
-// ceiling a trial organization has. The account type cannot supply one: arming
-// a trial sets the enterprise tier, which makes a trial indistinguishable from
-// a paying enterprise customer.
-//
-// The limit binds when a key is minted. Nothing re-mints a key, so it does not
-// follow an organization across the end of its trial in either direction. See
-// AGE-3138 and AGE-3141.
+// The limit binds at mint time and nothing re-mints a key. AGE-3138 and
+// AGE-3141 cover the two lifecycle edges that leaves wrong.
 const trialCreditLimit = 50
 
 var specialLimitOrgs = []string{
@@ -264,7 +258,6 @@ type OpenRouter struct {
 	db              *pgxpool.Pool
 	repo            *repo.Queries
 	orgRepo         *orgRepo.Queries
-	trialsRepo      *trialsRepo.Queries
 	orClient        *guardian.HTTPClient
 	refresher       KeyRefresher
 	featureClient   *productfeatures.Client
@@ -284,7 +277,6 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolic
 		db:              db,
 		repo:            repo.New(db),
 		orgRepo:         orgRepo.New(db),
-		trialsRepo:      trialsRepo.New(db),
 		orClient:        orClient,
 		refresher:       refresher,
 		featureClient:   featureClient,
@@ -382,7 +374,7 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 		return "", oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
 	}
 
-	creditAmount := o.defaultLimitForOrg(ctx, o.trialsRepo.WithTx(dbtx), org)
+	creditAmount := o.defaultLimitForOrg(ctx, dbtx, org)
 
 	// Cap the upstream call so guardian's retry backoff cannot stretch the
 	// advisory-lock hold to minutes during an OpenRouter outage; a burst of
@@ -444,7 +436,7 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyTy
 	if limit != nil {
 		keyLimit = *limit
 	} else {
-		keyLimit = o.defaultLimitForOrg(ctx, o.trialsRepo, org)
+		keyLimit = o.defaultLimitForOrg(ctx, o.db, org)
 	}
 
 	creditLimit := float64(keyLimit)
@@ -531,7 +523,7 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string, keyType K
 	if err != nil {
 		return 0, 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
 	}
-	limit := o.defaultLimitForOrg(ctx, o.trialsRepo, org)
+	limit := o.defaultLimitForOrg(ctx, o.db, org)
 
 	key, err := o.repo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
@@ -640,14 +632,14 @@ func (o *OpenRouter) ReconcileMonthlyCredits(ctx context.Context, orgID string, 
 }
 
 // defaultLimitForOrg resolves the monthly credit ceiling an organization is
-// entitled to by policy. It describes what a key would be minted at today, not
-// what any existing key carries: an operator raise or a manual refresh leaves
-// the key above this amount, and only the key row records that.
+// entitled to by policy. It answers what a key would be minted at today, not
+// what an existing key carries: an operator raise leaves the key above this
+// amount, and only the key row records that.
 //
-// The trials queries arrive from the caller because the provisioning path runs
-// inside a transaction that already holds an advisory lock and a pool
-// connection, so it must read through that same transaction.
-func (o *OpenRouter) defaultLimitForOrg(ctx context.Context, trials *trialsRepo.Queries, org orgRepo.OrganizationMetadatum) int {
+// dbtx arrives from the caller because the provisioning path runs inside a
+// transaction that already holds an advisory lock and a pool connection, so it
+// must read through that same transaction.
+func (o *OpenRouter) defaultLimitForOrg(ctx context.Context, dbtx trialsRepo.DBTX, org orgRepo.OrganizationMetadatum) int {
 	if slices.Contains(specialLimitOrgs, org.ID) {
 		return 500
 	}
@@ -656,7 +648,7 @@ func (o *OpenRouter) defaultLimitForOrg(ctx context.Context, trials *trialsRepo.
 	// cannot tell a trial apart from a paying enterprise customer. A read
 	// failure falls through to the account type rather than capping a paying
 	// customer on a transient database error.
-	_, err := trials.GetActiveTrial(ctx, org.ID)
+	_, err := trialsRepo.New(dbtx).GetActiveTrial(ctx, org.ID)
 	switch {
 	case err == nil:
 		return trialCreditLimit
