@@ -69,6 +69,9 @@ func newTraceTestService(t *testing.T, authorizer authorizer, meterProvider metr
 	t.Helper()
 	processor := newTraceProcessor(testenv.NewLogger(t), meterProvider, logBulk, traceProcessorWorkers, traceProcessorQueueSize)
 	metricProcessor := newMetricProcessor(testenv.NewLogger(t), meterProvider, logBulk, traceProcessorWorkers, traceProcessorQueueSize)
+	resolver := NewInstanceResolver(testenv.NewLogger(t), nil)
+	processor.SetInstanceResolver(resolver)
+	metricProcessor.SetInstanceResolver(resolver)
 	processor.Start(t.Context())
 	metricProcessor.Start(t.Context())
 	t.Cleanup(func() {
@@ -78,13 +81,21 @@ func newTraceTestService(t *testing.T, authorizer authorizer, meterProvider metr
 		require.NoError(t, metricProcessor.Shutdown(ctx))
 	})
 	return &Service{
-		tracer:  testenv.NewTracerProvider(t).Tracer("test"),
-		logger:  testenv.NewLogger(t),
-		auth:    authorizer,
-		hooks:   nil,
-		calls:   nil,
-		traces:  processor,
-		metrics: metricProcessor,
+		tracer:    testenv.NewTracerProvider(t).Tracer("test"),
+		logger:    testenv.NewLogger(t),
+		auth:      authorizer,
+		hooks:     nil,
+		calls:     nil,
+		traces:    processor,
+		metrics:   metricProcessor,
+		health:    newDisabledHealthProcessor(t),
+		db:        nil,
+		telemetry: nil,
+		instances: resolver,
+		authz:     nil,
+		features:  nil,
+		audit:     nil,
+		keyPrefix: "",
 	}, processor
 }
 
@@ -592,6 +603,8 @@ func TestTraceHTTPAcceptsJSONAndProtobufPlainAndGzip(t *testing.T) {
 		jobs <- params
 		return nil
 	})
+	instanceID := uuid.New()
+	service.instances.Remember(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.APIKeyID, instanceID)
 	mux := mountedTraceMux(service)
 	jsonFixture := testenv.ReadFixture(t, contractFixtureDir+"otlp-traces.json")
 	protobufFixture := testenv.ReadFixture(t, contractFixtureDir+"otlp-traces.pb")
@@ -609,6 +622,8 @@ func TestTraceHTTPAcceptsJSONAndProtobufPlainAndGzip(t *testing.T) {
 		require.Len(t, params, 1)
 		require.Equal(t, "0123456789abcdef0123456789abcdef", params[0].Attributes["trace.id"])
 		require.Equal(t, "fixture-logical-trace", params[0].Attributes["gram.litellm.trace_id"])
+		require.Equal(t, authCtx.APIKeyID, params[0].Attributes[attr.APIKeyIDKey])
+		require.Equal(t, instanceID.String(), params[0].Attributes[attr.LiteLLMInstanceIDKey])
 	}
 }
 
@@ -780,13 +795,21 @@ func TestTraceHTTPQueueSaturationDropsWithoutBlocking(t *testing.T) {
 	authCtx := testAuthContext()
 	authorizer := &traceTestAuthorizer{authCtx: authCtx, key: "valid-key", project: "project-test", mu: sync.Mutex{}, schemes: nil}
 	service := &Service{
-		tracer:  testenv.NewTracerProvider(t).Tracer("test"),
-		logger:  testenv.NewLogger(t),
-		auth:    authorizer,
-		hooks:   nil,
-		calls:   nil,
-		traces:  processor,
-		metrics: nil,
+		tracer:    testenv.NewTracerProvider(t).Tracer("test"),
+		logger:    testenv.NewLogger(t),
+		auth:      authorizer,
+		hooks:     nil,
+		calls:     nil,
+		traces:    processor,
+		metrics:   nil,
+		health:    newDisabledHealthProcessor(t),
+		db:        nil,
+		telemetry: nil,
+		instances: NewInstanceResolver(testenv.NewLogger(t), nil),
+		authz:     nil,
+		features:  nil,
+		audit:     nil,
+		keyPrefix: "",
 	}
 	response := serveTraceRequest(t, mountedTraceMux(service), []byte(`{"resourceSpans":[{"scopeSpans":[{"spans":[{"traceId":"0123456789abcdef0123456789abcdef","spanId":"0123456789abcdef","name":"queue test"}]}]}]}`), "application/json", "", "valid-key", "project-test")
 	require.Equal(t, http.StatusAccepted, response.Code)

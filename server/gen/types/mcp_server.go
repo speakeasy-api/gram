@@ -29,6 +29,9 @@ type McpServer struct {
 	TunneledMcpServerID *string
 	// The ID of the toolset used as the backend
 	ToolsetID *string
+	// The ID of the unproxied MCP server used as the backend, if any. A server
+	// backed by an unproxied MCP server is never proxied by Gram.
+	UnproxiedMcpServerID *string
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
 	ToolVariationsGroupID *string

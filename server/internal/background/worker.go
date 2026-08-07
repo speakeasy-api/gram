@@ -21,6 +21,7 @@ import (
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/infra/pkg/topics"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -157,6 +158,7 @@ func ForDeploymentProcessing(
 			CustomRulesAnalysis:     gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
 			RiskFindings:            gcp.NewNoopPublisher[*riskv1.Finding](),
 			TelemetryLogs:           gcp.NewNoopPublisher[*telemetryv1.LogRecord](),
+			Outbox:                  topics.NewNoopPublisher(),
 		},
 	}
 }
@@ -411,6 +413,10 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.FilterNoopOutboxEvents)
 	temporalWorker.RegisterActivity(activities.RelayOutboxEvents)
 	temporalWorker.RegisterActivity(activities.GCOutboxProcessedRows)
+	// Publish outbox relay activities
+	temporalWorker.RegisterActivity(activities.DrainPublishOutbox)
+	temporalWorker.RegisterActivity(activities.GCPublishOutboxDeadLetters)
+	// Plugin publishing activities
 	temporalWorker.RegisterActivity(activities.ListPluginPublishCandidates)
 	temporalWorker.RegisterActivity(activities.PublishPluginProject)
 	// Spend rule evaluation activities
@@ -508,6 +514,9 @@ func NewTemporalWorker(
 	// Outbox -> Relay workflow and GC
 	temporalWorker.RegisterWorkflow(ProcessOutboxWorkflow)
 	temporalWorker.RegisterWorkflow(OutboxGCWorkflow)
+	// Publish outbox -> Pub/Sub workflow and dead letter GC
+	temporalWorker.RegisterWorkflow(PublishOutboxWorkflow)
+	temporalWorker.RegisterWorkflow(PublishOutboxGCWorkflow)
 	temporalWorker.RegisterWorkflow(PluginGeneratorRolloutWorkflow)
 	temporalWorker.RegisterWorkflow(PluginInitialPublishWorkflow)
 	// Spend rule evaluation workflows
@@ -588,6 +597,14 @@ func NewTemporalWorker(
 
 	if err := AddOutboxGCSchedule(context.Background(), env); err != nil {
 		logger.ErrorContext(context.Background(), "failed to add outbox gc schedule", attr.SlogError(err))
+	}
+
+	if err := AddPublishOutboxSchedule(context.Background(), env); err != nil {
+		logger.ErrorContext(context.Background(), "failed to add publish outbox schedule", attr.SlogError(err))
+	}
+
+	if err := AddPublishOutboxGCSchedule(context.Background(), env); err != nil {
+		logger.ErrorContext(context.Background(), "failed to add publish outbox gc schedule", attr.SlogError(err))
 	}
 
 	if err := AddStagedTelemetrySweepSchedule(context.Background(), env); err != nil {

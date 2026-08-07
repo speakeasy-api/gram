@@ -34,8 +34,6 @@ type GetProductFeaturesResponseBody struct {
 	SessionCaptureEnabled bool `form:"session_capture_enabled" json:"session_capture_enabled" xml:"session_capture_enabled"`
 	// Whether authz challenge logging to ClickHouse is enabled
 	AuthzChallengeLoggingEnabled bool `form:"authz_challenge_logging_enabled" json:"authz_challenge_logging_enabled" xml:"authz_challenge_logging_enabled"`
-	// Whether webhooks are enabled
-	Webhooks bool `form:"webhooks" json:"webhooks" xml:"webhooks"`
 	// Whether SSO setup is enabled for the organization
 	SsoEnabled bool `form:"sso_enabled" json:"sso_enabled" xml:"sso_enabled"`
 	// Whether SCIM/directory sync setup is enabled for the organization
@@ -53,6 +51,13 @@ type GetProductFeaturesResponseBody struct {
 	// Whether skill capture stores activation metadata without requesting manifest
 	// content
 	SkillCaptureMetadataOnly bool `form:"skill_capture_metadata_only" json:"skill_capture_metadata_only" xml:"skill_capture_metadata_only"`
+	// Whether the organization can provision push integrations for AI platforms
+	AiPlatformPushIntegrationsEnabled bool `form:"ai_platform_push_integrations_enabled" json:"ai_platform_push_integrations_enabled" xml:"ai_platform_push_integrations_enabled"`
+	// Whether the organization is eligible for the Gram Platform MCP capability
+	PlatformMcpEnabled bool `form:"platform_mcp_enabled" json:"platform_mcp_enabled" xml:"platform_mcp_enabled"`
+	// Whether the organization can manage the external credentials and cloud KMS
+	// keys backing customer-managed encryption
+	CustomerManagedEncryptionKeysEnabled bool `form:"customer_managed_encryption_keys_enabled" json:"customer_managed_encryption_keys_enabled" xml:"customer_managed_encryption_keys_enabled"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -436,19 +441,21 @@ type SetProductFeatureGatewayErrorResponseBody struct {
 // result of the "getProductFeatures" endpoint of the "features" service.
 func NewGetProductFeaturesResponseBody(res *features.GetProductFeaturesResult) *GetProductFeaturesResponseBody {
 	body := &GetProductFeaturesResponseBody{
-		LogsEnabled:                  res.LogsEnabled,
-		ToolIoLogsEnabled:            res.ToolIoLogsEnabled,
-		SessionCaptureEnabled:        res.SessionCaptureEnabled,
-		AuthzChallengeLoggingEnabled: res.AuthzChallengeLoggingEnabled,
-		Webhooks:                     res.Webhooks,
-		SsoEnabled:                   res.SsoEnabled,
-		ScimEnabled:                  res.ScimEnabled,
-		HooksBrowserLoginEnabled:     res.HooksBrowserLoginEnabled,
-		HooksFailOpenEnabled:         res.HooksFailOpenEnabled,
-		CustomModelKeysEnabled:       res.CustomModelKeysEnabled,
-		SkillsEnabled:                res.SkillsEnabled,
-		SkillCaptureMetadataOnly:     res.SkillCaptureMetadataOnly,
-		DeviceAgent:                  res.DeviceAgent,
+		LogsEnabled:                          res.LogsEnabled,
+		ToolIoLogsEnabled:                    res.ToolIoLogsEnabled,
+		SessionCaptureEnabled:                res.SessionCaptureEnabled,
+		AuthzChallengeLoggingEnabled:         res.AuthzChallengeLoggingEnabled,
+		SsoEnabled:                           res.SsoEnabled,
+		ScimEnabled:                          res.ScimEnabled,
+		HooksBrowserLoginEnabled:             res.HooksBrowserLoginEnabled,
+		HooksFailOpenEnabled:                 res.HooksFailOpenEnabled,
+		CustomModelKeysEnabled:               res.CustomModelKeysEnabled,
+		SkillsEnabled:                        res.SkillsEnabled,
+		SkillCaptureMetadataOnly:             res.SkillCaptureMetadataOnly,
+		AiPlatformPushIntegrationsEnabled:    res.AiPlatformPushIntegrationsEnabled,
+		PlatformMcpEnabled:                   res.PlatformMcpEnabled,
+		CustomerManagedEncryptionKeysEnabled: res.CustomerManagedEncryptionKeysEnabled,
+		DeviceAgent:                          res.DeviceAgent,
 	}
 	return body
 }
@@ -777,8 +784,8 @@ func ValidateSetProductFeatureRequestBody(body *SetProductFeatureRequestBody) (e
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
 	if body.FeatureName != nil {
-		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture" || *body.FeatureName == "authz_challenge_logging" || *body.FeatureName == "webhooks" || *body.FeatureName == "sso" || *body.FeatureName == "scim" || *body.FeatureName == "hooks_browser_login" || *body.FeatureName == "hooks_fail_open" || *body.FeatureName == "custom_model_keys" || *body.FeatureName == "skills" || *body.FeatureName == "skill_capture_metadata_only") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "webhooks", "sso", "scim", "hooks_browser_login", "hooks_fail_open", "custom_model_keys", "skills", "skill_capture_metadata_only"}))
+		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture" || *body.FeatureName == "authz_challenge_logging" || *body.FeatureName == "sso" || *body.FeatureName == "scim" || *body.FeatureName == "hooks_browser_login" || *body.FeatureName == "hooks_fail_open" || *body.FeatureName == "custom_model_keys" || *body.FeatureName == "skills" || *body.FeatureName == "skill_capture_metadata_only" || *body.FeatureName == "ai_platform_push_integrations" || *body.FeatureName == "platform_mcp" || *body.FeatureName == "customer_managed_encryption_keys") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "sso", "scim", "hooks_browser_login", "hooks_fail_open", "custom_model_keys", "skills", "skill_capture_metadata_only", "ai_platform_push_integrations", "platform_mcp", "customer_managed_encryption_keys"}))
 		}
 	}
 	if body.FeatureName != nil {

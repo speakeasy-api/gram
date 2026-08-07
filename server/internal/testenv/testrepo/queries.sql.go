@@ -45,12 +45,26 @@ func (q *Queries) CountFunctionsAccess(ctx context.Context, arg CountFunctionsAc
 
 const countOutboxEntriesByEventType = `-- name: CountOutboxEntriesByEventType :one
 SELECT COUNT(*)
-FROM outbox
-WHERE event_type = $1
+FROM publish_outbox
+WHERE attributes->>'event_type' = $1::text
 `
 
+// Counts enqueued webhook events of a given type. The event type lives in a
+// Pub/Sub message attribute rather than a column now, because the outbox row
+// itself is transport-agnostic.
 func (q *Queries) CountOutboxEntriesByEventType(ctx context.Context, eventType string) (int64, error) {
 	row := q.db.QueryRow(ctx, countOutboxEntriesByEventType, eventType)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countPublishOutboxRows = `-- name: CountPublishOutboxRows :one
+SELECT COUNT(*) FROM publish_outbox
+`
+
+func (q *Queries) CountPublishOutboxRows(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countPublishOutboxRows)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -328,6 +342,102 @@ func (q *Queries) GetOutboxRelayState(ctx context.Context, outboxID int64) (GetO
 	return i, err
 }
 
+const getPublishOutboxDeadLetter = `-- name: GetPublishOutboxDeadLetter :one
+SELECT id, public_id, organization_id, topic, message, attributes,
+       attempts, last_error, enqueued_at, created_at
+FROM publish_outbox_dead_letters
+WHERE public_id = $1
+`
+
+func (q *Queries) GetPublishOutboxDeadLetter(ctx context.Context, publicID uuid.UUID) (PublishOutboxDeadLetter, error) {
+	row := q.db.QueryRow(ctx, getPublishOutboxDeadLetter, publicID)
+	var i PublishOutboxDeadLetter
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.OrganizationID,
+		&i.Topic,
+		&i.Message,
+		&i.Attributes,
+		&i.Attempts,
+		&i.LastError,
+		&i.EnqueuedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getPublishOutboxRow = `-- name: GetPublishOutboxRow :one
+SELECT id, public_id, organization_id, topic, message, attributes,
+       attempts, last_error, retry_after, locked_until, lease_token, created_at
+FROM publish_outbox
+WHERE id = $1
+`
+
+type GetPublishOutboxRowRow struct {
+	ID             int64
+	PublicID       uuid.UUID
+	OrganizationID string
+	Topic          string
+	Message        []byte
+	Attributes     []byte
+	Attempts       int32
+	LastError      pgtype.Text
+	RetryAfter     pgtype.Timestamptz
+	LockedUntil    pgtype.Timestamptz
+	LeaseToken     uuid.NullUUID
+	CreatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) GetPublishOutboxRow(ctx context.Context, id int64) (GetPublishOutboxRowRow, error) {
+	row := q.db.QueryRow(ctx, getPublishOutboxRow, id)
+	var i GetPublishOutboxRowRow
+	err := row.Scan(
+		&i.ID,
+		&i.PublicID,
+		&i.OrganizationID,
+		&i.Topic,
+		&i.Message,
+		&i.Attributes,
+		&i.Attempts,
+		&i.LastError,
+		&i.RetryAfter,
+		&i.LockedUntil,
+		&i.LeaseToken,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getToolCallBlockLinksFixture = `-- name: GetToolCallBlockLinksFixture :one
+SELECT chat_id, chat_message_id, risk_result_id, risk_policy_id
+FROM tool_call_blocks
+WHERE id = $1
+`
+
+type GetToolCallBlockLinksFixtureRow struct {
+	ChatID        uuid.NullUUID
+	ChatMessageID uuid.NullUUID
+	RiskResultID  uuid.NullUUID
+	RiskPolicyID  uuid.NullUUID
+}
+
+// Test-only. The block page query deliberately does not expose the optional
+// foreign keys, but asserting that the salvage cleared exactly the link the
+// database rejected — and left the others alone — requires reading them off
+// the row.
+func (q *Queries) GetToolCallBlockLinksFixture(ctx context.Context, id uuid.UUID) (GetToolCallBlockLinksFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getToolCallBlockLinksFixture, id)
+	var i GetToolCallBlockLinksFixtureRow
+	err := row.Scan(
+		&i.ChatID,
+		&i.ChatMessageID,
+		&i.RiskResultID,
+		&i.RiskPolicyID,
+	)
+	return i, err
+}
+
 const insertChatContentPartFixture = `-- name: InsertChatContentPartFixture :one
 INSERT INTO chat_content_parts (chat_id, project_id, kind, content_asset_url)
 VALUES ($1, $2, $3, $4)
@@ -510,6 +620,38 @@ type InsertPluginAssignmentFixtureParams struct {
 // create.
 func (q *Queries) InsertPluginAssignmentFixture(ctx context.Context, arg InsertPluginAssignmentFixtureParams) error {
 	_, err := q.db.Exec(ctx, insertPluginAssignmentFixture, arg.PluginID, arg.OrganizationID, arg.PrincipalUrn)
+	return err
+}
+
+const insertTrialFixture = `-- name: InsertTrialFixture :exec
+INSERT INTO trials (organization_id, tier, created_at, ends_at, converted_at, demoted_at)
+VALUES (
+    $1,
+    'enterprise',
+    $2,
+    $3,
+    $4::timestamptz,
+    $5::timestamptz
+)
+`
+
+type InsertTrialFixtureParams struct {
+	OrganizationID string
+	CreatedAt      pgtype.Timestamptz
+	EndsAt         pgtype.Timestamptz
+	ConvertedAt    pgtype.Timestamptz
+	DemotedAt      pgtype.Timestamptz
+}
+
+// Test-only fixture for exercising active trial lifecycle states.
+func (q *Queries) InsertTrialFixture(ctx context.Context, arg InsertTrialFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertTrialFixture,
+		arg.OrganizationID,
+		arg.CreatedAt,
+		arg.EndsAt,
+		arg.ConvertedAt,
+		arg.DemotedAt,
+	)
 	return err
 }
 
@@ -815,6 +957,74 @@ func (q *Queries) ScrubDeploymentFunctionMachineSpecs(ctx context.Context, deplo
 	return err
 }
 
+const seedOutboxEntry = `-- name: SeedOutboxEntry :one
+INSERT INTO outbox (organization_id, event_type, payload)
+VALUES ($1, $2, $3)
+RETURNING id
+`
+
+type SeedOutboxEntryParams struct {
+	OrganizationID string
+	EventType      string
+	Payload        []byte
+}
+
+// Fixture insert for the deprecated outbox table. Producers write to
+// publish_outbox now, so the only thing that still needs to create one of
+// these rows is the legacy relay's own tests; this goes away with them.
+func (q *Queries) SeedOutboxEntry(ctx context.Context, arg SeedOutboxEntryParams) (int64, error) {
+	row := q.db.QueryRow(ctx, seedOutboxEntry, arg.OrganizationID, arg.EventType, arg.Payload)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const seedPublishOutboxRow = `-- name: SeedPublishOutboxRow :one
+INSERT INTO publish_outbox (
+    public_id, organization_id, topic, message, attributes,
+    attempts, retry_after, locked_until
+)
+VALUES (
+    COALESCE($1::uuid, generate_uuidv7()),
+    $2, $3, $4, $5,
+    $6, $7, $8
+)
+RETURNING id, public_id
+`
+
+type SeedPublishOutboxRowParams struct {
+	PublicID       uuid.NullUUID
+	OrganizationID string
+	Topic          string
+	Message        []byte
+	Attributes     []byte
+	Attempts       int32
+	RetryAfter     pgtype.Timestamptz
+	LockedUntil    pgtype.Timestamptz
+}
+
+type SeedPublishOutboxRowRow struct {
+	ID       int64
+	PublicID uuid.UUID
+}
+
+// Fixture insert that can set the retry/lease columns a producer never touches.
+func (q *Queries) SeedPublishOutboxRow(ctx context.Context, arg SeedPublishOutboxRowParams) (SeedPublishOutboxRowRow, error) {
+	row := q.db.QueryRow(ctx, seedPublishOutboxRow,
+		arg.PublicID,
+		arg.OrganizationID,
+		arg.Topic,
+		arg.Message,
+		arg.Attributes,
+		arg.Attempts,
+		arg.RetryAfter,
+		arg.LockedUntil,
+	)
+	var i SeedPublishOutboxRowRow
+	err := row.Scan(&i.ID, &i.PublicID)
+	return i, err
+}
+
 const setDeploymentFunctionInfraOverrides = `-- name: SetDeploymentFunctionInfraOverrides :exec
 UPDATE deployments_functions SET memory_mib_override = $1, scale_override = $2 WHERE deployment_id = $3
 `
@@ -883,6 +1093,22 @@ type SetOrgWebhookConfigParams struct {
 // Sets the Svix app ID and webhooks_enabled flag on an organization.
 func (q *Queries) SetOrgWebhookConfig(ctx context.Context, arg SetOrgWebhookConfigParams) error {
 	_, err := q.db.Exec(ctx, setOrgWebhookConfig, arg.SvixAppID, arg.WebhooksEnabled, arg.OrganizationID)
+	return err
+}
+
+const setProjectSlugFixture = `-- name: SetProjectSlugFixture :exec
+UPDATE projects
+SET slug = $1
+WHERE id = $2
+`
+
+type SetProjectSlugFixtureParams struct {
+	Slug string
+	ID   uuid.UUID
+}
+
+func (q *Queries) SetProjectSlugFixture(ctx context.Context, arg SetProjectSlugFixtureParams) error {
+	_, err := q.db.Exec(ctx, setProjectSlugFixture, arg.Slug, arg.ID)
 	return err
 }
 

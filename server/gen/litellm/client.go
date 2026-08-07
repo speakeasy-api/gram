@@ -15,18 +15,111 @@ import (
 
 // Client is the "litellm" service client.
 type Client struct {
-	IngestEndpoint  goa.Endpoint
-	TracesEndpoint  goa.Endpoint
-	MetricsEndpoint goa.Endpoint
+	CreateInstanceEndpoint    goa.Endpoint
+	ListInstancesEndpoint     goa.Endpoint
+	RotateInstanceKeyEndpoint goa.Endpoint
+	RevokeInstanceEndpoint    goa.Endpoint
+	IngestEndpoint            goa.Endpoint
+	TracesEndpoint            goa.Endpoint
+	MetricsEndpoint           goa.Endpoint
 }
 
 // NewClient initializes a "litellm" service client given the endpoints.
-func NewClient(ingest, traces, metrics goa.Endpoint) *Client {
+func NewClient(createInstance, listInstances, rotateInstanceKey, revokeInstance, ingest, traces, metrics goa.Endpoint) *Client {
 	return &Client{
-		IngestEndpoint:  ingest,
-		TracesEndpoint:  traces,
-		MetricsEndpoint: metrics,
+		CreateInstanceEndpoint:    createInstance,
+		ListInstancesEndpoint:     listInstances,
+		RotateInstanceKeyEndpoint: rotateInstanceKey,
+		RevokeInstanceEndpoint:    revokeInstance,
+		IngestEndpoint:            ingest,
+		TracesEndpoint:            traces,
+		MetricsEndpoint:           metrics,
 	}
+}
+
+// CreateInstance calls the "createInstance" endpoint of the "litellm" service.
+// CreateInstance may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreateInstance(ctx context.Context, p *CreateInstancePayload) (res *LitellmInstanceKeyResult, err error) {
+	var ires any
+	ires, err = c.CreateInstanceEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*LitellmInstanceKeyResult), nil
+}
+
+// ListInstances calls the "listInstances" endpoint of the "litellm" service.
+// ListInstances may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListInstances(ctx context.Context, p *ListInstancesPayload) (res *ListInstancesResult, err error) {
+	var ires any
+	ires, err = c.ListInstancesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListInstancesResult), nil
+}
+
+// RotateInstanceKey calls the "rotateInstanceKey" endpoint of the "litellm"
+// service.
+// RotateInstanceKey may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) RotateInstanceKey(ctx context.Context, p *RotateInstanceKeyPayload) (res *LitellmInstanceKeyResult, err error) {
+	var ires any
+	ires, err = c.RotateInstanceKeyEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*LitellmInstanceKeyResult), nil
+}
+
+// RevokeInstance calls the "revokeInstance" endpoint of the "litellm" service.
+// RevokeInstance may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) RevokeInstance(ctx context.Context, p *RevokeInstancePayload) (err error) {
+	_, err = c.RevokeInstanceEndpoint(ctx, p)
+	return
 }
 
 // Ingest calls the "ingest" endpoint of the "litellm" service.

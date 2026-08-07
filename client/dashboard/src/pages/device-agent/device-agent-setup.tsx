@@ -97,12 +97,23 @@ function safeVersion(version: string | null | undefined) {
 // we inline it (a concrete, copy-and-run value); otherwise we fall back to a
 // self-resolving one-liner so the snippet still works before the fetch lands
 // or if it fails.
+//
+// The manifest value is fetched at runtime and pasted by the user into a
+// (often sudo-adjacent) shell, so only a strictly semver-shaped version is
+// ever inlined — anything else (e.g. a tampered manifest smuggling `$(...)`)
+// takes the fallback path instead of landing in the snippet.
+const INLINABLE_VERSION = /^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/;
+function inlinableVersion(version: string | null) {
+  return version !== null && INLINABLE_VERSION.test(version) ? version : null;
+}
 function bashVersionAssign(version: string | null) {
+  version = inlinableVersion(version);
   return version
     ? `VERSION="${version}"`
     : `VERSION=$(curl -s ${MANIFEST_URL} | jq -r '.latest.speakeasyd.version')`;
 }
 function psVersionAssign(version: string | null) {
+  version = inlinableVersion(version);
   return version
     ? `$VERSION = "${version}"`
     : `$VERSION = (Invoke-RestMethod ${MANIFEST_URL}).latest.speakeasyd.version`;
@@ -139,6 +150,9 @@ type ScriptOsSpec = BaseOsSpec & {
   verify: string;
   // Manifest platform keys to surface as direct-download links for this OS.
   downloadKeys: string[];
+  // The OS ships a root-helper install package (.deb/.rpm on Linux) that gets
+  // its own setup step. See HelperPackageStep.
+  hasHelperPackage?: boolean;
 };
 
 const OS_CONFIG: {
@@ -200,6 +214,7 @@ sudo mv speakeasyd speakeasy /usr/local/bin/`,
 speakeasyd -service start`,
     verify: `speakeasyd status`,
     downloadKeys: ["linux/amd64", "linux/arm64"],
+    hasHelperPackage: true,
   },
 };
 
@@ -448,6 +463,77 @@ function BinaryLegend() {
   );
 }
 
+// HelperPackageStep is the Linux-only step for the speakeasy-helper root
+// helper. The daemon runs as the logged-in user and can't write the root-owned
+// managed config layer itself, so enforcement of "managed" tools needs the
+// helper installed as a systemd system service — which ships as a .deb/.rpm
+// (the Linux analog of the macOS .pkg). The packages are mirrored to the same
+// public bucket as the binaries but are deliberately NOT in the release
+// manifest (a root binary updates only via a package push, never the
+// user-context auto-updater), so the URLs are built from the resolved version
+// rather than read from manifest artifacts.
+function HelperPackageStep() {
+  const { data } = useAgentReleases();
+  const version = data?.latest["speakeasyd"]?.version ?? null;
+
+  // The package installs as root, so the snippet is hardened where the
+  // user-context download script isn't: ARCH is detected at run time (uname -m
+  // mapped to the release's amd64/arm64 naming) instead of hand-edited, and
+  // the sha256 is checked against the release's published checksums.txt with
+  // the install chained behind the check — a missing or tampered package never
+  // reaches the package manager.
+  const script = (fmt: "deb" | "rpm", install: string) =>
+    `${bashVersionAssign(version)}
+ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+BASE=${RELEASES_BASE}/v$VERSION
+PKG="speakeasy-helper_\${VERSION}_linux_\${ARCH}.${fmt}"
+curl -fSLO "$BASE/$PKG"
+curl -fsSL "$BASE/checksums.txt" | grep " $PKG$" | sha256sum -c - &&
+  ${install}`;
+
+  // Sits above each snippet, matching the archNote convention in DownloadStep.
+  const verifyNote = (
+    <StepNote>
+      Detects your architecture and verifies the package's <code>sha256</code>{" "}
+      against the release's <code>checksums.txt</code> before installing.
+    </StepNote>
+  );
+
+  return (
+    <div className="flex flex-col gap-6">
+      <Text muted>
+        The daemon runs as the logged-in user and can't write root-owned config,
+        so enforcing tools your org marks{" "}
+        <strong className="font-medium">managed</strong> needs the{" "}
+        <code>speakeasy-helper</code> package: it installs a privileged writer
+        as a systemd system service. Without it the agent still runs and
+        reports, but can't enforce the managed layer.
+      </Text>
+      <div className="flex flex-col gap-2">
+        <SubLabel>Debian / Ubuntu (.deb)</SubLabel>
+        {verifyNote}
+        <CodeBlock language="bash">
+          {script("deb", `sudo apt install "./$PKG"`)}
+        </CodeBlock>
+      </div>
+      <OrDivider />
+      <div className="flex flex-col gap-2">
+        <SubLabel>RHEL / Fedora (.rpm)</SubLabel>
+        {verifyNote}
+        <CodeBlock language="bash">
+          {script("rpm", `sudo rpm -i "$PKG"`)}
+        </CodeBlock>
+      </div>
+      <Text small muted>
+        Verify with <code>systemctl status com.speakeasy.helper</code>. The
+        helper is deliberately outside the agent's auto-update channel — it
+        updates only via a package push (apt/dnf upgrade or your config
+        management).
+      </Text>
+    </div>
+  );
+}
+
 // ManualIdentity is the personal/PoC identity path: sign in once with the CLI.
 function ManualIdentity({ os }: { os: OsKey }) {
   // macOS: bare `speakeasy` is command-not-found (see MacVerifyStep for why
@@ -646,7 +732,6 @@ function FleetIdentity() {
         <div className="mt-4 flex flex-col gap-3">
           {generatedToken && (
             <Alert variant="warning">
-              <Icon name="triangle-alert" className="h-4 w-4" />
               <AlertTitle>
                 {autoCopied
                   ? "managed.json copied to your clipboard"
@@ -669,7 +754,6 @@ function FleetIdentity() {
 
           {isError && (
             <Alert variant="error">
-              <Icon name="triangle-alert" className="h-4 w-4" />
               <AlertTitle>Couldn't generate a token</AlertTitle>
               <AlertDescription>
                 Something went wrong creating the agent token. Try again, or
@@ -706,7 +790,6 @@ function FleetIdentity() {
             </Dialog.Description>
           </Dialog.Header>
           <Alert variant="error">
-            <Icon name="triangle-alert" className="h-4 w-4" />
             <AlertTitle>
               Your current MDM integration will stop working
             </AlertTitle>
@@ -956,6 +1039,12 @@ function buildSteps(os: OsKey): SetupStep[] {
     title: "Verify it's running",
     body: <CodeBlock language={cfg.lang}>{cfg.verify}</CodeBlock>,
   });
+  if (cfg.hasHelperPackage) {
+    steps.push({
+      title: "Install the root helper package",
+      body: <HelperPackageStep />,
+    });
+  }
   steps.push({
     title: "Set the user's identity",
     body: <IdentityStep os={os} />,
@@ -1128,7 +1217,6 @@ export function DeviceAgentSetup(): React.JSX.Element {
       <Page.Section.Body>
         <div className="flex flex-col gap-4">
           <Alert variant="info">
-            <Icon name="building-2" className="h-4 w-4" />
             <AlertTitle>Rolling out to more than a few machines?</AlertTitle>
             <AlertDescription>
               We recommend deploying the agent through your MDM (Kandji, Jamf,

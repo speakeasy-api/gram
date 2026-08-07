@@ -766,13 +766,12 @@ func TestProxy_Get_LongStreamStaysAliveOnActivity(t *testing.T) {
 	require.Len(t, observed, eventCount, "every event must reach the interceptor — none lost to a premature timeout")
 }
 
-func TestProxy_Get_StreamTerminatesOnIdleTimeout(t *testing.T) {
-	t.Parallel()
-
-	// Upstream sends headers + one event, then goes silent. The
-	// StreamingTimeout idle bound must fire and tear down the stream
-	// even though NonStreamingTimeout is much larger.
-	const idleTimeout = 100 * time.Millisecond
+// newStallingSSEUpstream returns an httptest server that answers with SSE
+// headers plus one progress event, then holds the stream silent until the
+// proxy disconnects or test cleanup releases the handler — the proxy's idle
+// timer should beat the cleanup channel.
+func newStallingSSEUpstream(t *testing.T) *httptest.Server {
+	t.Helper()
 
 	handlerDone := make(chan struct{})
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -786,9 +785,6 @@ func TestProxy_Get_StreamTerminatesOnIdleTimeout(t *testing.T) {
 		if flusher != nil {
 			flusher.Flush()
 		}
-		// Hold the connection silent until either the proxy disconnects or
-		// test cleanup releases the handler — the proxy's idle timer should
-		// beat the cleanup channel.
 		select {
 		case <-r.Context().Done():
 		case <-handlerDone:
@@ -799,6 +795,19 @@ func TestProxy_Get_StreamTerminatesOnIdleTimeout(t *testing.T) {
 	// handler before upstream.Close waits for it to drain.
 	t.Cleanup(func() { close(handlerDone) })
 
+	return upstream
+}
+
+func TestProxy_Get_StreamTerminatesOnIdleTimeout(t *testing.T) {
+	t.Parallel()
+
+	// Upstream sends headers + one event, then goes silent. The
+	// StreamingTimeout idle bound must fire and tear down the stream
+	// even though NonStreamingTimeout is much larger.
+	const idleTimeout = 100 * time.Millisecond
+
+	upstream := newStallingSSEUpstream(t)
+
 	p := newProxyForTest(t, upstream.URL)
 	p.NonStreamingTimeout = 5 * time.Second // deliberately too long to be load-bearing
 	p.StreamingTimeout = idleTimeout
@@ -808,11 +817,39 @@ func TestProxy_Get_StreamTerminatesOnIdleTimeout(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 	start := time.Now()
-	_ = p.Get(rr, req) // an error here is acceptable; the stream was torn down mid-flight
+	err := p.Get(rr, req)
 	elapsed := time.Since(start)
 
+	require.NoError(t, err, "idle termination of the standalone listen stream is its expected end, not a fault")
 	require.Less(t, elapsed, 1*time.Second, "idle stream must terminate within ~StreamingTimeout, not wait for NonStreamingTimeout")
 	require.Contains(t, rr.Body.String(), `"step":0`, "first event must have reached the client before idle terminated the stream")
+}
+
+func TestProxy_Post_StreamIdleTimeoutReturnsGatewayError(t *testing.T) {
+	t.Parallel()
+
+	// Upstream answers the POST with an SSE stream, sends one progress
+	// event, then stalls without ever delivering the terminal response
+	// event. Unlike the standalone GET stream, the client is still owed a
+	// reply here, so the idle bound firing is an upstream fault.
+	const idleTimeout = 100 * time.Millisecond
+
+	upstream := newStallingSSEUpstream(t)
+
+	p := newProxyForTest(t, upstream.URL)
+	p.NonStreamingTimeout = 5 * time.Second
+	p.StreamingTimeout = idleTimeout
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/x/mcp/id", strings.NewReader(initializeRequest))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+
+	rr := httptest.NewRecorder()
+	err := p.Post(rr, req)
+
+	var serr *oops.ShareableError
+	require.ErrorAs(t, err, &serr, "idle timeout mid-POST-response must surface as a shareable error")
+	require.Equal(t, oops.CodeGatewayError, serr.Code, "idle timeout mid-POST-response is an upstream fault")
 }
 
 func TestProxy_Post_UpstreamUnreachableReturnsGatewayError(t *testing.T) {

@@ -18,10 +18,14 @@ import (
 
 // Server lists the litellm service endpoint HTTP handlers.
 type Server struct {
-	Mounts  []*MountPoint
-	Ingest  http.Handler
-	Traces  http.Handler
-	Metrics http.Handler
+	Mounts            []*MountPoint
+	CreateInstance    http.Handler
+	ListInstances     http.Handler
+	RotateInstanceKey http.Handler
+	RevokeInstance    http.Handler
+	Ingest            http.Handler
+	Traces            http.Handler
+	Metrics           http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -51,13 +55,21 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
+			{"CreateInstance", "POST", "/rpc/litellm.createInstance"},
+			{"ListInstances", "GET", "/rpc/litellm.listInstances"},
+			{"RotateInstanceKey", "POST", "/rpc/litellm.rotateInstanceKey"},
+			{"RevokeInstance", "DELETE", "/rpc/litellm.revokeInstance"},
 			{"Ingest", "POST", "/rpc/litellm.ingest/beta/litellm_basic_guardrail_api"},
 			{"Traces", "POST", "/rpc/hooks.otel/v1/traces"},
 			{"Metrics", "POST", "/rpc/litellm.otel/v1/metrics"},
 		},
-		Ingest:  NewIngestHandler(e.Ingest, mux, decoder, encoder, errhandler, formatter),
-		Traces:  NewTracesHandler(e.Traces, mux, decoder, encoder, errhandler, formatter),
-		Metrics: NewMetricsHandler(e.Metrics, mux, decoder, encoder, errhandler, formatter),
+		CreateInstance:    NewCreateInstanceHandler(e.CreateInstance, mux, decoder, encoder, errhandler, formatter),
+		ListInstances:     NewListInstancesHandler(e.ListInstances, mux, decoder, encoder, errhandler, formatter),
+		RotateInstanceKey: NewRotateInstanceKeyHandler(e.RotateInstanceKey, mux, decoder, encoder, errhandler, formatter),
+		RevokeInstance:    NewRevokeInstanceHandler(e.RevokeInstance, mux, decoder, encoder, errhandler, formatter),
+		Ingest:            NewIngestHandler(e.Ingest, mux, decoder, encoder, errhandler, formatter),
+		Traces:            NewTracesHandler(e.Traces, mux, decoder, encoder, errhandler, formatter),
+		Metrics:           NewMetricsHandler(e.Metrics, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -66,6 +78,10 @@ func (s *Server) Service() string { return "litellm" }
 
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
+	s.CreateInstance = m(s.CreateInstance)
+	s.ListInstances = m(s.ListInstances)
+	s.RotateInstanceKey = m(s.RotateInstanceKey)
+	s.RevokeInstance = m(s.RevokeInstance)
 	s.Ingest = m(s.Ingest)
 	s.Traces = m(s.Traces)
 	s.Metrics = m(s.Metrics)
@@ -76,6 +92,10 @@ func (s *Server) MethodNames() []string { return litellm.MethodNames[:] }
 
 // Mount configures the mux to serve the litellm endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
+	MountCreateInstanceHandler(mux, h.CreateInstance)
+	MountListInstancesHandler(mux, h.ListInstances)
+	MountRotateInstanceKeyHandler(mux, h.RotateInstanceKey)
+	MountRevokeInstanceHandler(mux, h.RevokeInstance)
 	MountIngestHandler(mux, h.Ingest)
 	MountTracesHandler(mux, h.Traces)
 	MountMetricsHandler(mux, h.Metrics)
@@ -84,6 +104,218 @@ func Mount(mux goahttp.Muxer, h *Server) {
 // Mount configures the mux to serve the litellm endpoints.
 func (s *Server) Mount(mux goahttp.Muxer) {
 	Mount(mux, s)
+}
+
+// MountCreateInstanceHandler configures the mux to serve the "litellm" service
+// "createInstance" endpoint.
+func MountCreateInstanceHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/litellm.createInstance", f)
+}
+
+// NewCreateInstanceHandler creates a HTTP handler which loads the HTTP request
+// and calls the "litellm" service "createInstance" endpoint.
+func NewCreateInstanceHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateInstanceRequest(mux, decoder)
+		encodeResponse = EncodeCreateInstanceResponse(encoder)
+		encodeError    = EncodeCreateInstanceError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createInstance")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "litellm")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListInstancesHandler configures the mux to serve the "litellm" service
+// "listInstances" endpoint.
+func MountListInstancesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/litellm.listInstances", f)
+}
+
+// NewListInstancesHandler creates a HTTP handler which loads the HTTP request
+// and calls the "litellm" service "listInstances" endpoint.
+func NewListInstancesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListInstancesRequest(mux, decoder)
+		encodeResponse = EncodeListInstancesResponse(encoder)
+		encodeError    = EncodeListInstancesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listInstances")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "litellm")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRotateInstanceKeyHandler configures the mux to serve the "litellm"
+// service "rotateInstanceKey" endpoint.
+func MountRotateInstanceKeyHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/litellm.rotateInstanceKey", f)
+}
+
+// NewRotateInstanceKeyHandler creates a HTTP handler which loads the HTTP
+// request and calls the "litellm" service "rotateInstanceKey" endpoint.
+func NewRotateInstanceKeyHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRotateInstanceKeyRequest(mux, decoder)
+		encodeResponse = EncodeRotateInstanceKeyResponse(encoder)
+		encodeError    = EncodeRotateInstanceKeyError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "rotateInstanceKey")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "litellm")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRevokeInstanceHandler configures the mux to serve the "litellm" service
+// "revokeInstance" endpoint.
+func MountRevokeInstanceHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("DELETE", "/rpc/litellm.revokeInstance", f)
+}
+
+// NewRevokeInstanceHandler creates a HTTP handler which loads the HTTP request
+// and calls the "litellm" service "revokeInstance" endpoint.
+func NewRevokeInstanceHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRevokeInstanceRequest(mux, decoder)
+		encodeResponse = EncodeRevokeInstanceResponse(encoder)
+		encodeError    = EncodeRevokeInstanceError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "revokeInstance")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "litellm")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
 }
 
 // MountIngestHandler configures the mux to serve the "litellm" service

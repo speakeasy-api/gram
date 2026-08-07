@@ -21,6 +21,8 @@ const (
 
 	ActionOrganizationHooksFailOpenEnabled  Action = "organization:hooks_fail_open_enabled"
 	ActionOrganizationHooksFailOpenDisabled Action = "organization:hooks_fail_open_disabled"
+
+	ActionOrganizationDeviceAgentConfigurationUpdated Action = "organization:device_agent_configuration_updated"
 )
 
 type LogOrganizationInviteCreateEvent struct {
@@ -259,4 +261,63 @@ func (l *Logger) LogOrganizationHooksFailOpenToggled(ctx context.Context, dbtx r
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationHooksFailOpenV1})
+}
+
+type DeviceAgentConfigurationSnapshot struct {
+	SchemaVersion int32          `json:"schema_version"`
+	Config        map[string]any `json:"config"`
+}
+
+type LogOrganizationDeviceAgentConfigurationUpdatedEvent struct {
+	OrganizationID string
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	OrganizationSlug string
+
+	DeviceAgentConfigurationSnapshotBefore *DeviceAgentConfigurationSnapshot
+	DeviceAgentConfigurationSnapshotAfter  *DeviceAgentConfigurationSnapshot
+}
+
+func (l *Logger) LogOrganizationDeviceAgentConfigurationUpdated(
+	ctx context.Context,
+	dbtx repo.DBTX,
+	event LogOrganizationDeviceAgentConfigurationUpdatedEvent,
+) error {
+	beforeSnapshot, err := marshalAuditPayload(event.DeviceAgentConfigurationSnapshotBefore)
+	if err != nil {
+		return fmt.Errorf("marshal %s before snapshot: %w", ActionOrganizationDeviceAgentConfigurationUpdated, err)
+	}
+	afterSnapshot, err := marshalAuditPayload(event.DeviceAgentConfigurationSnapshotAfter)
+	if err != nil {
+		return fmt.Errorf("marshal %s after snapshot: %w", ActionOrganizationDeviceAgentConfigurationUpdated, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID: event.OrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+
+		ActorID:          event.Actor.ID,
+		ActorType:        string(event.Actor.Type),
+		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
+
+		Action: string(ActionOrganizationDeviceAgentConfigurationUpdated),
+
+		SubjectID:          event.OrganizationID,
+		SubjectType:        "organization",
+		SubjectDisplayName: conv.ToPGTextEmpty(event.OrganizationSlug),
+		SubjectSlug:        conv.ToPGTextEmpty(event.OrganizationSlug),
+
+		Metadata:       nil,
+		BeforeSnapshot: beforeSnapshot,
+		AfterSnapshot:  afterSnapshot,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{
+		Params:      entry,
+		OutboxEvent: events.OrganizationDeviceAgentConfigurationV1,
+	})
 }

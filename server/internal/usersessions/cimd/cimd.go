@@ -8,8 +8,8 @@
 // deliberately nothing else: no caching (until AIS-216) and no persistence.
 // Callers own the upsert of the resolved client and the mapping of returned
 // errors onto their wire format. Spec-defined rejections are returned as
-// *usersessions.OAuthError with a client-safe description; transport-level
-// fetch failures are returned as plain wrapped errors whose text may reference
+// *oauthwire.Error with a client-safe description; transport-level fetch
+// failures are returned as plain wrapped errors whose text may reference
 // internal details and MUST NOT be echoed to the OAuth client verbatim. The
 // same opacity rule applies to the internal result taxonomy: parse failures
 // are distinguished from fetch failures only in metrics and logs, never in the
@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 )
 
 const (
@@ -40,7 +41,12 @@ const (
 	// index with a ~2704-byte entry limit, so oversized URLs must be
 	// rejected here with a clean OAuth error rather than a Postgres index
 	// failure.
-	maxClientIDLength = 2048
+	//
+	// Derived from the admission package rather than declared independently:
+	// admission applies the same bound earlier (before a catalog miss turns
+	// the client_id into a database query parameter), and two copies of a
+	// security-relevant cap would eventually drift.
+	maxClientIDLength = admission.MaxClientIDLength
 
 	// maxDocumentBytes is the read cap on the fetched document body. Draft
 	// -02 §8.7 frames the size limit as a read cap, not a Content-Length
@@ -124,9 +130,11 @@ type Document struct {
 	// GrantTypes — the AS only supports response type "code".
 	ResponseTypes []string `json:"response_types"`
 
-	// TokenEndpointAuthMethod must be "none" — only public clients are
-	// accepted. An absent value is also rejected: the RFC 7591 default is
-	// client_secret_basic, a symmetric method -02 bans for CIMD.
+	// TokenEndpointAuthMethod must be "none" or absent — only public
+	// clients are accepted. Absence is NOT a rejection: -02 does not
+	// require the field, and RFC 7591's client_secret_basic default cannot
+	// apply because §4.1 bans every shared-symmetric-secret method for CIMD.
+	// Several real clients (OpenAI's among them) omit it.
 	TokenEndpointAuthMethod string `json:"token_endpoint_auth_method"`
 }
 
@@ -192,7 +200,7 @@ func newFetchClientFrom(base *guardian.HTTPClient) *guardian.HTTPClient {
 // auth method, secret/private-key bans, and Gram's same-origin redirect-URI
 // binding.
 func (r *Resolver) Resolve(ctx context.Context, clientID string) (*Document, error) {
-	clientIDURL, err := validateClientIDURL(clientID)
+	clientIDURL, err := ValidateClientIDURL(clientID)
 	if err != nil {
 		// Pre-fetch rejection: no origin has been established (the URL did
 		// not parse or failed syntax rules), so the origin attribute and the
@@ -352,7 +360,7 @@ func (r *Resolver) fetchDocument(ctx context.Context, origin string, clientID st
 	defer cancel()
 
 	// A build failure here is practically unreachable — clientID already
-	// passed validateClientIDURL — so the fetch_error result it produces is
+	// passed ValidateClientIDURL — so the fetch_error result it produces is
 	// accepted despite no request having been sent.
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, clientID, nil)
 	if err != nil {

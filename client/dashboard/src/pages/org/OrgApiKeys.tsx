@@ -325,8 +325,8 @@ function OrgApiKeysInner() {
                       <div className="flex items-center gap-3">
                         <RadioGroupItem value="hooks" id="r4" />
                         <Label className="leading-normal" htmlFor="r4">
-                          Hooks: can send hook events and OTEL logs from agent
-                          integrations.
+                          Hooks: can ingest authenticated AI traffic, including
+                          hook events and OpenTelemetry data.
                         </Label>
                       </div>
                       <div className="flex items-center gap-3">

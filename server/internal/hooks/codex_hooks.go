@@ -377,12 +377,11 @@ func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPa
 		UserEmail:   strings.TrimSpace(conv.PtrValOr(payload.UserEmail, "")),
 		UserID:      "",
 		Provider:    providerOpenAI,
-		// Account-scope attribution (external org/account identity, account
-		// type, billing mode) is wired only for Anthropic sessions today. The
-		// Codex payload carries no account identity for attributeSession to
-		// key on, and ai_integration_configs has no "openai" provider to
-		// declare an org-level billing mode, so these fields stay empty and
-		// cost surfaces treat Codex spend as unclassified (an estimate).
+		// The Codex payload carries no account-scope identity (no account
+		// UUID, org id, or auth mode), so these fields stay empty and
+		// classification below is email-based: a resolved work email is team,
+		// anything else personal, with the org-level codex_compliance billing
+		// mode riding on team sessions (DNO-734).
 		ExternalOrgID:       "",
 		ExternalAccountUUID: "",
 		ExternalAccountID:   "",
@@ -396,9 +395,12 @@ func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPa
 		ProjectID:           projectID,
 	}
 
+	var cached SessionMetadata
+	cachedOK := false
 	if metadata.SessionID != "" {
-		cached, err := s.getSessionMetadata(ctx, metadata.SessionID)
-		if err == nil && cached.ServiceName == "Codex" && cached.GramOrgID == orgID && cached.ProjectID == projectID {
+		c, err := s.getSessionMetadata(ctx, metadata.SessionID)
+		if err == nil && c.ServiceName == "Codex" && c.GramOrgID == orgID && c.ProjectID == projectID {
+			cached, cachedOK = c, true
 			if metadata.UserEmail == "" {
 				metadata.UserEmail = cached.UserEmail
 			}
@@ -408,10 +410,54 @@ func (s *Service) codexSessionMetadata(ctx context.Context, payload *gen.CodexPa
 		}
 	}
 
+	// On this path user_email is the account's own report (the authenticated
+	// ChatGPT account), so it doubles as the observed email consumers keep
+	// separate from actor identity.
+	metadata.ObservedUserEmail = metadata.UserEmail
+
+	// Attribute the account. Codex identity is the email alone, so when the
+	// cached classification was computed from the same email this event brings
+	// nothing new — adopt it, including the resolved UserID, instead of
+	// re-resolving per event. Otherwise resolve and classify fresh (email-based
+	// for openai; billing mode rides on team sessions — see classifyAccount /
+	// attributeSession) and write the result back so later events, and the
+	// OTEL/ingest paths, inherit it regardless of which event seeded it.
+	// Billing mode is frozen with the classification for the cache lifetime,
+	// matching the Claude path's attribute-once semantics. Failures leave the
+	// session unclassified rather than blocking capture or enforcement.
+	if cachedOK && cached.AccountType != "" && sameCodexIdentity(cached.UserEmail, metadata.UserEmail) {
+		metadata.UserID = cached.UserID
+		metadata.AccountType = cached.AccountType
+		metadata.BillingMode = cached.BillingMode
+		return metadata
+	}
+
 	if metadata.UserEmail != "" {
 		metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, orgID)
-	} else {
-		metadata.UserID = ""
+	}
+	if err := s.attributeSession(ctx, metadata); err != nil {
+		s.logger.WarnContext(ctx, "failed to attribute AI account for Codex session",
+			attr.SlogEvent("account_attribution_failed"),
+			attr.SlogError(err),
+			attr.SlogGenAIConversationID(metadata.SessionID),
+		)
+		// Leave the session unclassified rather than half-attributed:
+		// attributeSession stamps AccountType before the step that failed,
+		// and the fast path above (plus recordCodexHook's SessionStart cache
+		// write) keys on AccountType alone — keeping the half state would
+		// freeze an empty billing mode for the cache lifetime.
+		metadata.AccountType = ""
+		metadata.BillingMode = ""
+	} else if metadata.SessionID != "" && metadata.AccountType != "" && payload.HookEventName != "SessionStart" {
+		// SessionStart is excluded: recordCodexHook already persists this
+		// metadata (attribution included) for that event; this write-back
+		// exists for sessions whose SessionStart was never seen.
+		if err := s.cache.Set(ctx, sessionCacheKey(metadata.SessionID), *metadata, 24*time.Hour); err != nil {
+			s.logger.WarnContext(ctx, "failed to cache Codex session metadata",
+				attr.SlogError(err),
+				attr.SlogGenAIConversationID(metadata.SessionID),
+			)
+		}
 	}
 
 	return metadata
@@ -467,8 +513,10 @@ func (s *Service) buildCodexTelemetryAttributes(ctx context.Context, payload *ge
 		attr.ProjectIDKey:      metadata.ProjectID,
 		attr.OrganizationIDKey: metadata.GramOrgID,
 		attr.HookSourceKey:     "codex",
-		attr.ProviderKey:       providerOpenAI,
 	}
+	// Provider plus the session's account attribution (account_type,
+	// billing_mode) — stamped up front so both return paths below carry it.
+	stampAccountAttribution(attrs, *metadata)
 
 	if payload.Model != nil && *payload.Model != "" {
 		attrs[attr.GenAIResponseModelKey] = *payload.Model

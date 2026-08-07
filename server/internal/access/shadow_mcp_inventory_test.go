@@ -613,6 +613,7 @@ func TestService_ListShadowMCPInventoryUsers_ReturnsPaginatedUsersForCanonicalUR
 		ServerURL:  "https://mcp.speakeasy.com/mcp?token=one",
 		ServerName: "Speakeasy",
 		UserEmail:  "ada@example.com",
+		HookSource: "claude-code",
 		ObservedAt: now.Add(-30 * time.Minute),
 	})
 	insertShadowMCPInventoryTelemetry(t, ctx, ti, shadowMCPInventoryTelemetryInput{
@@ -620,14 +621,32 @@ func TestService_ListShadowMCPInventoryUsers_ReturnsPaginatedUsersForCanonicalUR
 		ServerURL:  "https://mcp.speakeasy.com/mcp?token=two#ignored",
 		ServerName: "Speakeasy",
 		UserEmail:  "ada@example.com",
+		HookSource: "claude-code",
 		ObservedAt: now.Add(-20 * time.Minute),
 	})
 	insertShadowMCPInventoryTelemetry(t, ctx, ti, shadowMCPInventoryTelemetryInput{
 		ProjectID:  projectID,
 		ServerURL:  "https://mcp.speakeasy.com/mcp",
 		ServerName: "Speakeasy",
-		UserEmail:  "grace@example.com",
+		UserEmail:  "ada@example.com",
+		HookSource: "cursor",
 		ObservedAt: now.Add(-10 * time.Minute),
+	})
+	insertShadowMCPInventoryTelemetry(t, ctx, ti, shadowMCPInventoryTelemetryInput{
+		ProjectID:  projectID,
+		ServerURL:  "https://mcp.speakeasy.com/mcp",
+		ServerName: "Speakeasy",
+		UserEmail:  "ada@example.com",
+		HookSource: "",
+		ObservedAt: now.Add(-5 * time.Minute),
+	})
+	insertShadowMCPInventoryTelemetry(t, ctx, ti, shadowMCPInventoryTelemetryInput{
+		ProjectID:  projectID,
+		ServerURL:  "https://mcp.speakeasy.com/mcp",
+		ServerName: "Speakeasy",
+		UserID:     "grace",
+		HookSource: "cursor",
+		ObservedAt: now.Add(-15 * time.Minute),
 	})
 
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
@@ -639,14 +658,19 @@ func TestService_ListShadowMCPInventoryUsers_ReturnsPaginatedUsersForCanonicalUR
 	})
 	require.NoError(t, err)
 	require.Len(t, firstPage.Users, 1)
-	require.Equal(t, 2, firstPage.Users[0].ObservedUseCount)
+	require.Equal(t, 4, firstPage.Users[0].ObservedUseCount)
 
 	require.NotNil(t, firstPage.NextCursor)
 	require.Equal(t, "ada@example.com", firstPage.Users[0].UserKey)
 	require.Nil(t, firstPage.Users[0].Name)
 	require.NotNil(t, firstPage.Users[0].Email)
 	require.Equal(t, "ada@example.com", *firstPage.Users[0].Email)
-	require.NotEmpty(t, firstPage.Users[0].LastCalled)
+	require.Equal(t, formatTimeValue(now.Add(-5*time.Minute)), firstPage.Users[0].LastCalled)
+	require.Equal(t, []*gen.ShadowMCPInventoryUserSource{
+		{Source: "claude-code", ObservedUseCount: 2},
+		{Source: "", ObservedUseCount: 1},
+		{Source: "cursor", ObservedUseCount: 1},
+	}, firstPage.Users[0].Sources)
 
 	secondPage, err := ti.service.ListShadowMCPInventoryUsers(ctx, &gen.ListShadowMCPInventoryUsersPayload{
 		ProjectID: projectID,
@@ -657,10 +681,13 @@ func TestService_ListShadowMCPInventoryUsers_ReturnsPaginatedUsersForCanonicalUR
 	require.NoError(t, err)
 	require.Len(t, secondPage.Users, 1)
 	require.Nil(t, secondPage.NextCursor)
-	require.Equal(t, "grace@example.com", secondPage.Users[0].UserKey)
-	require.NotNil(t, secondPage.Users[0].Email)
-	require.Equal(t, "grace@example.com", *secondPage.Users[0].Email)
+	require.Equal(t, "grace", secondPage.Users[0].UserKey)
+	require.Nil(t, secondPage.Users[0].Email)
 	require.Equal(t, 1, secondPage.Users[0].ObservedUseCount)
+	require.Equal(t, []*gen.ShadowMCPInventoryUserSource{{
+		Source:           "cursor",
+		ObservedUseCount: 1,
+	}}, secondPage.Users[0].Sources)
 }
 
 func TestService_ListShadowMCPInventoryUsers_EmptyUsageIsValid(t *testing.T) {
@@ -1027,6 +1054,8 @@ type shadowMCPInventoryTelemetryInput struct {
 	ServerURL  string
 	ServerName string
 	UserEmail  string
+	UserID     string
+	HookSource string
 	ObservedAt time.Time
 }
 
@@ -1212,11 +1241,12 @@ func insertShadowMCPInventoryTelemetry(t *testing.T, ctx context.Context, ti *te
 
 	attrs := map[string]any{
 		"gram.event.source":     "hook",
-		"gram.hook.source":      "claude-code",
+		"gram.hook.source":      input.HookSource,
 		"gram.mcp.server_url":   input.ServerURL,
 		"gram.tool_call.source": input.ServerName,
 		"gram.tool.name":        "mcp__speakeasy__search",
 		"user.email":            input.UserEmail,
+		"user.id":               input.UserID,
 	}
 	attrsJSON, err := json.Marshal(attrs)
 	require.NoError(t, err)

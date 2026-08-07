@@ -62,10 +62,12 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/toolsets"
 	_ "github.com/speakeasy-api/gram/server/design/triggers"
 	_ "github.com/speakeasy-api/gram/server/design/tunneledmcp"
+	_ "github.com/speakeasy-api/gram/server/design/unproxiedmcp"
 	_ "github.com/speakeasy-api/gram/server/design/usage"
 	_ "github.com/speakeasy-api/gram/server/design/usersessionclients"
 	_ "github.com/speakeasy-api/gram/server/design/usersessionconsents"
 	_ "github.com/speakeasy-api/gram/server/design/usersessionissuers"
+	_ "github.com/speakeasy-api/gram/server/design/usersessionissuerscimdclients"
 	_ "github.com/speakeasy-api/gram/server/design/usersessions"
 	_ "github.com/speakeasy-api/gram/server/design/variations"
 )

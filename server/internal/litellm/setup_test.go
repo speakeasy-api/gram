@@ -15,13 +15,16 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
+	keysservice "github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
+	"github.com/speakeasy-api/gram/server/internal/litellm/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -38,6 +41,14 @@ type captureEnabledFeatures struct{}
 
 func (captureEnabledFeatures) IsFeatureEnabled(_ context.Context, _ string, feature productfeatures.Feature) (bool, error) {
 	return feature == productfeatures.FeatureSessionCapture, nil
+}
+
+type testProductFeatures struct {
+	enabled bool
+}
+
+func (f *testProductFeatures) IsFeatureEnabled(_ context.Context, _ string, feature productfeatures.Feature) (bool, error) {
+	return feature == productfeatures.FeatureAIPlatformPushIntegrations && f.enabled, nil
 }
 
 func TestMain(m *testing.M) {
@@ -60,6 +71,8 @@ type realTestInstance struct {
 	chConn    clickhouse.Conn
 	telemetry *telemetry.Logger
 	observer  *recordingMessageObserver
+	features  *testProductFeatures
+	keys      *keysservice.Service
 }
 
 type recordingMessageObserver struct {
@@ -117,7 +130,7 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		telemetry.NewUserInfoResolver(logger, conn, cache.NewRedisCacheAdapter(redisClient)),
 		telemetry.NewNoopLogPublisher(logger),
 	)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 	assetStorage := assetstest.NewTestBlobStore(t)
 	chatWriter, shutdownWriter := chat.NewChatMessageWriter(logger, conn, assetStorage)
@@ -159,15 +172,23 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 	calls := callcache.New(cacheAdapter)
 	traceProcessor := NewTraceProcessor(logger, meterProvider, telemetryLogger, calls)
 	metricProcessor := NewMetricProcessor(logger, meterProvider, telemetryLogger)
+	healthProcessor := NewHealthProcessor(logger, conn)
+	instanceResolver := NewInstanceResolver(logger, conn)
+	traceProcessor.SetInstanceResolver(instanceResolver)
+	metricProcessor.SetInstanceResolver(instanceResolver)
 	traceProcessor.Start(ctx)
 	metricProcessor.Start(ctx)
+	healthProcessor.Start(ctx)
 	t.Cleanup(func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		require.NoError(t, traceProcessor.Shutdown(shutdownCtx))
 		require.NoError(t, metricProcessor.Shutdown(shutdownCtx))
+		require.NoError(t, healthProcessor.Shutdown(shutdownCtx))
 	})
-	service := NewService(logger, tracerProvider, conn, sessionManager, authzEngine, hookService, calls, traceProcessor, metricProcessor)
+	features := &testProductFeatures{enabled: false}
+	auditLogger := audit.NewLogger()
+	service := NewService(logger, tracerProvider, conn, chConn, sessionManager, authzEngine, hookService, calls, traceProcessor, metricProcessor, healthProcessor, instanceResolver, features, auditLogger, "local")
 	return ctx, &realTestInstance{
 		service:   service,
 		hooks:     hookService,
@@ -175,5 +196,12 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		chConn:    chConn,
 		telemetry: telemetryLogger,
 		observer:  observer,
+		features:  features,
+		keys:      keysservice.NewService(logger, tracerProvider, conn, sessionManager, "local", authzEngine, auditLogger),
 	}
+}
+
+func newDisabledHealthProcessor(t *testing.T) *HealthProcessor {
+	t.Helper()
+	return newHealthProcessor(testenv.NewLogger(t), time.Hour, func(context.Context, repo.RecordLiteLLMInstanceHealthParams) error { return nil })
 }

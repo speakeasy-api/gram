@@ -10,10 +10,150 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"unicode/utf8"
 
 	litellm "github.com/speakeasy-api/gram/server/gen/litellm"
 	goa "goa.design/goa/v3/pkg"
 )
+
+// BuildCreateInstancePayload builds the payload for the litellm createInstance
+// endpoint from CLI flags.
+func BuildCreateInstancePayload(litellmCreateInstanceBody string, litellmCreateInstanceSessionToken string, litellmCreateInstanceProjectSlugInput string) (*litellm.CreateInstancePayload, error) {
+	var err error
+	var body CreateInstanceRequestBody
+	{
+		err = json.Unmarshal([]byte(litellmCreateInstanceBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"failure_posture\": \"fail_open\",\n      \"name\": \"aaa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.Name) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 255, false))
+		}
+		if body.FailurePosture != nil {
+			if !(*body.FailurePosture == "fail_closed" || *body.FailurePosture == "fail_open") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.failure_posture", *body.FailurePosture, []any{"fail_closed", "fail_open"}))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if litellmCreateInstanceSessionToken != "" {
+			sessionToken = &litellmCreateInstanceSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if litellmCreateInstanceProjectSlugInput != "" {
+			projectSlugInput = &litellmCreateInstanceProjectSlugInput
+		}
+	}
+	v := &litellm.CreateInstancePayload{
+		Name: body.Name,
+	}
+	if body.FailurePosture != nil {
+		v.FailurePosture = litellm.LiteLLMFailurePosture(*body.FailurePosture)
+	}
+	if body.FailurePosture == nil {
+		v.FailurePosture = "fail_closed"
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListInstancesPayload builds the payload for the litellm listInstances
+// endpoint from CLI flags.
+func BuildListInstancesPayload(litellmListInstancesSessionToken string, litellmListInstancesProjectSlugInput string) (*litellm.ListInstancesPayload, error) {
+	var sessionToken *string
+	{
+		if litellmListInstancesSessionToken != "" {
+			sessionToken = &litellmListInstancesSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if litellmListInstancesProjectSlugInput != "" {
+			projectSlugInput = &litellmListInstancesProjectSlugInput
+		}
+	}
+	v := &litellm.ListInstancesPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildRotateInstanceKeyPayload builds the payload for the litellm
+// rotateInstanceKey endpoint from CLI flags.
+func BuildRotateInstanceKeyPayload(litellmRotateInstanceKeyBody string, litellmRotateInstanceKeySessionToken string, litellmRotateInstanceKeyProjectSlugInput string) (*litellm.RotateInstanceKeyPayload, error) {
+	var err error
+	var body RotateInstanceKeyRequestBody
+	{
+		err = json.Unmarshal([]byte(litellmRotateInstanceKeyBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if litellmRotateInstanceKeySessionToken != "" {
+			sessionToken = &litellmRotateInstanceKeySessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if litellmRotateInstanceKeyProjectSlugInput != "" {
+			projectSlugInput = &litellmRotateInstanceKeyProjectSlugInput
+		}
+	}
+	v := &litellm.RotateInstanceKeyPayload{
+		ID: body.ID,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildRevokeInstancePayload builds the payload for the litellm revokeInstance
+// endpoint from CLI flags.
+func BuildRevokeInstancePayload(litellmRevokeInstanceID string, litellmRevokeInstanceSessionToken string, litellmRevokeInstanceProjectSlugInput string) (*litellm.RevokeInstancePayload, error) {
+	var err error
+	var id string
+	{
+		id = litellmRevokeInstanceID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if litellmRevokeInstanceSessionToken != "" {
+			sessionToken = &litellmRevokeInstanceSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if litellmRevokeInstanceProjectSlugInput != "" {
+			projectSlugInput = &litellmRevokeInstanceProjectSlugInput
+		}
+	}
+	v := &litellm.RevokeInstancePayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
 
 // BuildIngestPayload builds the payload for the litellm ingest endpoint from
 // CLI flags.

@@ -71,12 +71,17 @@ func BuildUpdateUserSessionIssuerPayload(userSessionIssuersUpdateUserSessionIssu
 	{
 		err = json.Unmarshal([]byte(userSessionIssuersUpdateUserSessionIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authn_challenge_mode\": \"interactive\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"session_duration_hours\": 1,\n      \"slug\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authn_challenge_mode\": \"interactive\",\n      \"client_id_metadata_admission_mode\": \"presets\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"session_duration_hours\": 1,\n      \"slug\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.AuthnChallengeMode != nil {
 			if !(*body.AuthnChallengeMode == "chain" || *body.AuthnChallengeMode == "interactive") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authn_challenge_mode", *body.AuthnChallengeMode, []any{"chain", "interactive"}))
+			}
+		}
+		if body.ClientIDMetadataAdmissionMode != nil {
+			if !(*body.ClientIDMetadataAdmissionMode == "disabled" || *body.ClientIDMetadataAdmissionMode == "presets" || *body.ClientIDMetadataAdmissionMode == "open") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_id_metadata_admission_mode", *body.ClientIDMetadataAdmissionMode, []any{"disabled", "presets", "open"}))
 			}
 		}
 		if err != nil {
@@ -102,10 +107,11 @@ func BuildUpdateUserSessionIssuerPayload(userSessionIssuersUpdateUserSessionIssu
 		}
 	}
 	v := &usersessionissuers.UpdateUserSessionIssuerPayload{
-		ID:                   body.ID,
-		Slug:                 body.Slug,
-		AuthnChallengeMode:   body.AuthnChallengeMode,
-		SessionDurationHours: body.SessionDurationHours,
+		ID:                            body.ID,
+		Slug:                          body.Slug,
+		AuthnChallengeMode:            body.AuthnChallengeMode,
+		SessionDurationHours:          body.SessionDurationHours,
+		ClientIDMetadataAdmissionMode: body.ClientIDMetadataAdmissionMode,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

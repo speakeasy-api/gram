@@ -147,13 +147,21 @@ func unitService(t *testing.T, ingester HookIngester, authCtx *contextvalues.Aut
 	t.Helper()
 	tracerProvider := testenv.NewTracerProvider(t)
 	return &Service{
-		tracer:  tracerProvider.Tracer("test"),
-		logger:  testenv.NewLogger(t),
-		auth:    fixedAuthorizer{authCtx: authCtx},
-		hooks:   ingester,
-		calls:   callcache.New(newMemoryCache()),
-		traces:  newTraceProcessor(testenv.NewLogger(t), testenv.NewMeterProvider(t), telemetry.NewStub(testenv.NewLogger(t)).LogBulk, traceProcessorWorkers, traceProcessorQueueSize),
-		metrics: nil,
+		tracer:    tracerProvider.Tracer("test"),
+		logger:    testenv.NewLogger(t),
+		auth:      fixedAuthorizer{authCtx: authCtx},
+		hooks:     ingester,
+		calls:     callcache.New(newMemoryCache()),
+		traces:    newTraceProcessor(testenv.NewLogger(t), testenv.NewMeterProvider(t), telemetry.NewStub(testenv.NewLogger(t)).LogBulk, traceProcessorWorkers, traceProcessorQueueSize),
+		metrics:   nil,
+		health:    newDisabledHealthProcessor(t),
+		db:        nil,
+		telemetry: nil,
+		instances: NewInstanceResolver(testenv.NewLogger(t), nil),
+		authz:     nil,
+		features:  nil,
+		audit:     nil,
+		keyPrefix: "",
 	}
 }
 
@@ -267,6 +275,30 @@ func TestIngestUsesTextsAndSessionFallbacks(t *testing.T) {
 	require.Equal(t, "header-session", *ingester.calls[0].payload.Session.ID)
 	require.Equal(t, "trace-session", *ingester.calls[1].payload.Session.ID)
 	require.Equal(t, "call-3", *ingester.calls[2].payload.Session.ID)
+}
+
+func TestSessionHeaderUsesNativeClientHeadersInPrecedenceOrder(t *testing.T) {
+	t.Parallel()
+	headers := map[string]string{
+		"X-Session-ID":             "opencode-session",
+		"Thread-ID":                "codex-thread",
+		"Session-ID":               "codex-session",
+		"X-Claude-Code-Session-ID": "claude-session",
+		"X-Gram-Session-ID":        "gram-session",
+	}
+
+	require.Equal(t, "gram-session", sessionHeader(headers))
+	delete(headers, "X-Gram-Session-ID")
+	require.Equal(t, "claude-session", sessionHeader(headers))
+	delete(headers, "X-Claude-Code-Session-ID")
+	require.Equal(t, "codex-session", sessionHeader(headers))
+	delete(headers, "Session-ID")
+	require.Equal(t, "codex-thread", sessionHeader(headers))
+	delete(headers, "Thread-ID")
+	require.Equal(t, "opencode-session", sessionHeader(headers))
+
+	headers["X-Gram-Session-ID"] = "[present]"
+	require.Equal(t, "opencode-session", sessionHeader(headers))
 }
 
 func TestIngestResponseUsesCachedActorAndSession(t *testing.T) {

@@ -10,6 +10,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { DotCard } from "@/components/ui/DotCard";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
+import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { cn } from "@/lib/utils";
 import { mcpServerRouteParam } from "@/lib/sources";
 import {
@@ -91,14 +92,21 @@ import { SectionEmptyState } from "./SectionEmptyState";
 import { usePluginAssignmentsVisible } from "./use-plugin-assignments-visible";
 
 // A selectable server for a plugin, sourced from either a toolset (Hosted) or
-// a Remote MCP-backed mcp_server. The kind determines whether it is submitted
-// as a toolset_id or an mcp_server_id, mirroring the collections picker.
+// a Remote- or unproxied-MCP-backed mcp_server. The kind determines
+// whether it is submitted as a toolset_id or an mcp_server_id, mirroring the
+// collections picker.
 type ServerOptionKind = "toolset" | "mcpServer";
 type ServerOption = {
   kind: ServerOptionKind;
   id: string;
   name: string;
+  isUnproxied?: boolean;
 };
+
+function serverOptionSuffix(option: ServerOption): string {
+  if (option.kind !== "mcpServer") return "";
+  return option.isUnproxied ? " (Unproxied MCP)" : " (Remote MCP)";
+}
 
 function serverOptionKey(kind: ServerOptionKind, id: string): string {
   return `${kind}:${id}`;
@@ -160,15 +168,22 @@ export default function PluginDetail(): JSX.Element | null {
     useMcpEndpoints({});
   const mcpServers = useMemo(
     () =>
-      (mcpServersData?.mcpServers ?? []).filter((s) => !!s.remoteMcpServerId),
+      (mcpServersData?.mcpServers ?? []).filter(
+        (s) => !!s.remoteMcpServerId || !!s.unproxiedMcpServerId,
+      ),
     [mcpServersData],
   );
   const publishableMcpServers = useMemo(() => {
     const serverIdsWithEndpoint = new Set(
       (mcpEndpointsData?.mcpEndpoints ?? []).map((e) => e.mcpServerId),
     );
+    // Unproxied-backed servers are never proxied, so they never gain an
+    // mcp_endpoints row — exempt them from the endpoint requirement, mirroring
+    // the backend's AddPluginServer check (server/internal/plugins/impl.go).
     return mcpServers.filter(
-      (s) => s.visibility !== "disabled" && serverIdsWithEndpoint.has(s.id),
+      (s) =>
+        s.visibility !== "disabled" &&
+        (serverIdsWithEndpoint.has(s.id) || !!s.unproxiedMcpServerId),
     );
   }, [mcpServers, mcpEndpointsData]);
 
@@ -227,7 +242,7 @@ export default function PluginDetail(): JSX.Element | null {
         action: {
           label: "Open",
           onClick: () => {
-            void window.open(data.repoUrl, "_blank", "noopener,noreferrer");
+            openSafeExternalUrl(data.repoUrl);
           },
         },
       });
@@ -404,6 +419,7 @@ export default function PluginDetail(): JSX.Element | null {
         kind: "mcpServer",
         id: s.id,
         name: s.name ?? s.slug ?? "Untitled server",
+        isUnproxied: !!s.unproxiedMcpServerId,
       });
     }
     return opts;
@@ -933,7 +949,7 @@ export default function PluginDetail(): JSX.Element | null {
                         value={serverOptionKey(o.kind, o.id)}
                       >
                         {o.name}
-                        {o.kind === "mcpServer" ? " (Remote MCP)" : ""}
+                        {serverOptionSuffix(o)}
                       </option>
                     ))}
                   </select>
@@ -1276,10 +1292,12 @@ function PluginServerCard({
             </Badge>
           )}
           {isRemote ? (
-            // Remote MCP servers have no Gram-side tool catalog, so the
-            // tool-collection badge is omitted.
+            // Remote/unproxied MCP servers have no Gram-side tool
+            // catalog, so the tool-collection badge is omitted.
             <Badge variant="neutral" className="text-xs">
-              Remote MCP
+              {mcpServer?.unproxiedMcpServerId
+                ? "Unproxied MCP · Not proxied"
+                : "Remote MCP"}
             </Badge>
           ) : toolset ? (
             <ToolCollectionBadge toolNames={toolset.tools.map((t) => t.name)} />

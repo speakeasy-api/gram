@@ -163,15 +163,36 @@ const (
 
 	// CIMDOriginKey is the host of a Client ID Metadata Document URL — the
 	// per-metadata-host dimension on cimd.fetch.* metrics. Attacker-influenced
-	// on the unauthenticated OAuth surface until CIMD admission control
-	// (AIS-371) bounds accepted client_id URLs, so it is deliberately omitted
-	// for client_ids that fail URL-syntax validation before a fetch.
+	// on the unauthenticated OAuth surface, so it is deliberately omitted for
+	// client_ids rejected before a fetch establishes an origin.
+	//
+	// CIMD admission control (AIS-371) bounds this dimension only for issuers
+	// in "presets" mode, where a fetch happens solely for catalog or custom
+	// URLs. Issuers in "open" mode still fetch arbitrary attacker-supplied
+	// origins. Admission denials deliberately carry NO origin attribute: a
+	// denial costs no fetch and no timeout, so tagging it by host would
+	// reintroduce the unbounded dimension at far higher throughput than the
+	// fetch path it replaced.
 	CIMDOriginKey = attribute.Key("gram.cimd.origin")
 
 	// CIMDValidationReasonKey is the machine-readable reason a Client ID
 	// Metadata Document (or its client_id URL) failed validation — the
 	// per-reason dimension on cimd.validation.failures.
 	CIMDValidationReasonKey = attribute.Key("gram.cimd.validation_reason")
+
+	// CIMDAdmissionModeKey is the effective per-issuer CIMD admission policy
+	// ("disabled", "presets", "open") — the low-cardinality dimension on
+	// cimd.admission.decisions. Operator-chosen, never attacker-influenced.
+	CIMDAdmissionModeKey = attribute.Key("gram.cimd.admission_mode")
+
+	// CIMDAdmissionOutcomeKey is the machine-readable admission decision on
+	// cimd.admission.decisions. Admissions carry the reason they were
+	// admitted rather than a bare "admitted", so the values are
+	// "admitted_open", "admitted_catalog_exact", "admitted_catalog_pattern",
+	// "admitted_custom", "denied_disabled", "denied_not_listed",
+	// "denied_oversized", and "denied_unknown_mode". Chart the admitted_*
+	// values as a group; there is no single value meaning "admitted".
+	CIMDAdmissionOutcomeKey = attribute.Key("gram.cimd.admission_outcome")
 
 	ComponentKey                   = attribute.Key("gram.component")
 	DBDeletedRowsCountKey          = attribute.Key("gram.db.deleted_rows_count")
@@ -235,6 +256,10 @@ const (
 	CustomDomainHealthStatusKey         = attribute.Key("gram.custom_domain.health.status")
 	CustomDomainHealthIssueKey          = attribute.Key("gram.custom_domain.health.issue")
 	CustomDomainNotifyRecipientCountKey = attribute.Key("gram.custom_domain.notify.recipient_count")
+	AccessRequestScopeKey               = attribute.Key("gram.access_request.scope")
+	AccessRequestAdminCountKey          = attribute.Key("gram.access_request.admin_count")
+	AccessRequestSentCountKey           = attribute.Key("gram.access_request.sent_count")
+	AccessRequestRecipientKey           = attribute.Key("gram.access_request.recipient")
 	McpMethodKey                        = attribute.Key("gram.mcp.method")
 	McpRequestedTagsKey                 = attribute.Key("gram.mcp.requested_tags")
 	McpToolsReturnedKey                 = attribute.Key("gram.mcp.tools_returned")
@@ -334,6 +359,7 @@ const (
 	AuditSubjectKey                   = attribute.Key("gram.audit.subject")
 	AuditSubjectIDKey                 = attribute.Key("gram.audit.subject_id")
 	UserSessionIssuerIDKey            = attribute.Key("gram.user_session_issuer.id")
+	UserSessionClientIDKey            = attribute.Key("gram.user_session_client.id")
 	UserSessionClientMigratedCountKey = attribute.Key("gram.user_session_client.migrated_count")
 	RiskPolicyCountKey                = attribute.Key("gram.risk.policy_count")
 	RiskPolicyIDKey                   = attribute.Key("gram.risk.policy_id")
@@ -370,6 +396,8 @@ const (
 	ResourceURNKey                    = attribute.Key("gram.resource.urn")
 	ResourceURIKey                    = attribute.Key("gram.resource.uri")
 	SvixAppIDKey                      = attribute.Key("gram.svix.app_id")
+	SvixMessageIDKey                  = attribute.Key("gram.svix.message_id")
+	WebhookDropReasonKey              = attribute.Key("gram.webhook.drop_reason")
 	SvixPreviousAppIDKey              = attribute.Key("gram.svix.previous_app_id")
 	ToolsetIDKey                      = attribute.Key("gram.toolset.id")
 	ToolsetSlugKey                    = attribute.Key("gram.toolset.slug")
@@ -419,6 +447,7 @@ const (
 	// denied the tool call (e.g. shadow-MCP guard). Its presence (non-empty)
 	// signals the trace should render as "blocked" in dashboards.
 	HookBlockReasonKey       = attribute.Key("gram.hook.block_reason")
+	LiteLLMInstanceIDKey     = attribute.Key("gram.litellm.instance_id")
 	LiteLLMCallIDKey         = attribute.Key("gram.litellm.call_id")
 	LiteLLMTraceIDKey        = attribute.Key("gram.litellm.trace_id")
 	LiteLLMUserIDKey         = attribute.Key("gram.litellm.user_id")
@@ -545,6 +574,10 @@ const (
 	// events whose timestamps failed RFC3339 parsing in one log file and
 	// fell back to import time — a canary for upstream format changes.
 	ChatGPTComplianceTimestampFallbacksKey = attribute.Key("chatgpt.compliance.timestamp_fallbacks")
+	// CodexCloudTimestampFallbacksKey is the CODEX_LOG transcript import's
+	// counterpart, kept as its own key so a Codex cloud feed regression is
+	// never mis-attributed to the ChatGPT conversation import.
+	CodexCloudTimestampFallbacksKey = attribute.Key("codex.cloud.timestamp_fallbacks")
 
 	// GenAI evaluation keys (OTel semconv experimental - gen_ai.evaluation.*)
 	GenAIEvaluationNameKey        = attribute.Key("gen_ai.evaluation.name")        // Evaluation metric name (e.g., "chat_resolution")
@@ -723,6 +756,10 @@ func SlogTelemetryPublishFailedCount(v int) slog.Attr {
 
 func SlogChatGPTComplianceTimestampFallbacks(v int) slog.Attr {
 	return slog.Int(string(ChatGPTComplianceTimestampFallbacksKey), v)
+}
+
+func SlogCodexCloudTimestampFallbacks(v int) slog.Attr {
+	return slog.Int(string(CodexCloudTimestampFallbacksKey), v)
 }
 
 func TelemetryCHOperation(v string) attribute.KeyValue { return TelemetryCHOperationKey.String(v) }
@@ -937,6 +974,22 @@ func SlogCIMDValidationReason[V ~string](v V) slog.Attr {
 	return slog.String(string(CIMDValidationReasonKey), string(v))
 }
 
+func CIMDAdmissionMode[V ~string](v V) attribute.KeyValue {
+	return CIMDAdmissionModeKey.String(string(v))
+}
+
+func SlogCIMDAdmissionMode[V ~string](v V) slog.Attr {
+	return slog.String(string(CIMDAdmissionModeKey), string(v))
+}
+
+func CIMDAdmissionOutcome[V ~string](v V) attribute.KeyValue {
+	return CIMDAdmissionOutcomeKey.String(string(v))
+}
+
+func SlogCIMDAdmissionOutcome[V ~string](v V) slog.Attr {
+	return slog.String(string(CIMDAdmissionOutcomeKey), string(v))
+}
+
 func Component(v string) attribute.KeyValue { return ComponentKey.String(v) }
 func SlogComponent(v string) slog.Attr      { return slog.String(string(ComponentKey), v) }
 
@@ -1149,6 +1202,24 @@ func CustomDomainNotifyRecipientCount(v int) attribute.KeyValue {
 
 func SlogCustomDomainNotifyRecipientCount(v int) slog.Attr {
 	return slog.Int(string(CustomDomainNotifyRecipientCountKey), v)
+}
+
+func AccessRequestScope(v string) attribute.KeyValue { return AccessRequestScopeKey.String(v) }
+func SlogAccessRequestScope(v string) slog.Attr      { return slog.String(string(AccessRequestScopeKey), v) }
+
+func AccessRequestAdminCount(v int) attribute.KeyValue { return AccessRequestAdminCountKey.Int(v) }
+func SlogAccessRequestAdminCount(v int) slog.Attr {
+	return slog.Int(string(AccessRequestAdminCountKey), v)
+}
+
+func AccessRequestSentCount(v int) attribute.KeyValue { return AccessRequestSentCountKey.Int(v) }
+func SlogAccessRequestSentCount(v int) slog.Attr {
+	return slog.Int(string(AccessRequestSentCountKey), v)
+}
+
+func AccessRequestRecipient(v string) attribute.KeyValue { return AccessRequestRecipientKey.String(v) }
+func SlogAccessRequestRecipient(v string) slog.Attr {
+	return slog.String(string(AccessRequestRecipientKey), v)
 }
 
 func MetricName(v string) attribute.KeyValue { return MetricNameKey.String(v) }
@@ -1471,6 +1542,11 @@ func SlogUserSessionIssuerID(v string) slog.Attr {
 	return slog.String(string(UserSessionIssuerIDKey), v)
 }
 
+func UserSessionClientID(v string) attribute.KeyValue { return UserSessionClientIDKey.String(v) }
+func SlogUserSessionClientID(v string) slog.Attr {
+	return slog.String(string(UserSessionClientIDKey), v)
+}
+
 func UserSessionClientMigratedCount(v int64) attribute.KeyValue {
 	return UserSessionClientMigratedCountKey.Int64(v)
 }
@@ -1605,6 +1681,14 @@ func SlogSlackTeamID(v string) slog.Attr      { return slog.String(string(SlackT
 
 func SvixAppID(v string) attribute.KeyValue { return SvixAppIDKey.String(v) }
 func SlogSvixAppID(v string) slog.Attr      { return slog.String(string(SvixAppIDKey), v) }
+
+func SvixMessageID(v string) attribute.KeyValue { return SvixMessageIDKey.String(v) }
+func SlogSvixMessageID(v string) slog.Attr      { return slog.String(string(SvixMessageIDKey), v) }
+
+func WebhookDropReason(v string) attribute.KeyValue { return WebhookDropReasonKey.String(v) }
+func SlogWebhookDropReason(v string) slog.Attr {
+	return slog.String(string(WebhookDropReasonKey), v)
+}
 
 func SvixPreviousAppID(v string) attribute.KeyValue { return SvixPreviousAppIDKey.String(v) }
 func SlogSvixPreviousAppID(v string) slog.Attr      { return slog.String(string(SvixPreviousAppIDKey), v) }

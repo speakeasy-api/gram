@@ -37,9 +37,7 @@ type Server struct {
 	BlockShadowMCPInventoryServer        http.Handler
 	UnblockShadowMCPInventoryServer      http.Handler
 	ResolveShadowMCPInventoryRequest     http.Handler
-	GetRBACStatus                        http.Handler
-	EnableRBAC                           http.Handler
-	DisableRBAC                          http.Handler
+	RequestAccess                        http.Handler
 	ListChallenges                       http.Handler
 	ListChallengeBuckets                 http.Handler
 	ResolveChallenge                     http.Handler
@@ -90,9 +88,7 @@ func New(
 			{"BlockShadowMCPInventoryServer", "POST", "/rpc/access.blockShadowMCPInventoryServer"},
 			{"UnblockShadowMCPInventoryServer", "DELETE", "/rpc/access.unblockShadowMCPInventoryServer"},
 			{"ResolveShadowMCPInventoryRequest", "POST", "/rpc/access.resolveShadowMCPInventoryRequest"},
-			{"GetRBACStatus", "GET", "/rpc/access.getRBACStatus"},
-			{"EnableRBAC", "POST", "/rpc/access.enableRBAC"},
-			{"DisableRBAC", "POST", "/rpc/access.disableRBAC"},
+			{"RequestAccess", "POST", "/rpc/access.requestAccess"},
 			{"ListChallenges", "GET", "/rpc/access.listChallenges"},
 			{"ListChallengeBuckets", "GET", "/rpc/access.listChallengeBuckets"},
 			{"ResolveChallenge", "POST", "/rpc/access.resolveChallenge"},
@@ -115,9 +111,7 @@ func New(
 		BlockShadowMCPInventoryServer:        NewBlockShadowMCPInventoryServerHandler(e.BlockShadowMCPInventoryServer, mux, decoder, encoder, errhandler, formatter),
 		UnblockShadowMCPInventoryServer:      NewUnblockShadowMCPInventoryServerHandler(e.UnblockShadowMCPInventoryServer, mux, decoder, encoder, errhandler, formatter),
 		ResolveShadowMCPInventoryRequest:     NewResolveShadowMCPInventoryRequestHandler(e.ResolveShadowMCPInventoryRequest, mux, decoder, encoder, errhandler, formatter),
-		GetRBACStatus:                        NewGetRBACStatusHandler(e.GetRBACStatus, mux, decoder, encoder, errhandler, formatter),
-		EnableRBAC:                           NewEnableRBACHandler(e.EnableRBAC, mux, decoder, encoder, errhandler, formatter),
-		DisableRBAC:                          NewDisableRBACHandler(e.DisableRBAC, mux, decoder, encoder, errhandler, formatter),
+		RequestAccess:                        NewRequestAccessHandler(e.RequestAccess, mux, decoder, encoder, errhandler, formatter),
 		ListChallenges:                       NewListChallengesHandler(e.ListChallenges, mux, decoder, encoder, errhandler, formatter),
 		ListChallengeBuckets:                 NewListChallengeBucketsHandler(e.ListChallengeBuckets, mux, decoder, encoder, errhandler, formatter),
 		ResolveChallenge:                     NewResolveChallengeHandler(e.ResolveChallenge, mux, decoder, encoder, errhandler, formatter),
@@ -147,9 +141,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.BlockShadowMCPInventoryServer = m(s.BlockShadowMCPInventoryServer)
 	s.UnblockShadowMCPInventoryServer = m(s.UnblockShadowMCPInventoryServer)
 	s.ResolveShadowMCPInventoryRequest = m(s.ResolveShadowMCPInventoryRequest)
-	s.GetRBACStatus = m(s.GetRBACStatus)
-	s.EnableRBAC = m(s.EnableRBAC)
-	s.DisableRBAC = m(s.DisableRBAC)
+	s.RequestAccess = m(s.RequestAccess)
 	s.ListChallenges = m(s.ListChallenges)
 	s.ListChallengeBuckets = m(s.ListChallengeBuckets)
 	s.ResolveChallenge = m(s.ResolveChallenge)
@@ -178,9 +170,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountBlockShadowMCPInventoryServerHandler(mux, h.BlockShadowMCPInventoryServer)
 	MountUnblockShadowMCPInventoryServerHandler(mux, h.UnblockShadowMCPInventoryServer)
 	MountResolveShadowMCPInventoryRequestHandler(mux, h.ResolveShadowMCPInventoryRequest)
-	MountGetRBACStatusHandler(mux, h.GetRBACStatus)
-	MountEnableRBACHandler(mux, h.EnableRBAC)
-	MountDisableRBACHandler(mux, h.DisableRBAC)
+	MountRequestAccessHandler(mux, h.RequestAccess)
 	MountListChallengesHandler(mux, h.ListChallenges)
 	MountListChallengeBucketsHandler(mux, h.ListChallengeBuckets)
 	MountResolveChallengeHandler(mux, h.ResolveChallenge)
@@ -1153,21 +1143,21 @@ func NewResolveShadowMCPInventoryRequestHandler(
 	})
 }
 
-// MountGetRBACStatusHandler configures the mux to serve the "access" service
-// "getRBACStatus" endpoint.
-func MountGetRBACStatusHandler(mux goahttp.Muxer, h http.Handler) {
+// MountRequestAccessHandler configures the mux to serve the "access" service
+// "requestAccess" endpoint.
+func MountRequestAccessHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/access.getRBACStatus", f)
+	mux.Handle("POST", "/rpc/access.requestAccess", f)
 }
 
-// NewGetRBACStatusHandler creates a HTTP handler which loads the HTTP request
-// and calls the "access" service "getRBACStatus" endpoint.
-func NewGetRBACStatusHandler(
+// NewRequestAccessHandler creates a HTTP handler which loads the HTTP request
+// and calls the "access" service "requestAccess" endpoint.
+func NewRequestAccessHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -1176,119 +1166,13 @@ func NewGetRBACStatusHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeGetRBACStatusRequest(mux, decoder)
-		encodeResponse = EncodeGetRBACStatusResponse(encoder)
-		encodeError    = EncodeGetRBACStatusError(encoder, formatter)
+		decodeRequest  = DecodeRequestAccessRequest(mux, decoder)
+		encodeResponse = EncodeRequestAccessResponse(encoder)
+		encodeError    = EncodeRequestAccessError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "getRBACStatus")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountEnableRBACHandler configures the mux to serve the "access" service
-// "enableRBAC" endpoint.
-func MountEnableRBACHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/rpc/access.enableRBAC", f)
-}
-
-// NewEnableRBACHandler creates a HTTP handler which loads the HTTP request and
-// calls the "access" service "enableRBAC" endpoint.
-func NewEnableRBACHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeEnableRBACRequest(mux, decoder)
-		encodeResponse = EncodeEnableRBACResponse(encoder)
-		encodeError    = EncodeEnableRBACError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "enableRBAC")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountDisableRBACHandler configures the mux to serve the "access" service
-// "disableRBAC" endpoint.
-func MountDisableRBACHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/rpc/access.disableRBAC", f)
-}
-
-// NewDisableRBACHandler creates a HTTP handler which loads the HTTP request
-// and calls the "access" service "disableRBAC" endpoint.
-func NewDisableRBACHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeDisableRBACRequest(mux, decoder)
-		encodeResponse = EncodeDisableRBACResponse(encoder)
-		encodeError    = EncodeDisableRBACError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "disableRBAC")
+		ctx = context.WithValue(ctx, goa.MethodKey, "requestAccess")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {

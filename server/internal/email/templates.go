@@ -32,6 +32,7 @@ const (
 	transactionalIDOpenRouterInternalCreditsThreshold TransactionalID = "cmrpkq1r6014d0jze28webret" //nolint:gosec // template id, not a credential
 	transactionalIDCustomDomainUnhealthy              TransactionalID = "cmrvye9w306z30j1pnuldvunv"
 	transactionalIDWeeklyUsageSummary                 TransactionalID = "cms9749uv04e50jzdg9e1ji9u"
+	transactionalIDAccessRequest                      TransactionalID = "cmsfthjcy152o0jy3bgc22c77"
 )
 
 // Template is implemented by every concrete email template. Concrete types
@@ -109,5 +110,10 @@ var RegisteredTemplates = []Template{
 		TotalChangePercent:  "",
 		UsageTableHTML:      "",
 		ViewUsageURL:        "",
+	},
+	AccessRequest{
+		RequesterName:    "",
+		OrganizationName: "",
+		ManageAccessLink: "",
 	},
 }

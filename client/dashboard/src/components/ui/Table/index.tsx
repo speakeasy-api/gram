@@ -450,6 +450,7 @@ type BodyProps<T extends object> = {
   data: T[] | Group<T>[];
   rowKey: (row: T) => string | number;
   onRowClick?: (row: T) => void;
+  isRowClickable?: (row: T) => boolean;
   renderRow?: RenderRow<T>;
   noResultsMessage?: ReactNode;
   renderGroupHeader?: (group: Group<T>) => ReactNode;
@@ -495,6 +496,7 @@ const Body = React.forwardRef(function Body<T extends object>(
     rowKey,
     hasMore,
     onRowClick,
+    isRowClickable,
     renderRow,
     noResultsMessage,
     renderGroupHeader,
@@ -514,6 +516,7 @@ const Body = React.forwardRef(function Body<T extends object>(
           renderGroupHeader={renderGroupHeader}
           key={row.key}
           onRowClick={onRowClick}
+          isRowClickable={isRowClickable}
           renderRow={renderRow}
         />
       );
@@ -525,7 +528,7 @@ const Body = React.forwardRef(function Body<T extends object>(
           rowKey={rowKey}
           renderExpandedContent={renderExpandedContent}
           key={rowKey(row)}
-          onClick={onRowClick}
+          onClick={isRowClickable?.(row) === false ? undefined : onRowClick}
           renderRow={renderRow}
         />
       );
@@ -535,7 +538,7 @@ const Body = React.forwardRef(function Body<T extends object>(
           row={row}
           key={rowKey(row)}
           columns={columns}
-          onClick={onRowClick}
+          onClick={isRowClickable?.(row) === false ? undefined : onRowClick}
           renderRow={renderRow}
         />
       );
@@ -581,17 +584,42 @@ type RowContainerProps = {
   >;
 
 const RowContainer = forwardRef<HTMLTableRowElement, RowContainerProps>(
-  function RowContainer({ className, children, onClick, ...rest }, ref) {
+  function RowContainer(
+    { className, children, onClick, onKeyDown, tabIndex, ...rest },
+    ref,
+  ) {
+    const isClickable = Boolean(onClick);
+
+    const handleKeyDown = (event: React.KeyboardEvent<HTMLTableRowElement>) => {
+      onKeyDown?.(event);
+      if (event.defaultPrevented || !onClick) {
+        return;
+      }
+      // Only the row itself activates on Enter/Space. Key events from a focused
+      // nested control (button, link, input, …) must reach that control instead.
+      if (event.target !== event.currentTarget) {
+        return;
+      }
+      if (event.key !== "Enter" && event.key !== " ") {
+        return;
+      }
+      event.preventDefault();
+      onClick();
+    };
+
     return (
       <tr
         ref={ref}
+        {...rest}
         className={cn(
           "-z-0 [grid-column:1/-1] grid max-w-full [grid-template-columns:subgrid] border-b transition-colors last:border-none hover:bg-muted/50 data-[state=selected]:bg-muted",
-          onClick && "cursor-pointer",
+          isClickable &&
+            "cursor-pointer focus-visible:bg-muted/50 focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-inset focus-visible:outline-none",
           className,
         )}
         onClick={onClick}
-        {...rest}
+        onKeyDown={isClickable ? handleKeyDown : onKeyDown}
+        tabIndex={isClickable ? 0 : tabIndex}
       >
         {children}
       </tr>
@@ -722,6 +750,7 @@ function RowGroup<T extends object>({
   renderGroupHeader,
   className,
   onRowClick,
+  isRowClickable,
   renderRow,
 }: {
   group: Group<T>;
@@ -730,6 +759,7 @@ function RowGroup<T extends object>({
   renderGroupHeader?: (group: Group<T>) => ReactNode;
   className?: string;
   onRowClick?: (row: T) => void;
+  isRowClickable?: (row: T) => boolean;
   renderRow?: RenderRow<T>;
 }) {
   return (
@@ -745,7 +775,7 @@ function RowGroup<T extends object>({
           row={row}
           key={rowKey(row)}
           columns={columns}
-          onClick={onRowClick}
+          onClick={isRowClickable?.(row) === false ? undefined : onRowClick}
           renderRow={renderRow}
         />
       ))}

@@ -8,7 +8,7 @@ import {
 } from "react";
 import { Link, Outlet, useNavigate, useParams } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { useAssistantRuntime, useAuiState } from "@assistant-ui/react";
+import { useAui, useAuiState } from "@assistant-ui/react";
 import { ActiveChatTitle, Chat } from "@/elements";
 import {
   ChevronLeft,
@@ -1020,7 +1020,7 @@ function ChatSurface(): ReactElement {
  * the conversation binds.
  */
 function SavedConversation({ chatId }: { chatId: string }): ReactElement {
-  const runtime = useAssistantRuntime();
+  const aui = useAui();
   const isListLoading = useAuiState(({ threads }) => threads.isLoading);
   const activeRemoteId = useAuiState(
     ({ threadListItem }) => threadListItem.remoteId ?? null,
@@ -1032,11 +1032,8 @@ function SavedConversation({ chatId }: { chatId: string }): ReactElement {
   useEffect(() => {
     if (isListLoading || switchedForRef.current === chatId) return;
     switchedForRef.current = chatId;
-    runtime.threads.switchToThread(chatId).catch(() => {
-      // Allow a retry if the switch failed (e.g. list refetch in flight).
-      switchedForRef.current = null;
-    });
-  }, [runtime, chatId, isListLoading]);
+    aui.threads().switchToThread(chatId);
+  }, [aui, chatId, isListLoading]);
 
   if (activeRemoteId !== chatId) {
     return (

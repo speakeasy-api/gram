@@ -106,6 +106,7 @@ func (t *List) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Re
 		Search:           nil,
 		SourceKinds:      nil,
 		Classifications:  nil,
+		Tags:             nil,
 		Sort:             "name",
 		SessionToken:     nil,
 		ApikeyToken:      nil,

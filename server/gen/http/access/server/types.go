@@ -87,6 +87,20 @@ type ResolveShadowMCPInventoryRequestRequestBody struct {
 	PolicyIds []string `form:"policy_ids,omitempty" json:"policy_ids,omitempty" xml:"policy_ids,omitempty"`
 }
 
+// RequestAccessRequestBody is the type of the "access" service "requestAccess"
+// endpoint HTTP request body.
+type RequestAccessRequestBody struct {
+	// The scope being requested.
+	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Optional resource ID the scope applies to.
+	ResourceID *string `form:"resource_id,omitempty" json:"resource_id,omitempty" xml:"resource_id,omitempty"`
+	// Optional human-readable name for the resource (e.g. project name, MCP server
+	// name).
+	ResourceName *string `form:"resource_name,omitempty" json:"resource_name,omitempty" xml:"resource_name,omitempty"`
+	// Optional message from the requester explaining why they need access.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+}
+
 // ResolveChallengeRequestBody is the type of the "access" service
 // "resolveChallenge" endpoint HTTP request body.
 type ResolveChallengeRequestBody struct {
@@ -320,11 +334,11 @@ type ResolveShadowMCPInventoryRequestResponseBody struct {
 	BlockedPolicyIds []string `form:"blocked_policy_ids" json:"blocked_policy_ids" xml:"blocked_policy_ids"`
 }
 
-// GetRBACStatusResponseBody is the type of the "access" service
-// "getRBACStatus" endpoint HTTP response body.
-type GetRBACStatusResponseBody struct {
-	// Whether RBAC enforcement is currently enabled for this organization.
-	RbacEnabled bool `form:"rbac_enabled" json:"rbac_enabled" xml:"rbac_enabled"`
+// RequestAccessResponseBody is the type of the "access" service
+// "requestAccess" endpoint HTTP response body.
+type RequestAccessResponseBody struct {
+	// Number of administrators who were notified.
+	SentToCount int `form:"sent_to_count" json:"sent_to_count" xml:"sent_to_count"`
 }
 
 // ListChallengesResponseBody is the type of the "access" service
@@ -3687,9 +3701,9 @@ type ResolveShadowMCPInventoryRequestGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetRBACStatusUnauthorizedResponseBody is the type of the "access" service
-// "getRBACStatus" endpoint HTTP response body for the "unauthorized" error.
-type GetRBACStatusUnauthorizedResponseBody struct {
+// RequestAccessUnauthorizedResponseBody is the type of the "access" service
+// "requestAccess" endpoint HTTP response body for the "unauthorized" error.
+type RequestAccessUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3705,9 +3719,9 @@ type GetRBACStatusUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetRBACStatusForbiddenResponseBody is the type of the "access" service
-// "getRBACStatus" endpoint HTTP response body for the "forbidden" error.
-type GetRBACStatusForbiddenResponseBody struct {
+// RequestAccessForbiddenResponseBody is the type of the "access" service
+// "requestAccess" endpoint HTTP response body for the "forbidden" error.
+type RequestAccessForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3723,9 +3737,9 @@ type GetRBACStatusForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetRBACStatusBadRequestResponseBody is the type of the "access" service
-// "getRBACStatus" endpoint HTTP response body for the "bad_request" error.
-type GetRBACStatusBadRequestResponseBody struct {
+// RequestAccessBadRequestResponseBody is the type of the "access" service
+// "requestAccess" endpoint HTTP response body for the "bad_request" error.
+type RequestAccessBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3741,9 +3755,9 @@ type GetRBACStatusBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetRBACStatusNotFoundResponseBody is the type of the "access" service
-// "getRBACStatus" endpoint HTTP response body for the "not_found" error.
-type GetRBACStatusNotFoundResponseBody struct {
+// RequestAccessNotFoundResponseBody is the type of the "access" service
+// "requestAccess" endpoint HTTP response body for the "not_found" error.
+type RequestAccessNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3759,9 +3773,9 @@ type GetRBACStatusNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetRBACStatusConflictResponseBody is the type of the "access" service
-// "getRBACStatus" endpoint HTTP response body for the "conflict" error.
-type GetRBACStatusConflictResponseBody struct {
+// RequestAccessConflictResponseBody is the type of the "access" service
+// "requestAccess" endpoint HTTP response body for the "conflict" error.
+type RequestAccessConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3777,10 +3791,10 @@ type GetRBACStatusConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetRBACStatusUnsupportedMediaResponseBody is the type of the "access"
-// service "getRBACStatus" endpoint HTTP response body for the
+// RequestAccessUnsupportedMediaResponseBody is the type of the "access"
+// service "requestAccess" endpoint HTTP response body for the
 // "unsupported_media" error.
-type GetRBACStatusUnsupportedMediaResponseBody struct {
+type RequestAccessUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3796,9 +3810,9 @@ type GetRBACStatusUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetRBACStatusInvalidResponseBody is the type of the "access" service
-// "getRBACStatus" endpoint HTTP response body for the "invalid" error.
-type GetRBACStatusInvalidResponseBody struct {
+// RequestAccessInvalidResponseBody is the type of the "access" service
+// "requestAccess" endpoint HTTP response body for the "invalid" error.
+type RequestAccessInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3814,10 +3828,10 @@ type GetRBACStatusInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetRBACStatusInvariantViolationResponseBody is the type of the "access"
-// service "getRBACStatus" endpoint HTTP response body for the
+// RequestAccessInvariantViolationResponseBody is the type of the "access"
+// service "requestAccess" endpoint HTTP response body for the
 // "invariant_violation" error.
-type GetRBACStatusInvariantViolationResponseBody struct {
+type RequestAccessInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3833,9 +3847,9 @@ type GetRBACStatusInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetRBACStatusUnexpectedResponseBody is the type of the "access" service
-// "getRBACStatus" endpoint HTTP response body for the "unexpected" error.
-type GetRBACStatusUnexpectedResponseBody struct {
+// RequestAccessUnexpectedResponseBody is the type of the "access" service
+// "requestAccess" endpoint HTTP response body for the "unexpected" error.
+type RequestAccessUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3851,370 +3865,9 @@ type GetRBACStatusUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetRBACStatusGatewayErrorResponseBody is the type of the "access" service
-// "getRBACStatus" endpoint HTTP response body for the "gateway_error" error.
-type GetRBACStatusGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// EnableRBACUnauthorizedResponseBody is the type of the "access" service
-// "enableRBAC" endpoint HTTP response body for the "unauthorized" error.
-type EnableRBACUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// EnableRBACForbiddenResponseBody is the type of the "access" service
-// "enableRBAC" endpoint HTTP response body for the "forbidden" error.
-type EnableRBACForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// EnableRBACBadRequestResponseBody is the type of the "access" service
-// "enableRBAC" endpoint HTTP response body for the "bad_request" error.
-type EnableRBACBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// EnableRBACNotFoundResponseBody is the type of the "access" service
-// "enableRBAC" endpoint HTTP response body for the "not_found" error.
-type EnableRBACNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// EnableRBACConflictResponseBody is the type of the "access" service
-// "enableRBAC" endpoint HTTP response body for the "conflict" error.
-type EnableRBACConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// EnableRBACUnsupportedMediaResponseBody is the type of the "access" service
-// "enableRBAC" endpoint HTTP response body for the "unsupported_media" error.
-type EnableRBACUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// EnableRBACInvalidResponseBody is the type of the "access" service
-// "enableRBAC" endpoint HTTP response body for the "invalid" error.
-type EnableRBACInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// EnableRBACInvariantViolationResponseBody is the type of the "access" service
-// "enableRBAC" endpoint HTTP response body for the "invariant_violation" error.
-type EnableRBACInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// EnableRBACUnexpectedResponseBody is the type of the "access" service
-// "enableRBAC" endpoint HTTP response body for the "unexpected" error.
-type EnableRBACUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// EnableRBACGatewayErrorResponseBody is the type of the "access" service
-// "enableRBAC" endpoint HTTP response body for the "gateway_error" error.
-type EnableRBACGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DisableRBACUnauthorizedResponseBody is the type of the "access" service
-// "disableRBAC" endpoint HTTP response body for the "unauthorized" error.
-type DisableRBACUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DisableRBACForbiddenResponseBody is the type of the "access" service
-// "disableRBAC" endpoint HTTP response body for the "forbidden" error.
-type DisableRBACForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DisableRBACBadRequestResponseBody is the type of the "access" service
-// "disableRBAC" endpoint HTTP response body for the "bad_request" error.
-type DisableRBACBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DisableRBACNotFoundResponseBody is the type of the "access" service
-// "disableRBAC" endpoint HTTP response body for the "not_found" error.
-type DisableRBACNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DisableRBACConflictResponseBody is the type of the "access" service
-// "disableRBAC" endpoint HTTP response body for the "conflict" error.
-type DisableRBACConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DisableRBACUnsupportedMediaResponseBody is the type of the "access" service
-// "disableRBAC" endpoint HTTP response body for the "unsupported_media" error.
-type DisableRBACUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DisableRBACInvalidResponseBody is the type of the "access" service
-// "disableRBAC" endpoint HTTP response body for the "invalid" error.
-type DisableRBACInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DisableRBACInvariantViolationResponseBody is the type of the "access"
-// service "disableRBAC" endpoint HTTP response body for the
-// "invariant_violation" error.
-type DisableRBACInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DisableRBACUnexpectedResponseBody is the type of the "access" service
-// "disableRBAC" endpoint HTTP response body for the "unexpected" error.
-type DisableRBACUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// DisableRBACGatewayErrorResponseBody is the type of the "access" service
-// "disableRBAC" endpoint HTTP response body for the "gateway_error" error.
-type DisableRBACGatewayErrorResponseBody struct {
+// RequestAccessGatewayErrorResponseBody is the type of the "access" service
+// "requestAccess" endpoint HTTP response body for the "gateway_error" error.
+type RequestAccessGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -4907,11 +4560,19 @@ type ShadowMCPInventoryRequestSummaryResponseBody struct {
 // ShadowMCPInventoryUserResponseBody is used to define fields on response body
 // types.
 type ShadowMCPInventoryUserResponseBody struct {
-	UserKey          string  `form:"user_key" json:"user_key" xml:"user_key"`
-	Name             *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	Email            *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
-	LastCalled       string  `form:"last_called" json:"last_called" xml:"last_called"`
-	ObservedUseCount int     `form:"observed_use_count" json:"observed_use_count" xml:"observed_use_count"`
+	UserKey          string                                      `form:"user_key" json:"user_key" xml:"user_key"`
+	Name             *string                                     `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	Email            *string                                     `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
+	LastCalled       string                                      `form:"last_called" json:"last_called" xml:"last_called"`
+	ObservedUseCount int                                         `form:"observed_use_count" json:"observed_use_count" xml:"observed_use_count"`
+	Sources          []*ShadowMCPInventoryUserSourceResponseBody `form:"sources,omitempty" json:"sources,omitempty" xml:"sources,omitempty"`
+}
+
+// ShadowMCPInventoryUserSourceResponseBody is used to define fields on
+// response body types.
+type ShadowMCPInventoryUserSourceResponseBody struct {
+	Source           string `form:"source" json:"source" xml:"source"`
+	ObservedUseCount int    `form:"observed_use_count" json:"observed_use_count" xml:"observed_use_count"`
 }
 
 // AuthzChallengeResponseBody is used to define fields on response body types.
@@ -5482,11 +5143,11 @@ func NewResolveShadowMCPInventoryRequestResponseBody(res *access.ShadowMCPInvent
 	return body
 }
 
-// NewGetRBACStatusResponseBody builds the HTTP response body from the result
-// of the "getRBACStatus" endpoint of the "access" service.
-func NewGetRBACStatusResponseBody(res *access.RBACStatus) *GetRBACStatusResponseBody {
-	body := &GetRBACStatusResponseBody{
-		RbacEnabled: res.RbacEnabled,
+// NewRequestAccessResponseBody builds the HTTP response body from the result
+// of the "requestAccess" endpoint of the "access" service.
+func NewRequestAccessResponseBody(res *access.RequestAccessResult) *RequestAccessResponseBody {
+	body := &RequestAccessResponseBody{
+		SentToCount: res.SentToCount,
 	}
 	return body
 }
@@ -8164,10 +7825,10 @@ func NewResolveShadowMCPInventoryRequestGatewayErrorResponseBody(res *goa.Servic
 	return body
 }
 
-// NewGetRBACStatusUnauthorizedResponseBody builds the HTTP response body from
-// the result of the "getRBACStatus" endpoint of the "access" service.
-func NewGetRBACStatusUnauthorizedResponseBody(res *goa.ServiceError) *GetRBACStatusUnauthorizedResponseBody {
-	body := &GetRBACStatusUnauthorizedResponseBody{
+// NewRequestAccessUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "requestAccess" endpoint of the "access" service.
+func NewRequestAccessUnauthorizedResponseBody(res *goa.ServiceError) *RequestAccessUnauthorizedResponseBody {
+	body := &RequestAccessUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -8178,10 +7839,10 @@ func NewGetRBACStatusUnauthorizedResponseBody(res *goa.ServiceError) *GetRBACSta
 	return body
 }
 
-// NewGetRBACStatusForbiddenResponseBody builds the HTTP response body from the
-// result of the "getRBACStatus" endpoint of the "access" service.
-func NewGetRBACStatusForbiddenResponseBody(res *goa.ServiceError) *GetRBACStatusForbiddenResponseBody {
-	body := &GetRBACStatusForbiddenResponseBody{
+// NewRequestAccessForbiddenResponseBody builds the HTTP response body from the
+// result of the "requestAccess" endpoint of the "access" service.
+func NewRequestAccessForbiddenResponseBody(res *goa.ServiceError) *RequestAccessForbiddenResponseBody {
+	body := &RequestAccessForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -8192,10 +7853,10 @@ func NewGetRBACStatusForbiddenResponseBody(res *goa.ServiceError) *GetRBACStatus
 	return body
 }
 
-// NewGetRBACStatusBadRequestResponseBody builds the HTTP response body from
-// the result of the "getRBACStatus" endpoint of the "access" service.
-func NewGetRBACStatusBadRequestResponseBody(res *goa.ServiceError) *GetRBACStatusBadRequestResponseBody {
-	body := &GetRBACStatusBadRequestResponseBody{
+// NewRequestAccessBadRequestResponseBody builds the HTTP response body from
+// the result of the "requestAccess" endpoint of the "access" service.
+func NewRequestAccessBadRequestResponseBody(res *goa.ServiceError) *RequestAccessBadRequestResponseBody {
+	body := &RequestAccessBadRequestResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -8206,10 +7867,10 @@ func NewGetRBACStatusBadRequestResponseBody(res *goa.ServiceError) *GetRBACStatu
 	return body
 }
 
-// NewGetRBACStatusNotFoundResponseBody builds the HTTP response body from the
-// result of the "getRBACStatus" endpoint of the "access" service.
-func NewGetRBACStatusNotFoundResponseBody(res *goa.ServiceError) *GetRBACStatusNotFoundResponseBody {
-	body := &GetRBACStatusNotFoundResponseBody{
+// NewRequestAccessNotFoundResponseBody builds the HTTP response body from the
+// result of the "requestAccess" endpoint of the "access" service.
+func NewRequestAccessNotFoundResponseBody(res *goa.ServiceError) *RequestAccessNotFoundResponseBody {
+	body := &RequestAccessNotFoundResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -8220,10 +7881,10 @@ func NewGetRBACStatusNotFoundResponseBody(res *goa.ServiceError) *GetRBACStatusN
 	return body
 }
 
-// NewGetRBACStatusConflictResponseBody builds the HTTP response body from the
-// result of the "getRBACStatus" endpoint of the "access" service.
-func NewGetRBACStatusConflictResponseBody(res *goa.ServiceError) *GetRBACStatusConflictResponseBody {
-	body := &GetRBACStatusConflictResponseBody{
+// NewRequestAccessConflictResponseBody builds the HTTP response body from the
+// result of the "requestAccess" endpoint of the "access" service.
+func NewRequestAccessConflictResponseBody(res *goa.ServiceError) *RequestAccessConflictResponseBody {
+	body := &RequestAccessConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -8234,10 +7895,10 @@ func NewGetRBACStatusConflictResponseBody(res *goa.ServiceError) *GetRBACStatusC
 	return body
 }
 
-// NewGetRBACStatusUnsupportedMediaResponseBody builds the HTTP response body
-// from the result of the "getRBACStatus" endpoint of the "access" service.
-func NewGetRBACStatusUnsupportedMediaResponseBody(res *goa.ServiceError) *GetRBACStatusUnsupportedMediaResponseBody {
-	body := &GetRBACStatusUnsupportedMediaResponseBody{
+// NewRequestAccessUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "requestAccess" endpoint of the "access" service.
+func NewRequestAccessUnsupportedMediaResponseBody(res *goa.ServiceError) *RequestAccessUnsupportedMediaResponseBody {
+	body := &RequestAccessUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -8248,10 +7909,10 @@ func NewGetRBACStatusUnsupportedMediaResponseBody(res *goa.ServiceError) *GetRBA
 	return body
 }
 
-// NewGetRBACStatusInvalidResponseBody builds the HTTP response body from the
-// result of the "getRBACStatus" endpoint of the "access" service.
-func NewGetRBACStatusInvalidResponseBody(res *goa.ServiceError) *GetRBACStatusInvalidResponseBody {
-	body := &GetRBACStatusInvalidResponseBody{
+// NewRequestAccessInvalidResponseBody builds the HTTP response body from the
+// result of the "requestAccess" endpoint of the "access" service.
+func NewRequestAccessInvalidResponseBody(res *goa.ServiceError) *RequestAccessInvalidResponseBody {
+	body := &RequestAccessInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -8262,10 +7923,10 @@ func NewGetRBACStatusInvalidResponseBody(res *goa.ServiceError) *GetRBACStatusIn
 	return body
 }
 
-// NewGetRBACStatusInvariantViolationResponseBody builds the HTTP response body
-// from the result of the "getRBACStatus" endpoint of the "access" service.
-func NewGetRBACStatusInvariantViolationResponseBody(res *goa.ServiceError) *GetRBACStatusInvariantViolationResponseBody {
-	body := &GetRBACStatusInvariantViolationResponseBody{
+// NewRequestAccessInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "requestAccess" endpoint of the "access" service.
+func NewRequestAccessInvariantViolationResponseBody(res *goa.ServiceError) *RequestAccessInvariantViolationResponseBody {
+	body := &RequestAccessInvariantViolationResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -8276,10 +7937,10 @@ func NewGetRBACStatusInvariantViolationResponseBody(res *goa.ServiceError) *GetR
 	return body
 }
 
-// NewGetRBACStatusUnexpectedResponseBody builds the HTTP response body from
-// the result of the "getRBACStatus" endpoint of the "access" service.
-func NewGetRBACStatusUnexpectedResponseBody(res *goa.ServiceError) *GetRBACStatusUnexpectedResponseBody {
-	body := &GetRBACStatusUnexpectedResponseBody{
+// NewRequestAccessUnexpectedResponseBody builds the HTTP response body from
+// the result of the "requestAccess" endpoint of the "access" service.
+func NewRequestAccessUnexpectedResponseBody(res *goa.ServiceError) *RequestAccessUnexpectedResponseBody {
+	body := &RequestAccessUnexpectedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -8290,290 +7951,10 @@ func NewGetRBACStatusUnexpectedResponseBody(res *goa.ServiceError) *GetRBACStatu
 	return body
 }
 
-// NewGetRBACStatusGatewayErrorResponseBody builds the HTTP response body from
-// the result of the "getRBACStatus" endpoint of the "access" service.
-func NewGetRBACStatusGatewayErrorResponseBody(res *goa.ServiceError) *GetRBACStatusGatewayErrorResponseBody {
-	body := &GetRBACStatusGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewEnableRBACUnauthorizedResponseBody builds the HTTP response body from the
-// result of the "enableRBAC" endpoint of the "access" service.
-func NewEnableRBACUnauthorizedResponseBody(res *goa.ServiceError) *EnableRBACUnauthorizedResponseBody {
-	body := &EnableRBACUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewEnableRBACForbiddenResponseBody builds the HTTP response body from the
-// result of the "enableRBAC" endpoint of the "access" service.
-func NewEnableRBACForbiddenResponseBody(res *goa.ServiceError) *EnableRBACForbiddenResponseBody {
-	body := &EnableRBACForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewEnableRBACBadRequestResponseBody builds the HTTP response body from the
-// result of the "enableRBAC" endpoint of the "access" service.
-func NewEnableRBACBadRequestResponseBody(res *goa.ServiceError) *EnableRBACBadRequestResponseBody {
-	body := &EnableRBACBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewEnableRBACNotFoundResponseBody builds the HTTP response body from the
-// result of the "enableRBAC" endpoint of the "access" service.
-func NewEnableRBACNotFoundResponseBody(res *goa.ServiceError) *EnableRBACNotFoundResponseBody {
-	body := &EnableRBACNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewEnableRBACConflictResponseBody builds the HTTP response body from the
-// result of the "enableRBAC" endpoint of the "access" service.
-func NewEnableRBACConflictResponseBody(res *goa.ServiceError) *EnableRBACConflictResponseBody {
-	body := &EnableRBACConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewEnableRBACUnsupportedMediaResponseBody builds the HTTP response body from
-// the result of the "enableRBAC" endpoint of the "access" service.
-func NewEnableRBACUnsupportedMediaResponseBody(res *goa.ServiceError) *EnableRBACUnsupportedMediaResponseBody {
-	body := &EnableRBACUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewEnableRBACInvalidResponseBody builds the HTTP response body from the
-// result of the "enableRBAC" endpoint of the "access" service.
-func NewEnableRBACInvalidResponseBody(res *goa.ServiceError) *EnableRBACInvalidResponseBody {
-	body := &EnableRBACInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewEnableRBACInvariantViolationResponseBody builds the HTTP response body
-// from the result of the "enableRBAC" endpoint of the "access" service.
-func NewEnableRBACInvariantViolationResponseBody(res *goa.ServiceError) *EnableRBACInvariantViolationResponseBody {
-	body := &EnableRBACInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewEnableRBACUnexpectedResponseBody builds the HTTP response body from the
-// result of the "enableRBAC" endpoint of the "access" service.
-func NewEnableRBACUnexpectedResponseBody(res *goa.ServiceError) *EnableRBACUnexpectedResponseBody {
-	body := &EnableRBACUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewEnableRBACGatewayErrorResponseBody builds the HTTP response body from the
-// result of the "enableRBAC" endpoint of the "access" service.
-func NewEnableRBACGatewayErrorResponseBody(res *goa.ServiceError) *EnableRBACGatewayErrorResponseBody {
-	body := &EnableRBACGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDisableRBACUnauthorizedResponseBody builds the HTTP response body from
-// the result of the "disableRBAC" endpoint of the "access" service.
-func NewDisableRBACUnauthorizedResponseBody(res *goa.ServiceError) *DisableRBACUnauthorizedResponseBody {
-	body := &DisableRBACUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDisableRBACForbiddenResponseBody builds the HTTP response body from the
-// result of the "disableRBAC" endpoint of the "access" service.
-func NewDisableRBACForbiddenResponseBody(res *goa.ServiceError) *DisableRBACForbiddenResponseBody {
-	body := &DisableRBACForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDisableRBACBadRequestResponseBody builds the HTTP response body from the
-// result of the "disableRBAC" endpoint of the "access" service.
-func NewDisableRBACBadRequestResponseBody(res *goa.ServiceError) *DisableRBACBadRequestResponseBody {
-	body := &DisableRBACBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDisableRBACNotFoundResponseBody builds the HTTP response body from the
-// result of the "disableRBAC" endpoint of the "access" service.
-func NewDisableRBACNotFoundResponseBody(res *goa.ServiceError) *DisableRBACNotFoundResponseBody {
-	body := &DisableRBACNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDisableRBACConflictResponseBody builds the HTTP response body from the
-// result of the "disableRBAC" endpoint of the "access" service.
-func NewDisableRBACConflictResponseBody(res *goa.ServiceError) *DisableRBACConflictResponseBody {
-	body := &DisableRBACConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDisableRBACUnsupportedMediaResponseBody builds the HTTP response body
-// from the result of the "disableRBAC" endpoint of the "access" service.
-func NewDisableRBACUnsupportedMediaResponseBody(res *goa.ServiceError) *DisableRBACUnsupportedMediaResponseBody {
-	body := &DisableRBACUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDisableRBACInvalidResponseBody builds the HTTP response body from the
-// result of the "disableRBAC" endpoint of the "access" service.
-func NewDisableRBACInvalidResponseBody(res *goa.ServiceError) *DisableRBACInvalidResponseBody {
-	body := &DisableRBACInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDisableRBACInvariantViolationResponseBody builds the HTTP response body
-// from the result of the "disableRBAC" endpoint of the "access" service.
-func NewDisableRBACInvariantViolationResponseBody(res *goa.ServiceError) *DisableRBACInvariantViolationResponseBody {
-	body := &DisableRBACInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDisableRBACUnexpectedResponseBody builds the HTTP response body from the
-// result of the "disableRBAC" endpoint of the "access" service.
-func NewDisableRBACUnexpectedResponseBody(res *goa.ServiceError) *DisableRBACUnexpectedResponseBody {
-	body := &DisableRBACUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewDisableRBACGatewayErrorResponseBody builds the HTTP response body from
-// the result of the "disableRBAC" endpoint of the "access" service.
-func NewDisableRBACGatewayErrorResponseBody(res *goa.ServiceError) *DisableRBACGatewayErrorResponseBody {
-	body := &DisableRBACGatewayErrorResponseBody{
+// NewRequestAccessGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "requestAccess" endpoint of the "access" service.
+func NewRequestAccessGatewayErrorResponseBody(res *goa.ServiceError) *RequestAccessGatewayErrorResponseBody {
+	body := &RequestAccessGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -9274,26 +8655,16 @@ func NewResolveShadowMCPInventoryRequestPayload(body *ResolveShadowMCPInventoryR
 	return v
 }
 
-// NewGetRBACStatusPayload builds a access service getRBACStatus endpoint
+// NewRequestAccessPayload builds a access service requestAccess endpoint
 // payload.
-func NewGetRBACStatusPayload(sessionToken *string) *access.GetRBACStatusPayload {
-	v := &access.GetRBACStatusPayload{}
-	v.SessionToken = sessionToken
-
-	return v
-}
-
-// NewEnableRBACPayload builds a access service enableRBAC endpoint payload.
-func NewEnableRBACPayload(sessionToken *string) *access.EnableRBACPayload {
-	v := &access.EnableRBACPayload{}
-	v.SessionToken = sessionToken
-
-	return v
-}
-
-// NewDisableRBACPayload builds a access service disableRBAC endpoint payload.
-func NewDisableRBACPayload(sessionToken *string) *access.DisableRBACPayload {
-	v := &access.DisableRBACPayload{}
+func NewRequestAccessPayload(body *RequestAccessRequestBody, apikeyToken *string, sessionToken *string) *access.RequestAccessPayload {
+	v := &access.RequestAccessPayload{
+		Scope:        *body.Scope,
+		ResourceID:   body.ResourceID,
+		ResourceName: body.ResourceName,
+		Message:      body.Message,
+	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v
@@ -9511,6 +8882,25 @@ func ValidateResolveShadowMCPInventoryRequestRequestBody(body *ResolveShadowMCPI
 	}
 	for _, e := range body.PolicyIds {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_ids[*]", e, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateRequestAccessRequestBody runs the validations defined on
+// RequestAccessRequestBody
+func ValidateRequestAccessRequestBody(body *RequestAccessRequestBody) (err error) {
+	if body.Scope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
+	}
+	if body.Scope != nil {
+		if !(*body.Scope == "org:read" || *body.Scope == "org:admin" || *body.Scope == "project:read" || *body.Scope == "project:write" || *body.Scope == "mcp:read" || *body.Scope == "mcp:write" || *body.Scope == "mcp:connect" || *body.Scope == "environment:read" || *body.Scope == "environment:write" || *body.Scope == "skill:read" || *body.Scope == "skill:write" || *body.Scope == "risk_policy:evaluate" || *body.Scope == "risk_policy:bypass" || *body.Scope == "chat:read") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read"}))
+		}
+	}
+	if body.Message != nil {
+		if utf8.RuneCountInString(*body.Message) > 1000 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.message", *body.Message, utf8.RuneCountInString(*body.Message), 1000, false))
+		}
 	}
 	return
 }

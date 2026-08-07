@@ -4,6 +4,7 @@ import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-que
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { toast } from "sonner";
 import { StepContainer } from "../step-container";
+import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { getServerURL } from "@/lib/utils";
 
 interface DirectorySyncStepProps {
@@ -42,8 +43,7 @@ export function DirectorySyncStep({
       },
       {
         onSuccess: (data) => {
-          window.open(data.url, "_blank", "noopener,noreferrer");
-          setPortalOpened(true);
+          if (openSafeExternalUrl(data.url)) setPortalOpened(true);
         },
       },
     );

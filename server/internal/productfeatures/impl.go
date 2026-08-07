@@ -238,19 +238,21 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 	}
 
 	return &gen.GetProductFeaturesResult{
-		LogsEnabled:                  isEnabled(FeatureLogs),
-		ToolIoLogsEnabled:            isEnabled(FeatureToolIOLogs),
-		SessionCaptureEnabled:        isEnabled(FeatureSessionCapture),
-		AuthzChallengeLoggingEnabled: isEnabled(FeatureAuthzChallengeLogging),
-		Webhooks:                     isEnabled(FeatureWebhooks),
-		SsoEnabled:                   isEnabled(FeatureSSO),
-		ScimEnabled:                  isEnabled(FeatureSCIM),
-		HooksBrowserLoginEnabled:     isEnabled(FeatureHooksBrowserLogin),
-		HooksFailOpenEnabled:         isEnabled(FeatureHooksFailOpen),
-		CustomModelKeysEnabled:       isEnabled(FeatureCustomModelKeys),
-		SkillsEnabled:                isEnabled(FeatureSkills),
-		SkillCaptureMetadataOnly:     isEnabled(FeatureSkillCaptureMetadataOnly),
-		DeviceAgent:                  deviceAgent,
+		LogsEnabled:                          isEnabled(FeatureLogs),
+		ToolIoLogsEnabled:                    isEnabled(FeatureToolIOLogs),
+		SessionCaptureEnabled:                isEnabled(FeatureSessionCapture),
+		AuthzChallengeLoggingEnabled:         isEnabled(FeatureAuthzChallengeLogging),
+		SsoEnabled:                           isEnabled(FeatureSSO),
+		ScimEnabled:                          isEnabled(FeatureSCIM),
+		HooksBrowserLoginEnabled:             isEnabled(FeatureHooksBrowserLogin),
+		HooksFailOpenEnabled:                 isEnabled(FeatureHooksFailOpen),
+		CustomModelKeysEnabled:               isEnabled(FeatureCustomModelKeys),
+		SkillsEnabled:                        isEnabled(FeatureSkills),
+		SkillCaptureMetadataOnly:             isEnabled(FeatureSkillCaptureMetadataOnly),
+		AiPlatformPushIntegrationsEnabled:    isEnabled(FeatureAIPlatformPushIntegrations),
+		PlatformMcpEnabled:                   isEnabled(FeaturePlatformMCP),
+		CustomerManagedEncryptionKeysEnabled: isEnabled(FeatureCustomerManagedEncryptionKeys),
+		DeviceAgent:                          deviceAgent,
 	}, nil
 }
 

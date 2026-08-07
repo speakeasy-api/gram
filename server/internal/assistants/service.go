@@ -49,6 +49,7 @@ const (
 	StatusPaused = "paused"
 
 	sourceKindSlack     = bgtriggers.DefinitionSlugSlack
+	sourceKindMSTeams   = bgtriggers.DefinitionSlugMSTeams
 	sourceKindLinear    = bgtriggers.DefinitionSlugLinear
 	sourceKindGithub    = bgtriggers.DefinitionSlugGithub
 	sourceKindCron      = bgtriggers.DefinitionSlugCron
@@ -1960,8 +1961,16 @@ func (s *ServiceCore) CheckDashboardChatOwnership(ctx context.Context, projectID
 }
 
 func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, []byte, error) {
+	sourcePayloadJSON := task.RawPayload
+	if !json.Valid(sourcePayloadJSON) {
+		wrapped, err := json.Marshal(map[string]string{"raw": string(task.RawPayload)})
+		if err != nil {
+			return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
+		}
+		sourcePayloadJSON = wrapped
+	}
 	switch task.DefinitionSlug {
-	case "slack":
+	case sourceKindSlack:
 		var event slackEventPayload
 		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
 			return "", nil, nil, nil, fmt.Errorf("decode slack trigger event: %w", err)
@@ -1978,14 +1987,22 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal slack source ref: %w", err)
 		}
-		sourcePayloadJSON := task.RawPayload
-		if !json.Valid(sourcePayloadJSON) {
-			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
-			if err != nil {
-				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
-			}
-		}
 		return sourceKindSlack, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
+	case sourceKindMSTeams:
+		var event msteamsEventPayload
+		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
+			return "", nil, nil, nil, fmt.Errorf("decode msteams trigger event: %w", err)
+		}
+		sourceRefJSON, err := json.Marshal(msteamsSourceRef{
+			TenantID:       event.TenantID,
+			ConversationID: event.ConversationID,
+			ServiceURL:     event.ServiceURL,
+			UserID:         event.UserID,
+		})
+		if err != nil {
+			return "", nil, nil, nil, fmt.Errorf("marshal msteams source ref: %w", err)
+		}
+		return sourceKindMSTeams, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	case sourceKindLinear:
 		var event linearEventPayload
 		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
@@ -1997,13 +2014,6 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		})
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal linear source ref: %w", err)
-		}
-		sourcePayloadJSON := task.RawPayload
-		if !json.Valid(sourcePayloadJSON) {
-			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
-			if err != nil {
-				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
-			}
 		}
 		return sourceKindLinear, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	case sourceKindGithub:
@@ -2019,13 +2029,6 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal github source ref: %w", err)
 		}
-		sourcePayloadJSON := task.RawPayload
-		if !json.Valid(sourcePayloadJSON) {
-			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
-			if err != nil {
-				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
-			}
-		}
 		return sourceKindGithub, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	case sourceKindCron:
 		var event cronEventPayload
@@ -2038,13 +2041,6 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		})
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal cron source ref: %w", err)
-		}
-		sourcePayloadJSON := task.RawPayload
-		if !json.Valid(sourcePayloadJSON) {
-			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
-			if err != nil {
-				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
-			}
 		}
 		return sourceKindCron, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	case sourceKindWake:
@@ -2059,13 +2055,6 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal wake source ref: %w", err)
 		}
-		sourcePayloadJSON := task.RawPayload
-		if !json.Valid(sourcePayloadJSON) {
-			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
-			if err != nil {
-				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
-			}
-		}
 		return sourceKindWake, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	case sourceKindDashboard:
 		var event dashboardEventPayload
@@ -2075,13 +2064,6 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		sourceRefJSON, err := json.Marshal(dashboardSourceRef{UserID: event.UserID})
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal dashboard source ref: %w", err)
-		}
-		sourcePayloadJSON := task.RawPayload
-		if !json.Valid(sourcePayloadJSON) {
-			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
-			if err != nil {
-				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
-			}
 		}
 		return sourceKindDashboard, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	default:

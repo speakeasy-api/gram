@@ -24,6 +24,7 @@ import {
   formatRemoteMcpDisplay,
   getRemoteMcpServerArgs,
   remoteMcpRouteParam,
+  validateMcpServerUrl,
 } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
@@ -72,26 +73,6 @@ type TabValue = (typeof VALID_TABS)[number];
 
 function isValidTab(value: string): value is TabValue {
   return (VALID_TABS as readonly string[]).includes(value);
-}
-
-// Mirrors the validation in CreateRemoteMcp.tsx so users get the same feedback
-// from the Settings tab. Backend re-validates regardless.
-function validateRemoteMcpUrl(value: string): string | null {
-  const trimmed = value.trim();
-  if (!trimmed) return "URL is required";
-  let parsed: URL;
-  try {
-    parsed = new URL(trimmed);
-  } catch {
-    return "Enter a valid absolute URL (e.g. https://example.com/mcp)";
-  }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    return "URL must use http or https";
-  }
-  if (!parsed.hostname) {
-    return "URL must include a host";
-  }
-  return null;
 }
 
 export default function RemoteMCPDetails(): JSX.Element {
@@ -644,16 +625,16 @@ function UrlSection({
   const update = useUpdateRemoteMcpServerMutation();
   const verify = useVerifyRemoteMcpUrl(draft);
 
-  const validationError = touched ? validateRemoteMcpUrl(draft) : null;
+  const validationError = touched ? validateMcpServerUrl(draft) : null;
   const dirty = draft.trim() !== initialUrl;
   const saveDisabled =
-    !dirty || update.isPending || validateRemoteMcpUrl(draft) !== null;
+    !dirty || update.isPending || validateMcpServerUrl(draft) !== null;
   const verifyDisabled =
-    update.isPending || !draft.trim() || validateRemoteMcpUrl(draft) !== null;
+    update.isPending || !draft.trim() || validateMcpServerUrl(draft) !== null;
 
   const handleSave = async () => {
     setTouched(true);
-    if (validateRemoteMcpUrl(draft) !== null) return;
+    if (validateMcpServerUrl(draft) !== null) return;
     try {
       const updated = await update.mutateAsync({
         request: {

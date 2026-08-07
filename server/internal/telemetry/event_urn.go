@@ -20,6 +20,8 @@ const eventTypeUsage = "usage"
 const (
 	legacyClaudeOTELLogsURN    = "claude-code:otel:logs"
 	legacyClaudeUsageURN       = "claude-code:usage:metrics"
+	legacyCodexOTELLogsURN     = "codex:otel:logs"
+	legacyCodexOTELMetricsURN  = "codex:otel:metrics"
 	legacyCodexUsageURN        = "codex:usage:metrics"
 	legacyCursorHookUsageURN   = "cursor:usage:metrics"
 	legacyClaudeOTELBodyPrefix = "claude_code."
@@ -80,6 +82,16 @@ func deriveHookEventURN(legacyURN string, attrs map[attr.Key]any) string {
 			}
 		}
 		return urn.NewTelemetryEvent(urn.TelemetryEventOriginProviderOTEL, urn.TelemetryEventKindLog, eventType).String()
+	case legacyCodexOTELLogsURN:
+		// Codex's provider-native OTel log records (codex.sse_event,
+		// codex.tool_decision, ...). Codex always sets event.name, so there is
+		// no body-prefix fallback like the one older Claude CLIs need.
+		return urn.NewTelemetryEvent(urn.TelemetryEventOriginProviderOTEL, urn.TelemetryEventKindLog, getString(attrs, rawEventNameKey)).String()
+	case legacyCodexOTELMetricsURN:
+		// Raw Codex OTel metric data points, typed by the metric name the
+		// writer stamps. Distinct from legacyCodexUsageURN below, which is the
+		// usage row synthesized from Codex response.completed *logs*.
+		return urn.NewTelemetryEvent(urn.TelemetryEventOriginProviderOTEL, urn.TelemetryEventKindMetric, getString(attrs, attr.MetricNameKey)).String()
 	case legacyClaudeUsageURN, legacyCodexUsageURN:
 		// Usage data points normalized from provider OTel metrics (Claude)
 		// or provider OTel logs (Codex response.completed events).

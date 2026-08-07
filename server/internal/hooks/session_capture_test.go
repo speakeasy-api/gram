@@ -168,6 +168,15 @@ func TestPreferClaudeServiceName(t *testing.T) {
 	assert.Equal(t, "cursor", preferClaudeServiceName("cursor", "claude-code"))
 	assert.Equal(t, "cursor", preferClaudeServiceName("cursor", "claude-code-desktop"))
 	assert.Equal(t, "cursor", preferClaudeServiceName("cursor", "cowork"))
+	// The bare "claude" adapter slug the hooks binary sends for Claude Code
+	// marks a Claude-family sender without naming a surface, so any cached
+	// surface survives it instead of being clobbered.
+	assert.Equal(t, "claude-code", preferClaudeServiceName("claude", "claude-code"))
+	assert.Equal(t, "claude-code-desktop", preferClaudeServiceName("claude", "claude-code-desktop"))
+	assert.Equal(t, "cowork", preferClaudeServiceName("claude", "cowork"))
+	assert.Equal(t, "claude", preferClaudeServiceName("claude", ""))
+	// And any Claude surface upgrades a cached bare slug.
+	assert.Equal(t, "claude-code", preferClaudeServiceName("claude-code", "claude"))
 }
 
 // A session whose OTEL stream reports service.name "cowork" must persist its
