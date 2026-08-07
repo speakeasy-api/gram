@@ -242,10 +242,10 @@ func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UU
 }
 
 // WriteInTx inserts messages via a caller-provided transaction. Observers are
-// NOT fired here — the caller must invoke NotifyStored after commit so observers
-// never see a write that ended up rolled back. Use when the write must be
-// atomic with surrounding DB operations (e.g. a row-level lock for generation
-// serialisation).
+// NOT fired here — the caller must invoke NotifyStored or NotifyStoredRows after
+// commit so observers never see a write that ended up rolled back. Use when the
+// write must be atomic with surrounding DB operations (e.g. a row-level lock
+// for generation serialisation).
 func (w *ChatMessageWriter) WriteInTx(ctx context.Context, tx repo.DBTX, params []repo.CreateChatMessageParams) (int64, error) {
 	return insertChatMessages(ctx, tx, params)
 }
@@ -253,6 +253,12 @@ func (w *ChatMessageWriter) WriteInTx(ctx context.Context, tx repo.DBTX, params 
 // NotifyStored fans out a stored-messages signal to registered observers.
 // Pair with WriteInTx: invoke after the surrounding transaction commits.
 func (w *ChatMessageWriter) NotifyStored(ctx context.Context, projectID uuid.UUID) {
+	w.notifyMessagesStored(ctx, projectID)
+}
+
+// NotifyStoredRows publishes rows inserted through WriteInTx after commit.
+func (w *ChatMessageWriter) NotifyStoredRows(ctx context.Context, projectID uuid.UUID, params []repo.CreateChatMessageParams) {
+	w.publishTurnFrames(ctx, nil, params)
 	w.notifyMessagesStored(ctx, projectID)
 }
 

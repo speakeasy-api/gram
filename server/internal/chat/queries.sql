@@ -289,15 +289,37 @@ WHERE chat_messages.project_id = EXCLUDED.project_id
   AND EXCLUDED.source IN ('claude', 'claude-code', 'claude-code-desktop', 'cowork', 'codex', 'cursor', 'opencode')
   AND chat_messages.source = 'litellm';
 
--- name: HasNativeChatPrompt :one
-SELECT EXISTS (
-  SELECT 1
-  FROM chat_messages
-  WHERE chat_id = @chat_id
-    AND project_id = @project_id::uuid
-    AND role = 'user'
-    AND source = ANY(@sources::text[])
-);
+-- name: AcquireChatPromptCorrelationLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended(
+  'chat-prompt-correlation:' || (@project_id::uuid)::text || ':' || (@chat_id::uuid)::text,
+  0
+));
+
+-- name: GetLatestChatUserPrompt :one
+-- The chat_id/created_at index serves this backward LIMIT 1 scan. Unlike a
+-- source-filtered EXISTS, a negative result does not walk the full transcript.
+SELECT id, content, source
+FROM chat_messages
+WHERE chat_id = @chat_id
+  AND project_id = @project_id::uuid
+  AND role = 'user'
+ORDER BY created_at DESC, seq DESC
+LIMIT 1;
+
+-- name: PromoteLiteLLMPrompt :execrows
+UPDATE chat_messages
+SET source = @source
+  , user_id = COALESCE(@user_id, user_id)
+  , external_user_id = COALESCE(@external_user_id, external_user_id)
+  , model = COALESCE(@model, model)
+  , replayed = replayed OR @replayed
+  , created_at = @created_at
+  , risk_analyzed_at = NULL
+WHERE id = @id
+  AND project_id = @project_id::uuid
+  AND role = 'user'
+  AND content = @content
+  AND source = 'litellm';
 
 -- name: CreateChatContentPart :copyfrom
 INSERT INTO chat_content_parts (

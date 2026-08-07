@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
-	"slices"
 	"strings"
 	"time"
 
@@ -34,8 +33,6 @@ const (
 	agentTurnPrefix              = "agent-turn:v1:"
 	agentPromptCorrelationPrefix = "agent-prompt:v1:"
 )
-
-var nativeTranscriptFallbackSources = []string{"claude", "claude-code", "claude-code-desktop", "cowork", "cursor"}
 
 type authenticatedIngestOptionsKey struct{}
 
@@ -1408,6 +1405,8 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 
 	var msg chatRepo.CreateChatMessageParams
 	var titleContent string
+	uncorrelatedPrompt := false
+	nativePrompt := false
 	switch strings.TrimSpace(payload.Event.Type) {
 	case "prompt.submitted":
 		content := canonicalPromptText(payload)
@@ -1417,25 +1416,9 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		msg = baseMsg("user", content)
 		if correlationID := agentPromptCorrelationID(payload, content); correlationID != "" {
 			msg.MessageID = conv.ToPGText(correlationID)
-		} else if strings.EqualFold(strings.TrimSpace(hookSource), "litellm") {
-			var nativeSource string
-			if err := s.cache.Get(ctx, sessionNativeHooksCacheKey(authCtx.ProjectID.String(), sessionID), &nativeSource); err == nil && strings.TrimSpace(nativeSource) != "" {
-				return false, nil
-			}
-			captured, err := chatRepo.New(s.db).HasNativeChatPrompt(ctx, chatRepo.HasNativeChatPromptParams{
-				ChatID:    msg.ChatID,
-				ProjectID: *authCtx.ProjectID,
-				Sources:   nativeTranscriptFallbackSources,
-			})
-			if err != nil {
-				s.logger.WarnContext(ctx, "failed to verify native prompt capture",
-					attr.SlogError(err),
-					attr.SlogGenAIConversationID(sessionID),
-				)
-			} else if captured {
-				s.markNativePromptSession(ctx, authCtx.ProjectID.String(), sessionID, "captured")
-				return false, nil
-			}
+		} else {
+			uncorrelatedPrompt = strings.EqualFold(strings.TrimSpace(hookSource), "litellm") || usesNativeTranscriptFallback(payload.Source.Adapter)
+			nativePrompt = usesNativeTranscriptFallback(payload.Source.Adapter)
 		}
 		titleContent = content
 	case "assistant.responded":
@@ -1487,13 +1470,21 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 		return false, nil
 	}
 
-	stored, err := s.insertMessageWithFallbackUpsertResult(ctx, metadata, msg.ChatID, *authCtx.ProjectID, msg, canonicalChatTitle(payload, titleContent))
+	title := canonicalChatTitle(payload, titleContent)
+	if uncorrelatedPrompt {
+		return s.insertUncorrelatedAgentPrompt(ctx, metadata, msg, title, nativePrompt)
+	}
+	stored, err := s.insertMessageWithFallbackUpsertResult(ctx, metadata, msg.ChatID, *authCtx.ProjectID, msg, title)
 	return stored && msg.Role == "user", err
 }
 
 func usesNativeTranscriptFallback(adapter string) bool {
-	adapter = strings.ToLower(strings.TrimSpace(adapter))
-	return slices.Contains(nativeTranscriptFallbackSources, adapter)
+	switch strings.ToLower(strings.TrimSpace(adapter)) {
+	case "claude", "claude-code", "claude-code-desktop", "cowork", "cursor":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) markNativePromptSession(ctx context.Context, projectID, sessionID, source string) {
