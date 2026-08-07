@@ -256,7 +256,6 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 		canonicalSessionID(payload),
 		mcpInventory,
 		canonicalMCPInventoryRead(payload),
-		strings.TrimSpace(payload.Event.Type) == "mcp.inventory",
 	)
 	// Transcript-derived MCP attribution (Claude Stop/SubagentStop): stash
 	// tuples for the scheduled staged-telemetry sweep to join. Runs for
@@ -810,7 +809,7 @@ func (s *Service) resolveEvidenceFromSessionInventory(ctx context.Context, evide
 // and TTL the legacy per-provider endpoints use, so the shadow-MCP guard can
 // resolve a later tool call's target to a configured server. Best-effort: a
 // cache miss downgrades a deny's detail, it never changes the decision.
-func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, entries []MCPServerEntry, inventoryRead, inventoryEvent bool) {
+func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, entries []MCPServerEntry, inventoryRead bool) {
 	if sessionID == "" {
 		return
 	}
@@ -826,36 +825,34 @@ func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, e
 		)
 	}
 
-	// Dedicated inventory events and successful inventory reads are
-	// authoritative even when the inventory is empty or omitted. Other events
-	// only refresh the existing snapshot.
+	// Only a successful inventory read is authoritative, even when the
+	// inventory is empty or omitted. Partial reads only refresh an existing
+	// snapshot so they cannot downgrade complete evidence.
 	// Write the entries before the read status. The status is what licenses the
 	// guard to treat an empty inventory as proof no servers exist, so recording
 	// it while the entries write failed would leave the session claiming a read
 	// it cannot back up — and under block_all every later meta-tool call denies
 	// for the rest of the session.
-	authoritative := inventoryRead || inventoryEvent
-	if authoritative {
-		if err := s.cache.Set(ctx, sessionMCPListCacheKey(sessionID), entries, sessionMCPListTTL); err != nil {
-			s.logger.WarnContext(ctx, "failed to cache MCP list snapshot",
-				attr.SlogEvent("hook_mcp_list_cache_set_failed"),
-				attr.SlogError(err),
-				attr.SlogGenAIConversationID(sessionID),
-			)
-			return
-		}
+	if !inventoryRead {
+		return
+	}
+	if err := s.cache.Set(ctx, sessionMCPListCacheKey(sessionID), entries, sessionMCPListTTL); err != nil {
+		s.logger.WarnContext(ctx, "failed to cache MCP list snapshot",
+			attr.SlogEvent("hook_mcp_list_cache_set_failed"),
+			attr.SlogError(err),
+			attr.SlogGenAIConversationID(sessionID),
+		)
+		return
 	}
 
 	// Meta-tool calls arrive later carrying no inventory status, so the
 	// authoritative read status has to be held per session.
-	if authoritative {
-		if err := s.cache.Set(ctx, sessionMCPInventoryReadCacheKey(sessionID), true, sessionMCPInventoryReadTTL); err != nil {
-			s.logger.WarnContext(ctx, "failed to cache MCP inventory read status",
-				attr.SlogEvent("hook_mcp_list_read_cache_set_failed"),
-				attr.SlogError(err),
-				attr.SlogGenAIConversationID(sessionID),
-			)
-		}
+	if err := s.cache.Set(ctx, sessionMCPInventoryReadCacheKey(sessionID), true, sessionMCPInventoryReadTTL); err != nil {
+		s.logger.WarnContext(ctx, "failed to cache MCP inventory read status",
+			attr.SlogEvent("hook_mcp_list_read_cache_set_failed"),
+			attr.SlogError(err),
+			attr.SlogGenAIConversationID(sessionID),
+		)
 	}
 }
 
@@ -915,8 +912,8 @@ func (s *Service) canonicalClientReportsMCPInventory(ctx context.Context, payloa
 	return read
 }
 
-// canonicalMCPInventoryRead reports the sender's own claim on this event, which
-// only session-start events carry.
+// canonicalMCPInventoryRead reports the sender's own claim that this event
+// carries a complete inventory.
 func canonicalMCPInventoryRead(payload *gen.IngestPayload) bool {
 	return payload != nil && payload.Data != nil && conv.PtrValOr(payload.Data.McpInventoryCollected, false)
 }
