@@ -84,6 +84,7 @@ func TestUploadPackRequestIsReplayable(t *testing.T) {
 			gotBody, err := io.ReadAll(req.Body)
 			require.NoError(t, err)
 			require.Equal(t, wantBody, gotBody)
+			require.Equal(t, "gzip", req.Header.Get("Content-Encoding"))
 			require.NotNil(t, req.GetBody)
 
 			replayedBody, err := req.GetBody()
@@ -122,6 +123,7 @@ func TestUploadPackRequestIsReplayable(t *testing.T) {
 		"/marketplace/"+strings.Repeat("a", 43)+".git/git-upload-pack",
 		bytes.NewReader(wantBody),
 	)
+	req.Header.Set("Content-Encoding", "gzip")
 	// Incoming server requests do not provide GetBody.
 	req.GetBody = nil
 	rec := httptest.NewRecorder()
