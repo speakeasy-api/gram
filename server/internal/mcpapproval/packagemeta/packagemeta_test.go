@@ -279,3 +279,20 @@ func TestLookup_OversizedResponseIsAClearError(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "byte limit")
 }
+
+// A 200 whose document carries no package name is an unrecognized response,
+// not metadata — presenting it as a published package would put an empty
+// finding in front of an approver.
+func TestLookup_UnrecognizedResponseIsAnError(t *testing.T) {
+	t.Parallel()
+
+	server, _ := serve(t, http.StatusOK, `{}`)
+	client := packagemeta.NewClient(server.Client(),
+		packagemeta.WithNPMBaseURL(server.URL), packagemeta.WithPyPIBaseURL(server.URL))
+
+	_, err := client.Lookup(t.Context(), identity.RegistryNPM, "p")
+	require.Error(t, err)
+
+	_, err = client.Lookup(t.Context(), identity.RegistryPyPI, "p")
+	require.Error(t, err)
+}
