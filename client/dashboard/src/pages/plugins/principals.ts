@@ -1,4 +1,6 @@
+import type { FacepileMember } from "@/components/member-facepile";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
+import type { PluginAssignment } from "@gram/client/models/components/pluginassignment.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import { Globe, Mail, Shield, User } from "lucide-react";
 import { z } from "zod";
@@ -57,6 +59,32 @@ export function describePrincipal(
     return { kind: "user", label: member?.name || member?.email || urn };
   }
   return { kind: "unknown", label: urn };
+}
+
+// An individually-assigned member is a "user:<id>" principal — but not the
+// "user:all" subject-set, which describes everyone rather than a single person.
+export function isIndividualMemberPrincipal(urn: string): boolean {
+  return urn.startsWith("user:") && urn !== "user:all";
+}
+
+// Resolve a plugin's individually-assigned members to facepile entries. Role,
+// email, and everyone principals are excluded — only "user:<id>" assignments
+// map to a specific person's avatar.
+export function individualMemberFacepile(
+  assignments: PluginAssignment[],
+  memberByUrn: Map<string, AccessMember>,
+): FacepileMember[] {
+  return assignments
+    .filter((a) => isIndividualMemberPrincipal(a.principalUrn))
+    .map((a) => {
+      const member = memberByUrn.get(a.principalUrn);
+      return {
+        id: member?.id ?? a.principalUrn,
+        name: member?.name || member?.email || "Unknown member",
+        email: member?.email ?? "",
+        photoUrl: member?.photoUrl,
+      };
+    });
 }
 
 export function roleMapByUrn(roles: Role[]): Map<string, Role> {

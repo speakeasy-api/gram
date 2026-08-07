@@ -1,14 +1,14 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
-import { Type } from "@/components/ui/type";
+import { Heading } from "@/components/ui/Heading";
+import { Text } from "@/components/ui/Text";
 import {
   useIsPlatformAdmin,
   useOrganization,
   useProject,
 } from "@/contexts/Auth";
 import { ShieldAlert } from "lucide-react";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/Stack";
 import { SettingsDangerZone } from "./SettingsDangerZone";
 import { RegistryCacheSection } from "./RegistryCacheSection";
 import { ModelProviderKeysSection } from "./ModelProviderKeysSection";
@@ -25,13 +25,13 @@ export default function Settings(): JSX.Element {
       </Page.Header>
       <Page.Body>
         <RequireScope scope="project:write" level="page">
-          <Heading variant="h4" className="mb-2">
+          <Page.Section.Title className="mb-2">
             Project Settings
-          </Heading>
-          <Type muted small className="mb-6">
+          </Page.Section.Title>
+          <Text muted small className="mb-6">
             Manage your project configuration and perform administrative
             actions.
-          </Type>
+          </Text>
           <div className="mb-8">
             <ModelProviderKeysSection />
           </div>
@@ -41,18 +41,15 @@ export default function Settings(): JSX.Element {
           </div>
 
           {isAdmin && (
-            <div className="mt-8 rounded-lg border border-red-500/20 bg-red-500/5 p-4">
+            <div className="border-destructive-default bg-card mt-8 border p-4">
               <Stack
                 direction="horizontal"
                 align="center"
                 gap={2}
                 className="mb-3"
               >
-                <ShieldAlert className="h-5 w-5 text-red-500" />
-                <Heading
-                  variant="h4"
-                  className="text-red-600 dark:text-red-400"
-                >
+                <ShieldAlert className="text-default-destructive h-5 w-5" />
+                <Heading variant="h4" className="text-default-destructive">
                   Platform Admin Only
                 </Heading>
               </Stack>

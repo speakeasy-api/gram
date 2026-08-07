@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
@@ -429,13 +430,20 @@ func requireShadowMCPInventoryURLsFromHooks(
 ) []telemetryrepo.ShadowMCPInventoryURLRow {
 	t.Helper()
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-	rows, err := chClient.ListShadowMCPInventoryURLs(ctx, telemetryrepo.ListShadowMCPInventoryURLsParams{
-		GramProjectID: projectID,
-		Limit:         50,
-	})
-	require.NoError(t, err)
-	require.Len(t, rows, wantLen)
+	// The inventory upsert runs detached from the hook request (DNO-606), so
+	// poll until the background write lands. Rows from one capture arrive in a
+	// single insert, so a matching length means the batch is complete.
+	var rows []telemetryrepo.ShadowMCPInventoryURLRow
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+		var err error
+		rows, err = chClient.ListShadowMCPInventoryURLs(ctx, telemetryrepo.ListShadowMCPInventoryURLsParams{
+			GramProjectID: projectID,
+			Limit:         50,
+		})
+		assert.NoError(c, err)
+		assert.Len(c, rows, wantLen)
+	}, 10*time.Second, 50*time.Millisecond)
 
 	return rows
 }

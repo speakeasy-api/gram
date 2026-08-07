@@ -11,10 +11,10 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  TooltipProps,
+  TooltipContentProps,
 } from "recharts";
 
-const CustomTooltip = ({ active, payload }: TooltipProps<number, string>) => {
+const CustomTooltip = ({ active, payload }: TooltipContentProps) => {
   if (!active || !payload || payload.length === 0) return null;
   const entry = payload[0];
   return (
@@ -80,7 +80,7 @@ export const RadarChart: FC<RadarChartProps> = ({
               tick={{ fill: "var(--foreground)", fontSize: 10 }}
               axisLine={{ stroke: "var(--border)" }}
             />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={CustomTooltip} />
             {showLegend && (
               <Legend
                 wrapperStyle={{ color: "var(--foreground)" }}

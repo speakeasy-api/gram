@@ -31,7 +31,7 @@ export function InsightsShortcutKeys({
       {keys.map((key) => (
         <kbd
           key={key}
-          className="border-border bg-muted text-muted-foreground pointer-events-none inline-flex h-6 min-w-6 items-center justify-center rounded border px-1.5 font-mono text-sm leading-none font-medium select-none"
+          className="border-border bg-muted text-muted-foreground pointer-events-none inline-flex h-6 min-w-6 items-center justify-center border px-1.5 font-mono text-sm leading-none font-medium select-none"
         >
           {key}
         </kbd>

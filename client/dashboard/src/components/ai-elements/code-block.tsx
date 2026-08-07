@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { CheckIcon, CopyIcon } from "lucide-react";
 import {
@@ -63,7 +63,7 @@ export const CodeBlock = ({
       <div className="group relative">
         <div
           className={cn(
-            "bg-background text-foreground w-full overflow-hidden rounded-md border",
+            "bg-background text-foreground w-full overflow-hidden border",
             className,
           )}
           {...props}
@@ -126,10 +126,11 @@ export const CodeBlockCopyButton = ({
 
   return (
     <Button
+      aria-label={isCopied ? "Copied" : "Copy code"}
       className={cn("shrink-0", className)}
       onClick={() => void copyToClipboard()}
-      size="icon"
-      variant="ghost"
+      size="md"
+      variant="tertiary"
       {...props}
     >
       {children ?? <Icon size={14} />}

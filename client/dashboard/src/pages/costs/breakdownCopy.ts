@@ -12,17 +12,23 @@ import {
 // here has to survive every dimension label in the taxonomy and every drill
 // depth, so it's covered by a table-driven test rather than spot-checked.
 //
-// Cost arrives preformatted: five formatCost copies already exist across the
-// cost views, and this module's job is grammar, not money.
+// Cost arrives preformatted (lib/money's formatCost): this module's job is
+// grammar, not money.
 
 /**
  * Title the breakdown table by the cut in view ("Cost by Model") rather than by
  * the mechanism ("Breakdown by"): the title echoes whichever axis is lit in the
- * track beside it, which is what teaches the idea on the first click.
+ * track beside it, which is what teaches the idea on the first click. The
+ * efficiency lens leads with what it ranks instead ("Work delivered by Model").
  */
-export function breakdownTitle(axisValue: string, groupBy: Dimension): string {
+export function breakdownTitle(
+  axisValue: string,
+  groupBy: Dimension,
+  efficiency = false,
+): string {
   if (isSessionsAxis(axisValue)) return "Agent sessions";
-  return `Cost by ${LABELS[groupBy] ?? "group"}`;
+  const measure = efficiency ? "Work delivered" : "Cost";
+  return `${measure} by ${LABELS[groupBy] ?? "group"}`;
 }
 
 // "Adam" → "Adam's", "Operations" → "Operations'". English drops the extra s on

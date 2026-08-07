@@ -4,8 +4,8 @@ import {
 } from "@/components/environments/EnvironmentVariableDialog";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Dialog } from "@/components/ui/dialog";
-import { Type } from "@/components/ui/type";
+import { Dialog } from "@/components/ui/Dialog";
+import { Text } from "@/components/ui/Text";
 import {
   useRegisterEnvironmentTelemetry,
   useTelemetry,
@@ -15,13 +15,14 @@ import { useDeleteEnvironmentMutation } from "@gram/client/react-query/deleteEnv
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useToolset } from "@gram/client/react-query/toolset.js";
 import { useUpdateEnvironmentMutation } from "@gram/client/react-query/updateEnvironment.js";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { AlertCircle, CodeXml, Eye, EyeOff, Lock, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { DotRow } from "@/components/ui/dot-row";
-import { DotTable } from "@/components/ui/dot-table";
-import { type Action, MoreActions } from "@/components/ui/more-actions";
+import { DotRow } from "@/components/ui/DotRow";
+import { DotTable } from "@/components/ui/DotTable";
+import { type Action, MoreActions } from "@/components/ui/MoreActions";
 import { useEnvironment } from "./useEnvironment";
 
 const MASK = "••••••••••••";
@@ -84,11 +85,11 @@ function ToolsetDialog({ open, onOpenChange, onSubmit }: ToolsetDialogProps) {
         </Dialog.Header>
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">
-            <Type>MCP Server</Type>
+            <Text>MCP Server</Text>
             <select
               value={selectedToolset}
               onChange={(e) => setSelectedToolset(e.target.value)}
-              className="border-input placeholder:text-muted-foreground focus-visible:ring-ring flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              className="border-input placeholder:text-muted-foreground focus-visible:ring-ring flex h-9 w-full border bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
             >
               <option value="">Select an MCP server</option>
               {options.map((option) => (
@@ -165,8 +166,6 @@ function EnvironmentPageInner() {
   const telemetry = useTelemetry();
   const { hasScope } = useRBAC();
   const canWrite = hasScope("environment:write");
-  // "Fill for MCP Server" links an environment to a toolset, which remains project:write.
-  const canLinkToolset = hasScope("project:write");
 
   const [toolsetDialogOpen, setToolsetDialogOpen] = useState(false);
   const [selectedToolsetSlug, setSelectedToolsetSlug] = useState<string>("");
@@ -326,7 +325,9 @@ function EnvironmentPageInner() {
                 label: "Fill for MCP Server",
                 onClick: () => setToolsetDialogOpen(true),
                 icon: "copy-plus",
-                disabled: !canLinkToolset,
+                // Prefills placeholder variables via updateEnvironment, so this
+                // is an environment write like Add Variable / Delete below.
+                disabled: !canWrite,
               },
               {
                 label: "Delete Environment",
@@ -452,8 +453,10 @@ function EnvironmentPageInner() {
                   {canWrite && (
                     <div className="mt-4 flex flex-col items-center gap-2">
                       <Button onClick={() => setVariableDialog({ open: true })}>
-                        <Plus className="mr-2 h-4 w-4" />
-                        ADD YOUR FIRST VARIABLE
+                        <Button.LeftIcon>
+                          <Plus className="h-4 w-4" />
+                        </Button.LeftIcon>
+                        <Button.Text>ADD YOUR FIRST VARIABLE</Button.Text>
                       </Button>
                       <Button
                         variant="secondary"

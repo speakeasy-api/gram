@@ -6,10 +6,10 @@ import { MCPServerCard } from "@/components/mcp/MCPServerCard";
 import { MCPServerTableRow } from "@/components/mcp/MCPServerTableRow";
 import { MCPTableRow, MCPTableRowSkeleton } from "@/components/mcp/MCPTableRow";
 import { Page } from "@/components/page-layout";
-import { DotTable } from "@/components/ui/dot-table";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
-import { useViewMode } from "@/components/ui/use-view-mode";
+import { DotTable } from "@/components/ui/DotTable";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
+import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
 import { useGetMcpServerActivity } from "@gram/client/react-query/getMcpServerActivity.js";
@@ -21,7 +21,9 @@ import {
   mcpActivityStatus,
   type McpActivityTargetType,
 } from "@/components/mcp/mcp-activity";
-import { Badge, Button, Icon } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Outlet } from "react-router";
@@ -57,9 +59,17 @@ const BUILT_IN_SERVERS = [
 // a remote-backed one attributes as "hosted_mcp_server" (same as hosted
 // toolsets). Deriving the type here lets the activity lookup disambiguate a
 // tunnelled server from a hosted toolset that happens to share its slug.
+// Unproxied servers have no matcher in this mechanism at all (the backend
+// correlates their usage separately, by canonical URL, via the dedicated
+// unproxied usage endpoints), so this returns undefined and callers skip the
+// lookup instead of misclassifying them as hosted.
 function mcpServerTargetType(server: {
   tunneledMcpServerId?: string;
-}): McpActivityTargetType {
+  unproxiedMcpServerId?: string;
+}): McpActivityTargetType | undefined {
+  if (server.unproxiedMcpServerId) {
+    return undefined;
+  }
   return server.tunneledMcpServerId
     ? "tunneled_mcp_server"
     : "hosted_mcp_server";
@@ -148,10 +158,12 @@ function MCPOverview() {
   // markers after observability is disabled), or when the server has no
   // matchable identifier. We only flag a server once we can confirm its state.
   const activityStatusFor = (
-    targetType: McpActivityTargetType,
+    targetType: McpActivityTargetType | undefined,
     targetId: string | undefined,
   ) => {
-    if (isActivityError || !activityResult || !targetId) return undefined;
+    if (isActivityError || !activityResult || !targetId || !targetType) {
+      return undefined;
+    }
     return mcpActivityStatus(
       lookupMcpActivity(activityByTarget, targetType, targetId),
     );
@@ -172,7 +184,10 @@ function MCPOverview() {
   const mcpServers = useMemo(
     () =>
       (mcpServersResult?.mcpServers ?? []).filter(
-        (server) => !!server.remoteMcpServerId || !!server.tunneledMcpServerId,
+        (server) =>
+          !!server.remoteMcpServerId ||
+          !!server.tunneledMcpServerId ||
+          !!server.unproxiedMcpServerId,
       ),
     [mcpServersResult],
   );
@@ -319,7 +334,10 @@ function MCPOverview() {
 
   const builtInSection = (
     <Page.Section>
-      <Page.Section.Title>Built-in MCP Servers</Page.Section.Title>
+      {/* Section heading, not a second page title: no eyebrow, smaller serif. */}
+      <Page.Section.Title area="" className="text-display-xs">
+        Built-in MCP Servers
+      </Page.Section.Title>
       <Page.Section.Description>
         Pre-configured MCP servers provided by the platform for your project.
         Connect from Claude Desktop, Cursor, or any MCP client.
@@ -391,11 +409,11 @@ function MCPOverview() {
             </Page.Toolbar>
           )}
           {showNoMatches ? (
-            <Type muted className="py-8 text-center">
+            <Text muted className="py-8 text-center">
               {search !== ""
                 ? `No MCP servers matching “${search}”`
                 : "No MCP servers match your filters"}
-            </Type>
+            </Text>
           ) : viewMode === "grid" ? (
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
               {isLoading ? (

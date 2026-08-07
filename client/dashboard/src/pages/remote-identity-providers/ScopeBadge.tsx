@@ -1,17 +1,30 @@
-import { Badge } from "@/components/ui/badge";
+import { Badge, type BadgeProps } from "@/components/ui/Badge";
+import {
+  remoteSessionScopeTier,
+  type RemoteSessionScopeTier,
+} from "@/lib/sources";
 
-// ScopeBadge labels a remote identity provider or session client as
-// organization-wide or scoped to a single project, based on whether it carries
-// an owning project id. Shared by the issuer and client detail headers so the
-// two never drift.
+// ScopeBadge labels a remote identity provider or session client with its
+// tenancy tier — project-specific, organizational, or platform — derived from
+// the owning ids on the entity. Shared by the issuer and client detail headers
+// and the org-admin listing so the three tiers never render inconsistently.
+const TIER_BADGE: Record<
+  RemoteSessionScopeTier,
+  { label: string; variant: BadgeProps["variant"] }
+> = {
+  project: { label: "Project-Specific", variant: "neutral" },
+  organization: { label: "Organizational", variant: "information" },
+  platform: { label: "Platform", variant: "success" },
+};
+
 export function ScopeBadge({
-  projectScoped,
+  projectId,
+  organizationId,
 }: {
-  projectScoped: boolean;
+  projectId?: string | null;
+  organizationId?: string | null;
 }): JSX.Element {
-  return projectScoped ? (
-    <Badge variant="outline">Project-Specific</Badge>
-  ) : (
-    <Badge variant="secondary">Organizational</Badge>
-  );
+  const { label, variant } =
+    TIER_BADGE[remoteSessionScopeTier({ projectId, organizationId })];
+  return <Badge variant={variant}>{label}</Badge>;
 }

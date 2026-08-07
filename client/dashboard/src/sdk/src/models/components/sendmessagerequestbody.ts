@@ -22,6 +22,10 @@ export type SendMessageRequestBody = {
    * The user's message text.
    */
   message: string;
+  /**
+   * Project skills to make available for this turn.
+   */
+  skillIds?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -30,6 +34,7 @@ export type SendMessageRequestBody$Outbound = {
   chat_id?: string | undefined;
   idempotency_key?: string | undefined;
   message: string;
+  skill_ids?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -42,12 +47,14 @@ export const SendMessageRequestBody$outboundSchema: z.ZodMiniType<
     chatId: z.optional(z.string()),
     idempotencyKey: z.optional(z.string()),
     message: z.string(),
+    skillIds: z.optional(z.array(z.string())),
   }),
   z.transform((v) => {
     return remap$(v, {
       assistantId: "assistant_id",
       chatId: "chat_id",
       idempotencyKey: "idempotency_key",
+      skillIds: "skill_ids",
     });
   }),
 );

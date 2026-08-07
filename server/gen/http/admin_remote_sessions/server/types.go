@@ -27,6 +27,9 @@ type CreateGlobalIssuerRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Optional logo asset id.
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
+	// URL of OAuth client setup documentation shown when creating clients.
+	// Manually set, not RFC 8414; rejected unless an absolute http(s) URL.
+	ClientSetupDocumentationURL *string `form:"client_setup_documentation_url,omitempty" json:"client_setup_documentation_url,omitempty" xml:"client_setup_documentation_url,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -77,6 +80,10 @@ type UpdateGlobalIssuerRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Set the logo asset id.
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
+	// Set or clear the URL of OAuth client setup documentation shown when creating
+	// clients. An empty string clears it to NULL; any other value must be an
+	// absolute http(s) URL.
+	ClientSetupDocumentationURL *string `form:"client_setup_documentation_url,omitempty" json:"client_setup_documentation_url,omitempty" xml:"client_setup_documentation_url,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -103,6 +110,22 @@ type UpdateGlobalIssuerRequestBody struct {
 	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
 	// (OAuth CIMD draft).
 	ClientIDMetadataDocumentSupported *bool `form:"client_id_metadata_document_supported,omitempty" json:"client_id_metadata_document_supported,omitempty" xml:"client_id_metadata_document_supported,omitempty"`
+}
+
+// FetchGlobalIssuerMetadataRequestBody is the type of the
+// "adminRemoteSessions" service "fetchGlobalIssuerMetadata" endpoint HTTP
+// request body.
+type FetchGlobalIssuerMetadataRequestBody struct {
+	// Issuer URL to fetch metadata for (e.g. https://login.linear.com).
+	Issuer *string `form:"issuer,omitempty" json:"issuer,omitempty" xml:"issuer,omitempty"`
+}
+
+// RefreshGlobalIssuerMetadataRequestBody is the type of the
+// "adminRemoteSessions" service "refreshGlobalIssuerMetadata" endpoint HTTP
+// request body.
+type RefreshGlobalIssuerMetadataRequestBody struct {
+	// The remote_session_issuer id.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 }
 
 // CreateGlobalClientRequestBody is the type of the "adminRemoteSessions"
@@ -159,6 +182,9 @@ type CreateGlobalIssuerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Optional logo asset id; null when unset.
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
+	// URL of OAuth client setup documentation shown when creating clients.
+	// Manually set, not RFC 8414; null when unset.
+	ClientSetupDocumentationURL *string `form:"client_setup_documentation_url,omitempty" json:"client_setup_documentation_url,omitempty" xml:"client_setup_documentation_url,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -193,7 +219,7 @@ type CreateGlobalIssuerResponseBody struct {
 // ListGlobalIssuersResponseBody is the type of the "adminRemoteSessions"
 // service "listGlobalIssuers" endpoint HTTP response body.
 type ListGlobalIssuersResponseBody struct {
-	Items []*RemoteSessionIssuerResponseBody `form:"items" json:"items" xml:"items"`
+	Items []*GlobalRemoteSessionIssuerResponseBody `form:"items" json:"items" xml:"items"`
 	// Cursor for the next page; empty when exhausted.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
@@ -201,49 +227,16 @@ type ListGlobalIssuersResponseBody struct {
 // GetGlobalIssuerResponseBody is the type of the "adminRemoteSessions" service
 // "getGlobalIssuer" endpoint HTTP response body.
 type GetGlobalIssuerResponseBody struct {
-	// The remote_session_issuer id.
-	ID string `form:"id" json:"id" xml:"id"`
-	// The owning project id. Empty for organization-level issuers.
-	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The owning organization id. Empty for legacy rows not yet backfilled.
-	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// Project-unique slug.
-	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// Issuer URL; matches the iss claim.
-	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
-	// Optional display name; null when unset.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// Optional logo asset id; null when unset.
-	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
-	// Upstream authorization endpoint.
-	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
-	// Upstream token endpoint.
-	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
-	// Upstream RFC 7591 registration endpoint; null for issuers without DCR.
-	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
-	// Upstream JWKS URI; null when not advertised.
-	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
-	// RFC 8414 service_documentation; developer documentation for the issuer. Null
-	// when not advertised.
-	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
-	// RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not
-	// advertised.
-	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
-	// RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised.
-	OpTosURI                          *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
-	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
-	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
-	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
-	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
-	// When true, may unlock OIDC-aware behaviour.
-	Oidc bool `form:"oidc" json:"oidc" xml:"oidc"`
-	// When true, the MCP client registers and transacts directly with this issuer.
-	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
-	// Whether the issuer accepts a Client ID Metadata Document URL as client_id
-	// (OAuth CIMD draft).
-	ClientIDMetadataDocumentSupported bool   `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
-	CreatedAt                         string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The remote_session_issuer record.
+	Issuer *RemoteSessionIssuerResponseBody `form:"issuer" json:"issuer" xml:"issuer"`
+	// Number of non-deleted global remote_session_clients (project_id NULL,
+	// organization_id NULL) registered with this issuer. These block a delete and
+	// the platform admin can remove them here.
+	GlobalClientCount int `form:"global_client_count" json:"global_client_count" xml:"global_client_count"`
+	// Number of non-deleted remote_session_clients owned by an organization or
+	// project that are registered with this issuer. These block a delete but only
+	// their owning organization can remove them.
+	TenantClientCount int `form:"tenant_client_count" json:"tenant_client_count" xml:"tenant_client_count"`
 }
 
 // UpdateGlobalIssuerResponseBody is the type of the "adminRemoteSessions"
@@ -263,6 +256,9 @@ type UpdateGlobalIssuerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Optional logo asset id; null when unset.
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
+	// URL of OAuth client setup documentation shown when creating clients.
+	// Manually set, not RFC 8414; null when unset.
+	ClientSetupDocumentationURL *string `form:"client_setup_documentation_url,omitempty" json:"client_setup_documentation_url,omitempty" xml:"client_setup_documentation_url,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -292,6 +288,58 @@ type UpdateGlobalIssuerResponseBody struct {
 	ClientIDMetadataDocumentSupported bool   `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
 	CreatedAt                         string `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt                         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// FetchGlobalIssuerMetadataResponseBody is the type of the
+// "adminRemoteSessions" service "fetchGlobalIssuerMetadata" endpoint HTTP
+// response body.
+type FetchGlobalIssuerMetadataResponseBody struct {
+	// Issuer URL; matches the iss claim.
+	Issuer string `form:"issuer" json:"issuer" xml:"issuer"`
+	// Upstream authorization endpoint.
+	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
+	// Upstream token endpoint.
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// Upstream RFC 7591 registration endpoint; null for issuers without DCR.
+	RegistrationEndpoint *string `form:"registration_endpoint,omitempty" json:"registration_endpoint,omitempty" xml:"registration_endpoint,omitempty"`
+	// Upstream JWKS URI; null when not advertised.
+	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// RFC 8414 service_documentation; developer documentation for the issuer. Null
+	// when not advertised or when the advertised value is not an absolute http(s)
+	// URL.
+	ServiceDocumentation *string `form:"service_documentation,omitempty" json:"service_documentation,omitempty" xml:"service_documentation,omitempty"`
+	// RFC 8414 op_policy_uri; the issuer's client data-usage policy. Null when not
+	// advertised or when the advertised value is not an absolute http(s) URL.
+	OpPolicyURI *string `form:"op_policy_uri,omitempty" json:"op_policy_uri,omitempty" xml:"op_policy_uri,omitempty"`
+	// RFC 8414 op_tos_uri; the issuer's terms of service. Null when not advertised
+	// or when the advertised value is not an absolute http(s) URL.
+	OpTosURI                          *string  `form:"op_tos_uri,omitempty" json:"op_tos_uri,omitempty" xml:"op_tos_uri,omitempty"`
+	ScopesSupported                   []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
+	GrantTypesSupported               []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
+	ResponseTypesSupported            []string `form:"response_types_supported,omitempty" json:"response_types_supported,omitempty" xml:"response_types_supported,omitempty"`
+	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
+	// When true, may unlock OIDC-aware behaviour.
+	Oidc bool `form:"oidc" json:"oidc" xml:"oidc"`
+	// When true, the MCP client registers and transacts directly with this issuer.
+	Passthrough bool `form:"passthrough" json:"passthrough" xml:"passthrough"`
+	// Whether the issuer advertises support for a Client ID Metadata Document URL
+	// as client_id (OAuth CIMD draft), parsed from the discovery document.
+	ClientIDMetadataDocumentSupported bool `form:"client_id_metadata_document_supported" json:"client_id_metadata_document_supported" xml:"client_id_metadata_document_supported"`
+	// Warnings describing any RFC 8414 deviations encountered during discovery.
+	DiscoveryWarnings []string `form:"discovery_warnings" json:"discovery_warnings" xml:"discovery_warnings"`
+}
+
+// RefreshGlobalIssuerMetadataResponseBody is the type of the
+// "adminRemoteSessions" service "refreshGlobalIssuerMetadata" endpoint HTTP
+// response body.
+type RefreshGlobalIssuerMetadataResponseBody struct {
+	// The remote_session_issuer after the refreshed metadata was persisted.
+	Issuer *RemoteSessionIssuerResponseBody `form:"issuer" json:"issuer" xml:"issuer"`
+	// Warnings describing any RFC 8414 deviations encountered while re-reading the
+	// issuer's metadata document. A refresh that returns warnings still persisted
+	// its result; deviations severe enough to distrust the document abort the
+	// refresh with an error instead.
+	DiscoveryWarnings []string `form:"discovery_warnings" json:"discovery_warnings" xml:"discovery_warnings"`
 }
 
 // CreateGlobalClientResponseBody is the type of the "adminRemoteSessions"
@@ -1366,6 +1414,386 @@ type DeleteGlobalIssuerGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// FetchGlobalIssuerMetadataUnauthorizedResponseBody is the type of the
+// "adminRemoteSessions" service "fetchGlobalIssuerMetadata" endpoint HTTP
+// response body for the "unauthorized" error.
+type FetchGlobalIssuerMetadataUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FetchGlobalIssuerMetadataForbiddenResponseBody is the type of the
+// "adminRemoteSessions" service "fetchGlobalIssuerMetadata" endpoint HTTP
+// response body for the "forbidden" error.
+type FetchGlobalIssuerMetadataForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FetchGlobalIssuerMetadataBadRequestResponseBody is the type of the
+// "adminRemoteSessions" service "fetchGlobalIssuerMetadata" endpoint HTTP
+// response body for the "bad_request" error.
+type FetchGlobalIssuerMetadataBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FetchGlobalIssuerMetadataNotFoundResponseBody is the type of the
+// "adminRemoteSessions" service "fetchGlobalIssuerMetadata" endpoint HTTP
+// response body for the "not_found" error.
+type FetchGlobalIssuerMetadataNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FetchGlobalIssuerMetadataConflictResponseBody is the type of the
+// "adminRemoteSessions" service "fetchGlobalIssuerMetadata" endpoint HTTP
+// response body for the "conflict" error.
+type FetchGlobalIssuerMetadataConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FetchGlobalIssuerMetadataUnsupportedMediaResponseBody is the type of the
+// "adminRemoteSessions" service "fetchGlobalIssuerMetadata" endpoint HTTP
+// response body for the "unsupported_media" error.
+type FetchGlobalIssuerMetadataUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FetchGlobalIssuerMetadataInvalidResponseBody is the type of the
+// "adminRemoteSessions" service "fetchGlobalIssuerMetadata" endpoint HTTP
+// response body for the "invalid" error.
+type FetchGlobalIssuerMetadataInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FetchGlobalIssuerMetadataInvariantViolationResponseBody is the type of the
+// "adminRemoteSessions" service "fetchGlobalIssuerMetadata" endpoint HTTP
+// response body for the "invariant_violation" error.
+type FetchGlobalIssuerMetadataInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FetchGlobalIssuerMetadataUnexpectedResponseBody is the type of the
+// "adminRemoteSessions" service "fetchGlobalIssuerMetadata" endpoint HTTP
+// response body for the "unexpected" error.
+type FetchGlobalIssuerMetadataUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// FetchGlobalIssuerMetadataGatewayErrorResponseBody is the type of the
+// "adminRemoteSessions" service "fetchGlobalIssuerMetadata" endpoint HTTP
+// response body for the "gateway_error" error.
+type FetchGlobalIssuerMetadataGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshGlobalIssuerMetadataUnauthorizedResponseBody is the type of the
+// "adminRemoteSessions" service "refreshGlobalIssuerMetadata" endpoint HTTP
+// response body for the "unauthorized" error.
+type RefreshGlobalIssuerMetadataUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshGlobalIssuerMetadataForbiddenResponseBody is the type of the
+// "adminRemoteSessions" service "refreshGlobalIssuerMetadata" endpoint HTTP
+// response body for the "forbidden" error.
+type RefreshGlobalIssuerMetadataForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshGlobalIssuerMetadataBadRequestResponseBody is the type of the
+// "adminRemoteSessions" service "refreshGlobalIssuerMetadata" endpoint HTTP
+// response body for the "bad_request" error.
+type RefreshGlobalIssuerMetadataBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshGlobalIssuerMetadataNotFoundResponseBody is the type of the
+// "adminRemoteSessions" service "refreshGlobalIssuerMetadata" endpoint HTTP
+// response body for the "not_found" error.
+type RefreshGlobalIssuerMetadataNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshGlobalIssuerMetadataConflictResponseBody is the type of the
+// "adminRemoteSessions" service "refreshGlobalIssuerMetadata" endpoint HTTP
+// response body for the "conflict" error.
+type RefreshGlobalIssuerMetadataConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshGlobalIssuerMetadataUnsupportedMediaResponseBody is the type of the
+// "adminRemoteSessions" service "refreshGlobalIssuerMetadata" endpoint HTTP
+// response body for the "unsupported_media" error.
+type RefreshGlobalIssuerMetadataUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshGlobalIssuerMetadataInvalidResponseBody is the type of the
+// "adminRemoteSessions" service "refreshGlobalIssuerMetadata" endpoint HTTP
+// response body for the "invalid" error.
+type RefreshGlobalIssuerMetadataInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshGlobalIssuerMetadataInvariantViolationResponseBody is the type of the
+// "adminRemoteSessions" service "refreshGlobalIssuerMetadata" endpoint HTTP
+// response body for the "invariant_violation" error.
+type RefreshGlobalIssuerMetadataInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshGlobalIssuerMetadataUnexpectedResponseBody is the type of the
+// "adminRemoteSessions" service "refreshGlobalIssuerMetadata" endpoint HTTP
+// response body for the "unexpected" error.
+type RefreshGlobalIssuerMetadataUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RefreshGlobalIssuerMetadataGatewayErrorResponseBody is the type of the
+// "adminRemoteSessions" service "refreshGlobalIssuerMetadata" endpoint HTTP
+// response body for the "gateway_error" error.
+type RefreshGlobalIssuerMetadataGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // CreateGlobalClientUnauthorizedResponseBody is the type of the
 // "adminRemoteSessions" service "createGlobalClient" endpoint HTTP response
 // body for the "unauthorized" error.
@@ -2316,6 +2744,21 @@ type DeleteGlobalClientGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GlobalRemoteSessionIssuerResponseBody is used to define fields on response
+// body types.
+type GlobalRemoteSessionIssuerResponseBody struct {
+	// The remote_session_issuer record.
+	Issuer *RemoteSessionIssuerResponseBody `form:"issuer" json:"issuer" xml:"issuer"`
+	// Number of non-deleted global remote_session_clients (project_id NULL,
+	// organization_id NULL) registered with this issuer. These block a delete and
+	// the platform admin can remove them here.
+	GlobalClientCount int `form:"global_client_count" json:"global_client_count" xml:"global_client_count"`
+	// Number of non-deleted remote_session_clients owned by an organization or
+	// project that are registered with this issuer. These block a delete but only
+	// their owning organization can remove them.
+	TenantClientCount int `form:"tenant_client_count" json:"tenant_client_count" xml:"tenant_client_count"`
+}
+
 // RemoteSessionIssuerResponseBody is used to define fields on response body
 // types.
 type RemoteSessionIssuerResponseBody struct {
@@ -2333,6 +2776,9 @@ type RemoteSessionIssuerResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Optional logo asset id; null when unset.
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
+	// URL of OAuth client setup documentation shown when creating clients.
+	// Manually set, not RFC 8414; null when unset.
+	ClientSetupDocumentationURL *string `form:"client_setup_documentation_url,omitempty" json:"client_setup_documentation_url,omitempty" xml:"client_setup_documentation_url,omitempty"`
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
 	// Upstream token endpoint.
@@ -2414,6 +2860,7 @@ func NewCreateGlobalIssuerResponseBody(res *types.RemoteSessionIssuer) *CreateGl
 		Issuer:                            res.Issuer,
 		Name:                              res.Name,
 		LogoAssetID:                       res.LogoAssetID,
+		ClientSetupDocumentationURL:       res.ClientSetupDocumentationURL,
 		AuthorizationEndpoint:             res.AuthorizationEndpoint,
 		TokenEndpoint:                     res.TokenEndpoint,
 		RegistrationEndpoint:              res.RegistrationEndpoint,
@@ -2457,72 +2904,34 @@ func NewCreateGlobalIssuerResponseBody(res *types.RemoteSessionIssuer) *CreateGl
 // NewListGlobalIssuersResponseBody builds the HTTP response body from the
 // result of the "listGlobalIssuers" endpoint of the "adminRemoteSessions"
 // service.
-func NewListGlobalIssuersResponseBody(res *adminremotesessions.ListRemoteSessionIssuersResult) *ListGlobalIssuersResponseBody {
+func NewListGlobalIssuersResponseBody(res *adminremotesessions.ListGlobalRemoteSessionIssuersResult) *ListGlobalIssuersResponseBody {
 	body := &ListGlobalIssuersResponseBody{
 		NextCursor: res.NextCursor,
 	}
 	if res.Items != nil {
-		body.Items = make([]*RemoteSessionIssuerResponseBody, len(res.Items))
+		body.Items = make([]*GlobalRemoteSessionIssuerResponseBody, len(res.Items))
 		for i, val := range res.Items {
 			if val == nil {
 				body.Items[i] = nil
 				continue
 			}
-			body.Items[i] = marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(val)
+			body.Items[i] = marshalAdminremotesessionsGlobalRemoteSessionIssuerToGlobalRemoteSessionIssuerResponseBody(val)
 		}
 	} else {
-		body.Items = []*RemoteSessionIssuerResponseBody{}
+		body.Items = []*GlobalRemoteSessionIssuerResponseBody{}
 	}
 	return body
 }
 
 // NewGetGlobalIssuerResponseBody builds the HTTP response body from the result
 // of the "getGlobalIssuer" endpoint of the "adminRemoteSessions" service.
-func NewGetGlobalIssuerResponseBody(res *types.RemoteSessionIssuer) *GetGlobalIssuerResponseBody {
+func NewGetGlobalIssuerResponseBody(res *adminremotesessions.GlobalRemoteSessionIssuer) *GetGlobalIssuerResponseBody {
 	body := &GetGlobalIssuerResponseBody{
-		ID:                                res.ID,
-		ProjectID:                         res.ProjectID,
-		OrganizationID:                    res.OrganizationID,
-		Slug:                              res.Slug,
-		Issuer:                            res.Issuer,
-		Name:                              res.Name,
-		LogoAssetID:                       res.LogoAssetID,
-		AuthorizationEndpoint:             res.AuthorizationEndpoint,
-		TokenEndpoint:                     res.TokenEndpoint,
-		RegistrationEndpoint:              res.RegistrationEndpoint,
-		JwksURI:                           res.JwksURI,
-		ServiceDocumentation:              res.ServiceDocumentation,
-		OpPolicyURI:                       res.OpPolicyURI,
-		OpTosURI:                          res.OpTosURI,
-		Oidc:                              res.Oidc,
-		Passthrough:                       res.Passthrough,
-		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
-		CreatedAt:                         res.CreatedAt,
-		UpdatedAt:                         res.UpdatedAt,
+		GlobalClientCount: res.GlobalClientCount,
+		TenantClientCount: res.TenantClientCount,
 	}
-	if res.ScopesSupported != nil {
-		body.ScopesSupported = make([]string, len(res.ScopesSupported))
-		for i, val := range res.ScopesSupported {
-			body.ScopesSupported[i] = val
-		}
-	}
-	if res.GrantTypesSupported != nil {
-		body.GrantTypesSupported = make([]string, len(res.GrantTypesSupported))
-		for i, val := range res.GrantTypesSupported {
-			body.GrantTypesSupported[i] = val
-		}
-	}
-	if res.ResponseTypesSupported != nil {
-		body.ResponseTypesSupported = make([]string, len(res.ResponseTypesSupported))
-		for i, val := range res.ResponseTypesSupported {
-			body.ResponseTypesSupported[i] = val
-		}
-	}
-	if res.TokenEndpointAuthMethodsSupported != nil {
-		body.TokenEndpointAuthMethodsSupported = make([]string, len(res.TokenEndpointAuthMethodsSupported))
-		for i, val := range res.TokenEndpointAuthMethodsSupported {
-			body.TokenEndpointAuthMethodsSupported[i] = val
-		}
+	if res.Issuer != nil {
+		body.Issuer = marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(res.Issuer)
 	}
 	return body
 }
@@ -2539,6 +2948,7 @@ func NewUpdateGlobalIssuerResponseBody(res *types.RemoteSessionIssuer) *UpdateGl
 		Issuer:                            res.Issuer,
 		Name:                              res.Name,
 		LogoAssetID:                       res.LogoAssetID,
+		ClientSetupDocumentationURL:       res.ClientSetupDocumentationURL,
 		AuthorizationEndpoint:             res.AuthorizationEndpoint,
 		TokenEndpoint:                     res.TokenEndpoint,
 		RegistrationEndpoint:              res.RegistrationEndpoint,
@@ -2575,6 +2985,77 @@ func NewUpdateGlobalIssuerResponseBody(res *types.RemoteSessionIssuer) *UpdateGl
 		for i, val := range res.TokenEndpointAuthMethodsSupported {
 			body.TokenEndpointAuthMethodsSupported[i] = val
 		}
+	}
+	return body
+}
+
+// NewFetchGlobalIssuerMetadataResponseBody builds the HTTP response body from
+// the result of the "fetchGlobalIssuerMetadata" endpoint of the
+// "adminRemoteSessions" service.
+func NewFetchGlobalIssuerMetadataResponseBody(res *types.RemoteSessionIssuerDraft) *FetchGlobalIssuerMetadataResponseBody {
+	body := &FetchGlobalIssuerMetadataResponseBody{
+		Issuer:                            res.Issuer,
+		AuthorizationEndpoint:             res.AuthorizationEndpoint,
+		TokenEndpoint:                     res.TokenEndpoint,
+		RegistrationEndpoint:              res.RegistrationEndpoint,
+		JwksURI:                           res.JwksURI,
+		ServiceDocumentation:              res.ServiceDocumentation,
+		OpPolicyURI:                       res.OpPolicyURI,
+		OpTosURI:                          res.OpTosURI,
+		Oidc:                              res.Oidc,
+		Passthrough:                       res.Passthrough,
+		ClientIDMetadataDocumentSupported: res.ClientIDMetadataDocumentSupported,
+	}
+	if res.ScopesSupported != nil {
+		body.ScopesSupported = make([]string, len(res.ScopesSupported))
+		for i, val := range res.ScopesSupported {
+			body.ScopesSupported[i] = val
+		}
+	}
+	if res.GrantTypesSupported != nil {
+		body.GrantTypesSupported = make([]string, len(res.GrantTypesSupported))
+		for i, val := range res.GrantTypesSupported {
+			body.GrantTypesSupported[i] = val
+		}
+	}
+	if res.ResponseTypesSupported != nil {
+		body.ResponseTypesSupported = make([]string, len(res.ResponseTypesSupported))
+		for i, val := range res.ResponseTypesSupported {
+			body.ResponseTypesSupported[i] = val
+		}
+	}
+	if res.TokenEndpointAuthMethodsSupported != nil {
+		body.TokenEndpointAuthMethodsSupported = make([]string, len(res.TokenEndpointAuthMethodsSupported))
+		for i, val := range res.TokenEndpointAuthMethodsSupported {
+			body.TokenEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if res.DiscoveryWarnings != nil {
+		body.DiscoveryWarnings = make([]string, len(res.DiscoveryWarnings))
+		for i, val := range res.DiscoveryWarnings {
+			body.DiscoveryWarnings[i] = val
+		}
+	} else {
+		body.DiscoveryWarnings = []string{}
+	}
+	return body
+}
+
+// NewRefreshGlobalIssuerMetadataResponseBody builds the HTTP response body
+// from the result of the "refreshGlobalIssuerMetadata" endpoint of the
+// "adminRemoteSessions" service.
+func NewRefreshGlobalIssuerMetadataResponseBody(res *types.RemoteSessionIssuerRefresh) *RefreshGlobalIssuerMetadataResponseBody {
+	body := &RefreshGlobalIssuerMetadataResponseBody{}
+	if res.Issuer != nil {
+		body.Issuer = marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(res.Issuer)
+	}
+	if res.DiscoveryWarnings != nil {
+		body.DiscoveryWarnings = make([]string, len(res.DiscoveryWarnings))
+		for i, val := range res.DiscoveryWarnings {
+			body.DiscoveryWarnings[i] = val
+		}
+	} else {
+		body.DiscoveryWarnings = []string{}
 	}
 	return body
 }
@@ -3455,6 +3936,306 @@ func NewDeleteGlobalIssuerGatewayErrorResponseBody(res *goa.ServiceError) *Delet
 	return body
 }
 
+// NewFetchGlobalIssuerMetadataUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "fetchGlobalIssuerMetadata" endpoint of
+// the "adminRemoteSessions" service.
+func NewFetchGlobalIssuerMetadataUnauthorizedResponseBody(res *goa.ServiceError) *FetchGlobalIssuerMetadataUnauthorizedResponseBody {
+	body := &FetchGlobalIssuerMetadataUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFetchGlobalIssuerMetadataForbiddenResponseBody builds the HTTP response
+// body from the result of the "fetchGlobalIssuerMetadata" endpoint of the
+// "adminRemoteSessions" service.
+func NewFetchGlobalIssuerMetadataForbiddenResponseBody(res *goa.ServiceError) *FetchGlobalIssuerMetadataForbiddenResponseBody {
+	body := &FetchGlobalIssuerMetadataForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFetchGlobalIssuerMetadataBadRequestResponseBody builds the HTTP response
+// body from the result of the "fetchGlobalIssuerMetadata" endpoint of the
+// "adminRemoteSessions" service.
+func NewFetchGlobalIssuerMetadataBadRequestResponseBody(res *goa.ServiceError) *FetchGlobalIssuerMetadataBadRequestResponseBody {
+	body := &FetchGlobalIssuerMetadataBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFetchGlobalIssuerMetadataNotFoundResponseBody builds the HTTP response
+// body from the result of the "fetchGlobalIssuerMetadata" endpoint of the
+// "adminRemoteSessions" service.
+func NewFetchGlobalIssuerMetadataNotFoundResponseBody(res *goa.ServiceError) *FetchGlobalIssuerMetadataNotFoundResponseBody {
+	body := &FetchGlobalIssuerMetadataNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFetchGlobalIssuerMetadataConflictResponseBody builds the HTTP response
+// body from the result of the "fetchGlobalIssuerMetadata" endpoint of the
+// "adminRemoteSessions" service.
+func NewFetchGlobalIssuerMetadataConflictResponseBody(res *goa.ServiceError) *FetchGlobalIssuerMetadataConflictResponseBody {
+	body := &FetchGlobalIssuerMetadataConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFetchGlobalIssuerMetadataUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "fetchGlobalIssuerMetadata" endpoint of
+// the "adminRemoteSessions" service.
+func NewFetchGlobalIssuerMetadataUnsupportedMediaResponseBody(res *goa.ServiceError) *FetchGlobalIssuerMetadataUnsupportedMediaResponseBody {
+	body := &FetchGlobalIssuerMetadataUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFetchGlobalIssuerMetadataInvalidResponseBody builds the HTTP response
+// body from the result of the "fetchGlobalIssuerMetadata" endpoint of the
+// "adminRemoteSessions" service.
+func NewFetchGlobalIssuerMetadataInvalidResponseBody(res *goa.ServiceError) *FetchGlobalIssuerMetadataInvalidResponseBody {
+	body := &FetchGlobalIssuerMetadataInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFetchGlobalIssuerMetadataInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "fetchGlobalIssuerMetadata" endpoint of
+// the "adminRemoteSessions" service.
+func NewFetchGlobalIssuerMetadataInvariantViolationResponseBody(res *goa.ServiceError) *FetchGlobalIssuerMetadataInvariantViolationResponseBody {
+	body := &FetchGlobalIssuerMetadataInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFetchGlobalIssuerMetadataUnexpectedResponseBody builds the HTTP response
+// body from the result of the "fetchGlobalIssuerMetadata" endpoint of the
+// "adminRemoteSessions" service.
+func NewFetchGlobalIssuerMetadataUnexpectedResponseBody(res *goa.ServiceError) *FetchGlobalIssuerMetadataUnexpectedResponseBody {
+	body := &FetchGlobalIssuerMetadataUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewFetchGlobalIssuerMetadataGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "fetchGlobalIssuerMetadata" endpoint of
+// the "adminRemoteSessions" service.
+func NewFetchGlobalIssuerMetadataGatewayErrorResponseBody(res *goa.ServiceError) *FetchGlobalIssuerMetadataGatewayErrorResponseBody {
+	body := &FetchGlobalIssuerMetadataGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshGlobalIssuerMetadataUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "refreshGlobalIssuerMetadata" endpoint
+// of the "adminRemoteSessions" service.
+func NewRefreshGlobalIssuerMetadataUnauthorizedResponseBody(res *goa.ServiceError) *RefreshGlobalIssuerMetadataUnauthorizedResponseBody {
+	body := &RefreshGlobalIssuerMetadataUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshGlobalIssuerMetadataForbiddenResponseBody builds the HTTP response
+// body from the result of the "refreshGlobalIssuerMetadata" endpoint of the
+// "adminRemoteSessions" service.
+func NewRefreshGlobalIssuerMetadataForbiddenResponseBody(res *goa.ServiceError) *RefreshGlobalIssuerMetadataForbiddenResponseBody {
+	body := &RefreshGlobalIssuerMetadataForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshGlobalIssuerMetadataBadRequestResponseBody builds the HTTP
+// response body from the result of the "refreshGlobalIssuerMetadata" endpoint
+// of the "adminRemoteSessions" service.
+func NewRefreshGlobalIssuerMetadataBadRequestResponseBody(res *goa.ServiceError) *RefreshGlobalIssuerMetadataBadRequestResponseBody {
+	body := &RefreshGlobalIssuerMetadataBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshGlobalIssuerMetadataNotFoundResponseBody builds the HTTP response
+// body from the result of the "refreshGlobalIssuerMetadata" endpoint of the
+// "adminRemoteSessions" service.
+func NewRefreshGlobalIssuerMetadataNotFoundResponseBody(res *goa.ServiceError) *RefreshGlobalIssuerMetadataNotFoundResponseBody {
+	body := &RefreshGlobalIssuerMetadataNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshGlobalIssuerMetadataConflictResponseBody builds the HTTP response
+// body from the result of the "refreshGlobalIssuerMetadata" endpoint of the
+// "adminRemoteSessions" service.
+func NewRefreshGlobalIssuerMetadataConflictResponseBody(res *goa.ServiceError) *RefreshGlobalIssuerMetadataConflictResponseBody {
+	body := &RefreshGlobalIssuerMetadataConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshGlobalIssuerMetadataUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "refreshGlobalIssuerMetadata" endpoint
+// of the "adminRemoteSessions" service.
+func NewRefreshGlobalIssuerMetadataUnsupportedMediaResponseBody(res *goa.ServiceError) *RefreshGlobalIssuerMetadataUnsupportedMediaResponseBody {
+	body := &RefreshGlobalIssuerMetadataUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshGlobalIssuerMetadataInvalidResponseBody builds the HTTP response
+// body from the result of the "refreshGlobalIssuerMetadata" endpoint of the
+// "adminRemoteSessions" service.
+func NewRefreshGlobalIssuerMetadataInvalidResponseBody(res *goa.ServiceError) *RefreshGlobalIssuerMetadataInvalidResponseBody {
+	body := &RefreshGlobalIssuerMetadataInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshGlobalIssuerMetadataInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "refreshGlobalIssuerMetadata" endpoint
+// of the "adminRemoteSessions" service.
+func NewRefreshGlobalIssuerMetadataInvariantViolationResponseBody(res *goa.ServiceError) *RefreshGlobalIssuerMetadataInvariantViolationResponseBody {
+	body := &RefreshGlobalIssuerMetadataInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshGlobalIssuerMetadataUnexpectedResponseBody builds the HTTP
+// response body from the result of the "refreshGlobalIssuerMetadata" endpoint
+// of the "adminRemoteSessions" service.
+func NewRefreshGlobalIssuerMetadataUnexpectedResponseBody(res *goa.ServiceError) *RefreshGlobalIssuerMetadataUnexpectedResponseBody {
+	body := &RefreshGlobalIssuerMetadataUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRefreshGlobalIssuerMetadataGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "refreshGlobalIssuerMetadata" endpoint
+// of the "adminRemoteSessions" service.
+func NewRefreshGlobalIssuerMetadataGatewayErrorResponseBody(res *goa.ServiceError) *RefreshGlobalIssuerMetadataGatewayErrorResponseBody {
+	body := &RefreshGlobalIssuerMetadataGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreateGlobalClientUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "createGlobalClient" endpoint of the
 // "adminRemoteSessions" service.
@@ -4213,6 +4994,7 @@ func NewCreateGlobalIssuerPayload(body *CreateGlobalIssuerRequestBody, sessionTo
 		Issuer:                            *body.Issuer,
 		Name:                              body.Name,
 		LogoAssetID:                       body.LogoAssetID,
+		ClientSetupDocumentationURL:       body.ClientSetupDocumentationURL,
 		AuthorizationEndpoint:             body.AuthorizationEndpoint,
 		TokenEndpoint:                     body.TokenEndpoint,
 		RegistrationEndpoint:              body.RegistrationEndpoint,
@@ -4283,6 +5065,7 @@ func NewUpdateGlobalIssuerPayload(body *UpdateGlobalIssuerRequestBody, sessionTo
 		Issuer:                            body.Issuer,
 		Name:                              body.Name,
 		LogoAssetID:                       body.LogoAssetID,
+		ClientSetupDocumentationURL:       body.ClientSetupDocumentationURL,
 		AuthorizationEndpoint:             body.AuthorizationEndpoint,
 		TokenEndpoint:                     body.TokenEndpoint,
 		RegistrationEndpoint:              body.RegistrationEndpoint,
@@ -4328,6 +5111,28 @@ func NewUpdateGlobalIssuerPayload(body *UpdateGlobalIssuerRequestBody, sessionTo
 func NewDeleteGlobalIssuerPayload(id string, sessionToken *string) *adminremotesessions.DeleteGlobalIssuerPayload {
 	v := &adminremotesessions.DeleteGlobalIssuerPayload{}
 	v.ID = id
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewFetchGlobalIssuerMetadataPayload builds a adminRemoteSessions service
+// fetchGlobalIssuerMetadata endpoint payload.
+func NewFetchGlobalIssuerMetadataPayload(body *FetchGlobalIssuerMetadataRequestBody, sessionToken *string) *adminremotesessions.FetchGlobalIssuerMetadataPayload {
+	v := &adminremotesessions.FetchGlobalIssuerMetadataPayload{
+		Issuer: *body.Issuer,
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewRefreshGlobalIssuerMetadataPayload builds a adminRemoteSessions service
+// refreshGlobalIssuerMetadata endpoint payload.
+func NewRefreshGlobalIssuerMetadataPayload(body *RefreshGlobalIssuerMetadataRequestBody, sessionToken *string) *adminremotesessions.RefreshGlobalIssuerMetadataPayload {
+	v := &adminremotesessions.RefreshGlobalIssuerMetadataPayload{
+		ID: *body.ID,
+	}
 	v.SessionToken = sessionToken
 
 	return v
@@ -4432,6 +5237,27 @@ func ValidateUpdateGlobalIssuerRequestBody(body *UpdateGlobalIssuerRequestBody) 
 	}
 	if body.LogoAssetID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateFetchGlobalIssuerMetadataRequestBody runs the validations defined on
+// FetchGlobalIssuerMetadataRequestBody
+func ValidateFetchGlobalIssuerMetadataRequestBody(body *FetchGlobalIssuerMetadataRequestBody) (err error) {
+	if body.Issuer == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("issuer", "body"))
+	}
+	return
+}
+
+// ValidateRefreshGlobalIssuerMetadataRequestBody runs the validations defined
+// on RefreshGlobalIssuerMetadataRequestBody
+func ValidateRefreshGlobalIssuerMetadataRequestBody(body *RefreshGlobalIssuerMetadataRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	return
 }

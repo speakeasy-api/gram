@@ -16,18 +16,22 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	users_repo "github.com/speakeasy-api/gram/server/internal/users/repo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -85,16 +89,52 @@ type consentTemplateData struct {
 	// completion message: a first-party challenge has no MCP client to grant
 	// to, so linking the cards is the whole job.
 	FirstParty bool
+	// ClientIDOrigin is the host of the client_id URL for CIMD-resolved
+	// clients, empty otherwise. Surfaced because a metadata document's
+	// client_name (and logo) are attacker-chosen for any accepted document;
+	// the origin is the trust anchor a human can actually verify
+	// (draft-ietf-oauth-client-id-metadata-document-02 §8.5).
+	ClientIDOrigin string
+	// LoopbackRedirectWarning is set when a CIMD client will receive the
+	// authorization code on a loopback redirect: any process on the user's
+	// machine can bind the same port, so the page shows a caution (MCP
+	// SHOULD).
+	LoopbackRedirectWarning bool
 	// AutoClose marks a fully completed first-party connection: every bound
 	// remote_session_client is connected. The consent script closes only this
 	// terminal state; partially-linked connections (some cards still
 	// disconnected) and MCP client consent remain open.
 	AutoClose bool
+	// SessionDurationOptions is the "Session length" picker rendered as an
+	// info row wired to the approve form: presets capped at the issuer's
+	// maximum, preselecting the maximum. Empty hides the picker (first-party
+	// pages, or a lookup failure — the mint then falls back to the maximum).
+	SessionDurationOptions []sessionDurationOption
+	// AutoRefreshSupported shows the page-level "Auto refresh" control when
+	// the organization feature is enabled.
+	AutoRefreshSupported bool
+	// AutoRefreshOn is the control's current value: on only when every card's
+	// stored preference is on. New connections default on while the feature is
+	// visible. Changing it applies to all providers at once.
+	AutoRefreshOn bool
+	// AutoRefreshHasSessions marks that at least one remote_session row exists
+	// (connected or expired), so a change can be persisted immediately rather
+	// than only riding the next connect.
+	AutoRefreshHasSessions bool
+}
+
+// sessionDurationOption is one <option> of the consent page's session length
+// picker.
+type sessionDurationOption struct {
+	Hours    int
+	Label    string
+	Selected bool
 }
 
 // remoteSessionCard is the per-remote view rendered by the {{range}} block
-// in the consent template. ChallengeURL is the upstream provider's
-// authorize URL with PKCE + state bound for this consent session.
+// in the consent template. Connect/Disconnect/auto-refresh are POST actions
+// against the non-consuming consent action endpoint, so no upstream
+// authorize URL is prebuilt here.
 //
 // Connected and Expired are mutually exclusive and reflect the stored
 // remote_session's usability: Connected means the runtime gate will accept
@@ -102,11 +142,24 @@ type consentTemplateData struct {
 // false means never connected. Only Connected enables consent — an expired
 // link is no better than none until the user reconnects.
 type remoteSessionCard struct {
-	ClientID     string
-	IssuerSlug   string
-	Connected    bool
-	Expired      bool
-	ChallengeURL string
+	ClientID   string
+	IssuerSlug string
+	Connected  bool
+	Expired    bool
+	CanRefresh bool
+	// Access expiry describes the current credential. Refresh expiry is kept
+	// separate because a renewable one-hour access token is not a connection
+	// with "no expiry." Empty values mean the provider omitted that lifetime.
+	AccessExpiresAt  string
+	AccessExpiresIn  string
+	RefreshExpiresAt string
+	RefreshExpiresIn string
+	// AutoRefreshSupported gates the card's hidden auto_refresh input.
+	// The visible control is the page-level "Auto refresh" combobox.
+	AutoRefreshSupported bool
+	// AutoRefreshChecked is the card's stored preference, or true for a new
+	// connection while the organization feature is visible.
+	AutoRefreshChecked bool
 }
 
 // HandleConsent serves the GET (consent UI) and POST (Give Access /
@@ -194,11 +247,10 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	// user's own upstream sessions. Skip the client lookup and label the page
 	// generically.
 	clientName := "Gram"
+	clientIDOrigin := ""
+	loopbackRedirectWarning := false
 	if !challengeState.FirstParty {
-		client, err := usersessions_repo.New(s.db).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
-			UserSessionIssuerID: endpoint.UserSessionIssuerID,
-			ClientID:            challengeState.ClientID,
-		})
+		client, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return oops.E(oops.CodeUnauthorized, err, "user session client revoked").LogError(ctx, logger)
@@ -206,6 +258,14 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 		}
 		clientName = client.ClientName
+		if client.ClientIDMetadataUri.Valid {
+			if u, err := url.Parse(client.ClientIDMetadataUri.String); err == nil {
+				clientIDOrigin = u.Host
+			}
+			if u, err := url.Parse(challengeState.RedirectURI); err == nil && cimd.IsLoopbackRedirectURI(u) {
+				loopbackRedirectWarning = true
+			}
+		}
 	}
 
 	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
@@ -214,33 +274,65 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 
 	subjectDisplay := resolveSubjectDisplay(ctx, s.db, *challengeState.Subject)
 
-	cards, err := s.buildRemoteSessionCards(ctx, endpoint, challengeState)
+	// Only show Auto refresh for organizations that enabled it.
+	autoRefreshFeatureEnabled := s.platformFeatureChecker != nil &&
+		s.platformFeatureChecker(ctx, endpoint.OrganizationID, string(productfeatures.FeatureRemoteSessionAutoRefresh))
+	cards, err := s.buildRemoteSessionCards(ctx, endpoint, challengeState, autoRefreshFeatureEnabled)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build remote session cards").LogError(ctx, logger)
 	}
 
 	hasConnectedCard := false
+	autoRefreshSupported := false
+	autoRefreshOn := true
+	autoRefreshHasSessions := false
 	for _, c := range cards {
 		if c.Connected {
 			hasConnectedCard = true
-			break
+		}
+		if c.Connected || c.Expired {
+			autoRefreshHasSessions = true
+		}
+		if c.AutoRefreshSupported {
+			autoRefreshSupported = true
+			autoRefreshOn = autoRefreshOn && c.AutoRefreshChecked
 		}
 	}
+	autoRefreshOn = autoRefreshOn && autoRefreshSupported
 	consentEnabled := len(cards) == 0 || hasConnectedCard
 
+	// First-party pages mint no user session, so there is no length to pick.
+	// A lookup failure degrades to no picker rather than a failed render; the
+	// mint falls back to the issuer default in that case anyway.
+	var durationOptions []sessionDurationOption
+	if !challengeState.FirstParty {
+		if issuer, ierr := usersessions_repo.New(s.db).GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
+			ID:        endpoint.UserSessionIssuerID,
+			ProjectID: endpoint.ProjectID,
+		}); ierr == nil {
+			durationOptions = buildSessionDurationOptions(issuer)
+		}
+	}
+
 	data := consentTemplateData{
-		ClientName:         clientName,
-		MCPSlug:            endpoint.Slug,
-		MCPRouteBase:       endpoint.RouteBase,
-		State:              stateID,
-		CSRFToken:          challengeState.CSRFToken,
-		SubjectDisplay:     subjectDisplay,
-		RedirectURI:        challengeState.RedirectURI,
-		ScriptURL:          consentScriptURL,
-		RemoteSessionCards: cards,
-		ConsentEnabled:     consentEnabled,
-		FirstParty:         challengeState.FirstParty,
-		AutoClose:          shouldAutoCloseFirstParty(challengeState.FirstParty, cards),
+		ClientName:              clientName,
+		MCPSlug:                 endpoint.Slug,
+		MCPRouteBase:            endpoint.RouteBase,
+		State:                   stateID,
+		CSRFToken:               challengeState.CSRFToken,
+		SubjectDisplay:          subjectDisplay,
+		RedirectURI:             challengeState.RedirectURI,
+		ScriptURL:               consentScriptURL,
+		RemoteSessionCards:      cards,
+		ConsentEnabled:          consentEnabled,
+		FirstParty:              challengeState.FirstParty,
+		ClientIDOrigin:          clientIDOrigin,
+		LoopbackRedirectWarning: loopbackRedirectWarning,
+		AutoClose:               shouldAutoCloseFirstParty(challengeState.FirstParty, cards),
+		SessionDurationOptions:  durationOptions,
+		AutoRefreshSupported:    autoRefreshSupported,
+		AutoRefreshOn:           autoRefreshOn,
+		AutoRefreshHasSessions:  autoRefreshHasSessions,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -330,10 +422,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	subject := *challengeState.Subject
 
 	// Resolve the user_session_clients row id for the consent FK.
-	clientRow, err := usersessions_repo.New(s.db).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{
-		UserSessionIssuerID: endpoint.UserSessionIssuerID,
-		ClientID:            challengeState.ClientID,
-	})
+	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
 	if err != nil {
 		// Client revoked mid-flow (config change) or DB error — either way the
 		// approved flow can't complete.
@@ -364,16 +453,17 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	}
 
 	grant := UserSessionGrant{
-		Code:                code,
-		FlowID:              challengeState.FlowID,
-		UserSessionIssuerID: endpoint.UserSessionIssuerID,
-		UserSessionClientID: clientRow.ID,
-		ClientID:            challengeState.ClientID,
-		RedirectURI:         challengeState.RedirectURI,
-		CodeChallenge:       challengeState.CodeChallenge,
-		CodeChallengeMethod: challengeState.CodeChallengeMethod,
-		Subject:             subject,
-		CreatedAt:           time.Now(),
+		Code:                        code,
+		FlowID:                      challengeState.FlowID,
+		UserSessionIssuerID:         endpoint.UserSessionIssuerID,
+		UserSessionClientID:         clientRow.ID,
+		ClientID:                    challengeState.ClientID,
+		RedirectURI:                 challengeState.RedirectURI,
+		CodeChallenge:               challengeState.CodeChallenge,
+		CodeChallengeMethod:         challengeState.CodeChallengeMethod,
+		Subject:                     subject,
+		DesiredSessionDurationHours: desiredSessionDurationHours(r.PostForm.Get("session_duration_hours")),
+		CreatedAt:                   time.Now(),
 	}
 	if err := s.userSessionGrantCache.Store(ctx, grant); err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
@@ -440,7 +530,7 @@ func buildClientRedirect(redirectURI, code, originalState, errCode, errDescripti
 // violation. Used to detect duplicate consent inserts (idempotent re-consent).
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation
 }
 
 // shouldAutoCloseFirstParty reports whether a first-party connect tab is fully
@@ -461,6 +551,79 @@ func shouldAutoCloseFirstParty(firstParty bool, cards []remoteSessionCard) bool 
 	return true
 }
 
+// consentDurationPresets are the session-length choices offered on the
+// consent page, largest first. The issuer's maximum is inserted when not
+// already present, and anything above the maximum is dropped.
+var consentDurationPresets = []sessionDurationOption{
+	{Hours: 90 * 24, Label: "90 days", Selected: false},
+	{Hours: 60 * 24, Label: "60 days", Selected: false},
+	{Hours: 30 * 24, Label: "30 days", Selected: false},
+	{Hours: 14 * 24, Label: "2 weeks", Selected: false},
+	{Hours: 7 * 24, Label: "1 week", Selected: false},
+	{Hours: 3 * 24, Label: "3 days", Selected: false},
+	{Hours: 24, Label: "1 day", Selected: false},
+	{Hours: 12, Label: "12 hours", Selected: false},
+	{Hours: 1, Label: "1 hour", Selected: false},
+}
+
+// formatDurationHours renders a whole-hour count the way the presets do.
+func formatDurationHours(hours int) string {
+	switch {
+	case hours%(7*24) == 0:
+		if hours == 7*24 {
+			return "1 week"
+		}
+		return fmt.Sprintf("%d weeks", hours/(7*24))
+	case hours%24 == 0:
+		if hours == 24 {
+			return "1 day"
+		}
+		return fmt.Sprintf("%d days", hours/24)
+	case hours == 1:
+		return "1 hour"
+	default:
+		return fmt.Sprintf("%d hours", hours)
+	}
+}
+
+// buildSessionDurationOptions produces the session-length <select> options:
+// presets at or below the issuer's maximum, with the maximum itself
+// guaranteed present and preselected.
+func buildSessionDurationOptions(issuer usersessions_repo.UserSessionIssuer) []sessionDurationOption {
+	if !issuer.SessionDuration.Valid || issuer.SessionDuration.Microseconds <= 0 {
+		return nil
+	}
+	maxHours := int(time.Duration(issuer.SessionDuration.Microseconds) * time.Microsecond / time.Hour)
+	if maxHours < 1 {
+		return nil
+	}
+
+	options := make([]sessionDurationOption, 0, len(consentDurationPresets)+1)
+	seen := map[int]bool{}
+	add := func(hours int, label string) {
+		if hours < 1 || hours > maxHours || seen[hours] {
+			return
+		}
+		seen[hours] = true
+		options = append(options, sessionDurationOption{Hours: hours, Label: label, Selected: hours == maxHours})
+	}
+	add(maxHours, formatDurationHours(maxHours)+" (maximum)")
+	for _, preset := range consentDurationPresets {
+		add(preset.Hours, preset.Label)
+	}
+	return options
+}
+
+// desiredSessionDurationHours parses the approve form's session length.
+// Token minting applies the issuer's authoritative maximum.
+func desiredSessionDurationHours(raw string) int {
+	hours, err := strconv.Atoi(raw)
+	if err != nil || hours < 1 {
+		return 0
+	}
+	return hours
+}
+
 // buildRemoteSessionCards loads every remote_session_client linked to the
 // endpoint's user_session_issuer and materialises a card per client. Each
 // card carries a connected/disconnected state (read from remote_sessions
@@ -471,6 +634,7 @@ func (s *Service) buildRemoteSessionCards(
 	ctx context.Context,
 	endpoint *ResolvedMcpEndpoint,
 	challengeState AuthnChallengeState,
+	autoRefreshFeatureEnabled bool,
 ) ([]remoteSessionCard, error) {
 	clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
 	if err != nil {
@@ -484,40 +648,80 @@ func (s *Service) buildRemoteSessionCards(
 	// the subject hasn't been stamped yet (early render before IDP /
 	// anonymous late-bind); the per-card check below then resolves to
 	// not-connected.
-	var statuses map[uuid.UUID]remotesessions.RemoteSessionStatus
+	var statuses map[uuid.UUID]remotesessions.RemoteSessionState
 	if challengeState.Subject != nil && !challengeState.Subject.IsZero() {
-		statuses, err = s.remoteChallengeMgr.RemoteSessionStatuses(ctx, *challengeState.Subject, endpoint.UserSessionIssuerID)
+		statuses, err = s.remoteChallengeMgr.RemoteSessionStatuses(ctx, *challengeState.Subject, endpoint.ProjectID, endpoint.UserSessionIssuerID)
 		if err != nil {
 			return nil, fmt.Errorf("remote session statuses: %w", err)
 		}
 	}
 
-	parent := remotesessions.ParentChallenge{
-		ID:                  challengeState.ID,
-		ProjectID:           endpoint.ProjectID,
-		OrganizationID:      endpoint.OrganizationID,
-		UserSessionIssuerID: endpoint.UserSessionIssuerID,
-		Subject:             challengeState.Subject,
-		McpSlug:             endpoint.Slug,
-		RouteBase:           endpoint.RouteBase,
-		FinalRedirectURI:    "",
-		Resource:            endpoint.UpstreamResource,
-	}
-
 	cards := make([]remoteSessionCard, 0, len(clients))
+	renderedAt := time.Now()
 	for _, c := range clients {
-		challengeURL, berr := s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, parent, c)
-		if berr != nil {
-			return nil, fmt.Errorf("build authorization url for %s: %w", c.IssuerSlug, berr)
+		state, hasSession := statuses[c.ID]
+		checked := autoRefreshFeatureEnabled
+		if hasSession {
+			checked = state.AutoRefresh
 		}
-		status := statuses[c.ID]
+		accessExpiresAt := ""
+		accessExpiresIn := ""
+		if state.AccessExpiresAt != nil {
+			accessExpiresAt = state.AccessExpiresAt.UTC().Format(time.RFC3339)
+			accessExpiresIn = formatTimeRemaining(renderedAt, *state.AccessExpiresAt)
+		}
+		refreshExpiresAt := ""
+		refreshExpiresIn := ""
+		if state.RefreshExpiresAt != nil {
+			refreshExpiresAt = state.RefreshExpiresAt.UTC().Format(time.RFC3339)
+			refreshExpiresIn = formatTimeRemaining(renderedAt, *state.RefreshExpiresAt)
+		}
+		autoRefreshSupported := autoRefreshFeatureEnabled
 		cards = append(cards, remoteSessionCard{
-			ClientID:     c.ID.String(),
-			IssuerSlug:   c.IssuerSlug,
-			Connected:    status == remotesessions.RemoteSessionActive,
-			Expired:      status == remotesessions.RemoteSessionExpired,
-			ChallengeURL: challengeURL,
+			ClientID:             c.ID.String(),
+			IssuerSlug:           c.IssuerSlug,
+			Connected:            state.Status == remotesessions.RemoteSessionActive,
+			Expired:              state.Status == remotesessions.RemoteSessionExpired,
+			CanRefresh:           state.CanRefresh,
+			AccessExpiresAt:      accessExpiresAt,
+			AccessExpiresIn:      accessExpiresIn,
+			RefreshExpiresAt:     refreshExpiresAt,
+			RefreshExpiresIn:     refreshExpiresIn,
+			AutoRefreshSupported: autoRefreshSupported,
+			AutoRefreshChecked:   checked && autoRefreshSupported,
 		})
 	}
 	return cards, nil
+}
+
+func formatTimeRemaining(now, expiresAt time.Time) string {
+	remaining := expiresAt.Sub(now)
+	if remaining <= 0 {
+		return "Expired"
+	}
+
+	totalMinutes := int((remaining + time.Minute - 1) / time.Minute)
+	days := totalMinutes / (24 * 60)
+	hours := totalMinutes % (24 * 60) / 60
+	minutes := totalMinutes % 60
+
+	switch {
+	case days > 0 && hours > 0:
+		return fmt.Sprintf("%d %s %d %s", days, pluralize(days, "day"), hours, pluralize(hours, "hour"))
+	case days > 0:
+		return fmt.Sprintf("%d %s", days, pluralize(days, "day"))
+	case hours > 0 && minutes > 0:
+		return fmt.Sprintf("%d %s %d %s", hours, pluralize(hours, "hour"), minutes, pluralize(minutes, "minute"))
+	case hours > 0:
+		return fmt.Sprintf("%d %s", hours, pluralize(hours, "hour"))
+	default:
+		return fmt.Sprintf("%d %s", minutes, pluralize(minutes, "minute"))
+	}
+}
+
+func pluralize(value int, singular string) string {
+	if value == 1 {
+		return singular
+	}
+	return singular + "s"
 }

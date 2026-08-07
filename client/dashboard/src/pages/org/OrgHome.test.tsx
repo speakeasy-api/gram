@@ -25,7 +25,7 @@ vi.mock("@/components/project-menu", () => ({
 vi.mock("@/components/member-facepile", () => ({
   MemberFacepile: () => <span />,
 }));
-vi.mock("@/components/ui/context-menu", () => ({
+vi.mock("@/components/ui/ContextMenu", () => ({
   ContextMenu: ({ children }: { children: ReactNode }) => <>{children}</>,
   ContextMenuTrigger: ({ children }: { children: ReactNode }) => (
     <>{children}</>
@@ -35,8 +35,7 @@ vi.mock("@/components/ui/context-menu", () => ({
   ContextMenuSeparator: () => null,
 }));
 vi.mock("@/components/auditlogs/feed", () => ({
-  ActionBadge: () => null,
-  ActionDot: () => null,
+  ActionIconTile: () => null,
 }));
 vi.mock("@/pages/access/ChallengesTab", () => ({
   ChallengesEmptyState: () => null,
@@ -110,8 +109,7 @@ vi.mock("react-router", () => ({
   ),
   useNavigate: () => vi.fn(),
 }));
-vi.mock("@speakeasy-api/moonshine", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@speakeasy-api/moonshine")>()),
+vi.mock("@/components/ui/Dropdown", () => ({
   DropdownMenu: ({ children }: { children: ReactNode }) => <>{children}</>,
   DropdownMenuContent: ({ children }: { children: ReactNode }) => (
     <>{children}</>
@@ -120,6 +118,9 @@ vi.mock("@speakeasy-api/moonshine", async (importOriginal) => ({
   DropdownMenuTrigger: ({ children }: { children: ReactNode }) => (
     <>{children}</>
   ),
+}));
+
+vi.mock("@/components/ui/Icon", () => ({
   Icon: () => null,
 }));
 

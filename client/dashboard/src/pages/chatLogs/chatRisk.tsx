@@ -3,17 +3,23 @@ import {
   Fragment,
   type ReactElement,
   type ReactNode,
+  useContext,
   useMemo,
   useState,
 } from "react";
 import { Link } from "react-router";
-import { Badge, Icon } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Icon } from "@/components/ui/Icon";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
+} from "@/components/ui/Popover";
+import { MoreActions, type Action } from "@/components/ui/MoreActions";
+import { CardContextMenu } from "@/components/card-context-menu";
+import { useDismissFinding } from "@/pages/security/useDismissFinding";
+import { CreateExclusionContext } from "./exclusionContext";
 import {
   collapseToMatchWindows,
   getMatchStrings,
@@ -71,8 +77,11 @@ export function HighlightedMessageText({
   const [expanded, setExpanded] = useState(false);
   const collapsed = snippets !== null && !expanded;
   const masked = sensitive && !revealed;
+  // Lets a reviewer act on a flagged (especially just-revealed) secret right
+  // where it's read, not just from the turn-level "N risks" popover.
+  const actions = useFindingActions(results);
   return (
-    <div className="space-y-1">
+    <CardContextMenu actions={actions} className="space-y-1">
       {text && (
         <div className="whitespace-pre-wrap">
           {collapsed ? (
@@ -111,7 +120,7 @@ export function HighlightedMessageText({
             {orphanMatches.map((m, i) => (
               <code
                 key={i}
-                className="bg-destructive/10 text-destructive rounded px-1 py-0.5 font-mono break-all"
+                className="bg-destructive/10 text-destructive px-1 py-0.5 font-mono break-all"
               >
                 {sensitive && !revealed ? maskValue(m) : m}
               </code>
@@ -133,7 +142,7 @@ export function HighlightedMessageText({
           {internal.revealed ? "Hide secret" : "Reveal secret"}
         </button>
       )}
-    </div>
+    </CardContextMenu>
   );
 }
 
@@ -160,7 +169,7 @@ function MaskedMatchInline({ value }: { value: string }): ReactNode {
   }
   return (
     <span className="mt-1 inline-flex items-center gap-1">
-      <code className="bg-destructive/10 text-destructive inline-block rounded px-1.5 py-0.5 font-mono text-xs break-all">
+      <code className="bg-destructive/10 text-destructive inline-block px-1.5 py-0.5 font-mono text-xs break-all">
         {value}
       </code>
       <button
@@ -188,6 +197,8 @@ type TranscriptFinding = {
   tags?: string[];
   count?: number;
   showRuleId?: boolean;
+  onMarkFalsePositive?: () => void;
+  onSetupExclusionRule?: () => void;
 };
 
 // spansOf returns a finding's matched spans: the spans array when the backend
@@ -239,6 +250,33 @@ function TranscriptFindingsCard({
                   >
                     ×{finding.count}
                   </Badge>
+                )}
+                {(finding.onMarkFalsePositive ||
+                  finding.onSetupExclusionRule) && (
+                  <div className={(finding.count ?? 1) > 1 ? "" : "ml-auto"}>
+                    <MoreActions
+                      actions={
+                        [
+                          ...(finding.onMarkFalsePositive
+                            ? [
+                                {
+                                  label: "Mark false positive",
+                                  onClick: finding.onMarkFalsePositive,
+                                },
+                              ]
+                            : []),
+                          ...(finding.onSetupExclusionRule
+                            ? [
+                                {
+                                  label: "Set up exclusion rule",
+                                  onClick: finding.onSetupExclusionRule,
+                                },
+                              ]
+                            : []),
+                        ] satisfies Action[]
+                      }
+                    />
+                  </div>
                 )}
               </div>
               {finding.rationale && (
@@ -303,10 +341,14 @@ function riskResultToTranscriptFinding({
   result,
   spans,
   count,
+  onMarkFalsePositive,
+  onSetupExclusionRule,
 }: {
   result: RiskResult;
   spans: FindingSpan[];
   count: number;
+  onMarkFalsePositive?: () => void;
+  onSetupExclusionRule?: () => void;
 }): TranscriptFinding {
   return {
     id: result.id,
@@ -318,7 +360,83 @@ function riskResultToTranscriptFinding({
     tags: result.tags,
     count,
     showRuleId: shouldShowRiskRuleId(result),
+    onMarkFalsePositive,
+    onSetupExclusionRule,
   };
+}
+
+// Dedupes findings that share a source/rule/spans triple (e.g. the same
+// secret flagged by more than one policy pass) into one entry with a count,
+// dropping anything already optimistically dismissed. Shared by RiskBadge's
+// popover list and useFindingActions' context-menu items so both surfaces
+// group findings identically. Keeps every member result (not just the
+// first) — dismissing a grouped entry must clear all of them, or the ones
+// left behind keep the finding active under the hood.
+function groupFindings(
+  results: RiskResult[],
+  isOptimisticallyDismissed: (id: string) => boolean,
+): {
+  result: RiskResult;
+  spans: FindingSpan[];
+  count: number;
+  allResults: RiskResult[];
+}[] {
+  const grouped = new Map<
+    string,
+    {
+      result: RiskResult;
+      spans: FindingSpan[];
+      count: number;
+      allResults: RiskResult[];
+    }
+  >();
+  for (const r of results) {
+    if (isOptimisticallyDismissed(r.id)) continue;
+    const spans = spansOf(r);
+    const key = `${r.source}|${r.ruleId ?? ""}|${spans
+      .map((s) => `${s.field ?? ""}:${s.path ?? ""}:${s.match}`)
+      .join("|")}`;
+    const hit = grouped.get(key);
+    if (hit) {
+      hit.count++;
+      hit.allResults.push(r);
+    } else {
+      grouped.set(key, { result: r, spans, count: 1, allResults: [r] });
+    }
+  }
+  return [...grouped.values()];
+}
+
+/** "Mark false positive" / "Set up exclusion rule" for every distinct
+ * finding in `results`, suffixed with the finding's own label once there's
+ * more than one so a flat list (a context menu has no room for the popover's
+ * per-finding grouping) still reads as which action applies to which. */
+function useFindingActions(results: RiskResult[]): Action[] {
+  const { dismiss, isOptimisticallyDismissed } = useDismissFinding();
+  const openCreateExclusion = useContext(CreateExclusionContext);
+  return useMemo(() => {
+    const findings = groupFindings(results, isOptimisticallyDismissed);
+    return findings.flatMap((f, i): Action[] => {
+      const suffix =
+        findings.length > 1 ? ` (${getRiskBadgeLabel(f.result)})` : "";
+      const actions: Action[] = [
+        {
+          label: `Mark false positive${suffix}`,
+          onClick: () => dismiss(f.allResults),
+          separatorBefore: i > 0,
+        },
+      ];
+      // llm_judge findings aren't exclusion-eligible: exclusions don't yet
+      // support prompt-based (LLM-judge) policy scoping (AGE-2750).
+      if (openCreateExclusion && f.result.ruleId !== "llm_judge") {
+        actions.push({
+          label: `Set up exclusion rule${suffix}`,
+          onClick: () => openCreateExclusion(f.result),
+        });
+      }
+      return actions;
+    });
+  }, [results, isOptimisticallyDismissed, dismiss, openCreateExclusion]);
 }
 
 /** Compact "N risks" badge with a popover listing each unique finding. */
@@ -334,22 +452,12 @@ export function RiskBadge({
    * to the default destructive badge. */
   trigger?: ReactElement;
 }): ReactNode {
-  const findings = useMemo(() => {
-    const grouped = new Map<
-      string,
-      { result: RiskResult; spans: FindingSpan[]; count: number }
-    >();
-    for (const r of results) {
-      const spans = spansOf(r);
-      const key = `${r.source}|${r.ruleId ?? ""}|${spans
-        .map((s) => `${s.field ?? ""}:${s.path ?? ""}:${s.match}`)
-        .join("|")}`;
-      const hit = grouped.get(key);
-      if (hit) hit.count++;
-      else grouped.set(key, { result: r, spans, count: 1 });
-    }
-    return [...grouped.values()];
-  }, [results]);
+  const { dismiss, isOptimisticallyDismissed } = useDismissFinding();
+  const openCreateExclusion = useContext(CreateExclusionContext);
+  const findings = useMemo(
+    () => groupFindings(results, isOptimisticallyDismissed),
+    [results, isOptimisticallyDismissed],
+  );
 
   return (
     <Popover>
@@ -379,7 +487,20 @@ export function RiskBadge({
         onClick={(e) => e.stopPropagation()}
       >
         <TranscriptFindingsCard
-          findings={findings.map(riskResultToTranscriptFinding)}
+          findings={findings.map((f) =>
+            riskResultToTranscriptFinding({
+              ...f,
+              onMarkFalsePositive: () => dismiss(f.allResults),
+              // llm_judge findings aren't exclusion-eligible: exclusions
+              // don't yet support prompt-based (LLM-judge) policy scoping
+              // (AGE-2750), matching the same filter the old turn-header
+              // "Actions" menu applied before it was merged into this menu.
+              onSetupExclusionRule:
+                openCreateExclusion && f.result.ruleId !== "llm_judge"
+                  ? () => openCreateExclusion(f.result)
+                  : undefined,
+            }),
+          )}
         />
       </PopoverContent>
     </Popover>

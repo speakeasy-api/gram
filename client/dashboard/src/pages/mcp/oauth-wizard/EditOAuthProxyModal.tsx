@@ -1,11 +1,12 @@
-import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Type } from "@/components/ui/type";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
+import { Text } from "@/components/ui/Text";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Toolset } from "@/lib/toolTypes";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { useUpdateOAuthProxyServerMutation } from "@gram/client/react-query/updateOAuthProxyServer.js";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
@@ -139,16 +140,16 @@ function EditOAuthProxyForm({
       </Dialog.Header>
 
       <div className="max-h-[60vh] space-y-4 overflow-auto">
-        {error && <Type className="mb-4 text-sm text-red-500!">{error}</Type>}
+        {error && <Text className="mb-4 text-sm text-red-500!">{error}</Text>}
 
         <Stack gap={4}>
           <div>
-            <Type className="mb-2 font-medium">OAuth Proxy Server Slug</Type>
+            <Text className="mb-2 font-medium">OAuth Proxy Server Slug</Text>
             <Input value={proxyServer.slug ?? ""} disabled />
           </div>
 
           <div>
-            <Type className="mb-2 font-medium">Authorization Endpoint</Type>
+            <Text className="mb-2 font-medium">Authorization Endpoint</Text>
             <Input
               placeholder="https://provider.com/oauth/authorize"
               value={authorizationEndpoint}
@@ -157,7 +158,7 @@ function EditOAuthProxyForm({
           </div>
 
           <div>
-            <Type className="mb-2 font-medium">Token Endpoint</Type>
+            <Text className="mb-2 font-medium">Token Endpoint</Text>
             <Input
               placeholder="https://provider.com/oauth/token"
               value={tokenEndpoint}
@@ -166,7 +167,7 @@ function EditOAuthProxyForm({
           </div>
 
           <div>
-            <Type className="mb-2 font-medium">Scopes (comma-separated)</Type>
+            <Text className="mb-2 font-medium">Scopes (comma-separated)</Text>
             <Input
               placeholder="read, write, openid"
               value={scopes}
@@ -175,23 +176,23 @@ function EditOAuthProxyForm({
           </div>
 
           <div>
-            <Type className="mb-2 font-medium">Audience (optional)</Type>
+            <Text className="mb-2 font-medium">Audience (optional)</Text>
             <Input
               placeholder="https://api.example.com"
               value={audience}
               onChange={(v: string) => setAudience(v)}
             />
-            <Type muted small className="mt-1">
+            <Text muted small className="mt-1">
               The audience parameter sent to the upstream OAuth provider.
               Required by some providers (e.g. Auth0) to return JWT access
               tokens.
-            </Type>
+            </Text>
           </div>
 
           <div>
-            <Type className="mb-2 font-medium">Token Endpoint Auth Method</Type>
+            <Text className="mb-2 font-medium">Token Endpoint Auth Method</Text>
             <select
-              className="bg-background w-full rounded border px-3 py-2"
+              className="bg-background w-full border px-3 py-2"
               value={tokenAuthMethod}
               onChange={(e) => setTokenAuthMethod(e.target.value)}
             >
@@ -202,7 +203,7 @@ function EditOAuthProxyForm({
           </div>
 
           <div>
-            <Type className="mb-2 font-medium">Environment Slug</Type>
+            <Text className="mb-2 font-medium">Environment Slug</Text>
             <Input
               value={environmentSlug}
               onChange={(v: string) => setEnvironmentSlug(v)}

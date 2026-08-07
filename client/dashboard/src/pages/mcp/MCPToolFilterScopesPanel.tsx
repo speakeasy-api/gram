@@ -3,14 +3,14 @@ import {
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
-} from "@/components/ui/accordion";
-import { Badge } from "@/components/ui/badge";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Accordion";
+import { Badge } from "@/components/ui/Badge";
+import { Text } from "@/components/ui/Text";
 import { toolVariationsGroupDisplayName } from "@/lib/toolVariationGroups";
 import { cn } from "@/lib/utils";
 import { ListToolFiltersResult } from "@gram/client/models/components/listtoolfiltersresult.js";
 import { ToolFilterTool } from "@gram/client/models/components/toolfiltertool.js";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/Stack";
 
 // Sentinel value identifying the "available only without filtering" grouping in
 // the active-tag selection, distinct from any real tag.
@@ -36,26 +36,23 @@ export function MCPToolFilterScopesPanel({
   const hasExcluded = filters.excluded.length > 0;
 
   return (
-    <Stack
-      gap={3}
-      className="border-border bg-muted/20 mb-4 rounded-lg border p-4"
-    >
+    <Stack gap={3} className="border-border bg-muted/20 mb-4 border p-4">
       <Stack direction="horizontal" justify="space-between" align="center">
-        <Type variant="small" className="font-medium">
+        <Text variant="small" className="font-medium">
           Tool filtering
-        </Type>
+        </Text>
         {filters.toolVariationsGroupName && (
-          <Type variant="small" muted>
+          <Text variant="small" muted>
             Group:{" "}
             {toolVariationsGroupDisplayName(filters.toolVariationsGroupName)}
-          </Type>
+          </Text>
         )}
       </Stack>
 
-      <Type variant="small" muted>
+      <Text variant="small" muted>
         Clients can request a subset of tools with the <code>?tags=</code> query
         parameter. Select a scope to preview the tools it exposes.
-      </Type>
+      </Text>
 
       {/* Filter chips: clicking one scopes the tool list below to its tools. */}
       <Stack direction="horizontal" gap={2} className="flex-wrap">
@@ -138,7 +135,7 @@ function FilterChip({
   onClick: () => void;
 }) {
   return (
-    <Badge asChild variant={active ? "default" : "outline"}>
+    <Badge asChild variant={active ? "neutral" : "neutral"}>
       <button type="button" onClick={onClick} className="cursor-pointer">
         {/* Tags render verbatim: ?tags= matching is case-sensitive, so the
             displayed label must be the exact tag string. */}
@@ -177,7 +174,7 @@ function ScopeAccordionItem({
       <AccordionContent>
         <Stack direction="horizontal" gap={2} className="flex-wrap pb-2">
           {tools.map((tool) => (
-            <Badge key={tool.toolUrn} variant="secondary">
+            <Badge key={tool.toolUrn} variant="neutral">
               {tool.name}
             </Badge>
           ))}

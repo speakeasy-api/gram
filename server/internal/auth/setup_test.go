@@ -17,6 +17,7 @@ import (
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -26,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -122,7 +124,13 @@ func createMockWorkOSServer(userInfo *MockUserInfo) *httptest.Server {
 func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, *testInstance) {
 	t.Helper()
 
-	ctx := t.Context()
+	return newTestAuthServiceWithWorkOSClient(t, userInfo, nil)
+}
+
+func newTestAuthServiceWithWorkOSClient(t *testing.T, userInfo *MockUserInfo, workosClient identity.WorkOSClient) (context.Context, *testInstance) {
+	t.Helper()
+
+	ctx := authztest.WithAdminGrants(t.Context())
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
 
@@ -147,7 +155,8 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, nil, orgRepo.New(conn), userRepo.New(conn), pylon, posthog, nil, cache.SuffixNone)
+	authzProvisioner := authz.NewProvisioner(conn)
+	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, workosClient, orgRepo.New(conn), userRepo.New(conn), pylon, posthog, cache.SuffixNone)
 	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), conn, redisClient, cache.Suffix("gram-test"), idpClient, billingClient, resolver)
 
 	authConfigs := auth.AuthConfigurations{
@@ -161,10 +170,26 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 	require.NoError(t, err)
 
 	nonceStore := cache.NewRedisCacheAdapter(redisClient)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nonceStore, nil)
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nonceStore, authzProvisioner, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger())
 	result := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
 	result.authorizer = auth.New(logger, conn, sessionManager, authzEngine)
+
+	return ctx, result
+}
+
+func newTestAuthServiceForOrganizationProvisioning(t *testing.T, userInfo *MockUserInfo) (context.Context, *testInstance) {
+	t.Helper()
+
+	ctx, result := newTestAuthServiceWithWorkOSClient(t, userInfo, &mockWorkOSFetcher{
+		members: map[string][]workos.Member{},
+		orgs:    map[string]*workos.Organization{},
+	})
+	require.NoError(t, result.createTestUser(ctx, userInfo))
+	require.NoError(t, userRepo.New(result.conn).OverwriteUserWorkosID(ctx, userRepo.OverwriteUserWorkosIDParams{
+		ID:       userInfo.UserID,
+		WorkosID: conv.ToPGText(userInfo.UserID),
+	}))
 
 	return ctx, result
 }
@@ -172,7 +197,7 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.Context, *testInstance) {
 	t.Helper()
 
-	ctx := t.Context()
+	ctx := authztest.WithAdminGrants(t.Context())
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
 
@@ -197,7 +222,8 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 
-	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, nil, orgRepo.New(conn), userRepo.New(conn), pylon, posthog, nil, cache.SuffixNone)
+	authzProvisioner := authz.NewProvisioner(conn)
+	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, nil, orgRepo.New(conn), userRepo.New(conn), pylon, posthog, cache.SuffixNone)
 	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), conn, redisClient, cache.Suffix("gram-test"), idpClient, billingClient, resolver)
 
 	authConfigs := auth.AuthConfigurations{
@@ -211,8 +237,8 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 	require.NoError(t, err)
 
 	nonceStore := cache.NewRedisCacheAdapter(redisClient)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nonceStore, nil)
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nonceStore, authzProvisioner, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger())
 	result := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
 	result.authorizer = auth.New(logger, conn, sessionManager, authzEngine)
 
@@ -257,6 +283,27 @@ func (ti *testInstance) stateWithNonce(ctx context.Context, t *testing.T, redire
 	stateJSON, err := json.Marshal(state)
 	require.NoError(t, err)
 	return auth.TestNonceBindingContext(ctx, testNonceBinding), base64.RawURLEncoding.EncodeToString(stateJSON)
+}
+
+// stateWithSignupIntent behaves like stateWithNonce and additionally seeds a
+// signup intent under the same nonce, simulating a login that came from the
+// sign-up page with a company name.
+//
+// The map key is "OrgName" — the Go field name, not the "org_name" JSON tag.
+// The nonce store round-trips values through msgpack (go-redis/cache v9),
+// which keys struct fields by their literal Go name unless a `msgpack` tag
+// says otherwise; it does not consult `json` tags. Since signupIntent (in
+// impl.go) carries no `msgpack` tag, that's the key production's own
+// Login->Callback round trip actually uses under the hood.
+func (ti *testInstance) stateWithSignupIntent(ctx context.Context, t *testing.T, redirectURL, orgName string) (context.Context, string) {
+	t.Helper()
+
+	ctx, stateParam := ti.stateWithNonce(ctx, t, redirectURL)
+	nonce := extractNonceFromState(t, stateParam)
+	require.NoError(t, ti.nonceStore.Set(ctx, "auth:signup_intent:"+nonce, map[string]string{
+		"OrgName": orgName,
+	}, 10*time.Minute))
+	return ctx, stateParam
 }
 
 // callbackWithNonce creates a CallbackPayload with a valid nonce and calls Callback.

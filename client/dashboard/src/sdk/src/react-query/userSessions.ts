@@ -28,9 +28,9 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  ListUserSessionsQueryParamStatus,
   ListUserSessionsRequest,
   ListUserSessionsSecurity,
+  QueryParamStatus,
 } from "../models/operations/listusersessions.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -203,7 +203,7 @@ export function setUserSessionsData(
     parameters: {
       subjectUrn?: string | undefined;
       userSessionIssuerId?: string | undefined;
-      status?: ListUserSessionsQueryParamStatus | undefined;
+      status?: QueryParamStatus | undefined;
       clientId?: string | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;
@@ -225,7 +225,7 @@ export function invalidateUserSessions(
     [parameters: {
       subjectUrn?: string | undefined;
       userSessionIssuerId?: string | undefined;
-      status?: ListUserSessionsQueryParamStatus | undefined;
+      status?: QueryParamStatus | undefined;
       clientId?: string | undefined;
       cursor?: string | undefined;
       limit?: number | undefined;

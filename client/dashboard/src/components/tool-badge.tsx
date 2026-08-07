@@ -1,17 +1,18 @@
 import { Tool } from "@/lib/toolTypes";
-import { Icon, Stack } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
 import { HttpRoute } from "./http-route";
-import { Badge } from "./ui/badge";
-import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
-import { Type } from "./ui/type";
+import { Badge, type BadgeProps } from "./ui/Badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/Tooltip";
+import { Text } from "@/components/ui/Text";
 
 export function ToolBadge({
   tool,
-  variant = "secondary",
+  variant = "neutral",
   className,
 }: {
   tool: Tool;
-  variant?: "default" | "secondary" | "outline";
+  variant?: BadgeProps["variant"];
   className?: string;
 }): JSX.Element {
   return (
@@ -37,14 +38,14 @@ export function ToolBadge({
                 size="small"
                 className="text-muted-foreground"
               />
-              <Type small mono muted>
+              <Text small mono muted>
                 {tool.name}
-              </Type>
+              </Text>
             </Stack>
           )}
-          <Type small className="line-clamp-3">
+          <Text small className="line-clamp-3">
             {tool.description}
-          </Type>
+          </Text>
         </Stack>
       </TooltipContent>
     </Tooltip>

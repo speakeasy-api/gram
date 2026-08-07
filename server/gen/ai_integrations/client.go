@@ -15,17 +15,23 @@ import (
 
 // Client is the "aiIntegrations" service client.
 type Client struct {
-	GetConfigEndpoint    goa.Endpoint
-	UpsertConfigEndpoint goa.Endpoint
-	DeleteConfigEndpoint goa.Endpoint
+	GetConfigEndpoint          goa.Endpoint
+	UpsertConfigEndpoint       goa.Endpoint
+	DeleteConfigEndpoint       goa.Endpoint
+	ListSchedulesEndpoint      goa.Endpoint
+	SetScheduleEnabledEndpoint goa.Endpoint
+	RetryScheduleEndpoint      goa.Endpoint
 }
 
 // NewClient initializes a "aiIntegrations" service client given the endpoints.
-func NewClient(getConfig, upsertConfig, deleteConfig goa.Endpoint) *Client {
+func NewClient(getConfig, upsertConfig, deleteConfig, listSchedules, setScheduleEnabled, retrySchedule goa.Endpoint) *Client {
 	return &Client{
-		GetConfigEndpoint:    getConfig,
-		UpsertConfigEndpoint: upsertConfig,
-		DeleteConfigEndpoint: deleteConfig,
+		GetConfigEndpoint:          getConfig,
+		UpsertConfigEndpoint:       upsertConfig,
+		DeleteConfigEndpoint:       deleteConfig,
+		ListSchedulesEndpoint:      listSchedules,
+		SetScheduleEnabledEndpoint: setScheduleEnabled,
+		RetryScheduleEndpoint:      retrySchedule,
 	}
 }
 
@@ -91,4 +97,73 @@ func (c *Client) UpsertConfig(ctx context.Context, p *UpsertConfigPayload) (res 
 func (c *Client) DeleteConfig(ctx context.Context, p *DeleteConfigPayload) (err error) {
 	_, err = c.DeleteConfigEndpoint(ctx, p)
 	return
+}
+
+// ListSchedules calls the "listSchedules" endpoint of the "aiIntegrations"
+// service.
+// ListSchedules may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListSchedules(ctx context.Context, p *ListSchedulesPayload) (res *ListAIIntegrationSchedulesResult, err error) {
+	var ires any
+	ires, err = c.ListSchedulesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListAIIntegrationSchedulesResult), nil
+}
+
+// SetScheduleEnabled calls the "setScheduleEnabled" endpoint of the
+// "aiIntegrations" service.
+// SetScheduleEnabled may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetScheduleEnabled(ctx context.Context, p *SetScheduleEnabledPayload) (res *AIIntegrationScheduleState, err error) {
+	var ires any
+	ires, err = c.SetScheduleEnabledEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AIIntegrationScheduleState), nil
+}
+
+// RetrySchedule calls the "retrySchedule" endpoint of the "aiIntegrations"
+// service.
+// RetrySchedule may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) RetrySchedule(ctx context.Context, p *RetrySchedulePayload) (res *AIIntegrationScheduleState, err error) {
+	var ires any
+	ires, err = c.RetryScheduleEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AIIntegrationScheduleState), nil
 }

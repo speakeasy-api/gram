@@ -10,8 +10,8 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  ThemeSwitcher,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { ThemeSwitcher } from "@/components/ui/ThemeSwitcher";
 import {
   ActivityIcon,
   BookOpenIcon,
@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { useNavigate } from "react-router";
-import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 
 export function SidebarUserMenu(): JSX.Element {
   const user = useUser();
@@ -73,7 +73,7 @@ export function SidebarUserMenu(): JSX.Element {
         type="button"
         aria-label="Open account menu"
         onClick={() => setMenuOpen(true)}
-        className="hover:bg-accent flex min-w-0 flex-1 items-center gap-2 rounded-md p-1 text-left group-data-[collapsible=icon]:hidden"
+        className="hover:bg-accent flex min-w-0 flex-1 items-center gap-2 p-1 text-left group-data-[collapsible=icon]:hidden"
       >
         <Avatar className="size-7 shrink-0">
           <AvatarImage
@@ -86,7 +86,7 @@ export function SidebarUserMenu(): JSX.Element {
       </button>
 
       {/* Smaller inline theme switcher — expanded only */}
-      <ThemeSwitcher className="scale-90 group-data-[collapsible=icon]:hidden" />
+      <ThemeSwitcher className="group-data-[collapsible=icon]:hidden" />
 
       <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
         <DropdownMenuTrigger asChild>
@@ -94,7 +94,7 @@ export function SidebarUserMenu(): JSX.Element {
             data-testid="user-menu-trigger"
             type="button"
             aria-label="Account menu"
-            className="border-border text-muted-foreground hover:bg-accent hover:text-foreground flex size-7 shrink-0 items-center justify-center rounded-full border group-data-[collapsible=icon]:mx-auto"
+            className="border-border text-muted-foreground hover:bg-accent hover:text-foreground flex size-9 shrink-0 items-center justify-center border group-data-[collapsible=icon]:mx-auto"
           >
             <MoreHorizontal className="h-4 w-4 group-data-[collapsible=icon]:hidden" />
             {/* Collapsed: the round trigger shows the avatar so the menu stays reachable */}
@@ -203,7 +203,7 @@ export function SidebarUserMenu(): JSX.Element {
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <a
-                href="https://status.speakeasyapi.dev/"
+                href="https://status.speakeasy.com/"
                 target="_blank"
                 rel="noopener noreferrer"
               >

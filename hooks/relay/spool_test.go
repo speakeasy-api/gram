@@ -271,7 +271,7 @@ func TestSpoolOversizeEntryShedsRawNotBacklog(t *testing.T) {
 		Raw:           json.RawMessage(`{"blob":"` + string(big) + `"}`),
 	}
 	NewRelay(Config{ServerURL: "https://gram.test", ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}).
-		spoolUnsent(newIdempotencyToken(), payload)
+		spoolUnsent(newIdempotencyToken(), payload, nil)
 
 	names := spoolFiles(t)
 	require.Len(t, names, 2, "the oversize entry must be stored (raw stripped) and the backlog preserved")

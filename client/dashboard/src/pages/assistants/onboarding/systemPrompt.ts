@@ -45,19 +45,19 @@ Pass section bodies WITHOUT a leading heading — the tool adds it. Inside a sec
 - Integration — packaged toolset from the catalog. \`list_integrations\`.
 
 # Models (pass full id to \`update_assistant\`)
-- Anthropic: \`anthropic/claude-sonnet-5\` (default), \`anthropic/claude-fable-5\`, \`anthropic/claude-opus-4.8\`, \`anthropic/claude-opus-4.7\`, \`anthropic/claude-sonnet-4.6\`, \`anthropic/claude-haiku-4.5\`, \`anthropic/claude-sonnet-4.5\`, \`anthropic/claude-opus-4.6\`, \`anthropic/claude-opus-4.5\`
+- Anthropic: \`anthropic/claude-opus-5\` (default), \`anthropic/claude-fable-5\`, \`anthropic/claude-sonnet-5\`, \`anthropic/claude-opus-4.8\`, \`anthropic/claude-opus-4.7\`, \`anthropic/claude-sonnet-4.6\`, \`anthropic/claude-haiku-4.5\`, \`anthropic/claude-sonnet-4.5\`, \`anthropic/claude-opus-4.6\`, \`anthropic/claude-opus-4.5\`
 - OpenAI: \`openai/gpt-5.6-sol\`, \`openai/gpt-5.6-terra\`, \`openai/gpt-5.6-luna\`, \`openai/gpt-5.5\`, \`openai/gpt-5.5-pro\`, \`openai/gpt-5.4\`, \`openai/gpt-5.4-mini\`, \`openai/gpt-5.4-nano\`, \`openai/gpt-5.3-codex\`, \`openai/gpt-5.1\`, \`openai/gpt-5\`
 - Google: \`google/gemini-3.5-flash\`, \`google/gemini-3.1-pro-preview\`, \`google/gemini-3.1-flash-lite\`
 - Others: \`deepseek/deepseek-v4-pro\`, \`deepseek/deepseek-v4-flash\`, \`deepseek/deepseek-v3.2\`, \`meta-llama/llama-4-maverick\`, \`x-ai/grok-4.3\`, \`x-ai/grok-4.20\`, \`qwen/qwen3.7-max\`, \`qwen/qwen3-coder\`, \`moonshotai/kimi-k2.6\`, \`moonshotai/kimi-k2.5\`, \`mistralai/mistral-medium-3-5\`, \`mistralai/codestral-2508\`, \`mistralai/devstral-2512\`, \`mistralai/mistral-medium-3.1\`
 
 Recommend:
-- General default → \`anthropic/claude-sonnet-5\` (strong all-rounder, good price/performance).
-- Agentic / tool-heavy → \`anthropic/claude-sonnet-5\` or \`anthropic/claude-fable-5\` (hardest reasoning, expensive).
+- General default → \`anthropic/claude-opus-5\` (strongest all-rounder, expensive).
+- Agentic / tool-heavy → \`anthropic/claude-opus-5\` or \`anthropic/claude-fable-5\` (hardest reasoning, expensive).
 - Cheap / fast / high-volume → \`anthropic/claude-haiku-4.5\` or \`openai/gpt-5.6-luna\`.
 - Coding → \`openai/gpt-5.6-sol\`, \`openai/gpt-5.3-codex\`, \`qwen/qwen3-coder\`.
-- Deep reasoning / math → \`anthropic/claude-fable-5\` (expensive) or \`openai/gpt-5.6-sol\`.
+- Deep reasoning / math → \`anthropic/claude-opus-5\`, \`anthropic/claude-fable-5\`, or \`openai/gpt-5.6-sol\` (all expensive).
 - Fast Google → \`google/gemini-3.5-flash\`.
-- Unsure → \`anthropic/claude-sonnet-5\`.
+- Unsure → \`anthropic/claude-opus-5\`.
 
 # "How do I connect X?" decision tree
 1. \`list_docs\` — if X has a doc (currently: \`slack\`, \`cron\`), follow it. Slack: route through \`propose_slack_setup\` (the user picks capabilities + events; the tool creates a per-assistant Slack toolset and slack trigger — never reuse a catalog toolset). Then \`add_environment_keys\` → \`show_slack_app_guide\` with the returned webhook_url (skip if SLACK_BOT_TOKEN is already populated; check via \`list_environments\` → \`populated_entry_names\`) → \`request_environment_secrets\`.
@@ -110,6 +110,19 @@ Never report X as unavailable until steps 2–5 have all run and all come back e
 - Don't ask "shall I proceed?" between steps — just go.
 `;
 
+const SKILLS = `
+# Skills
+- Skill — reusable instructions loaded by the assistant at runtime. Skills are not MCP servers, toolsets, or callable tools.
+- Use \`list_skills\` to inspect live project skills and current attachments; never guess a skill name.
+`;
+
+const SKILL_MUTATIONS = `
+- Call \`list_skills\` before attaching or detaching so the name is resolved from live project state.
+- \`attach_skill(skill_name)\` tracks the latest valid version by default. Pass \`pinned_version_id\` only when the user explicitly wants a specific version.
+- \`detach_skill(skill_name)\` removes the attachment without deleting the project skill.
+- The Draft panel shows each attached skill as Latest or Pinned and lets the user change that selection directly.
+`;
+
 export type AssistantSnapshot = {
   name: string;
   model: string;
@@ -117,13 +130,21 @@ export type AssistantSnapshot = {
   instructions: string;
   toolsets: { slug: string; environmentSlug?: string | null }[];
   mcpServers: { slug: string; environmentSlug?: string | null }[];
+  skills: { id: string; pinnedVersionId?: string | null }[];
 };
 
 export function buildSystemPrompt(args: {
   mode: "create" | "edit";
   snapshot?: AssistantSnapshot;
+  skillsEnabled?: boolean;
+  skillMutationsEnabled?: boolean;
 }): string {
-  const { mode, snapshot } = args;
+  const {
+    mode,
+    snapshot,
+    skillsEnabled = false,
+    skillMutationsEnabled = false,
+  } = args;
   const isEdit = mode === "edit" && !!snapshot;
 
   const tonePersona = isEdit
@@ -138,7 +159,7 @@ Never restate or re-paste the Assistant spec — the user can see the live Draft
 
   const stateBlock = isEdit
     ? `\n\n# Current Assistant state (page-load snapshot)
-This is a snapshot taken when the user opened this chat — it bootstraps the edit flow so you don't need to call read tools just to know who you are. During the session, prefer the most recent tool results in this conversation over this snapshot; if you need authoritative live state, call \`list_toolsets\` / \`list_mcp_servers\` / \`list_triggers\` / \`list_environments\`.
+This is a snapshot taken when the user opened this chat — it bootstraps the edit flow so you don't need to call read tools just to know who you are. During the session, prefer the most recent tool results in this conversation over this snapshot; if you need authoritative live state, call \`list_toolsets\` / \`list_mcp_servers\` / \`list_triggers\` / \`list_environments\`${skillsEnabled ? " / `list_skills`" : ""}.
 
 - Name: ${snapshot.name}
 - Model: \`${snapshot.model}\`
@@ -163,6 +184,20 @@ This is a snapshot taken when the user opened this chat — it bootstraps the ed
               )
               .join(", ")
       }
+${
+  skillsEnabled
+    ? `- Skills: ${
+        snapshot.skills.length === 0
+          ? "none attached"
+          : snapshot.skills
+              .map(
+                (skill) =>
+                  `ID \`${skill.id}\` (${skill.pinnedVersionId ? `pinned: \`${skill.pinnedVersionId}\`` : "latest"})`,
+              )
+              .join(", ")
+      }`
+    : ""
+}
 
 ## Current instructions
 ${snapshot.instructions.trim().length > 0 ? snapshot.instructions : "(empty — none set yet)"}`
@@ -170,7 +205,7 @@ ${snapshot.instructions.trim().length > 0 ? snapshot.instructions : "(empty — 
 
   const modeBlock = isEdit
     ? `# Mode
-Edit flow. The Assistant already exists (see "Current Assistant state" above). Skip \`propose_name\` and \`propose_personality\` entirely — never call them. Use \`set_personality\` / \`set_tasks\` / \`update_assistant\` / \`attach_toolset\` / \`detach_toolset\` / \`create_trigger\` / \`update_trigger\` / etc. directly to make the changes the user asks for.
+Edit flow. The Assistant already exists (see "Current Assistant state" above). Skip \`propose_name\` and \`propose_personality\` entirely — never call them. Use \`set_personality\` / \`set_tasks\` / \`update_assistant\` / \`attach_toolset\` / \`detach_toolset\`${skillMutationsEnabled ? " / `attach_skill` / `detach_skill`" : ""} / \`create_trigger\` / \`update_trigger\` / etc. directly to make the changes the user asks for.
 
 Open the conversation with a short, in-persona acknowledgement and ask what they'd like to change. Don't restate your current spec — the user can see it in the panel.`
     : `# Mode
@@ -183,7 +218,7 @@ Onboarding agent. Help a (likely non-technical) user build or edit an Assistant 
 
 ${tonePersona}
 
-${BASE}${stateBlock}
+${BASE}${skillsEnabled ? SKILLS : ""}${skillMutationsEnabled ? SKILL_MUTATIONS : ""}${stateBlock}
 
 ${modeBlock}
 

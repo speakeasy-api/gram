@@ -117,7 +117,7 @@ func newTestOrganizationsService(t *testing.T) (context.Context, *testInstance) 
 
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
@@ -136,7 +136,7 @@ func newTestOrganizationsService(t *testing.T) (context.Context, *testInstance) 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient())
 
 	auditLogger := audit.NewLogger()
 
@@ -173,7 +173,7 @@ func newTestOrganizationsServiceRBAC(t *testing.T) (context.Context, *testInstan
 
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
@@ -192,7 +192,7 @@ func newTestOrganizationsServiceRBAC(t *testing.T) (context.Context, *testInstan
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient())
 
 	auditLogger := audit.NewLogger()
 
@@ -229,7 +229,7 @@ func newTestOrganizationsServiceWithEmail(t *testing.T) (context.Context, *testI
 
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
@@ -246,7 +246,7 @@ func newTestOrganizationsServiceWithEmail(t *testing.T) (context.Context, *testI
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient())
 
 	auditLogger := audit.NewLogger()
 

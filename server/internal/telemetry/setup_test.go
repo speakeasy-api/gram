@@ -89,7 +89,7 @@ func newTestLogsServiceWithSessionCapture(t *testing.T, sessionCapture bool) (co
 
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
@@ -122,8 +122,8 @@ func newTestLogsServiceWithSessionCapture(t *testing.T, sessionCapture bool) (co
 
 	posthogClient := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 
-	telemLogger := telemetry.NewLogger(ctx, logger, chConn, logsEnabled, toolIOLogsEnabled, telemetry.NewUserInfoResolver(logger, conn, cache.NewRedisCacheAdapter(redisClient)))
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	telemLogger := telemetry.NewLogger(ctx, logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, logsEnabled, toolIOLogsEnabled, telemetry.NewUserInfoResolver(logger, conn, cache.NewRedisCacheAdapter(redisClient)), telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	svc := telemetry.NewService(logger, tracerProvider, conn, chConn, sessionManager, chatSessionsManager, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)
 
 	return ctx, &testInstance{

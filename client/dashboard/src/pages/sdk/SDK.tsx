@@ -1,12 +1,14 @@
 import { Page } from "@/components/page-layout";
-import { Button, Icon } from "@speakeasy-api/moonshine";
-import { Combobox } from "@/components/ui/combobox";
-import { SkeletonCode } from "@/components/ui/skeleton";
-import { TextArea } from "@/components/ui/textarea";
-import { Type } from "@/components/ui/type";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { Combobox } from "@/components/ui/Combobox";
+import { SkeletonCode } from "@/components/ui/Skeleton";
+import { TextArea } from "@/components/ui/Textarea";
+import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { capitalize } from "@/lib/utils";
-import { CodeSnippet, Stack } from "@speakeasy-api/moonshine";
+import { CodeSnippet } from "@/components/ui/CodeSnippet";
+import { Stack } from "@/components/ui/Stack";
 import { AgentifyProvider } from "../playground/Agentify";
 import { useAgentify } from "../playground/useAgentify";
 import {
@@ -98,7 +100,7 @@ const SdkContent = ({
       onSelectionChange={(value) => setFramework(value.value as SdkFramework)}
       className="max-w-fit"
     >
-      <Type variant="small">{framework}</Type>
+      <Text variant="small">{framework}</Text>
     </Combobox>
   );
 
@@ -111,10 +113,10 @@ const SdkContent = ({
 
   let heading = (
     <div className="flex items-end justify-between gap-4">
-      <Type variant="subheading">
+      <Text variant="subheading">
         Use platform MCP servers to build agentic workflows in many popular
         frameworks
-      </Type>
+      </Text>
       {langFrameworkDropdowns}
     </div>
   );
@@ -122,12 +124,12 @@ const SdkContent = ({
   if (prompt) {
     heading = (
       <Stack gap={1}>
-        <Type variant="subheading">
+        <Text variant="subheading">
           What should the agent do?{" "}
           <span className="text-muted-foreground text-sm italic">
             Chat history will also be included in the prompt.
           </span>
-        </Type>
+        </Text>
         <Stack direction="horizontal" gap={4} align="end">
           <TextArea
             value={prompt}
@@ -195,9 +197,9 @@ const SdkLanguageDropdown = ({
       onSelectionChange={(value) => setLang(value.value as SdkLanguage)}
       className="max-w-fit"
     >
-      <Type variant="small" className="capitalize">
+      <Text variant="small" className="capitalize">
         {lang}
-      </Type>
+      </Text>
     </Combobox>
   );
 };

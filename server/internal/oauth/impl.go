@@ -218,6 +218,10 @@ func (s *Service) loadToolsetFromCurrentURLContext(ctx context.Context, mcpSlug 
 		return nil, "", fmt.Errorf("lookup toolset: %w", toolsetErr)
 	}
 
+	if !toolset.McpEnabled {
+		return nil, "", fmt.Errorf("%w: mcp disabled", errToolsetNotFound)
+	}
+
 	if !toolset.McpIsPublic && !toolset.OauthProxyServerID.Valid {
 		return nil, "", errOAuthUnavailable
 	}
@@ -235,6 +239,10 @@ func (s *Service) loadToolsetForProjectAndMCPSlug(ctx context.Context, projectID
 		return nil, "", fmt.Errorf("%w: %w", errToolsetNotFound, err)
 	case err != nil:
 		return nil, "", fmt.Errorf("lookup toolset: %w", err)
+	}
+
+	if !toolset.McpEnabled {
+		return nil, "", fmt.Errorf("%w: mcp disabled", errToolsetNotFound)
 	}
 
 	mcpURL := fmt.Sprintf("%s/mcp/%s", s.serverURL.String(), mcpSlug)
@@ -386,6 +394,8 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 			Scope:           req.Scope,
 			State:           string(oauthReqInfoJSON),
 			ScopesSupported: provider.ScopesSupported,
+			LoginHint:       "",
+			ScreenHint:      "",
 		})
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to build gram OAuth URL").LogError(ctx, s.logger)

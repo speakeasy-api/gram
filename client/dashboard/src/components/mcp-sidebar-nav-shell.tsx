@@ -1,8 +1,8 @@
 import { NavButton, NavGroupProvider } from "@/components/nav-menu";
 import { SidebarFooterAction } from "@/components/sidebar-footer-action";
-import { SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar";
-import { useSidebar } from "@/components/ui/sidebar-context";
-import { Type } from "@/components/ui/type";
+import { SidebarMenu, SidebarMenuItem } from "@/components/ui/Sidebar";
+import { useSidebar } from "@/components/ui/Sidebar/sidebar-context";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { ArrowLeft } from "lucide-react";
 import * as React from "react";
@@ -13,13 +13,13 @@ export function McpSidebarInfoLabel({
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <Type
+    <Text
       variant="small"
       muted
       className="font-mono text-xs tracking-wide uppercase"
     >
       {children}
-    </Type>
+    </Text>
   );
 }
 
@@ -87,7 +87,10 @@ export function McpSidebarNavShell({
 
   return (
     <NavGroupProvider activeItem={activeItemTitle}>
-      <SidebarMenu className="gap-1 px-2 group-data-[collapsible=icon]:px-0">
+      {/* min-h-0 + overflow-y-auto: with the at-a-glance card expanded the
+          nav can exceed the viewport, so it must be allowed to scroll instead
+          of clipping the last items below the fold. */}
+      <SidebarMenu className="min-h-0 gap-1 overflow-y-auto px-2 group-data-[collapsible=icon]:px-0">
         <SidebarMenuItem>
           <SidebarFooterAction
             to={backHref}
@@ -103,7 +106,7 @@ export function McpSidebarNavShell({
             {topTitle && (
               <SidebarEyebrow align="card">{topTitle}</SidebarEyebrow>
             )}
-            <li className="pt-2 pb-4 group-data-[collapsible=icon]:hidden">
+            <li className="pt-1 pb-3 group-data-[collapsible=icon]:hidden">
               {topContent}
             </li>
             <SidebarDivider className="mb-2 group-data-[collapsible=icon]:hidden" />
@@ -113,8 +116,8 @@ export function McpSidebarNavShell({
         <SidebarEyebrow align="card">At a glance</SidebarEyebrow>
 
         {cardContent && (
-          <li className="pt-2 pb-4 group-data-[collapsible=icon]:hidden">
-            <div className="bg-card border-border dark:bg-neutral-950 flex flex-col gap-3 rounded-lg border px-4 py-3 shadow-md">
+          <li className="pt-1 pb-3 group-data-[collapsible=icon]:hidden">
+            <div className="bg-card border-border flex flex-col gap-2 border px-3 py-2.5">
               {cardContent}
             </div>
           </li>

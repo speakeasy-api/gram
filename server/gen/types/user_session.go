@@ -27,7 +27,12 @@ type UserSession struct {
 	// Slug of the user_session_issuer that gated this session.
 	IssuerSlug string
 	// Name of the MCP client that established the session, if known.
+	// Client-controlled and unverified; do not present it as an identity.
 	ClientName *string
+	// Set when the client that established this session was resolved from a Client
+	// ID Metadata Document (CIMD) hosted at this URL, rather than registered via
+	// RFC 7591 DCR. Null for DCR clients and for sessions with no bound client.
+	ClientIDMetadataURI *string
 	// Subject kind: 'user', 'apikey', or 'anonymous'.
 	SubjectType string
 	// Resolved human-readable name of the subject, if known.

@@ -5,14 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/google/uuid"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 )
 
 // Source is the detection source stamped on every Finding this analyzer emits.
@@ -80,49 +79,21 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.CustomRulesAnalysis, _ g
 		return nil
 	}
 
-	// One timestamp for the batch: when the findings were detected, distinct from
-	// the request's created_at.
-	createdAt := time.Now().UTC().Format(time.RFC3339)
-
 	// Issue every publish first so the Pub/Sub client can batch them, then drain
-	// the futures — mirrors the publish-then-drain pattern in the gitleaks handler.
-	messages := make([]*riskv1.Finding, 0, len(findings))
-	ruleIDs := make([]string, 0, len(findings))
-	for _, finding := range findings {
-		id, err := uuid.NewV7()
-		if err != nil {
-			return fmt.Errorf("generate finding id: %w", err)
-		}
-
-		startPos := conv.SafeInt32(finding.StartPos)
-		endPos := conv.SafeInt32(finding.EndPos)
-		fpb := riskv1.Finding_builder{
-			Id:                new(id.String()),
-			RequestId:         new(m.GetRequestId()),
-			ChatMessageId:     new(m.GetChatMessageId()),
-			ProjectId:         new(m.GetProjectId()),
-			OrganizationId:    new(m.GetOrganizationId()),
-			RiskPolicyId:      new(m.GetRiskPolicyId()),
-			RiskPolicyVersion: new(m.GetRiskPolicyVersion()),
-			CreatedAt:         &createdAt,
-			RuleId:            &finding.RuleID,
-			Description:       &finding.Description,
-			Match:             &finding.Match,
-			StartPos:          &startPos,
-			EndPos:            &endPos,
-			Tags:              finding.Tags,
-			Source:            &finding.Source,
-			Confidence:        &finding.Confidence,
-		}.Build()
-
-		messages = append(messages, fpb)
-		ruleIDs = append(ruleIDs, finding.RuleID)
-	}
-
-	results := make([]gcp.PublishResult, 0, len(messages))
-	for _, m := range messages {
-		results = append(results, h.findingsPub.Publish(ctx, m))
-	}
+	// the futures — mirrors the publish-then-drain pattern in the gitleaks
+	// handler. StartPublishFindings mints deterministic ids — a redelivered
+	// message republishes under the same ids instead of duplicating ClickHouse
+	// rows — and stamps the reveal metadata (surface/field/path/tool_call_id)
+	// from each finding's span attribution.
+	results, ruleIDs := scanners.StartPublishFindings(ctx, h.findingsPub, scanners.FindingMetadata{
+		RequestID:         m.GetRequestId(),
+		ChatMessageID:     m.GetChatMessageId(),
+		ContentPartID:     m.GetContentPartId(),
+		ProjectID:         m.GetProjectId(),
+		OrganizationID:    m.GetOrganizationId(),
+		RiskPolicyID:      m.GetRiskPolicyId(),
+		RiskPolicyVersion: m.GetRiskPolicyVersion(),
+	}, findings)
 
 	published := 0
 	for _, res := range results {
@@ -138,7 +109,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.CustomRulesAnalysis, _ g
 	h.logger.InfoContext(ctx, "custom rules scan complete", attr.SlogValueAny(map[string]any{
 		"request_id":      m.GetRequestId(),
 		"chat_message_id": m.GetChatMessageId(),
-		"matches":         len(messages),
+		"matches":         len(findings),
 		"published":       published,
 		"rule_ids":        ruleIDs,
 	}))

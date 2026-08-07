@@ -1,7 +1,4 @@
-import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
-import { useTelemetry } from "@/contexts/Telemetry";
-import { useProductTier } from "@/hooks/useProductTier";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useGrants } from "@gram/client/react-query/grants.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -146,24 +143,9 @@ export function hasScopeInGrants(
 /**
  * Core RBAC hook. Fetches the current user's effective grants and provides
  * helpers to check whether the user holds a particular scope.
- *
- * When RBAC is disabled via feature flag (and no dev override is active),
- * every scope check returns `true` so existing behaviour is preserved.
  */
 function useRBACImpl() {
-  const telemetry = useTelemetry();
   const isAdmin = useIsPlatformAdmin();
-  const productTier = useProductTier();
-  const featureFlagEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
-  // Toolbar is accessible in dev or for admins; pass the flag into the getter
-  // so it can also gate the SDK fetcher (which lacks auth context) at the source.
-  const devOverrideActive =
-    getRBACScopeOverrideHeader(import.meta.env.DEV || isAdmin) !== null;
-  // Enterprise gate applies to the feature flag only. The dev override bypasses
-  // the tier check entirely (mirroring the server, which applies override grants
-  // before checking account type in access/manager.go).
-  const isRbacEnabled =
-    (featureFlagEnabled && productTier === "enterprise") || devOverrideActive;
 
   // Re-render when the toolbar changes scopes in localStorage.
   const [, setOverrideVersion] = useState(0);
@@ -174,17 +156,15 @@ function useRBACImpl() {
     return () => window.removeEventListener("rbac-override-change", handler);
   }, [isAdmin]);
 
-  // Always fetch grants — even when RBAC is disabled — so we can detect a
-  // broken org membership (404/403) and show a recovery prompt via
-  // MembershipSyncGuard. throwOnError is disabled so the error doesn't crash
-  // the app; it's surfaced via the returned `error` field instead.
+  // Always fetch grants so we can detect a broken org membership (404/403) and
+  // show a recovery prompt via MembershipSyncGuard. throwOnError is disabled
+  // so the error doesn't crash the app; it's surfaced via `error` instead.
   const { data, isLoading, error } = useGrants(undefined, undefined, {
     staleTime: 30_000,
     throwOnError: false,
   });
 
-  // setOverrideVersion triggers a re-render (and therefore a re-read of devOverrideActive)
-  // when the dev toolbar changes; the query invalidation handles the actual refetch.
+  // The toolbar event re-renders this hook; query invalidation refreshes the grants.
   const grants = useMemo(() => {
     return data?.grants;
   }, [data?.grants]);
@@ -195,19 +175,17 @@ function useRBACImpl() {
    * Uses exclusion-wins semantics: matching internal exclusion grants (and
    * legacy deny-effect grants) override matching allow grants.
    *
-   * - If RBAC is disabled, always returns true.
    * - If grants haven't loaded yet, returns false (safe default).
    * - A grant with `selectors: undefined` (null from the API) means unrestricted.
    * - A grant with `selectors: [...]` means the scope is constrained by selectors.
    */
   const hasScope = useCallback(
     (scope: Scope, resourceId?: string): boolean => {
-      if (!isRbacEnabled) return true;
       if (!grants) return false;
 
       return hasScopeInGrants(grants, scope, resourceId);
     },
-    [isRbacEnabled, grants],
+    [grants],
   );
 
   /**
@@ -235,21 +213,12 @@ function useRBACImpl() {
       hasScope,
       hasAllScopes,
       hasAnyScope,
-      isRbacEnabled,
-      isLoading: isRbacEnabled && isLoading,
+      isLoading,
       grants: grants ?? [],
       /** Non-null when the grants query failed (e.g. missing org membership). */
       error: error ?? null,
     }),
-    [
-      hasScope,
-      hasAllScopes,
-      hasAnyScope,
-      isRbacEnabled,
-      isLoading,
-      grants,
-      error,
-    ],
+    [hasScope, hasAllScopes, hasAnyScope, isLoading, grants, error],
   );
 }
 

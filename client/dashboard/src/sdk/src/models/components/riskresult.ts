@@ -15,13 +15,17 @@ export type RiskResult = {
    */
   blockId?: string | undefined;
   /**
+   * The chat content part that was scanned, when the finding is anchored to a content part.
+   */
+  chatContentPartId?: string | undefined;
+  /**
    * The chat session containing the message.
    */
   chatId?: string | undefined;
   /**
-   * The chat message that was scanned.
+   * The chat message that was scanned, when the finding is anchored to a message.
    */
-  chatMessageId: string;
+  chatMessageId?: string | undefined;
   /**
    * Title of the chat session.
    */
@@ -43,6 +47,10 @@ export type RiskResult = {
    */
   endPos?: number | undefined;
   /**
+   * When this result was manually marked as a false positive. Null when not dismissed.
+   */
+  falsePositiveAt?: Date | undefined;
+  /**
    * The result ID.
    */
   id: string;
@@ -62,10 +70,6 @@ export type RiskResult = {
    * Policy version when this result was produced.
    */
   policyVersion: number;
-  /**
-   * True when the scanned message arrived as a replay from a device's offline spool after control-plane downtime — the finding was produced retroactively rather than from live traffic.
-   */
-  replayed: boolean;
   /**
    * The matched rule identifier.
    */
@@ -97,8 +101,9 @@ export const RiskResult$inboundSchema: z.ZodMiniType<RiskResult, unknown> = z
   .pipe(
     z.object({
       block_id: z.optional(z.string()),
+      chat_content_part_id: z.optional(z.string()),
       chat_id: z.optional(z.string()),
-      chat_message_id: z.string(),
+      chat_message_id: z.optional(z.string()),
       chat_title: z.optional(z.string()),
       confidence: z.optional(z.number()),
       created_at: z.pipe(
@@ -107,12 +112,14 @@ export const RiskResult$inboundSchema: z.ZodMiniType<RiskResult, unknown> = z
       ),
       description: z.optional(z.string()),
       end_pos: z.optional(z.int()),
+      false_positive_at: z.optional(
+        z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+      ),
       id: z.string(),
       match: z.optional(z.string()),
       match_redacted: z.optional(z.string()),
       policy_id: z.string(),
       policy_version: z.int(),
-      replayed: z.boolean(),
       rule_id: z.optional(z.string()),
       source: z.string(),
       spans: z.optional(z.array(RiskSpan$inboundSchema)),
@@ -123,11 +130,13 @@ export const RiskResult$inboundSchema: z.ZodMiniType<RiskResult, unknown> = z
     z.transform((v) => {
       return remap$(v, {
         "block_id": "blockId",
+        "chat_content_part_id": "chatContentPartId",
         "chat_id": "chatId",
         "chat_message_id": "chatMessageId",
         "chat_title": "chatTitle",
         "created_at": "createdAt",
         "end_pos": "endPos",
+        "false_positive_at": "falsePositiveAt",
         "match_redacted": "matchRedacted",
         "policy_id": "policyId",
         "policy_version": "policyVersion",

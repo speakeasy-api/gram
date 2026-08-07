@@ -1,0 +1,55 @@
+import { cn } from "@/lib/utils";
+
+/**
+ * Table wrapper that matches the DotCard aesthetic — square hairline border,
+ * subtle background, and consistent spacing with the card grid.
+ */
+export function DotTable({
+  headers,
+  children,
+  className,
+  selectionHeader,
+}: {
+  headers: { label: string; className?: string }[];
+  children: React.ReactNode;
+  className?: string;
+  /**
+   * When provided, renders a leading selection column (after the dot column)
+   * with this node as its header — typically a select-all checkbox. Rows must
+   * render a matching leading cell so columns stay aligned.
+   */
+  selectionHeader?: React.ReactNode;
+}): JSX.Element {
+  return (
+    <div
+      className={cn(
+        "!border-foreground/10 w-full overflow-hidden border",
+        className,
+      )}
+    >
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="bg-muted/30 border-b">
+            {/* Empty header for the dot-pattern column */}
+            <th className="w-17" />
+            {selectionHeader !== undefined && (
+              <th className="w-10 px-3 py-2.5">{selectionHeader}</th>
+            )}
+            {headers.map((header, index) => (
+              <th
+                key={header.label || `header-${index}`}
+                className={cn(
+                  "text-muted-foreground px-3 py-2.5 text-left text-xs font-medium tracking-wider uppercase",
+                  header.className,
+                )}
+              >
+                {header.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="[&_tr:last-child]:border-0">{children}</tbody>
+      </table>
+    </div>
+  );
+}

@@ -8,6 +8,7 @@ const VALID_TABS = [
   "authentication",
   "performance",
   "team-access",
+  "sessions",
   "settings",
 ] as const;
 
@@ -56,13 +57,9 @@ export function activeTabFromPath(
   return tabSegment && isValidTab(tabSegment) ? tabSegment : undefined;
 }
 
-export function initialTabFromHash(
-  hash: string,
-  isRbacEnabled: boolean,
-): TabValue {
+export function initialTabFromHash(hash: string): TabValue {
   const hashValue = hash.replace("#", "");
   if (!isValidTab(hashValue)) return "overview";
-  if (hashValue === "team-access" && !isRbacEnabled) return "overview";
   return hashValue;
 }
 
@@ -86,6 +83,8 @@ export function mcpDetailTabHref(
       return routes.mcp.details.performance.href(toolsetSlug);
     case "team-access":
       return routes.mcp.details.teamAccess.href(toolsetSlug);
+    case "sessions":
+      return routes.mcp.details.sessions.href(toolsetSlug);
     case "settings":
       return routes.mcp.details.settings.href(toolsetSlug);
   }

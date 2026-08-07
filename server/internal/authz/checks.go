@@ -20,7 +20,7 @@ func MCPToolCallCheck(toolsetID string, dims MCPToolCallDimensions) Check {
 	if dims.ProjectID != "" {
 		dimensions[SelectorKeyProjectID] = dims.ProjectID
 	}
-	return Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: toolsetID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, expanded: false}
+	return Check{Scope: ScopeMCPConnect, ResourceKind: "", ResourceID: toolsetID, Dimensions: dimensions, selectorMatch: selectorMatchNormal}
 }
 
 // MCPCheck builds a Check for an MCP scope (read/write/connect) with project_id
@@ -30,7 +30,7 @@ func MCPCheck(scope Scope, resourceID, projectID string) Check {
 	if projectID != "" {
 		dimensions = map[string]string{SelectorKeyProjectID: projectID}
 	}
-	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, selectorMatch: selectorMatchNormal, expanded: false}
+	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: dimensions, selectorMatch: selectorMatchNormal}
 }
 
 func expressionForCheck(check Check) GrantExpression {
@@ -44,7 +44,7 @@ func expressionForCheck(check Check) GrantExpression {
 	return GrantDifference{
 		Base: base,
 		Exclusion: GrantCheck{
-			Check:    Check{Scope: exclusion, ResourceKind: check.ResourceKind, ResourceID: check.ResourceID, Dimensions: check.Dimensions, selectorMatch: selectorMatchStrict, expanded: false},
+			Check:    Check{Scope: exclusion, ResourceKind: check.ResourceKind, ResourceID: check.ResourceID, Dimensions: check.Dimensions, selectorMatch: selectorMatchStrict},
 			Instance: instance,
 		},
 	}
@@ -56,7 +56,7 @@ type RiskPolicyDimensions struct {
 }
 
 func RiskPolicyEvaluateCheck(policyID string) Check {
-	return Check{Scope: ScopeRiskPolicyEvaluate, ResourceKind: "", ResourceID: policyID, Dimensions: nil, selectorMatch: selectorMatchNormal, expanded: false}
+	return Check{Scope: ScopeRiskPolicyEvaluate, ResourceKind: "", ResourceID: policyID, Dimensions: nil, selectorMatch: selectorMatchNormal}
 }
 
 // RiskPolicyApplies builds the runtime authorization rule for applying a risk
@@ -87,7 +87,7 @@ func RiskPolicyApplies(policyID string, bypassDims RiskPolicyDimensions) GrantEx
 // placeholder that does not affect matching — every chat:read grant wildcards
 // resource_id — so any concrete value (the chat or project id) works.
 func ChatReadCheck(resourceID string) Check {
-	return Check{Scope: ScopeChatRead, ResourceKind: "", ResourceID: resourceID, Dimensions: nil, selectorMatch: selectorMatchNormal, expanded: false}
+	return Check{Scope: ScopeChatRead, ResourceKind: "", ResourceID: resourceID, Dimensions: nil, selectorMatch: selectorMatchNormal}
 }
 
 func RiskPolicyBypassCheck(policyID string, dims RiskPolicyDimensions) Check {
@@ -102,5 +102,5 @@ func RiskPolicyBypassCheck(policyID string, dims RiskPolicyDimensions) Check {
 		}
 		dimensions[SelectorKeyServerIdentity] = dims.ServerIdentity
 	}
-	return Check{Scope: ScopeRiskPolicyBypass, ResourceKind: "", ResourceID: policyID, Dimensions: dimensions, selectorMatch: selectorMatchStrict, expanded: false}
+	return Check{Scope: ScopeRiskPolicyBypass, ResourceKind: "", ResourceID: policyID, Dimensions: dimensions, selectorMatch: selectorMatchStrict}
 }

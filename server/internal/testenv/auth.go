@@ -57,12 +57,11 @@ func NewTestManager(t *testing.T, logger *slog.Logger, tracerProvider trace.Trac
 		srv.URL,
 		"test-client-id",
 		idpClient,
-		nil, // no WorkOS client in tests — fallback won't fire
+		nil, // no WorkOS client in tests
 		orgRepo.New(db),
 		userRepo.New(db),
 		fakePylon,
 		fakePosthog,
-		nil, // RBAC enabler — org seeding not exercised in this test env
 		suffix,
 	)
 

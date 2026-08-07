@@ -15,6 +15,92 @@ RETURNING *;
 DELETE FROM hooks_server_name_overrides
 WHERE id = $1 AND project_id = $2;
 
+-- name: InsertSkillObservation :execrows
+INSERT INTO skill_observations (
+    project_id
+  , idempotency_key
+  , provider
+  , user_id
+  , user_email
+  , hostname
+  , session_id
+  , skill_name
+  , source
+  , source_level
+  , source_path
+  , raw_sha256
+  , seen_at
+) VALUES (
+    @project_id
+  , sqlc.narg(idempotency_key)
+  , @provider
+  , sqlc.narg(user_id)
+  , sqlc.narg(user_email)
+  , sqlc.narg(hostname)
+  , sqlc.narg(session_id)
+  , @skill_name
+  , sqlc.narg(source)
+  , sqlc.narg(source_level)
+  , sqlc.narg(source_path)
+  , sqlc.narg(raw_sha256)
+  , @seen_at
+)
+ON CONFLICT (project_id, idempotency_key) WHERE idempotency_key IS NOT NULL
+DO NOTHING;
+
+-- name: RememberKnownSkillRawHash :one
+WITH existing_alias AS (
+  SELECT srh.canonical_sha256
+  FROM skill_raw_hashes srh
+  WHERE srh.project_id = @project_id
+    AND srh.raw_sha256 = @raw_sha256
+), known_version AS (
+  SELECT MIN(sv.canonical_sha256) AS canonical_sha256
+  FROM skill_versions sv
+  JOIN skills s ON s.id = sv.skill_id
+  WHERE s.project_id = @project_id
+    AND s.archived_at IS NULL
+    AND sv.raw_sha256 = @raw_sha256
+    AND NOT EXISTS (SELECT 1 FROM existing_alias)
+  HAVING COUNT(*) = 1
+), inserted AS (
+  INSERT INTO skill_raw_hashes (project_id, raw_sha256, canonical_sha256)
+  SELECT @project_id, @raw_sha256, canonical_sha256
+  FROM known_version
+  WHERE canonical_sha256 IS NOT NULL
+  ON CONFLICT (project_id, raw_sha256) DO NOTHING
+  RETURNING canonical_sha256
+), canonical_hash AS (
+  SELECT canonical_sha256 FROM existing_alias
+  UNION ALL
+  SELECT canonical_sha256 FROM inserted
+), resolved AS (
+  SELECT sv.id
+  FROM canonical_hash hash
+  JOIN skills s ON s.project_id = @project_id
+  JOIN skill_versions sv
+    ON sv.skill_id = s.id
+    AND sv.canonical_sha256 = hash.canonical_sha256
+  WHERE s.archived_at IS NULL
+  LIMIT 2
+)
+SELECT COUNT(*) = 1 AS known
+FROM resolved;
+
+-- name: HasSkillObservationRawHash :one
+SELECT EXISTS (
+  SELECT 1
+  FROM skill_observations so
+  WHERE so.project_id = @project_id
+    AND so.raw_sha256 = @raw_sha256
+)::boolean;
+
+-- name: ListSkillObservations :many
+SELECT *
+FROM skill_observations
+WHERE project_id = @project_id
+ORDER BY seen_at ASC, id ASC;
+
 -- name: UpsertClaudeCodeSession :one
 INSERT INTO chats (
     id
@@ -165,9 +251,13 @@ ORDER BY user_id, account_type DESC, provider, last_seen_at DESC;
 -- provider org; a config with none applies provider-wide. Exact-org matches are
 -- preferred over provider-wide (NULLS LAST because the comparison is NULL for a
 -- NULL-scoped row, and DESC would otherwise sort NULL ahead of an exact match).
--- Only one live config per (org, provider) can exist today, so the ordering is
--- defensive. Only configs with a non-null billing_mode are considered, so an
--- undeclared org returns no rows (treated as unknown upstream).
+-- @match_any_org disables the org scoping entirely: Codex sessions carry no org
+-- identity on any layer while codex_compliance configs always pin one, so for
+-- them the provider-wide declaration applies regardless of config scope. Only
+-- one live config per (org, provider) can exist today, so the ordering (with
+-- updated_at as the tiebreak against historical duplicates) is defensive. Only
+-- configs with a non-null billing_mode are considered, so an undeclared org
+-- returns no rows (treated as unknown upstream).
 SELECT billing_mode
 FROM ai_integration_configs
 WHERE organization_id = @organization_id
@@ -176,11 +266,12 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
   AND billing_mode IS NOT NULL
   AND (
-    external_organization_id IS NULL
+    @match_any_org::bool
+    OR external_organization_id IS NULL
     OR external_organization_id = ''
     OR external_organization_id = @external_org_id
   )
-ORDER BY (external_organization_id = @external_org_id) DESC NULLS LAST
+ORDER BY (external_organization_id = @external_org_id) DESC NULLS LAST, updated_at DESC
 LIMIT 1;
 
 -- name: GetDeviceOwner :one
@@ -227,22 +318,6 @@ WHERE project_id = sqlc.arg(project_id)
   )
 ORDER BY created_at DESC
 LIMIT 1;
-
--- name: BackfillLatestClaudeUserMessagePromptID :execrows
-WITH latest_user_message AS (
-  SELECT chat_messages.id
-  FROM chat_messages
-  WHERE chat_messages.chat_id = sqlc.arg(chat_id)
-    AND (chat_messages.project_id IS NULL OR chat_messages.project_id = sqlc.arg(project_id)::uuid)
-    AND chat_messages.role = 'user'
-  ORDER BY chat_messages.created_at DESC, chat_messages.seq DESC
-  LIMIT 1
-)
-UPDATE chat_messages
-SET message_id = sqlc.arg(message_id)
-WHERE chat_messages.id = (SELECT latest_user_message.id FROM latest_user_message)
-  AND sqlc.arg(message_id)::text <> ''
-  AND (chat_messages.message_id IS NULL OR chat_messages.message_id = '' OR chat_messages.message_id != sqlc.arg(message_id)::text);
 
 -- name: InsertShadowMCPBlockResult :exec
 INSERT INTO risk_results (

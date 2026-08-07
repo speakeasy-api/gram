@@ -1,7 +1,7 @@
-import { DotCard } from "@/components/ui/dot-card";
-import { Type } from "@/components/ui/type";
+import { Card } from "@/components/ui/Card";
+import { Text } from "@/components/ui/Text";
 import { useRoutes } from "@/routes";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 import { Network, ScrollText } from "lucide-react";
 
 const BUILT_IN_ICONS: Record<string, React.ReactNode> = {
@@ -22,7 +22,7 @@ export function BuiltInMCPCard({
   const routes = useRoutes();
 
   return (
-    <DotCard
+    <Card.Entity
       className="cursor-pointer"
       onClick={() => routes.mcp.builtIn.goTo(slug)}
       icon={
@@ -33,23 +33,23 @@ export function BuiltInMCPCard({
     >
       {/* Header row with name and badge */}
       <div className="mb-2 flex items-start justify-between gap-2">
-        <Type
+        <Text
           variant="subheading"
           as="div"
           className="text-md group-hover:text-primary flex-1 truncate transition-colors"
           title={name}
         >
           {name}
-        </Type>
+        </Text>
         <Badge variant="information">
           <Badge.Text>Built-in</Badge.Text>
         </Badge>
       </div>
 
       {/* Description */}
-      <Type variant="small" muted className="line-clamp-2">
+      <Text variant="small" muted className="line-clamp-2">
         {description}
-      </Type>
-    </DotCard>
+      </Text>
+    </Card.Entity>
   );
 }

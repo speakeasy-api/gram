@@ -1,19 +1,19 @@
-import { Label } from "@/components/ui/label";
+import { Label } from "@/components/ui/Label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/Select";
 import {
   Sheet,
   SheetContent,
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useFetcher } from "@/contexts/Fetcher";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -22,7 +22,10 @@ import type { RemoteSessionIssuer } from "@gram/client/models/components/remotes
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import { invalidateAllOrganizationRemoteSessionClients } from "@gram/client/react-query/organizationRemoteSessionClients.js";
-import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
+import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -36,11 +39,46 @@ import {
   narrowTokenEndpointAuthMethod,
   parseScopes,
 } from "../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
+import { issuerDocumentationLinks } from "./issuerDocumentationLinks";
 
 // Sentinel for the unselected project in the org-level-issuer scope picker.
 // Radix Select treats the empty string specially, so submission is gated until
 // the operator picks a real project (a client must be project-scoped).
 const UNSELECTED_PROJECT = "";
+
+// DocumentationLinks surfaces the issuer's documentation so customers can create
+// the upstream OAuth client themselves, owning its credentials, access, and rate
+// limits rather than sharing a Gram-owned client. Renders nothing when the
+// issuer carries no documentation URLs.
+function DocumentationLinks({ issuer }: { issuer: RemoteSessionIssuer }) {
+  const links = issuerDocumentationLinks(issuer);
+
+  if (links.length === 0) {
+    return null;
+  }
+
+  return (
+    <Stack gap={2}>
+      <Text muted small>
+        Documentation links to assist with creating this client.
+      </Text>
+      <Stack direction="horizontal" gap={4}>
+        {links.map(({ label, url }) => (
+          <Text key={label} muted small>
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-foreground underline underline-offset-2"
+            >
+              {label}
+            </a>
+          </Text>
+        ))}
+      </Stack>
+    </Stack>
+  );
+}
 
 // CreateRemoteSessionClientSheet registers a standalone remote_session_client
 // under the page's already-selected issuer via the org-admin createClient
@@ -194,9 +232,18 @@ export function CreateRemoteSessionClientSheet({
       return { unsupportedDcrAuthMethod };
     },
     onSuccess: async ({ unsupportedDcrAuthMethod }) => {
-      await invalidateAllOrganizationRemoteSessionClients(queryClient, {
-        refetchType: "all",
-      });
+      await Promise.all([
+        invalidateAllOrganizationRemoteSessionClients(queryClient, {
+          refetchType: "all",
+        }),
+        // The issuer listing carries a per-issuer client count, so creating a
+        // client makes that number stale. It shows on the same screen as this
+        // sheet when the operator starts from the provider list's Add Client
+        // action, and on back-navigation from the Clients tab.
+        invalidateAllOrganizationRemoteSessionIssuers(queryClient, {
+          refetchType: "all",
+        }),
+      ]);
       toast.success("Client created");
       if (unsupportedDcrAuthMethod) {
         toast.warning(
@@ -257,6 +304,7 @@ export function CreateRemoteSessionClientSheet({
       >
         <SheetHeader className="px-6 pt-6 pb-0">
           <SheetTitle className="text-lg font-semibold">New Client</SheetTitle>
+          <DocumentationLinks issuer={issuer} />
         </SheetHeader>
 
         <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
@@ -281,10 +329,10 @@ export function CreateRemoteSessionClientSheet({
                       <SelectItem value="project">Specific project</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Type muted small>
+                  <Text muted small>
                     An organization-level client has no project and can be
                     attached by every project in the organization.
-                  </Type>
+                  </Text>
                 </Stack>
 
                 {scope === "project" && (
@@ -304,17 +352,17 @@ export function CreateRemoteSessionClientSheet({
                         ))}
                       </SelectContent>
                     </Select>
-                    <Type muted small>
+                    <Text muted small>
                       The client will be scoped to this project in the
                       organization.
-                    </Type>
+                    </Text>
                   </Stack>
                 )}
               </Stack>
             ) : (
-              <Type muted small>
+              <Text muted small>
                 The client will be created in this provider's project.
-              </Type>
+              </Text>
             )}
 
             <ClientTypeFields

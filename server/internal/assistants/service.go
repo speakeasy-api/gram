@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,21 +26,25 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const (
@@ -50,6 +55,7 @@ const (
 	StatusPaused = "paused"
 
 	sourceKindSlack     = bgtriggers.DefinitionSlugSlack
+	sourceKindMSTeams   = bgtriggers.DefinitionSlugMSTeams
 	sourceKindLinear    = bgtriggers.DefinitionSlugLinear
 	sourceKindGithub    = bgtriggers.DefinitionSlugGithub
 	sourceKindCron      = bgtriggers.DefinitionSlugCron
@@ -133,6 +139,7 @@ type assistantRecord struct {
 	Instructions    string
 	Toolsets        []assistantToolsetRow
 	MCPServers      []assistantMCPServerRow
+	Skills          []assistantSkillRow
 	WarmTTLSeconds  int
 	MaxConcurrency  int
 	Status          string
@@ -181,6 +188,7 @@ type assistantThreadEventRecord struct {
 	Attempts              int
 	LastError             pgtype.Text
 	CreatedAt             time.Time
+	SkillSetSnapshot      []byte
 }
 
 // assistantToolsetRow is the hydrated view of a row in assistant_toolsets
@@ -210,6 +218,14 @@ type assistantMCPServerRow struct {
 	EnvironmentSlug pgtype.Text
 }
 
+type assistantSkillRow struct {
+	SkillID           uuid.UUID
+	PinnedVersionID   uuid.NullUUID
+	Name              string
+	ResolvedVersionID uuid.UUID
+	Description       string
+}
+
 func assistantRecordFromCreateRow(row assistantrepo.CreateAssistantRow) assistantRecord {
 	return assistantRecord{
 		ID:              row.ID,
@@ -221,6 +237,7 @@ func assistantRecordFromCreateRow(row assistantrepo.CreateAssistantRow) assistan
 		Instructions:    row.Instructions,
 		Toolsets:        nil,
 		MCPServers:      nil,
+		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
 		Status:          row.Status,
@@ -241,6 +258,7 @@ func assistantRecordFromListRow(row assistantrepo.ListAssistantsRow) assistantRe
 		Instructions:    row.Instructions,
 		Toolsets:        nil,
 		MCPServers:      nil,
+		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
 		Status:          row.Status,
@@ -261,6 +279,7 @@ func assistantRecordFromGetRow(row assistantrepo.GetAssistantRow) assistantRecor
 		Instructions:    row.Instructions,
 		Toolsets:        nil,
 		MCPServers:      nil,
+		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
 		Status:          row.Status,
@@ -281,6 +300,7 @@ func assistantRecordFromDispatchRow(row assistantrepo.GetAssistantForDispatchRow
 		Instructions:    row.Instructions,
 		Toolsets:        nil,
 		MCPServers:      nil,
+		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
 		Status:          row.Status,
@@ -301,6 +321,7 @@ func assistantRecordFromUpdateRow(row assistantrepo.UpdateAssistantRow) assistan
 		Instructions:    row.Instructions,
 		Toolsets:        nil,
 		MCPServers:      nil,
+		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
 		Status:          row.Status,
@@ -367,6 +388,7 @@ type ServiceCore struct {
 	logger            *slog.Logger
 	tracer            trace.Tracer
 	db                *pgxpool.Pool
+	audit             *audit.Logger
 	guardianPolicy    *guardian.Policy
 	encryptionClient  *encryption.Client
 	runtime           RuntimeBackend
@@ -381,6 +403,7 @@ type ServiceCore struct {
 	envLoader         toolconfig.EnvironmentLoader
 	slackImages       slackImageFetcher
 	dashboardIngestor DashboardIngestor
+	featureFlags      feature.Provider
 	turnClassified    metric.Int64Counter
 }
 
@@ -397,6 +420,7 @@ func NewServiceCore(
 	serverURL *url.URL,
 	telemetryLogger *telemetry.Logger,
 	contextWindow *openrouter.ContextWindowResolver,
+	auditLogger *audit.Logger,
 ) *ServiceCore {
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/assistants")
 	turnClassified, err := meter.Int64Counter(
@@ -412,6 +436,7 @@ func NewServiceCore(
 		logger:            logger,
 		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/assistants"),
 		db:                db,
+		audit:             auditLogger,
 		guardianPolicy:    guardianPolicy,
 		encryptionClient:  encryptionClient,
 		runtime:           newTelemetryRuntimeBackend(runtime, telemetryLogger),
@@ -426,6 +451,7 @@ func NewServiceCore(
 		envLoader:         nil,
 		slackImages:       nil,
 		dashboardIngestor: nil,
+		featureFlags:      nil,
 		turnClassified:    turnClassified,
 	}
 }
@@ -457,6 +483,14 @@ func (s *ServiceCore) SetChatMessageWriter(w *chat.ChatMessageWriter) {
 // without it, oversized messages replay their plain-text projection.
 func (s *ServiceCore) SetAssetStorage(storage assets.BlobStore) {
 	s.assetStorage = storage
+}
+
+// SetFeatureProvider wires PostHog flag evaluation. Set after construction
+// to match the existing post-construction injection pattern and avoid
+// churning every test call site. A nil provider leaves every flag-gated
+// grant off (fail closed).
+func (s *ServiceCore) SetFeatureProvider(p feature.Provider) {
+	s.featureFlags = p
 }
 
 // resolveAssistantContextWindow returns the smallest context_length the gram
@@ -970,6 +1004,30 @@ func (s *ServiceCore) loadAssistantMcpServers(ctx context.Context, projectID uui
 	return out, nil
 }
 
+func (s *ServiceCore) loadAssistantSkills(ctx context.Context, projectID uuid.UUID, assistantIDs []uuid.UUID) (map[uuid.UUID][]assistantSkillRow, error) {
+	out := map[uuid.UUID][]assistantSkillRow{}
+	if len(assistantIDs) == 0 {
+		return out, nil
+	}
+	rows, err := assistantrepo.New(s.db).LoadAssistantSkills(ctx, assistantrepo.LoadAssistantSkillsParams{AssistantIds: assistantIDs, ProjectID: projectID})
+	if err != nil {
+		return nil, fmt.Errorf("load assistant skills: %w", err)
+	}
+	for _, row := range rows {
+		if !row.AssistantID.Valid {
+			continue
+		}
+		out[row.AssistantID.UUID] = append(out[row.AssistantID.UUID], assistantSkillRow{
+			SkillID:           row.SkillID,
+			PinnedVersionID:   row.PinnedVersionID,
+			Name:              row.Name,
+			ResolvedVersionID: row.ResolvedVersionID,
+			Description:       conv.FromPGTextOrEmpty[string](row.Description),
+		})
+	}
+	return out, nil
+}
+
 // hydrateAssistantToolSources loads both attachment kinds — toolsets and
 // directly-attached mcp_servers — onto a single assistant record. Every read
 // that feeds the runtime (dispatch, bootstrap, reconcile) and every API read
@@ -986,6 +1044,16 @@ func (s *ServiceCore) hydrateAssistantToolSources(ctx context.Context, projectID
 		return err
 	}
 	record.MCPServers = mcpServers[record.ID]
+
+	return nil
+}
+
+func (s *ServiceCore) hydrateAssistantSkills(ctx context.Context, projectID uuid.UUID, record *assistantRecord) error {
+	skills, err := s.loadAssistantSkills(ctx, projectID, []uuid.UUID{record.ID})
+	if err != nil {
+		return err
+	}
+	record.Skills = skills[record.ID]
 	return nil
 }
 
@@ -1104,6 +1172,13 @@ func toHTTPAssistant(record assistantRecord) (*types.Assistant, error) {
 		}
 		mcpServers = append(mcpServers, ref)
 	}
+	skills := make([]*types.AssistantSkillRef, 0, len(record.Skills))
+	for _, row := range record.Skills {
+		skills = append(skills, &types.AssistantSkillRef{
+			SkillID: row.SkillID.String(), PinnedVersionID: conv.FromNullableUUID(row.PinnedVersionID),
+			ResolvedVersionID: row.ResolvedVersionID.String(),
+		})
+	}
 	return &types.Assistant{
 		ID:              record.ID.String(),
 		ProjectID:       record.ProjectID.String(),
@@ -1113,6 +1188,7 @@ func toHTTPAssistant(record assistantRecord) (*types.Assistant, error) {
 		Instructions:    record.Instructions,
 		Toolsets:        toolsets,
 		McpServers:      mcpServers,
+		Skills:          skills,
 		WarmTTLSeconds:  record.WarmTTLSeconds,
 		MaxConcurrency:  record.MaxConcurrency,
 		Status:          record.Status,
@@ -1210,9 +1286,14 @@ func (s *ServiceCore) ListAssistants(ctx context.Context, projectID uuid.UUID) (
 	if err != nil {
 		return nil, err
 	}
+	skillRefs, err := s.loadAssistantSkills(ctx, projectID, ids)
+	if err != nil {
+		return nil, err
+	}
 	for i := range out {
 		out[i].Toolsets = refs[out[i].ID]
 		out[i].MCPServers = mcpRefs[out[i].ID]
+		out[i].Skills = skillRefs[out[i].ID]
 	}
 	return out, nil
 }
@@ -1227,6 +1308,9 @@ func (s *ServiceCore) GetAssistant(ctx context.Context, projectID uuid.UUID, ass
 	}
 	record := assistantRecordFromGetRow(row)
 	if err := s.hydrateAssistantToolSources(ctx, projectID, &record); err != nil {
+		return assistantRecord{}, err
+	}
+	if err := s.hydrateAssistantSkills(ctx, projectID, &record); err != nil {
 		return assistantRecord{}, err
 	}
 	return record, nil
@@ -1314,16 +1398,62 @@ func (s *ServiceCore) UpdateAssistant(
 	if err := s.hydrateAssistantToolSources(ctx, projectID, &record); err != nil {
 		return assistantRecord{}, err
 	}
+	if err := s.hydrateAssistantSkills(ctx, projectID, &record); err != nil {
+		return assistantRecord{}, err
+	}
 	return record, nil
 }
 
-func (s *ServiceCore) DeleteAssistant(ctx context.Context, projectID uuid.UUID, assistantID uuid.UUID) error {
-	err := assistantrepo.New(s.db).DeleteAssistant(ctx, assistantrepo.DeleteAssistantParams{
+func (s *ServiceCore) revokeAssistantSkillDistributions(ctx context.Context, tx pgx.Tx, projectID, assistantID uuid.UUID, actor urn.Principal, actorDisplayName *string) error {
+	rows, err := assistantrepo.New(tx).RevokeSkillDistributionsByAssistant(ctx, assistantrepo.RevokeSkillDistributionsByAssistantParams{
+		ProjectID: projectID, AssistantID: uuid.NullUUID{UUID: assistantID, Valid: true},
+	})
+	if err != nil {
+		return fmt.Errorf("revoke assistant skill distributions: %w", err)
+	}
+	for _, row := range rows {
+		after := &audit.SkillDistributionSnapshot{
+			ID: row.ID.String(), ProjectID: row.ProjectID.String(), SkillID: row.SkillID.String(),
+			PluginID: conv.FromNullableUUID(row.PluginID), AssistantID: conv.FromNullableUUID(row.AssistantID),
+			PinnedVersionID: conv.FromNullableUUID(row.PinnedVersionID), ResolvedVersionID: row.ResolvedVersionID.String(),
+			Channel: row.Channel, CreatedByUserID: row.CreatedByUserID,
+			RevokedAt: conv.PtrEmpty(conv.FromPGTimestamptz(row.RevokedAt)), CreatedAt: conv.FromPGTimestamptz(row.CreatedAt),
+			UpdatedAt: conv.FromPGTimestamptz(row.UpdatedAt),
+		}
+		before := *after
+		before.RevokedAt = nil
+		before.UpdatedAt = conv.FromPGTimestamptz(row.PreviousUpdatedAt)
+		if err := s.audit.LogSkillUndistribute(ctx, tx, audit.LogSkillUndistributeEvent{
+			OrganizationID: row.OrganizationID, ProjectID: projectID, Actor: actor,
+			ActorDisplayName: actorDisplayName, ActorSlug: nil, SkillURN: urn.NewSkill(row.SkillID),
+			SkillName: row.SkillName, SkillDisplayName: row.SkillDisplayName,
+			DistributionSnapshotBefore: &before, DistributionSnapshotAfter: after,
+		}); err != nil {
+			return fmt.Errorf("log assistant skill undistribution: %w", err)
+		}
+	}
+	return nil
+}
+
+func (s *ServiceCore) DeleteAssistant(ctx context.Context, projectID uuid.UUID, assistantID uuid.UUID, actor urn.Principal, actorDisplayName *string) error {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin delete assistant tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	queries := assistantrepo.New(tx)
+	err = queries.DeleteAssistant(ctx, assistantrepo.DeleteAssistantParams{
 		AssistantID: assistantID,
 		ProjectID:   projectID,
 	})
 	if err != nil {
 		return fmt.Errorf("delete assistant: %w", err)
+	}
+	if err := s.revokeAssistantSkillDistributions(ctx, tx, projectID, assistantID, actor, actorDisplayName); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit delete assistant tx: %w", err)
 	}
 
 	// Best-effort: tear down per-assistant backend resources (e.g. Fly app)
@@ -1861,8 +1991,16 @@ func (s *ServiceCore) CheckDashboardChatOwnership(ctx context.Context, projectID
 }
 
 func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, []byte, error) {
+	sourcePayloadJSON := task.RawPayload
+	if !json.Valid(sourcePayloadJSON) {
+		wrapped, err := json.Marshal(map[string]string{"raw": string(task.RawPayload)})
+		if err != nil {
+			return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
+		}
+		sourcePayloadJSON = wrapped
+	}
 	switch task.DefinitionSlug {
-	case "slack":
+	case sourceKindSlack:
 		var event slackEventPayload
 		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
 			return "", nil, nil, nil, fmt.Errorf("decode slack trigger event: %w", err)
@@ -1879,14 +2017,22 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal slack source ref: %w", err)
 		}
-		sourcePayloadJSON := task.RawPayload
-		if !json.Valid(sourcePayloadJSON) {
-			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
-			if err != nil {
-				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
-			}
-		}
 		return sourceKindSlack, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
+	case sourceKindMSTeams:
+		var event msteamsEventPayload
+		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
+			return "", nil, nil, nil, fmt.Errorf("decode msteams trigger event: %w", err)
+		}
+		sourceRefJSON, err := json.Marshal(msteamsSourceRef{
+			TenantID:       event.TenantID,
+			ConversationID: event.ConversationID,
+			ServiceURL:     event.ServiceURL,
+			UserID:         event.UserID,
+		})
+		if err != nil {
+			return "", nil, nil, nil, fmt.Errorf("marshal msteams source ref: %w", err)
+		}
+		return sourceKindMSTeams, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	case sourceKindLinear:
 		var event linearEventPayload
 		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
@@ -1898,13 +2044,6 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		})
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal linear source ref: %w", err)
-		}
-		sourcePayloadJSON := task.RawPayload
-		if !json.Valid(sourcePayloadJSON) {
-			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
-			if err != nil {
-				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
-			}
 		}
 		return sourceKindLinear, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	case sourceKindGithub:
@@ -1920,13 +2059,6 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal github source ref: %w", err)
 		}
-		sourcePayloadJSON := task.RawPayload
-		if !json.Valid(sourcePayloadJSON) {
-			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
-			if err != nil {
-				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
-			}
-		}
 		return sourceKindGithub, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	case sourceKindCron:
 		var event cronEventPayload
@@ -1939,13 +2071,6 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		})
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal cron source ref: %w", err)
-		}
-		sourcePayloadJSON := task.RawPayload
-		if !json.Valid(sourcePayloadJSON) {
-			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
-			if err != nil {
-				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
-			}
 		}
 		return sourceKindCron, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	case sourceKindWake:
@@ -1960,13 +2085,6 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal wake source ref: %w", err)
 		}
-		sourcePayloadJSON := task.RawPayload
-		if !json.Valid(sourcePayloadJSON) {
-			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
-			if err != nil {
-				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
-			}
-		}
 		return sourceKindWake, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	case sourceKindDashboard:
 		var event dashboardEventPayload
@@ -1976,13 +2094,6 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		sourceRefJSON, err := json.Marshal(dashboardSourceRef{UserID: event.UserID})
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal dashboard source ref: %w", err)
-		}
-		sourcePayloadJSON := task.RawPayload
-		if !json.Valid(sourcePayloadJSON) {
-			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
-			if err != nil {
-				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
-			}
 		}
 		return sourceKindDashboard, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	default:
@@ -2340,7 +2451,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "turn_start", "assistant turn started", "INFO", nil)
 
 		stopLeaseHeartbeat := s.startProcessingLeaseHeartbeat(turnCtx, thread.ProjectID, runtimeRecord.ID, event.ID)
-		runErr := s.processEventTurn(turnCtx, thread, assistant, runtimeRecord, event)
+		currentSkillSnapshot, runErr := s.processEventTurn(turnCtx, thread, assistant, runtimeRecord, event)
 		stopLeaseHeartbeat()
 		if runErr != nil {
 			s.logger.WarnContext(ctx, "assistant turn failed",
@@ -2537,8 +2648,20 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			}, nil
 		}
 
-		if err := s.completeEvent(ctx, thread.ProjectID, event.ID); err != nil {
+		completed, err := s.completeEvent(ctx, thread.ProjectID, event.ID, event.Attempts, event.SkillSetSnapshot, currentSkillSnapshot, event.Attempts == 1)
+		if err != nil {
 			return ProcessThreadEventsResult{}, err
+		}
+		if !completed {
+			return ProcessThreadEventsResult{
+				AssistantID:         assistant.ID,
+				WarmUntil:           runtimeRecord.WarmUntil.Time,
+				WarmTTLSeconds:      assistant.WarmTTLSeconds,
+				RuntimeActive:       true,
+				RetryAdmission:      true,
+				ProcessedAnyEvent:   processedAny,
+				BootstrappedRuntime: bootstrappedRuntime,
+			}, nil
 		}
 		s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_completed", "assistant event completed", "INFO", nil)
 		processedAny = true
@@ -2565,44 +2688,61 @@ func (s *ServiceCore) processEventTurn(
 	assistant assistantRecord,
 	runtime assistantRuntimeRecord,
 	event assistantThreadEventRecord,
-) error {
+) ([]byte, error) {
+	skills, err := s.loadAssistantSkills(ctx, assistant.ProjectID, []uuid.UUID{assistant.ID})
+	if err != nil {
+		return nil, err
+	}
+	currentSnapshot := newAssistantSkillSetSnapshot(skills[assistant.ID])
+	currentSnapshotBytes, err := marshalAssistantSkillSetSnapshot(currentSnapshot)
+	if err != nil {
+		return nil, fmt.Errorf("marshal current assistant skill snapshot: %w", err)
+	}
+	notice := ""
+	if event.SkillSetSnapshot != nil {
+		claimedSnapshot, err := decodeAssistantSkillSetSnapshot(event.SkillSetSnapshot)
+		if err != nil {
+			return nil, err
+		}
+		notice = renderAssistantSkillSetChange(claimedSnapshot, currentSnapshot)
+	}
+
 	mcpServers := s.currentRuntimeMCPServers(ctx, assistant)
 
-	if prompt, ok := decodeMCPAuthTurn(ctx, s.logger, event); ok {
+	prompt, actorUserID := "", assistant.CreatedByUserID
+	var inputParts []runtimeContentPart
+	if mcpAuthPrompt, ok := decodeMCPAuthTurn(ctx, s.logger, event); ok {
 		// MCP auth resumption is a system event with no human sender — act as
 		// the assistant's creator.
-		turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID, assistant.CreatedByUserID)
+		prompt = mcpAuthPrompt
+	} else {
+		adapter, err := getSourceAdapter(thread.SourceKind)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		if err := s.runtime.RunTurn(ctx, runtime, thread.ID, event.ID.String(), turnToken, prompt, nil, mcpServers); err != nil {
-			return fmt.Errorf("run assistant turn: %w", err)
+		prompt, err = adapter.DecodeTurn(event)
+		if err != nil {
+			return nil, fmt.Errorf("decode assistant turn: %w", err)
 		}
-		return nil
+		actorUserID = turnUserID(assistant, thread, event)
+		// Best-effort: image attachments on the triggering Slack message ride
+		// along as vision content. Failures degrade to the metadata-only turn.
+		if thread.SourceKind == sourceKindSlack {
+			inputParts = s.slackTurnImageParts(ctx, thread, event)
+		}
 	}
-
-	adapter, err := getSourceAdapter(thread.SourceKind)
+	prompt, err = insertAssistantEnvironmentChange(prompt, notice)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	prompt, err := adapter.DecodeTurn(event)
+	turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID, actorUserID)
 	if err != nil {
-		return fmt.Errorf("decode assistant turn: %w", err)
-	}
-	// Best-effort: image attachments on the triggering Slack message ride
-	// along as vision content. Failures degrade to the metadata-only turn.
-	var inputParts []runtimeContentPart
-	if thread.SourceKind == sourceKindSlack {
-		inputParts = s.slackTurnImageParts(ctx, thread, event)
-	}
-	turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID, turnUserID(assistant, thread, event))
-	if err != nil {
-		return err
+		return nil, err
 	}
 	if err := s.runtime.RunTurn(ctx, runtime, thread.ID, event.ID.String(), turnToken, prompt, inputParts, mcpServers); err != nil {
-		return fmt.Errorf("run assistant turn: %w", err)
+		return nil, fmt.Errorf("run assistant turn: %w", err)
 	}
-	return nil
+	return currentSnapshotBytes, nil
 }
 
 // currentRuntimeMCPServers builds the MCP server set the runner should be
@@ -2639,6 +2779,9 @@ func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assi
 	case mErr == nil:
 		if managed.ID == assistant.ID {
 			platformSlugs = append(platformSlugs, platformtools.ManagedAssistantPlatformToolsetSlug)
+			if s.platformMCPReadEnabled(ctx, assistant.ProjectID) {
+				platformSlugs = append(platformSlugs, platformtools.PlatformMCPReadToolsetSlug)
+			}
 		}
 	case errors.Is(mErr, pgx.ErrNoRows):
 		// Project has no managed assistant; managed-only tools stay ungranted.
@@ -2646,6 +2789,29 @@ func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assi
 		return nil, fmt.Errorf("resolve managed assistant: %w", mErr)
 	}
 	return platformSlugs, nil
+}
+
+// platformMCPReadEnabled reports whether the organization owning projectID is
+// cleared for the Platform MCP read toolset rollout. Evaluation mirrors the
+// Platform MCP organization gate: distinct ID is the org ID with the org-slug
+// PostHog group. Errors fail closed but never abort the turn — a flag-provider
+// outage must not take down bootstrap or reconcile, so the toolset is simply
+// withheld until evaluation recovers.
+func (s *ServiceCore) platformMCPReadEnabled(ctx context.Context, projectID uuid.UUID) bool {
+	if s.featureFlags == nil {
+		return false
+	}
+	project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, projectID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve organization for platform mcp read toolset", attr.SlogError(err))
+		return false
+	}
+	enabled, err := s.featureFlags.IsFlagEnabled(ctx, feature.FlagAssistantPlatformMCP, project.ID, feature.OrgProjectGroups(project.Slug, ""))
+	if err != nil {
+		s.logger.WarnContext(ctx, "evaluate assistant platform mcp flag", attr.SlogError(err))
+		return false
+	}
+	return enabled
 }
 
 // turnUserID returns the Gram user whose identity a turn should act under.
@@ -2774,6 +2940,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 		Instructions:    row.Instructions,
 		Toolsets:        nil,
 		MCPServers:      nil,
+		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
 		Status:          row.Status,
@@ -2783,6 +2950,26 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	}
 	if err := s.hydrateAssistantToolSources(ctx, assistant.ProjectID, &assistant); err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant tool sources").LogError(ctx, s.logger, logAttrs...)
+	}
+	if err := s.hydrateAssistantSkills(ctx, assistant.ProjectID, &assistant); err != nil {
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant skills").LogError(ctx, s.logger, logAttrs...)
+	}
+	candidate := newAssistantSkillSetSnapshot(assistant.Skills)
+	candidateSnapshot, err := marshalAssistantSkillSetSnapshot(candidate)
+	if err != nil {
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "marshal assistant skill snapshot").LogError(ctx, s.logger, logAttrs...)
+	}
+	persistedSnapshot, err := assistantrepo.New(s.db).InitThreadSkillSnapshot(ctx, assistantrepo.InitThreadSkillSnapshotParams{
+		Candidate: candidateSnapshot,
+		ThreadID:  thread.ID,
+		ProjectID: thread.ProjectID,
+	})
+	if err != nil {
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "initialize assistant skill snapshot").LogError(ctx, s.logger, logAttrs...)
+	}
+	baselineSkills, err := decodeAssistantSkillSetSnapshot(persistedSnapshot)
+	if err != nil {
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "decode assistant skill snapshot").LogError(ctx, s.logger, logAttrs...)
 	}
 
 	runtimeServerURL := s.runtime.ServerURL()
@@ -2804,7 +2991,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	// assistant can tell the user which integration is broken.
 	mcpServers := resolveAssistantMCPServers(ctx, s.logger, runtimeServerURL, assistant.Toolsets, assistant.MCPServers, platformSlugs)
 
-	instructions, err := composeInstructions(assistant.Instructions, thread)
+	instructions, err := composeInstructions(assistant.Instructions, thread, baselineSkills.Skills)
 	if err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "compose assistant instructions").LogError(ctx, s.logger, logAttrs...)
 	}
@@ -2858,7 +3045,7 @@ Two MCP auth events may appear in thread, each as <message-context> block with E
 
 - EventType "assistant_mcp_auth" reports result. Status "success" + still need server → call mcp_force_reconnect with server_id = MCPServerID, then continue task. Status "failed" → inform the user the auth attempt failed, include ErrorDescription if present.`
 
-func composeInstructions(base string, thread assistantThreadRecord) (string, error) {
+func composeInstructions(base string, thread assistantThreadRecord, skills []assistantSkillSnapshot) (string, error) {
 	adapter, err := getSourceAdapter(thread.SourceKind)
 	if err != nil {
 		return "", err
@@ -2870,6 +3057,17 @@ func composeInstructions(base string, thread assistantThreadRecord) (string, err
 	parts := make([]string, 0, 4)
 	if base != "" {
 		parts = append(parts, base)
+	}
+	if len(skills) > 0 {
+		lines := make([]string, 0, len(skills)+2)
+		lines = append(lines, "## Skills")
+		lines = append(lines, "If a user turn includes a <skill-context> block for one of these skills, its embedded <skill-content> is already loaded and takes precedence for that turn. Do not call mcp__p-assistants_skills_load for that skill in that turn.")
+		for _, skill := range skills {
+			name := strings.Join(strings.Fields(skill.Name), " ")
+			description := conv.TruncateString(strings.Join(strings.Fields(skill.Description), " "), 200)
+			lines = append(lines, "- Name: "+strconv.Quote(name)+"; description: "+strconv.Quote(description)+". Unless this turn already includes a <skill-context> for this skill, call mcp__p-assistants_skills_load with name "+strconv.Quote(name)+" before relying on this skill.")
+		}
+		parts = append(parts, strings.Join(lines, "\n"))
 	}
 	parts = append(parts, mcpAuthAddendum)
 	if guidance := adapter.OutputChannelGuidance(); guidance != "" {
@@ -3111,6 +3309,7 @@ func (s *ServiceCore) loadThreadContext(ctx context.Context, projectID, threadID
 		Instructions:    row.Instructions,
 		Toolsets:        nil,
 		MCPServers:      nil,
+		Skills:          nil,
 		WarmTTLSeconds:  conv.SafeInt(row.WarmTtlSeconds),
 		MaxConcurrency:  conv.SafeInt(row.MaxConcurrency),
 		Status:          row.Status,
@@ -3390,20 +3589,26 @@ func (s *ServiceCore) claimNextPendingEvent(ctx context.Context, projectID, thre
 			Attempts:              conv.SafeInt(row.Attempts),
 			LastError:             row.LastError,
 			CreatedAt:             row.CreatedAt.Time,
+			SkillSetSnapshot:      row.SkillSetSnapshot,
 		}, true, nil
 	}
 }
 
-func (s *ServiceCore) completeEvent(ctx context.Context, projectID, eventID uuid.UUID) error {
-	err := assistantrepo.New(s.db).CompleteAssistantThreadEvent(ctx, assistantrepo.CompleteAssistantThreadEventParams{
-		CompletedStatus: eventStatusCompleted,
-		EventID:         eventID,
-		ProjectID:       projectID,
+func (s *ServiceCore) completeEvent(ctx context.Context, projectID, eventID uuid.UUID, claimedAttempt int, claimedSnapshot, currentSnapshot []byte, allowAdvance bool) (bool, error) {
+	completed, err := assistantrepo.New(s.db).CompleteAssistantThreadEventAndAdvanceSkillSnapshot(ctx, assistantrepo.CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams{
+		AllowAdvance:     allowAdvance,
+		ClaimedAttempt:   int64(claimedAttempt),
+		CompletedStatus:  eventStatusCompleted,
+		EventID:          eventID,
+		ProcessingStatus: eventStatusProcessing,
+		ProjectID:        projectID,
+		CurrentSnapshot:  currentSnapshot,
+		ClaimedSnapshot:  claimedSnapshot,
 	})
 	if err != nil {
-		return fmt.Errorf("complete assistant thread event: %w", err)
+		return false, fmt.Errorf("complete assistant thread event: %w", err)
 	}
-	return nil
+	return completed, nil
 }
 
 // recordTurnClassification counts a failed turn by its classifyTurnError

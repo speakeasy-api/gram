@@ -111,19 +111,24 @@ func TestListMcpEndpoints_ForbiddenWithoutOrgAdminGrant(t *testing.T) {
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
-func TestListMcpEndpoints_ForbiddenWithOrgReadGrantOnly(t *testing.T) {
+func TestListMcpEndpoints_AllowsOrgReadGrant(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestCustomDomainsService(t)
 	authCtx := testAuthContext(t, ctx)
+	_, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         "org-read.example.com",
+		IpAllowlist:    []string{},
+	})
+	require.NoError(t, err)
 
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
 		Scope:    authz.ScopeOrgRead,
 		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
 	})
 
-	_, err := ti.service.ListMcpEndpoints(ctx, &gen.ListMcpEndpointsPayload{SessionToken: nil})
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+	result, err := ti.service.ListMcpEndpoints(ctx, &gen.ListMcpEndpointsPayload{SessionToken: nil})
+	require.NoError(t, err)
+	require.Empty(t, result.McpEndpoints)
 }

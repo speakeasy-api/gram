@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type Service struct {
@@ -97,7 +98,6 @@ func (s *Service) ListAssistants(ctx context.Context, _ *gen.ListAssistantsPaylo
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
-
 	items, err := s.core.ListAssistants(ctx, *authCtx.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list assistants").LogError(ctx, s.logger)
@@ -222,7 +222,10 @@ func (s *Service) DeleteAssistant(ctx context.Context, payload *gen.DeleteAssist
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogError(ctx, s.logger)
 	}
-	if err := s.core.DeleteAssistant(ctx, *authCtx.ProjectID, assistantID); err != nil {
+	if authCtx.UserID == "" {
+		return oops.E(oops.CodeUnauthorized, nil, "deleting an assistant requires a user identity")
+	}
+	if err := s.core.DeleteAssistant(ctx, *authCtx.ProjectID, assistantID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), authCtx.Email); err != nil {
 		return mapAssistantStoreError(ctx, s.logger, err, "delete assistant")
 	}
 	return nil
@@ -237,6 +240,11 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 	// configuration, and viewers must be able to talk to a project's assistants.
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
+	}
+	if len(payload.SkillIds) > 0 {
+		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeSkillRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+			return nil, err
+		}
 	}
 	// Messages are sent as the calling user, so a user identity is required.
 	if authCtx.UserID == "" {
@@ -276,8 +284,28 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 		idempotencyKey = *payload.IdempotencyKey
 	}
 
-	result, err := s.core.SendDashboardMessage(ctx, *authCtx.ProjectID, assistantID, authCtx.UserID, chatID, payload.Message, idempotencyKey)
+	skillIDs := make([]uuid.UUID, 0, len(payload.SkillIds))
+	seenSkillIDs := make(map[uuid.UUID]struct{}, len(payload.SkillIds))
+	for _, rawSkillID := range payload.SkillIds {
+		skillID, err := uuid.Parse(rawSkillID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid skill id").LogError(ctx, s.logger)
+		}
+		if _, exists := seenSkillIDs[skillID]; exists {
+			continue
+		}
+		seenSkillIDs[skillID] = struct{}{}
+		skillIDs = append(skillIDs, skillID)
+	}
+
+	result, err := s.core.SendDashboardMessage(ctx, *authCtx.ProjectID, assistantID, authCtx.UserID, chatID, payload.Message, idempotencyKey, skillIDs)
 	if err != nil {
+		if errors.Is(err, ErrAssistantTurnSkillContextTooLarge) {
+			return nil, oops.E(oops.CodeBadRequest, err, "selected skill context is too large").LogError(ctx, s.logger)
+		}
+		if errors.Is(err, ErrAssistantTurnSkillUnavailable) {
+			return nil, oops.E(oops.CodeBadRequest, err, "one or more selected skills are unavailable").LogError(ctx, s.logger)
+		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "assistant not found").LogError(ctx, s.logger)
 		}

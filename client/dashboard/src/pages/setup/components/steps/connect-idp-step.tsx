@@ -6,14 +6,15 @@ import {
   ChevronDown,
   Search,
 } from "lucide-react";
-import { useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { toast } from "sonner";
 import { StepContainer } from "../step-container";
 import { IDP_PROVIDERS } from "../../providers";
 import type { IdpProvider } from "../../types";
-import { Input } from "@/components/ui/input";
+import { Input } from "@/components/ui/Input";
+import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { cn, getServerURL } from "@/lib/utils";
 
 function ProviderIcon({
@@ -102,8 +103,7 @@ export function ConnectIdpStep({
       },
       {
         onSuccess: (data) => {
-          window.open(data.url, "_blank", "noopener,noreferrer");
-          setPortalOpened(true);
+          if (openSafeExternalUrl(data.url)) setPortalOpened(true);
         },
       },
     );
@@ -138,7 +138,7 @@ export function ConnectIdpStep({
   return (
     <StepContainer
       icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center rounded-lg">
+        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
           <KeyRound className="text-foreground h-6 w-6" />
         </div>
       }
@@ -179,7 +179,7 @@ export function ConnectIdpStep({
                 onClick={() => setSelectedProvider(p.id)}
                 disabled={generatePortalLink.isPending}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg border p-4 text-left transition-all",
+                  "flex items-center gap-3 border p-4 text-left transition-all",
                   selectedProvider === p.id
                     ? "border-foreground bg-secondary"
                     : "border-border bg-card hover:border-foreground/30",
@@ -188,7 +188,7 @@ export function ConnectIdpStep({
                     "cursor-not-allowed opacity-50",
                 )}
               >
-                <div className="bg-secondary flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg">
+                <div className="bg-secondary flex h-10 w-10 flex-shrink-0 items-center justify-center">
                   <ProviderIcon provider={p} />
                 </div>
                 <div className="min-w-0 flex-1">
@@ -223,9 +223,9 @@ export function ConnectIdpStep({
         </div>
 
         {selectedProvider && !generatePortalLink.isPending && (
-          <div className="bg-card border-border rounded-lg border p-4">
+          <div className="bg-card border-border border p-4">
             <div className="flex items-start gap-3">
-              <div className="bg-secondary mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded">
+              <div className="bg-secondary mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center">
                 <ExternalLink className="text-muted-foreground h-4 w-4" />
               </div>
               <div>

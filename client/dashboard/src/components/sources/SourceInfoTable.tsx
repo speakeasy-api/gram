@@ -1,4 +1,4 @@
-import { Type } from "@/components/ui/type";
+import { Text } from "@/components/ui/Text";
 import type { ReactNode } from "react";
 
 export function SourceInfoTable({
@@ -6,7 +6,7 @@ export function SourceInfoTable({
 }: {
   children: ReactNode;
 }): JSX.Element {
-  return <div className="divide-y rounded-lg border">{children}</div>;
+  return <div className="divide-y border">{children}</div>;
 }
 
 export function SourceInfoRow({
@@ -18,9 +18,9 @@ export function SourceInfoRow({
 }): JSX.Element {
   return (
     <div className="flex items-center justify-between px-3 py-2.5">
-      <Type muted small>
+      <Text muted small>
         {label}
-      </Type>
+      </Text>
       <div className="text-right">{children}</div>
     </div>
   );

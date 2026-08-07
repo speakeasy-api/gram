@@ -14,6 +14,30 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 )
 
+// DCRRequest represents the Dynamic Client Registration request per RFC 7591
+type DCRRequest struct {
+	RedirectURIs            []string `json:"redirect_uris"`
+	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method,omitempty"`
+	GrantTypes              []string `json:"grant_types"`
+	ResponseTypes           []string `json:"response_types"`
+	ClientName              string   `json:"client_name"`
+	ClientURI               string   `json:"client_uri,omitempty"`
+	Scope                   string   `json:"scope,omitempty"`
+}
+
+// DCRResponse represents the Dynamic Client Registration response per RFC 7591
+type DCRResponse struct {
+	ClientID                string   `json:"client_id"`
+	ClientSecret            string   `json:"client_secret,omitempty"`
+	ClientIDIssuedAt        int64    `json:"client_id_issued_at,omitempty"`
+	ClientSecretExpiresAt   int64    `json:"client_secret_expires_at,omitempty"`
+	RedirectURIs            []string `json:"redirect_uris,omitempty"`
+	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method,omitempty"`
+	GrantTypes              []string `json:"grant_types,omitempty"`
+	ResponseTypes           []string `json:"response_types,omitempty"`
+	ClientName              string   `json:"client_name,omitempty"`
+}
+
 // ClientRegistrationService handles OAuth Dynamic Client Registration
 type ClientRegistrationService struct {
 	logger            *slog.Logger

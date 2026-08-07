@@ -1,0 +1,97 @@
+# # Project Configuration
+#
+# Project configuration lets teams share repository-specific settings — hooks, dev server URLs, and other defaults. The file lives in `.config/wt.toml` and is typically checked into version control.
+#
+# To create a starter file with commented-out examples, run `wt config create --project`.
+#
+# ## Hooks
+#
+# Project hooks apply to this repository only. See `wt hook` (https://worktrunk.dev/hook/) for hook types, execution order, and examples.
+#
+# pre-start = "npm cwti"
+# post-start = "npm run dev"
+# pre-merge = "npm test"
+
+# Blocking: copies mise.local.toml/local/ from the main worktree, installs deps,
+# and remaps ports — everything else in the worktree depends on this.
+[[pre-start]]
+workinit = "mise run git:workinit"
+
+# Background: brings the worktree's stack up on the ports workinit just
+# assigned — compose infra, migrations, dev-idp, the pitchfork daemons, then
+# seed. Non-blocking, so worktree creation returns without waiting on it;
+# `wt config state logs` has the output. The task also publishes a pid marker
+# while it runs, which is what lets `wt status` say "booting" rather than
+# "down". Keep the hook key `stack` — the log file is named after it.
+#
+# Set GRAM_WT_NO_BOOT=1 to skip the stack for branches that don't need it (a
+# README tweak, a config change). `new-branch <branch> --no-boot` sets it.
+# workinit still runs, so the worktree is complete — boot it later with
+# `./zero --agent`.
+[post-start]
+stack = "mise run git:workboot"
+
+# Runs inside the worktree before deletion — nuke needs this worktree's
+# COMPOSE_PROJECT_NAME (mise.local.toml) and local/ dir to tear down the right
+# compose stack. post-remove would run in the primary worktree instead.
+# --keep-shared leaves the shared Presidio stack up for the other worktrees.
+[[pre-remove]]
+nuke = "mise run nuke --keep-shared"
+
+# Dashboard URL in the `wt list` URL column, dimmed when the port isn't
+# listening — so it doubles as a "is this worktree's stack up?" indicator.
+# Ports are randomized per worktree by `zero:remap-ports`, not derived from the
+# branch, so `git:workinit` stores the assigned port as the per-branch
+# `siteport` var. The default covers the primary worktree, which keeps
+# mise.toml's port.
+[list]
+url = "https://localhost:{{ vars.siteport | default('5173') }}"
+
+# `wt status` — one line per worktree: is its stack up, and where. The built-in
+# table can't express this: liveness is only in `url_active` in the JSON, not
+# in any column template.
+# `wt status` — interactive TUI: live-updating stack states, per-worktree boot
+# logs (enter), multi-select remove (space + d). Without a TTY (pipes, agents)
+# it prints a single plain-text frame instead, so scripting keeps working.
+# The old one-shot table remains at `mise run git:workstatus` / `gwst`.
+[aliases]
+status = "mise run git:worktui"
+
+#
+# ## Dev server URL
+#
+# URL column in `wt list` (dimmed when port not listening):
+#
+# [list]
+# url = "http://localhost:{{ branch | hash_port }}"
+#
+# ## Commit-message append [experimental]
+#
+# `template-append` adds project-wide conventions to the LLM commit and squash prompts, shared so every teammate's LLM sees the same style guide:
+#
+# [commit.generation]
+# template-append = """
+# - Use conventional commits (feat:, fix:, docs:, …)
+# - Reference the relevant issue ID in the body
+# """
+#
+# The first time the fragment is used (and whenever it changes), `wt` prompts the user to approve it — the same one-shot gate as project-defined hooks. Only `template-append` is honored from the project file; the LLM command and the main prompt template stay in user config (https://worktrunk.dev/config/), since they describe per-developer environment (which CLI is installed, which agent the developer prefers). How the fragment renders: the LLM commits guide (https://worktrunk.dev/llm-commits/#appending-to-the-prompt).
+#
+# ## Copy-ignored excludes
+#
+# Additional excludes for `wt step copy-ignored`:
+#
+# [step.copy-ignored]
+# exclude = [".cache/", ".turbo/"]
+#
+# Built-in excludes (VCS metadata and tool-state directories) always apply; the `wt step copy-ignored` docs (https://worktrunk.dev/step/#wt-step-copy-ignored) list them. User config and project config exclusions are combined.
+#
+# ## Aliases
+#
+# Command templates that run as `wt <name>`. See the Extending Worktrunk guide (https://worktrunk.dev/extending/#aliases) for usage and flags.
+#
+# [aliases]
+# deploy = "make deploy BRANCH={{ branch }}"
+# url = "echo http://localhost:{{ branch | hash_port }}"
+#
+# Aliases defined here are shared with teammates. For personal aliases, use the user config (https://worktrunk.dev/config/#aliases) `[aliases]` section instead.

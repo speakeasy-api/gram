@@ -1,24 +1,20 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Type } from "@/components/ui/type";
-import {
-  getActionCategory,
-  getActionColorConfig,
-} from "@/lib/audit-log-colors";
+} from "@/components/ui/Select";
+import { Text } from "@/components/ui/Text";
+import { getActionMeta } from "@/components/auditlogs/action-meta";
 import {
   formatDateHeader,
   type FacetOption,
   type TimestampMode,
 } from "@/lib/audit-log-feed";
-import { formatAuditAction } from "@/lib/audit-log-format";
 import { cn } from "@/lib/utils";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
 import React from "react";
 
 export function DateGroupHeader({
@@ -30,7 +26,7 @@ export function DateGroupHeader({
 }): React.JSX.Element {
   return (
     <div className="flex items-center gap-3 px-4 py-2">
-      <span className="text-muted-foreground shrink-0 text-[11px] font-semibold tracking-wide uppercase">
+      <span className="text-eyebrow shrink-0">
         {formatDateHeader(date, mode)}
       </span>
       <div className="bg-border h-px flex-1" />
@@ -38,32 +34,36 @@ export function DateGroupHeader({
   );
 }
 
-export function ActionBadge({ action }: { action: string }): React.JSX.Element {
-  const category = getActionCategory(action);
-  const colors = getActionColorConfig(category);
+/**
+ * The bordered square icon tile that leads an audit row — same idiom as the
+ * project-home Activity Timeline, so clicking through from the timeline to
+ * the audit log lands on rows that read identically.
+ */
+export function ActionIconTile({
+  action,
+  className,
+}: {
+  action: string;
+  className?: string;
+}): React.JSX.Element {
+  const meta = getActionMeta(action);
   return (
-    <span
+    <div
       className={cn(
-        "inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[11px] font-medium",
-        colors.bg,
-        colors.text,
+        "border-border bg-card relative flex size-8 shrink-0 items-center justify-center border",
+        className,
       )}
     >
-      {formatAuditAction(action)}
-    </span>
-  );
-}
-
-export function ActionDot({ action }: { action: string }): React.JSX.Element {
-  const category = getActionCategory(action);
-  const colors = getActionColorConfig(category);
-  return (
-    <span
-      className={cn(
-        "mt-[3px] inline-block size-2 shrink-0 rounded-full",
-        colors.dot,
+      <meta.icon className="text-muted-foreground size-4" />
+      {meta.dot && (
+        <span
+          className={cn(
+            "absolute top-1 right-1 size-1.5 rounded-full",
+            meta.dot,
+          )}
+        />
       )}
-    />
+    </div>
   );
 }
 
@@ -84,9 +84,9 @@ export function FacetSelect({
 }): React.JSX.Element {
   return (
     <div className="flex flex-col gap-1.5">
-      <Type small muted>
+      <Text small muted>
         {label}
-      </Type>
+      </Text>
       <Select value={value} onValueChange={onValueChange}>
         <SelectTrigger size="sm" className="bg-background min-w-[220px]">
           <SelectValue placeholder={placeholder} />
@@ -136,15 +136,15 @@ export function AuditFeedFooter({
   if (count === 0 && !isFetchingNextPage) return null;
 
   return (
-    <div className="bg-muted/20 flex items-center justify-between border-t px-4 py-3">
-      <Type muted small>
+    <div className="bg-card flex items-center justify-between border-t px-4 py-3">
+      <Text muted small>
         {count.toLocaleString()} {noun}
         {count === 1 ? "" : "s"}
-      </Type>
+      </Text>
 
       {hasNextPage ? (
         <Button
-          variant="outline"
+          variant="secondary"
           size="sm"
           onClick={onLoadMore}
           disabled={isFetchingNextPage}
@@ -159,9 +159,9 @@ export function AuditFeedFooter({
           )}
         </Button>
       ) : (
-        <Type muted small>
+        <Text muted small>
           {isFetching ? "Refreshing..." : endLabel}
-        </Type>
+        </Text>
       )}
     </div>
   );

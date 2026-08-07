@@ -27,19 +27,23 @@ type UserSession struct {
 }
 
 type UserSessionClient struct {
-	ID                    uuid.UUID
-	ProjectID             uuid.UUID
-	UserSessionIssuerID   uuid.UUID
-	ClientID              string
-	ClientSecretHash      pgtype.Text
-	ClientName            string
-	RedirectUris          []string
-	ClientIDIssuedAt      pgtype.Timestamptz
-	ClientSecretExpiresAt pgtype.Timestamptz
-	CreatedAt             pgtype.Timestamptz
-	UpdatedAt             pgtype.Timestamptz
-	DeletedAt             pgtype.Timestamptz
-	Deleted               bool
+	ID                             uuid.UUID
+	ProjectID                      uuid.UUID
+	UserSessionIssuerID            uuid.UUID
+	ClientID                       string
+	ClientSecretHash               pgtype.Text
+	ClientName                     string
+	RedirectUris                   []string
+	ClientIDIssuedAt               pgtype.Timestamptz
+	ClientSecretExpiresAt          pgtype.Timestamptz
+	ClientIDMetadataUri            pgtype.Text
+	ClientIDMetadataFetchedAt      pgtype.Timestamptz
+	ClientIDMetadataCacheExpiresAt pgtype.Timestamptz
+	ClientIDMetadataEtag           pgtype.Text
+	CreatedAt                      pgtype.Timestamptz
+	UpdatedAt                      pgtype.Timestamptz
+	DeletedAt                      pgtype.Timestamptz
+	Deleted                        bool
 }
 
 type UserSessionConsent struct {
@@ -56,14 +60,26 @@ type UserSessionConsent struct {
 }
 
 type UserSessionIssuer struct {
-	ID                 uuid.UUID
-	ProjectID          uuid.UUID
-	Slug               string
-	AuthnChallengeMode string
-	SessionDuration    pgtype.Interval
-	Classification     string
-	CreatedAt          pgtype.Timestamptz
-	UpdatedAt          pgtype.Timestamptz
-	DeletedAt          pgtype.Timestamptz
-	Deleted            bool
+	ID                            uuid.UUID
+	ProjectID                     uuid.UUID
+	Slug                          string
+	AuthnChallengeMode            string
+	SessionDuration               pgtype.Interval
+	Classification                string
+	ClientIDMetadataAdmissionMode pgtype.Text
+	CreatedAt                     pgtype.Timestamptz
+	UpdatedAt                     pgtype.Timestamptz
+	DeletedAt                     pgtype.Timestamptz
+	Deleted                       bool
+}
+
+type UserSessionIssuerCimdClient struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	ClientIDMetadataUri string
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
 }

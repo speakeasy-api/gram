@@ -29,8 +29,16 @@ type SkillVersion struct {
 	SpecValid bool
 	// Specification validation problems recorded for this manifest version.
 	ValidationErrors []*SkillValidationError
+	// The source version this version was derived from.
+	DerivedFromVersionID *string
 	// When this immutable version was recorded.
 	CreatedAt string
 	// The user that recorded this version.
 	CreatedByUserID string
+	// When this exact version was first activated.
+	FirstSeenAt *string
+	// When this exact version was most recently activated.
+	LastSeenAt *string
+	// The number of activations attributed to this exact version.
+	SeenCount int64
 }

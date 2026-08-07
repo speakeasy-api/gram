@@ -17,15 +17,13 @@ type fakeConfigPoller struct {
 
 type fakeConfigPollerCall struct {
 	organizationSlug string
-	configID         uuid.UUID
-	provider         string
+	syncID           uuid.UUID
 }
 
-func (f *fakeConfigPoller) Poll(_ context.Context, organizationSlug string, configID uuid.UUID, provider string) error {
+func (f *fakeConfigPoller) Poll(_ context.Context, organizationSlug string, syncID uuid.UUID) error {
 	f.calls = append(f.calls, fakeConfigPollerCall{
 		organizationSlug: organizationSlug,
-		configID:         configID,
-		provider:         provider,
+		syncID:           syncID,
 	})
 	return f.returnErr
 }
@@ -33,16 +31,44 @@ func (f *fakeConfigPoller) Poll(_ context.Context, organizationSlug string, conf
 func TestStartUsagePollDelegatesToStarter(t *testing.T) {
 	t.Parallel()
 
-	configID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	poller := &fakeConfigPoller{}
-	svc := &Service{configPoller: poller}
+	ctx, conn, store, orgID := newStoreTestDB(t)
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "cursor-key", true, true, nil, nil)
+	schedules, err := store.ListSyncSchedules(ctx, created.Config.ID)
+	require.NoError(t, err)
+	require.Len(t, schedules, 1)
 
-	require.NoError(t, svc.startUsagePoll(t.Context(), "acme", configID, ProviderCursor))
+	poller := &fakeConfigPoller{}
+	svc := &Service{store: store, configPoller: poller}
+
+	require.NoError(t, svc.startUsagePoll(ctx, "acme", created.Config.ID, ProviderCursor))
 	require.Equal(t, []fakeConfigPollerCall{{
 		organizationSlug: "acme",
-		configID:         configID,
-		provider:         ProviderCursor,
+		syncID:           schedules[0].ID,
 	}}, poller.calls)
+}
+
+func TestStartUsagePollStartsEveryAnthropicSchedule(t *testing.T) {
+	t.Parallel()
+
+	ctx, conn, store, orgID := newStoreTestDB(t)
+	extOrgID := "org_ext_1"
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderAnthropicCompliance, "anthropic-key", true, true, &extOrgID, nil)
+	schedules, err := store.ListSyncSchedules(ctx, created.Config.ID)
+	require.NoError(t, err)
+	syncIDsBySchedule := make(map[string]uuid.UUID, len(schedules))
+	for _, schedule := range schedules {
+		syncIDsBySchedule[schedule.Schedule] = schedule.ID
+	}
+
+	poller := &fakeConfigPoller{}
+	svc := &Service{store: store, configPoller: poller}
+
+	require.NoError(t, svc.startUsagePoll(ctx, "acme", created.Config.ID, ProviderAnthropicCompliance))
+	require.Equal(t, []fakeConfigPollerCall{
+		{organizationSlug: "acme", syncID: syncIDsBySchedule[ScheduleAnthropicCompliance]},
+		{organizationSlug: "acme", syncID: syncIDsBySchedule[ScheduleAnthropicAnalyticsUsage]},
+		{organizationSlug: "acme", syncID: syncIDsBySchedule[ScheduleAnthropicAnalyticsCost]},
+	}, poller.calls)
 }
 
 func TestStartUsagePollAllowsMissingStarter(t *testing.T) {
@@ -57,9 +83,11 @@ func TestStartUsagePollReturnsStarterError(t *testing.T) {
 	t.Parallel()
 
 	expectedErr := errors.New("temporal unavailable")
-	svc := &Service{configPoller: &fakeConfigPoller{returnErr: expectedErr}}
+	ctx, conn, store, orgID := newStoreTestDB(t)
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderCursor, "cursor-key", true, true, nil, nil)
+	svc := &Service{store: store, configPoller: &fakeConfigPoller{returnErr: expectedErr}}
 
-	require.ErrorIs(t, svc.startUsagePoll(t.Context(), "acme", uuid.MustParse("11111111-1111-1111-1111-111111111111"), ProviderCursor), expectedErr)
+	require.ErrorIs(t, svc.startUsagePoll(ctx, "acme", created.Config.ID, ProviderCursor), expectedErr)
 }
 
 func TestBuildViewUsesLastPollSuccessForLastPolledAt(t *testing.T) {
@@ -67,6 +95,7 @@ func TestBuildViewUsesLastPollSuccessForLastPolledAt(t *testing.T) {
 
 	cfg := Config{
 		ID:                uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+		SyncID:            uuid.Nil,
 		OrganizationID:    "org_123",
 		Provider:          ProviderCursor,
 		ProjectID:         uuid.MustParse("22222222-2222-2222-2222-222222222222"),
@@ -89,6 +118,7 @@ func TestBuildViewShowsPendingWithoutPollResult(t *testing.T) {
 
 	cfg := Config{
 		ID:             uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+		SyncID:         uuid.Nil,
 		OrganizationID: "org_123",
 		Provider:       ProviderCursor,
 		ProjectID:      uuid.MustParse("22222222-2222-2222-2222-222222222222"),
@@ -111,6 +141,7 @@ func TestBuildViewShowsFailedPollState(t *testing.T) {
 
 	cfg := Config{
 		ID:                uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+		SyncID:            uuid.Nil,
 		OrganizationID:    "org_123",
 		Provider:          ProviderCursor,
 		ProjectID:         uuid.MustParse("22222222-2222-2222-2222-222222222222"),

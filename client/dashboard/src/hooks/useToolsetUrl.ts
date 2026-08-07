@@ -1,56 +1,39 @@
 import { useProject } from "@/contexts/Auth";
 import { getServerURL } from "@/lib/utils";
+import type { CustomDomain } from "@gram/client/models/components/customdomain.js";
 import { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
-import { useGetDomain } from "@gram/client/react-query/getDomain.js";
+import { useListDomains } from "@gram/client/react-query/listDomains.js";
 import { useMemo } from "react";
 
 export function useCustomDomain(enabled = true): {
-  domain: ReturnType<typeof useGetDomain>["data"];
-  refetch: ReturnType<typeof useGetDomain>["refetch"];
+  domain: CustomDomain | undefined;
+  refetch: ReturnType<typeof useListDomains>["refetch"];
   isLoading: boolean;
 } {
-  const {
-    data: domain,
-    isLoading,
-    refetch,
-  } = useGetDomain(undefined, undefined, {
+  const { data, isLoading, refetch } = useListDomains(undefined, undefined, {
     refetchOnWindowFocus: false,
     retry: false,
     throwOnError: false,
     enabled,
   });
 
-  return { domain: domain, refetch: refetch, isLoading };
+  return { domain: data?.domains[0], refetch, isLoading };
 }
 
-// useCustomDomains is a forward-compatible shim around useGetDomain that
-// returns the org's custom domains as an array. The backend currently enforces
-// a single custom domain per organization (see custom_domains_organization_id_key
-// in schema.sql), so the array has at most one entry today. Tracked under
-// AGE-2227 (DB migration to drop the unique index) and AGE-2229 (list RPC +
-// dashboard call-site updates) — once both ship this shim swaps to a real
-// list-backed implementation without touching any callsites that already iterate
-// over `domains`.
 export function useCustomDomains(enabled = true): {
-  domains: ReturnType<typeof useGetDomain>["data"][];
+  domains: CustomDomain[];
   isLoading: boolean;
-  refetch: ReturnType<typeof useGetDomain>["refetch"];
+  refetch: ReturnType<typeof useListDomains>["refetch"];
 } {
-  const { domain, isLoading, refetch } = useCustomDomain(enabled);
+  const { data, isLoading, refetch } = useListDomains(undefined, undefined, {
+    refetchOnWindowFocus: false,
+    retry: false,
+    throwOnError: false,
+    enabled,
+  });
 
-  const domains = domain ? [domain] : [];
-
-  if (Array.isArray(domain) && (domain as unknown[]).length > 1) {
-    // Defensive logging for the AGE-2229 swap: if useGetDomain ever starts
-    // returning a list, callsites that still assume `domains[0]` semantics
-    // need an audit pass. Emitted as console.error so RUM telemetry captures it.
-    console.error(
-      "useCustomDomains: useGetDomain returned multiple domains; audit callers assuming single-domain semantics (AGE-2229).",
-    );
-  }
-
-  return { domains, isLoading, refetch };
+  return { domains: data?.domains ?? [], isLoading, refetch };
 }
 
 // useMcpEndpointUrl resolves the runtime install URL for a single mcp_endpoint
@@ -117,6 +100,19 @@ export function useResolvedMcpServerUrl(
   };
 }
 
+// Path suffix for a toolset-backed MCP URL. Prefers the custom mcpSlug; the
+// legacy form requires the default environment — without both there is no
+// routable MCP URL, so return undefined rather than an invalid
+// /mcp/<project>/<toolset> path.
+function mcpUrlSuffix(
+  project: { slug: string },
+  toolset: Pick<ToolsetEntry, "slug" | "mcpSlug" | "defaultEnvironmentSlug">,
+): string | undefined {
+  if (toolset.mcpSlug) return toolset.mcpSlug;
+  if (!toolset.defaultEnvironmentSlug) return undefined;
+  return [project.slug, toolset.slug, toolset.defaultEnvironmentSlug].join("/");
+}
+
 export function useMcpUrl(
   toolset:
     | Pick<
@@ -148,9 +144,10 @@ export function useMcpUrl(
     customServerURL = `https://${domain.domain}`;
   }
 
-  const urlSuffix = toolset.mcpSlug
-    ? toolset.mcpSlug
-    : `${project.slug}/${toolset.slug}/${toolset.defaultEnvironmentSlug}`;
+  const urlSuffix = mcpUrlSuffix(project, toolset);
+  if (!urlSuffix) {
+    return { url: undefined, customServerURL, installPageUrl: "" };
+  }
   const mcpUrl = `${
     toolset.mcpSlug && customServerURL ? customServerURL : getServerURL()
   }/mcp/${urlSuffix}`;
@@ -185,15 +182,15 @@ export function useInternalMcpUrl(
 /**
  * Non-hook variant of {@link useInternalMcpUrl}. Use this when the project and
  * toolset are already in scope (e.g. when mapping over an array of toolsets).
+ * Returns undefined when the toolset has no routable MCP URL (no mcpSlug and
+ * no default environment).
  */
 export function internalMcpUrl(
   project: { slug: string },
   toolset: Pick<ToolsetEntry, "slug" | "mcpSlug" | "defaultEnvironmentSlug">,
-): string {
-  const urlSuffix = toolset.mcpSlug
-    ? toolset.mcpSlug
-    : `${project.slug}/${toolset.slug}/${toolset.defaultEnvironmentSlug}`;
-  return `${getServerURL()}/mcp/${urlSuffix}`;
+): string | undefined {
+  const suffix = mcpUrlSuffix(project, toolset);
+  return suffix ? `${getServerURL()}/mcp/${suffix}` : undefined;
 }
 
 /**

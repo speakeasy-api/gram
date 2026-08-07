@@ -1,12 +1,12 @@
-import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useDeleteProjectMutation } from "@gram/client/react-query/deleteProject";
 import { invalidateListProjects } from "@gram/client/react-query/listProjects";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 import { useState } from "react";
@@ -49,14 +49,12 @@ export function SettingsDangerZone(): JSX.Element {
 
   return (
     <>
-      <div className="border-destructive/30 rounded-lg border p-6">
-        <Type variant="subheading" className="text-destructive mb-1">
-          Danger Zone
-        </Type>
-        <Type muted small className="mb-6">
+      <div className="border-destructive/30 border p-6">
+        <div className="text-eyebrow text-destructive mb-1">Danger Zone</div>
+        <Text muted small className="mb-6">
           Permanently delete this project and all its data. This action cannot
           be undone.
-        </Type>
+        </Text>
         {isDefaultProject ? (
           <SimpleTooltip tooltip="The default project cannot be deleted">
             <Button variant="destructive-primary" size="md" disabled>
@@ -86,13 +84,13 @@ export function SettingsDangerZone(): JSX.Element {
             <Dialog.Title>Delete Project</Dialog.Title>
           </Dialog.Header>
           <div className="space-y-4 py-4">
-            <Type variant="body">
+            <Text variant="body">
               Are you sure you want to delete the project{" "}
-              <code className="bg-muted rounded px-1 py-0.5 font-mono font-bold">
+              <code className="bg-muted px-1 py-0.5 font-mono font-bold">
                 {project.name}
               </code>
               ? This action cannot be undone.
-            </Type>
+            </Text>
 
             <div className="space-y-2">
               <Label htmlFor="confirm-project-name">

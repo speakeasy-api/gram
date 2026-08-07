@@ -1,53 +1,29 @@
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
-import { cn } from "@/lib/utils";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
 import { Workflow } from "lucide-react";
 import { useState } from "react";
 import { HooksSetupDialog } from "./HooksSetupDialog";
-import {
-  ClaudeCodeIcon,
-  CursorIcon,
-  CodexIcon,
-  CopilotIcon,
-  GeminiIcon,
-  GleanIcon,
-  BedrockIcon,
-} from "./HookSourceIcon";
+import { ClaudeCodeIcon, CursorIcon, CodexIcon } from "./HookSourceIcon";
 
 interface ProviderCardProps {
   name: string;
   icon: React.ComponentType<{ className?: string }>;
-  status: "available" | "coming-soon";
   onInstall: () => void;
 }
 
 function ProviderCard({
   name,
   icon: IconComponent,
-  status,
   onInstall,
 }: ProviderCardProps) {
-  const isComingSoon = status === "coming-soon";
-
   return (
     <button
+      type="button"
       onClick={onInstall}
-      className={cn(
-        "relative flex min-w-[160px] flex-col items-center rounded-lg border p-6 transition-all",
-        status === "available"
-          ? "border-border hover:border-primary hover:bg-muted/50 cursor-pointer"
-          : "border-border/50 hover:border-primary/50 hover:bg-muted/30 cursor-pointer opacity-60",
-      )}
+      className="border-border hover:border-primary hover:bg-muted/50 relative flex min-w-[160px] cursor-pointer flex-col items-center border p-6 transition-all"
     >
       <IconComponent className="mb-3 size-12" />
       <span className="text-sm font-medium">{name}</span>
-      {isComingSoon && (
-        <div className="absolute top-3 right-3">
-          <span className="text-muted-foreground bg-muted rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase">
-            Coming Soon
-          </span>
-        </div>
-      )}
     </button>
   );
 }
@@ -64,16 +40,9 @@ export function HooksEmptyState({
     "claude" | "cursor" | "codex"
   >("claude");
   const [showFeatureRequestModal, setShowFeatureRequestModal] = useState(false);
-  const [selectedProvider, setSelectedProvider] = useState<string>("");
 
-  const handleProviderClick = (provider: string, status: string) => {
-    if (status === "coming-soon") {
-      setSelectedProvider(provider);
-      setShowFeatureRequestModal(true);
-      return;
-    }
-
-    setSetupProvider(provider as "claude" | "cursor" | "codex");
+  const handleProviderClick = (provider: "claude" | "cursor" | "codex") => {
+    setSetupProvider(provider);
     setShowSetupDialog(true);
   };
 
@@ -83,11 +52,11 @@ export function HooksEmptyState({
         <div className="w-full max-w-2xl space-y-8 text-center">
           {/* Icon and Title */}
           <div className="flex flex-col items-center gap-4">
-            <div className="bg-muted flex size-16 items-center justify-center rounded-full">
+            <div className="border-border flex size-16 items-center justify-center border">
               <Icon name="workflow" className="text-muted-foreground size-8" />
             </div>
             <div>
-              <h2 className="mb-2 text-xl font-semibold">{title}</h2>
+              <h2 className="text-display-sm mb-2 font-thin">{title}</h2>
               <p className="text-muted-foreground mx-auto max-w-md text-sm">
                 {subtitle}
               </p>
@@ -96,55 +65,33 @@ export function HooksEmptyState({
 
           {/* Installation Options */}
           <div>
-            <h3 className="mb-4 text-sm font-medium">
+            <h3 className="text-eyebrow mb-4">
               Choose Your AI Coding Assistant
             </h3>
             <div className="flex flex-wrap items-center justify-center gap-4">
               <ProviderCard
                 name="Claude Code"
                 icon={ClaudeCodeIcon}
-                status="available"
-                onInstall={() => handleProviderClick("claude", "available")}
+                onInstall={() => handleProviderClick("claude")}
               />
               <ProviderCard
                 name="Cursor"
                 icon={CursorIcon}
-                status="available"
-                onInstall={() => handleProviderClick("cursor", "available")}
+                onInstall={() => handleProviderClick("cursor")}
               />
               <ProviderCard
                 name="Codex"
                 icon={CodexIcon}
-                status="available"
-                onInstall={() => handleProviderClick("codex", "available")}
-              />
-              <ProviderCard
-                name="Copilot"
-                icon={CopilotIcon}
-                status="coming-soon"
-                onInstall={() => handleProviderClick("copilot", "coming-soon")}
-              />
-              <ProviderCard
-                name="Gemini"
-                icon={GeminiIcon}
-                status="coming-soon"
-                onInstall={() => handleProviderClick("gemini", "coming-soon")}
-              />
-              <ProviderCard
-                name="Glean"
-                icon={GleanIcon}
-                status="coming-soon"
-                onInstall={() => handleProviderClick("glean", "coming-soon")}
-              />
-              <ProviderCard
-                name="AWS Bedrock"
-                icon={BedrockIcon}
-                status="coming-soon"
-                onInstall={() =>
-                  handleProviderClick("aws-bedrock", "coming-soon")
-                }
+                onInstall={() => handleProviderClick("codex")}
               />
             </div>
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-foreground mt-4 text-sm underline underline-offset-4"
+              onClick={() => setShowFeatureRequestModal(true)}
+            >
+              Don&apos;t see your agent? Request an integration
+            </button>
           </div>
         </div>
       </div>
@@ -159,11 +106,15 @@ export function HooksEmptyState({
       <FeatureRequestModal
         isOpen={showFeatureRequestModal}
         onClose={() => setShowFeatureRequestModal(false)}
-        title={`${selectedProvider.charAt(0).toUpperCase() + selectedProvider.slice(1)} Integration`}
-        description={`Support for ${selectedProvider.charAt(0).toUpperCase() + selectedProvider.slice(1)} is coming soon. Let us know you're interested and we'll notify you when it's available.`}
-        actionType={`hooks_${selectedProvider}_integration`}
+        title="Request an Observability Integration"
+        description="Tell us which AI agent your team uses. We'll use your feedback to prioritize new integrations."
+        actionType="hooks_agent_integration"
         icon={Workflow}
-        telemetryData={{ provider: selectedProvider }}
+        requestInput={{
+          label: "AI agent",
+          placeholder: "e.g. GitHub Copilot",
+          telemetryField: "requested_agent",
+        }}
       />
     </>
   );

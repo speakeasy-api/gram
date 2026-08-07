@@ -1,10 +1,10 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { DotTable } from "@/components/ui/dot-table";
-import { Heading } from "@/components/ui/heading";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
-import { useViewMode } from "@/components/ui/use-view-mode";
+import { DotTable } from "@/components/ui/DotTable";
+import { Heading } from "@/components/ui/Heading";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
+import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { useProject } from "@/contexts/Auth";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import { CommandBar } from "@/pages/catalog/CommandBar";
@@ -15,7 +15,8 @@ import {
 } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { SearchXIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Outlet } from "react-router";
@@ -309,7 +310,7 @@ function EmptySearchResult({
   onClear: () => void;
 }) {
   return (
-    <div className="bg-background flex w-full items-center justify-center rounded-xl border py-8">
+    <div className="bg-background flex w-full items-center justify-center border py-8">
       <Stack
         gap={1}
         className="m-8 w-full max-w-sm"
@@ -322,11 +323,11 @@ function EmptySearchResult({
         <Heading variant="h5" className="font-medium">
           No matching servers
         </Heading>
-        <Type small muted className="mb-4 text-center">
+        <Text small muted className="mb-4 text-center">
           {hasFilters
             ? "No MCP servers match your current filters. Try adjusting or clearing your filters."
             : "No MCP servers found. Check back later for new additions."}
-        </Type>
+        </Text>
         {hasFilters && (
           <Button onClick={onClear} size="sm">
             <Button.Text>Clear Filters</Button.Text>

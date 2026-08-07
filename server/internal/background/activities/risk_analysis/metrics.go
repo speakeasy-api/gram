@@ -5,24 +5,34 @@ import (
 	"log/slog"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/risk/categories"
+	"github.com/speakeasy-api/gram/server/internal/risk/recommendedscopes"
 )
 
 const (
-	meterRiskScanEvents          = "risk.scan.events"
-	meterRiskScanDuration        = "risk.scan.duration"
-	meterRiskRuleConfidence      = "risk.rule.confidence"
-	meterRiskPresidioScanSkipped = "risk.presidio.scan_skipped"
+	meterRiskScanEvents                         = "risk.scan.events"
+	meterRiskScanDuration                       = "risk.scan.duration"
+	meterRiskRuleConfidence                     = "risk.rule.confidence"
+	meterRiskPresidioScanSkipped                = "risk.presidio.scan_skipped"
+	meterRiskRecommendedScopePrefiltered        = "risk.recommended_scope.messages_prefiltered"
+	meterRiskRecommendedScopeFindingsSuppressed = "risk.recommended_scope.findings_suppressed"
+	meterRiskShadowMCPResolution                = "risk.shadow_mcp.resolution"
 )
 
 type riskMetrics struct {
-	scanEvents          metric.Int64Counter
-	scanDuration        metric.Float64Histogram
-	ruleConfidence      metric.Float64Histogram
-	presidioScanSkipped metric.Int64Counter
+	scanEvents                          metric.Int64Counter
+	scanDuration                        metric.Float64Histogram
+	ruleConfidence                      metric.Float64Histogram
+	presidioScanSkipped                 metric.Int64Counter
+	recommendedScopeMessagesPrefiltered metric.Int64Counter
+	recommendedScopeFindingsSuppressed  metric.Int64Counter
+	shadowMCPResolution                 metric.Int64Counter
 }
 
 func newRiskMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *riskMetrics {
@@ -67,11 +77,41 @@ func newRiskMetrics(meterProvider metric.MeterProvider, logger *slog.Logger) *ri
 		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterRiskPresidioScanSkipped), attr.SlogError(err))
 	}
 
+	recommendedScopeMessagesPrefiltered, err := meter.Int64Counter(
+		meterRiskRecommendedScopePrefiltered,
+		metric.WithDescription("Messages skipped before expensive scanners by recommended category scopes"),
+		metric.WithUnit("{message}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterRiskRecommendedScopePrefiltered), attr.SlogError(err))
+	}
+
+	recommendedScopeFindingsSuppressed, err := meter.Int64Counter(
+		meterRiskRecommendedScopeFindingsSuppressed,
+		metric.WithDescription("Findings suppressed by recommended category scopes"),
+		metric.WithUnit("{finding}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterRiskRecommendedScopeFindingsSuppressed), attr.SlogError(err))
+	}
+
+	shadowMCPResolution, err := meter.Int64Counter(
+		meterRiskShadowMCPResolution,
+		metric.WithDescription("MCP tool calls by how the shadow-MCP scanner resolved their server provenance"),
+		metric.WithUnit("{tool_call}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "create metric", attr.SlogMetricName(meterRiskShadowMCPResolution), attr.SlogError(err))
+	}
+
 	return &riskMetrics{
-		scanEvents:          scanEvents,
-		scanDuration:        scanDuration,
-		ruleConfidence:      ruleConfidence,
-		presidioScanSkipped: presidioScanSkipped,
+		scanEvents:                          scanEvents,
+		scanDuration:                        scanDuration,
+		ruleConfidence:                      ruleConfidence,
+		presidioScanSkipped:                 presidioScanSkipped,
+		recommendedScopeMessagesPrefiltered: recommendedScopeMessagesPrefiltered,
+		recommendedScopeFindingsSuppressed:  recommendedScopeFindingsSuppressed,
+		shadowMCPResolution:                 shadowMCPResolution,
 	}
 }
 
@@ -99,5 +139,43 @@ func (m *riskMetrics) RecordFindingConfidence(ctx context.Context, orgID string,
 	m.ruleConfidence.Record(ctx, confidence, metric.WithAttributes(
 		attr.OrganizationID(orgID),
 		attr.RiskRuleID(ruleID),
+	))
+}
+
+func (m *riskMetrics) RecordRecommendedScopePrefiltered(ctx context.Context, orgID, source string, count int) {
+	if count <= 0 || m == nil || m.recommendedScopeMessagesPrefiltered == nil {
+		return
+	}
+	m.recommendedScopeMessagesPrefiltered.Add(ctx, int64(count), metric.WithAttributes(
+		attr.OrganizationID(orgID),
+		attr.RiskSource(source),
+		attribute.Int("risk.recommended_scopes.version", recommendedscopes.Version),
+	))
+}
+
+// RecordShadowMCPResolution counts one scanned MCP tool call by how its server
+// provenance resolved. hookSource is the reporting agent, empty when the call
+// had no provenance row at all; splitting on it is what makes the unresolved
+// rate actionable per sender rather than a single opaque number, which is the
+// signal for when the legacy signature fallback can be deleted.
+func (m *riskMetrics) RecordShadowMCPResolution(ctx context.Context, orgID string, hookSource string, resolution string) {
+	if m == nil || m.shadowMCPResolution == nil {
+		return
+	}
+	m.shadowMCPResolution.Add(ctx, 1, metric.WithAttributes(
+		attr.OrganizationID(orgID),
+		attribute.String("gram.hook.source", conv.Default(hookSource, "unknown")),
+		attribute.String("risk.shadow_mcp.resolution", resolution),
+	))
+}
+
+func (m *riskMetrics) RecordRecommendedScopeSuppressed(ctx context.Context, orgID string, cat categories.Category) {
+	if m == nil || m.recommendedScopeFindingsSuppressed == nil {
+		return
+	}
+	m.recommendedScopeFindingsSuppressed.Add(ctx, 1, metric.WithAttributes(
+		attr.OrganizationID(orgID),
+		attribute.String("risk.category", string(cat)),
+		attribute.Int("risk.recommended_scopes.version", recommendedscopes.Version),
 	))
 }

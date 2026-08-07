@@ -26,6 +26,9 @@ type Endpoints struct {
 	ListRiskResultsForAgent        goa.Endpoint
 	UnmaskRiskResult               goa.Endpoint
 	ListRiskResultsByChat          goa.Endpoint
+	MarkRiskResultsFalsePositive   goa.Endpoint
+	UnmarkRiskResultsFalsePositive goa.Endpoint
+	ListDismissedRiskResults       goa.Endpoint
 	GetRiskOverview                goa.Endpoint
 	ListRiskCategories             goa.Endpoint
 	CompileExpr                    goa.Endpoint
@@ -76,6 +79,9 @@ func NewEndpoints(s Service) *Endpoints {
 		ListRiskResultsForAgent:        NewListRiskResultsForAgentEndpoint(s, a.APIKeyAuth),
 		UnmaskRiskResult:               NewUnmaskRiskResultEndpoint(s, a.APIKeyAuth),
 		ListRiskResultsByChat:          NewListRiskResultsByChatEndpoint(s, a.APIKeyAuth),
+		MarkRiskResultsFalsePositive:   NewMarkRiskResultsFalsePositiveEndpoint(s, a.APIKeyAuth),
+		UnmarkRiskResultsFalsePositive: NewUnmarkRiskResultsFalsePositiveEndpoint(s, a.APIKeyAuth),
+		ListDismissedRiskResults:       NewListDismissedRiskResultsEndpoint(s, a.APIKeyAuth),
 		GetRiskOverview:                NewGetRiskOverviewEndpoint(s, a.APIKeyAuth),
 		ListRiskCategories:             NewListRiskCategoriesEndpoint(s, a.APIKeyAuth),
 		CompileExpr:                    NewCompileExprEndpoint(s, a.APIKeyAuth),
@@ -124,6 +130,9 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListRiskResultsForAgent = m(e.ListRiskResultsForAgent)
 	e.UnmaskRiskResult = m(e.UnmaskRiskResult)
 	e.ListRiskResultsByChat = m(e.ListRiskResultsByChat)
+	e.MarkRiskResultsFalsePositive = m(e.MarkRiskResultsFalsePositive)
+	e.UnmarkRiskResultsFalsePositive = m(e.UnmarkRiskResultsFalsePositive)
+	e.ListDismissedRiskResults = m(e.ListDismissedRiskResults)
 	e.GetRiskOverview = m(e.GetRiskOverview)
 	e.ListRiskCategories = m(e.ListRiskCategories)
 	e.CompileExpr = m(e.CompileExpr)
@@ -167,7 +176,7 @@ func NewCreateRiskPolicyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -226,7 +235,7 @@ func NewListRiskPoliciesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -285,7 +294,7 @@ func NewListBuiltinExclusionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -344,7 +353,7 @@ func NewGetRiskPolicyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -403,7 +412,7 @@ func NewUpdateRiskPolicyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -462,7 +471,7 @@ func NewDeleteRiskPolicyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -521,7 +530,7 @@ func NewListRiskResultsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -580,7 +589,7 @@ func NewListRiskResultsForAgentEndpoint(s Service, authAPIKeyFn security.AuthAPI
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -639,7 +648,7 @@ func NewUnmaskRiskResultEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -698,7 +707,7 @@ func NewListRiskResultsByChatEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -749,6 +758,183 @@ func NewListRiskResultsByChatEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 	}
 }
 
+// NewMarkRiskResultsFalsePositiveEndpoint returns an endpoint function that
+// calls the method "markRiskResultsFalsePositive" of service "risk".
+func NewMarkRiskResultsFalsePositiveEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*MarkRiskResultsFalsePositivePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.MarkRiskResultsFalsePositive(ctx, p)
+	}
+}
+
+// NewUnmarkRiskResultsFalsePositiveEndpoint returns an endpoint function that
+// calls the method "unmarkRiskResultsFalsePositive" of service "risk".
+func NewUnmarkRiskResultsFalsePositiveEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UnmarkRiskResultsFalsePositivePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.UnmarkRiskResultsFalsePositive(ctx, p)
+	}
+}
+
+// NewListDismissedRiskResultsEndpoint returns an endpoint function that calls
+// the method "listDismissedRiskResults" of service "risk".
+func NewListDismissedRiskResultsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListDismissedRiskResultsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListDismissedRiskResults(ctx, p)
+	}
+}
+
 // NewGetRiskOverviewEndpoint returns an endpoint function that calls the
 // method "getRiskOverview" of service "risk".
 func NewGetRiskOverviewEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -757,7 +943,7 @@ func NewGetRiskOverviewEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -816,7 +1002,7 @@ func NewListRiskCategoriesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -875,7 +1061,7 @@ func NewCompileExprEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -934,7 +1120,7 @@ func NewGetRiskUserBreakdownEndpoint(s Service, authAPIKeyFn security.AuthAPIKey
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -993,7 +1179,7 @@ func NewGetRiskRuleBreakdownEndpoint(s Service, authAPIKeyFn security.AuthAPIKey
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -1052,7 +1238,7 @@ func NewGetRiskPolicyStatusEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -1249,7 +1435,7 @@ func NewListRiskPolicyBypassRequestsEndpoint(s Service, authAPIKeyFn security.Au
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -1308,7 +1494,7 @@ func NewApproveRiskPolicyBypassRequestEndpoint(s Service, authAPIKeyFn security.
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -1367,7 +1553,7 @@ func NewDenyRiskPolicyBypassRequestEndpoint(s Service, authAPIKeyFn security.Aut
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -1426,7 +1612,7 @@ func NewRevokeRiskPolicyBypassRequestEndpoint(s Service, authAPIKeyFn security.A
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -1485,7 +1671,7 @@ func NewTriggerRiskAnalysisEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -1544,7 +1730,7 @@ func NewCreateCustomDetectionRuleEndpoint(s Service, authAPIKeyFn security.AuthA
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -1603,7 +1789,7 @@ func NewListCustomDetectionRulesEndpoint(s Service, authAPIKeyFn security.AuthAP
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -1662,7 +1848,7 @@ func NewGetCustomDetectionRuleEndpoint(s Service, authAPIKeyFn security.AuthAPIK
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -1721,7 +1907,7 @@ func NewUpdateCustomDetectionRuleEndpoint(s Service, authAPIKeyFn security.AuthA
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -1780,7 +1966,7 @@ func NewDeleteCustomDetectionRuleEndpoint(s Service, authAPIKeyFn security.AuthA
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -1839,7 +2025,7 @@ func NewListRiskExclusionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -1898,7 +2084,7 @@ func NewCreateRiskExclusionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -1957,7 +2143,7 @@ func NewUpdateRiskExclusionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -2016,7 +2202,7 @@ func NewDeleteRiskExclusionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -2075,7 +2261,7 @@ func NewSuggestCustomDetectionRuleEndpoint(s Service, authAPIKeyFn security.Auth
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -2134,7 +2320,7 @@ func NewSuggestExclusionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -2193,7 +2379,7 @@ func NewTestDetectionRuleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -2252,7 +2438,7 @@ func NewEvaluatePromptGuardrailEndpoint(s Service, authAPIKeyFn security.AuthAPI
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -2311,7 +2497,7 @@ func NewSaveRiskEvalReviewEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -2370,7 +2556,7 @@ func NewListRiskEvalReviewsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string
@@ -2429,7 +2615,7 @@ func NewDeleteRiskEvalReviewEndpoint(s Service, authAPIKeyFn security.AuthAPIKey
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 			RequiredScopes: []string{"producer"},
 		}
 		var key string

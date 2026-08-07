@@ -16,37 +16,82 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// BuildDiscoverRemoteSessionIssuerPayload builds the payload for the
-// remoteSessionIssuers discoverRemoteSessionIssuer endpoint from CLI flags.
-func BuildDiscoverRemoteSessionIssuerPayload(remoteSessionIssuersDiscoverRemoteSessionIssuerBody string, remoteSessionIssuersDiscoverRemoteSessionIssuerSessionToken string, remoteSessionIssuersDiscoverRemoteSessionIssuerApikeyToken string, remoteSessionIssuersDiscoverRemoteSessionIssuerProjectSlugInput string) (*remotesessionissuers.DiscoverRemoteSessionIssuerPayload, error) {
+// BuildFetchRemoteSessionIssuerMetadataPayload builds the payload for the
+// remoteSessionIssuers fetchRemoteSessionIssuerMetadata endpoint from CLI
+// flags.
+func BuildFetchRemoteSessionIssuerMetadataPayload(remoteSessionIssuersFetchRemoteSessionIssuerMetadataBody string, remoteSessionIssuersFetchRemoteSessionIssuerMetadataSessionToken string, remoteSessionIssuersFetchRemoteSessionIssuerMetadataApikeyToken string, remoteSessionIssuersFetchRemoteSessionIssuerMetadataProjectSlugInput string) (*remotesessionissuers.FetchRemoteSessionIssuerMetadataPayload, error) {
 	var err error
-	var body DiscoverRemoteSessionIssuerRequestBody
+	var body FetchRemoteSessionIssuerMetadataRequestBody
 	{
-		err = json.Unmarshal([]byte(remoteSessionIssuersDiscoverRemoteSessionIssuerBody), &body)
+		err = json.Unmarshal([]byte(remoteSessionIssuersFetchRemoteSessionIssuerMetadataBody), &body)
 		if err != nil {
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"issuer\": \"abc123\"\n   }'")
 		}
 	}
 	var sessionToken *string
 	{
-		if remoteSessionIssuersDiscoverRemoteSessionIssuerSessionToken != "" {
-			sessionToken = &remoteSessionIssuersDiscoverRemoteSessionIssuerSessionToken
+		if remoteSessionIssuersFetchRemoteSessionIssuerMetadataSessionToken != "" {
+			sessionToken = &remoteSessionIssuersFetchRemoteSessionIssuerMetadataSessionToken
 		}
 	}
 	var apikeyToken *string
 	{
-		if remoteSessionIssuersDiscoverRemoteSessionIssuerApikeyToken != "" {
-			apikeyToken = &remoteSessionIssuersDiscoverRemoteSessionIssuerApikeyToken
+		if remoteSessionIssuersFetchRemoteSessionIssuerMetadataApikeyToken != "" {
+			apikeyToken = &remoteSessionIssuersFetchRemoteSessionIssuerMetadataApikeyToken
 		}
 	}
 	var projectSlugInput *string
 	{
-		if remoteSessionIssuersDiscoverRemoteSessionIssuerProjectSlugInput != "" {
-			projectSlugInput = &remoteSessionIssuersDiscoverRemoteSessionIssuerProjectSlugInput
+		if remoteSessionIssuersFetchRemoteSessionIssuerMetadataProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionIssuersFetchRemoteSessionIssuerMetadataProjectSlugInput
 		}
 	}
-	v := &remotesessionissuers.DiscoverRemoteSessionIssuerPayload{
+	v := &remotesessionissuers.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer: body.Issuer,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildRefreshRemoteSessionIssuerMetadataPayload builds the payload for the
+// remoteSessionIssuers refreshRemoteSessionIssuerMetadata endpoint from CLI
+// flags.
+func BuildRefreshRemoteSessionIssuerMetadataPayload(remoteSessionIssuersRefreshRemoteSessionIssuerMetadataBody string, remoteSessionIssuersRefreshRemoteSessionIssuerMetadataSessionToken string, remoteSessionIssuersRefreshRemoteSessionIssuerMetadataApikeyToken string, remoteSessionIssuersRefreshRemoteSessionIssuerMetadataProjectSlugInput string) (*remotesessionissuers.RefreshRemoteSessionIssuerMetadataPayload, error) {
+	var err error
+	var body RefreshRemoteSessionIssuerMetadataRequestBody
+	{
+		err = json.Unmarshal([]byte(remoteSessionIssuersRefreshRemoteSessionIssuerMetadataBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionIssuersRefreshRemoteSessionIssuerMetadataSessionToken != "" {
+			sessionToken = &remoteSessionIssuersRefreshRemoteSessionIssuerMetadataSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteSessionIssuersRefreshRemoteSessionIssuerMetadataApikeyToken != "" {
+			apikeyToken = &remoteSessionIssuersRefreshRemoteSessionIssuerMetadataApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionIssuersRefreshRemoteSessionIssuerMetadataProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionIssuersRefreshRemoteSessionIssuerMetadataProjectSlugInput
+		}
+	}
+	v := &remotesessionissuers.RefreshRemoteSessionIssuerMetadataPayload{
+		ID: body.ID,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -63,7 +108,7 @@ func BuildCreateRemoteSessionIssuerPayload(remoteSessionIssuersCreateRemoteSessi
 	{
 		err = json.Unmarshal([]byte(remoteSessionIssuersCreateRemoteSessionIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 		if body.LogoAssetID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
@@ -95,6 +140,7 @@ func BuildCreateRemoteSessionIssuerPayload(remoteSessionIssuersCreateRemoteSessi
 		Issuer:                            body.Issuer,
 		Name:                              body.Name,
 		LogoAssetID:                       body.LogoAssetID,
+		ClientSetupDocumentationURL:       body.ClientSetupDocumentationURL,
 		AuthorizationEndpoint:             body.AuthorizationEndpoint,
 		TokenEndpoint:                     body.TokenEndpoint,
 		RegistrationEndpoint:              body.RegistrationEndpoint,
@@ -145,7 +191,7 @@ func BuildUpdateRemoteSessionIssuerPayload(remoteSessionIssuersUpdateRemoteSessi
 	{
 		err = json.Unmarshal([]byte(remoteSessionIssuersUpdateRemoteSessionIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.LogoAssetID != nil {
@@ -179,6 +225,7 @@ func BuildUpdateRemoteSessionIssuerPayload(remoteSessionIssuersUpdateRemoteSessi
 		Issuer:                            body.Issuer,
 		Name:                              body.Name,
 		LogoAssetID:                       body.LogoAssetID,
+		ClientSetupDocumentationURL:       body.ClientSetupDocumentationURL,
 		AuthorizationEndpoint:             body.AuthorizationEndpoint,
 		TokenEndpoint:                     body.TokenEndpoint,
 		RegistrationEndpoint:              body.RegistrationEndpoint,
@@ -273,7 +320,7 @@ func BuildListRemoteSessionIssuersPayload(remoteSessionIssuersListRemoteSessionI
 
 // BuildGetRemoteSessionIssuerPayload builds the payload for the
 // remoteSessionIssuers getRemoteSessionIssuer endpoint from CLI flags.
-func BuildGetRemoteSessionIssuerPayload(remoteSessionIssuersGetRemoteSessionIssuerID string, remoteSessionIssuersGetRemoteSessionIssuerSlug string, remoteSessionIssuersGetRemoteSessionIssuerSessionToken string, remoteSessionIssuersGetRemoteSessionIssuerApikeyToken string, remoteSessionIssuersGetRemoteSessionIssuerProjectSlugInput string) (*remotesessionissuers.GetRemoteSessionIssuerPayload, error) {
+func BuildGetRemoteSessionIssuerPayload(remoteSessionIssuersGetRemoteSessionIssuerID string, remoteSessionIssuersGetRemoteSessionIssuerSlug string, remoteSessionIssuersGetRemoteSessionIssuerIssuer string, remoteSessionIssuersGetRemoteSessionIssuerSessionToken string, remoteSessionIssuersGetRemoteSessionIssuerApikeyToken string, remoteSessionIssuersGetRemoteSessionIssuerProjectSlugInput string) (*remotesessionissuers.GetRemoteSessionIssuerPayload, error) {
 	var err error
 	var id *string
 	{
@@ -289,6 +336,12 @@ func BuildGetRemoteSessionIssuerPayload(remoteSessionIssuersGetRemoteSessionIssu
 	{
 		if remoteSessionIssuersGetRemoteSessionIssuerSlug != "" {
 			slug = &remoteSessionIssuersGetRemoteSessionIssuerSlug
+		}
+	}
+	var issuer *string
+	{
+		if remoteSessionIssuersGetRemoteSessionIssuerIssuer != "" {
+			issuer = &remoteSessionIssuersGetRemoteSessionIssuerIssuer
 		}
 	}
 	var sessionToken *string
@@ -312,6 +365,7 @@ func BuildGetRemoteSessionIssuerPayload(remoteSessionIssuersGetRemoteSessionIssu
 	v := &remotesessionissuers.GetRemoteSessionIssuerPayload{}
 	v.ID = id
 	v.Slug = slug
+	v.Issuer = issuer
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

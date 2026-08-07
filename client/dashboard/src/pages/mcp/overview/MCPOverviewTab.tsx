@@ -1,19 +1,18 @@
-import { MetricCard } from "@/components/chart/MetricCard";
+import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
 import { RankedBarList } from "@/components/chart/RankedBarList";
 import { ToolCallsTimeSeriesChart } from "@/components/chart/ToolCallsTimeSeriesChart";
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
-import { Heading } from "@/components/ui/heading";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
 import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
 import type { ObservabilitySummary } from "@gram/client/models/components/observabilitysummary.js";
 import { useGramContext } from "@gram/client/react-query/_context";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/Stack";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { PluginStatusBanner } from "./PluginStatusBanner";
@@ -59,7 +58,7 @@ export function MCPOverviewTab({
   } = useDateRangeFilter();
   const timeRangeMs = useMemo(() => to.getTime() - from.getTime(), [from, to]);
 
-  const { data, isLoading, isLogsDisabled } = useLogsEnabledErrorCheck(
+  const { data, isLoading, isError, isLogsDisabled } = useLogsEnabledErrorCheck(
     useQuery<GetObservabilityOverviewResult>({
       queryKey: [
         "mcp-detail-overview",
@@ -82,6 +81,10 @@ export function MCPOverviewTab({
       throwOnError: false,
     }),
   );
+
+  // With keepPreviousData a failed refetch still has stale data to show, so
+  // only fall back to the error state when there is nothing to render at all.
+  const showQueryError = isError && !data;
 
   const summary = data?.summary;
   const comparison = data?.comparison;
@@ -111,7 +114,9 @@ export function MCPOverviewTab({
   );
 
   return (
-    <Stack gap={6} className="mb-4">
+    // Container queries, not viewport ones: the side panel narrows this column
+    // without narrowing the window, and `lg:`/`xl:` would not notice.
+    <Stack gap={6} className="@container mb-4">
       <PluginStatusBanner server={server} />
 
       <div className="flex justify-end">
@@ -125,27 +130,40 @@ export function MCPOverviewTab({
         />
       </div>
 
-      {isLogsDisabled ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border p-12 text-center">
-          <Type muted className="mb-1 block">
+      {isLogsDisabled && (
+        <div className="flex flex-col items-center justify-center border p-12 text-center">
+          <Text muted className="mb-1 block">
             Observability is not enabled
-          </Type>
-          <Type muted small>
+          </Text>
+          <Text muted small>
             Enable logs for this organization to see usage for this MCP server.
-          </Type>
+          </Text>
         </div>
-      ) : (
+      )}
+      {!isLogsDisabled && showQueryError && (
+        <div className="flex flex-col items-center justify-center border p-12 text-center">
+          <Text muted className="mb-1 block">
+            Could not load usage data
+          </Text>
+          <Text muted small>
+            Something went wrong loading metrics for this MCP server. Try
+            refreshing the page or changing the time range.
+          </Text>
+        </div>
+      )}
+      {!isLogsDisabled && !showQueryError && (
         <>
-          <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+          <MetricCardGroup>
             {isLoading && !summary ? (
               Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={i} className="h-[116px] w-full rounded-lg" />
+                <Skeleton key={i} className="h-[116px] flex-1" />
               ))
             ) : (
               <>
                 <MetricCard
                   title="Tool calls"
                   value={summary?.totalToolCalls ?? 0}
+                  tone="information"
                   previousValue={comparison?.totalToolCalls}
                   format="compact"
                   comparisonLabel="vs previous period"
@@ -153,6 +171,11 @@ export function MCPOverviewTab({
                 <MetricCard
                   title="Failed calls"
                   value={summary?.failedToolCalls ?? 0}
+                  tone={
+                    (summary?.failedToolCalls ?? 0) > 0
+                      ? "destructive"
+                      : "neutral"
+                  }
                   previousValue={comparison?.failedToolCalls}
                   format="compact"
                   invertDelta
@@ -170,6 +193,7 @@ export function MCPOverviewTab({
                 <MetricCard
                   title="Avg latency"
                   value={summary?.avgLatencyMs ?? 0}
+                  tone="information"
                   previousValue={comparison?.avgLatencyMs}
                   format="ms"
                   invertDelta
@@ -177,7 +201,7 @@ export function MCPOverviewTab({
                 />
               </>
             )}
-          </div>
+          </MetricCardGroup>
 
           <ToolCallsTimeSeriesChart
             title="Tool calls over time"
@@ -188,21 +212,17 @@ export function MCPOverviewTab({
             onExpand={setExpandedChart}
           />
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <div className="rounded-lg border p-5">
-              <Heading variant="h5" className="mb-3">
-                Top tools by call count
-              </Heading>
+          <div className="grid grid-cols-1 gap-6 @3xl:grid-cols-2">
+            <div className="border p-5">
+              <h3 className="text-eyebrow mb-3">Top tools by call count</h3>
               {topByCount.length > 0 ? (
                 <RankedBarList items={topByCount} />
               ) : (
                 <WidgetEmptyState message="No tool calls in the selected range." />
               )}
             </div>
-            <div className="rounded-lg border p-5">
-              <Heading variant="h5" className="mb-3">
-                Top tools by failure rate
-              </Heading>
+            <div className="border p-5">
+              <h3 className="text-eyebrow mb-3">Top tools by failure rate</h3>
               {topByFailureRate.length > 0 ? (
                 <RankedBarList items={topByFailureRate} />
               ) : (

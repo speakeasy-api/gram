@@ -974,6 +974,7 @@ func marshalTypesUserSessionToUserSessionResponseBody(v *types.UserSession) *Use
 		UpdatedAt:           v.UpdatedAt,
 		IssuerSlug:          v.IssuerSlug,
 		ClientName:          v.ClientName,
+		ClientIDMetadataURI: v.ClientIDMetadataURI,
 		SubjectType:         v.SubjectType,
 		SubjectDisplayName:  v.SubjectDisplayName,
 		RevokedAt:           v.RevokedAt,

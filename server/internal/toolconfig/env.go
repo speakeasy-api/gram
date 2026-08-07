@@ -130,6 +130,29 @@ func (c *CaseInsensitiveEnv) Keys() []string {
 	return keys
 }
 
+// MCPClientIdentity describes who is on the other end of an MCP tool call.
+//
+// Name and Version are self-reported by the client. OAuthClientID is read from
+// the caller's verified bearer token, so it is the sounder of the two here —
+// but it is forwarded to tools as plain request metadata, where that
+// provenance no longer travels with it. Both are for attribution and
+// observability; authorization stays on this side of the boundary, where the
+// credential is actually checked.
+//
+// Every field is optional: direct (non-MCP) tool calls populate none of them,
+// and an MCP client may report an identity without authenticating, or the
+// reverse.
+type MCPClientIdentity struct {
+	Name          string
+	Version       string
+	OAuthClientID string
+}
+
+// IsZero reports whether nothing is known about the caller.
+func (m MCPClientIdentity) IsZero() bool {
+	return m.Name == "" && m.Version == "" && m.OAuthClientID == ""
+}
+
 // ToolCallEnv holds the environment configuration for a tool call.
 // SystemEnv contains base values, UserConfig contains user overrides.
 // OAuthToken is an optional OAuth token for external MCP servers that require authentication.
@@ -138,6 +161,10 @@ type ToolCallEnv struct {
 	UserConfig *CaseInsensitiveEnv
 	OAuthToken string // OAuth token for external MCP servers (empty if not applicable)
 	GramEmail  string // Authenticated Gram user's email (empty if not applicable)
+	// GramChatID is the authoritative assistant chat UUID when supplied by the caller.
+	GramChatID string
+	// MCPClient identifies the MCP caller, when the tool was called over MCP.
+	MCPClient MCPClientIdentity
 }
 
 // Merged returns a case-insensitive view where UserConfig values override

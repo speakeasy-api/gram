@@ -7,19 +7,24 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type UndistributeSkillRequestBody = {
   /**
+   * The assistant the skill was distributed to.
+   */
+  assistantId?: string | undefined;
+  /**
    * The skill ID.
    */
   id: string;
   /**
    * The plugin the skill was distributed to.
    */
-  pluginId: string;
+  pluginId?: string | undefined;
 };
 
 /** @internal */
 export type UndistributeSkillRequestBody$Outbound = {
+  assistant_id?: string | undefined;
   id: string;
-  plugin_id: string;
+  plugin_id?: string | undefined;
 };
 
 /** @internal */
@@ -28,11 +33,13 @@ export const UndistributeSkillRequestBody$outboundSchema: z.ZodMiniType<
   UndistributeSkillRequestBody
 > = z.pipe(
   z.object({
+    assistantId: z.optional(z.string()),
     id: z.string(),
-    pluginId: z.string(),
+    pluginId: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      assistantId: "assistant_id",
       pluginId: "plugin_id",
     });
   }),

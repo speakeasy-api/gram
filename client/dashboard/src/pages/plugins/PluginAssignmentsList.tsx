@@ -1,18 +1,14 @@
-import {
-  type FacepileMember,
-  MemberFacepile,
-} from "@/components/member-facepile";
-import { Type } from "@/components/ui/type";
+import { MemberFacepile } from "@/components/member-facepile";
+import { Text } from "@/components/ui/Text";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { PluginAssignment } from "@gram/client/models/components/pluginassignment.js";
 import type { Role } from "@gram/client/models/components/role.js";
+import { Users } from "lucide-react";
 import { PluginAssignmentRow } from "./PluginAssignmentRow";
-
-// An individually-assigned member is a "user:<id>" principal — but not the
-// "user:all" subject-set, which describes everyone and renders as its own row.
-function isIndividualMember(urn: string): boolean {
-  return urn.startsWith("user:") && urn !== "user:all";
-}
+import {
+  individualMemberFacepile,
+  isIndividualMemberPrincipal,
+} from "./principals";
 
 // PluginAssignmentsList renders a plugin's current assignments as a bordered
 // list: everyone/role/email principals each get a row, while individually
@@ -28,24 +24,13 @@ export function PluginAssignmentsList({
   memberByUrn: Map<string, AccessMember>;
 }): JSX.Element {
   const rowAssignments = assignments.filter(
-    (a) => !isIndividualMember(a.principalUrn),
-  );
-  const memberAssignments = assignments.filter((a) =>
-    isIndividualMember(a.principalUrn),
+    (a) => !isIndividualMemberPrincipal(a.principalUrn),
   );
 
-  const facepileMembers: FacepileMember[] = memberAssignments.map((a) => {
-    const member = memberByUrn.get(a.principalUrn);
-    return {
-      id: member?.id ?? a.principalUrn,
-      name: member?.name || member?.email || "Unknown member",
-      email: member?.email ?? "",
-      photoUrl: member?.photoUrl,
-    };
-  });
+  const facepileMembers = individualMemberFacepile(assignments, memberByUrn);
 
   return (
-    <div className="border-border divide-border divide-y rounded-xl border px-4">
+    <div className="border-border divide-border divide-y border px-4">
       {rowAssignments.map((assignment) => (
         <PluginAssignmentRow
           key={assignment.id}
@@ -55,17 +40,23 @@ export function PluginAssignmentsList({
         />
       ))}
       {facepileMembers.length > 0 && (
+        // Same icon-tile + text structure as the principal rows, so the labels
+        // line up; the face-stack sits at the row's trailing edge where its
+        // variable width can't shift the text column.
         <div className="flex items-center gap-3 py-3">
-          <MemberFacepile members={facepileMembers} />
-          <div className="min-w-0">
-            <Type as="div" className="truncate font-medium">
+          <div className="bg-muted text-muted-foreground flex h-9 w-9 shrink-0 items-center justify-center">
+            <Users className="h-4 w-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <Text as="div" className="truncate font-medium">
               {facepileMembers.length}{" "}
               {facepileMembers.length === 1 ? "member" : "members"}
-            </Type>
-            <Type as="div" small muted className="truncate">
+            </Text>
+            <Text as="div" small muted className="truncate">
               Assigned individually
-            </Type>
+            </Text>
           </div>
+          <MemberFacepile members={facepileMembers} />
         </div>
       )}
     </div>

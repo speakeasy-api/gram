@@ -31,10 +31,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -147,12 +147,9 @@ func createRemoteMcpEndpoint(
 	return mcpServer, remoteServer
 }
 
-// TestServePublic_McpEndpoint_PublicTunneledBacked_FailsClosed: tunneled MCP
-// servers front customer-private networks and may never serve publicly. The
-// management API rejects public visibility at create/update; this test seeds
-// the forbidden state directly through the repo layer (the shape a manual SQL
-// edit or future write path would produce) and asserts the serve path fails
-// closed rather than proxying unauthenticated traffic into the tunnel.
+// A tunneled MCP server with public visibility but no allow_public consent
+// must fail closed — as a 404, so unauthenticated callers cannot distinguish
+// a gated endpoint from a missing one.
 func TestServePublic_McpEndpoint_PublicTunneledBacked_FailsClosed(t *testing.T) {
 	t.Parallel()
 
@@ -200,10 +197,10 @@ func TestServePublic_McpEndpoint_PublicTunneledBacked_FailsClosed(t *testing.T) 
 	require.NoError(t, err)
 
 	_, err = servePublicHTTP(t, context.Background(), ti, endpointSlug, makeInitializeBody(), "", nil)
-	require.Error(t, err, "public tunneled-backed endpoint must fail closed")
+	require.Error(t, err, "public tunneled-backed endpoint must fail closed without owner consent")
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
 
 // createUserSessionIssuer inserts a user_session_issuers row in the
@@ -321,7 +318,10 @@ func mintIssuerBearerForEndpoint(
 		CodeChallenge:       codeChallenge,
 		CodeChallengeMethod: "S256",
 		Subject:             urn.NewAnonymousSubject(uuid.NewString()),
-		CreatedAt:           time.Now(),
+		// Simulate a tampered consent value; token minting must clamp this to
+		// the issuer's one-hour maximum asserted below.
+		DesiredSessionDurationHours: 10_000,
+		CreatedAt:                   time.Now(),
 	}))
 
 	form := url.Values{}
@@ -341,10 +341,12 @@ func mintIssuerBearerForEndpoint(
 	require.Equal(t, http.StatusOK, w.Code, "token endpoint should mint an access token: %s", w.Body.String())
 
 	var resp struct {
-		AccessToken string `json:"access_token"`
+		AccessToken            string `json:"access_token"`
+		AuthorizationExpiresIn int64  `json:"authorization_expires_in"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	require.NotEmpty(t, resp.AccessToken)
+	require.Equal(t, int64(time.Hour/time.Second), resp.AuthorizationExpiresIn)
 	return resp.AccessToken
 }
 
@@ -607,7 +609,6 @@ func seedUserMCPConnectGrant(t *testing.T, ctx context.Context, conn *pgxpool.Po
 		OrganizationID: organizationID,
 		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeUser, userID),
 		Scope:          string(authz.ScopeMCPConnect),
-		Effect:         pgtype.Text{},
 		Selectors:      selectors,
 	})
 	require.NoError(t, err)
@@ -635,7 +636,7 @@ func decodeMCPResult(t *testing.T, body []byte) map[string]any {
 // Before the fix, serveRemoteBackend only called authz.PrepareContext on the
 // non-issuer-gated path. For issuer-gated callers the proxy still attached
 // the tools/list mcp:connect filter and the tools/call authz interceptor;
-// with an enterprise org + session principal + RBAC enabled, those ran
+// with a session principal + RBAC enabled, those ran
 // FindMatched / Require against a context with no prepared grants, returned
 // ErrMissingGrants (mapped to CodeUnexpected), and the proxy substituted a
 // JSON-RPC error event — yielding zero tools and a broken tools/call even
@@ -653,15 +654,6 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_ResolvesG
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
-
-	// Mark the caller's org enterprise so authz.ShouldEnforce returns true
-	// (enterprise + session principal + the test engine's always-on RBAC
-	// flag). Without this the missing-grants path is dead — RBAC never
-	// enforces and the bug cannot reproduce.
-	require.NoError(t, orgsrepo.New(ti.conn).SetAccountType(ctx, orgsrepo.SetAccountTypeParams{
-		GramAccountType: "enterprise",
-		ID:              authCtx.ActiveOrganizationID,
-	}))
 
 	const toolName = "ping"
 	upstream := newStatelessRemoteMCPUpstream(t, toolName)
@@ -682,12 +674,12 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_ResolvesG
 	// the issuer URN (remote-backed endpoints bind the audience to the
 	// issuer, not the backend id). Subject is the dev user, an active member
 	// of the org, so PrepareContext can resolve principals.
-	token, _, err := usersessions.NewSigner("test-jwt-secret").Mint(
-		urn.NewUserSubject(mockidp.MockUserID),
-		urn.NewUserSessionIssuer(issuerID).String(),
-		ti.serverURL.String()+"/x/mcp/"+endpointSlug,
-		time.Hour,
-	)
+	token, _, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
+		Subject:  urn.NewUserSubject(mockidp.MockUserID),
+		Audience: urn.NewUserSessionIssuer(issuerID).String(),
+		Issuer:   ti.serverURL.String() + "/x/mcp/" + endpointSlug,
+		Lifetime: time.Hour,
+	})
 	require.NoError(t, err)
 
 	// A plain context (no session auth) so the only credential is the bearer
@@ -734,11 +726,6 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_RequiresC
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	require.NoError(t, orgsrepo.New(ti.conn).SetAccountType(ctx, orgsrepo.SetAccountTypeParams{
-		GramAccountType: "enterprise",
-		ID:              authCtx.ActiveOrganizationID,
-	}))
-
 	upstreamHit := make(chan struct{}, 1)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		upstreamHit <- struct{}{}
@@ -749,14 +736,14 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_RequiresC
 
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
 	endpointSlug := "endpoint-" + uuid.NewString()
-	createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "private", issuerID)
+	mcpServer, _ := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "private", issuerID)
 
-	token, _, err := usersessions.NewSigner("test-jwt-secret").Mint(
-		urn.NewUserSubject(mockidp.MockUserID),
-		urn.NewUserSessionIssuer(issuerID).String(),
-		ti.serverURL.String()+"/x/mcp/"+endpointSlug,
-		time.Hour,
-	)
+	token, _, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
+		Subject:  urn.NewUserSubject(mockidp.MockUserID),
+		Audience: urn.NewUserSessionIssuer(issuerID).String(),
+		Issuer:   ti.serverURL.String() + "/x/mcp/" + endpointSlug,
+		Lifetime: time.Hour,
+	})
 	require.NoError(t, err)
 
 	_, err = servePublicHTTP(t, context.Background(), ti, endpointSlug, makeInitializeBody(), token, nil)
@@ -764,6 +751,15 @@ func TestServePublic_McpEndpoint_IssuerGatedPrivateRemote_RBACEnforced_RequiresC
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+	// Assert the literal URL invariants rather than round-tripping through
+	// mcpaccess.RequestAccessURL — these params are the integration contract
+	// with the dashboard's /request-access page.
+	message := oopsErr.Error()
+	require.Contains(t, message, mcpaccess.ServerPermissionDeniedMessage+"\n\nRequest access:\n")
+	require.Contains(t, message, "/"+authCtx.OrganizationSlug+"/request-access?")
+	require.Contains(t, message, "scope=mcp%3Aconnect")
+	require.Contains(t, message, "resource_id="+mcpServer.ID.String())
+	require.Contains(t, message, "resource_name=test+mcp+server")
 
 	select {
 	case <-upstreamHit:

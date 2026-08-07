@@ -7,34 +7,19 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type CreateGcpIamCredentialForm = {
   /**
-   * The service account Gram impersonates. Set alone for direct impersonation, or as the hop alongside the wif_* fields.
+   * The service account in your project that Gram impersonates. Grant Gram's own service account roles/iam.serviceAccountTokenCreator on it — see externalCredentials.getGcpSetupInfo.
    */
-  impersonateServiceAccount?: string | undefined;
+  impersonateServiceAccount: string;
   /**
    * A human-readable name for the credential.
    */
   name: string;
-  /**
-   * Workload Identity Federation pool ID. Set together with the other wif_* fields.
-   */
-  wifPoolId?: string | undefined;
-  /**
-   * GCP project number backing the WIF pool. Set together with the other wif_* fields.
-   */
-  wifProjectNumber?: string | undefined;
-  /**
-   * Workload Identity Federation provider ID. Set together with the other wif_* fields.
-   */
-  wifProviderId?: string | undefined;
 };
 
 /** @internal */
 export type CreateGcpIamCredentialForm$Outbound = {
-  impersonate_service_account?: string | undefined;
+  impersonate_service_account: string;
   name: string;
-  wif_pool_id?: string | undefined;
-  wif_project_number?: string | undefined;
-  wif_provider_id?: string | undefined;
 };
 
 /** @internal */
@@ -43,18 +28,12 @@ export const CreateGcpIamCredentialForm$outboundSchema: z.ZodMiniType<
   CreateGcpIamCredentialForm
 > = z.pipe(
   z.object({
-    impersonateServiceAccount: z.optional(z.string()),
+    impersonateServiceAccount: z.string(),
     name: z.string(),
-    wifPoolId: z.optional(z.string()),
-    wifProjectNumber: z.optional(z.string()),
-    wifProviderId: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       impersonateServiceAccount: "impersonate_service_account",
-      wifPoolId: "wif_pool_id",
-      wifProjectNumber: "wif_project_number",
-      wifProviderId: "wif_provider_id",
     });
   }),
 );

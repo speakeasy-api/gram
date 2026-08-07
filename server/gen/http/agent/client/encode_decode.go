@@ -45,6 +45,14 @@ func EncodeGetPluginsRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
 		}
+		if p.SerialNumber != nil {
+			head := *p.SerialNumber
+			req.Header.Set("Gram-Device-Serial", head)
+		}
+		if p.Hostname != nil {
+			head := *p.Hostname
+			req.Header.Set("Gram-Device-Hostname", head)
+		}
 		values := req.URL.Query()
 		values.Add("email", p.Email)
 		req.URL.RawQuery = values.Encode()
@@ -481,6 +489,471 @@ func DecodeListSyncedUsersResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// BuildGetConfigurationRequest instantiates a HTTP request object with method
+// and path set to call the "agent" service "getConfiguration" endpoint
+func (c *Client) BuildGetConfigurationRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetConfigurationAgentPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("agent", "getConfiguration", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetConfigurationRequest returns an encoder for requests sent to the
+// agent getConfiguration server.
+func EncodeGetConfigurationRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*agent.GetConfigurationPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("agent", "getConfiguration", "*agent.GetConfigurationPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetConfigurationResponse returns a decoder for responses returned by
+// the agent getConfiguration endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetConfigurationResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetConfigurationResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetConfigurationResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getConfiguration", err)
+			}
+			err = ValidateGetConfigurationResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getConfiguration", err)
+			}
+			res := NewGetConfigurationDeviceAgentConfigurationOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetConfigurationUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getConfiguration", err)
+			}
+			err = ValidateGetConfigurationUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getConfiguration", err)
+			}
+			return nil, NewGetConfigurationUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetConfigurationForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getConfiguration", err)
+			}
+			err = ValidateGetConfigurationForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getConfiguration", err)
+			}
+			return nil, NewGetConfigurationForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetConfigurationBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getConfiguration", err)
+			}
+			err = ValidateGetConfigurationBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getConfiguration", err)
+			}
+			return nil, NewGetConfigurationBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetConfigurationNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getConfiguration", err)
+			}
+			err = ValidateGetConfigurationNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getConfiguration", err)
+			}
+			return nil, NewGetConfigurationNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetConfigurationConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getConfiguration", err)
+			}
+			err = ValidateGetConfigurationConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getConfiguration", err)
+			}
+			return nil, NewGetConfigurationConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetConfigurationUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getConfiguration", err)
+			}
+			err = ValidateGetConfigurationUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getConfiguration", err)
+			}
+			return nil, NewGetConfigurationUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetConfigurationInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getConfiguration", err)
+			}
+			err = ValidateGetConfigurationInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getConfiguration", err)
+			}
+			return nil, NewGetConfigurationInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetConfigurationInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agent", "getConfiguration", err)
+				}
+				err = ValidateGetConfigurationInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agent", "getConfiguration", err)
+				}
+				return nil, NewGetConfigurationInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetConfigurationUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agent", "getConfiguration", err)
+				}
+				err = ValidateGetConfigurationUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agent", "getConfiguration", err)
+				}
+				return nil, NewGetConfigurationUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agent", "getConfiguration", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetConfigurationGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getConfiguration", err)
+			}
+			err = ValidateGetConfigurationGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getConfiguration", err)
+			}
+			return nil, NewGetConfigurationGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("agent", "getConfiguration", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildUpdateConfigurationRequest instantiates a HTTP request object with
+// method and path set to call the "agent" service "updateConfiguration"
+// endpoint
+func (c *Client) BuildUpdateConfigurationRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateConfigurationAgentPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("agent", "updateConfiguration", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdateConfigurationRequest returns an encoder for requests sent to the
+// agent updateConfiguration server.
+func EncodeUpdateConfigurationRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*agent.UpdateConfigurationPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("agent", "updateConfiguration", "*agent.UpdateConfigurationPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewUpdateConfigurationRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("agent", "updateConfiguration", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdateConfigurationResponse returns a decoder for responses returned
+// by the agent updateConfiguration endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeUpdateConfigurationResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdateConfigurationResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdateConfigurationResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "updateConfiguration", err)
+			}
+			err = ValidateUpdateConfigurationResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "updateConfiguration", err)
+			}
+			res := NewUpdateConfigurationDeviceAgentConfigurationOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdateConfigurationUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "updateConfiguration", err)
+			}
+			err = ValidateUpdateConfigurationUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "updateConfiguration", err)
+			}
+			return nil, NewUpdateConfigurationUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateConfigurationForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "updateConfiguration", err)
+			}
+			err = ValidateUpdateConfigurationForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "updateConfiguration", err)
+			}
+			return nil, NewUpdateConfigurationForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateConfigurationBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "updateConfiguration", err)
+			}
+			err = ValidateUpdateConfigurationBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "updateConfiguration", err)
+			}
+			return nil, NewUpdateConfigurationBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateConfigurationNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "updateConfiguration", err)
+			}
+			err = ValidateUpdateConfigurationNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "updateConfiguration", err)
+			}
+			return nil, NewUpdateConfigurationNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateConfigurationConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "updateConfiguration", err)
+			}
+			err = ValidateUpdateConfigurationConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "updateConfiguration", err)
+			}
+			return nil, NewUpdateConfigurationConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateConfigurationUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "updateConfiguration", err)
+			}
+			err = ValidateUpdateConfigurationUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "updateConfiguration", err)
+			}
+			return nil, NewUpdateConfigurationUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateConfigurationInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "updateConfiguration", err)
+			}
+			err = ValidateUpdateConfigurationInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "updateConfiguration", err)
+			}
+			return nil, NewUpdateConfigurationInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateConfigurationInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agent", "updateConfiguration", err)
+				}
+				err = ValidateUpdateConfigurationInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agent", "updateConfiguration", err)
+				}
+				return nil, NewUpdateConfigurationInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateConfigurationUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agent", "updateConfiguration", err)
+				}
+				err = ValidateUpdateConfigurationUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agent", "updateConfiguration", err)
+				}
+				return nil, NewUpdateConfigurationUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agent", "updateConfiguration", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateConfigurationGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "updateConfiguration", err)
+			}
+			err = ValidateUpdateConfigurationGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "updateConfiguration", err)
+			}
+			return nil, NewUpdateConfigurationGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("agent", "updateConfiguration", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAgentMarketplaceResponseBodyToAgentAgentMarketplace builds a value
 // of type *agent.AgentMarketplace from a value of type
 // *AgentMarketplaceResponseBody.
@@ -499,6 +972,29 @@ func unmarshalAgentPluginResponseBodyToAgentAgentPlugin(v *AgentPluginResponseBo
 	res := &agent.AgentPlugin{
 		Slug:            *v.Slug,
 		MarketplaceName: *v.MarketplaceName,
+	}
+
+	return res
+}
+
+// unmarshalDeviceAgentConfigurationResponseBodyToAgentDeviceAgentConfiguration
+// builds a value of type *agent.DeviceAgentConfiguration from a value of type
+// *DeviceAgentConfigurationResponseBody.
+func unmarshalDeviceAgentConfigurationResponseBodyToAgentDeviceAgentConfiguration(v *DeviceAgentConfigurationResponseBody) *agent.DeviceAgentConfiguration {
+	if v == nil {
+		return nil
+	}
+	res := &agent.DeviceAgentConfiguration{
+		SchemaVersion: *v.SchemaVersion,
+		IsConfigured:  *v.IsConfigured,
+		Etag:          *v.Etag,
+		UpdatedAt:     v.UpdatedAt,
+	}
+	res.Config = make(map[string]any, len(v.Config))
+	for key, val := range v.Config {
+		tk := key
+		tv := val
+		res.Config[tk] = tv
 	}
 
 	return res

@@ -81,10 +81,10 @@ func (q *Queries) GetLatestAuditLogByAction(ctx context.Context, action string) 
 }
 
 const getLatestOutboxPayloadByOrg = `-- name: GetLatestOutboxPayloadByOrg :one
-SELECT payload
-FROM outbox
+SELECT message
+FROM publish_outbox
 WHERE organization_id = $1
-  AND event_type = $2
+  AND attributes->>'event_type' = $2::text
 ORDER BY id DESC
 LIMIT 1
 `
@@ -94,10 +94,13 @@ type GetLatestOutboxPayloadByOrgParams struct {
 	EventType      string
 }
 
-// Returns the JSON payload of the most-recently inserted outbox entry for an org+event_type pair.
+// Returns the marshaled webhook envelope of the most-recently enqueued outbox
+// entry for an org+event_type pair. Callers decode it to reach the JSON payload.
+// The event type is matched on the Pub/Sub message attribute because the outbox
+// row no longer carries webhook-specific columns.
 func (q *Queries) GetLatestOutboxPayloadByOrg(ctx context.Context, arg GetLatestOutboxPayloadByOrgParams) ([]byte, error) {
 	row := q.db.QueryRow(ctx, getLatestOutboxPayloadByOrg, arg.OrganizationID, arg.EventType)
-	var payload []byte
-	err := row.Scan(&payload)
-	return payload, err
+	var message []byte
+	err := row.Scan(&message)
+	return message, err
 }

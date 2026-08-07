@@ -1,4 +1,5 @@
-import { Alert, Button } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import { Loader2, Plug } from "lucide-react";
 import type { VerifyRemoteMcpUrlState } from "./useVerifyRemoteMcpUrl";
 
@@ -22,21 +23,16 @@ export function VerifyRemoteMcpUrlButton({
         void state.trigger();
       }}
     >
-      {state.isPending ? (
-        <>
-          <Button.LeftIcon>
-            <Loader2 className="size-4 animate-spin" />
-          </Button.LeftIcon>
-          <Button.Text>Verifying</Button.Text>
-        </>
-      ) : (
-        <>
-          <Button.LeftIcon>
-            <Plug className="size-4" />
-          </Button.LeftIcon>
-          <Button.Text>Verify MCP Connectivity</Button.Text>
-        </>
-      )}
+      <Button.LeftIcon>
+        {state.isPending ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : (
+          <Plug className="size-4" />
+        )}
+      </Button.LeftIcon>
+      <Button.Text>
+        {state.isPending ? "Verifying" : "Verify MCP Connectivity"}
+      </Button.Text>
     </Button>
   );
 }

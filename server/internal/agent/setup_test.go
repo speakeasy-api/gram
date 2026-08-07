@@ -14,6 +14,7 @@ import (
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agent"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -72,16 +73,21 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
+	// The device agent authenticates with an org-scoped key, so the default
+	// context represents the org install key (`agent` scope) — getPlugins treats
+	// the vouched `email` param as authoritative on this path. Per-user-key
+	// behavior is exercised explicitly via withPerUserKeyAuth.
+	authCtx.APIKeyScopes = []string{"agent", "agent_user"}
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
-	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, testServerURL)
+	svc := agent.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), testServerURL)
 
 	return ctx, &testInstance{
 		service:   svc,
@@ -89,6 +95,34 @@ func newTestAgentService(t *testing.T) (context.Context, *testInstance) {
 		orgID:     authCtx.ActiveOrganizationID,
 		projectID: *authCtx.ProjectID,
 	}
+}
+
+// withPlatformAdmin rewrites the request's auth context to look like a
+// Speakeasy platform administrator, which is what allows editing the
+// platform-admin-only configuration keys (update_channel, blocked_versions).
+func withPlatformAdmin(t *testing.T, ctx context.Context) context.Context {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	clone := *authCtx
+	clone.IsAdmin = true
+	return contextvalues.SetAuthContext(ctx, &clone)
+}
+
+// withPerUserKeyAuth rewrites the request's auth context to look like a per-user
+// device-agent key (minted by token-exchange or manual enrollment): it carries
+// only the `agent_user` scope, and its owner email IS the enrolled developer.
+// getPlugins must therefore attribute to the key owner and ignore any vouched
+// `email` param.
+func withPerUserKeyAuth(t *testing.T, ctx context.Context, ownerEmail string) context.Context {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	clone := *authCtx
+	clone.Email = &ownerEmail
+	clone.APIKeyScopes = []string{"agent_user"}
+	clone.SessionID = nil
+	return contextvalues.SetAuthContext(ctx, &clone)
 }
 
 // publishMarketplace gives a project a marketplace_token, which is what makes

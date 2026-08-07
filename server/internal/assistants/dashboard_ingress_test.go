@@ -8,6 +8,7 @@ import (
 
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestDashboardAdapterThreadContext(t *testing.T) {
@@ -99,7 +100,7 @@ func TestManagedAssistantDashboardTriggerLifecycle(t *testing.T) {
 	require.Len(t, instances, 1, "enable provisions one dashboard trigger instance")
 	require.Equal(t, bgtriggers.KindDirect, mustDefinitionKind(t, instances[0].DefinitionSlug))
 
-	require.NoError(t, core.DisableManagedAssistant(ctx, projectID))
+	require.NoError(t, core.DisableManagedAssistant(ctx, projectID, urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"), nil))
 
 	instances, err = triggerrepo.New(conn).ListActiveTriggerInstancesByTarget(ctx, target)
 	require.NoError(t, err)

@@ -5,7 +5,7 @@ export type DiscoveredOAuth = {
   metadata: Record<string, unknown>;
 };
 
-type ExternalFormKey = "slug" | "metadataJson";
+type ExternalFormKey = "issuerUrl" | "slug" | "metadataJson";
 
 export type ProxyFormKey =
   | "slug"
@@ -20,7 +20,9 @@ export type ProxyFormKey =
 
 export type Context = {
   discovered: DiscoveredOAuth | null;
+  initialPath?: "external";
   external: {
+    issuerUrl: string;
     slug: string;
     metadataJson: string;
     jsonError: string | null;
@@ -53,6 +55,7 @@ export type Context = {
 
 export type Input = {
   discovered: DiscoveredOAuth | null;
+  initialPath?: "external";
   toolsetSlug: string;
   toolsetName: string;
   activeOrganizationId: string;

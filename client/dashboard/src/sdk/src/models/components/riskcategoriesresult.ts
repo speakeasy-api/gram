@@ -3,6 +3,7 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
@@ -19,15 +20,27 @@ export type RiskCategoriesResult = {
    * Categories in classification-priority order. The last entry is the 'custom' fallback for findings that match none of the others.
    */
   categories: Array<RiskCategoryDefinition>;
+  /**
+   * Version of the recommended-scope registry; bumps when any recommendation changes.
+   */
+  recommendedScopesVersion: number;
 };
 
 /** @internal */
 export const RiskCategoriesResult$inboundSchema: z.ZodMiniType<
   RiskCategoriesResult,
   unknown
-> = z.object({
-  categories: z.array(RiskCategoryDefinition$inboundSchema),
-});
+> = z.pipe(
+  z.object({
+    categories: z.array(RiskCategoryDefinition$inboundSchema),
+    recommended_scopes_version: z.int(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "recommended_scopes_version": "recommendedScopesVersion",
+    });
+  }),
+);
 
 export function riskCategoriesResultFromJSON(
   jsonString: string,

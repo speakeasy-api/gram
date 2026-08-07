@@ -78,6 +78,7 @@ SELECT
     WHERE sd.plugin_id = p.id
       AND sd.project_id = p.project_id
       AND sd.channel = 'plugin'
+      AND sd.assistant_id IS NULL
       AND sd.revoked_at IS NULL
       AND EXISTS (
         SELECT 1
@@ -135,6 +136,38 @@ WHERE plugin_id = @plugin_id
   AND mcp_server_id IS NOT DISTINCT FROM sqlc.narg('mcp_server_id')::uuid
   AND deleted IS FALSE;
 
+-- name: PluginServerDisplayNameExists :one
+-- Reports whether a live plugin server on the plugin already uses the display
+-- name. AttachToDefaultPlugin checks this before inserting so it can uniquify
+-- the name instead of tripping the (plugin_id, display_name) unique index,
+-- whose failed insert would abort the caller's surrounding transaction.
+-- Joins plugins to scope by project_id as defense-in-depth against IDOR.
+SELECT EXISTS (
+  SELECT 1 FROM plugin_servers
+  JOIN plugins ON plugins.id = plugin_servers.plugin_id
+  WHERE plugin_servers.plugin_id = @plugin_id
+    AND plugins.project_id = @project_id
+    AND plugin_servers.display_name = @display_name
+    AND plugin_servers.deleted IS FALSE
+);
+
+-- name: SoftDeletePluginServersByMCPServerID :many
+-- Soft-deletes every live plugin server backed by the mcp_server, joining
+-- plugins for project scoping. Returns the removed rows with their plugin's
+-- name and slug so callers can audit-log each removal. Used by mcpservers on
+-- server deletion so a deleted server does not keep holding a plugin's
+-- display name: the (plugin_id, display_name) unique index only excludes
+-- soft-deleted rows.
+UPDATE plugin_servers
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+FROM plugins
+WHERE plugins.id = plugin_servers.plugin_id
+  AND plugins.project_id = @project_id
+  AND plugin_servers.mcp_server_id = @mcp_server_id
+  AND plugin_servers.deleted IS FALSE
+RETURNING plugin_servers.*, plugins.name AS plugin_name, plugins.slug AS plugin_slug;
+
 -- name: AddPluginServer :one
 -- Inserts a plugin server backed by exactly one of a toolset or an mcp_server.
 -- The plugin_servers backend-exclusivity CHECK enforces the XOR; callers must
@@ -154,6 +187,9 @@ RETURNING *;
 -- Resolve an mcp_server for plugin-server validation, scoped to the project so
 -- IDs alone are never trusted. has_endpoint reports whether the server has at
 -- least one usable endpoint so the caller can reject unpublishable servers.
+-- is_unproxied reports whether the server is backed by an unproxied MCP
+-- server, which is never proxied and so never has an mcp_endpoints row; the
+-- caller exempts those servers from the has_endpoint requirement.
 SELECT
   s.id,
   s.name,
@@ -162,7 +198,8 @@ SELECT
   EXISTS (
     SELECT 1 FROM mcp_endpoints e
     WHERE e.mcp_server_id = s.id AND e.deleted IS FALSE
-  ) AS has_endpoint
+  ) AS has_endpoint,
+  (s.unproxied_mcp_server_id IS NOT NULL)::boolean AS is_unproxied
 FROM mcp_servers s
 WHERE
   s.id = @mcp_server_id
@@ -199,6 +236,28 @@ WHERE id = @id
   AND plugin_id = @plugin_id
   AND deleted IS FALSE
 RETURNING *;
+
+-- name: SyncMcpServerDisplayName :execrows
+-- Keep auto-derived plugin server names in sync with their MCP server while
+-- preserving names customized through UpdatePluginServer.
+UPDATE plugin_servers ps
+SET display_name = @new_display_name,
+    updated_at = clock_timestamp()
+FROM plugins p
+WHERE ps.plugin_id = p.id
+  AND p.project_id = @project_id
+  AND p.deleted IS FALSE
+  AND ps.mcp_server_id = @mcp_server_id
+  AND ps.display_name = @old_display_name
+  AND ps.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM plugin_servers sibling
+    WHERE sibling.plugin_id = ps.plugin_id
+      AND sibling.id <> ps.id
+      AND sibling.display_name = @new_display_name
+      AND sibling.deleted IS FALSE
+  );
 
 -- name: RemovePluginServer :one
 -- Soft-deletes a plugin server and returns the removed row so the caller can
@@ -268,7 +327,10 @@ ORDER BY p.slug, ps.sort_order ASC;
 -- rule; per-plugin endpoint preference is a follow-up). Resolving the host
 -- inside the selection keeps endpoint choice and URL-host construction in
 -- lockstep, so a dangling custom-domain endpoint is never picked and emitted as
--- a (wrong) platform URL. Servers without a usable endpoint are dropped.
+-- a (wrong) platform URL. A server backed by an unproxied MCP server never has
+-- an mcp_endpoints row (Gram never proxies it), so it's resolved instead via
+-- unproxied_mcp_servers, exposing the vendor's own URL. Servers with neither a
+-- usable endpoint nor an unproxied backing are dropped.
 -- Scoped to project_id; the mcp_server must live in the same project as the
 -- plugin, and disabled servers are excluded.
 SELECT
@@ -281,8 +343,9 @@ SELECT
   ps.policy AS server_policy,
   ps.sort_order AS server_sort_order,
   ps.mcp_server_id,
-  ep.slug AS endpoint_slug,
-  ep.custom_domain AS endpoint_custom_domain
+  COALESCE(ep.slug, '') AS endpoint_slug,
+  ep.custom_domain AS endpoint_custom_domain,
+  ump.url AS unproxied_url
 FROM plugins p
 JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
 JOIN mcp_servers s ON s.id = ps.mcp_server_id AND s.deleted IS FALSE AND s.project_id = p.project_id AND s.visibility <> 'disabled'
@@ -300,9 +363,10 @@ LEFT JOIN LATERAL (
   ORDER BY (e.custom_domain_id IS NULL) ASC, e.created_at ASC
   LIMIT 1
 ) ep ON TRUE
+LEFT JOIN unproxied_mcp_servers ump ON ump.id = s.unproxied_mcp_server_id AND ump.project_id = p.project_id AND ump.deleted IS FALSE
 WHERE p.project_id = @project_id
   AND p.deleted IS FALSE
-  AND ep.slug IS NOT NULL
+  AND (ep.slug IS NOT NULL OR ump.url IS NOT NULL)
 ORDER BY p.slug, ps.sort_order ASC;
 
 -- name: GetOrganizationName :one
@@ -491,15 +555,21 @@ JOIN skills s ON s.id = prev.skill_id
 JOIN LATERAL (
   SELECT sv.id
   FROM skill_versions sv
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = prev.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
   WHERE sv.skill_id = prev.skill_id
     AND sv.spec_valid IS TRUE
     AND (prev.pinned_version_id IS NULL OR sv.id = prev.pinned_version_id)
-  ORDER BY sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
 WHERE prev.id = sd.id
   AND sd.project_id = @project_id
   AND sd.plugin_id = @plugin_id
+  AND sd.channel = 'plugin'
+  AND sd.assistant_id IS NULL
   AND sd.revoked_at IS NULL
 RETURNING sd.*, prev.updated_at AS previous_updated_at, resolved.id AS resolved_version_id, s.name AS skill_name, s.display_name AS skill_display_name;
 
@@ -526,13 +596,19 @@ JOIN skills s
 JOIN LATERAL (
   SELECT sv.content
   FROM skill_versions sv
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = sd.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
   WHERE sv.skill_id = sd.skill_id
     AND sv.spec_valid IS TRUE
     AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
-  ORDER BY sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
 WHERE sd.project_id = @project_id
   AND sd.channel = 'plugin'
+  AND sd.plugin_id IS NOT NULL
+  AND sd.assistant_id IS NULL
   AND sd.revoked_at IS NULL
 ORDER BY p.slug ASC, s.name ASC;

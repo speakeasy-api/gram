@@ -55,7 +55,7 @@ type testInstance struct {
 	assetStorage   assets.BlobStore
 }
 
-func newTestProjectsService(t *testing.T, enableRBAC bool) (context.Context, *testInstance) {
+func newTestProjectsService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -101,9 +101,6 @@ func newTestProjectsService(t *testing.T, enableRBAC bool) (context.Context, *te
 			logger,
 			conn,
 			chConn,
-			func(context.Context, string) (bool, error) {
-				return enableRBAC, nil
-			},
 			authztest.ChallengeLoggingAlwaysDisabled,
 			workos.NewStubClient(),
 		),

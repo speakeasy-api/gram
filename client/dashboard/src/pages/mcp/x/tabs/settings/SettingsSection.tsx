@@ -1,10 +1,10 @@
 // oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
-import { Heading } from "@/components/ui/heading";
-import { Type } from "@/components/ui/type";
+import { Heading } from "@/components/ui/Heading";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
 import { Loader2, SaveIcon } from "lucide-react";
-import { createContext, use } from "react";
+import { createContext, type ComponentProps, use } from "react";
 
 type SettingsSectionTone = "default" | "danger";
 type SettingsSectionContextValue = {
@@ -87,9 +87,9 @@ function SettingsSectionDescription({
   className,
 }: SettingsSectionSlotProps) {
   return (
-    <Type muted small className={cn("max-w-3xl", className)}>
+    <Text muted small className={cn("max-w-3xl", className)}>
       {children}
-    </Type>
+    </Text>
   );
 }
 
@@ -102,7 +102,7 @@ function SettingsSectionPanel({
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-xl border bg-card",
+        "overflow-hidden border bg-card",
         tone === "danger" && "border-destructive/30",
         className,
       )}
@@ -143,9 +143,9 @@ function SettingsSectionFooterHint({
   className,
 }: SettingsSectionSlotProps) {
   return (
-    <Type muted small className={className}>
+    <Text muted small className={className}>
       {children}
-    </Type>
+    </Text>
   );
 }
 
@@ -180,48 +180,24 @@ export const DangerSettingsSection = Object.assign(
   settingsSectionSlots,
 );
 
-export function FooterSaveButtonContent({
-  pending,
-}: {
+type FooterSaveButtonProps = Omit<ComponentProps<typeof Button>, "children"> & {
   pending: boolean;
-}): JSX.Element {
-  if (pending) {
-    return (
-      <>
-        <Button.LeftIcon>
-          <Loader2 className="size-4 animate-spin" />
-        </Button.LeftIcon>
-        <Button.Text>Saving</Button.Text>
-      </>
-    );
-  }
+};
 
-  return (
-    <>
-      <Button.LeftIcon>
-        <SaveIcon className="size-4" />
-      </Button.LeftIcon>
-      <Button.Text>Save</Button.Text>
-    </>
-  );
-}
-
-export function RowSaveButtonContent({
+export function FooterSaveButton({
   pending,
-}: {
-  pending: boolean;
-}): JSX.Element {
-  if (pending) {
-    return (
-      <Button.LeftIcon>
-        <Loader2 className="size-4 animate-spin" />
-      </Button.LeftIcon>
-    );
-  }
-
+  ...buttonProps
+}: FooterSaveButtonProps): JSX.Element {
   return (
-    <Button.LeftIcon>
-      <SaveIcon className="size-4" />
-    </Button.LeftIcon>
+    <Button variant="primary" size="md" {...buttonProps}>
+      <Button.LeftIcon>
+        {pending ? (
+          <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+        ) : (
+          <SaveIcon aria-hidden="true" className="size-4" />
+        )}
+      </Button.LeftIcon>
+      <Button.Text>{pending ? "Saving" : "Save"}</Button.Text>
+    </Button>
   );
 }

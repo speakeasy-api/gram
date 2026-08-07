@@ -1,9 +1,9 @@
-import { Dialog } from "@/components/ui/dialog";
-import { Type } from "@/components/ui/type";
+import { Dialog } from "@/components/ui/Dialog";
+import { Text } from "@/components/ui/Text";
 import { useProductTier } from "@/hooks/useProductTier";
 import { useOrgRoutes } from "@/routes";
 import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
 import { CreditCard, Server } from "lucide-react";
 
 interface ServerEnableDialogProps {
@@ -62,18 +62,18 @@ export function ServerEnableDialog({
 
         <div className="space-y-4">
           {!canEnable ? (
-            <Type className="text-muted-foreground">
+            <Text className="text-muted-foreground">
               Free accounts are limited to one enabled MCP server. To enable
               additional servers, upgrade to a paid plan.
-            </Type>
+            </Text>
           ) : (
-            <Type className="text-muted-foreground">
+            <Text className="text-muted-foreground">
               {currentlyEnabled
                 ? "Disabling this server will stop all requests and may affect any applications using this MCP server."
                 : targetIsPublic
                   ? "This will enable the server and make it publicly accessible. Anyone with the URL can read the tools hosted by this server. Authentication is still required to use the tools."
                   : "Enabling this server will allow it to receive requests. Standard usage charges may apply based on your plan."}
-            </Type>
+            </Text>
           )}
         </div>
 
@@ -83,8 +83,10 @@ export function ServerEnableDialog({
           </Button>
           {!canEnable ? (
             <Button onClick={handleUpgrade} className="gap-2">
-              <CreditCard className="h-4 w-4" />
-              Upgrade Plan
+              <Button.LeftIcon>
+                <CreditCard className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>Upgrade Plan</Button.Text>
             </Button>
           ) : (
             <Button

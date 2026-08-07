@@ -1,11 +1,11 @@
-import { Label } from "@/components/ui/label";
+import { Label } from "@/components/ui/Label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/Select";
 import {
   Sheet,
   SheetContent,
@@ -13,11 +13,11 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Switch } from "@/components/ui/switch";
-import { TextArea } from "@/components/ui/textarea";
-import { Type } from "@/components/ui/type";
-import { Button } from "@speakeasy-api/moonshine";
+} from "@/components/ui/Sheet";
+import { Switch } from "@/components/ui/Switch";
+import { TextArea } from "@/components/ui/Textarea";
+import { Text } from "@/components/ui/Text";
+import { Button } from "@/components/ui/Button";
 import { invalidateAllListChats } from "@gram/client/react-query/listChats.js";
 import { useRiskCreateExclusionMutation } from "@gram/client/react-query/riskCreateExclusion.js";
 import { invalidateAllRiskListExclusions } from "@gram/client/react-query/riskListExclusions.js";
@@ -34,7 +34,7 @@ import { Loader2, Sparkles } from "lucide-react";
 import type { JSX } from "react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { BUILTIN_RULES_BY_CATEGORY } from "./detection-rules-data";
+import { BUILTIN_RULE_ID_LIST } from "./detection-rules-data";
 import {
   type ExclusionFields,
   parseExclusionExpression,
@@ -42,13 +42,6 @@ import {
 } from "./exclusion-expression";
 
 export const GLOBAL_SCOPE = "__global__";
-
-// Rule ids the AI suggestion may reference in rule_id clauses. Built-ins only:
-// they cover the common asks ("email findings", "AWS keys") without an extra
-// fetch; custom rule ids can still be named in the prompt itself.
-const BUILTIN_RULE_ID_LIST = Object.values(BUILTIN_RULES_BY_CATEGORY)
-  .flat()
-  .map((rule) => rule.id);
 
 export type ExclusionSheetState =
   | { mode: "create"; initialExpression?: string; initialScope?: string }
@@ -179,7 +172,7 @@ export function ExclusionSheet({
       <SheetContent className="flex flex-col overflow-y-auto sm:max-w-lg">
         <SheetHeader className="px-6 pt-6">
           <SheetTitle>
-            {editing ? "Edit exclusion" : "Create exclusion"}
+            {editing ? "Edit exclusion rule" : "Set up exclusion rule"}
           </SheetTitle>
           <SheetDescription>
             {editing
@@ -323,10 +316,10 @@ function ExclusionForm({
             placeholder="e.g. stop flagging our shared test account jane.doe@acme.com in email findings"
           />
           <div className="flex items-center justify-between gap-3">
-            <Type className="text-muted-foreground" small>
+            <Text className="text-muted-foreground" small>
               Describe what to stop flagging. We'll write the criteria
               expression, you tweak before saving.
-            </Type>
+            </Text>
             <Button
               variant="secondary"
               size="sm"
@@ -356,7 +349,7 @@ function ExclusionForm({
             placeholder={'e.g. match == "jane.doe@acme.com"'}
             className="font-mono text-sm"
           />
-          {error && <Type className="text-destructive text-sm">{error}</Type>}
+          {error && <Text className="text-destructive text-sm">{error}</Text>}
           <ExclusionExamples />
         </div>
 
@@ -393,10 +386,10 @@ function ExclusionExamples() {
     ['entity_type == "EMAIL_ADDRESS"', "suppress by entity type"],
   ];
   return (
-    <div className="bg-muted/40 text-muted-foreground space-y-1 rounded-md p-3 text-xs">
-      <Type className="font-medium" small>
+    <div className="bg-muted/40 text-muted-foreground space-y-1 p-3 text-xs">
+      <Text className="font-medium" small>
         Examples
-      </Type>
+      </Text>
       <ul className="space-y-1">
         {examples.map(([code, desc]) => (
           <li key={code}>
@@ -404,10 +397,10 @@ function ExclusionExamples() {
           </li>
         ))}
       </ul>
-      <Type className="text-muted-foreground" small>
+      <Text className="text-muted-foreground" small>
         Combine with <code className="font-mono">&amp;&amp;</code> to scope by
         rule or source.
-      </Type>
+      </Text>
     </div>
   );
 }

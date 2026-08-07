@@ -21,7 +21,7 @@ func TestMetrics_RecordHookEventDuration(t *testing.T) {
 	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
 	metrics := newMetrics(meterProvider, testenv.NewLogger(t))
 
-	metrics.RecordHookEventDuration(ctx, "claude", "PreToolUse", hookMetricOutcomeAccepted, hookMetricDecisionDeny, "acme", 150*time.Millisecond)
+	metrics.RecordHookEventDuration(ctx, "claude", "PreToolUse", hookMetricOutcomeAccepted, hookMetricDecisionDeny, "acme", true, 150*time.Millisecond)
 
 	var rm metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(ctx, &rm))
@@ -49,6 +49,10 @@ func TestMetrics_RecordHookEventDuration(t *testing.T) {
 	value, ok = histogramPoint.Attributes.Value(attr.OrganizationSlugKey)
 	require.True(t, ok)
 	require.Equal(t, "acme", value.AsString())
+
+	value, ok = histogramPoint.Attributes.Value(attr.HookRiskScannedKey)
+	require.True(t, ok)
+	require.True(t, value.AsBool())
 }
 
 func TestClaudeHookDecision(t *testing.T) {
