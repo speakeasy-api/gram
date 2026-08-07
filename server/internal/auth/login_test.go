@@ -313,6 +313,19 @@ func TestService_Login(t *testing.T) {
 	})
 }
 
+func TestService_LoginRejectsOrgNameWithShortSlug(t *testing.T) {
+	t.Parallel()
+
+	userInfo := defaultMockUserInfo()
+	ctx, instance := newTestAuthService(t, userInfo)
+
+	orgName := "-----"
+	result, err := instance.service.Login(ctx, &gen.LoginPayload{OrgName: &orgName})
+	require.Error(t, err)
+	require.Nil(t, result)
+	require.Contains(t, err.Error(), "organization name must contain at least 2 letters or numbers")
+}
+
 // nonceFromLocation pulls the nonce out of the state param on an authorization
 // URL returned by Login.
 func nonceFromLocation(t *testing.T, location string) string {
