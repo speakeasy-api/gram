@@ -949,6 +949,7 @@ func TestListChats_RiskFindingsCount_SamePolicyIdentityDedupesAcrossAnchors(t *t
 	require.Equal(t, 1, *chat.LowRiskFindingsCount)
 	require.NotNil(t, chat.HighRiskFindingsCount)
 	require.Equal(t, 1, *chat.HighRiskFindingsCount)
+	require.NotNil(t, chat.MediumRiskFindingsCount)
 	require.Equal(t, *chat.LowRiskFindingsCount+*chat.MediumRiskFindingsCount+*chat.HighRiskFindingsCount, *chat.RiskFindingsCount,
 		"band counts must sum to the total; a finding must not double-count across bands")
 }
