@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -28,9 +30,7 @@ func TestRequire_withLoadedGrantsFromContext(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx = GrantsToContext(ctx, grants)
-	chConn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, gcp.NewNoopPublisher[*authzv1.Challenge](), challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	err = engine.Require(ctx,
 		Check{Scope: ScopeProjectRead, ResourceID: "proj:123"},
@@ -62,9 +62,7 @@ func TestFilter_withLoadedGrantsFromContext(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx = GrantsToContext(ctx, grants)
-	chConn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, gcp.NewNoopPublisher[*authzv1.Challenge](), challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	projectIDs, err := engine.Filter(ctx, []Check{
 		{Scope: ScopeProjectRead, ResourceID: "proj:123"},
@@ -101,9 +99,7 @@ func TestFilter_withDimensions(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx = GrantsToContext(ctx, grants)
-	chConn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, gcp.NewNoopPublisher[*authzv1.Challenge](), challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	results, err := engine.Filter(ctx, []Check{
 		MCPToolCallCheck("toolsetX", MCPToolCallDimensions{Tool: "allowed_tool", Disposition: ""}),
