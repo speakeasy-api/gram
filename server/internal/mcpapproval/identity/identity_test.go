@@ -508,3 +508,39 @@ func TestResolve_ZeroPaddedDefaultPortIsDropped(t *testing.T) {
 		identity.Resolve("https://mcp.example.com:0443/sse").ArtifactRef,
 	)
 }
+
+// npm reads anything that is not valid semver as a dist-tag, and only forbids
+// tags that are themselves valid semver — so `1.2.abc` is a legal tag name a
+// publisher can repoint at will. A version-shaped string is not a pin.
+func TestResolve_VersionShapedNpmTagsAreNotPinned(t *testing.T) {
+	t.Parallel()
+
+	for _, spec := range []string{
+		"npx pkg@1.2.abc",
+		"npx pkg@1..3",
+		"npx pkg@01.2.3",
+		"npx pkg@1.2.3.4",
+		"npx pkg@1.2.3-",
+		"npx pkg@1.2.3+",
+	} {
+		got := identity.Resolve(spec)
+		require.Equal(t, identity.KindPackage, got.Kind, spec)
+		require.False(t, got.VersionPinned, "%s is not a complete semver and npm resolves it as a tag", spec)
+	}
+}
+
+// Genuine semver, including prerelease and build metadata, still pins.
+func TestResolve_CompleteSemverStillPins(t *testing.T) {
+	t.Parallel()
+
+	for _, spec := range []string{
+		"npx pkg@1.2.3",
+		"npx pkg@0.0.1",
+		"npx pkg@1.2.3-beta.1",
+		"npx pkg@1.2.3+build.5",
+		"npx pkg@1.2.3-rc.1+build.5",
+		"npx pkg@v1.2.3",
+	} {
+		require.True(t, identity.Resolve(spec).VersionPinned, "%s names one immutable release", spec)
+	}
+}

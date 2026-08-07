@@ -617,8 +617,15 @@ func isExactVersion(version string, registry Registry) bool {
 	// floats, while the x in a prerelease or build tag such as `1.0.0-linux`
 	// is part of an exact version. Testing for the letter anywhere would drop
 	// every platform-suffixed release.
-	core, _, _ := strings.Cut(v, "+")
-	core, _, _ = strings.Cut(core, "-")
+	core, build, hasBuild := strings.Cut(v, "+")
+	if hasBuild && build == "" {
+		return false
+	}
+	core, pre, hasPre := strings.Cut(core, "-")
+	if hasPre && pre == "" {
+		return false
+	}
+
 	parts := strings.Split(core, ".")
 	for _, part := range parts {
 		if part == "x" || part == "X" || part == "*" {
@@ -626,12 +633,46 @@ func isExactVersion(version string, registry Registry) bool {
 		}
 	}
 
-	// npm resolves a partial version as a range: `pkg@1.2` installs the newest
-	// 1.2.x and `pkg@1` the newest 1.x, so only a complete major.minor.patch
-	// names one release. PyPI has no such rule — a version only reaches here
-	// through the `==` operator, which is exact at whatever precision it names.
-	if registry == RegistryNPM && len(parts) != 3 {
+	// npm resolves anything that is not valid semver as a **dist-tag**, and it
+	// only forbids tags that are themselves valid semver — so a publisher may
+	// create a tag literally named `1.2.abc` and repoint it whenever they
+	// like. A version-shaped string is therefore not evidence of a pin, and
+	// counting components alone would let that tag through as immutable.
+	//
+	// A partial version is a range for the same reason a tag is not a pin:
+	// `pkg@1.2` installs the newest 1.2.x.
+	//
+	// PyPI needs none of this — a version only reaches here through the `==`
+	// operator, which is exact at whatever precision it names.
+	if registry == RegistryNPM && !isSemverCore(parts) {
 		return false
+	}
+
+	return true
+}
+
+// isSemverCore reports whether the dot-separated components form a complete
+// numeric major.minor.patch.
+//
+// Leading zeros are rejected because semver disallows them, which means npm
+// reads `01.2.3` as a dist-tag rather than a version.
+func isSemverCore(parts []string) bool {
+	if len(parts) != 3 {
+		return false
+	}
+
+	for _, part := range parts {
+		if part == "" {
+			return false
+		}
+		if len(part) > 1 && part[0] == '0' {
+			return false
+		}
+		for _, r := range part {
+			if r < '0' || r > '9' {
+				return false
+			}
+		}
 	}
 
 	return true
