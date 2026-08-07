@@ -369,6 +369,150 @@
         opacity: 0.65;
       }
 
+      .tools {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+
+      .tools h3 {
+        margin: 0;
+        color: var(--fill-neutral-default);
+        font-size: 0.875rem;
+        font-weight: 400;
+      }
+
+      .tools-modes {
+        display: flex;
+        gap: 1rem;
+        font-size: 0.8125rem;
+      }
+
+      .tools-modes label {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        cursor: pointer;
+      }
+
+      .tools-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        border: solid 1px var(--border-neutral-softest);
+        border-radius: 0.5rem;
+        padding: 0.875rem 1rem;
+        background: var(--fill-neutral-default-inverse);
+      }
+
+      .tools-annotations {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem 1rem;
+        font-size: 0.8125rem;
+      }
+
+      .tools-annotations label {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        cursor: pointer;
+      }
+
+      .tools-annotations .count {
+        color: var(--text-default);
+        font-size: 0.6875rem;
+        font-family: var(--font-diatype-mono);
+      }
+
+      .tools-scopes {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.375rem;
+      }
+
+      .scope-chip {
+        font: inherit;
+        font-size: 0.6875rem;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        padding: 0.25rem 0.625rem;
+        border: solid 1px var(--border-neutral-softest);
+        border-radius: 999px;
+        background: var(--bg-surface-primary-default);
+        color: var(--text-default);
+        cursor: pointer;
+      }
+
+      .scope-chip:hover {
+        color: var(--fill-neutral-highlight);
+        border-color: var(--color-neutral-700);
+      }
+
+      .tools-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        max-height: 16rem;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        font-size: 0.8125rem;
+      }
+
+      .tools-list label {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        cursor: pointer;
+        padding: 0.125rem 0;
+      }
+
+      .tools-list .tool-name {
+        font-family: var(--font-diatype-mono);
+        word-break: break-all;
+      }
+
+      .tools-list .badge {
+        font-size: 0.625rem;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        padding: 0.0625rem 0.375rem;
+        border: solid 1px var(--border-neutral-softest);
+        border-radius: 999px;
+        color: var(--text-default);
+        white-space: nowrap;
+      }
+
+      .tools-list li[data-via-annotation] .tool-name {
+        color: var(--text-default-success);
+      }
+
+      .tools-list li[data-via-annotation]::after {
+        content: "included";
+        font-size: 0.625rem;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        color: var(--text-default-success);
+        margin-left: auto;
+      }
+
+      .tools-list li {
+        display: flex;
+        align-items: center;
+      }
+
+      .tools-list li label {
+        flex: 1;
+      }
+
+      .tools-note {
+        margin: 0;
+        font-size: 0.75rem;
+        color: var(--text-default);
+      }
+
       .actions {
         display: flex;
         gap: 0.75rem;
@@ -655,7 +799,108 @@
           </form>
           {{end}}
         </div>
-        {{end}} {{if .AutoClose}}
+        {{end}}
+
+        {{if and .ToolsSection.Supported (not .FirstParty)}}
+        <div class="tools">
+          <h3>Tool access</h3>
+          <div class="tools-modes">
+            <label>
+              <input
+                type="radio"
+                name="tool_filtering"
+                value="off"
+                form="consent-approve-form"
+                {{if not .ToolsSection.FilteringEnabled}}checked{{end}}
+                data-tool-filtering
+              />
+              All tools
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="tool_filtering"
+                value="on"
+                form="consent-approve-form"
+                {{if .ToolsSection.FilteringEnabled}}checked{{end}}
+                data-tool-filtering
+              />
+              Limit tools
+            </label>
+          </div>
+          <div
+            class="tools-panel"
+            data-tools-panel
+            {{if not .ToolsSection.FilteringEnabled}}hidden{{end}}
+          >
+            <div
+              class="tools-annotations"
+              title="Declared behavior hints from tool authors — not verified safety properties."
+            >
+              {{range .ToolsSection.AnnotationOptions}}
+              <label>
+                <input
+                  type="checkbox"
+                  name="tool_annotations"
+                  value="{{.Value}}"
+                  form="consent-approve-form"
+                  {{if .Checked}}checked{{end}}
+                  data-annotation-checkbox
+                />
+                {{.Label}} <span class="count">{{.Count}}</span>
+              </label>
+              {{end}}
+            </div>
+            {{if .ToolsSection.Scopes}}
+            <div class="tools-scopes">
+              {{range .ToolsSection.Scopes}}
+              <button
+                type="button"
+                class="scope-chip"
+                data-scope-tools="{{.NamesJoined}}"
+              >
+                {{.Tag}} ({{.Count}})
+              </button>
+              {{end}}
+            </div>
+            {{end}}
+            <ul class="tools-list">
+              {{range .ToolsSection.Tools}}
+              <li data-tool-row data-annotations="{{.AnnotationsJoined}}">
+                <label>
+                  <input
+                    type="checkbox"
+                    name="tools"
+                    value="{{.Name}}"
+                    form="consent-approve-form"
+                    {{if .Checked}}checked{{end}}
+                    data-tool-checkbox
+                  />
+                  <span class="tool-name">{{.Name}}</span>
+                  {{range .Annotations}}
+                  <span class="badge">{{.}}</span>
+                  {{end}}
+                </label>
+              </li>
+              {{end}}
+            </ul>
+            {{if .ToolsSection.ProxyExcludedCount}}
+            <p class="tools-note">
+              {{.ToolsSection.ProxyExcludedCount}} external MCP tools are
+              unavailable while limiting tools.
+            </p>
+            {{end}}
+            {{if .ToolsSection.UnannotatedCount}}
+            <p class="tools-note">
+              {{.ToolsSection.UnannotatedCount}} tools carry no annotations and
+              are only included when selected individually.
+            </p>
+            {{end}}
+          </div>
+        </div>
+        {{end}}
+
+        {{if .AutoClose}}
         <p class="info">
           Connection complete. This tab will close automatically.
         </p>

@@ -149,6 +149,7 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		RefreshTokenHash: fmt.Sprintf("%s:%s", dashboardMintRefreshTokenHashPrefix, jti),
 		ExpiresAt:        pgtype.Timestamptz{Time: now.Add(mintAccessTokenLifetime), InfinityModifier: 0, Valid: true},
 		RefreshExpiresAt: pgtype.Timestamptz{Time: now.Add(refreshLifetime), InfinityModifier: 0, Valid: true},
+		ToolSelection:    nil,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "persist user session").LogError(ctx, s.logger)
 	}

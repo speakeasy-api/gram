@@ -78,6 +78,84 @@
   guardActionButtons("button[data-connect-link]", "Connecting…");
   guardActionButtons("button[data-refresh-link]", "Refreshing…");
 
+  // Tool access: the "Limit tools" radio reveals the picker panel; a scope
+  // chip bulk-checks its member tools (selection stays name-based); and tool
+  // rows covered by a checked annotation are marked "included" so an
+  // unchecked name checkbox is never read as an exclusion.
+  var toolPanel = document.querySelector("[data-tools-panel]");
+  if (toolPanel) {
+    var radios = document.querySelectorAll("input[data-tool-filtering]");
+    Array.prototype.forEach.call(radios, function (radio) {
+      radio.addEventListener("change", function () {
+        var limiting = false;
+        Array.prototype.forEach.call(radios, function (r) {
+          if (r.checked && r.value === "on") {
+            limiting = true;
+          }
+        });
+        if (limiting) {
+          toolPanel.removeAttribute("hidden");
+        } else {
+          toolPanel.setAttribute("hidden", "");
+        }
+      });
+    });
+
+    var refreshAnnotationMarks = function () {
+      var selected = {};
+      var boxes = document.querySelectorAll("input[data-annotation-checkbox]");
+      Array.prototype.forEach.call(boxes, function (box) {
+        if (box.checked) {
+          selected[box.value] = true;
+        }
+      });
+      var rows = document.querySelectorAll("[data-tool-row]");
+      Array.prototype.forEach.call(rows, function (row) {
+        var covered = false;
+        var annotations = (row.getAttribute("data-annotations") || "").split(
+          " ",
+        );
+        Array.prototype.forEach.call(annotations, function (annotation) {
+          if (annotation && selected[annotation]) {
+            covered = true;
+          }
+        });
+        if (covered) {
+          row.setAttribute("data-via-annotation", "");
+        } else {
+          row.removeAttribute("data-via-annotation");
+        }
+      });
+    };
+    var annotationBoxes = document.querySelectorAll(
+      "input[data-annotation-checkbox]",
+    );
+    Array.prototype.forEach.call(annotationBoxes, function (box) {
+      box.addEventListener("change", refreshAnnotationMarks);
+    });
+    refreshAnnotationMarks();
+
+    var chips = document.querySelectorAll("button[data-scope-tools]");
+    Array.prototype.forEach.call(chips, function (chip) {
+      chip.addEventListener("click", function () {
+        var names = {};
+        (chip.getAttribute("data-scope-tools") || "")
+          .split(",")
+          .forEach(function (name) {
+            if (name) {
+              names[name] = true;
+            }
+          });
+        var toolBoxes = document.querySelectorAll("input[data-tool-checkbox]");
+        Array.prototype.forEach.call(toolBoxes, function (box) {
+          if (names[box.value]) {
+            box.checked = true;
+          }
+        });
+      });
+    });
+  }
+
   // Auto refresh: the page-level combobox drives every provider at once. A
   // change syncs each card's hidden auto_refresh input (so a subsequent
   // Connect carries the choice) and, when a stored session exists to update,

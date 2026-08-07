@@ -259,3 +259,70 @@ func TestConsentScriptClosesOnlyMarkedPages(t *testing.T) {
 	require.Contains(t, script, "}, 3000);")
 	require.Contains(t, script, `guardActionButtons("button[data-refresh-link]", "Refreshing…")`)
 }
+
+func TestConsentTemplateToolAccessSection(t *testing.T) {
+	t.Parallel()
+
+	var page bytes.Buffer
+	err := consentTemplate.Execute(&page, consentTemplateData{
+		ClientName:     "Demo",
+		MCPSlug:        "example",
+		MCPRouteBase:   "mcp",
+		State:          "state",
+		CSRFToken:      "csrf",
+		SubjectDisplay: "user@example.com",
+		RedirectURI:    "http://127.0.0.1/cb",
+		ScriptURL:      "/mcp/consent-page-test.js",
+		ConsentEnabled: true,
+		FirstParty:     false,
+		ToolsSection: consentToolsSection{
+			Supported:        true,
+			FilteringEnabled: true,
+			AnnotationOptions: []consentAnnotationOption{
+				{Value: "read_only", Label: "Read-only", Count: 3, Checked: true},
+				{Value: "destructive", Label: "Destructive", Count: 1, Checked: false},
+			},
+			Tools: []consentToolEntry{
+				{Name: "get_thing", Annotations: []string{"read_only"}, AnnotationsJoined: "read_only", Checked: false},
+				{Name: "delete_thing", Annotations: []string{"destructive"}, AnnotationsJoined: "destructive", Checked: true},
+			},
+			Scopes:             []consentToolScope{{Tag: "billing", Count: 2, NamesJoined: "get_thing,delete_thing"}},
+			UnannotatedCount:   4,
+			ProxyExcludedCount: 2,
+		},
+	})
+	require.NoError(t, err)
+
+	html := page.String()
+	require.Contains(t, html, "Tool access")
+	require.Contains(t, html, `name="tool_filtering"`)
+	require.Contains(t, html, `value="read_only"`)
+	require.Contains(t, html, `name="tool_annotations"`)
+	require.Contains(t, html, `name="tools"`)
+	require.Contains(t, html, `value="get_thing"`)
+	require.Contains(t, html, `data-scope-tools="get_thing,delete_thing"`)
+	require.Contains(t, html, "external MCP tools are")
+	require.Contains(t, html, "carry no annotations")
+	// FilteringEnabled preselects "Limit tools" and reveals the panel.
+	require.NotContains(t, html, `data-tools-panel
+            hidden`)
+}
+
+func TestConsentTemplateToolAccessHiddenWhenUnsupported(t *testing.T) {
+	t.Parallel()
+
+	var page bytes.Buffer
+	err := consentTemplate.Execute(&page, consentTemplateData{
+		ClientName:     "Demo",
+		MCPSlug:        "example",
+		MCPRouteBase:   "mcp",
+		State:          "state",
+		CSRFToken:      "csrf",
+		SubjectDisplay: "user@example.com",
+		ScriptURL:      "/mcp/consent-page-test.js",
+		ConsentEnabled: true,
+		FirstParty:     false,
+	})
+	require.NoError(t, err)
+	require.NotContains(t, page.String(), "Tool access")
+}

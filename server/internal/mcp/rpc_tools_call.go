@@ -124,6 +124,15 @@ func handleToolsCall(
 		recordToolFilterSpan(ctx, len(toolset.Tools), before-len(toolset.Tools))
 	}
 
+	// The consent-screen tool selection narrows the same slice before any
+	// resolution, so a deselected tool surfaces as method-not-found exactly
+	// like a ?tags=-filtered one.
+	if payload.toolSelection != nil {
+		before := len(toolset.Tools)
+		toolset.Tools = toolfilter.FilterToolsBySelection(toolset.Tools, payload.toolSelection)
+		recordToolFilterSpan(ctx, len(toolset.Tools), before-len(toolset.Tools))
+	}
+
 	if payload.mode != ToolModeStatic {
 		switch params.Name {
 		case searchToolsToolName:
