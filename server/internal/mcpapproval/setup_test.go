@@ -294,3 +294,22 @@ func requireOopsCode(t *testing.T, err error, code oops.Code) {
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, code, oopsErr.Code)
 }
+
+func seedResearchReport(t *testing.T, ctx context.Context, ti *testInstance, projectID, requestID uuid.UUID, status, report string) {
+	t.Helper()
+
+	_, err := ti.repo.CreateResearchReport(ctx, repo.CreateResearchReportParams{
+		OrganizationID:       ti.organizationID,
+		ProjectID:            projectID,
+		McpApprovalRequestID: requestID,
+		Status:               status,
+		Report:               []byte(report),
+		ReportVersion:        1,
+		Model:                pgtype.Text{},
+		PromptVersion:        pgtype.Text{},
+		RequestedBy:          conv.ToPGText("test-admin"),
+		StartedAt:            pgtype.Timestamptz{},
+		CompletedAt:          pgtype.Timestamptz{},
+	})
+	require.NoError(t, err)
+}

@@ -85,9 +85,14 @@ WHERE id = @id
   AND deleted IS FALSE;
 
 -- name: UpsertApprovalRequest :one
--- Re-requesting a server reopens the same row rather than starting a second
+-- Re-requesting a server reuses the same row rather than starting a second
 -- review, so decisions accumulate as history against one target per project.
 -- target_key is what deduplicates; target_raw stays as the requester wrote it.
+--
+-- A re-request reopens a denied review: the denial stays in the decision
+-- history, and the request returns to the queue. An approved or still-pending
+-- request keeps its status — re-asking for an approved server changes
+-- nothing, and an admin can re-decide at any time.
 INSERT INTO mcp_approval_requests (
   organization_id
   , project_id
@@ -109,6 +114,10 @@ INSERT INTO mcp_approval_requests (
 )
 ON CONFLICT (project_id, target_kind, target_key) WHERE deleted IS FALSE DO UPDATE
 SET updated_at = clock_timestamp()
+  , status = CASE
+      WHEN mcp_approval_requests.status = 'denied' THEN EXCLUDED.status
+      ELSE mcp_approval_requests.status
+    END
 RETURNING *;
 
 -- name: CreateApprovalRequestRequester :one
@@ -140,3 +149,50 @@ SET current_evidence = @current_evidence
 WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
+
+-- name: GetApprovalRequestForDecision :one
+-- Locking read used inside the decision transaction. Serialises concurrent
+-- decisions on the same request, so the request's status always matches the
+-- newest decision rather than whichever transaction happened to commit last.
+SELECT id, organization_id, target_raw, status, current_evidence, evidence_version
+FROM mcp_approval_requests
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: ListResearchReportsForApprovalRequest :many
+SELECT *
+FROM mcp_research_reports
+WHERE mcp_approval_request_id = @mcp_approval_request_id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+ORDER BY created_at DESC;
+
+-- name: CreateResearchReport :one
+INSERT INTO mcp_research_reports (
+  organization_id
+  , project_id
+  , mcp_approval_request_id
+  , status
+  , report
+  , report_version
+  , model
+  , prompt_version
+  , requested_by
+  , started_at
+  , completed_at
+) VALUES (
+  @organization_id
+  , @project_id
+  , @mcp_approval_request_id
+  , @status
+  , @report
+  , @report_version
+  , sqlc.narg(model)::text
+  , sqlc.narg(prompt_version)::text
+  , sqlc.narg(requested_by)::text
+  , sqlc.narg(started_at)::timestamptz
+  , sqlc.narg(completed_at)::timestamptz
+)
+RETURNING *;
