@@ -50,7 +50,7 @@ export const emptySession: Session = {
   },
   organizations: [],
   activeOrganizationId: "",
-  enterpriseTrial: null,
+  trial: null,
   hasActiveSubscription: false,
   whitelisted: false,
   session: "",

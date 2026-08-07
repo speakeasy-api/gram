@@ -7,7 +7,7 @@ import (
 	"github.com/speakeasy-api/gram/server/design/shared"
 )
 
-var EnterpriseTrial = Type("EnterpriseTrial", func() {
+var Trial = Type("Trial", func() {
 	Attribute("started_at", String, func() {
 		Format(FormatDateTime)
 	})
@@ -209,8 +209,8 @@ var _ = Service("auth", func() {
 			Attribute("gram_account_type", String)
 			Attribute("has_active_subscription", Boolean, "Whether the organization has an active billing subscription")
 			Attribute("whitelisted", Boolean, "Whether the organization is whitelisted to access the platform")
-			Attribute("enterprise_trial", EnterpriseTrial, func() {
-				Meta("struct:tag:json", "enterprise_trial")
+			Attribute("trial", Trial, func() {
+				Meta("struct:tag:json", "trial")
 			})
 			Attribute("organizations", ArrayOf(shared.OrganizationEntry))
 

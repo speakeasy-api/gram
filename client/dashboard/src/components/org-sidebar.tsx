@@ -24,7 +24,7 @@ import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
 import { OnboardingResumeButton } from "./onboarding-resume-button";
 import { SidebarUserMenu } from "./sidebar-user-menu";
 import { WorkspaceSwitcher } from "./workspace-switcher";
-import { EnterpriseTrialStatusCard } from "./enterprise-trial-status-card";
+import { TrialStatusCard } from "./trial-status-card";
 
 /** Scopes that make an org-level nav item visible. */
 const orgReadOrAdmin: Scope[] = ["org:read", "org:admin"];
@@ -256,7 +256,7 @@ export function OrgSidebar({
         )}
       </SidebarContent>
       <SidebarFooter className="border-t">
-        <EnterpriseTrialStatusCard />
+        <TrialStatusCard />
         <OnboardingResumeButton />
         <SidebarUserMenu />
       </SidebarFooter>

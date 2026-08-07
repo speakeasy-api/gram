@@ -355,24 +355,24 @@ func (q *Queries) FilterOrganizationMemberUserIDs(ctx context.Context, arg Filte
 	return items, nil
 }
 
-const getActiveEnterpriseTrial = `-- name: GetActiveEnterpriseTrial :one
+const getActiveTrial = `-- name: GetActiveTrial :one
 SELECT organization_id, created_at, ends_at
-FROM enterprise_trials
+FROM trials
 WHERE organization_id = $1
   AND converted_at IS NULL
   AND demoted_at IS NULL
   AND ends_at > now()
 `
 
-type GetActiveEnterpriseTrialRow struct {
+type GetActiveTrialRow struct {
 	OrganizationID string
 	CreatedAt      pgtype.Timestamptz
 	EndsAt         pgtype.Timestamptz
 }
 
-func (q *Queries) GetActiveEnterpriseTrial(ctx context.Context, organizationID string) (GetActiveEnterpriseTrialRow, error) {
-	row := q.db.QueryRow(ctx, getActiveEnterpriseTrial, organizationID)
-	var i GetActiveEnterpriseTrialRow
+func (q *Queries) GetActiveTrial(ctx context.Context, organizationID string) (GetActiveTrialRow, error) {
+	row := q.db.QueryRow(ctx, getActiveTrial, organizationID)
+	var i GetActiveTrialRow
 	err := row.Scan(&i.OrganizationID, &i.CreatedAt, &i.EndsAt)
 	return i, err
 }

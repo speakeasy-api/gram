@@ -14,18 +14,18 @@ vi.mock("@/contexts/Auth", async (importOriginal) => {
   };
 });
 
-import { EnterpriseTrialStatusCard } from "./enterprise-trial-status-card";
+import { TrialStatusCard } from "./trial-status-card";
 
 const activeTrial = {
   startedAt: new Date("2026-08-05T00:00:00.000Z"),
   endsAt: new Date("2026-08-19T00:00:00.000Z"),
 };
 
-describe("EnterpriseTrialStatusCard", () => {
+describe("TrialStatusCard", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-05T00:00:00.000Z"));
-    mocks.useSession.mockReturnValue({ enterpriseTrial: activeTrial });
+    mocks.useSession.mockReturnValue({ trial: activeTrial });
   });
 
   afterEach(() => {
@@ -34,12 +34,12 @@ describe("EnterpriseTrialStatusCard", () => {
     vi.clearAllMocks();
   });
 
-  it("defaults the empty session enterprise trial to null", () => {
-    expect(emptySession.enterpriseTrial).toBeNull();
+  it("defaults the empty session trial to null", () => {
+    expect(emptySession.trial).toBeNull();
   });
 
   it("renders the active trial status", () => {
-    render(<EnterpriseTrialStatusCard />);
+    render(<TrialStatusCard />);
 
     expect(screen.getByText("Trial")).toBeTruthy();
     expect(screen.getByText("Day 1/14")).toBeTruthy();
@@ -56,23 +56,23 @@ describe("EnterpriseTrialStatusCard", () => {
   it("shows one day left on the final trial day", () => {
     vi.setSystemTime(new Date("2026-08-18T00:00:00.000Z"));
 
-    render(<EnterpriseTrialStatusCard />);
+    render(<TrialStatusCard />);
 
     expect(screen.getByText("1 day left")).toBeTruthy();
   });
 
-  it("renders nothing without an enterprise trial", () => {
-    mocks.useSession.mockReturnValue({ enterpriseTrial: null });
+  it("renders nothing without a trial", () => {
+    mocks.useSession.mockReturnValue({ trial: null });
 
-    const { container } = render(<EnterpriseTrialStatusCard />);
+    const { container } = render(<TrialStatusCard />);
 
     expect(container.firstChild).toBeNull();
   });
 
-  it("renders nothing once the enterprise trial has expired", () => {
+  it("renders nothing once the trial has expired", () => {
     vi.setSystemTime(new Date("2026-08-19T00:00:00.000Z"));
 
-    const { container } = render(<EnterpriseTrialStatusCard />);
+    const { container } = render(<TrialStatusCard />);
 
     expect(container.firstChild).toBeNull();
   });
@@ -84,19 +84,29 @@ describe("EnterpriseTrialStatusCard", () => {
     "renders nothing when the trial %s date is invalid",
     (_, startedAt, endsAt) => {
       mocks.useSession.mockReturnValue({
-        enterpriseTrial: { startedAt, endsAt },
+        trial: { startedAt, endsAt },
       });
 
-      const { container } = render(<EnterpriseTrialStatusCard />);
+      const { container } = render(<TrialStatusCard />);
 
       expect(container.firstChild).toBeNull();
     },
   );
 
+  it("renders nothing when a trial date is missing", () => {
+    mocks.useSession.mockReturnValue({
+      trial: { startedAt: undefined, endsAt: activeTrial.endsAt },
+    });
+
+    const { container } = render(<TrialStatusCard />);
+
+    expect(container.firstChild).toBeNull();
+  });
+
   it("removes the card when the trial expires without a parent rerender", async () => {
     vi.setSystemTime(new Date("2026-08-18T23:59:59.999Z"));
 
-    const { container } = render(<EnterpriseTrialStatusCard />);
+    const { container } = render(<TrialStatusCard />);
 
     expect(screen.getByText("1 day left")).toBeTruthy();
 
@@ -108,7 +118,7 @@ describe("EnterpriseTrialStatusCard", () => {
   });
 
   it("updates the displayed day at a day boundary without a parent rerender", async () => {
-    render(<EnterpriseTrialStatusCard />);
+    render(<TrialStatusCard />);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000);
@@ -120,10 +130,10 @@ describe("EnterpriseTrialStatusCard", () => {
 
   it("does not recreate the timer on an unrelated rerender", () => {
     const setTimeoutSpy = vi.spyOn(window, "setTimeout");
-    const { rerender } = render(<EnterpriseTrialStatusCard />);
+    const { rerender } = render(<TrialStatusCard />);
     setTimeoutSpy.mockClear();
 
-    rerender(<EnterpriseTrialStatusCard />);
+    rerender(<TrialStatusCard />);
 
     expect(setTimeoutSpy).not.toHaveBeenCalled();
     setTimeoutSpy.mockRestore();
@@ -132,7 +142,7 @@ describe("EnterpriseTrialStatusCard", () => {
   it("visually advances the elapsed-time bar", () => {
     vi.setSystemTime(new Date("2026-08-07T00:00:00.000Z"));
 
-    render(<EnterpriseTrialStatusCard />);
+    render(<TrialStatusCard />);
 
     expect(
       screen
@@ -155,7 +165,7 @@ describe("EnterpriseTrialStatusCard", () => {
           activeTrial.startedAt.getTime() + (day - 1) * 24 * 60 * 60 * 1000,
         ),
       );
-      const { unmount } = render(<EnterpriseTrialStatusCard />);
+      const { unmount } = render(<TrialStatusCard />);
 
       expect(
         screen
@@ -168,7 +178,7 @@ describe("EnterpriseTrialStatusCard", () => {
   });
 
   it("hides the card when the sidebar is collapsed", () => {
-    const { container } = render(<EnterpriseTrialStatusCard />);
+    const { container } = render(<TrialStatusCard />);
 
     expect(
       container.firstElementChild?.classList.contains(
@@ -178,7 +188,7 @@ describe("EnterpriseTrialStatusCard", () => {
   });
 
   it("opens the Sales conversation safely in a new tab", () => {
-    render(<EnterpriseTrialStatusCard />);
+    render(<TrialStatusCard />);
 
     const salesLink = screen.getByRole("link", { name: "Talk to sales" });
     expect(salesLink.getAttribute("href")).toBe(

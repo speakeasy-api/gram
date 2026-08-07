@@ -86,11 +86,6 @@ type EnterDemoResult struct {
 	SessionCookie string
 }
 
-type EnterpriseTrial struct {
-	StartedAt string
-	EndsAt    string
-}
-
 // InfoPayload is the payload type of the auth service info method.
 type InfoPayload struct {
 	SessionToken *string
@@ -109,9 +104,9 @@ type InfoResult struct {
 	// Whether the organization has an active billing subscription
 	HasActiveSubscription bool
 	// Whether the organization is whitelisted to access the platform
-	Whitelisted     bool
-	EnterpriseTrial *EnterpriseTrial `json:"enterprise_trial"`
-	Organizations   []*OrganizationEntry
+	Whitelisted   bool
+	Trial         *Trial `json:"trial"`
+	Organizations []*OrganizationEntry
 	// The authentication session
 	SessionToken string
 	// The authentication session
@@ -187,6 +182,11 @@ type SwitchScopesResult struct {
 	SessionToken string
 	// The authentication session
 	SessionCookie string
+}
+
+type Trial struct {
+	StartedAt string
+	EndsAt    string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

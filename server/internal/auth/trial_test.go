@@ -10,17 +10,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLoadActiveEnterpriseTrialReturnsNilAfterLookupError(t *testing.T) {
+func TestLoadActiveTrialReturnsNilAfterLookupError(t *testing.T) {
 	t.Parallel()
 
-	lookupErr := errors.New("enterprise trial lookup unavailable")
+	lookupErr := errors.New("trial lookup unavailable")
 	logger := testenv.NewLogger(t)
 
-	trial := loadActiveEnterpriseTrial(
+	trial := loadActiveTrial(
 		context.Background(),
 		"<ORG_ID>",
-		func(context.Context, string) (orgRepo.GetActiveEnterpriseTrialRow, error) {
-			return orgRepo.GetActiveEnterpriseTrialRow{}, lookupErr
+		func(context.Context, string) (orgRepo.GetActiveTrialRow, error) {
+			return orgRepo.GetActiveTrialRow{}, lookupErr
 		},
 		logger,
 	)

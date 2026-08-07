@@ -1,10 +1,7 @@
 import { Icon } from "@/components/ui/Icon";
 import { Text } from "@/components/ui/Text";
 import { useSession } from "@/contexts/Auth";
-import {
-  getEnterpriseTrialStatus,
-  MILLISECONDS_PER_DAY,
-} from "@/lib/enterprise-trial";
+import { getTrialStatus, MILLISECONDS_PER_DAY } from "@/lib/trial-status";
 import { useEffect, useState } from "react";
 
 const SALES_URL = "https://www.speakeasy.com/talk-to-us";
@@ -14,20 +11,24 @@ const DEEP_GREEN_PROGRESS_CLASS = "bg-[var(--color-brand-c)]";
 const ORANGE_PROGRESS_CLASS = "bg-[var(--color-brand-ruby)]";
 const RED_PROGRESS_CLASS = "bg-[var(--color-brand-swift)]";
 
-function getTrialStatus(
+function isValidDate(value: unknown): value is Date {
+  return value instanceof Date && Number.isFinite(value.getTime());
+}
+
+function getTrialStatusFromDates(
   trial: { startedAt: Date; endsAt: Date } | null | undefined,
   now: Date,
 ) {
   if (
     trial === null ||
     trial === undefined ||
-    !Number.isFinite(trial.startedAt.getTime()) ||
-    !Number.isFinite(trial.endsAt.getTime())
+    !isValidDate(trial.startedAt) ||
+    !isValidDate(trial.endsAt)
   ) {
     return null;
   }
 
-  return getEnterpriseTrialStatus(
+  return getTrialStatus(
     {
       startedAt: trial.startedAt.toISOString(),
       endsAt: trial.endsAt.toISOString(),
@@ -57,19 +58,23 @@ function getTrialProgressColorClass(
   return RED_PROGRESS_CLASS;
 }
 
-export function EnterpriseTrialStatusCard(): React.ReactNode {
-  const { enterpriseTrial } = useSession();
+export function TrialStatusCard(): React.ReactNode {
+  const { trial } = useSession();
   const [now, setNow] = useState(() => new Date());
-  const status = getTrialStatus(enterpriseTrial, now);
-  const startedAt = enterpriseTrial?.startedAt.getTime();
-  const endsAt = enterpriseTrial?.endsAt.getTime();
+  const status = getTrialStatusFromDates(trial, now);
+  const startedAt = isValidDate(trial?.startedAt)
+    ? trial.startedAt.getTime()
+    : undefined;
+  const endsAt = isValidDate(trial?.endsAt)
+    ? trial.endsAt.getTime()
+    : undefined;
   const nowTime = now.getTime();
   const dayNumber = status?.dayNumber;
   const remainingDays = status?.remainingDays;
 
   useEffect(() => {
     setNow(new Date());
-  }, [enterpriseTrial?.startedAt, enterpriseTrial?.endsAt]);
+  }, [trial?.startedAt, trial?.endsAt]);
 
   useEffect(() => {
     if (

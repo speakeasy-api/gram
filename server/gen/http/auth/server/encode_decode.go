@@ -1434,13 +1434,13 @@ func EncodeInfoError(encoder func(context.Context, http.ResponseWriter) goahttp.
 	}
 }
 
-// marshalAuthEnterpriseTrialToEnterpriseTrialResponseBody builds a value of
-// type *EnterpriseTrialResponseBody from a value of type *auth.EnterpriseTrial.
-func marshalAuthEnterpriseTrialToEnterpriseTrialResponseBody(v *auth.EnterpriseTrial) *EnterpriseTrialResponseBody {
+// marshalAuthTrialToTrialResponseBody builds a value of type
+// *TrialResponseBody from a value of type *auth.Trial.
+func marshalAuthTrialToTrialResponseBody(v *auth.Trial) *TrialResponseBody {
 	if v == nil {
 		return nil
 	}
-	res := &EnterpriseTrialResponseBody{
+	res := &TrialResponseBody{
 		StartedAt: v.StartedAt,
 		EndsAt:    v.EndsAt,
 	}

@@ -57946,18 +57946,6 @@ components:
                 - tier
                 - label
                 - total_calls
-        EnterpriseTrial:
-            type: object
-            properties:
-                ends_at:
-                    type: string
-                    format: date-time
-                started_at:
-                    type: string
-                    format: date-time
-            required:
-                - started_at
-                - ends_at
         Environment:
             type: object
             properties:
@@ -60725,8 +60713,6 @@ components:
             properties:
                 active_organization_id:
                     type: string
-                enterprise_trial:
-                    $ref: '#/components/schemas/EnterpriseTrial'
                 gram_account_type:
                     type: string
                 has_active_subscription:
@@ -60738,6 +60724,8 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/OrganizationEntry'
+                trial:
+                    $ref: '#/components/schemas/Trial'
                 user_display_name:
                     type: string
                 user_email:
@@ -72262,6 +72250,18 @@ components:
                 - user_id
                 - user_type
                 - activity_count
+        Trial:
+            type: object
+            properties:
+                ends_at:
+                    type: string
+                    format: date-time
+                started_at:
+                    type: string
+                    format: date-time
+            required:
+                - started_at
+                - ends_at
         TriggerAnalysisResponseBody:
             type: object
             properties:

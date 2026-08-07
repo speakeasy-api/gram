@@ -33,9 +33,9 @@ type InfoResponseBody struct {
 	// Whether the organization has an active billing subscription
 	HasActiveSubscription bool `form:"has_active_subscription" json:"has_active_subscription" xml:"has_active_subscription"`
 	// Whether the organization is whitelisted to access the platform
-	Whitelisted     bool                             `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
-	EnterpriseTrial *EnterpriseTrialResponseBody     `json:"enterprise_trial"`
-	Organizations   []*OrganizationEntryResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
+	Whitelisted   bool                             `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
+	Trial         *TrialResponseBody               `json:"trial"`
+	Organizations []*OrganizationEntryResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
 }
 
 // CallbackUnauthorizedResponseBody is the type of the "auth" service
@@ -1299,8 +1299,8 @@ type InfoGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// EnterpriseTrialResponseBody is used to define fields on response body types.
-type EnterpriseTrialResponseBody struct {
+// TrialResponseBody is used to define fields on response body types.
+type TrialResponseBody struct {
 	StartedAt string `form:"started_at" json:"started_at" xml:"started_at"`
 	EndsAt    string `form:"ends_at" json:"ends_at" xml:"ends_at"`
 }
@@ -1345,8 +1345,8 @@ func NewInfoResponseBody(res *auth.InfoResult) *InfoResponseBody {
 		HasActiveSubscription: res.HasActiveSubscription,
 		Whitelisted:           res.Whitelisted,
 	}
-	if res.EnterpriseTrial != nil {
-		body.EnterpriseTrial = marshalAuthEnterpriseTrialToEnterpriseTrialResponseBody(res.EnterpriseTrial)
+	if res.Trial != nil {
+		body.Trial = marshalAuthTrialToTrialResponseBody(res.Trial)
 	}
 	if res.Organizations != nil {
 		body.Organizations = make([]*OrganizationEntryResponseBody, len(res.Organizations))

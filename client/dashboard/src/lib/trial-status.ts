@@ -1,16 +1,16 @@
 export const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 
-export type EnterpriseTrialStatus = {
+export type TrialStatus = {
   dayNumber: number;
   totalDays: number;
   remainingDays: number;
   progress: number;
 };
 
-export function getEnterpriseTrialStatus(
+export function getTrialStatus(
   trial: { startedAt: string; endsAt: string } | null | undefined,
   now: Date,
-): EnterpriseTrialStatus | null {
+): TrialStatus | null {
   if (trial === null || trial === undefined) {
     return null;
   }

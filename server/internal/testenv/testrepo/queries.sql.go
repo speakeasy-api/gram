@@ -575,37 +575,6 @@ func (q *Queries) InsertDeviceAgentSyncFixture(ctx context.Context, arg InsertDe
 	return err
 }
 
-const insertEnterpriseTrialFixture = `-- name: InsertEnterpriseTrialFixture :exec
-INSERT INTO enterprise_trials (organization_id, created_at, ends_at, converted_at, demoted_at)
-VALUES (
-    $1,
-    $2,
-    $3,
-    $4::timestamptz,
-    $5::timestamptz
-)
-`
-
-type InsertEnterpriseTrialFixtureParams struct {
-	OrganizationID string
-	CreatedAt      pgtype.Timestamptz
-	EndsAt         pgtype.Timestamptz
-	ConvertedAt    pgtype.Timestamptz
-	DemotedAt      pgtype.Timestamptz
-}
-
-// Test-only fixture for exercising active enterprise-trial lifecycle states.
-func (q *Queries) InsertEnterpriseTrialFixture(ctx context.Context, arg InsertEnterpriseTrialFixtureParams) error {
-	_, err := q.db.Exec(ctx, insertEnterpriseTrialFixture,
-		arg.OrganizationID,
-		arg.CreatedAt,
-		arg.EndsAt,
-		arg.ConvertedAt,
-		arg.DemotedAt,
-	)
-	return err
-}
-
 const insertMdmDeviceFixture = `-- name: InsertMdmDeviceFixture :exec
 INSERT INTO mdm_devices (device_integration_config_id, organization_id, external_id, user_email, user_id, serial_number, missing_since)
 VALUES ($1, $2, $3, NULLIF($4::text, ''), $5::text, NULLIF($6::text, ''), $7::timestamptz)
@@ -651,6 +620,38 @@ type InsertPluginAssignmentFixtureParams struct {
 // create.
 func (q *Queries) InsertPluginAssignmentFixture(ctx context.Context, arg InsertPluginAssignmentFixtureParams) error {
 	_, err := q.db.Exec(ctx, insertPluginAssignmentFixture, arg.PluginID, arg.OrganizationID, arg.PrincipalUrn)
+	return err
+}
+
+const insertTrialFixture = `-- name: InsertTrialFixture :exec
+INSERT INTO trials (organization_id, tier, created_at, ends_at, converted_at, demoted_at)
+VALUES (
+    $1,
+    'enterprise',
+    $2,
+    $3,
+    $4::timestamptz,
+    $5::timestamptz
+)
+`
+
+type InsertTrialFixtureParams struct {
+	OrganizationID string
+	CreatedAt      pgtype.Timestamptz
+	EndsAt         pgtype.Timestamptz
+	ConvertedAt    pgtype.Timestamptz
+	DemotedAt      pgtype.Timestamptz
+}
+
+// Test-only fixture for exercising active trial lifecycle states.
+func (q *Queries) InsertTrialFixture(ctx context.Context, arg InsertTrialFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertTrialFixture,
+		arg.OrganizationID,
+		arg.CreatedAt,
+		arg.EndsAt,
+		arg.ConvertedAt,
+		arg.DemotedAt,
+	)
 	return err
 }
 

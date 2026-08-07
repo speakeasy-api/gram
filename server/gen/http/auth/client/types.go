@@ -35,9 +35,9 @@ type InfoResponseBody struct {
 	// Whether the organization has an active billing subscription
 	HasActiveSubscription *bool `form:"has_active_subscription,omitempty" json:"has_active_subscription,omitempty" xml:"has_active_subscription,omitempty"`
 	// Whether the organization is whitelisted to access the platform
-	Whitelisted     *bool                            `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
-	EnterpriseTrial *EnterpriseTrialResponseBody     `json:"enterprise_trial"`
-	Organizations   []*OrganizationEntryResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
+	Whitelisted   *bool                            `form:"whitelisted,omitempty" json:"whitelisted,omitempty" xml:"whitelisted,omitempty"`
+	Trial         *TrialResponseBody               `json:"trial"`
+	Organizations []*OrganizationEntryResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
 }
 
 // CallbackUnauthorizedResponseBody is the type of the "auth" service
@@ -1301,8 +1301,8 @@ type InfoGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// EnterpriseTrialResponseBody is used to define fields on response body types.
-type EnterpriseTrialResponseBody struct {
+// TrialResponseBody is used to define fields on response body types.
+type TrialResponseBody struct {
 	StartedAt *string `form:"started_at,omitempty" json:"started_at,omitempty" xml:"started_at,omitempty"`
 	EndsAt    *string `form:"ends_at,omitempty" json:"ends_at,omitempty" xml:"ends_at,omitempty"`
 }
@@ -2282,8 +2282,8 @@ func NewInfoResultOK(body *InfoResponseBody, sessionToken string, sessionCookie 
 		HasActiveSubscription: *body.HasActiveSubscription,
 		Whitelisted:           *body.Whitelisted,
 	}
-	if body.EnterpriseTrial != nil {
-		v.EnterpriseTrial = unmarshalEnterpriseTrialResponseBodyToAuthEnterpriseTrial(body.EnterpriseTrial)
+	if body.Trial != nil {
+		v.Trial = unmarshalTrialResponseBodyToAuthTrial(body.Trial)
 	}
 	v.Organizations = make([]*auth.OrganizationEntry, len(body.Organizations))
 	for i, val := range body.Organizations {
@@ -2467,8 +2467,8 @@ func ValidateInfoResponseBody(body *InfoResponseBody) (err error) {
 	if body.Whitelisted == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("whitelisted", "body"))
 	}
-	if body.EnterpriseTrial != nil {
-		if err2 := ValidateEnterpriseTrialResponseBody(body.EnterpriseTrial); err2 != nil {
+	if body.Trial != nil {
+		if err2 := ValidateTrialResponseBody(body.Trial); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -4162,9 +4162,8 @@ func ValidateInfoGatewayErrorResponseBody(body *InfoGatewayErrorResponseBody) (e
 	return
 }
 
-// ValidateEnterpriseTrialResponseBody runs the validations defined on
-// EnterpriseTrialResponseBody
-func ValidateEnterpriseTrialResponseBody(body *EnterpriseTrialResponseBody) (err error) {
+// ValidateTrialResponseBody runs the validations defined on TrialResponseBody
+func ValidateTrialResponseBody(body *TrialResponseBody) (err error) {
 	if body.StartedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("started_at", "body"))
 	}

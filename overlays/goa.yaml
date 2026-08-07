@@ -11,12 +11,12 @@ actions:
   - target: $.components.schemas.Error
     update:
       x-speakeasy-name-override: ServiceError
-  - target: $.components.schemas.InfoResponseBody.properties.enterprise_trial['$ref']
+  - target: $.components.schemas.InfoResponseBody.properties.trial['$ref']
     remove: true
-  - target: $.components.schemas.InfoResponseBody.properties.enterprise_trial
+  - target: $.components.schemas.InfoResponseBody.properties.trial
     update:
       allOf:
-        - $ref: "#/components/schemas/EnterpriseTrial"
+        - $ref: "#/components/schemas/Trial"
       nullable: true
   - target: $.components.schemas.InfoResponseBody.required
     remove: true
@@ -31,7 +31,7 @@ actions:
         - gram_account_type
         - has_active_subscription
         - whitelisted
-        - enterprise_trial
+        - trial
   - target: $.paths.*[?(@.operationId=='uploadOpenAPIv3Asset' || @.operationId=='uploadFunctions' || @.operationId=='uploadImage')]
     update:
       requestBody:

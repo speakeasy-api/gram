@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getEnterpriseTrialStatus } from "./enterprise-trial";
+import { getTrialStatus } from "./trial-status";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -8,10 +8,10 @@ const trial = (startedAt: string, endsAt: string) => ({
   endsAt,
 });
 
-describe("getEnterpriseTrialStatus", () => {
+describe("getTrialStatus", () => {
   it("returns the first day at the first instant of a 14-day trial", () => {
     expect(
-      getEnterpriseTrialStatus(
+      getTrialStatus(
         trial("2026-08-01T00:00:00.000Z", "2026-08-15T00:00:00.000Z"),
         new Date("2026-08-01T00:00:00.000Z"),
       ),
@@ -25,7 +25,7 @@ describe("getEnterpriseTrialStatus", () => {
 
   it("calculates progress and remaining days in the middle of a trial", () => {
     expect(
-      getEnterpriseTrialStatus(
+      getTrialStatus(
         trial("2026-08-01T00:00:00.000Z", "2026-08-15T00:00:00.000Z"),
         new Date("2026-08-07T12:00:00.000Z"),
       ),
@@ -42,13 +42,13 @@ describe("getEnterpriseTrialStatus", () => {
     const trialEnd = new Date(trialStart.getTime() + 14 * DAY_MS);
 
     expect(
-      getEnterpriseTrialStatus(
+      getTrialStatus(
         trial(trialStart.toISOString(), trialEnd.toISOString()),
         new Date(trialStart.getTime() + DAY_MS),
       ),
     ).toMatchObject({ dayNumber: 2, remainingDays: 13 });
     expect(
-      getEnterpriseTrialStatus(
+      getTrialStatus(
         trial(trialStart.toISOString(), trialEnd.toISOString()),
         new Date(trialStart.getTime() + 7 * DAY_MS),
       ),
@@ -57,7 +57,7 @@ describe("getEnterpriseTrialStatus", () => {
 
   it("keeps one day remaining immediately before expiry", () => {
     expect(
-      getEnterpriseTrialStatus(
+      getTrialStatus(
         trial("2026-08-01T00:00:00.000Z", "2026-08-15T00:00:00.000Z"),
         new Date("2026-08-14T23:59:59.999Z"),
       ),
@@ -71,7 +71,7 @@ describe("getEnterpriseTrialStatus", () => {
 
   it("returns null at exact expiry", () => {
     expect(
-      getEnterpriseTrialStatus(
+      getTrialStatus(
         trial("2026-08-01T00:00:00.000Z", "2026-08-15T00:00:00.000Z"),
         new Date("2026-08-15T00:00:00.000Z"),
       ),
@@ -80,7 +80,7 @@ describe("getEnterpriseTrialStatus", () => {
 
   it("calculates an extended trial from its actual duration", () => {
     expect(
-      getEnterpriseTrialStatus(
+      getTrialStatus(
         trial("2026-08-01T00:00:00.000Z", "2026-08-31T00:00:00.000Z"),
         new Date("2026-08-16T00:00:00.000Z"),
       ),
@@ -94,7 +94,7 @@ describe("getEnterpriseTrialStatus", () => {
 
   it("clamps a pre-start reference time to the trial start", () => {
     expect(
-      getEnterpriseTrialStatus(
+      getTrialStatus(
         trial("2026-08-01T00:00:00.000Z", "2026-08-15T00:00:00.000Z"),
         new Date("2026-07-31T00:00:00.000Z"),
       ),
@@ -116,6 +116,6 @@ describe("getEnterpriseTrialStatus", () => {
       new Date("2026-08-01T00:00:00.000Z"),
     ],
   ])("returns null for invalid trial input: %j", (invalidTrial, now) => {
-    expect(getEnterpriseTrialStatus(invalidTrial, now)).toBeNull();
+    expect(getTrialStatus(invalidTrial, now)).toBeNull();
   });
 });

@@ -175,11 +175,12 @@ INSERT INTO organization_metadata (
 INSERT INTO organization_user_relationships (organization_id, user_id)
 VALUES (@organization_id, sqlc.narg('user_id')::text);
 
--- name: InsertEnterpriseTrialFixture :exec
--- Test-only fixture for exercising active enterprise-trial lifecycle states.
-INSERT INTO enterprise_trials (organization_id, created_at, ends_at, converted_at, demoted_at)
+-- name: InsertTrialFixture :exec
+-- Test-only fixture for exercising active trial lifecycle states.
+INSERT INTO trials (organization_id, tier, created_at, ends_at, converted_at, demoted_at)
 VALUES (
     @organization_id,
+    'enterprise',
     @created_at,
     @ends_at,
     sqlc.narg('converted_at')::timestamptz,
