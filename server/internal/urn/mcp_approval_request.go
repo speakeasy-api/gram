@@ -11,21 +11,10 @@ import (
 
 type MCPApprovalRequest struct {
 	ID uuid.UUID
-
-	checked bool
-	err     error
 }
 
 func NewMCPApprovalRequest(id uuid.UUID) MCPApprovalRequest {
-	a := MCPApprovalRequest{
-		ID:      id,
-		checked: false,
-		err:     nil,
-	}
-
-	_ = a.validate()
-
-	return a
+	return MCPApprovalRequest{ID: id}
 }
 
 func ParseMCPApprovalRequest(value string) (MCPApprovalRequest, error) {
@@ -46,6 +35,12 @@ func ParseMCPApprovalRequest(value string) (MCPApprovalRequest, error) {
 	id, err := uuid.Parse(parts[1])
 	if err != nil {
 		return MCPApprovalRequest{}, fmt.Errorf("%w: invalid mcp-approval-request uuid", ErrInvalid)
+	}
+
+	// The zero UUID is invalid for this type, so a URN carrying it is
+	// rejected here rather than deferred to a later marshal or write.
+	if id == uuid.Nil {
+		return MCPApprovalRequest{}, fmt.Errorf("%w: empty id", ErrInvalid)
 	}
 
 	return NewMCPApprovalRequest(id), nil
@@ -140,16 +135,12 @@ func (u *MCPApprovalRequest) UnmarshalText(text []byte) error {
 	return nil
 }
 
-func (u *MCPApprovalRequest) validate() error {
-	if u.checked {
-		return u.err
-	}
-
-	u.checked = true
-
+// validate checks the current ID on every call rather than caching a result,
+// so a value whose exported ID was changed after construction is judged as it
+// stands now.
+func (u MCPApprovalRequest) validate() error {
 	if u.ID == uuid.Nil {
-		u.err = fmt.Errorf("%w: empty id", ErrInvalid)
-		return u.err
+		return fmt.Errorf("%w: empty id", ErrInvalid)
 	}
 
 	return nil

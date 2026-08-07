@@ -60,6 +60,8 @@ type ApprovalDecision struct {
 	Rationale *string
 	// Principals the approval covers. Empty for a denial.
 	GrantedPrincipalUrns []string
+	// The research report this decision cited, when one informed it.
+	ResearchReportID *string
 	// The evidence as it stood when this decision was made. Frozen at decision
 	// time: a later re-gather updates the request's evidence but never this
 	// snapshot, so what the reviewer actually saw stays inspectable.
@@ -179,6 +181,9 @@ type RecordDecisionPayload struct {
 	Rationale string
 	// Principals the approval covers. Empty for a denial.
 	GrantedPrincipalUrns []string
+	// A research report this decision cites. Must belong to the request being
+	// decided.
+	ResearchReportID *string
 }
 
 // One research-agent run over a request's server. Findings are gathered and
@@ -196,6 +201,9 @@ type ResearchReport struct {
 	ReportVersion int
 	// The model that produced the report.
 	Model *string
+	// The prompt version the run used, so reports stay distinguishable across
+	// prompt changes.
+	PromptVersion *string
 	// Who asked for the research run.
 	RequestedBy *string
 	// When the run started.

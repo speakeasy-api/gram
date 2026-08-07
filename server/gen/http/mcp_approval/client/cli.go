@@ -114,7 +114,7 @@ func BuildRecordDecisionPayload(mcpApprovalRecordDecisionBody string, mcpApprova
 	{
 		err = json.Unmarshal([]byte(mcpApprovalRecordDecisionBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"decision\": \"abc123\",\n      \"granted_principal_urns\": [\n         \"abc123\"\n      ],\n      \"id\": \"abc123\",\n      \"rationale\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"decision\": \"abc123\",\n      \"granted_principal_urns\": [\n         \"abc123\"\n      ],\n      \"id\": \"abc123\",\n      \"rationale\": \"abc123\",\n      \"research_report_id\": \"abc123\"\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -136,9 +136,10 @@ func BuildRecordDecisionPayload(mcpApprovalRecordDecisionBody string, mcpApprova
 		}
 	}
 	v := &mcpapproval.RecordDecisionPayload{
-		ID:        body.ID,
-		Decision:  body.Decision,
-		Rationale: body.Rationale,
+		ID:               body.ID,
+		Decision:         body.Decision,
+		Rationale:        body.Rationale,
+		ResearchReportID: body.ResearchReportID,
 	}
 	if body.GrantedPrincipalUrns != nil {
 		v.GrantedPrincipalUrns = make([]string, len(body.GrantedPrincipalUrns))

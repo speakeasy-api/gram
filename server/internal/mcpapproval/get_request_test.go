@@ -78,7 +78,13 @@ func TestGetRequest_ChildQueriesAreProjectBounded(t *testing.T) {
 	theirs := seedRequest(t, ctx, ti, otherProject, seededRequest{targetKey: "https://theirs.example.com", status: "", evidence: "", version: 0})
 	seedRequester(t, ctx, ti, otherProject, theirs, "their-user", "their reason")
 
-	_, err := ti.service.GetRequest(ctx, getPayload(theirs.String()))
+	// A decision in the other project too, so the empty result below proves
+	// the predicate filters rather than the data being absent.
+	otherCtx := withProject(t, ctx, ti, otherProject, authz.ScopeMCPApprovalDecide)
+	_, err := ti.service.RecordDecision(otherCtx, decisionPayload(theirs.String(), "denied"))
+	require.NoError(t, err)
+
+	_, err = ti.service.GetRequest(ctx, getPayload(theirs.String()))
 	requireOopsCode(t, err, oops.CodeNotFound)
 
 	requesters, err := ti.repo.ListRequestersForApprovalRequest(ctx, repo.ListRequestersForApprovalRequestParams{

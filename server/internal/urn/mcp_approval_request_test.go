@@ -61,4 +61,13 @@ func TestMCPApprovalRequestRejectsInvalidValues(t *testing.T) {
 
 	_, err = urn.NewMCPApprovalRequest(uuid.Nil).MarshalJSON()
 	require.ErrorIs(t, err, urn.ErrInvalid)
+
+	_, err = urn.ParseMCPApprovalRequest("mcp-approval-request:00000000-0000-0000-0000-000000000000")
+	require.ErrorIs(t, err, urn.ErrInvalid)
+
+	// Validation judges the value as it stands, not as it was constructed.
+	mutated := urn.NewMCPApprovalRequest(uuid.MustParse("33333333-3333-3333-3333-333333333333"))
+	mutated.ID = uuid.Nil
+	_, err = mutated.MarshalJSON()
+	require.ErrorIs(t, err, urn.ErrInvalid)
 }

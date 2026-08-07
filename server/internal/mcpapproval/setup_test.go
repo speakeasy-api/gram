@@ -295,10 +295,10 @@ func requireOopsCode(t *testing.T, err error, code oops.Code) {
 	require.Equal(t, code, oopsErr.Code)
 }
 
-func seedResearchReport(t *testing.T, ctx context.Context, ti *testInstance, projectID, requestID uuid.UUID, status, report string) {
+func seedResearchReport(t *testing.T, ctx context.Context, ti *testInstance, projectID, requestID uuid.UUID, status, report string) uuid.UUID {
 	t.Helper()
 
-	_, err := ti.repo.CreateResearchReport(ctx, repo.CreateResearchReportParams{
+	row, err := ti.repo.CreateResearchReport(ctx, repo.CreateResearchReportParams{
 		OrganizationID:       ti.organizationID,
 		ProjectID:            projectID,
 		McpApprovalRequestID: requestID,
@@ -310,6 +310,16 @@ func seedResearchReport(t *testing.T, ctx context.Context, ti *testInstance, pro
 		RequestedBy:          conv.ToPGText("test-admin"),
 		StartedAt:            pgtype.Timestamptz{},
 		CompletedAt:          pgtype.Timestamptz{},
+		Error:                pgtype.Text{},
 	})
 	require.NoError(t, err)
+
+	return row.ID
+}
+
+// ptrString takes the address of a string for optional payload fields.
+//
+//go:fix inline
+func ptrString(value string) *string {
+	return new(value)
 }

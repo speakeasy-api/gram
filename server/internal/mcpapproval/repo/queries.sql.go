@@ -23,6 +23,7 @@ INSERT INTO mcp_approval_decisions (
   , evidence_snapshot
   , evidence_version
   , granted_principal_urns
+  , mcp_research_report_id
 ) VALUES (
   $1
   , $2
@@ -33,6 +34,7 @@ INSERT INTO mcp_approval_decisions (
   , $7
   , $8
   , $9
+  , $10::uuid
 )
 RETURNING id, organization_id, project_id, mcp_approval_request_id, decision, decided_by, rationale, evidence_snapshot, evidence_version, mcp_research_report_id, granted_principal_urns, decided_at, created_at, updated_at, deleted_at, deleted
 `
@@ -47,6 +49,7 @@ type CreateApprovalDecisionParams struct {
 	EvidenceSnapshot     []byte
 	EvidenceVersion      int32
 	GrantedPrincipalUrns []string
+	McpResearchReportID  uuid.NullUUID
 }
 
 // evidence_version carries no default in the schema: the writer must copy the
@@ -63,6 +66,7 @@ func (q *Queries) CreateApprovalDecision(ctx context.Context, arg CreateApproval
 		arg.EvidenceSnapshot,
 		arg.EvidenceVersion,
 		arg.GrantedPrincipalUrns,
+		arg.McpResearchReportID,
 	)
 	var i McpApprovalDecision
 	err := row.Scan(
@@ -154,6 +158,7 @@ INSERT INTO mcp_research_reports (
   , requested_by
   , started_at
   , completed_at
+  , error
 ) VALUES (
   $1
   , $2
@@ -166,6 +171,7 @@ INSERT INTO mcp_research_reports (
   , $9::text
   , $10::timestamptz
   , $11::timestamptz
+  , $12::text
 )
 RETURNING id, organization_id, project_id, mcp_approval_request_id, status, report, report_version, model, prompt_version, requested_by, started_at, completed_at, error, created_at, updated_at, deleted_at, deleted
 `
@@ -182,6 +188,7 @@ type CreateResearchReportParams struct {
 	RequestedBy          pgtype.Text
 	StartedAt            pgtype.Timestamptz
 	CompletedAt          pgtype.Timestamptz
+	Error                pgtype.Text
 }
 
 func (q *Queries) CreateResearchReport(ctx context.Context, arg CreateResearchReportParams) (McpResearchReport, error) {
@@ -197,6 +204,7 @@ func (q *Queries) CreateResearchReport(ctx context.Context, arg CreateResearchRe
 		arg.RequestedBy,
 		arg.StartedAt,
 		arg.CompletedAt,
+		arg.Error,
 	)
 	var i McpResearchReport
 	err := row.Scan(
@@ -327,6 +335,31 @@ func (q *Queries) GetApprovalRequestForDecision(ctx context.Context, arg GetAppr
 		&i.EvidenceVersion,
 	)
 	return i, err
+}
+
+const getResearchReportForDecision = `-- name: GetResearchReportForDecision :one
+SELECT id
+FROM mcp_research_reports
+WHERE id = $1
+  AND mcp_approval_request_id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+`
+
+type GetResearchReportForDecisionParams struct {
+	ID                   uuid.UUID
+	McpApprovalRequestID uuid.UUID
+	ProjectID            uuid.UUID
+}
+
+// Resolves a report a decision wants to cite, pinned to the request being
+// decided and to the caller's project, so a decision can never attribute
+// research about one server to another.
+func (q *Queries) GetResearchReportForDecision(ctx context.Context, arg GetResearchReportForDecisionParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getResearchReportForDecision, arg.ID, arg.McpApprovalRequestID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const listApprovalRequests = `-- name: ListApprovalRequests :many

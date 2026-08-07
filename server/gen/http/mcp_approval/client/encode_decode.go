@@ -789,13 +789,14 @@ func unmarshalApprovalRequesterResponseBodyToMcpapprovalApprovalRequester(v *App
 // *ApprovalDecisionResponseBody.
 func unmarshalApprovalDecisionResponseBodyToMcpapprovalApprovalDecision(v *ApprovalDecisionResponseBody) *mcpapproval.ApprovalDecision {
 	res := &mcpapproval.ApprovalDecision{
-		ID:              *v.ID,
-		Decision:        *v.Decision,
-		DecidedBy:       *v.DecidedBy,
-		Rationale:       v.Rationale,
-		Evidence:        v.Evidence,
-		EvidenceVersion: v.EvidenceVersion,
-		DecidedAt:       *v.DecidedAt,
+		ID:               *v.ID,
+		Decision:         *v.Decision,
+		DecidedBy:        *v.DecidedBy,
+		Rationale:        v.Rationale,
+		ResearchReportID: v.ResearchReportID,
+		Evidence:         v.Evidence,
+		EvidenceVersion:  v.EvidenceVersion,
+		DecidedAt:        *v.DecidedAt,
 	}
 	if v.GrantedPrincipalUrns != nil {
 		res.GrantedPrincipalUrns = make([]string, len(v.GrantedPrincipalUrns))
@@ -817,6 +818,7 @@ func unmarshalResearchReportResponseBodyToMcpapprovalResearchReport(v *ResearchR
 		Report:        v.Report,
 		ReportVersion: *v.ReportVersion,
 		Model:         v.Model,
+		PromptVersion: v.PromptVersion,
 		RequestedBy:   v.RequestedBy,
 		StartedAt:     v.StartedAt,
 		CompletedAt:   v.CompletedAt,

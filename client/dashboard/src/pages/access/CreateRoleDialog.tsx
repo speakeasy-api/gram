@@ -210,6 +210,11 @@ export function CreateRoleDialog({
         resourceType: "chat",
         description: "Access to members' agent session transcripts.",
       },
+      {
+        label: "MCP Approvals",
+        resourceType: "mcp_approval",
+        description: "Reviewing and deciding MCP server approval requests.",
+      },
     ];
     return groupOrder.map((g) => ({
       ...g,
