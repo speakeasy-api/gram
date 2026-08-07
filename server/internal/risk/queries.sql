@@ -489,6 +489,9 @@ WHERE rr.project_id = @project_id
   AND rr.risk_policy_version = @risk_policy_version;
 
 -- name: CountFindingsByPolicy :one
+-- Reported next to CountAnalyzedMessages, so it stays message-scoped: a
+-- skill-anchored finding has no message behind it and would inflate the
+-- numerator over a denominator that never counted it. (cubic)
 SELECT COUNT(*)::BIGINT
 FROM risk_results
 WHERE project_id = @project_id
@@ -496,14 +499,18 @@ WHERE project_id = @project_id
   AND risk_policy_version = @risk_policy_version
   AND found IS TRUE
   AND excluded_at IS NULL
-  AND false_positive_at IS NULL;
+  AND false_positive_at IS NULL
+  AND skill_version_id IS NULL;
 
 -- name: CountAllFindings :one
+-- Total for ListRiskResultsByProjectFound, which drops skill-anchored rows;
+-- counting them here would page an empty list against a non-zero total.
 SELECT COUNT(*)::BIGINT
 FROM risk_results rr
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE rr.project_id = @project_id
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL;
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+  AND rr.skill_version_id IS NULL;
 
 -- name: CountRiskResultsByProjectAndPolicy :one
 -- Matches the filter semantics of ListRiskResultsByProjectAndPolicy: a
@@ -514,7 +521,8 @@ FROM risk_results rr
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
 WHERE rr.project_id = @project_id
   AND rr.risk_policy_id = @risk_policy_id
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL;
+  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+  AND rr.skill_version_id IS NULL;
 
 -- name: GetRiskOverviewScanCounts :one
 -- messages_scanned counts every scanned message in the window regardless of
@@ -1004,6 +1012,68 @@ VALUES (
   , @dead_letter_reason
 );
 
+-- name: SkillVersionNeedsPromptInjectionScan :one
+-- True when some enabled prompt-injection policy has no recorded scan of this
+-- skill version yet. Gates the judge call: content is immutable per version,
+-- so a recorded scan is never worth repeating.
+SELECT EXISTS (
+  SELECT 1
+  FROM risk_policies p
+  WHERE p.project_id = @project_id
+    AND p.enabled IS TRUE
+    AND p.deleted IS FALSE
+    AND 'prompt_injection' = ANY (p.sources)
+    AND NOT EXISTS (
+      SELECT 1
+      FROM risk_results rr
+      WHERE rr.skill_version_id = @skill_version_id
+        AND rr.risk_policy_id = p.id
+    )
+    -- Same anchor/project pin as RecordSkillPromptInjectionScan. Without it a
+    -- foreign version id opens the gate and burns a judge call on content the
+    -- record query will refuse to write. (cubic)
+    AND EXISTS (
+      SELECT 1
+      FROM skill_versions sv
+      JOIN skills sk ON sk.id = sv.skill_id
+      WHERE sv.id = @skill_version_id
+        AND sk.project_id = p.project_id
+    )
+);
+
+-- name: RecordSkillPromptInjectionScan :exec
+-- Records one row per enabled prompt-injection policy that has not yet scanned
+-- this skill version, anchored on the version rather than a chat message.
+-- Called for any completed judgement: a found = FALSE row is the coverage
+-- record, mirroring the empty result rows the chat batch path writes.
+-- The NOT EXISTS gate is not atomic against a concurrent upload of the same
+-- content, so ON CONFLICT defers the last word to the partial unique index.
+INSERT INTO risk_results (project_id, organization_id, risk_policy_id, risk_policy_version, skill_version_id, source, found, rule_id, description, match, confidence)
+SELECT p.project_id, p.organization_id, p.id, p.version, @skill_version_id, @source::text, @found::boolean, sqlc.narg(rule_id)::text, sqlc.narg(description)::text, sqlc.narg(match)::text, sqlc.narg(confidence)::double precision
+FROM risk_policies p
+WHERE p.project_id = @project_id
+  AND p.enabled IS TRUE
+  AND p.deleted IS FALSE
+  AND 'prompt_injection' = ANY (p.sources)
+  AND NOT EXISTS (
+    SELECT 1
+    FROM risk_results rr
+    WHERE rr.skill_version_id = @skill_version_id
+      AND rr.risk_policy_id = p.id
+  )
+  -- Pin the anchor to the same project as the policy. The caller passes a
+  -- version id it just captured under the authed project, so this is
+  -- defence in depth: it keeps a foreign version id from being anchored
+  -- under a local policy if a future caller is less careful.
+  AND EXISTS (
+    SELECT 1
+    FROM skill_versions sv
+    JOIN skills sk ON sk.id = sv.skill_id
+    WHERE sv.id = @skill_version_id
+      AND sk.project_id = p.project_id
+  )
+ON CONFLICT (skill_version_id, risk_policy_id) WHERE skill_version_id IS NOT NULL DO NOTHING;
+
 -- name: DeleteRiskResultsForMessages :exec
 DELETE FROM risk_results
 WHERE risk_policy_id = @risk_policy_id
@@ -1030,7 +1100,10 @@ WHERE rr.id = @id
   AND rr.project_id = @project_id
   AND rr.found IS TRUE
   AND rr.excluded_at IS NULL
-  AND rr.false_positive_at IS NULL;
+  AND rr.false_positive_at IS NULL
+  -- Skill-anchored findings have no chat, so chat_id would come back NULL and
+  -- fail the non-null scan. They need their own read path, not this one.
+  AND rr.skill_version_id IS NULL;
 
 -- name: ListRiskResultsByProjectFound :many
 -- Sort by the underlying chat message's created_at (the event time), NOT
@@ -1095,6 +1168,9 @@ FROM (
   ) blk ON TRUE
   WHERE rr.project_id = @project_id
     AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+    -- Skill-anchored findings have no chat, so chat_id would come back NULL and
+    -- fail the non-null scan. They need their own read path, not this one.
+    AND rr.skill_version_id IS NULL
     AND (sqlc.narg(policy_id)::uuid IS NULL OR rr.risk_policy_id = sqlc.narg(policy_id)::uuid)
     AND (sqlc.narg(from_time)::timestamptz IS NULL OR COALESCE(cm.created_at, ccp.created_at) >= sqlc.narg(from_time)::timestamptz)
     AND (sqlc.narg(to_time)::timestamptz IS NULL OR COALESCE(cm.created_at, ccp.created_at) < sqlc.narg(to_time)::timestamptz)
@@ -1187,6 +1263,9 @@ LEFT JOIN LATERAL (
 WHERE rr.project_id = @project_id
   AND rr.risk_policy_id = @risk_policy_id
   AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+  -- Skill-anchored findings have no chat, so chat_id would come back NULL and
+  -- fail the non-null scan. They need their own read path, not this one.
+  AND rr.skill_version_id IS NULL
   AND (
     sqlc.narg(cursor_message_created_at)::timestamptz IS NULL
     OR (COALESCE(cm.created_at, ccp.created_at), rr.id) < (sqlc.narg(cursor_message_created_at)::timestamptz, sqlc.narg(cursor_id)::uuid)
@@ -1444,6 +1523,9 @@ LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
 LEFT JOIN chats c ON c.id = COALESCE(cm.chat_id, ccp.chat_id) AND c.deleted IS FALSE
 WHERE rr.project_id = @project_id
   AND rr.false_positive_at IS NOT NULL
+  -- Skill-anchored findings have no chat, so chat_id would come back NULL and
+  -- fail the non-null scan. They need their own read path, not this one.
+  AND rr.skill_version_id IS NULL
   AND (
     sqlc.narg(cursor_false_positive_at)::timestamptz IS NULL
     OR (rr.false_positive_at, rr.id) < (sqlc.narg(cursor_false_positive_at)::timestamptz, sqlc.narg(cursor_id)::uuid)
@@ -1452,10 +1534,12 @@ ORDER BY rr.false_positive_at DESC, rr.id DESC
 LIMIT @page_limit;
 
 -- name: CountFalsePositiveRiskResults :one
+-- Total for ListFalsePositiveRiskResults, which drops skill-anchored rows.
 SELECT COUNT(*)::BIGINT
 FROM risk_results
 WHERE project_id = @project_id
-  AND false_positive_at IS NOT NULL;
+  AND false_positive_at IS NOT NULL
+  AND skill_version_id IS NULL;
 
 -- Exclusion reconcile sweep -------------------------------------------------
 -- All batches are keyset-paginated by id (id > @cursor, ORDER BY id, LIMIT

@@ -307,8 +307,11 @@ FROM risk_results rr
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE rr.project_id = $1
   AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+  AND rr.skill_version_id IS NULL
 `
 
+// Total for ListRiskResultsByProjectFound, which drops skill-anchored rows;
+// counting them here would page an empty list against a non-zero total.
 func (q *Queries) CountAllFindings(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, countAllFindings, projectID)
 	var column_1 int64
@@ -366,8 +369,10 @@ SELECT COUNT(*)::BIGINT
 FROM risk_results
 WHERE project_id = $1
   AND false_positive_at IS NOT NULL
+  AND skill_version_id IS NULL
 `
 
+// Total for ListFalsePositiveRiskResults, which drops skill-anchored rows.
 func (q *Queries) CountFalsePositiveRiskResults(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, countFalsePositiveRiskResults, projectID)
 	var column_1 int64
@@ -384,6 +389,7 @@ WHERE project_id = $1
   AND found IS TRUE
   AND excluded_at IS NULL
   AND false_positive_at IS NULL
+  AND skill_version_id IS NULL
 `
 
 type CountFindingsByPolicyParams struct {
@@ -392,6 +398,9 @@ type CountFindingsByPolicyParams struct {
 	RiskPolicyVersion int64
 }
 
+// Reported next to CountAnalyzedMessages, so it stays message-scoped: a
+// skill-anchored finding has no message behind it and would inflate the
+// numerator over a denominator that never counted it. (cubic)
 func (q *Queries) CountFindingsByPolicy(ctx context.Context, arg CountFindingsByPolicyParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countFindingsByPolicy, arg.ProjectID, arg.RiskPolicyID, arg.RiskPolicyVersion)
 	var column_1 int64
@@ -425,6 +434,7 @@ JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
 WHERE rr.project_id = $1
   AND rr.risk_policy_id = $2
   AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+  AND rr.skill_version_id IS NULL
 `
 
 type CountRiskResultsByProjectAndPolicyParams struct {
@@ -2026,6 +2036,9 @@ WHERE rr.id = $1
   AND rr.found IS TRUE
   AND rr.excluded_at IS NULL
   AND rr.false_positive_at IS NULL
+  -- Skill-anchored findings have no chat, so chat_id would come back NULL and
+  -- fail the non-null scan. They need their own read path, not this one.
+  AND rr.skill_version_id IS NULL
 `
 
 type GetRiskResultByIDParams struct {
@@ -2632,6 +2645,9 @@ LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
 LEFT JOIN chats c ON c.id = COALESCE(cm.chat_id, ccp.chat_id) AND c.deleted IS FALSE
 WHERE rr.project_id = $1
   AND rr.false_positive_at IS NOT NULL
+  -- Skill-anchored findings have no chat, so chat_id would come back NULL and
+  -- fail the non-null scan. They need their own read path, not this one.
+  AND rr.skill_version_id IS NULL
   AND (
     $2::timestamptz IS NULL
     OR (rr.false_positive_at, rr.id) < ($2::timestamptz, $3::uuid)
@@ -3354,6 +3370,9 @@ LEFT JOIN LATERAL (
 WHERE rr.project_id = $1
   AND rr.risk_policy_id = $2
   AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+  -- Skill-anchored findings have no chat, so chat_id would come back NULL and
+  -- fail the non-null scan. They need their own read path, not this one.
+  AND rr.skill_version_id IS NULL
   AND (
     $3::timestamptz IS NULL
     OR (COALESCE(cm.created_at, ccp.created_at), rr.id) < ($3::timestamptz, $4::uuid)
@@ -3503,6 +3522,9 @@ FROM (
   ) blk ON TRUE
   WHERE rr.project_id = $3
     AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+    -- Skill-anchored findings have no chat, so chat_id would come back NULL and
+    -- fail the non-null scan. They need their own read path, not this one.
+    AND rr.skill_version_id IS NULL
     AND ($2::uuid IS NULL OR rr.risk_policy_id = $2::uuid)
     AND ($4::timestamptz IS NULL OR COALESCE(cm.created_at, ccp.created_at) >= $4::timestamptz)
     AND ($5::timestamptz IS NULL OR COALESCE(cm.created_at, ccp.created_at) < $5::timestamptz)
@@ -4344,6 +4366,65 @@ func (q *Queries) MarkRiskResultsFalsePositive(ctx context.Context, arg MarkRisk
 	return items, nil
 }
 
+const recordSkillPromptInjectionScan = `-- name: RecordSkillPromptInjectionScan :exec
+INSERT INTO risk_results (project_id, organization_id, risk_policy_id, risk_policy_version, skill_version_id, source, found, rule_id, description, match, confidence)
+SELECT p.project_id, p.organization_id, p.id, p.version, $1, $2::text, $3::boolean, $4::text, $5::text, $6::text, $7::double precision
+FROM risk_policies p
+WHERE p.project_id = $8
+  AND p.enabled IS TRUE
+  AND p.deleted IS FALSE
+  AND 'prompt_injection' = ANY (p.sources)
+  AND NOT EXISTS (
+    SELECT 1
+    FROM risk_results rr
+    WHERE rr.skill_version_id = $1
+      AND rr.risk_policy_id = p.id
+  )
+  -- Pin the anchor to the same project as the policy. The caller passes a
+  -- version id it just captured under the authed project, so this is
+  -- defence in depth: it keeps a foreign version id from being anchored
+  -- under a local policy if a future caller is less careful.
+  AND EXISTS (
+    SELECT 1
+    FROM skill_versions sv
+    JOIN skills sk ON sk.id = sv.skill_id
+    WHERE sv.id = $1
+      AND sk.project_id = p.project_id
+  )
+ON CONFLICT (skill_version_id, risk_policy_id) WHERE skill_version_id IS NOT NULL DO NOTHING
+`
+
+type RecordSkillPromptInjectionScanParams struct {
+	SkillVersionID uuid.NullUUID
+	Source         string
+	Found          bool
+	RuleID         pgtype.Text
+	Description    pgtype.Text
+	Match          pgtype.Text
+	Confidence     pgtype.Float8
+	ProjectID      uuid.UUID
+}
+
+// Records one row per enabled prompt-injection policy that has not yet scanned
+// this skill version, anchored on the version rather than a chat message.
+// Called for any completed judgement: a found = FALSE row is the coverage
+// record, mirroring the empty result rows the chat batch path writes.
+// The NOT EXISTS gate is not atomic against a concurrent upload of the same
+// content, so ON CONFLICT defers the last word to the partial unique index.
+func (q *Queries) RecordSkillPromptInjectionScan(ctx context.Context, arg RecordSkillPromptInjectionScanParams) error {
+	_, err := q.db.Exec(ctx, recordSkillPromptInjectionScan,
+		arg.SkillVersionID,
+		arg.Source,
+		arg.Found,
+		arg.RuleID,
+		arg.Description,
+		arg.Match,
+		arg.Confidence,
+		arg.ProjectID,
+	)
+	return err
+}
+
 const refreshAccountIdentityFindingMatch = `-- name: RefreshAccountIdentityFindingMatch :execrows
 UPDATE risk_results rr
 SET description = $1, match = $2
@@ -4482,6 +4563,48 @@ WHERE id = $1
 func (q *Queries) SetRiskResultFalsePositiveForTest(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, setRiskResultFalsePositiveForTest, id)
 	return err
+}
+
+const skillVersionNeedsPromptInjectionScan = `-- name: SkillVersionNeedsPromptInjectionScan :one
+SELECT EXISTS (
+  SELECT 1
+  FROM risk_policies p
+  WHERE p.project_id = $1
+    AND p.enabled IS TRUE
+    AND p.deleted IS FALSE
+    AND 'prompt_injection' = ANY (p.sources)
+    AND NOT EXISTS (
+      SELECT 1
+      FROM risk_results rr
+      WHERE rr.skill_version_id = $2
+        AND rr.risk_policy_id = p.id
+    )
+    -- Same anchor/project pin as RecordSkillPromptInjectionScan. Without it a
+    -- foreign version id opens the gate and burns a judge call on content the
+    -- record query will refuse to write. (cubic)
+    AND EXISTS (
+      SELECT 1
+      FROM skill_versions sv
+      JOIN skills sk ON sk.id = sv.skill_id
+      WHERE sv.id = $2
+        AND sk.project_id = p.project_id
+    )
+)
+`
+
+type SkillVersionNeedsPromptInjectionScanParams struct {
+	ProjectID      uuid.UUID
+	SkillVersionID uuid.NullUUID
+}
+
+// True when some enabled prompt-injection policy has no recorded scan of this
+// skill version yet. Gates the judge call: content is immutable per version,
+// so a recorded scan is never worth repeating.
+func (q *Queries) SkillVersionNeedsPromptInjectionScan(ctx context.Context, arg SkillVersionNeedsPromptInjectionScanParams) (bool, error) {
+	row := q.db.QueryRow(ctx, skillVersionNeedsPromptInjectionScan, arg.ProjectID, arg.SkillVersionID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const softDeleteRiskPolicyEvalReview = `-- name: SoftDeleteRiskPolicyEvalReview :one

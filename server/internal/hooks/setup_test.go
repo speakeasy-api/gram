@@ -201,6 +201,7 @@ func newTestHooksService(t *testing.T) (context.Context, *testInstance) {
 		nil,
 		nil,
 		nil,
+		nil,
 		policyBypass,
 		spendGate,
 		shadowMCPClient,
