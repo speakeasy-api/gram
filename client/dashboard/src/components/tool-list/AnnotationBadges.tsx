@@ -66,7 +66,7 @@ function AnnotationBadgeIcons({
         </Badge>
       )}
       {idempotent && !readOnly && (
-        <Badge variant="information" className="text-xs">
+        <Badge variant="neutral" className="text-xs">
           Idempotent
         </Badge>
       )}

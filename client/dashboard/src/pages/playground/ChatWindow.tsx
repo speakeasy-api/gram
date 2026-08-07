@@ -591,7 +591,7 @@ function ChatInner({
           <PromptInputBody>
             <PromptInputTextarea placeholder="Send a message..." />
           </PromptInputBody>
-          <PromptInputFooter className="bg-secondary border-neutral-softest rounded-br-lg rounded-bl-lg border-t">
+          <PromptInputFooter className="bg-secondary border-neutral-softest border-t">
             <PromptInputTools>{additionalActions}</PromptInputTools>
             <PromptInputSubmit
               disabled={status === "streaming"}

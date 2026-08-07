@@ -259,7 +259,7 @@ function ApprovalSectionEmptyState({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16 text-center">
+    <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16 text-center">
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
         <Icon className="text-muted-foreground h-6 w-6" />
       </div>
@@ -502,7 +502,7 @@ function ReviewRequestSheet({
         </SheetHeader>
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4">
-          <section className="border-border rounded-md border px-4 py-3">
+          <section className="border-border border px-4 py-3">
             <div className="flex items-start justify-between gap-3">
               <ServerCell
                 name={getPolicyBypassRequestDisplayName(request)}
@@ -553,11 +553,11 @@ function ReviewRequestSheet({
                 setReviewDirty(true);
                 setAction(value as ReviewAction);
               }}
-              className="border-border grid grid-cols-2 gap-4 rounded-md border p-3"
+              className="border-border grid grid-cols-2 gap-4 border p-3"
             >
               <label
                 className={cn(
-                  "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
+                  "flex cursor-pointer items-start gap-3 border border-transparent px-3 py-2.5 transition-colors",
                   action === "approve" && "border-border bg-card shadow-xs",
                 )}
               >
@@ -575,7 +575,7 @@ function ReviewRequestSheet({
               </label>
               <label
                 className={cn(
-                  "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
+                  "flex cursor-pointer items-start gap-3 border border-transparent px-3 py-2.5 transition-colors",
                   action === "deny" && "border-border bg-card shadow-xs",
                 )}
               >
@@ -600,7 +600,7 @@ function ReviewRequestSheet({
           )}
 
           {!allowAll && (isEditingAccess || action === "approve") && (
-            <section className="border-border space-y-3 rounded-md border p-3">
+            <section className="border-border space-y-3 border p-3">
               <Text variant="small" className="font-medium">
                 Applies to
               </Text>
@@ -613,7 +613,7 @@ function ReviewRequestSheet({
               >
                 <label
                   className={cn(
-                    "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
+                    "flex cursor-pointer items-start gap-3 border border-transparent px-3 py-2.5 transition-colors",
                     approvalAudience === "everyone" &&
                       "border-border bg-card shadow-xs",
                   )}
@@ -631,7 +631,7 @@ function ReviewRequestSheet({
 
                 <label
                   className={cn(
-                    "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
+                    "flex cursor-pointer items-start gap-3 border border-transparent px-3 py-2.5 transition-colors",
                     approvalAudience === "role" &&
                       "border-border bg-card shadow-xs",
                   )}
@@ -677,7 +677,7 @@ function ReviewRequestSheet({
 
                 <label
                   className={cn(
-                    "flex cursor-pointer items-start gap-3 rounded-sm border border-transparent px-3 py-2.5 transition-colors",
+                    "flex cursor-pointer items-start gap-3 border border-transparent px-3 py-2.5 transition-colors",
                     approvalAudience === "user" &&
                       "border-border bg-card shadow-xs",
                   )}
@@ -1070,12 +1070,12 @@ export function ApprovalRequestsContent({
               description="Requests will appear here when users ask for access after a policy block."
             />
           ) : (
-            <div className="overflow-hidden rounded-lg border">
+            <div className="overflow-hidden border">
               <Table
                 columns={pendingRequestColumns}
                 data={requests}
                 rowKey={(row) => row.id}
-                className="[&_thead]:bg-background max-h-128 overflow-y-auto rounded-none border-0 [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
+                className="[&_thead]:bg-background max-h-128 overflow-y-auto border-0 [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
               />
             </div>
           )}
@@ -1106,12 +1106,12 @@ export function ApprovalRequestsContent({
             description="Approved policy bypass requests will appear here."
           />
         ) : (
-          <div className="overflow-hidden rounded-lg border">
+          <div className="overflow-hidden border">
             <Table
               columns={ruleColumns}
               data={rules}
               rowKey={(row) => row.id}
-              className="[&_thead]:bg-background max-h-128 overflow-y-auto rounded-none border-0 [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
+              className="[&_thead]:bg-background max-h-128 overflow-y-auto border-0 [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
             />
           </div>
         )}
@@ -1129,7 +1129,7 @@ export function ApprovalRequestsContent({
           </Dialog.Header>
           <Text variant="small">
             This removes the bypass grant for{" "}
-            <code className="bg-muted rounded px-1 py-0.5 font-mono font-bold">
+            <code className="bg-muted px-1 py-0.5 font-mono font-bold">
               {rulePendingDelete
                 ? getPolicyBypassRequestDisplayName(rulePendingDelete)
                 : "this access rule"}

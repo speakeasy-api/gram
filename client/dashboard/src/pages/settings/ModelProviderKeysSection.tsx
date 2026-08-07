@@ -206,7 +206,7 @@ function ModelProviderKeysTable({
                 type="button"
                 variant="tertiary"
                 size="sm"
-                className="border-input bg-muted hover:bg-muted/80 absolute top-0 right-0 h-9 rounded-l-none border shadow-none"
+                className="border-input bg-muted hover:bg-muted/80 absolute top-0 right-0 h-9 border shadow-none"
                 onClick={() => handleSave(slot, key)}
                 disabled={
                   isMutating ||

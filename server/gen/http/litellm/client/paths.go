@@ -36,8 +36,3 @@ func IngestLitellmPath() string {
 func TracesLitellmPath() string {
 	return "/rpc/hooks.otel/v1/traces"
 }
-
-// MetricsLitellmPath returns the URL path to the litellm service metrics HTTP endpoint.
-func MetricsLitellmPath() string {
-	return "/rpc/litellm.otel/v1/metrics"
-}

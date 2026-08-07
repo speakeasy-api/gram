@@ -34,7 +34,7 @@ export function OrgAIIntegrationsInner(): JSX.Element {
         connection.
       </Page.Section.Description>
       <Page.Section.Body>
-        <div className="border-border bg-card divide-border divide-y overflow-hidden rounded-lg border">
+        <div className="border-border bg-card divide-border divide-y overflow-hidden border">
           {hasScope("org:admin") ? <LiteLLMIntegrationRow /> : null}
           {AI_INTEGRATION_PROVIDERS.map((provider) => (
             <AIIntegrationConnectionRow

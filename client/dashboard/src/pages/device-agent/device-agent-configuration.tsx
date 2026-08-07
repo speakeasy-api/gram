@@ -1,5 +1,5 @@
-import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { Heading } from "@/components/ui/Heading";
 import { DevBadge } from "@/components/dev-badge";
 import { ErrorAlert } from "@/components/ui/Alert";
 import {
@@ -181,18 +181,23 @@ export function DeviceAgentConfigurationTab(): JSX.Element {
   );
 }
 
+// The Device Agent page already renders the area eyebrow and display-serif
+// page title above the tab strip, so this in-tab header stays a plain
+// section heading rather than repeating the page-header idiom.
 function ConfigurationSection({ children }: { children: ReactNode }) {
   return (
-    <Page.Section>
-      <Page.Section.Title stage="preview">
-        Fleet configuration
-      </Page.Section.Title>
-      <Page.Section.Description>
-        Set non-secret device agent behavior once for every enrolled machine in
-        this organization.
-      </Page.Section.Description>
-      <Page.Section.Body>{children}</Page.Section.Body>
-    </Page.Section>
+    <Stack gap={6} className="mt-3 mb-6">
+      <div>
+        <Heading variant="h4" className="mb-2">
+          Fleet configuration
+        </Heading>
+        <Text muted small>
+          Set non-secret device agent behavior once for every enrolled machine
+          in this organization.
+        </Text>
+      </div>
+      {children}
+    </Stack>
   );
 }
 
@@ -319,7 +324,7 @@ function DeviceAgentConfigurationForm({
   };
 
   return (
-    <div className="border-border bg-card rounded-lg border p-6">
+    <div className="border-border bg-card border p-6">
       <Stack gap={6}>
         <div>
           <Text variant="body" className="font-medium">
@@ -506,7 +511,7 @@ function DeviceAgentConfigurationForm({
           </Field>
         )}
 
-        <div className="bg-muted/40 rounded-md border p-4">
+        <div className="bg-muted/40 border p-4">
           <Text muted small>
             After the first successful fetch, these settings override the same
             non-secret fields from local and MDM configuration. Device identity
@@ -532,19 +537,25 @@ function DeviceAgentConfigurationForm({
           />
         )}
 
-        <RequireScope
-          scope="org:admin"
-          level="component"
-          reason="Organization admin access is required to change fleet configuration."
-        >
-          <Button
-            variant="primary"
-            onClick={handleSave}
-            disabled={!isDirty || Boolean(intervalError) || mutation.isPending}
+        {/* Right-aligned at natural width — a Stack child would otherwise
+            stretch the button across the full form. */}
+        <div className="flex justify-end">
+          <RequireScope
+            scope="org:admin"
+            level="component"
+            reason="Organization admin access is required to change fleet configuration."
           >
-            {mutation.isPending ? "Saving..." : "Save configuration"}
-          </Button>
-        </RequireScope>
+            <Button
+              variant="primary"
+              onClick={handleSave}
+              disabled={
+                !isDirty || Boolean(intervalError) || mutation.isPending
+              }
+            >
+              {mutation.isPending ? "Saving..." : "Save configuration"}
+            </Button>
+          </RequireScope>
+        </div>
       </Stack>
     </div>
   );

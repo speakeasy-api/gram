@@ -95,12 +95,12 @@ function WorkAnalysisHeadlineMetric({
   description: string;
 }): JSX.Element {
   return (
-    <div className="border-border bg-muted/30 rounded-lg border p-4">
-      <dt className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium">
+    <div className="border-border bg-muted/30 border p-4">
+      <dt className="text-eyebrow flex items-center gap-1.5">
         <Icon name={icon} className="size-3.5" />
         {label}
       </dt>
-      <dd className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">
+      <dd className="font-display mt-2 text-2xl font-thin tabular-nums">
         {value}
       </dd>
       <dd className="text-muted-foreground mt-1.5 text-xs leading-relaxed">
@@ -200,7 +200,7 @@ export function WorkUnitsHeaderMetrics({
           type="button"
           onClick={() => setOpen(true)}
           className={cn(
-            "flex flex-wrap items-center gap-2 rounded-md transition-opacity",
+            "flex flex-wrap items-center gap-2 transition-opacity",
             "cursor-pointer hover:opacity-80",
             "focus-visible:ring-ring focus-visible:ring-2 focus:outline-none",
           )}

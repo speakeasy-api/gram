@@ -648,7 +648,7 @@ function AddSkillButton({ onClick }: { onClick: () => void }): JSX.Element {
       reason="You need write access to add skills."
     >
       <Button icon="plus" onClick={onClick}>
-        Add skill
+        Add Skill
       </Button>
     </RequireScope>
   );
@@ -656,8 +656,8 @@ function AddSkillButton({ onClick }: { onClick: () => void }): JSX.Element {
 
 function SkillsEmptyState({ onAdd }: { onAdd: () => void }): JSX.Element {
   return (
-    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
-      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+    <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16">
+      <div className="border-border mb-4 flex h-12 w-12 items-center justify-center border">
         <Icon name="terminal" className="text-muted-foreground h-6 w-6" />
       </div>
       <Text variant="subheading" className="mb-1">
@@ -674,7 +674,7 @@ function SkillsEmptyState({ onAdd }: { onAdd: () => void }): JSX.Element {
 
 function LoadMoreError({ onRetry }: { onRetry: () => void }): JSX.Element {
   return (
-    <div className="border-destructive/40 bg-destructive/5 flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
+    <div className="border-destructive/40 bg-destructive/5 flex flex-wrap items-center justify-between gap-3 border p-3">
       <Text small className="text-destructive">
         Unable to load more skills.
       </Text>

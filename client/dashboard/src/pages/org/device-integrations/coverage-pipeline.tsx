@@ -76,7 +76,7 @@ export function CoveragePipeline({
     : "assigned user has a live agent";
 
   return (
-    <div className="border-border bg-card rounded-lg border p-4">
+    <div className="border-border bg-card border p-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,0.95fr)_auto_minmax(0,1.2fr)_auto_minmax(0,0.75fr)] md:items-stretch">
         {/* Two inputs, stacked. Each row is one operand of the coverage join. */}
         <div className="flex flex-col gap-3">
@@ -133,7 +133,7 @@ function InputNode({
   foot: string;
 }) {
   return (
-    <div className="bg-muted/40 flex flex-col gap-1 rounded-md p-3">
+    <div className="bg-muted/40 flex flex-col gap-1 p-3">
       <Text
         variant="small"
         className="text-muted-foreground font-mono text-[10.5px] tracking-wider uppercase"
@@ -171,7 +171,7 @@ function CoverageNode({
 }) {
   if (!coverage || total === 0) {
     return (
-      <div className="border-border/60 bg-muted/20 flex flex-col justify-center gap-1 rounded-md border border-dashed p-3">
+      <div className="border-border/60 bg-muted/20 flex flex-col justify-center gap-1 border border-dashed p-3">
         <Text
           variant="small"
           className="text-muted-foreground font-mono text-[10.5px] tracking-wider uppercase"
@@ -190,7 +190,7 @@ function CoverageNode({
   const stalePct = (coverage.agentStale / total) * 100;
 
   return (
-    <div className="border-border relative flex flex-col justify-center gap-2 overflow-hidden rounded-md border p-3">
+    <div className="border-border relative flex flex-col justify-center gap-2 overflow-hidden border p-3">
       <span
         aria-hidden
         className="absolute inset-x-0 top-0 h-[3px]"

@@ -1,4 +1,5 @@
 import { NavButton, NavGroupProvider } from "@/components/nav-menu";
+import { useNavArea } from "@/hooks/useNavArea";
 import { ScopeGatedNavGroup } from "@/components/scope-gated-nav-group";
 import {
   Sidebar,
@@ -90,49 +91,11 @@ export function AppSidebar({
   const isOrgMemoryEnabled = navAccess.has(routes.orgMemory.url);
   const isDeploymentsPageEnabled = navAccess.has(routes.deployments.url);
 
-  const connectActive = [
-    routes.sources,
-    routes.catalog,
-    routes.playground,
-    ...(isDeploymentsPageEnabled ? [routes.deployments] : []),
-  ].some((r) => r.active);
-
-  const distributeActive = [
-    routes.mcp,
-    routes.skills,
-    routes.plugins,
-    routes.environments,
-    ...(isAssistantsEnabled ? [routes.assistants] : []),
-  ].some((r) => r.active);
-
-  const observeActive = [
-    routes.employees,
-    routes.costs,
-    routes.insights,
-    routes.agentSessions,
-    ...(isOrgMemoryEnabled ? [routes.orgMemory] : []),
-    routes.logs,
-  ].some((r) => r.active);
-
-  const securityActive = [
-    routes.riskOverview,
-    routes.policyCenter,
-    routes.riskEvents,
-    routes.shadowMCP,
-    routes.approvalRequests,
-    routes.detectionRules,
-  ].some((r) => r.active);
-
-  let activeGroup: string | undefined;
-  if (observeActive) {
-    activeGroup = "Observe";
-  } else if (securityActive) {
-    activeGroup = "Secure";
-  } else if (connectActive) {
-    activeGroup = "Connect";
-  } else if (distributeActive) {
-    activeGroup = "Distribute";
-  }
+  // Shared with the page-title eyebrow (Page.Eyebrow) so the sidebar group
+  // highlight and the page header always agree on the area. "Organization"
+  // labels org-level pages in the header but is not a sidebar group.
+  const navArea = useNavArea();
+  const activeGroup = navArea === "Organization" ? undefined : navArea;
 
   // Find the specific active route title for the sliding highlight. Shared with
   // the command palette via useProjectNavRoutes so the two stay in sync.
@@ -390,7 +353,7 @@ const PersistentNotification = ({
   );
 
   let classes =
-    "absolute bottom-2 left-1/2 h-[180px] w-[180px] -translate-x-1/2 rounded-lg p-4 border trans overflow-clip ";
+    "absolute bottom-2 left-1/2 h-[180px] w-[180px] -translate-x-1/2 p-4 border trans overflow-clip ";
   if (isMinimized) {
     classes +=
       "h-[12px] w-[12px] left-2 translate-x-0 cursor-pointer hover:scale-110";

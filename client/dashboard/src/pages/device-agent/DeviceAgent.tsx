@@ -1,12 +1,15 @@
+import { PageEyebrow } from "@/components/page-eyebrow";
 import { Page } from "@/components/page-layout";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { RequireScope } from "@/components/require-scope";
+import { Heading } from "@/components/ui/Heading";
 import {
   PageTabsList,
   PageTabsTrigger,
   Tabs,
   TabsContent,
 } from "@/components/ui/Tabs";
+import { Text } from "@/components/ui/Text";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { MdmIntegrationsTab } from "@/pages/org/device-integrations/DeviceIntegrations";
 import React from "react";
@@ -88,40 +91,52 @@ function DeviceAgentTabs() {
   }
 
   return (
-    <Tabs value={currentTab} onValueChange={handleTabChange}>
-      <div className="border-border -mx-8 border-b px-8">
-        <PageTabsList>
-          <PageTabsTrigger value="setup">Setup</PageTabsTrigger>
-          <PageTabsTrigger value="configuration">
-            <span className="inline-flex items-center gap-2">
-              Configuration
-              <ReleaseStageBadge stage="preview" noTooltip />
-            </span>
-          </PageTabsTrigger>
-          {mdmEnabled && (
-            <PageTabsTrigger value="mdm-integrations">
+    <>
+      <div className="mb-6">
+        <PageEyebrow className="mb-2" />
+        <Heading variant="h4" className="mb-2 text-display-sm font-thin">
+          Device Agent
+        </Heading>
+        <Text muted small className="mt-1">
+          Install and manage the on-device agent that enforces your
+          organization's AI-tool plugins and MCP configuration.
+        </Text>
+      </div>
+      <Tabs value={currentTab} onValueChange={handleTabChange}>
+        <div className="border-border -mx-8 border-b px-8">
+          <PageTabsList>
+            <PageTabsTrigger value="setup">Setup</PageTabsTrigger>
+            <PageTabsTrigger value="configuration">
               <span className="inline-flex items-center gap-2">
-                MDM Integrations
+                Configuration
                 <ReleaseStageBadge stage="preview" noTooltip />
               </span>
             </PageTabsTrigger>
-          )}
-        </PageTabsList>
-      </div>
+            {mdmEnabled && (
+              <PageTabsTrigger value="mdm-integrations">
+                <span className="inline-flex items-center gap-2">
+                  MDM Integrations
+                  <ReleaseStageBadge stage="preview" noTooltip />
+                </span>
+              </PageTabsTrigger>
+            )}
+          </PageTabsList>
+        </div>
 
-      <TabsContent value="setup" className="mt-6">
-        <DeviceAgentSetup />
-      </TabsContent>
-
-      <TabsContent value="configuration" className="mt-6">
-        <DeviceAgentConfigurationTab />
-      </TabsContent>
-
-      {mdmEnabled && (
-        <TabsContent value="mdm-integrations" className="mt-6">
-          <MdmIntegrationsTab />
+        <TabsContent value="setup" className="mt-6">
+          <DeviceAgentSetup />
         </TabsContent>
-      )}
-    </Tabs>
+
+        <TabsContent value="configuration" className="mt-6">
+          <DeviceAgentConfigurationTab />
+        </TabsContent>
+
+        {mdmEnabled && (
+          <TabsContent value="mdm-integrations" className="mt-6">
+            <MdmIntegrationsTab />
+          </TabsContent>
+        )}
+      </Tabs>
+    </>
   );
 }

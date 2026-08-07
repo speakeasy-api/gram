@@ -1,4 +1,4 @@
-import { MetricCard } from "@/components/chart/MetricCard";
+import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
 import { MCPStatusIndicator } from "@/components/mcp/MCPStatusIndicator";
@@ -7,7 +7,7 @@ import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Button as UiButton } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Dialog } from "@/components/ui/Dialog";
-import { DotCard } from "@/components/ui/DotCard";
+import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
@@ -577,16 +577,18 @@ export default function PluginDetail(): JSX.Element | null {
                 </Stack>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+              <MetricCardGroup>
                 <MetricCard
                   title="MCP servers"
                   value={plugin.serverCount ?? servers.length}
+                  tone="information"
                   format="number"
                   icon="network"
                 />
                 <MetricCard
                   title="Skills"
                   value={plugin.skillCount ?? 0}
+                  tone="information"
                   format="number"
                   icon="sparkles"
                 />
@@ -595,6 +597,7 @@ export default function PluginDetail(): JSX.Element | null {
                     <MetricCard
                       title="Assignments"
                       value={plugin.assignmentCount ?? assignments.length}
+                      tone="information"
                       format="number"
                       icon="users"
                       subtext="Roles, users, and emails"
@@ -602,6 +605,7 @@ export default function PluginDetail(): JSX.Element | null {
                     <MetricCard
                       title="Installs"
                       value={installs}
+                      tone="information"
                       displayValue={installsUnavailable ? "—" : undefined}
                       format="number"
                       icon="download"
@@ -619,7 +623,7 @@ export default function PluginDetail(): JSX.Element | null {
                     />
                   </>
                 )}
-              </div>
+              </MetricCardGroup>
 
               <PublishFreshnessIndicator publishStatus={publishStatus} />
             </section>
@@ -632,7 +636,7 @@ export default function PluginDetail(): JSX.Element | null {
                   <div className="flex items-center gap-2">
                     <SettingsSection.Title>MCP Servers</SettingsSection.Title>
                     {servers.length > 0 && (
-                      <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums">
+                      <span className="border-border text-muted-foreground border px-1.5 py-0.5 font-mono text-xs tabular-nums">
                         {servers.length}
                       </span>
                     )}
@@ -699,8 +703,8 @@ export default function PluginDetail(): JSX.Element | null {
                     plugin.
                   </SettingsSection.Description>
                 </SettingsSection.Header>
-                <div className="border-border flex items-center gap-4 rounded-xl border border-dashed p-6 opacity-60">
-                  <div className="bg-muted flex h-14 w-14 shrink-0 items-center justify-center rounded-xl">
+                <div className="border-border flex items-center gap-4 border border-dashed p-6 opacity-60">
+                  <div className="bg-muted flex h-14 w-14 shrink-0 items-center justify-center">
                     <Sparkles className="text-muted-foreground h-7 w-7" />
                   </div>
                   <Text small muted>
@@ -742,7 +746,7 @@ export default function PluginDetail(): JSX.Element | null {
                   <div className="flex items-center gap-2">
                     <SettingsSection.Title>Assignments</SettingsSection.Title>
                     {assignments.length > 0 && (
-                      <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums">
+                      <span className="border-border text-muted-foreground border px-1.5 py-0.5 font-mono text-xs tabular-nums">
                         {assignments.length}
                       </span>
                     )}
@@ -939,7 +943,7 @@ export default function PluginDetail(): JSX.Element | null {
                 ) : availableServerOptions.length > 0 ? (
                   <select
                     name="serverKey"
-                    className="bg-background rounded-md border px-3 py-2 text-sm"
+                    className="bg-background border px-3 py-2 text-sm"
                     required
                   >
                     <option value="">Select an MCP server</option>
@@ -1263,7 +1267,7 @@ function PluginServerCard({
   };
 
   return (
-    <DotCard
+    <Card.Entity
       className={cn(isClickable && "cursor-pointer")}
       onClick={isClickable ? handleClick : undefined}
       icon={<Network className="text-muted-foreground h-8 w-8" />}
@@ -1339,6 +1343,6 @@ function PluginServerCard({
           <Trash2 className="h-4 w-4" />
         </UiButton>
       </div>
-    </DotCard>
+    </Card.Entity>
   );
 }

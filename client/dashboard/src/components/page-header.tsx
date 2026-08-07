@@ -100,7 +100,7 @@ function BreadcrumbCrumb({
     return (
       <span
         aria-hidden="true"
-        className="bg-muted inline-block h-3.5 w-20 animate-pulse rounded align-middle"
+        className="bg-muted inline-block h-3.5 w-20 animate-pulse align-middle"
       />
     );
   }

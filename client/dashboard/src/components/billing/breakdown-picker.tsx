@@ -38,7 +38,7 @@ export function BreakdownPicker({
           type="button"
           role="combobox"
           aria-expanded={open}
-          className="border-border hover:bg-muted data-[state=open]:bg-muted inline-flex items-center gap-1 rounded border bg-transparent px-2 py-0.5 text-xs transition-colors"
+          className="border-border hover:bg-muted data-[state=open]:bg-muted inline-flex items-center gap-1 border bg-transparent px-2 py-0.5 text-xs transition-colors"
         >
           By {breakdownLabel(value).toLowerCase()}
           <ChevronDown className="!size-3 opacity-50" />

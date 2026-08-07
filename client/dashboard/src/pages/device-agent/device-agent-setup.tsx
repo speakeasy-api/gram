@@ -260,7 +260,7 @@ function Table({
   children: React.ReactNode;
 }) {
   return (
-    <div className="overflow-hidden rounded-lg border">
+    <div className="overflow-hidden border">
       <table className="w-full text-sm">
         <thead className="bg-muted/50 text-muted-foreground">
           <tr>
@@ -299,7 +299,7 @@ function BinaryDownloadButton({
       href={href}
       download
       title={`sha256: ${sha256}`}
-      className="border-border bg-card hover:border-foreground/20 hover:bg-secondary/40 flex min-w-40 items-start gap-2 rounded-md border px-3 py-2 transition-colors"
+      className="border-border bg-card hover:border-foreground/20 hover:bg-secondary/40 flex min-w-40 items-start gap-2 border px-3 py-2 transition-colors"
     >
       <Download className="text-muted-foreground mt-0.5 h-3.5 w-3.5 shrink-0" />
       <span className="flex flex-col leading-tight">
@@ -356,7 +356,7 @@ function ManualDownload({ os }: { os: OsKey }) {
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="overflow-hidden rounded-md border text-sm">
+      <div className="overflow-hidden border text-sm">
         {keys.map((key) => {
           const d = artifactFor(daemon, key);
           const c = artifactFor(cli, key);
@@ -441,7 +441,7 @@ function DownloadStep({ os }: { os: OsKey }) {
 // different roles.
 function BinaryLegend() {
   return (
-    <div className="border-border bg-card flex flex-col gap-2 rounded-md border p-3">
+    <div className="border-border bg-card flex flex-col gap-2 border p-3">
       <div className="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-1.5">
         <code className="text-foreground font-mono text-xs">speakeasyd</code>
         <span className="text-muted-foreground text-xs">
@@ -828,7 +828,7 @@ function IdentityStep() {
         for an org; personal enrollment is handy for testing.
       </Text>
       <Tabs defaultValue="fleet" className="gap-6">
-        <TabsList className="grid h-auto w-full grid-cols-2 items-stretch gap-3 bg-transparent p-0">
+        <TabsList className="grid h-auto w-full grid-cols-2 items-stretch gap-3 divide-x-0 border-0 bg-transparent p-0">
           <SetupTab
             value="fleet"
             icon="building-2"
@@ -868,7 +868,7 @@ function SetupTab({
   return (
     <TabsTrigger
       value={value}
-      className="border-border data-[state=active]:border-primary/40 h-auto flex-col items-start justify-start gap-1 rounded-md border p-4 text-left whitespace-normal"
+      className="border-border data-[state=active]:border-primary/40 h-auto flex-col items-start justify-start gap-1 border p-4 text-left whitespace-normal"
     >
       <div className="flex items-center gap-2">
         <Icon name={icon} className="h-4 w-4" />
@@ -968,7 +968,7 @@ function DeviceAgentSetupSheet({
               type="button"
               onClick={() => goToDot(idx)}
               className={cn(
-                "h-1 rounded-full transition-all",
+                "h-1 transition-all",
                 idx === stepIdx
                   ? "bg-foreground w-6"
                   : idx < stepIdx
@@ -1042,9 +1042,9 @@ function OsTile({ os, onClick }: { os: OsKey; onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="border-border bg-card hover:border-foreground/20 flex w-full items-center gap-4 rounded-lg border p-4 text-left transition-all"
+      className="border-border bg-card hover:border-foreground/20 flex w-full items-center gap-4 border p-4 text-left transition-all"
     >
-      <div className="bg-secondary flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-lg">
+      <div className="bg-secondary flex h-14 w-14 flex-shrink-0 items-center justify-center">
         <img
           src={cfg.logo}
           alt={`${cfg.label} logo`}
@@ -1073,7 +1073,9 @@ export function DeviceAgentSetup(): React.JSX.Element {
 
   return (
     <Page.Section>
-      <Page.Section.Title>Install the agent</Page.Section.Title>
+      {/* The Device Agent page renders the area eyebrow with its own page
+          title above the tab strip, so suppress the section-level one. */}
+      <Page.Section.Title area="">Install the agent</Page.Section.Title>
       <Page.Section.Description>
         The Speakeasy device agent runs on-device and enforces your org's
         required AI-tool plugins and MCP configuration, then reports compliance
@@ -1081,17 +1083,19 @@ export function DeviceAgentSetup(): React.JSX.Element {
       </Page.Section.Description>
       <Page.Section.Body>
         <div className="flex flex-col gap-4">
-          <Alert variant="info">
-            <AlertTitle>Rolling out to more than a few machines?</AlertTitle>
-            <AlertDescription>
-              We recommend deploying the agent through your MDM (Kandji, Jamf,
-              Intune, or similar). It installs the binaries and drops a{" "}
-              <code>managed.json</code> so identity and enrollment are set
-              centrally — no per-user setup. The{" "}
-              <strong className="font-medium">Fleet (MDM)</strong> path in each
-              platform's walkthrough covers it.
-            </AlertDescription>
-          </Alert>
+          <div className="border-border bg-card border p-4">
+            <p className="text-eyebrow mb-2">Fleet rollout</p>
+            <Text small muted>
+              Rolling out to more than a few machines? We recommend deploying
+              the agent through your MDM (Kandji, Jamf, Intune, or similar). It
+              installs the binaries and drops a <code>managed.json</code> so
+              identity and enrollment are set centrally — no per-user setup. The{" "}
+              <strong className="text-foreground font-medium">
+                Fleet (MDM)
+              </strong>{" "}
+              path in each platform's walkthrough covers it.
+            </Text>
+          </div>
           <Text small muted>
             Pick the platform you're installing on to walk through setup.
           </Text>

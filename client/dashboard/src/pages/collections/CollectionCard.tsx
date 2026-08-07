@@ -1,4 +1,4 @@
-import { DotCard } from "@/components/ui/DotCard";
+import { Card } from "@/components/ui/Card";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
 import { Badge } from "@/components/ui/Badge";
@@ -107,7 +107,7 @@ export function CollectionCard({
       <SimpleTooltip tooltip={installDisabledReason}>
         <span
           aria-label={`Install unavailable: ${installDisabledReason}`}
-          className="focus-visible:ring-ring inline-flex rounded-xs focus-visible:ring-2 focus-visible:outline-none"
+          className="focus-visible:ring-ring inline-flex focus-visible:ring-2 focus-visible:outline-none"
           onClick={(event) => event.stopPropagation()}
           tabIndex={0}
         >
@@ -118,7 +118,7 @@ export function CollectionCard({
   }
 
   return (
-    <DotCard
+    <Card.Entity
       className="cursor-pointer"
       onClick={() => {
         void navigate(detailHref);
@@ -197,6 +197,6 @@ export function CollectionCard({
           projects={projects}
         />
       </div>
-    </DotCard>
+    </Card.Entity>
   );
 }

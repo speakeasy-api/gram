@@ -1,5 +1,5 @@
 import { ChartCard } from "@/components/chart/ChartCard";
-import { CHART_COLORS } from "@/components/stacked-time-series";
+import { useSeriesColors } from "@/components/chart/useSeriesColors";
 import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
 import { SettingsSection } from "@/pages/mcp/x/tabs/settings/SettingsSection";
@@ -52,6 +52,7 @@ export function SkillActivitySections({
   versionLabels: Map<string, string>;
   versionsLoading: boolean;
 }): JSX.Element {
+  const chartColors = useSeriesColors();
   const { skill, adoption, drift, sightingTimeline } = data;
   const firstBucket = Date.UTC(
     adoption.windowStart.getUTCFullYear(),
@@ -86,7 +87,7 @@ export function SkillActivitySections({
     ...(pointsByVersion.has("") ? [""] : []),
   ];
   const datasets = versionIDs.map((versionID, index) => {
-    const color = CHART_COLORS[index % CHART_COLORS.length];
+    const color = chartColors[index % chartColors.length];
     const label = versionID
       ? (versionLabels.get(versionID) ?? `Version ${versionID.slice(0, 8)}`)
       : "Unknown version";
@@ -130,7 +131,7 @@ export function SkillActivitySections({
           </SettingsSection.Description>
         </SettingsSection.Header>
         <div className="space-y-3">
-          <dl className="grid gap-px overflow-hidden rounded-lg border sm:grid-cols-2 lg:grid-cols-4">
+          <dl className="grid gap-px overflow-hidden border sm:grid-cols-2 lg:grid-cols-4">
             <Metric label="Versions" value={metricValue(skill.versionCount)} />
             <Metric
               label="Active machines"
