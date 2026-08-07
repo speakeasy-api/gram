@@ -54,6 +54,48 @@ func TestResolve_RegistrableDomainDropsSubdomains(t *testing.T) {
 	require.Equal(t, "somevendor.co.uk", uk.RegistrableDomain)
 }
 
+// A fully-qualified name with the DNS trailing dot is the same server as one
+// without, so it must neither key differently nor lose its registrable domain.
+func TestResolve_TrailingDotHostIsCanonicalised(t *testing.T) {
+	t.Parallel()
+
+	fqdn := identity.Resolve("https://mcp.example.com./sse")
+	plain := identity.Resolve("https://mcp.example.com/sse")
+
+	require.Equal(t, plain.ArtifactRef, fqdn.ArtifactRef)
+	require.Equal(t, "mcp.example.com", fqdn.Host)
+	require.Equal(t, "example.com", fqdn.RegistrableDomain)
+
+	withPort := identity.Resolve("https://mcp.example.com.:8443/sse")
+	require.Equal(t, "mcp.example.com", withPort.Host)
+	require.Equal(t, "url:https://mcp.example.com:8443/sse", withPort.ArtifactRef)
+}
+
+// An unlisted TLD matches the public-suffix list's implicit wildcard rule,
+// which would otherwise report the name as its own registrable domain and let
+// an internal hostname masquerade as an owner.
+func TestResolve_UnlistedSuffixHasNoRegistrableDomain(t *testing.T) {
+	t.Parallel()
+
+	for _, ref := range []string{
+		"http://mcp.internal/sse",
+		"http://mcp.unknownsuffix/sse",
+	} {
+		got := identity.Resolve(ref)
+		require.Equal(t, identity.KindRemote, got.Kind, ref)
+		require.Empty(t, got.RegistrableDomain, "%s is under no managed suffix", ref)
+	}
+}
+
+// Private-section suffixes report icann=false like the wildcard fallback, but
+// they really do delimit ownership and must survive.
+func TestResolve_PrivateSuffixStillYieldsRegistrableDomain(t *testing.T) {
+	t.Parallel()
+
+	got := identity.Resolve("https://someone.blogspot.com/sse")
+	require.Equal(t, "someone.blogspot.com", got.RegistrableDomain)
+}
+
 // No registrable domain exists for these, and empty must read as
 // "undeterminable" rather than as a mismatch.
 func TestResolve_RegistrableDomainEmptyWhenUndeterminable(t *testing.T) {

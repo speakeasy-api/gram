@@ -166,7 +166,7 @@ func absoluteHTTPURL(reference string) (*url.URL, bool) {
 // server share an artifact ref. A remote endpoint is never version-pinned:
 // nothing links a URL to a fixed revision of what serves it.
 func remoteIdentity(u *url.URL) Identity {
-	host := strings.ToLower(u.Hostname())
+	host := canonicalHostname(u)
 
 	return Identity{
 		Kind:              KindRemote,
@@ -189,7 +189,7 @@ func redactedURL(u *url.URL) string {
 		Scheme:      u.Scheme,
 		Opaque:      "",
 		User:        nil,
-		Host:        strings.ToLower(u.Host),
+		Host:        canonicalHostPort(u),
 		Path:        u.Path,
 		RawPath:     u.RawPath,
 		OmitHost:    false,
@@ -202,6 +202,27 @@ func redactedURL(u *url.URL) string {
 	return canonical.String()
 }
 
+// canonicalHostname lowercases a URL's host and drops the trailing dot of a
+// fully-qualified name.
+//
+// `mcp.example.com.` and `mcp.example.com` name the same server, so keeping
+// the dot would give them separate artifact refs, and the public-suffix lookup
+// rejects it outright as an empty label.
+func canonicalHostname(u *url.URL) string {
+	return strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
+}
+
+// canonicalHostPort is canonicalHostname with the port reattached, for
+// rebuilding a URL.
+func canonicalHostPort(u *url.URL) string {
+	host := canonicalHostname(u)
+	if port := u.Port(); port != "" {
+		return net.JoinHostPort(host, port)
+	}
+
+	return host
+}
+
 // registrableDomain reduces a hostname to its effective TLD plus one label,
 // which is the part that identifies who owns it.
 //
@@ -211,6 +232,20 @@ func redactedURL(u *url.URL) string {
 // must treat as unknown rather than as a mismatch.
 func registrableDomain(host string) string {
 	if host == "" || net.ParseIP(host) != nil {
+		return ""
+	}
+
+	// An unlisted TLD falls back to the public-suffix list's implicit `*`
+	// rule, which hands back the final label and would make `mcp.internal`
+	// look like a registrable domain. Such a name is under no managed
+	// registry, so it identifies no owner.
+	//
+	// Suffixes from the list's private section (`blogspot.com`,
+	// `herokuapp.com`) also report icann=false but really do delimit
+	// ownership, and they are always multi-label — which is what separates
+	// them from the fallback rule.
+	suffix, icann := publicsuffix.PublicSuffix(host)
+	if !icann && !strings.Contains(suffix, ".") {
 		return ""
 	}
 
