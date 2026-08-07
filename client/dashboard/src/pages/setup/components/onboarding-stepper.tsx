@@ -58,13 +58,13 @@ export function OnboardingStepper({
                   {index + 1}
                 </div>
               ) : isCompleted ? (
-                /* Completed step: solid green square with checkmark; active
-                   keeps the solid ink fill, upcoming stays outlined */
+                /* Completed step: outlined square with a bold green checkmark;
+                   active keeps the solid ink fill, upcoming stays outlined */
                 <button
                   onClick={() => onStepClick?.(index)}
-                  className="bg-success-default text-background flex h-[28px] w-[28px] cursor-pointer items-center justify-center transition-all duration-200 ease-out hover:scale-[1.2] hover:bg-foreground"
+                  className="border-border text-default-success flex h-[28px] w-[28px] cursor-pointer items-center justify-center border bg-background transition-all duration-200 ease-out hover:scale-[1.2] hover:border-foreground"
                 >
-                  <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
+                  <Check className="h-4 w-4" strokeWidth={3} />
                 </button>
               ) : canJump ? (
                 /* Upcoming but jumpable: outlined square as a button so the
