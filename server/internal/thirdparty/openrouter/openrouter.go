@@ -190,12 +190,20 @@ var creditsAccountTypeMap = map[string]int{
 	"":           5, // safety default
 }
 
-// enterpriseTrialCredits caps an organization that is inside a self-signup
-// enterprise trial, which the account type alone cannot distinguish from a
-// paying enterprise customer. A trial is armed without verified intent, and
-// the chat credit-balance gate only hard-stops the free tier, so this key
-// limit is the only spend ceiling a trial organization has.
-const enterpriseTrialCredits = 50
+// trialCreditLimit caps each key an organization inside a trial holds. An
+// organization holds one key per KeyType, so its total trial exposure is this
+// amount multiplied by len(AllKeyTypes).
+//
+// A trial is armed without verified intent, and the chat credit-balance gate
+// hard-stops the free tier only, so these key limits are the only spend
+// ceiling a trial organization has. The account type cannot supply one: arming
+// a trial sets the enterprise tier, which makes a trial indistinguishable from
+// a paying enterprise customer.
+//
+// The limit binds when a key is minted. Nothing re-mints a key, so it does not
+// follow an organization across the end of its trial in either direction. See
+// AGE-3138 and AGE-3141.
+const trialCreditLimit = 50
 
 var specialLimitOrgs = []string{
 	"5a25158b-24dc-4d49-b03d-e85acfbea59c", // speakeasy-team
@@ -651,7 +659,7 @@ func (o *OpenRouter) defaultLimitForOrg(ctx context.Context, trials *trialsRepo.
 	_, err := trials.GetActiveTrial(ctx, org.ID)
 	switch {
 	case err == nil:
-		return enterpriseTrialCredits
+		return trialCreditLimit
 	case !errors.Is(err, pgx.ErrNoRows):
 		o.logger.WarnContext(ctx, "error reading active trial; using the account type credit limit",
 			attr.SlogError(err),
