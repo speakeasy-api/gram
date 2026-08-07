@@ -55,8 +55,8 @@ const PLATFORMS = [
   },
   {
     key: "opencode",
-    label: "opencode",
-    description: "Configure opencode plugins and MCP settings.",
+    label: "OpenCode",
+    description: "Configure OpenCode plugins and MCP settings.",
     defaultLayer: "off",
   },
 ] as const satisfies ReadonlyArray<{
