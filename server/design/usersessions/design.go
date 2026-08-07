@@ -168,7 +168,8 @@ var UserSession = Type("UserSession", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("issuer_slug", String, "Slug of the user_session_issuer that gated this session.")
-	Attribute("client_name", String, "Name of the MCP client that established the session, if known.")
+	Attribute("client_name", String, "Name of the MCP client that established the session, if known. Client-controlled and unverified; do not present it as an identity.")
+	Attribute("client_id_metadata_uri", String, "Set when the client that established this session was resolved from a Client ID Metadata Document (CIMD) hosted at this URL, rather than registered via RFC 7591 DCR. Null for DCR clients and for sessions with no bound client.")
 	Attribute("subject_type", String, "Subject kind: 'user', 'apikey', or 'anonymous'.")
 	Attribute("subject_display_name", String, "Resolved human-readable name of the subject, if known.")
 	Attribute("revoked_at", String, "When the session was revoked, if it has been.", func() {

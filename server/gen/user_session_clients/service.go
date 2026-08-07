@@ -15,16 +15,21 @@ import (
 	"goa.design/goa/v3/security"
 )
 
-// Operator visibility into DCR'd MCP clients (user_session_clients). Read +
-// revoke; registrations are written by /mcp/{slug}/register.
+// Operator visibility into MCP clients registered against a user-session
+// issuer (user_session_clients). Read + revoke. Registrations are written by
+// /mcp/{slug}/register (RFC 7591 DCR) or resolved from a Client ID Metadata
+// Document on /mcp/{slug}/authorize (CIMD); client_id_metadata_uri
+// distinguishes the two.
 type Service interface {
 	// List user_session_clients in the caller's project.
 	ListUserSessionClients(context.Context, *ListUserSessionClientsPayload) (res *ListUserSessionClientsResult, err error)
 	// Get a user_session_client by id.
 	GetUserSessionClient(context.Context, *GetUserSessionClientPayload) (res *types.UserSessionClient, err error)
-	// Soft-delete a user_session_client. Future tokens minted for this client_id
-	// are rejected; existing live user_sessions keep working until they hit
-	// expires_at.
+	// Soft-delete a user_session_client and cascade to the user_sessions it
+	// issued. A DCR client stays revoked. A CIMD client does not: its identity is
+	// the metadata document URL, so the next /authorize re-resolves that document
+	// and registers a fresh row. Durably blocking a CIMD client is admission
+	// control's job, not revocation's.
 	RevokeUserSessionClient(context.Context, *RevokeUserSessionClientPayload) (err error)
 }
 

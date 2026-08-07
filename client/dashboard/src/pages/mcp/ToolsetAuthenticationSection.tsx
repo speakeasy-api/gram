@@ -8,7 +8,6 @@ import { ConnectOAuthModal } from "./oauth-wizard";
 import { AttachRemoteIdentityProviderSheet } from "./x/tabs/settings/sections/authentication/AttachRemoteIdentityProviderSheet";
 import { AuthenticationSectionBody } from "./x/tabs/settings/sections/authentication/AuthenticationSection";
 import { useToolsetAuthTarget } from "./x/tabs/settings/sections/authentication/authTarget";
-import { UserSessionsList } from "./x/tabs/settings/sections/authentication/McpServerSessionsPanel";
 import {
   canConfigureExternalOAuth,
   externalOauthIssuerUrl,
@@ -52,14 +51,6 @@ export function ToolsetAuthenticationSection({
           }
         />
       </PageSection>
-      {target.userSessionIssuerId && (
-        <PageSection
-          heading="User sessions"
-          description="Active sessions clients hold into this server, established via OAuth."
-        >
-          <UserSessionsList issuerId={target.userSessionIssuerId} />
-        </PageSection>
-      )}
       <ConnectOAuthModal
         isOpen={externalOAuthOpen}
         onClose={() => setExternalOAuthOpen(false)}

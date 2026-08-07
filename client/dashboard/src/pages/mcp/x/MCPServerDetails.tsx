@@ -36,14 +36,14 @@ import {
   isLegacyAuthenticationTabPath,
   isLegacyToolsTabPath,
   mcpServerTabHref,
+  MCP_SERVER_TAB_URLS,
 } from "./MCPServerDetailsRouting";
 import { MCPOverviewTab } from "@/pages/mcp/overview/MCPOverviewTab";
 import { InspectTab } from "./tabs/InspectTab";
 import { MCP_AUTHENTICATION_SECTION_ID } from "./tabs/settings/sections/authentication/AuthenticationSection";
+import { ClientsAndSessionsTab } from "@/components/sessions/ClientsAndSessionsTab";
 import { SettingsTab } from "./tabs/settings/SettingsTab";
 import { UnproxiedMcpOverviewTab } from "./tabs/UnproxiedMcpOverviewTab";
-
-const MCP_X_TAB_URLS = ["overview", "inspect", "team-access", "settings"];
 
 export default function MCPServerDetails(): JSX.Element {
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
@@ -92,11 +92,14 @@ export default function MCPServerDetails(): JSX.Element {
       <Navigate to={mcpServerTabHref(routes, idOrSlug, "inspect")} replace />
     );
   }
-  // Inspect is hidden from the nav for unproxied servers (see
-  // McpServerXSidebarNav) but the route still resolves, so bounce anyone who
-  // lands on it directly (old links, the legacy /tools redirect above) back
-  // to Overview instead of rendering a tab with nothing to show.
-  if (activeTab === "inspect" && mcpServer?.unproxiedMcpServerId) {
+  // Inspect and Clients and Sessions are hidden from the nav for unproxied
+  // servers (see McpServerXSidebarNav) but the routes still resolve, so bounce
+  // anyone who lands on them directly (old links, the legacy /tools redirect
+  // above) back to Overview instead of rendering a tab with nothing to show.
+  if (
+    (activeTab === "inspect" || activeTab === "sessions") &&
+    mcpServer?.unproxiedMcpServerId
+  ) {
     return (
       <Navigate to={mcpServerTabHref(routes, idOrSlug, "overview")} replace />
     );
@@ -170,6 +173,14 @@ export default function MCPServerDetails(): JSX.Element {
             </RequireScope>
           )
         );
+      case "sessions":
+        return (
+          mcpServer && (
+            <RequireScope scope="project:read" level="page">
+              <ClientsAndSessionsTab issuerId={mcpServer.userSessionIssuerId} />
+            </RequireScope>
+          )
+        );
       case "settings":
         return (
           mcpServer && (
@@ -196,7 +207,7 @@ export default function MCPServerDetails(): JSX.Element {
             // server's own slug happens to collide with a tab name (e.g. a
             // server slugged "settings"), guard against also skipping the
             // server's own breadcrumb crumb.
-            ...MCP_X_TAB_URLS.filter((tab) => tab !== idOrSlug),
+            ...MCP_SERVER_TAB_URLS.filter((tab) => tab !== idOrSlug),
           ]}
         />
       </Page.Header>

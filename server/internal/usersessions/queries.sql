@@ -137,8 +137,9 @@ WHERE cli.user_session_issuer_id = @user_session_issuer_id
   AND cli.deleted IS FALSE;
 
 -- name: ListUserSessionClientsByProjectID :many
--- Operator visibility into all DCR-issued clients in the project, with optional
--- filter by user_session_issuer_id. Joins through issuers for project scoping.
+-- Operator visibility into every client registered against an issuer in the
+-- project -- DCR-registered and CIMD-resolved alike -- with optional filter by
+-- user_session_issuer_id. Joins through issuers for project scoping.
 SELECT cli.*
 FROM user_session_clients AS cli
 JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
@@ -300,6 +301,7 @@ SELECT s.id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, 
        s.created_at, s.updated_at, s.deleted_at, s.deleted,
        iss.slug AS issuer_slug,
        c.client_name AS client_name,
+       c.client_id_metadata_uri AS client_id_metadata_uri,
        u.display_name AS user_display_name,
        u.email AS user_email,
        k.name AS api_key_name
