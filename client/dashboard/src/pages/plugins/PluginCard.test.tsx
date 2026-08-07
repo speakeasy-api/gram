@@ -49,7 +49,20 @@ vi.mock("@/routes", () => ({
     plugins: { detail: { href: (id: string) => `/plugins/${id}` } },
   }),
 }));
-vi.mock("./downloadPluginPackage", () => ({ downloadPluginPackage }));
+vi.mock("./downloadPluginPackage", () => ({
+  usePluginPackageDownload: (
+    sdkClient: unknown,
+    pluginId: string,
+  ): {
+    isDownloading: boolean;
+    download: (platform: string) => Promise<void>;
+  } => ({
+    isDownloading: false,
+    download: async (platform) => {
+      await downloadPluginPackage(sdkClient, pluginId, platform);
+    },
+  }),
+}));
 
 afterEach(() => {
   cleanup();

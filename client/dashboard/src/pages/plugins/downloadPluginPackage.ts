@@ -1,5 +1,7 @@
 import { Gram } from "@gram/client";
 import type { QueryParamPlatform } from "@gram/client/models/operations/downloadpluginpackage.js";
+import { useRef, useState } from "react";
+import { toast } from "sonner";
 
 export type PluginPackagePlatform = QueryParamPlatform;
 
@@ -37,4 +39,33 @@ export async function downloadPluginPackage(
     "plugin.zip";
   a.click();
   URL.revokeObjectURL(url);
+}
+
+export function usePluginPackageDownload(
+  client: Gram,
+  pluginId: string,
+  onMenuOpenChange: (open: boolean) => void,
+): {
+  isDownloading: boolean;
+  download: (platform: PluginPackagePlatform) => Promise<void>;
+} {
+  const [isDownloading, setIsDownloading] = useState(false);
+  const isDownloadingRef = useRef(false);
+
+  const download = async (platform: PluginPackagePlatform): Promise<void> => {
+    if (isDownloadingRef.current) return;
+    isDownloadingRef.current = true;
+    onMenuOpenChange(false);
+    setIsDownloading(true);
+    try {
+      await downloadPluginPackage(client, pluginId, platform);
+    } catch (_err) {
+      toast.error("Failed to download plugin package");
+    } finally {
+      isDownloadingRef.current = false;
+      setIsDownloading(false);
+    }
+  };
+
+  return { isDownloading, download };
 }

@@ -19,14 +19,10 @@ import {
 } from "@/components/ui/Dropdown";
 import { Icon } from "@/components/ui/Icon";
 import { ArrowRight, Puzzle, Server } from "lucide-react";
-import { Fragment, useRef, useState } from "react";
+import { Fragment, useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { toast } from "sonner";
 import { DEFAULT_PLUGIN_DESCRIPTION } from "./default-plugin";
-import {
-  downloadPluginPackage,
-  type PluginPackagePlatform,
-} from "./downloadPluginPackage";
+import { usePluginPackageDownload } from "./downloadPluginPackage";
 import { InstallInstructionsDialog } from "./InstallInstructionsDialog";
 import { PluginInstallButton } from "./PluginInstallButton";
 
@@ -48,8 +44,11 @@ export function PluginCard({
     plugin.description ?? (isDefault ? DEFAULT_PLUGIN_DESCRIPTION : undefined);
   const [isInstallOpen, setIsInstallOpen] = useState(false);
   const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
-  const isDownloadingRef = useRef(false);
+  const { isDownloading, download } = usePluginPackageDownload(
+    client,
+    plugin.id,
+    setIsDownloadMenuOpen,
+  );
   const installTarget =
     publishStatus?.connected &&
     publishStatus.repoOwner &&
@@ -60,21 +59,6 @@ export function PluginCard({
           marketplaceUrl: publishStatus.marketplaceUrl,
         }
       : undefined;
-
-  const handleDownload = async (platform: PluginPackagePlatform) => {
-    if (isDownloadingRef.current) return;
-    isDownloadingRef.current = true;
-    setIsDownloadMenuOpen(false);
-    setIsDownloading(true);
-    try {
-      await downloadPluginPackage(client, plugin.id, platform);
-    } catch (_err) {
-      toast.error("Failed to download plugin package");
-    } finally {
-      isDownloadingRef.current = false;
-      setIsDownloading(false);
-    }
-  };
 
   // Single source of truth for the Install split-button dropdown. The
   // right-click context menu reuses these entries (plus View) so every card
@@ -96,21 +80,21 @@ export function PluginCard({
       separatorBefore: true,
       disabled: isDownloading,
       onClick: () => {
-        void handleDownload("claude");
+        void download("claude");
       },
     },
     {
       label: "Download as zip — Cursor",
       disabled: isDownloading,
       onClick: () => {
-        void handleDownload("cursor");
+        void download("cursor");
       },
     },
     {
       label: "Download as zip — Codex",
       disabled: isDownloading,
       onClick: () => {
-        void handleDownload("codex");
+        void download("codex");
       },
     },
     ...(plugin.agentPluginsV1Compatible
@@ -119,7 +103,7 @@ export function PluginCard({
             label: "Download Agent Plugin 1.0 ZIP",
             disabled: isDownloading,
             onClick: () => {
-              void handleDownload("agent-plugin");
+              void download("agent-plugin");
             },
           },
         ]

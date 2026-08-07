@@ -73,8 +73,8 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { toast } from "sonner";
 import { DEFAULT_PLUGIN_DESCRIPTION } from "./default-plugin";
 import {
-  downloadPluginPackage,
   type PluginPackagePlatform,
+  usePluginPackageDownload,
 } from "./downloadPluginPackage";
 import { InstallInstructionsDialog } from "./InstallInstructionsDialog";
 import { PluginInstallButton } from "./PluginInstallButton";
@@ -129,8 +129,6 @@ export default function PluginDetail(): JSX.Element | null {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isAddServerOpen, setIsAddServerOpen] = useState(false);
   const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
-  const isDownloadingRef = useRef(false);
   const [isInstallSheetOpen, setIsInstallSheetOpen] = useState(false);
   const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
   const [isManageCollaboratorsOpen, setIsManageCollaboratorsOpen] =
@@ -154,6 +152,11 @@ export default function PluginDetail(): JSX.Element | null {
   });
 
   const client = useSdkClient();
+  const { isDownloading, download } = usePluginPackageDownload(
+    client,
+    pluginId!,
+    setIsDownloadMenuOpen,
+  );
 
   const { data: toolsetsData, isLoading: isLoadingToolsets } =
     useListToolsets();
@@ -391,21 +394,6 @@ export default function PluginDetail(): JSX.Element | null {
     });
   };
 
-  const handleDownload = async (platform: PluginPackagePlatform) => {
-    if (isDownloadingRef.current) return;
-    isDownloadingRef.current = true;
-    setIsDownloadMenuOpen(false);
-    setIsDownloading(true);
-    try {
-      await downloadPluginPackage(client, pluginId!, platform);
-    } catch (_err) {
-      toast.error("Failed to download plugin package");
-    } finally {
-      isDownloadingRef.current = false;
-      setIsDownloading(false);
-    }
-  };
-
   const toolsetById = useMemo(() => {
     const map = new Map<string, ToolsetEntry>();
     for (const t of toolsets) map.set(t.id, t);
@@ -583,7 +571,7 @@ export default function PluginDetail(): JSX.Element | null {
                     publishStatus={publishStatus}
                     isDownloadMenuOpen={isDownloadMenuOpen}
                     onDownloadMenuOpenChange={setIsDownloadMenuOpen}
-                    onDownload={(platform) => void handleDownload(platform)}
+                    onDownload={(platform) => void download(platform)}
                     isDownloading={isDownloading}
                     isInstallSheetOpen={isInstallSheetOpen}
                     onInstallSheetOpenChange={setIsInstallSheetOpen}
