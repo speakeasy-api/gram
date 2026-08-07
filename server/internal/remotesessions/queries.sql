@@ -1144,6 +1144,14 @@ RETURNING *;
 -- The arm is additive on purpose. Every row reachable before is still reachable
 -- on the issuer arm regardless of whether organization_id was ever backfilled
 -- on older client rows, so this cannot silently narrow a result or undercount.
+--
+-- One operation retires the issuer arm rather than adding to it: migrating a
+-- tenant client onto a platform issuer moves it under an issuer whose
+-- organization_id is NULL, leaving c.organization_id as the sole path back to
+-- the org for that row. Every tenant client writer populates that column, and
+-- the historical rows that predate it were backfilled, so the fallback is not
+-- load-bearing there. Any future writer that moves a client between tenancy
+-- tiers depends on the same thing being true.
 -- Global clients (project_id and organization_id both NULL) match neither arm
 -- and stay correctly invisible to tenants; they are platform-admin owned.
 SELECT
@@ -1260,7 +1268,16 @@ ORDER BY m.id DESC;
 
 -- name: ListOrganizationMcpServerNamesForIssuer :many
 -- Display names (and URL fallbacks) of MCP servers attached to any client of a
--- given issuer. Used to populate the issuer delete-confirmation dialog.
+-- given issuer. Used to populate the issuer delete-confirmation dialog and the
+-- migrate preflight.
+--
+-- NOT org-scoped, despite the name: the only filter is the issuer id. Every
+-- caller is safe today because the issuer it passes is tenant-scoped, so its
+-- clients belong to one organization and the names returned are that
+-- organization's own. Passing a PLATFORM issuer id here would return MCP server
+-- names belonging to every organization on the platform in a single response.
+-- That is why platform-admin issuer migration accepts only a tenant-scoped
+-- source. Bound this query before relaxing that.
 SELECT DISTINCT
     m.id,
     m.name,
@@ -1332,8 +1349,15 @@ WHERE source_client.remote_session_issuer_id = @source_issuer_id
 --
 -- Soft-deleted clients stay on the source issuer: they resolve nowhere, and
 -- dragging tombstones onto the target would corrupt the returned migrated count.
--- Callers establish org ownership of both issuers and hold the advisory locks
--- from LockRemoteSessionIssuerForClientBinding. Returns the number of clients moved.
+-- Callers establish ownership of both issuers and hold the advisory locks from
+-- LockRemoteSessionIssuerForClientBinding. Returns the number of clients moved.
+--
+-- Tenancy columns are left alone. When the target is a platform issuer this
+-- retires the issuer arm of the ORG REACHABILITY predicate for the moved rows,
+-- leaving the client's own organization_id as the sole path back to its
+-- organization. Every writer that creates a tenant client populates that column,
+-- so this is safe; it does mean a row that somehow lacked one would go
+-- unreachable to its organization while its OAuth kept working.
 UPDATE remote_session_clients
 SET remote_session_issuer_id = @target_issuer_id,
     updated_at = clock_timestamp()
@@ -1605,3 +1629,111 @@ UPDATE remote_session_clients
 SET deleted_at = clock_timestamp()
 WHERE id = @id AND project_id IS NULL AND organization_id IS NULL AND deleted IS FALSE
 RETURNING *;
+
+-- TENANT PARTITION (used by platform-admin issuer migration):
+--
+--   (project_id IS NOT NULL OR organization_id IS NOT NULL)
+--
+-- Selects every issuer some organization owns, project-specific or
+-- organization-level, across all tenants, and excludes the global partition
+-- where both columns are NULL. The disjunction rather than a plain
+-- `organization_id IS NOT NULL` is deliberate: project-specific issuers written
+-- before organization_id existed on this table carry a NULL there, and those
+-- legacy rows are exactly the duplicates convergence exists to clean up.
+
+-- name: GetTenantRemoteSessionIssuerByID :one
+-- Any organization's issuer by id, unscoped by tenant. Only the platform-admin
+-- migration surface may use this: every tenant-facing read must stay scoped to
+-- the caller's own organization or project.
+SELECT *
+FROM remote_session_issuers
+WHERE id = @id
+  AND (project_id IS NOT NULL OR organization_id IS NOT NULL)
+  AND deleted IS FALSE;
+
+-- name: GetTenantRemoteSessionIssuerByIDForUpdate :one
+-- GetTenantRemoteSessionIssuerByID holding a row lock until the transaction
+-- ends. The platform migration reads the source's scope and endpoint metadata to
+-- decide whether the migration is legal, then acts on that decision later in the
+-- same transaction; without the lock a concurrent moveIssuer (which rewrites
+-- project_id) or updateIssuer (which rewrites the endpoints) could commit in
+-- between and the migration would proceed against a scope or an authorization
+-- server it never validated. Callers must already hold the advisory locks from
+-- LockRemoteSessionIssuerForClientBinding, which order these row locks so two
+-- concurrent migrations of the same pair cannot deadlock.
+SELECT *
+FROM remote_session_issuers
+WHERE id = @id
+  AND (project_id IS NOT NULL OR organization_id IS NOT NULL)
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: GetProjectOrganizationID :one
+-- The organization owning a project. Resolves the affected organization when a
+-- legacy project-scoped issuer carries no organization_id of its own, so a
+-- platform-admin migration of such a row can still name the tenant it touched.
+SELECT organization_id
+FROM projects
+WHERE id = @id AND deleted IS FALSE;
+
+-- name: DeleteTenantRemoteSessionIssuer :one
+-- Soft-delete any organization's issuer, unscoped by tenant. Platform-admin
+-- migration only: it tombstones the emptied source after its clients have been
+-- re-pointed. The org-scoped DeleteOrganizationRemoteSessionIssuer stays the
+-- only delete a tenant-facing handler may call.
+UPDATE remote_session_issuers
+SET deleted_at = clock_timestamp()
+WHERE id = @id
+  AND (project_id IS NOT NULL OR organization_id IS NOT NULL)
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: ListTenantRemoteSessionIssuersByIssuerURL :many
+-- Tenant issuers that describe the same upstream authorization server as a
+-- platform issuer, so a platform admin can see which organizations could
+-- converge onto the shared catalog entry. Each row carries the owning
+-- organization and the client count that would move.
+--
+-- Matching is literal equality against a caller-supplied candidate set rather
+-- than a normalizing expression, for the same reason as
+-- ListRemoteSessionIssuersByIssuerURL: remote_session_issuers_issuer_idx is on
+-- the raw column, so any expression around `issuer` makes it unusable. The
+-- caller canonicalizes in Go and expands the result back into the closed set of
+-- raw spellings via matchCandidates, keeping `= ANY` a series of index probes.
+--
+-- The owning organization is taken from the issuer, falling back to its
+-- project's. A project-scoped issuer written before organization_id existed on
+-- this table carries NULL there, and those legacy duplicates are exactly what
+-- convergence exists to clean up, so reporting them as belonging to nobody would
+-- hide the owner of the rows most likely to be migrated.
+--
+-- organization_metadata is joined LEFT and its name coalesced. There is no
+-- organizations table, and the metadata row is populated by WorkOS sync, so an
+-- inner join would silently drop candidates whose organization has not synced.
+-- projects is joined LEFT for the same reason.
+--
+-- Ordered by descending id with an id cursor, matching every other
+-- platform-admin listing. ListRemoteSessionIssuersByIssuerURL orders by
+-- created_at instead because it feeds a precedence resolution that needs
+-- "oldest within a tier" to mean what it says; this listing only has to
+-- enumerate, so it takes the paginable ordering rather than the chronological
+-- one.
+SELECT
+    sqlc.embed(i),
+    COALESCE(i.organization_id, p.organization_id, '')::text AS owner_organization_id,
+    COALESCE(om.name, '')::text AS organization_name,
+    (
+        SELECT COUNT(*)
+        FROM remote_session_clients AS c
+        WHERE c.remote_session_issuer_id = i.id
+          AND c.deleted IS FALSE
+    )::bigint AS client_count
+FROM remote_session_issuers AS i
+LEFT JOIN projects AS p ON p.id = i.project_id
+LEFT JOIN organization_metadata AS om ON om.id = COALESCE(i.organization_id, p.organization_id)
+WHERE i.issuer = ANY(@issuers::text[])
+  AND (i.project_id IS NOT NULL OR i.organization_id IS NOT NULL)
+  AND i.deleted IS FALSE
+  AND (sqlc.narg('cursor')::uuid IS NULL OR i.id < sqlc.narg('cursor')::uuid)
+ORDER BY i.id DESC
+LIMIT sqlc.arg('limit_value');

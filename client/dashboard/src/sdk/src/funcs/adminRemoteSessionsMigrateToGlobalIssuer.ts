@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  MigrateOrganizationRemoteSessionIssuerResult,
-  MigrateOrganizationRemoteSessionIssuerResult$inboundSchema,
-} from "../models/components/migrateorganizationremotesessionissuerresult.js";
+  MigrateRemoteSessionIssuerResult,
+  MigrateRemoteSessionIssuerResult$inboundSchema,
+} from "../models/components/migrateremotesessionissuerresult.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  MigrateOrganizationRemoteSessionIssuerRequest,
-  MigrateOrganizationRemoteSessionIssuerRequest$outboundSchema,
-  MigrateOrganizationRemoteSessionIssuerSecurity,
-} from "../models/operations/migrateorganizationremotesessionissuer.js";
+  MigrateToGlobalRemoteSessionIssuerRequest,
+  MigrateToGlobalRemoteSessionIssuerRequest$outboundSchema,
+  MigrateToGlobalRemoteSessionIssuerSecurity,
+} from "../models/operations/migratetoglobalremotesessionissuer.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * migrateIssuer organizationRemoteSessionIssuers
+ * migrateToGlobalIssuer adminRemoteSessions
  *
  * @remarks
- * Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller's organization and agree on issuer, token_endpoint, and authorization_endpoint. The issuer identifier is compared canonically, so two spellings differing only by a trailing slash or an explicit default port count as the same upstream; the two endpoints are compared literally. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.
+ * Consolidate an organization- or project-level remote_session_issuer onto a global one: re-point every client from the source issuer onto the target, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. The source may belong to any organization; the target must be a global issuer. Both must agree on issuer (compared canonically), token_endpoint, and authorization_endpoint. One source per call. Requires platform admin.
  */
-export function organizationRemoteSessionIssuersMigrate(
+export function adminRemoteSessionsMigrateToGlobalIssuer(
   client: GramCore,
-  request: MigrateOrganizationRemoteSessionIssuerRequest,
-  security?: MigrateOrganizationRemoteSessionIssuerSecurity | undefined,
+  request: MigrateToGlobalRemoteSessionIssuerRequest,
+  security?: MigrateToGlobalRemoteSessionIssuerSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    MigrateOrganizationRemoteSessionIssuerResult,
+    MigrateRemoteSessionIssuerResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +73,13 @@ export function organizationRemoteSessionIssuersMigrate(
 
 async function $do(
   client: GramCore,
-  request: MigrateOrganizationRemoteSessionIssuerRequest,
-  security?: MigrateOrganizationRemoteSessionIssuerSecurity | undefined,
+  request: MigrateToGlobalRemoteSessionIssuerRequest,
+  security?: MigrateToGlobalRemoteSessionIssuerSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      MigrateOrganizationRemoteSessionIssuerResult,
+      MigrateRemoteSessionIssuerResult,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -96,29 +96,24 @@ async function $do(
   const parsed = safeParse(
     request,
     (value) =>
-      z.parse(
-        MigrateOrganizationRemoteSessionIssuerRequest$outboundSchema,
-        value,
-      ),
+      z.parse(MigrateToGlobalRemoteSessionIssuerRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.MigrateIssuerRequestBody, {
-    explode: true,
-  });
+  const body = encodeJSON(
+    "body",
+    payload.MigrateRemoteSessionIssuerRequestBody,
+    { explode: true },
+  );
 
-  const path = pathToFunc("/rpc/organizationRemoteSessionIssuers.migrate")();
+  const path = pathToFunc("/rpc/adminRemoteSessions.migrateToGlobalIssuer")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
     Accept: "application/json",
-    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
-      explode: false,
-      charEncoding: "none",
-    }),
     "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
@@ -133,19 +128,12 @@ async function $do(
         value: security?.sessionHeaderGramSession,
       },
     ],
-    [
-      {
-        fieldName: "Gram-Key",
-        type: "apiKey:header",
-        value: security?.apikeyHeaderGramKey,
-      },
-    ],
   );
 
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "migrateOrganizationRemoteSessionIssuer",
+    operationID: "migrateToGlobalRemoteSessionIssuer",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -189,7 +177,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    MigrateOrganizationRemoteSessionIssuerResult,
+    MigrateRemoteSessionIssuerResult,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -200,7 +188,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, MigrateOrganizationRemoteSessionIssuerResult$inboundSchema),
+    M.json(200, MigrateRemoteSessionIssuerResult$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

@@ -139,7 +139,7 @@ func UsageCommands() []string {
 		"remote-session-clients (create-remote-session-client|create-cimd|clone-client-fromoauth-proxy-provider|update-remote-session-client|attach-user-session-issuer|detach-user-session-issuer|list-remote-session-clients|get-remote-session-client|delete-remote-session-client)",
 		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|update-issuer|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|fetch-issuer-metadata|refresh-issuer-metadata)",
 		"remote-session-issuers (fetch-remote-session-issuer-metadata|refresh-remote-session-issuer-metadata|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|delete-remote-session-issuer)",
-		"admin-remote-sessions (create-global-issuer|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|create-global-client|list-global-clients|get-global-client|update-global-client|delete-global-client)",
+		"admin-remote-sessions (create-global-issuer|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|create-global-client|list-global-clients|get-global-client|update-global-client|delete-global-client|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer)",
 		"organization-remote-sessions (list-client-sessions|revoke-session|refresh-session|revoke-all-client-sessions)",
 		"remote-sessions (list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
@@ -1994,6 +1994,21 @@ func ParseEndpoint(
 		adminRemoteSessionsDeleteGlobalClientIDFlag           = adminRemoteSessionsDeleteGlobalClientFlags.String("id", "REQUIRED", "")
 		adminRemoteSessionsDeleteGlobalClientSessionTokenFlag = adminRemoteSessionsDeleteGlobalClientFlags.String("session-token", "", "")
 
+		adminRemoteSessionsListGlobalIssuerConvergenceCandidatesFlags            = flag.NewFlagSet("list-global-issuer-convergence-candidates", flag.ExitOnError)
+		adminRemoteSessionsListGlobalIssuerConvergenceCandidatesTargetIDFlag     = adminRemoteSessionsListGlobalIssuerConvergenceCandidatesFlags.String("target-id", "REQUIRED", "")
+		adminRemoteSessionsListGlobalIssuerConvergenceCandidatesCursorFlag       = adminRemoteSessionsListGlobalIssuerConvergenceCandidatesFlags.String("cursor", "", "")
+		adminRemoteSessionsListGlobalIssuerConvergenceCandidatesLimitFlag        = adminRemoteSessionsListGlobalIssuerConvergenceCandidatesFlags.String("limit", "", "")
+		adminRemoteSessionsListGlobalIssuerConvergenceCandidatesSessionTokenFlag = adminRemoteSessionsListGlobalIssuerConvergenceCandidatesFlags.String("session-token", "", "")
+
+		adminRemoteSessionsGetGlobalIssuerMigratePreflightFlags            = flag.NewFlagSet("get-global-issuer-migrate-preflight", flag.ExitOnError)
+		adminRemoteSessionsGetGlobalIssuerMigratePreflightSourceIDFlag     = adminRemoteSessionsGetGlobalIssuerMigratePreflightFlags.String("source-id", "REQUIRED", "")
+		adminRemoteSessionsGetGlobalIssuerMigratePreflightTargetIDFlag     = adminRemoteSessionsGetGlobalIssuerMigratePreflightFlags.String("target-id", "REQUIRED", "")
+		adminRemoteSessionsGetGlobalIssuerMigratePreflightSessionTokenFlag = adminRemoteSessionsGetGlobalIssuerMigratePreflightFlags.String("session-token", "", "")
+
+		adminRemoteSessionsMigrateToGlobalIssuerFlags            = flag.NewFlagSet("migrate-to-global-issuer", flag.ExitOnError)
+		adminRemoteSessionsMigrateToGlobalIssuerBodyFlag         = adminRemoteSessionsMigrateToGlobalIssuerFlags.String("body", "REQUIRED", "")
+		adminRemoteSessionsMigrateToGlobalIssuerSessionTokenFlag = adminRemoteSessionsMigrateToGlobalIssuerFlags.String("session-token", "", "")
+
 		organizationRemoteSessionsFlags = flag.NewFlagSet("organization-remote-sessions", flag.ContinueOnError)
 
 		organizationRemoteSessionsListClientSessionsFlags            = flag.NewFlagSet("list-client-sessions", flag.ExitOnError)
@@ -3652,6 +3667,9 @@ func ParseEndpoint(
 	adminRemoteSessionsGetGlobalClientFlags.Usage = adminRemoteSessionsGetGlobalClientUsage
 	adminRemoteSessionsUpdateGlobalClientFlags.Usage = adminRemoteSessionsUpdateGlobalClientUsage
 	adminRemoteSessionsDeleteGlobalClientFlags.Usage = adminRemoteSessionsDeleteGlobalClientUsage
+	adminRemoteSessionsListGlobalIssuerConvergenceCandidatesFlags.Usage = adminRemoteSessionsListGlobalIssuerConvergenceCandidatesUsage
+	adminRemoteSessionsGetGlobalIssuerMigratePreflightFlags.Usage = adminRemoteSessionsGetGlobalIssuerMigratePreflightUsage
+	adminRemoteSessionsMigrateToGlobalIssuerFlags.Usage = adminRemoteSessionsMigrateToGlobalIssuerUsage
 
 	organizationRemoteSessionsFlags.Usage = organizationRemoteSessionsUsage
 	organizationRemoteSessionsListClientSessionsFlags.Usage = organizationRemoteSessionsListClientSessionsUsage
@@ -5251,6 +5269,15 @@ func ParseEndpoint(
 
 			case "delete-global-client":
 				epf = adminRemoteSessionsDeleteGlobalClientFlags
+
+			case "list-global-issuer-convergence-candidates":
+				epf = adminRemoteSessionsListGlobalIssuerConvergenceCandidatesFlags
+
+			case "get-global-issuer-migrate-preflight":
+				epf = adminRemoteSessionsGetGlobalIssuerMigratePreflightFlags
+
+			case "migrate-to-global-issuer":
+				epf = adminRemoteSessionsMigrateToGlobalIssuerFlags
 
 			}
 
@@ -7154,6 +7181,15 @@ func ParseEndpoint(
 			case "delete-global-client":
 				endpoint = c.DeleteGlobalClient()
 				data, err = adminremotesessionsc.BuildDeleteGlobalClientPayload(*adminRemoteSessionsDeleteGlobalClientIDFlag, *adminRemoteSessionsDeleteGlobalClientSessionTokenFlag)
+			case "list-global-issuer-convergence-candidates":
+				endpoint = c.ListGlobalIssuerConvergenceCandidates()
+				data, err = adminremotesessionsc.BuildListGlobalIssuerConvergenceCandidatesPayload(*adminRemoteSessionsListGlobalIssuerConvergenceCandidatesTargetIDFlag, *adminRemoteSessionsListGlobalIssuerConvergenceCandidatesCursorFlag, *adminRemoteSessionsListGlobalIssuerConvergenceCandidatesLimitFlag, *adminRemoteSessionsListGlobalIssuerConvergenceCandidatesSessionTokenFlag)
+			case "get-global-issuer-migrate-preflight":
+				endpoint = c.GetGlobalIssuerMigratePreflight()
+				data, err = adminremotesessionsc.BuildGetGlobalIssuerMigratePreflightPayload(*adminRemoteSessionsGetGlobalIssuerMigratePreflightSourceIDFlag, *adminRemoteSessionsGetGlobalIssuerMigratePreflightTargetIDFlag, *adminRemoteSessionsGetGlobalIssuerMigratePreflightSessionTokenFlag)
+			case "migrate-to-global-issuer":
+				endpoint = c.MigrateToGlobalIssuer()
+				data, err = adminremotesessionsc.BuildMigrateToGlobalIssuerPayload(*adminRemoteSessionsMigrateToGlobalIssuerBodyFlag, *adminRemoteSessionsMigrateToGlobalIssuerSessionTokenFlag)
 			}
 		case "organization-remote-sessions":
 			c := organizationremotesessionsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -15345,7 +15381,7 @@ func organizationRemoteSessionIssuersUsage() {
 	fmt.Fprintln(os.Stderr, `    delete-issuer: Soft-delete any remote_session_issuer (organizational or project-specific) in the caller's organization. Blocked when any remote_session_clients still reference it. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    move-issuer: Re-scope a remote_session_issuer in the caller's organization: provide a project_id (which must belong to the organization) to make it project-specific, or omit it to make it organization-level (project_id NULL, inherited by every project). Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    get-issuer-migrate-preflight: Authoritative impact summary for migrating a remote_session_issuer's clients onto another issuer: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Requires org:read.`)
-	fmt.Fprintln(os.Stderr, `    migrate-issuer: Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller's organization and agree on issuer, token_endpoint, and authorization_endpoint. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    migrate-issuer: Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller's organization and agree on issuer, token_endpoint, and authorization_endpoint. The issuer identifier is compared canonically, so two spellings differing only by a trailing slash or an explicit default port count as the same upstream; the two endpoints are compared literally. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    fetch-issuer-metadata: Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for organizationRemoteSessionIssuers.create. Keyed by issuer URL; no record need exist and nothing is persisted. The organization-scoped counterpart of remoteSessionIssuers.fetchMetadata, so creating an organization-level issuer no longer has to borrow an unrelated project's scope. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    refresh-issuer-metadata: Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id; serves both organizational and project-specific issuers in the caller's organization. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr)
@@ -15542,7 +15578,7 @@ func organizationRemoteSessionIssuersMigrateIssuerUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller's organization and agree on issuer, token_endpoint, and authorization_endpoint. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller's organization and agree on issuer, token_endpoint, and authorization_endpoint. The issuer identifier is compared canonically, so two spellings differing only by a trailing slash or an explicit default port count as the same upstream; the two endpoints are compared literally. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -15815,6 +15851,9 @@ func adminRemoteSessionsUsage() {
 	fmt.Fprintln(os.Stderr, `    get-global-client: Get a global remote_session_client by id. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    update-global-client: Rotate the client_secret or change non-issuer settings on a global remote_session_client. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    delete-global-client: Soft-delete a global remote_session_client. Cascades to the remote_sessions minted against it. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    list-global-issuer-convergence-candidates: List the organization- and project-level remote_session_issuers that describe the same upstream authorization server as a given global issuer, and so could be consolidated onto it. Matching is by canonical issuer URL, collapsing trailing-slash and default-port spellings. Each candidate carries its owning organization, the number of clients that would move, and the metadata differences that would block or accompany the migration. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    get-global-issuer-migrate-preflight: Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Also reports how many tenant-owned clients the target already carries, since those permanently block deleting it. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    migrate-to-global-issuer: Consolidate an organization- or project-level remote_session_issuer onto a global one: re-point every client from the source issuer onto the target, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. The source may belong to any organization; the target must be a global issuer. Both must agree on issuer (compared canonically), token_endpoint, and authorization_endpoint. One source per call. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s admin-remote-sessions COMMAND --help\n", os.Args[0])
@@ -16063,6 +16102,72 @@ func adminRemoteSessionsDeleteGlobalClientUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions delete-global-client --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func adminRemoteSessionsListGlobalIssuerConvergenceCandidatesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-remote-sessions list-global-issuer-convergence-candidates", os.Args[0])
+	fmt.Fprint(os.Stderr, " -target-id STRING")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the organization- and project-level remote_session_issuers that describe the same upstream authorization server as a given global issuer, and so could be consolidated onto it. Matching is by canonical issuer URL, collapsing trailing-slash and default-port spellings. Each candidate carries its owning organization, the number of clients that would move, and the metadata differences that would block or accompany the migration. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -target-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions list-global-issuer-convergence-candidates --target-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"abc123\" --limit 1 --session-token \"abc123\"")
+}
+
+func adminRemoteSessionsGetGlobalIssuerMigratePreflightUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-remote-sessions get-global-issuer-migrate-preflight", os.Args[0])
+	fmt.Fprint(os.Stderr, " -source-id STRING")
+	fmt.Fprint(os.Stderr, " -target-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Also reports how many tenant-owned clients the target already carries, since those permanently block deleting it. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -source-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -target-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions get-global-issuer-migrate-preflight --source-id \"550e8400-e29b-41d4-a716-446655440000\" --target-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func adminRemoteSessionsMigrateToGlobalIssuerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-remote-sessions migrate-to-global-issuer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Consolidate an organization- or project-level remote_session_issuer onto a global one: re-point every client from the source issuer onto the target, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. The source may belong to any organization; the target must be a global issuer. Both must agree on issuer (compared canonically), token_endpoint, and authorization_endpoint. One source per call. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions migrate-to-global-issuer --body '{\n      \"source_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"target_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
 }
 
 // organizationRemoteSessionsUsage displays the usage of the
