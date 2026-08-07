@@ -202,14 +202,15 @@ func seedRequest(t *testing.T, ctx context.Context, ti *testInstance, projectID 
 	}
 
 	request, err := ti.repo.UpsertApprovalRequest(ctx, repo.UpsertApprovalRequestParams{
-		OrganizationID: ti.organizationID,
-		ProjectID:      projectID,
-		TargetKind:     "server_url",
-		TargetRaw:      seed.targetKey,
-		TargetKey:      seed.targetKey,
-		ArtifactRef:    conv.ToPGText("npm:@scope/pkg@1.2.3"),
-		VersionPinned:  true,
-		Status:         seed.status,
+		OrganizationID:            ti.organizationID,
+		ProjectID:                 projectID,
+		TargetKind:                "server_url",
+		TargetRaw:                 seed.targetKey,
+		TargetKey:                 seed.targetKey,
+		ArtifactRef:               conv.ToPGText("npm:@scope/pkg@1.2.3"),
+		VersionPinned:             true,
+		Status:                    seed.status,
+		RiskPolicyBypassRequestID: uuid.NullUUID{},
 	})
 	require.NoError(t, err)
 
@@ -227,14 +228,15 @@ func seedUnresolvedRequest(t *testing.T, ctx context.Context, ti *testInstance, 
 	t.Helper()
 
 	request, err := ti.repo.UpsertApprovalRequest(ctx, repo.UpsertApprovalRequestParams{
-		OrganizationID: ti.organizationID,
-		ProjectID:      projectID,
-		TargetKind:     "stdio_command",
-		TargetRaw:      raw,
-		TargetKey:      raw,
-		ArtifactRef:    pgtype.Text{},
-		VersionPinned:  false,
-		Status:         "requested",
+		OrganizationID:            ti.organizationID,
+		ProjectID:                 projectID,
+		TargetKind:                "stdio_command",
+		TargetRaw:                 raw,
+		TargetKey:                 raw,
+		ArtifactRef:               pgtype.Text{},
+		VersionPinned:             false,
+		Status:                    "requested",
+		RiskPolicyBypassRequestID: uuid.NullUUID{},
 	})
 	require.NoError(t, err)
 
@@ -255,7 +257,7 @@ func seedEvidence(t *testing.T, ctx context.Context, ti *testInstance, projectID
 func seedRequester(t *testing.T, ctx context.Context, ti *testInstance, projectID, requestID uuid.UUID, userID, note string) {
 	t.Helper()
 
-	_, err := ti.repo.CreateApprovalRequestRequester(ctx, repo.CreateApprovalRequestRequesterParams{
+	_, err := ti.repo.UpsertApprovalRequestRequester(ctx, repo.UpsertApprovalRequestRequesterParams{
 		OrganizationID:       ti.organizationID,
 		ProjectID:            projectID,
 		McpApprovalRequestID: requestID,

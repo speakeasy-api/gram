@@ -9,6 +9,7 @@ package mcpapproval
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -29,11 +30,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/identity"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -50,6 +54,17 @@ const (
 	decisionApproved = "approved"
 	decisionDenied   = "denied"
 )
+
+// targetKindServerURL and targetKindStdioCommand are the reference namespaces
+// a request may name. Validated here rather than with a database CHECK, per
+// the schema conventions.
+const (
+	targetKindServerURL    = "server_url"
+	targetKindStdioCommand = "stdio_command"
+)
+
+// statusRequested is the status a raised or reopened request carries.
+const statusRequested = "requested"
 
 // statusFor maps a decision onto the status its request moves to.
 var statusFor = map[string]string{
@@ -134,6 +149,239 @@ func (s *Service) project(ctx context.Context, scope authz.Scope) (uuid.UUID, st
 	}
 
 	return *authCtx.ProjectID, authCtx.ActiveOrganizationID, nil
+}
+
+// member resolves the caller's project and enforces the feature gate without
+// demanding a scope. Raising a request deliberately carries no RBAC grant:
+// the people asking typically cannot reach the dashboard, and a scope for it
+// would either be ungranted for everyone who needs it or granted so
+// universally it means nothing — the same posture as the block and bypass
+// surfaces. Authentication and project membership still apply, and the
+// product-feature gate holds either way.
+func (s *Service) member(ctx context.Context) (uuid.UUID, *contextvalues.AuthContext, error) {
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	if authCtx == nil || authCtx.ProjectID == nil || authCtx.UserID == "" {
+		return uuid.Nil, nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	enabled, err := s.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureMCPApproval)
+	if err != nil {
+		return uuid.Nil, nil, oops.E(oops.CodeUnexpected, err, "check mcp approval feature").LogError(ctx, s.logger)
+	}
+	if !enabled {
+		return uuid.Nil, nil, oops.E(oops.CodeForbidden, nil, "MCP approval is not enabled for this organization")
+	}
+
+	return *authCtx.ProjectID, authCtx, nil
+}
+
+// admission is one ask for a server, ready to be written.
+type admission struct {
+	targetKind string
+	targetRaw  string
+	targetKey  string
+
+	// bypassRequestID links the promotion source, when there is one.
+	bypassRequestID uuid.NullUUID
+
+	// requesterID and requesterEmail identify who asked. An empty requesterID
+	// records the request without a requester row — a block hook cannot
+	// always resolve a user, and losing the ask entirely would be worse than
+	// losing its attribution.
+	requesterID    string
+	requesterEmail *string
+	note           *string
+
+	// actor is who performed this API call, which for a promotion is the
+	// admin rather than the original requester.
+	actor string
+
+	// actorEmail is the actor's email, when known.
+	actorEmail *string
+}
+
+// admit records one ask: the request row is created or reopened, the
+// requester is attached, and the create is audited — atomically.
+func (s *Service) admit(ctx context.Context, projectID uuid.UUID, organizationID string, adm admission) (*gen.ApprovalRequestSummary, error) {
+	resolved := identity.Resolve(adm.targetRaw)
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error recording approval request").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	queries := repo.New(s.db).WithTx(dbtx)
+
+	request, err := queries.UpsertApprovalRequest(ctx, repo.UpsertApprovalRequestParams{
+		OrganizationID:            organizationID,
+		ProjectID:                 projectID,
+		TargetKind:                adm.targetKind,
+		TargetRaw:                 adm.targetRaw,
+		TargetKey:                 adm.targetKey,
+		ArtifactRef:               conv.ToPGTextEmpty(resolved.ArtifactRef),
+		VersionPinned:             resolved.VersionPinned,
+		Status:                    statusRequested,
+		RiskPolicyBypassRequestID: adm.bypassRequestID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error recording approval request").LogError(ctx, s.logger)
+	}
+
+	if adm.requesterID != "" {
+		if _, err := queries.UpsertApprovalRequestRequester(ctx, repo.UpsertApprovalRequestRequesterParams{
+			OrganizationID:       organizationID,
+			ProjectID:            projectID,
+			McpApprovalRequestID: request.ID,
+			UserID:               adm.requesterID,
+			UserEmail:            conv.PtrToPGTextEmpty(adm.requesterEmail),
+			Note:                 conv.PtrToPGTextEmpty(adm.note),
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error recording requester").LogError(ctx, s.logger)
+		}
+	}
+
+	if err := s.audit.LogMCPApprovalRequestCreate(ctx, dbtx, audit.LogMCPApprovalRequestCreateEvent{
+		OrganizationID:   organizationID,
+		ProjectID:        projectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, adm.actor),
+		ActorDisplayName: adm.actorEmail,
+		ActorSlug:        nil,
+		RequestURN:       urn.NewMCPApprovalRequest(request.ID),
+		TargetRaw:        adm.targetRaw,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error auditing approval request").LogError(ctx, s.logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error recording approval request").LogError(ctx, s.logger)
+	}
+
+	// Re-read for the response so the summary carries the requester count the
+	// write just changed.
+	row, err := repo.New(s.db).GetApprovalRequest(ctx, repo.GetApprovalRequestParams{ID: request.ID, ProjectID: projectID})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading approval request").LogError(ctx, s.logger)
+	}
+
+	return summaryView(fromGetRow(row)), nil
+}
+
+func (s *Service) CreateRequest(ctx context.Context, payload *gen.CreateRequestPayload) (*gen.ApprovalRequestSummary, error) {
+	projectID, authCtx, err := s.member(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	raw := strings.TrimSpace(payload.Target)
+	if raw == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "a server reference is required")
+	}
+
+	var key string
+	switch payload.TargetKind {
+	case targetKindServerURL:
+		// The same canonicalization the shadow-MCP inventory is keyed by, so
+		// a request, a block, and the org's own traffic all converge on one
+		// key for one server.
+		inventoryURL, ok := shadowmcp.CanonicalizeInventoryURL(raw)
+		if !ok {
+			return nil, oops.E(oops.CodeBadRequest, nil, "target is not a valid server URL")
+		}
+		key = inventoryURL.CanonicalURL
+	case targetKindStdioCommand:
+		// Collapsed whitespace, so cosmetic spacing differences do not split
+		// one server into two reviews.
+		key = strings.Join(strings.Fields(raw), " ")
+	default:
+		return nil, oops.E(oops.CodeBadRequest, nil, "target_kind must be server_url or stdio_command")
+	}
+
+	var note *string
+	if payload.Note != nil && strings.TrimSpace(*payload.Note) != "" {
+		trimmed := strings.TrimSpace(*payload.Note)
+		note = &trimmed
+	}
+
+	return s.admit(ctx, projectID, authCtx.ActiveOrganizationID, admission{
+		targetKind:      payload.TargetKind,
+		targetRaw:       raw,
+		targetKey:       key,
+		bypassRequestID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		requesterID:     authCtx.UserID,
+		requesterEmail:  authCtx.Email,
+		note:            note,
+		actor:           authCtx.UserID,
+		actorEmail:      authCtx.Email,
+	})
+}
+
+func (s *Service) Promote(ctx context.Context, payload *gen.PromotePayload) (*gen.ApprovalRequestSummary, error) {
+	projectID, _, err := s.project(ctx, authz.ScopeMCPApprovalDecide)
+	if err != nil {
+		return nil, err
+	}
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	if authCtx == nil || authCtx.UserID == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	bypassID, err := uuid.Parse(payload.RiskPolicyBypassRequestID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid bypass request id")
+	}
+
+	// Resolved under the caller's project, never by id alone. The id arrives
+	// from the caller, and there is no database-level pin for this pair (see
+	// AIS-470), so this read is the primary control against promoting another
+	// project's bypass request into this project's queue.
+	bypass, err := repo.New(s.db).GetBypassRequestForPromotion(ctx, repo.GetBypassRequestForPromotionParams{
+		ID:        bypassID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "bypass request not found")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading bypass request").LogError(ctx, s.logger)
+	}
+
+	// Only a bypass request that names a server can become a server review. A
+	// whole-policy bypass names no server to gather evidence about.
+	serverURL := bypassServerURL(bypass)
+	if serverURL == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "bypass request names no server")
+	}
+
+	inventoryURL, ok := shadowmcp.CanonicalizeInventoryURL(serverURL)
+	if !ok {
+		return nil, oops.E(oops.CodeBadRequest, nil, "bypass request's server reference is not a valid URL")
+	}
+
+	return s.admit(ctx, projectID, bypass.OrganizationID, admission{
+		targetKind:      targetKindServerURL,
+		targetRaw:       serverURL,
+		targetKey:       inventoryURL.CanonicalURL,
+		bypassRequestID: uuid.NullUUID{UUID: bypass.ID, Valid: true},
+		requesterID:     bypass.RequesterUserID,
+		requesterEmail:  conv.FromPGText[string](bypass.RequesterEmail),
+		note:            conv.FromPGText[string](bypass.Note),
+		actor:           authCtx.UserID,
+		actorEmail:      authCtx.Email,
+	})
+}
+
+// bypassServerURL extracts the server a bypass request was raised about.
+func bypassServerURL(bypass repo.GetBypassRequestForPromotionRow) string {
+	var dimensions map[string]string
+	if err := json.Unmarshal(bypass.TargetDimensions, &dimensions); err == nil {
+		if serverURL := strings.TrimSpace(dimensions[authz.SelectorKeyServerURL]); serverURL != "" {
+			return serverURL
+		}
+	}
+
+	return strings.TrimSpace(conv.FromPGTextOrEmpty[string](bypass.TargetKey))
 }
 
 func (s *Service) ListRequests(ctx context.Context, payload *gen.ListRequestsPayload) (*gen.ListApprovalRequestsResult, error) {
