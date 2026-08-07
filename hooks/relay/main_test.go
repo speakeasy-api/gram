@@ -10,6 +10,8 @@ import (
 // pointed at the test's fake ingest server, whose scheduled export races the
 // test's request-count assertions. Individual telemetry tests opt back in by
 // clearing the variable with t.Setenv.
+// Alternative seam: agenthooks' telemetry.Config.ExportInterval could replace
+// this kill switch by making export timing deterministic (not adopted yet).
 func TestMain(m *testing.M) {
 	if err := os.Setenv("GRAM_HOOKS_DISABLE_TELEMETRY", "1"); err != nil {
 		panic(err)
