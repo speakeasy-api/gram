@@ -64,7 +64,6 @@ import (
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/gram/server/internal/oauth"
 	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -127,7 +126,6 @@ type Service struct {
 	// cimd.fetch.attempts).
 	cimdAdmissionMetrics   *admission.Metrics
 	toolProxy              *gateway.ToolProxy
-	oauthService           OAuthService
 	oauthRepo              *oauth_repo.Queries
 	billingTracker         billing.Tracker
 	billingRepository      billing.Repository
@@ -276,7 +274,6 @@ func NewService(
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
 	funcCaller functions.ToolCaller,
-	oauthService OAuthService,
 	billingTracker billing.Tracker,
 	billingRepository billing.Repository,
 	telemLogger *tm.Logger,
@@ -349,7 +346,6 @@ func NewService(
 			funcCaller,
 			platformSvc,
 		),
-		oauthService:           oauthService,
 		oauthRepo:              oauth_repo.New(db),
 		billingTracker:         billingTracker,
 		billingRepository:      billingRepository,
@@ -404,6 +400,10 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "POST", PlatformToolsetRoute, oops.ErrHandle(service.logger, service.ServePlatformToolset).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
+	// Backwards-compat: remote_session_clients flagged LegacyCallbackUrl were
+	// registered upstream against the retired oauth_proxy_servers /oauth/callback.
+	// Keep it mounted so their responses forward into remote_login_callback.
+	o11y.AttachHandler(mux, "GET", "/oauth/callback", oops.ErrHandle(service.logger, service.HandleLegacyProxyCallback).ServeHTTP)
 	// Public, unauthenticated outbound-CIMD document endpoint. Deployment-global
 	// (not slug-scoped): clients are addressed by their globally unique id.
 	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-client/{id}", oops.ErrHandle(service.logger, service.HandleClientMetadataDocument).ServeHTTP)
@@ -442,6 +442,14 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 // unexported manager field.
 func (s *Service) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Request) error {
 	return s.remoteChallengeMgr.HandleRemoteLoginCallback(w, r) //nolint:wrapcheck // thin passthrough; the inner handler already writes the HTTP response.
+}
+
+// HandleLegacyProxyCallback is the chi handler at `GET /oauth/callback`. Thin
+// passthrough to remotesessions.ChallengeManager: it forwards legacy
+// oauth_proxy_servers-era callbacks (remote_session_clients flagged
+// LegacyCallbackUrl) into /mcp/remote_login_callback.
+func (s *Service) HandleLegacyProxyCallback(w http.ResponseWriter, r *http.Request) error {
+	return s.remoteChallengeMgr.HandleLegacyProxyCallback(w, r) //nolint:wrapcheck // thin passthrough; the inner handler already writes the HTTP response.
 }
 
 // HandleClientMetadataDocument is the public outbound-CIMD document endpoint at
@@ -770,26 +778,6 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		return oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for issuer-gated toolset").LogError(ctx, s.logger)
 	}
 
-	var oAuthProxyProvider *oauth_repo.OauthProxyProvider
-	if toolset.OauthProxyServerID.Valid {
-		providers, err := s.oauthRepo.ListOAuthProxyProvidersByServer(
-			ctx,
-			oauth_repo.ListOAuthProxyProvidersByServerParams{
-				OauthProxyServerID: toolset.OauthProxyServerID.UUID,
-				ProjectID:          toolset.ProjectID,
-			},
-		)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to load OAuth proxy providers").LogError(ctx, s.logger)
-		}
-
-		if len(providers) == 0 {
-			return oops.E(oops.CodeUnexpected, nil, "no OAuth proxy providers found").LogError(ctx, s.logger)
-		}
-
-		oAuthProxyProvider = &providers[0]
-	}
-
 	// Token extraction — best effort for public MCPs with OAuth.
 	// We collect tokens if present but don't return 401 here.
 	// checkToolsetSecurity below enforces auth requirements and returns
@@ -797,7 +785,7 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	//
 	// Private MCPs still enforce identity auth at this level since that's user
 	// identity, not per-tool security.
-	oauthRequired := toolset.ExternalOauthServerID.Valid || (oAuthProxyProvider != nil)
+	oauthRequired := toolset.ExternalOauthServerID.Valid
 
 	// Issuer-gated path is fully separate from the legacy switch below: try
 	// validating a user-session JWT; on success stamp ctx and skip the legacy
@@ -847,44 +835,8 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 					Token:                 authToken,
 				})
 			}
-		case toolset.McpIsPublic && oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "custom":
-			// Custom OAuth provider flow — validate and collect tokens if present
-			if authToken != "" {
-				oauthToken, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, authToken)
-				if errors.Is(err, oauth.ErrExpiredExternalSecrets) && oauthToken != nil {
-					s.logger.InfoContext(ctx, "upstream credentials expired, attempting refresh", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
-					var refreshedToken *oauth.Token
-					refreshedToken, err = s.oauthService.RefreshProxyToken(ctx, toolset.ID, oauthToken, oAuthProxyProvider, toolset)
-					if err != nil {
-						s.logger.WarnContext(ctx, "upstream token refresh failed", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug), attr.SlogError(err))
-					} else {
-						oauthToken = refreshedToken
-					}
-				}
-				if err != nil {
-					s.logger.WarnContext(ctx, "OAuth token validation failed", attr.SlogToolsetID(toolset.ID.String()), attr.SlogError(err))
-				} else {
-					s.logger.InfoContext(ctx, "OAuth token validated successfully", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
-				}
-				// Collect upstream secrets so checkToolsetSecurity knows the user
-				// authenticated. We skip this when the Gram access token itself has
-				// expired (ErrExpiredAccessToken) — an expired token must not grant
-				// access. We still collect when only the upstream credentials expired
-				// (ErrExpiredExternalSecrets) because the user's Gram session is
-				// valid; the upstream refresh is best-effort.
-				if oauthToken != nil && !errors.Is(err, oauth.ErrExpiredAccessToken) {
-					for _, externalSecret := range oauthToken.ExternalSecrets {
-						tokenInputs = append(tokenInputs, oauthTokenInputs{
-							securityKeys:          externalSecret.SecurityKeys,
-							remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-							Token:                 externalSecret.Token,
-						})
-					}
-				}
-			}
 		case !toolset.McpIsPublic:
-			isOAuthCapable := oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "gram"
-			ctx, err = s.RequirePrivateIdentityAuth(ctx, w, r, isOAuthCapable, toolset.ID, oauthProtectedResourceURL)
+			ctx, err = s.RequirePrivateIdentityAuth(ctx, w, r, false, toolset.ID, oauthProtectedResourceURL)
 			if err != nil {
 				return err
 			}
@@ -1405,34 +1357,7 @@ func (s *Service) authenticateToken(ctx context.Context, token string, oauthReso
 		return authorizedCtx, nil
 	}
 
-	var oAuthToken *oauth.Token
 	var err error
-	if isOAuthCapable {
-		oAuthToken, err = s.oauthService.ValidateAccessToken(ctx, oauthResourceID, token)
-	}
-	if err == nil && oAuthToken != nil {
-		// OAuth token validated, authenticate with session
-		if len(oAuthToken.ExternalSecrets) == 0 {
-			return ctx, oops.E(oops.CodeUnauthorized, nil, "no session token found")
-		}
-
-		ctx, err = s.sessions.Authenticate(ctx, oAuthToken.ExternalSecrets[0].Token)
-		if err != nil {
-			return ctx, oops.E(oops.CodeUnauthorized, err, "failed to authenticate session")
-		}
-
-		authCtx, ok := contextvalues.GetAuthContext(ctx)
-		if !ok || authCtx == nil {
-			return ctx, oops.E(oops.CodeUnauthorized, nil, "no auth context found")
-		}
-
-		s.logger.InfoContext(ctx, "authenticated via gram OAuth", attr.SlogToolsetID(oauthResourceID.String()))
-		return ctx, nil
-	}
-
-	if errors.Is(err, oauth.ErrExpiredAccessToken) {
-		return ctx, oops.E(oops.CodeUnauthorized, err, "expired access token")
-	}
 
 	// Strategy 2: Try API key authentication (consumer scope)
 	sc := security.APIKeyScheme{
