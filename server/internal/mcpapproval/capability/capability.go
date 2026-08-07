@@ -44,6 +44,16 @@ const (
 	HintFalse
 )
 
+// DeclaresDestructive reports that a server annotated a tool destructive.
+//
+// The single reading of `destructiveHint` in the codebase, so a definition-
+// driven caller assembling approval evidence and a call-driven scanner
+// classifying recorded traffic cannot drift on what the annotation means.
+// An absent annotation is not a declaration, and is not treated as one.
+func DeclaresDestructive(destructiveHint *bool) bool {
+	return HintOf(destructiveHint) == HintTrue
+}
+
 // HintOf converts an optional annotation into a Hint.
 func HintOf(value *bool) Hint {
 	switch {
