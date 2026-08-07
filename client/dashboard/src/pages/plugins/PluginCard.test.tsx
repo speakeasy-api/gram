@@ -12,9 +12,10 @@ import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PluginCard } from "./PluginCard";
 
-const { client, downloadPluginPackage } = vi.hoisted(() => ({
+const { client, downloadPluginPackage, navigate } = vi.hoisted(() => ({
   client: {},
   downloadPluginPackage: vi.fn(),
+  navigate: vi.fn(),
 }));
 
 vi.mock("@/components/card-context-menu", () => ({
@@ -44,6 +45,10 @@ vi.mock("@/components/ui/Dropdown", () => ({
   ),
 }));
 vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => client }));
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
+  useNavigate: () => navigate,
+}));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
     plugins: { detail: { href: (id: string) => `/plugins/${id}` } },
@@ -110,7 +115,12 @@ describe("PluginCard Agent Plugins actions", () => {
       );
     });
     expect(screen.getAllByText("Download Agent Plugins ZIP")).toHaveLength(1);
-    const status = screen.getByLabelText("Agent Plugin standard compatible");
+    const status = screen.getByRole("img", {
+      name: "Agent Plugin standard compatible",
+    });
+    fireEvent.keyDown(status, { key: "Enter" });
+    fireEvent.keyDown(status, { key: " " });
+    expect(navigate).not.toHaveBeenCalled();
     fireEvent.focus(status);
     const tooltip = await screen.findByRole("tooltip");
     expect(tooltip.textContent).toBe(

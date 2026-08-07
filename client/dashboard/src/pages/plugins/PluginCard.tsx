@@ -297,8 +297,10 @@ function AgentPluginsStatus({
   return (
     <SimpleTooltip tooltip={tooltip}>
       <span
+        role="img"
         tabIndex={0}
         aria-label={label}
+        onKeyDown={(event) => event.stopPropagation()}
         className={cn(
           "inline-flex h-8 w-8 items-center justify-center border",
           compatible
