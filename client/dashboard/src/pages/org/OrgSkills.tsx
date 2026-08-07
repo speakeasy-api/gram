@@ -24,9 +24,7 @@ export default function OrgSkills(): JSX.Element {
             </Text>
           </div>
 
-          <div className="border-border bg-card max-w-2xl border p-6">
-            <SkillContentUploadSetting />
-          </div>
+          <SkillContentUploadSetting className="border-border bg-card max-w-2xl border p-6" />
 
           <SkillEfficacySettingsSection />
         </RequireScope>
