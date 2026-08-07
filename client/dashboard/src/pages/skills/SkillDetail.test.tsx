@@ -454,12 +454,12 @@ describe("SkillDetail", () => {
     ).toBeTruthy();
   });
 
-  it("keeps the archive action legible on hover and archives the skill", async () => {
+  it("uses the destructive primary archive action and archives the skill", async () => {
     testState.archive.mutateAsync.mockResolvedValue(undefined);
     render(<SkillDetail />);
     const archiveButton = screen.getByRole("button", { name: "Archive" });
     expect(archiveButton.getAttribute("data-variant")).toBe(
-      "destructive-secondary",
+      "destructive-primary",
     );
 
     fireEvent.click(archiveButton);
