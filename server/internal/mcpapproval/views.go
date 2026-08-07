@@ -3,6 +3,8 @@ package mcpapproval
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"io"
 	"time"
 
 	"github.com/google/uuid"
@@ -121,7 +123,9 @@ func rawEvidence(raw []byte) any {
 	// The whole input must be one value. Trailing content means a payload
 	// this function does not understand, and half a document read as the
 	// whole of what is known is exactly what the nil contract forbids.
-	if decoder.More() {
+	// Token rather than More: More reports false for a trailing `]` or `}`,
+	// so `{"a":1}]` would otherwise slip through.
+	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
 		return nil
 	}
 

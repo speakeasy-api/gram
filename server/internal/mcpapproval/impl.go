@@ -269,6 +269,17 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	// Parsed before any database work, so a malformed id costs no
+	// transaction and never locks the request row.
+	var citedReportID uuid.NullUUID
+	if payload.ResearchReportID != nil {
+		reportID, err := uuid.Parse(*payload.ResearchReportID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid research report id")
+		}
+		citedReportID = uuid.NullUUID{UUID: reportID, Valid: true}
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording decision").LogError(ctx, s.logger)
@@ -295,14 +306,9 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 	// A cited report is resolved against the request being decided and the
 	// caller's project before it is written, so a decision can never
 	// attribute research about one server to another.
-	var citedReport uuid.NullUUID
-	if payload.ResearchReportID != nil {
-		reportID, err := uuid.Parse(*payload.ResearchReportID)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid research report id")
-		}
+	if citedReportID.Valid {
 		if _, err := queries.GetResearchReportForDecision(ctx, repo.GetResearchReportForDecisionParams{
-			ID:                   reportID,
+			ID:                   citedReportID.UUID,
 			McpApprovalRequestID: requestID,
 			ProjectID:            projectID,
 		}); err != nil {
@@ -311,7 +317,6 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "error reading research report").LogError(ctx, s.logger)
 		}
-		citedReport = uuid.NullUUID{UUID: reportID, Valid: true}
 	}
 
 	granted := payload.GrantedPrincipalUrns
@@ -340,7 +345,7 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 		EvidenceSnapshot:     request.CurrentEvidence,
 		EvidenceVersion:      request.EvidenceVersion,
 		GrantedPrincipalUrns: granted,
-		McpResearchReportID:  citedReport,
+		McpResearchReportID:  citedReportID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording decision").LogError(ctx, s.logger)
