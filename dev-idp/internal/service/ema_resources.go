@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -55,6 +56,16 @@ func AttachEmaResources(mux goahttp.Muxer, service *EmaResourcesService) {
 }
 
 func (s *EmaResourcesService) Create(ctx context.Context, p *gen.CreatePayload) (*gen.EmaResource, error) {
+	if err := ema.ValidateResourceSlug(p.Slug); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid slug")
+	}
+	// An empty identifier would mint tokens bound to no protected resource and
+	// skip the resource-claim check at redemption, so the resource would exist
+	// but mean nothing.
+	if strings.TrimSpace(p.ResourceIdentifier) == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "resource_identifier is required")
+	}
+
 	name := p.Slug
 	if p.Name != nil && *p.Name != "" {
 		name = *p.Name
@@ -77,6 +88,15 @@ func (s *EmaResourcesService) Update(ctx context.Context, p *gen.UpdatePayload) 
 	id, err := uuid.Parse(p.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid ema resource id")
+	}
+
+	if p.Slug != nil {
+		if verr := ema.ValidateResourceSlug(*p.Slug); verr != nil {
+			return nil, oops.E(oops.CodeBadRequest, verr, "invalid slug")
+		}
+	}
+	if p.ResourceIdentifier != nil && strings.TrimSpace(*p.ResourceIdentifier) == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "resource_identifier cannot be cleared")
 	}
 
 	row, err := repo.New(s.db).UpdateEmaResource(ctx, repo.UpdateEmaResourceParams{
