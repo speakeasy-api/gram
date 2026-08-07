@@ -210,7 +210,7 @@ func backfillDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx databa
 	}
 
 	if rec.user.State != "" && rec.user.State != string(directorysync.Active) {
-		return backfillDeactivatedDirectoryUser(ctx, logger, dbtx, organizationID, rec)
+		return backfillDeactivatedDirectoryUser(ctx, logger, dbtx, organizationID, rec, existing.UserID)
 	}
 
 	var userID pgtype.Text
@@ -256,15 +256,19 @@ func backfillDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx databa
 // backfillDeactivatedDirectoryUser applies a non-active snapshot state:
 // soft-delete the directory user row and deprovision any live organization
 // relationship, mirroring deactivateDirectoryUser. Directory state is
-// authoritative for access here, and a fresh snapshot cannot be stale, so
-// only an already-deleted relationship short-circuits the deprovision.
-func backfillDeactivatedDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, organizationID string, rec backfillWorkOSDirectoryUser) (postCommitEffects, error) {
+// authoritative for access here, so only an already-deleted relationship
+// short-circuits the deprovision.
+func backfillDeactivatedDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx database.DBTX, organizationID string, rec backfillWorkOSDirectoryUser, storedUserID pgtype.Text) (postCommitEffects, error) {
 	var none postCommitEffects
 	repo := workosrepo.New(dbtx)
 
 	// Resolve the linked Gram user before soft-deleting the directory row:
 	// email is the canonical linkage (mirroring the upsert path), with the
 	// stored user_id as a fallback for directory users whose email changed.
+	// The stored linkage comes from the sync-state row, which includes
+	// soft-deleted rows, so a previously deactivated row that never got
+	// deprovisioned (e.g. an email mismatch at event time) can still be
+	// repaired.
 	var gramUserID string
 	if email := conv.NormalizeEmail(rec.user.Email); email != "" {
 		user, err := usersrepo.New(dbtx).GetUserByEmail(ctx, email)
@@ -276,14 +280,8 @@ func backfillDeactivatedDirectoryUser(ctx context.Context, logger *slog.Logger, 
 			return none, fmt.Errorf("get user by directory email: %w", err)
 		}
 	}
-	if gramUserID == "" {
-		directoryUser, err := repo.GetDirectoryUserByWorkOSID(ctx, rec.user.ID)
-		switch {
-		case err == nil && directoryUser.UserID.Valid:
-			gramUserID = directoryUser.UserID.String
-		case err != nil && !errors.Is(err, pgx.ErrNoRows):
-			return none, fmt.Errorf("get directory user by WorkOS ID: %w", err)
-		}
+	if gramUserID == "" && storedUserID.Valid {
+		gramUserID = storedUserID.String
 	}
 
 	if _, err := repo.DeleteDirectoryUserByWorkOSID(ctx, workosrepo.DeleteDirectoryUserByWorkOSIDParams{
@@ -315,17 +313,18 @@ func backfillDeactivatedDirectoryUser(ctx context.Context, logger *slog.Logger, 
 		return none, nil
 	}
 
-	// The deprovision is stamped with the snapshot time rather than the
-	// user's updated_at so older queued events cannot overwrite it, while
-	// genuinely newer events (e.g. a later re-add) still apply.
-	deprovisionedAt := time.Now().UTC()
+	// The deprovision is stamped with the directory user's updated_at, not
+	// wall-clock time: a membership event that lands between the snapshot
+	// fetch and this write (e.g. a re-add) carries a newer WorkOS timestamp
+	// and must still apply, while events older than the deactivation stay
+	// blocked.
 	effects, err := deprovisionOrganizationAccess(ctx, dbtx, deprovisionOrganizationAccessParams{
 		organizationID:     organizationID,
 		gramUserID:         gramUserID,
 		workosUserID:       rel.WorkosUserID.String,
 		workosMembershipID: rel.WorkosMembershipID.String,
 		eventID:            "",
-		eventUpdatedAt:     deprovisionedAt,
+		eventUpdatedAt:     rec.updatedAt,
 	})
 	if err != nil {
 		return none, fmt.Errorf("deprovision organization access for directory user %q: %w", rec.user.ID, err)
