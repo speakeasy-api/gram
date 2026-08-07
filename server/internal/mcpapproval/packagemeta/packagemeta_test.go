@@ -3,6 +3,7 @@ package packagemeta_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -30,7 +31,10 @@ func serve(t *testing.T, status int, body string) (*httptest.Server, *string) {
 const npmBody = `{
   "name": "@scope/mcp-server",
   "dist-tags": {"latest": "1.2.3"},
-  "time": {"created": "2023-01-15T10:00:00.000Z", "modified": "2026-07-01T12:00:00.000Z"},
+  "time": {
+    "created": "2023-01-15T10:00:00.000Z", "modified": "2026-07-01T12:00:00.000Z",
+    "1.0.0": "2023-01-15T10:00:00.000Z", "1.2.0": "2025-03-10T08:00:00.000Z", "1.2.3": "2026-06-20T09:30:00.000Z"
+  },
   "versions": {"1.0.0": {}, "1.2.0": {}, "1.2.3": {}},
   "maintainers": [{"name": "alice"}, {"name": "bob"}],
   "license": "MIT"
@@ -188,4 +192,67 @@ func TestLookup_UnsupportedRegistryOrEmptyName(t *testing.T) {
 	got, err = client.Lookup(t.Context(), identity.RegistryNPM, "   ")
 	require.NoError(t, err)
 	require.Nil(t, got)
+}
+
+// npm bumps top-level `modified` on any metadata edit, so maintenance recency
+// reads the newest release time instead. A deprecation flagged yesterday must
+// not make a package abandoned for years look actively maintained.
+func TestLookup_NPMLastPublishedIsTheLastRelease(t *testing.T) {
+	t.Parallel()
+
+	body := `{"name":"p","dist-tags":{"latest":"1.0.0"},
+	  "time":{"created":"2020-01-01T00:00:00.000Z","modified":"2026-07-01T00:00:00.000Z","1.0.0":"2020-01-01T00:00:00.000Z"},
+	  "versions":{"1.0.0":{}}}`
+	server, _ := serve(t, http.StatusOK, body)
+	client := packagemeta.NewClient(server.Client(), packagemeta.WithNPMBaseURL(server.URL))
+
+	got, err := client.Lookup(t.Context(), identity.RegistryNPM, "p")
+	require.NoError(t, err)
+	require.Equal(t, 2020, got.LastPublished.Year(), "a metadata edit is not a release")
+}
+
+// A package that ever had a version unpublished carries `time.unpublished` as
+// an object. The lookup must tolerate it rather than fail over a field it
+// never reads.
+func TestLookup_NPMToleratesUnpublishedTimeEntry(t *testing.T) {
+	t.Parallel()
+
+	body := `{"name":"p","dist-tags":{"latest":"2.0.0"},
+	  "time":{"created":"2020-01-01T00:00:00.000Z","1.0.0":"2020-01-01T00:00:00.000Z",
+	          "unpublished":{"time":"2021-06-01T00:00:00.000Z","versions":["1.5.0"]},
+	          "2.0.0":"2022-05-01T00:00:00.000Z"},
+	  "versions":{"2.0.0":{}}}`
+	server, _ := serve(t, http.StatusOK, body)
+	client := packagemeta.NewClient(server.Client(), packagemeta.WithNPMBaseURL(server.URL))
+
+	got, err := client.Lookup(t.Context(), identity.RegistryNPM, "p")
+	require.NoError(t, err)
+	require.Equal(t, 2022, got.LastPublished.Year())
+}
+
+// PEP 508 extras select optional dependencies of the same package, so the
+// lookup strips them instead of asking PyPI for a project that does not exist.
+func TestLookup_PyPIStripsExtras(t *testing.T) {
+	t.Parallel()
+
+	server, path := serve(t, http.StatusOK, pypiBody)
+	client := packagemeta.NewClient(server.Client(), packagemeta.WithPyPIBaseURL(server.URL))
+
+	got, err := client.Lookup(t.Context(), identity.RegistryPyPI, "mcp-thing[sse]")
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	require.Equal(t, "/pypi/mcp-thing/json", *path)
+}
+
+// An oversized registry response fails loudly with a size error, never as a
+// baffling decode failure on a silently truncated body.
+func TestLookup_OversizedResponseIsAClearError(t *testing.T) {
+	t.Parallel()
+
+	server, _ := serve(t, http.StatusOK, strings.Repeat(" ", 33<<20))
+	client := packagemeta.NewClient(server.Client(), packagemeta.WithNPMBaseURL(server.URL))
+
+	_, err := client.Lookup(t.Context(), identity.RegistryNPM, "p")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "byte limit")
 }

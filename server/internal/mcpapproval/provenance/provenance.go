@@ -48,13 +48,19 @@ type Provenance struct {
 	// PublishedAt it is the maintenance-recency signal an approver reads.
 	UpdatedAt time.Time
 
-	// VisitorsLastWeek, VisitorsLastFourWeeks and VisitorsTotal are the
-	// registry's traffic estimates. Rough, and a popularity proxy only — a
-	// widely used server and one nobody has touched are different approval
-	// decisions, but neither is evidence about behaviour.
-	VisitorsLastWeek      int
+	// VisitorsLastWeek is the registry's traffic estimate for the most recent
+	// week. Rough, and a popularity proxy only — a widely used server and one
+	// nobody has touched are different approval decisions, but neither is
+	// evidence about behaviour.
+	VisitorsLastWeek int
+
+	// VisitorsLastFourWeeks is the registry's traffic estimate over the last
+	// four weeks, with the same caveats as VisitorsLastWeek.
 	VisitorsLastFourWeeks int
-	VisitorsTotal         int
+
+	// VisitorsTotal is the registry's all-time traffic estimate, with the
+	// same caveats as VisitorsLastWeek.
+	VisitorsTotal int
 }
 
 // metaDocument mirrors the registry's `_meta` object. The keys are namespaced
@@ -78,8 +84,9 @@ type metaDocument struct {
 // Read parses a registry entry's `_meta` blob.
 //
 // The blob arrives as `any` because it is carried through the cache untyped.
-// Anything unparseable yields a zero Provenance with Catalogued false, since a
-// meta object we cannot read tells us no more than an absent one.
+// Anything unparseable — or parseable but carrying none of the recognized
+// namespaces' content — yields a zero Provenance with Catalogued false, since
+// a meta object that tells us nothing tells us no more than an absent one.
 func Read(meta any) Provenance {
 	none := Provenance{
 		Catalogued: false, Official: false, Status: "", IsLatest: false,
@@ -101,6 +108,16 @@ func Read(meta any) Provenance {
 
 	var doc metaDocument
 	if err := json.Unmarshal(encoded, &doc); err != nil {
+		return none
+	}
+
+	// An entirely zero document means no recognized namespace carried any
+	// value: an empty map, a blob of unrelated keys, or a caller's zero-value
+	// struct all decode to this. Each would otherwise read as Catalogued with
+	// every fact zeroed — the exact "empty panel as clean bill of health"
+	// this flag exists to prevent.
+	var zero metaDocument
+	if doc == zero {
 		return none
 	}
 

@@ -154,3 +154,19 @@ func TestSummarise_UnauthenticatedToolsAreCarried(t *testing.T) {
 	require.Equal(t, []string{"search", "fetch"}, got.UnauthenticatedTools)
 	require.False(t, got.Undeclared)
 }
+
+// A declaration carrying only a registration endpoint has published OAuth
+// authorization-server metadata. It must not read as "nothing was published
+// about authentication" while simultaneously advertising dynamic registration.
+func TestSummarise_RegistrationEndpointAloneIsAnOAuthDeclaration(t *testing.T) {
+	t.Parallel()
+
+	declaration := empty()
+	declaration.RegistrationEndpoint = "https://auth.example.com/register"
+
+	got := authority.Summarise(declaration)
+
+	require.False(t, got.Undeclared)
+	require.True(t, got.DynamicRegistration)
+	require.Equal(t, authority.ModeOAuth, got.Mode)
+}
