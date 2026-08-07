@@ -9,14 +9,15 @@
 #       defaults write com.cmuxterm.app socketControlMode automation
 #     (default `cmuxOnly` rejects any process not started inside cmux)
 #   - the CLI ships inside the app bundle, not on PATH; resolved below
-#   - the socket lives under Application Support, not /tmp
+#   - cmux >= 0.64 required (the CLI auto-discovers the socket; override
+#     with CMUX_SOCKET_PATH if needed)
 set -euo pipefail
 
 cmux() {
   local bin
   bin=$(type -P cmux || true)
   [ -n "$bin" ] || bin="/Applications/cmux.app/Contents/Resources/bin/cmux"
-  CMUX_SOCKET_PATH="${CMUX_SOCKET_PATH:-$HOME/Library/Application Support/cmux/cmux.sock}" "$bin" "$@"
+  "$bin" "$@"
 }
 
 repo="${1:-$(git rev-parse --show-toplevel)}"
