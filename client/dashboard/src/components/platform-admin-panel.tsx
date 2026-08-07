@@ -253,6 +253,24 @@ function ProductFeaturesSection(): ReactElement {
       />
 
       <FeatureToggle
+        label="Enforce Remote Session Refresh"
+        description="Forces Auto refresh on for every user (shown locked on consent screens) and keeps all eligible sessions alive, regardless of per-user settings."
+        icon={RefreshCw}
+        featureName={FeatureName.RemoteSessionAutoRefreshEnforced}
+        enabled={features.remoteSessionAutoRefreshEnforcedEnabled}
+        isPending={
+          isPending &&
+          pendingFeature === FeatureName.RemoteSessionAutoRefreshEnforced
+        }
+        onToggle={handleToggle}
+        error={
+          pendingFeature === FeatureName.RemoteSessionAutoRefreshEnforced
+            ? mutError?.message
+            : undefined
+        }
+      />
+
+      <FeatureToggle
         label="SSO"
         description="Enables WorkOS portal link creation for managing SSO."
         icon={KeyRound}

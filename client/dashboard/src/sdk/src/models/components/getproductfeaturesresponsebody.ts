@@ -50,6 +50,10 @@ export type GetProductFeaturesResponseBody = {
    */
   remoteSessionAutoRefreshEnabled: boolean;
   /**
+   * Whether automatic remote-session refresh is enforced as the organization default: forced on for every user, shown locked on consent screens, and applied by the keepalive regardless of per-session preference
+   */
+  remoteSessionAutoRefreshEnforcedEnabled: boolean;
+  /**
    * Whether SCIM/directory sync setup is enabled for the organization
    */
   scimEnabled: boolean;
@@ -91,6 +95,7 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
     logs_enabled: z.boolean(),
     platform_mcp_enabled: z.boolean(),
     remote_session_auto_refresh_enabled: z.boolean(),
+    remote_session_auto_refresh_enforced_enabled: z.boolean(),
     scim_enabled: z.boolean(),
     session_capture_enabled: z.boolean(),
     skill_capture_metadata_only: z.boolean(),
@@ -112,6 +117,8 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
       "logs_enabled": "logsEnabled",
       "platform_mcp_enabled": "platformMcpEnabled",
       "remote_session_auto_refresh_enabled": "remoteSessionAutoRefreshEnabled",
+      "remote_session_auto_refresh_enforced_enabled":
+        "remoteSessionAutoRefreshEnforcedEnabled",
       "scim_enabled": "scimEnabled",
       "session_capture_enabled": "sessionCaptureEnabled",
       "skill_capture_metadata_only": "skillCaptureMetadataOnly",

@@ -364,6 +364,12 @@
         max-width: 100%;
       }
 
+      .info .auto-refresh-managed {
+        font-family: var(--font-diatype-mono);
+        font-size: 0.8125rem;
+        color: var(--text-default-success);
+      }
+
       .remote-card button.btn-link[aria-disabled="true"] {
         pointer-events: none;
         opacity: 0.65;
@@ -514,6 +520,11 @@
             </span>
           </dt>
           <dd>
+            {{if .AutoRefreshLocked}}
+            <span class="auto-refresh-managed" data-auto-refresh-managed>
+              On · Managed by your organization
+            </span>
+            {{else}}
             <select
               name="auto_refresh"
               form="auto-refresh-form"
@@ -525,11 +536,12 @@
                 Off
               </option>
             </select>
+            {{end}}
           </dd>
           {{end}}
         </dl>
 
-        {{if .AutoRefreshSupported}}
+        {{if and .AutoRefreshSupported (not .AutoRefreshLocked)}}
         <form
           method="POST"
           action="/{{.MCPRouteBase}}/{{.MCPSlug}}/connect/remote-session"

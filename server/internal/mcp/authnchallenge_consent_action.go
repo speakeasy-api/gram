@@ -21,6 +21,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
@@ -99,6 +100,12 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 
 	backURL := fmt.Sprintf("/%s/%s/connect?state=%s", endpoint.RouteBase, endpoint.Slug, url.QueryEscape(stateID))
 
+	// When the organization enforces automatic refresh it is the org default
+	// and cannot be turned off; the form value is never trusted for the
+	// enforced case (a crafted "off" must not disable a managed connection).
+	autoRefreshEnforced := s.platformFeatureChecker != nil &&
+		s.platformFeatureChecker(ctx, endpoint.OrganizationID, string(productfeatures.FeatureRemoteSessionAutoRefreshEnforced))
+
 	switch r.PostForm.Get("action") {
 	case "connect":
 		client, cerr := resolveClient()
@@ -109,6 +116,10 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		if _, posted := r.PostForm["auto_refresh"]; posted {
 			v := r.PostForm.Get("auto_refresh") == "on"
 			autoRefresh = &v
+		}
+		if autoRefreshEnforced {
+			enforced := true
+			autoRefresh = &enforced
 		}
 		challengeURL, berr := s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
 			ID:                  challengeState.ID,
@@ -172,8 +183,12 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 	case "set_auto_refresh":
 		// Page-level "Auto refresh": persist the choice for every bound client.
 		// Clients without a stored session update zero rows; their preference
-		// rides the next connect instead.
+		// rides the next connect instead. Enforcement pins the value on
+		// regardless of the posted choice.
 		enabled := r.PostForm.Get("auto_refresh") == "on"
+		if autoRefreshEnforced {
+			enabled = true
+		}
 		for i := range clients {
 			if _, err := s.remoteChallengeMgr.SetRemoteSessionAutoRefresh(ctx, subject, endpoint.ProjectID, endpoint.UserSessionIssuerID, clients[i].ID, enabled); err != nil {
 				return oops.E(oops.CodeUnexpected, err, "set remote session auto refresh").LogError(ctx, logger)

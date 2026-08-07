@@ -12,6 +12,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -186,6 +188,50 @@ func TestRefreshSweep_RequiresDueOptedInRenewableSession(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRefreshSweep_EnforcedOrgClaimsOptedOutSession(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	// An opted-out session (auto_refresh = false) that would normally be
+	// skipped by the keepalive.
+	sessionID, org := seedSweepSession(t, ctx, ti, "sweep-enforced", true, false, 25*time.Hour, true)
+
+	q := repo.New(ti.conn)
+	window := newSweepWindow()
+
+	// Baseline: without enforcement the opted-out session is not claimed.
+	rows, err := q.ClaimDueRemoteSessionRefreshCandidates(ctx, window.claimParams())
+	require.NoError(t, err)
+	for _, row := range rows {
+		require.NotEqual(t, sessionID, row.ID)
+	}
+
+	// Enabling the organization-level enforcement feature makes every eligible
+	// session due regardless of its persisted per-session preference.
+	_, err = productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
+		OrganizationID: org,
+		FeatureName:    string(productfeatures.FeatureRemoteSessionAutoRefreshEnforced),
+	})
+	require.NoError(t, err)
+
+	rows, err = q.ClaimDueRemoteSessionRefreshCandidates(ctx, window.claimParams())
+	require.NoError(t, err)
+	var claimed bool
+	for _, row := range rows {
+		if row.ID == sessionID {
+			claimed = true
+			require.Equal(t, org, row.OrganizationID)
+		}
+	}
+	require.True(t, claimed, "enforced organization must claim the opted-out session")
+
+	// The authoritative re-check also honors enforcement.
+	candidate, err := q.GetDueRemoteSessionRefreshCandidate(ctx, window.candidateParams(sessionID, org))
+	require.NoError(t, err)
+	require.Equal(t, sessionID, candidate.RemoteSession.ID)
+	require.False(t, candidate.RemoteSession.AutoRefresh, "the per-session preference is untouched; enforcement is applied at query time")
 }
 
 func TestRefreshSweep_CandidateRejectsWrongOrganization(t *testing.T) {
