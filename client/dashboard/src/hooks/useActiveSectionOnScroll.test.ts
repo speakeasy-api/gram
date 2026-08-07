@@ -143,4 +143,31 @@ describe("useActiveSectionOnScroll", () => {
 
     expect(result.current).toBe("c");
   });
+
+  // The sidebar that calls this hook mounts before the page content that owns
+  // the sections, so observing only what exists on the first pass would freeze
+  // the highlight on the first section forever.
+  it("starts tracking sections that mount after the hook runs", async () => {
+    const { result } = renderHook(() =>
+      useActiveSectionOnScroll(["a", "b", "c"], TOP_OFFSET),
+    );
+    act(() => flushFrames());
+
+    // No sections in the DOM yet.
+    expect(observerCallbacks.length).toBe(0);
+
+    createSection("a");
+    createSection("b");
+    createSection("c");
+    setSectionTops({ a: -400, b: TOP_OFFSET - 5, c: 800 });
+
+    // MutationObserver callbacks are delivered as a microtask.
+    await act(async () => {
+      await Promise.resolve();
+      flushFrames();
+    });
+
+    expect(observerCallbacks.length).toBeGreaterThan(0);
+    expect(result.current).toBe("b");
+  });
 });

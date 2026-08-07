@@ -48,10 +48,14 @@ export function useActiveSectionOnScroll(
       return;
     }
 
-    const root = findVerticalScrollParent(document.getElementById(ids[0]!));
+    let scrollRoot: HTMLElement | null = null;
+    let intersectionObserver: IntersectionObserver | null = null;
+    let observedCount = 0;
+    let frame = 0;
 
     const recompute = () => {
-      const lineTop = (root ? root.getBoundingClientRect().top : 0) + topOffset;
+      const lineTop =
+        (scrollRoot ? scrollRoot.getBoundingClientRect().top : 0) + topOffset;
       let current: string | null = null;
       for (const id of ids) {
         const el = document.getElementById(id);
@@ -68,7 +72,6 @@ export function useActiveSectionOnScroll(
       setActiveId(current ?? ids[0] ?? null);
     };
 
-    let frame = 0;
     const scheduleRecompute = () => {
       if (frame !== 0) return;
       frame = window.requestAnimationFrame(() => {
@@ -77,25 +80,54 @@ export function useActiveSectionOnScroll(
       });
     };
 
-    // Shifting the root's top edge down to the activation line makes the
-    // observer fire exactly when a section boundary crosses it, which is the
-    // only moment the active section can change.
-    const observer = new IntersectionObserver(scheduleRecompute, {
-      root: root ?? null,
-      rootMargin: `-${topOffset}px 0px 0px 0px`,
-      threshold: 0,
-    });
-    for (const id of ids) {
-      const el = document.getElementById(id);
-      if (el) observer.observe(el);
-    }
+    // Returns true once every section is being observed.
+    const attach = (): boolean => {
+      const elements: HTMLElement[] = [];
+      for (const id of ids) {
+        const el = document.getElementById(id);
+        if (el) elements.push(el);
+      }
+      // Nothing new to observe; skip rebuilding the observer.
+      if (elements.length === observedCount)
+        return elements.length === ids.length;
 
-    // Seed the initial value once the observed elements are in the DOM.
-    scheduleRecompute();
+      observedCount = elements.length;
+      scrollRoot = findVerticalScrollParent(elements[0]!);
+      intersectionObserver?.disconnect();
+      // Shifting the root's top edge down to the activation line makes the
+      // observer fire exactly when a section boundary crosses it, which is the
+      // only moment the active section can change.
+      intersectionObserver = new IntersectionObserver(scheduleRecompute, {
+        root: scrollRoot ?? null,
+        rootMargin: `-${topOffset}px 0px 0px 0px`,
+        threshold: 0,
+      });
+      for (const el of elements) intersectionObserver.observe(el);
+      scheduleRecompute();
+      return elements.length === ids.length;
+    };
+
+    // This hook runs from the sidebar, which mounts before the page content
+    // that owns the sections — observing nothing here would freeze the
+    // highlight on the first section. Watch for them until all are observed.
+    let mutationObserver: MutationObserver | null = null;
+    if (!attach() && typeof MutationObserver !== "undefined") {
+      mutationObserver = new MutationObserver(() => {
+        if (attach()) {
+          mutationObserver?.disconnect();
+          mutationObserver = null;
+        }
+      });
+      mutationObserver.observe(document.body, {
+        childList: true,
+        subtree: true,
+      });
+    }
 
     return () => {
       if (frame !== 0) window.cancelAnimationFrame(frame);
-      observer.disconnect();
+      intersectionObserver?.disconnect();
+      mutationObserver?.disconnect();
     };
   }, [idsKey, topOffset]);
 
