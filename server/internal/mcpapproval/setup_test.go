@@ -23,6 +23,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/authority"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/capability"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/packagemeta"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
@@ -106,6 +108,8 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	assembler := evidence.NewAssembler(
 		packagemeta.NewClient(notFoundRegistry{}),
 		telemetryrepo.New(chConn),
+		quietProbes{},
+		quietProbes{},
 	)
 
 	ti := &testInstance{
@@ -298,6 +302,19 @@ func requestStatus(t *testing.T, ctx context.Context, ti *testInstance, projectI
 	require.NoError(t, err)
 
 	return request.Status
+}
+
+// quietProbes stands in for the remote probes in intake tests: nothing
+// discovered, nothing declared, no gaps — remote-probe behavior is covered by
+// the evidence package's own tests.
+type quietProbes struct{}
+
+func (quietProbes) DiscoverAuthority(_ context.Context, _ string) (*authority.Declaration, error) {
+	return nil, nil
+}
+
+func (quietProbes) ListToolDeclarations(_ context.Context, _ string) ([]capability.Declaration, error) {
+	return nil, nil
 }
 
 // notFoundRegistry answers every package-registry request with a 404, so
