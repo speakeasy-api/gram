@@ -17,6 +17,7 @@ type CatalogRegistrationGateChecker interface {
 
 type RegistrationPersistence interface {
 	ResolveProject(ctx context.Context, organizationID, projectSlug string) (ResolvedProject, error)
+	EligibleCatalogRegistrationTarget(ctx context.Context, organizationID string, project ResolvedProject) (bool, error)
 	BeginReceipt(ctx context.Context, principal Principal, project ResolvedProject, request CatalogRegistrationRequest, now time.Time) (OperationReceipt, error)
 	ConvergeRegistration(ctx context.Context, principal Principal, project ResolvedProject, request CatalogRegistrationRequest, receipt OperationReceipt) (OperationReceipt, error)
 	CompleteRegistration(ctx context.Context, principal Principal, project ResolvedProject, request CatalogRegistrationRequest, receipt OperationReceipt, remoteURL string) (OperationReceipt, error)
@@ -50,24 +51,60 @@ type RegisterCatalogMCPResult struct {
 // registration. Catalog identity is validated before persistence, and the
 // normalized input hash is computed here rather than trusted from an MCP caller.
 type RegistrationService struct {
-	catalog Catalog
-	gate    CatalogRegistrationGateChecker
-	store   RegistrationPersistence
-	now     func() time.Time
+	catalog   Catalog
+	gate      CatalogRegistrationGateChecker
+	store     RegistrationPersistence
+	now       func() time.Time
+	readiness *ReadinessService
+	budgets   OperationBudgets
+	telemetry LifecycleTelemetry
 }
 
 func NewRegistrationService(catalog Catalog, gate CatalogRegistrationGateChecker, store RegistrationPersistence) *RegistrationService {
 	return &RegistrationService{
-		catalog: catalog,
-		gate:    gate,
-		store:   store,
-		now:     time.Now,
+		catalog:   catalog,
+		gate:      gate,
+		store:     store,
+		now:       time.Now,
+		readiness: nil,
+		telemetry: noopLifecycleTelemetry{},
+		budgets: OperationBudgets{
+			Catalog:      OperationBudget{Connection: nil, Organization: nil},
+			Registration: OperationBudget{Connection: nil, Organization: nil},
+			Handoff:      OperationBudget{Connection: nil, Organization: nil},
+			SetupStart:   OperationBudget{Connection: nil, Organization: nil},
+			Repair:       OperationBudget{Connection: nil, Organization: nil},
+		},
 	}
 }
 
+func (s *RegistrationService) WithOperationBudgets(budgets OperationBudgets) *RegistrationService {
+	if s != nil {
+		s.budgets = budgets
+	}
+	return s
+}
+
+func (s *RegistrationService) WithTelemetry(telemetry LifecycleTelemetry) *RegistrationService {
+	if s != nil && telemetry != nil {
+		s.telemetry = telemetry
+	}
+	return s
+}
+
+func (s *RegistrationService) WithReadiness(readiness *ReadinessService) *RegistrationService {
+	if s != nil {
+		s.readiness = readiness
+	}
+	return s
+}
+
 func (s *RegistrationService) IssueSetupHandoff(ctx context.Context, principal Principal, input IssueSetupHandoffInput) (IssuedSetupHandoff, error) {
-	if s == nil || s.catalog == nil || s.gate == nil || s.store == nil || input.ProjectSlug == "" || input.RegistrationID == "" || input.ProviderKey == "" || input.CatalogRef == "" {
+	if s == nil || s.catalog == nil || s.gate == nil || s.store == nil || !s.budgets.Handoff.valid() || input.ProjectSlug == "" || input.RegistrationID == "" || input.ProviderKey == "" || input.CatalogRef == "" {
 		return IssuedSetupHandoff{}, ErrRegistrationUnavailable
+	}
+	if err := s.budgets.Handoff.Allow(ctx, principal); err != nil {
+		return IssuedSetupHandoff{}, err
 	}
 	enabled, err := s.gate.Enabled(ctx, principal.OrganizationID, input.ProjectSlug)
 	if err != nil {
@@ -87,6 +124,9 @@ func (s *RegistrationService) IssueSetupHandoff(ctx context.Context, principal P
 	if err != nil {
 		return IssuedSetupHandoff{}, fmt.Errorf("resolve setup handoff project: %w", err)
 	}
+	if err := s.requireEligibleTarget(ctx, principal.OrganizationID, project); err != nil {
+		return IssuedSetupHandoff{}, err
+	}
 	registrationID, err := uuid.Parse(input.RegistrationID)
 	if err != nil {
 		return IssuedSetupHandoff{}, ErrSetupHandoffInvalid
@@ -99,14 +139,19 @@ func (s *RegistrationService) IssueSetupHandoff(ctx context.Context, principal P
 		Intent:           catalog.SetupIntent,
 	}, s.now())
 	if err != nil {
+		s.telemetry.Record(ctx, LifecycleEvent{Operation: "provider_setup", Phase: "handoff", Outcome: lifecycleOutcome(err), State: ""})
 		return IssuedSetupHandoff{}, fmt.Errorf("issue platform mcp setup handoff: %w", err)
 	}
+	s.telemetry.Record(ctx, LifecycleEvent{Operation: "provider_setup", Phase: "handoff", Outcome: "succeeded", State: ""})
 	return issued, nil
 }
 
 func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal Principal, input RegisterCatalogMCPInput) (RegisterCatalogMCPResult, error) {
-	if s == nil || s.catalog == nil || s.gate == nil || s.store == nil || input.ProjectSlug == "" || input.ProviderKey == "" || input.CatalogRef == "" || input.IdempotencyKey == "" {
+	if s == nil || s.catalog == nil || s.gate == nil || s.store == nil || !s.budgets.Registration.valid() || input.ProjectSlug == "" || input.ProviderKey == "" || input.CatalogRef == "" || input.IdempotencyKey == "" {
 		return RegisterCatalogMCPResult{}, ErrRegistrationUnavailable
+	}
+	if err := s.budgets.Registration.Allow(ctx, principal); err != nil {
+		return RegisterCatalogMCPResult{}, err
 	}
 
 	enabled, err := s.gate.Enabled(ctx, principal.OrganizationID, input.ProjectSlug)
@@ -129,6 +174,9 @@ func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal 
 	if err != nil {
 		return RegisterCatalogMCPResult{}, fmt.Errorf("resolve catalog registration project: %w", err)
 	}
+	if err := s.requireEligibleTarget(ctx, principal.OrganizationID, project); err != nil {
+		return RegisterCatalogMCPResult{}, err
+	}
 	request := CatalogRegistrationRequest{
 		ProjectSlug:      project.Slug,
 		SourceKind:       "catalog",
@@ -147,6 +195,9 @@ func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal 
 			return RegisterCatalogMCPResult{}, fmt.Errorf("converge catalog registration: %w", err)
 		}
 	}
+	if receipt.ResultCode == receiptResultActiveCap {
+		return RegisterCatalogMCPResult{}, ErrRegistrationCap
+	}
 	if !receipt.RegistrationID.Valid {
 		return RegisterCatalogMCPResult{}, ErrRegistrationUnavailable
 	}
@@ -160,9 +211,11 @@ func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal 
 		}
 	}
 	if !receipt.RegistrationID.Valid {
+		s.telemetry.Record(ctx, LifecycleEvent{Operation: "registration", Phase: "complete", Outcome: "unavailable", State: ""})
 		return RegisterCatalogMCPResult{}, ErrRegistrationUnavailable
 	}
 
+	s.telemetry.Record(ctx, LifecycleEvent{Operation: "registration", Phase: "complete", Outcome: "succeeded", State: ""})
 	return RegisterCatalogMCPResult{
 		Project:      project,
 		ProviderKey:  catalog.ProviderKey,
@@ -171,4 +224,15 @@ func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal 
 		Receipt:      receipt,
 		Registration: receipt.RegistrationID.UUID.String(),
 	}, nil
+}
+
+func (s *RegistrationService) requireEligibleTarget(ctx context.Context, organizationID string, project ResolvedProject) error {
+	eligible, err := s.store.EligibleCatalogRegistrationTarget(ctx, organizationID, project)
+	if err != nil {
+		return fmt.Errorf("check platform mcp catalog registration target eligibility: %w", err)
+	}
+	if !eligible {
+		return ErrTargetIneligible
+	}
+	return nil
 }

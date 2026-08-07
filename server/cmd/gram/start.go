@@ -29,6 +29,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auditapi"
 	"github.com/speakeasy-api/gram/server/internal/external"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp/localfixture"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp/remotesessionprovider"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
@@ -345,6 +347,12 @@ func newStartCommand() *cli.Command {
 			EnvVars: []string{"GRAM_SINGLE_PROCESS"},
 			Value:   false,
 		},
+		&cli.BoolFlag{
+			Name:    platformMCPLocalFixtureFlag,
+			Usage:   "Enable the synthetic local-only Platform MCP reviewed-provider fixture",
+			EnvVars: []string{"GRAM_PLATFORM_MCP_LOCAL_FIXTURE"},
+			Value:   false,
+		},
 		&cli.StringFlag{
 			Name:     "pylon-verification-secret",
 			Usage:    "The identity verification secret for pylon",
@@ -479,6 +487,11 @@ func newStartCommand() *cli.Command {
 				attr.SlogServiceEnv(serviceEnv),
 			)
 			slog.SetDefault(logger)
+
+			platformFixture, err := platformMCPLocalFixtureConfigFromCLI(serviceEnv, c.Bool(platformMCPLocalFixtureFlag), c.String("server-url"))
+			if err != nil {
+				return fmt.Errorf("invalid Platform MCP local fixture configuration: %w", err)
+			}
 
 			if serviceEnv == "local" {
 				scanners.EnableRuleIDFormatEnforcement()
@@ -1309,20 +1322,96 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create platform mcp authenticator: %w", err)
 			}
+			var platformCatalog platformmcp.Catalog
+			var platformRegistrations *platformmcp.RegistrationService
+			var dashboardSetupStarter platformmcp.DashboardSetupStarter
+			var platformSetupResources []platformmcp.SetupResource
+			if platformFixture != nil {
+				fixtureConfig := platformFixture.Fixture
+				if err := mcpRegistryClient.ClearCache(ctx, fixtureConfig.Registry().URL); err != nil {
+					return fmt.Errorf("clear local Platform MCP fixture registry cache: %w", err)
+				}
+				fixtureOAuth := localfixture.NewOAuthHTTP(fixtureConfig)
+				fixtureMCP := localfixture.NewMCPHTTP(fixtureOAuth)
+				platformCatalog = platformmcp.NewRegistryCatalog(mcpRegistryClient, []platformmcp.CatalogDescriptor{fixtureConfig.CatalogDescriptor()})
+				platformSetupResources = fixtureConfig.SetupResources()
+				platformStore, err := platformmcp.NewRegistrationStore(db, platformmcp.RegistrationStoreConfig{ActiveRegistrationCap: 5})
+				if err != nil {
+					return fmt.Errorf("create local Platform MCP registration store: %w", err)
+				}
+				registrationGate := platformmcp.NewCatalogRegistrationGate(platformGate, featureFlags, platformOrganizationSlugs)
+				fixtureAdapter := remotesessionprovider.New(
+					logger,
+					guardianPolicy,
+					remoteChallengeManager,
+					remotesessionprovider.Descriptor{
+						ProviderKey:                localfixture.ProviderKey,
+						RemoteSessionIssuerID:      fixtureConfig.RemoteSessionIssuerID(),
+						StreamableHTTPURL:          fixtureConfig.RemoteURL(),
+						ProviderSetupCompletionURL: platformOAuth.ProviderSetupCompletionURL(),
+						Resource:                   fixtureConfig.RemoteURL(),
+						TestOnlyAllowedCIDRBlocks:  nil,
+					},
+					localfixture.NewClientConfigurator(fixtureConfig, db, guardianPolicy),
+				)
+				adapters := platformmcp.NewProviderAdapters([]platformmcp.ProviderAdapter{fixtureAdapter})
+				limitStore := ratelimit.NewRedisStore(redisClient)
+				newBudget := func(connectionName, organizationName string) platformmcp.OperationBudget {
+					return platformmcp.OperationBudget{
+						Connection:   ratelimit.New(limitStore, connectionName, ratelimit.PerMinute(5), ratelimit.WithMetrics(meterProvider)),
+						Organization: ratelimit.New(limitStore, organizationName, ratelimit.PerMinute(50), ratelimit.WithMetrics(meterProvider)),
+					}
+				}
+				platformBudgets := platformmcp.OperationBudgets{
+					Catalog:      newBudget(platformmcp.CatalogConnectionLimitName, platformmcp.CatalogOrganizationLimitName),
+					Registration: newBudget(platformmcp.RegistrationConnectionLimitName, platformmcp.RegistrationOrganizationLimitName),
+					Handoff:      newBudget(platformmcp.HandoffConnectionLimitName, platformmcp.HandoffOrganizationLimitName),
+					SetupStart:   newBudget(platformmcp.SetupConnectionLimitName, platformmcp.SetupOrganizationLimitName),
+					Repair:       newBudget(platformmcp.RepairConnectionLimitName, platformmcp.RepairOrganizationLimitName),
+				}
+				if !platformBudgets.Valid() {
+					return errors.New("local Platform MCP operation budgets are incomplete")
+				}
+				platformTelemetry := platformmcp.NewLifecycleTelemetry(logger, meterProvider)
+				readiness := platformmcp.NewReadinessService(
+					platformStore,
+					registrationGate,
+					adapters,
+					ratelimit.New(limitStore, platformmcp.ForcedReadinessProbeLimit, ratelimit.PerMinute(1), ratelimit.WithMetrics(meterProvider)),
+					platformBudgets.Repair,
+				).WithTelemetry(platformTelemetry)
+				platformRegistrations = platformmcp.NewRegistrationService(platformCatalog, registrationGate, platformStore).WithOperationBudgets(platformBudgets).WithReadiness(readiness).WithTelemetry(platformTelemetry)
+				dashboardSetupStarter = platformmcp.NewDashboardSetupService(platformStore, registrationGate, platformAuthorizer, adapters, platformBudgets.SetupStart)
+
+				mux.Handle(http.MethodGet, "/v0.1/servers", func(w http.ResponseWriter, r *http.Request) {
+					localfixture.NewRegistryHTTP(fixtureConfig).Handler().ServeHTTP(w, r)
+				})
+				mux.Handle(http.MethodGet, fixtureConfig.RegistryDetailsPath(), func(w http.ResponseWriter, r *http.Request) {
+					localfixture.NewRegistryHTTP(fixtureConfig).Handler().ServeHTTP(w, r)
+				})
+				mux.Handle(http.MethodGet, "/.well-known/oauth-authorization-server/platform-mcp/local-fixture", func(w http.ResponseWriter, r *http.Request) { fixtureOAuth.Handler().ServeHTTP(w, r) })
+				mux.Handle(http.MethodGet, "/platform-mcp/local-fixture/authorize", func(w http.ResponseWriter, r *http.Request) { fixtureOAuth.Handler().ServeHTTP(w, r) })
+				mux.Handle(http.MethodPost, "/platform-mcp/local-fixture/register", func(w http.ResponseWriter, r *http.Request) { fixtureOAuth.Handler().ServeHTTP(w, r) })
+				mux.Handle(http.MethodPost, "/platform-mcp/local-fixture/token", func(w http.ResponseWriter, r *http.Request) { fixtureOAuth.Handler().ServeHTTP(w, r) })
+				mux.Handle(http.MethodPost, "/platform-mcp/local-fixture/revoke", func(w http.ResponseWriter, r *http.Request) { fixtureOAuth.Handler().ServeHTTP(w, r) })
+				mux.Handle(http.MethodPost, "/platform-mcp/local-fixture/mcp", func(w http.ResponseWriter, r *http.Request) { fixtureMCP.Handler().ServeHTTP(w, r) })
+			}
 			platformRuntime := platformmcp.NewRuntime(
 				logger,
 				platformAuthenticator,
 				platformGate,
 				platformAuthorizer,
 				platformOAuth.ProtectedResourceURL(),
+				c.String(usersessions.JWTSigningKeyFlag),
 				platformmcp.NewPostgresReader(db),
-				nil, // Catalog descriptors remain fail-closed until a reviewed catalog provider descriptor and OAuth posture are configured.
-				nil, // Catalog registration remains fail-closed until it can use the same reviewed descriptor.
+				platformCatalog,
+				platformRegistrations,
 				platformmcp.NewPostgresReadinessRecorder(db),
+				platformSetupResources,
 			)
 
 			platformOAuth.Attach(mux)
-			platformmcp.NewDashboardSetupHTTP(nil, sessionManager).Attach(mux) // Reviewed provider composition is intentionally default-off, so setup start fails closed until approved dependencies are injected.
+			platformmcp.NewDashboardSetupHTTP(dashboardSetupStarter, sessionManager).Attach(mux)
 			o11y.AttachHandler(mux, "POST", platformmcp.Path, platformRuntime.Handler().ServeHTTP)
 			mcp.Attach(mux, mcpService, mcpMetadataService)
 			chat.Attach(mux, chatService)

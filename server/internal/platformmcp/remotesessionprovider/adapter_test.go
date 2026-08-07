@@ -2,6 +2,8 @@ package remotesessionprovider
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"io"
 	"net/http"
 	"testing"
@@ -10,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 func TestValidDescriptorRequiresReviewedHTTPSURLs(t *testing.T) {
@@ -28,6 +31,28 @@ func TestValidDescriptorRequiresReviewedHTTPSURLs(t *testing.T) {
 	valid.StreamableHTTPURL = "https://provider.test/mcp"
 	valid.ProviderSetupCompletionURL = "http://gram.test/platform-mcp/provider-setup-complete"
 	require.False(t, validDescriptor(valid))
+}
+
+func TestPreflightSetupRunsConfiguratorBeforeClientLookup(t *testing.T) {
+	t.Parallel()
+
+	configured := false
+	configurator := configuratorFunc(func(_ context.Context, _ platformmcp.ProviderSetupRequest, _ Descriptor) error {
+		configured = true
+		return errors.New("configure fixture client")
+	})
+	adapter := New(nil, nil, &remotesessions.ChallengeManager{}, Descriptor{
+		ProviderKey:                "fixture",
+		RemoteSessionIssuerID:      uuid.New(),
+		StreamableHTTPURL:          "https://provider.test/mcp",
+		ProviderSetupCompletionURL: "https://gram.test/platform-mcp/provider-setup-complete",
+	}, configurator)
+	err := adapter.PreflightSetup(t.Context(), platformmcp.ProviderSetupRequest{
+		UserID: "user", OrganizationID: "organization", ProjectID: uuid.New(), RegistrationID: uuid.New(), UserSessionIssuerID: uuid.New(), MCPSlug: "mcp", ConnectionID: uuid.New(), Generation: uuid.New(),
+	})
+
+	require.ErrorContains(t, err, "configure fixture client")
+	require.True(t, configured)
 }
 
 func TestPreflightSetupRejectsAlreadyConsumedHandoff(t *testing.T) {
@@ -83,6 +108,12 @@ func TestAuthorizationRoundTripperRejectsChunkedOverflow(t *testing.T) {
 	_, err = io.ReadAll(response.Body)
 	require.ErrorIs(t, err, errResponseTooLarge)
 	require.True(t, rt.responseTooLarge.Load())
+}
+
+type configuratorFunc func(context.Context, platformmcp.ProviderSetupRequest, Descriptor) error
+
+func (f configuratorFunc) ConfigureProviderClient(ctx context.Context, request platformmcp.ProviderSetupRequest, descriptor Descriptor) error {
+	return f(ctx, request, descriptor)
 }
 
 type roundTripperFunc func(*http.Request) (*http.Response, error)

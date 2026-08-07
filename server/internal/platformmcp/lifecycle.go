@@ -292,12 +292,17 @@ func (s *RegistrationStore) BeginProviderSetup(ctx context.Context, principal Pr
 	if err != nil {
 		return ProviderSetupResult{}, err
 	}
+	if err := s.recordSetupMilestone(ctx, principal, registration, handoff.ID, "provider_setup_started"); err != nil {
+		return ProviderSetupResult{}, fmt.Errorf("record platform mcp provider setup start: %w: %w", ErrSetupHandoffReissueRequired, err)
+	}
 	preflight.HandoffID = handoff.ID
 	result, err := adapter.BeginSetup(ctx, preflight)
 	if err != nil {
+		s.recordSetupFailure(ctx, principal, registration, handoff.ID)
 		return ProviderSetupResult{}, fmt.Errorf("begin platform mcp provider setup: %w: %w", ErrSetupHandoffReissueRequired, err)
 	}
 	if err := validateProviderSetupResult(result); err != nil {
+		s.recordSetupFailure(ctx, principal, registration, handoff.ID)
 		return ProviderSetupResult{}, fmt.Errorf("validate platform mcp provider setup: %w: %w", ErrSetupHandoffReissueRequired, err)
 	}
 	return result, nil
@@ -353,6 +358,47 @@ func (s *RegistrationStore) ProbeProviderReadiness(ctx context.Context, principa
 	}, result.State, result.EvidenceCode, result.CheckedAt, result.ExpiresAt)
 }
 
+// GetProviderReadiness returns the most recent normalized evidence for the
+// principal's active connection generation. It never returns the stored
+// authorization fingerprint or attempts provider egress.
+func (s *RegistrationStore) GetProviderReadiness(ctx context.Context, principal Principal, projectID, registrationID uuid.UUID) (Readiness, bool, error) {
+	if s == nil || s.db == nil {
+		return Readiness{}, false, ErrUnavailable
+	}
+	connectionID, generation, err := principalConnection(principal)
+	if err != nil {
+		return Readiness{}, false, err
+	}
+	q := platformrepo.New(s.db)
+	if _, err := q.DeleteExpiredPlatformMCPReadiness(ctx, platformrepo.DeleteExpiredPlatformMCPReadinessParams{
+		OrganizationID:       principal.OrganizationID,
+		ProjectID:            projectID,
+		RegistrationID:       registrationID,
+		ConnectionID:         connectionID,
+		ConnectionGeneration: generation,
+	}); err != nil {
+		return Readiness{}, false, fmt.Errorf("delete expired platform mcp readiness: %w", err)
+	}
+	row, err := q.GetLatestPlatformMCPReadinessForLifecycle(ctx, platformrepo.GetLatestPlatformMCPReadinessForLifecycleParams{
+		OrganizationID:       principal.OrganizationID,
+		ProjectID:            projectID,
+		RegistrationID:       registrationID,
+		ConnectionID:         connectionID,
+		ConnectionGeneration: generation,
+		SubjectUrn:           userSubjectURN(principal.UserID),
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Readiness{}, false, nil
+	}
+	if err != nil {
+		return Readiness{}, false, fmt.Errorf("load platform mcp readiness: %w", err)
+	}
+	if !isReadinessState(ReadinessState(row.State)) || !row.CheckedAt.Valid || !row.ExpiresAt.Valid || !row.ExpiresAt.Time.After(row.CheckedAt.Time) {
+		return Readiness{}, false, ErrReadinessInvalid
+	}
+	return readinessFromRow(row, time.Now()), true, nil
+}
+
 func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Principal, binding ReadinessBinding, state ReadinessState, evidenceCode string, checkedAt, expiresAt time.Time) (Readiness, error) {
 	if s == nil || s.db == nil {
 		return Readiness{}, ErrUnavailable
@@ -371,7 +417,8 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := platformrepo.New(tx)
-	if _, err := lifecycleRegistration(ctx, q, principal, binding.ProjectID, binding.RegistrationID); err != nil {
+	registration, err := lifecycleRegistration(ctx, q, principal, binding.ProjectID, binding.RegistrationID)
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Readiness{}, ErrReadinessInvalid
 		}
@@ -413,10 +460,64 @@ func (s *RegistrationStore) RecordReadiness(ctx context.Context, principal Princ
 	if err != nil {
 		return Readiness{}, fmt.Errorf("upsert platform mcp readiness: %w", err)
 	}
+	if state == ReadinessReady && expiresAt.After(time.Now()) {
+		handoff, err := q.GetLatestRedeemedPlatformMCPSetupHandoff(ctx, platformrepo.GetLatestRedeemedPlatformMCPSetupHandoffParams{
+			OrganizationID:       principal.OrganizationID,
+			ProjectID:            binding.ProjectID,
+			RegistrationID:       binding.RegistrationID,
+			ConnectionID:         connectionID,
+			ConnectionGeneration: generation,
+			SubjectUrn:           userSubjectURN(principal.UserID),
+		})
+		switch {
+		case err == nil:
+			for _, milestone := range []string{"provider_setup_succeeded", "platform_flow_ready"} {
+				if err := recordSetupMilestone(ctx, q, principal, registration, handoff.ID, milestone); err != nil {
+					return Readiness{}, fmt.Errorf("record platform mcp readiness milestone: %w", err)
+				}
+			}
+		case errors.Is(err, pgx.ErrNoRows):
+		case err != nil:
+			return Readiness{}, fmt.Errorf("load redeemed platform mcp setup handoff: %w", err)
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return Readiness{}, fmt.Errorf("commit platform mcp readiness: %w", err)
 	}
 	return readinessFromRow(row, time.Now()), nil
+}
+
+func (s *RegistrationStore) recordSetupMilestone(ctx context.Context, principal Principal, registration platformrepo.PlatformMcpCatalogRegistration, handoffID uuid.UUID, milestone string) error {
+	if handoffID == uuid.Nil {
+		return ErrSetupHandoffInvalid
+	}
+	return recordSetupMilestone(ctx, platformrepo.New(s.db), principal, registration, handoffID, milestone)
+}
+
+func (s *RegistrationStore) recordSetupFailure(ctx context.Context, principal Principal, registration platformrepo.PlatformMcpCatalogRegistration, handoffID uuid.UUID) {
+	_ = s.recordSetupMilestone(ctx, principal, registration, handoffID, "provider_setup_failed")
+}
+
+func recordSetupMilestone(ctx context.Context, q *platformrepo.Queries, principal Principal, registration platformrepo.PlatformMcpCatalogRegistration, handoffID uuid.UUID, milestone string) error {
+	connectionID, generation, err := principalConnection(principal)
+	if err != nil {
+		return err
+	}
+	if registration.ID == uuid.Nil || registration.ProjectID == uuid.Nil || registration.CatalogProvider == "" || registration.CatalogReference == "" || handoffID == uuid.Nil {
+		return ErrReadinessInvalid
+	}
+	if err := q.RecordPlatformMCPSetupMilestone(ctx, platformrepo.RecordPlatformMCPSetupMilestoneParams{
+		OrganizationID:       principal.OrganizationID,
+		Milestone:            milestone,
+		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: generation, Valid: true},
+		ProjectID:            uuid.NullUUID{UUID: registration.ProjectID, Valid: true},
+		McpKey:               registration.CatalogProvider + ":" + registration.CatalogReference,
+		AttemptID:            uuid.NullUUID{UUID: handoffID, Valid: true},
+	}); err != nil {
+		return fmt.Errorf("record platform mcp setup milestone: %w", err)
+	}
+	return nil
 }
 
 func lifecycleRegistration(ctx context.Context, q *platformrepo.Queries, principal Principal, projectID, registrationID uuid.UUID) (platformrepo.PlatformMcpCatalogRegistration, error) {

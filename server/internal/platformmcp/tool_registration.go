@@ -36,6 +36,9 @@ func registerCatalogRegistrationTool(server *mcp.Server, registrations *Registra
 		}
 		result, err := registrations.RegisterCatalogMCP(ctx, principal, RegisterCatalogMCPInput(input))
 		if err != nil {
+			if budgetResult, ok := operationBudgetToolResult(err); ok {
+				return budgetResult, RegisterCatalogMCPToolOutput{}, nil
+			}
 			return nil, RegisterCatalogMCPToolOutput{}, err
 		}
 		return nil, RegisterCatalogMCPToolOutput{

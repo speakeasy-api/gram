@@ -53,6 +53,59 @@ VALUES (
 )
 RETURNING *;
 
+-- name: CreateLocalFixtureGlobalRemoteSessionIssuer :one
+-- The local Platform MCP fixture owns this fixed global issuer identity. The
+-- caller first holds LockRemoteSessionIssuerForClientBinding on the fixed ID and
+-- validates an existing row, so this INSERT cannot overwrite incompatible state.
+INSERT INTO remote_session_issuers (
+    id,
+    project_id,
+    organization_id,
+    slug,
+    issuer,
+    name,
+    authorization_endpoint,
+    token_endpoint,
+    registration_endpoint,
+    scopes_supported,
+    grant_types_supported,
+    response_types_supported,
+    token_endpoint_auth_methods_supported,
+    client_id_metadata_document_supported,
+    oidc,
+    passthrough
+)
+VALUES (
+    @id,
+    NULL,
+    NULL,
+    @slug,
+    @issuer,
+    @name,
+    @authorization_endpoint,
+    @token_endpoint,
+    @registration_endpoint,
+    @scopes_supported,
+    @grant_types_supported,
+    @response_types_supported,
+    @token_endpoint_auth_methods_supported,
+    FALSE,
+    FALSE,
+    FALSE
+)
+RETURNING *;
+
+-- name: GetLocalFixtureGlobalRemoteSessionIssuer :one
+-- The local Platform MCP fixture owns one exact global issuer identity. This
+-- lookup intentionally excludes project and organization rows so a tenant-owned
+-- issuer can never be mistaken for the reviewed fixture.
+SELECT *
+FROM remote_session_issuers
+WHERE slug = @slug
+  AND project_id IS NULL
+  AND organization_id IS NULL
+  AND deleted IS FALSE;
+
 -- name: GetRemoteSessionIssuerByID :one
 -- Project-scoped read of the project's own issuers, plus each inherited tier the
 -- caller opts in to. Each inherited arm is gated by its own boolean:
@@ -440,6 +493,16 @@ SELECT client_id_metadata_uri, scope
 FROM remote_session_clients
 WHERE id = @id
   AND client_id_metadata_uri IS NOT NULL
+  AND deleted IS FALSE;
+
+-- name: GetLocalFixtureOrganizationRemoteSessionClient :one
+-- The local Platform MCP fixture owns at most one organization-scoped public
+-- client for its global issuer. Project-owned and global clients are excluded.
+SELECT *
+FROM remote_session_clients
+WHERE organization_id = @organization_id
+  AND remote_session_issuer_id = @remote_session_issuer_id
+  AND project_id IS NULL
   AND deleted IS FALSE;
 
 -- name: GetRemoteSessionClientByID :one

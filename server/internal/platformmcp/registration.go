@@ -29,6 +29,8 @@ const (
 	operationRegisterCatalogMCP  = "register_catalog_mcp"
 	receiptStatusPending         = "pending"
 	receiptStatusSucceeded       = "succeeded"
+	receiptResultRegistered      = "registered"
+	receiptResultActiveCap       = "conflict:active_registration_cap"
 	registrationStatusPending    = "pending"
 	registrationStatusRegistered = "registered"
 	receiptLifetime              = 24 * time.Hour
@@ -37,7 +39,9 @@ const (
 
 var (
 	ErrRegistrationConflict = errors.New("platform mcp registration idempotency conflict")
+	ErrRegistrationCap      = errors.New("platform mcp active registration cap reached")
 	ErrRegistrationInvalid  = errors.New("invalid platform mcp registration input")
+	ErrTargetIneligible     = errors.New("platform mcp registration target is ineligible")
 )
 
 // CatalogRegistrationRequest is the normalized desired state behind one
@@ -70,15 +74,25 @@ type OperationReceipt struct {
 	ConnectionGeneration uuid.UUID
 }
 
+// RegistrationStoreConfig carries values whose production defaults require
+// explicit review before Platform catalog registration can be composed.
+type RegistrationStoreConfig struct {
+	ActiveRegistrationCap int64
+}
+
 // RegistrationStore owns the tenant-qualified receipt and desired-state
 // persistence boundary. It does not fetch catalog data, call providers, or
 // create project components.
 type RegistrationStore struct {
-	db *pgxpool.Pool
+	db                    *pgxpool.Pool
+	activeRegistrationCap int64
 }
 
-func NewRegistrationStore(db *pgxpool.Pool) *RegistrationStore {
-	return &RegistrationStore{db: db}
+func NewRegistrationStore(db *pgxpool.Pool, config RegistrationStoreConfig) (*RegistrationStore, error) {
+	if db == nil || config.ActiveRegistrationCap <= 0 {
+		return nil, ErrRegistrationInvalid
+	}
+	return &RegistrationStore{db: db, activeRegistrationCap: config.ActiveRegistrationCap}, nil
 }
 
 func (s *RegistrationStore) ResolveProject(ctx context.Context, organizationID, projectSlug string) (ResolvedProject, error) {
@@ -96,6 +110,20 @@ func (s *RegistrationStore) ResolveProject(ctx context.Context, organizationID, 
 		return ResolvedProject{}, fmt.Errorf("resolve platform mcp registration project: %w", err)
 	}
 	return ResolvedProject{ID: row.ID, Name: row.Name, Slug: row.Slug}, nil
+}
+
+func (s *RegistrationStore) EligibleCatalogRegistrationTarget(ctx context.Context, organizationID string, project ResolvedProject) (bool, error) {
+	if s == nil || s.db == nil || organizationID == "" || project.ID == uuid.Nil || project.Slug == "" {
+		return false, ErrTargetIneligible
+	}
+	eligible, err := platformrepo.New(s.db).IsPlatformMCPCatalogRegistrationTargetEligible(ctx, platformrepo.IsPlatformMCPCatalogRegistrationTargetEligibleParams{
+		ProjectID:      project.ID,
+		OrganizationID: organizationID,
+	})
+	if err != nil {
+		return false, fmt.Errorf("check platform mcp catalog registration target eligibility: %w", err)
+	}
+	return eligible, nil
 }
 
 // BeginReceipt atomically establishes the 24-hour idempotency boundary. It
@@ -232,10 +260,19 @@ func (s *RegistrationStore) ConvergeRegistration(ctx context.Context, principal 
 		if err := tx.Commit(ctx); err != nil {
 			return OperationReceipt{}, fmt.Errorf("commit platform mcp registration convergence replay: %w", err)
 		}
+		if storedReceipt.ResultCode.String == receiptResultActiveCap {
+			return operationReceiptFromRow(storedReceipt, true), ErrRegistrationCap
+		}
 		return operationReceiptFromRow(storedReceipt, true), nil
 	}
 	if storedReceipt.Status != receiptStatusPending {
 		return OperationReceipt{}, ErrRegistrationInvalid
+	}
+	if err := q.LockPlatformMCPProjectRegistrationQuota(ctx, platformrepo.LockPlatformMCPProjectRegistrationQuotaParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      project.ID.String(),
+	}); err != nil {
+		return OperationReceipt{}, fmt.Errorf("lock platform mcp registration quota: %w", err)
 	}
 	if err := q.LockPlatformMCPCatalogRegistration(ctx, platformrepo.LockPlatformMCPCatalogRegistrationParams{
 		OrganizationID:   principal.OrganizationID,
@@ -255,6 +292,29 @@ func (s *RegistrationStore) ConvergeRegistration(ctx context.Context, principal 
 		CatalogReference: request.CatalogReference,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
+		activeRegistrations, err := q.CountActiveRegisteredPlatformMCPCatalogRegistrations(ctx, platformrepo.CountActiveRegisteredPlatformMCPCatalogRegistrationsParams{
+			OrganizationID: principal.OrganizationID,
+			ProjectID:      project.ID,
+		})
+		if err != nil {
+			return OperationReceipt{}, fmt.Errorf("count active platform mcp catalog registrations: %w", err)
+		}
+		if activeRegistrations >= s.activeRegistrationCap {
+			deniedReceipt, err := q.CompletePlatformMCPOperationReceipt(ctx, platformrepo.CompletePlatformMCPOperationReceiptParams{
+				RegistrationID: uuid.NullUUID{},
+				Status:         receiptStatusSucceeded,
+				ResultCode:     optionalText(receiptResultActiveCap),
+				ID:             storedReceipt.ID,
+				OrganizationID: principal.OrganizationID,
+			})
+			if err != nil {
+				return OperationReceipt{}, fmt.Errorf("complete platform mcp registration cap receipt: %w", err)
+			}
+			if err := tx.Commit(ctx); err != nil {
+				return OperationReceipt{}, fmt.Errorf("commit platform mcp registration cap receipt: %w", err)
+			}
+			return operationReceiptFromRow(deniedReceipt, receipt.Replayed), ErrRegistrationCap
+		}
 		registration, err = q.CreatePlatformMCPCatalogRegistration(ctx, platformrepo.CreatePlatformMCPCatalogRegistrationParams{
 			OrganizationID:       principal.OrganizationID,
 			ProjectID:            project.ID,
@@ -265,9 +325,11 @@ func (s *RegistrationStore) ConvergeRegistration(ctx context.Context, principal 
 			ConnectionID:         connectionID,
 			ConnectionGeneration: generation,
 		})
-	}
-	if err != nil {
-		return OperationReceipt{}, fmt.Errorf("converge platform mcp catalog registration: %w", err)
+		if err != nil {
+			return OperationReceipt{}, fmt.Errorf("create platform mcp catalog registration: %w", err)
+		}
+	} else if err != nil {
+		return OperationReceipt{}, fmt.Errorf("get active platform mcp catalog registration: %w", err)
 	}
 	ownedRegistration, err := lifecycleRegistration(ctx, q, principal, project.ID, registration.ID)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -351,6 +413,42 @@ func (s *RegistrationStore) CompleteRegistration(ctx context.Context, principal 
 	if storedReceipt.Status != receiptStatusPending {
 		return OperationReceipt{}, ErrRegistrationInvalid
 	}
+	if err := q.LockPlatformMCPProjectRegistrationQuota(ctx, platformrepo.LockPlatformMCPProjectRegistrationQuotaParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      project.ID.String(),
+	}); err != nil {
+		return OperationReceipt{}, fmt.Errorf("lock platform mcp component quota: %w", err)
+	}
+	activeRegistrations, err := q.CountActiveRegisteredPlatformMCPCatalogRegistrations(ctx, platformrepo.CountActiveRegisteredPlatformMCPCatalogRegistrationsParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      project.ID,
+	})
+	if err != nil {
+		return OperationReceipt{}, fmt.Errorf("count active platform mcp registrations before completion: %w", err)
+	}
+	if activeRegistrations >= s.activeRegistrationCap {
+		if err := q.SoftDeletePendingPlatformMCPCatalogRegistration(ctx, platformrepo.SoftDeletePendingPlatformMCPCatalogRegistrationParams{
+			RegistrationID: storedReceipt.RegistrationID.UUID,
+			OrganizationID: principal.OrganizationID,
+			ProjectID:      project.ID,
+		}); err != nil {
+			return OperationReceipt{}, fmt.Errorf("soft delete capped platform mcp registration: %w", err)
+		}
+		deniedReceipt, err := q.CompletePlatformMCPOperationReceipt(ctx, platformrepo.CompletePlatformMCPOperationReceiptParams{
+			RegistrationID: uuid.NullUUID{},
+			Status:         receiptStatusSucceeded,
+			ResultCode:     optionalText(receiptResultActiveCap),
+			ID:             storedReceipt.ID,
+			OrganizationID: principal.OrganizationID,
+		})
+		if err != nil {
+			return OperationReceipt{}, fmt.Errorf("complete capped platform mcp receipt: %w", err)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return OperationReceipt{}, fmt.Errorf("commit capped platform mcp receipt: %w", err)
+		}
+		return operationReceiptFromRow(deniedReceipt, receipt.Replayed), ErrRegistrationCap
+	}
 	if err := q.LockPlatformMCPCatalogRegistration(ctx, platformrepo.LockPlatformMCPCatalogRegistrationParams{
 		OrganizationID:   principal.OrganizationID,
 		ProjectID:        project.ID.String(),
@@ -405,7 +503,7 @@ func (s *RegistrationStore) CompleteRegistration(ctx context.Context, principal 
 	completedReceipt, err := q.CompletePlatformMCPOperationReceipt(ctx, platformrepo.CompletePlatformMCPOperationReceiptParams{
 		RegistrationID: storedReceipt.RegistrationID,
 		Status:         receiptStatusSucceeded,
-		ResultCode:     optionalText("registered"),
+		ResultCode:     optionalText(receiptResultRegistered),
 		ID:             storedReceipt.ID,
 		OrganizationID: principal.OrganizationID,
 	})

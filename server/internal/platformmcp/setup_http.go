@@ -20,18 +20,19 @@ type DashboardSetupStarter interface {
 }
 
 type DashboardSetupService struct {
-	store      *RegistrationStore
-	gate       CatalogRegistrationGateChecker
-	authorizer Authorizer
-	adapters   *ProviderAdapters
+	store       *RegistrationStore
+	gate        CatalogRegistrationGateChecker
+	authorizer  Authorizer
+	adapters    *ProviderAdapters
+	setupBudget OperationBudget
 }
 
-func NewDashboardSetupService(store *RegistrationStore, gate CatalogRegistrationGateChecker, authorizer Authorizer, adapters *ProviderAdapters) *DashboardSetupService {
-	return &DashboardSetupService{store: store, gate: gate, authorizer: authorizer, adapters: adapters}
+func NewDashboardSetupService(store *RegistrationStore, gate CatalogRegistrationGateChecker, authorizer Authorizer, adapters *ProviderAdapters, setupBudget OperationBudget) *DashboardSetupService {
+	return &DashboardSetupService{store: store, gate: gate, authorizer: authorizer, adapters: adapters, setupBudget: setupBudget}
 }
 
 func (s *DashboardSetupService) StartDashboardSetup(ctx context.Context, userID, organizationID, handoff string) (ProviderSetupResult, error) {
-	if s == nil || s.store == nil || s.store.db == nil || s.gate == nil || s.authorizer == nil || s.adapters == nil || userID == "" || organizationID == "" || handoff == "" {
+	if s == nil || s.store == nil || s.store.db == nil || s.gate == nil || s.authorizer == nil || s.adapters == nil || !s.setupBudget.valid() || userID == "" || organizationID == "" || handoff == "" {
 		return ProviderSetupResult{}, ErrUnavailable
 	}
 
@@ -54,12 +55,22 @@ func (s *DashboardSetupService) StartDashboardSetup(ctx context.Context, userID,
 		Generation:     row.ConnectionGeneration.String(),
 		ClientID:       "",
 	}
+	if err := s.setupBudget.Allow(ctx, principal); err != nil {
+		return ProviderSetupResult{}, err
+	}
 	enabled, err := s.gate.Enabled(ctx, organizationID, row.ProjectSlug)
 	if err != nil {
 		return ProviderSetupResult{}, fmt.Errorf("check platform mcp dashboard setup gate: %w: %w", ErrUnavailable, err)
 	}
 	if !enabled {
 		return ProviderSetupResult{}, ErrRegistrationUnavailable
+	}
+	eligible, err := s.store.EligibleCatalogRegistrationTarget(ctx, organizationID, ResolvedProject{ID: row.ProjectID, Name: "", Slug: row.ProjectSlug})
+	if err != nil {
+		return ProviderSetupResult{}, fmt.Errorf("check platform mcp dashboard setup target eligibility: %w", err)
+	}
+	if !eligible {
+		return ProviderSetupResult{}, ErrTargetIneligible
 	}
 	if err := s.authorizer.RequireLiveOrgAdmin(ctx, principal); err != nil {
 		if isAuthorizationDenied(err) {
@@ -131,11 +142,19 @@ func (s *DashboardSetupHTTP) Handler() http.Handler {
 			return
 		}
 		result, err := s.starter.StartDashboardSetup(ctx, auth.UserID, auth.ActiveOrganizationID, request.Handoff)
+		if errors.Is(err, ErrOperationRateLimited) || errors.Is(err, ErrReadinessRateLimited) {
+			writeJSON(w, http.StatusTooManyRequests, map[string]string{"code": "rate_limited"})
+			return
+		}
+		if errors.Is(err, ErrOperationBudgetUnavailable) {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"code": unavailableCode})
+			return
+		}
 		if errors.Is(err, ErrSetupHandoffReissueRequired) {
 			writeJSON(w, http.StatusConflict, map[string]string{"code": "setup_handoff_reissue_required"})
 			return
 		}
-		if errors.Is(err, ErrSetupHandoffInvalid) || errors.Is(err, ErrRegistrationUnavailable) {
+		if errors.Is(err, ErrSetupHandoffInvalid) || errors.Is(err, ErrRegistrationUnavailable) || errors.Is(err, ErrTargetIneligible) {
 			http.Error(w, "setup unavailable", http.StatusForbidden)
 			return
 		}

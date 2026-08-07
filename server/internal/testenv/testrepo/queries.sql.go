@@ -59,6 +59,38 @@ func (q *Queries) CountOutboxEntriesByEventType(ctx context.Context, eventType s
 	return count, err
 }
 
+const countPlatformMCPSetupMilestoneFixture = `-- name: CountPlatformMCPSetupMilestoneFixture :one
+SELECT count(*)
+FROM platform_mcp_onboarding_milestones
+WHERE organization_id = $1
+  AND project_id = $2
+  AND mcp_key = $3
+  AND attempt_id = $4
+  AND milestone = $5
+`
+
+type CountPlatformMCPSetupMilestoneFixtureParams struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	McpKey         string
+	AttemptID      uuid.NullUUID
+	Milestone      string
+}
+
+// Test-only count for idempotent Platform MCP setup evidence.
+func (q *Queries) CountPlatformMCPSetupMilestoneFixture(ctx context.Context, arg CountPlatformMCPSetupMilestoneFixtureParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countPlatformMCPSetupMilestoneFixture,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.McpKey,
+		arg.AttemptID,
+		arg.Milestone,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countPublishOutboxRows = `-- name: CountPublishOutboxRows :one
 SELECT COUNT(*) FROM publish_outbox
 `

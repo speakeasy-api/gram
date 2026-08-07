@@ -215,6 +215,27 @@ func (q *Queries) ConsumePlatformMCPSetupHandoff(ctx context.Context, arg Consum
 	return i, err
 }
 
+const countActiveRegisteredPlatformMCPCatalogRegistrations = `-- name: CountActiveRegisteredPlatformMCPCatalogRegistrations :one
+SELECT COUNT(*)
+FROM platform_mcp_catalog_registrations
+WHERE organization_id = $1
+  AND project_id = $2
+  AND status = 'registered'
+  AND deleted IS FALSE
+`
+
+type CountActiveRegisteredPlatformMCPCatalogRegistrationsParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) CountActiveRegisteredPlatformMCPCatalogRegistrations(ctx context.Context, arg CountActiveRegisteredPlatformMCPCatalogRegistrationsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveRegisteredPlatformMCPCatalogRegistrations, arg.OrganizationID, arg.ProjectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createPlatformMCPAuthorizationGrant = `-- name: CreatePlatformMCPAuthorizationGrant :one
 INSERT INTO platform_mcp_authorization_grants (
     organization_id,
@@ -711,6 +732,50 @@ func (q *Queries) DeleteExpiredPlatformMCPOperationReceipt(ctx context.Context, 
 	return result.RowsAffected(), nil
 }
 
+const deleteExpiredPlatformMCPReadiness = `-- name: DeleteExpiredPlatformMCPReadiness :execrows
+DELETE FROM platform_mcp_readiness AS stale
+WHERE stale.organization_id = $1
+  AND stale.project_id = $2
+  AND stale.registration_id = $3
+  AND stale.connection_id = $4
+  AND stale.connection_generation = $5
+  AND stale.expires_at <= clock_timestamp()
+  AND EXISTS (
+      SELECT 1
+      FROM platform_mcp_readiness AS newer
+      WHERE newer.organization_id = stale.organization_id
+        AND newer.project_id = stale.project_id
+        AND newer.registration_id = stale.registration_id
+        AND newer.connection_id = stale.connection_id
+        AND newer.connection_generation = stale.connection_generation
+        AND (newer.checked_at, newer.id) > (stale.checked_at, stale.id)
+  )
+`
+
+type DeleteExpiredPlatformMCPReadinessParams struct {
+	OrganizationID       string
+	ProjectID            uuid.UUID
+	RegistrationID       uuid.UUID
+	ConnectionID         uuid.UUID
+	ConnectionGeneration uuid.UUID
+}
+
+// Retain the newest expired projection as stale repair evidence. Only an older
+// expired row that has been superseded by later evidence is safe to remove.
+func (q *Queries) DeleteExpiredPlatformMCPReadiness(ctx context.Context, arg DeleteExpiredPlatformMCPReadinessParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredPlatformMCPReadiness,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.RegistrationID,
+		arg.ConnectionID,
+		arg.ConnectionGeneration,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getActivePlatformMCPCatalogRegistration = `-- name: GetActivePlatformMCPCatalogRegistration :one
 SELECT id, organization_id, project_id, source_kind, catalog_provider, catalog_reference, status, remote_mcp_server_id, remote_mcp_server_owned, user_session_issuer_id, user_session_issuer_owned, mcp_server_id, mcp_server_owned, mcp_endpoint_id, mcp_endpoint_owned, connection_id, connection_generation, created_at, updated_at, deleted_at, deleted
 FROM platform_mcp_catalog_registrations
@@ -923,6 +988,129 @@ func (q *Queries) GetActivePlatformMCPSessionByJTI(ctx context.Context, arg GetA
 		&i.SubjectUrn,
 		&i.ActiveGeneration,
 		&i.ClientID,
+	)
+	return i, err
+}
+
+const getLatestPlatformMCPReadinessForLifecycle = `-- name: GetLatestPlatformMCPReadinessForLifecycle :one
+SELECT readiness.id, readiness.organization_id, readiness.project_id, readiness.registration_id, readiness.connection_id, readiness.connection_generation, readiness.provider_authorization_fingerprint, readiness.state, readiness.evidence_code, readiness.checked_at, readiness.expires_at, readiness.created_at, readiness.updated_at
+FROM platform_mcp_readiness AS readiness
+JOIN platform_mcp_catalog_registrations AS registration
+  ON registration.id = readiness.registration_id
+ AND registration.organization_id = readiness.organization_id
+ AND registration.project_id = readiness.project_id
+ AND registration.deleted IS FALSE
+JOIN platform_mcp_connections AS connection
+  ON connection.id = readiness.connection_id
+ AND connection.organization_id = readiness.organization_id
+WHERE readiness.organization_id = $1
+  AND readiness.project_id = $2
+  AND readiness.registration_id = $3
+  AND readiness.connection_id = $4
+  AND readiness.connection_generation = $5
+  AND connection.subject_urn = $6
+  AND connection.active_generation = readiness.connection_generation
+  AND connection.revoked_at IS NULL
+ORDER BY readiness.checked_at DESC, readiness.id DESC
+LIMIT 1
+`
+
+type GetLatestPlatformMCPReadinessForLifecycleParams struct {
+	OrganizationID       string
+	ProjectID            uuid.UUID
+	RegistrationID       uuid.UUID
+	ConnectionID         uuid.UUID
+	ConnectionGeneration uuid.UUID
+	SubjectUrn           string
+}
+
+func (q *Queries) GetLatestPlatformMCPReadinessForLifecycle(ctx context.Context, arg GetLatestPlatformMCPReadinessForLifecycleParams) (PlatformMcpReadiness, error) {
+	row := q.db.QueryRow(ctx, getLatestPlatformMCPReadinessForLifecycle,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.RegistrationID,
+		arg.ConnectionID,
+		arg.ConnectionGeneration,
+		arg.SubjectUrn,
+	)
+	var i PlatformMcpReadiness
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.RegistrationID,
+		&i.ConnectionID,
+		&i.ConnectionGeneration,
+		&i.ProviderAuthorizationFingerprint,
+		&i.State,
+		&i.EvidenceCode,
+		&i.CheckedAt,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getLatestRedeemedPlatformMCPSetupHandoff = `-- name: GetLatestRedeemedPlatformMCPSetupHandoff :one
+SELECT handoff.id, handoff.organization_id, handoff.project_id, handoff.registration_id, handoff.connection_id, handoff.connection_generation, handoff.provider_key, handoff.intent, handoff.handoff_hash, handoff.expires_at, handoff.redeemed_at, handoff.invalidated_at, handoff.created_at, handoff.updated_at
+FROM platform_mcp_setup_handoffs AS handoff
+JOIN platform_mcp_catalog_registrations AS registration
+  ON registration.id = handoff.registration_id
+ AND registration.organization_id = handoff.organization_id
+ AND registration.project_id = handoff.project_id
+ AND registration.deleted IS FALSE
+JOIN platform_mcp_connections AS connection
+  ON connection.id = handoff.connection_id
+ AND connection.organization_id = handoff.organization_id
+WHERE handoff.organization_id = $1
+  AND handoff.project_id = $2
+  AND handoff.registration_id = $3
+  AND handoff.connection_id = $4
+  AND handoff.connection_generation = $5
+  AND connection.subject_urn = $6
+  AND connection.active_generation = handoff.connection_generation
+  AND connection.revoked_at IS NULL
+  AND handoff.redeemed_at IS NOT NULL
+  AND handoff.invalidated_at IS NULL
+ORDER BY handoff.redeemed_at DESC, handoff.id DESC
+LIMIT 1
+`
+
+type GetLatestRedeemedPlatformMCPSetupHandoffParams struct {
+	OrganizationID       string
+	ProjectID            uuid.UUID
+	RegistrationID       uuid.UUID
+	ConnectionID         uuid.UUID
+	ConnectionGeneration uuid.UUID
+	SubjectUrn           string
+}
+
+func (q *Queries) GetLatestRedeemedPlatformMCPSetupHandoff(ctx context.Context, arg GetLatestRedeemedPlatformMCPSetupHandoffParams) (PlatformMcpSetupHandoff, error) {
+	row := q.db.QueryRow(ctx, getLatestRedeemedPlatformMCPSetupHandoff,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.RegistrationID,
+		arg.ConnectionID,
+		arg.ConnectionGeneration,
+		arg.SubjectUrn,
+	)
+	var i PlatformMcpSetupHandoff
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.RegistrationID,
+		&i.ConnectionID,
+		&i.ConnectionGeneration,
+		&i.ProviderKey,
+		&i.Intent,
+		&i.HandoffHash,
+		&i.ExpiresAt,
+		&i.RedeemedAt,
+		&i.InvalidatedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -1571,6 +1759,57 @@ func (q *Queries) InvalidateActivePlatformMCPSetupHandoffs(ctx context.Context, 
 	return result.RowsAffected(), nil
 }
 
+const isPlatformMCPCatalogRegistrationTargetEligible = `-- name: IsPlatformMCPCatalogRegistrationTargetEligible :one
+SELECT EXISTS (
+    SELECT 1
+    FROM projects AS target
+    WHERE target.id = $1
+      AND target.organization_id = $2
+      AND target.deleted IS FALSE
+      AND NOT EXISTS (
+          SELECT 1
+          FROM mcp_servers AS legacy_server
+          WHERE legacy_server.project_id = target.id
+            AND legacy_server.deleted IS FALSE
+            AND legacy_server.visibility <> 'disabled'
+            AND legacy_server.toolset_id IS NOT NULL
+      )
+      AND EXISTS (
+          SELECT 1
+          FROM mcp_servers AS cohort_server
+          JOIN projects AS cohort_project
+            ON cohort_project.id = cohort_server.project_id
+           AND cohort_project.organization_id = $2
+           AND cohort_project.deleted IS FALSE
+          JOIN user_session_issuers AS issuer
+            ON issuer.id = cohort_server.user_session_issuer_id
+           AND issuer.project_id = cohort_project.id
+           AND issuer.deleted IS FALSE
+          JOIN mcp_endpoints AS endpoint
+            ON endpoint.mcp_server_id = cohort_server.id
+           AND endpoint.project_id = cohort_project.id
+           AND endpoint.deleted IS FALSE
+          WHERE cohort_server.deleted IS FALSE
+            AND cohort_server.visibility <> 'disabled'
+      )
+)
+`
+
+type IsPlatformMCPCatalogRegistrationTargetEligibleParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+// Registration requires the existing organization-level new-model cohort, while
+// the selected project may be empty. An active toolset-backed MCP server marks a
+// project as legacy-bound and prevents mixing the Platform registration path.
+func (q *Queries) IsPlatformMCPCatalogRegistrationTargetEligible(ctx context.Context, arg IsPlatformMCPCatalogRegistrationTargetEligibleParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isPlatformMCPCatalogRegistrationTargetEligible, arg.ProjectID, arg.OrganizationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const isPlatformMCPNewModelEligible = `-- name: IsPlatformMCPNewModelEligible :one
 SELECT EXISTS (
     SELECT 1
@@ -1829,6 +2068,28 @@ func (q *Queries) LockPlatformMCPOperationReceipt(ctx context.Context, arg LockP
 	return err
 }
 
+const lockPlatformMCPProjectRegistrationQuota = `-- name: LockPlatformMCPProjectRegistrationQuota :exec
+SELECT pg_advisory_xact_lock(
+    hashtextextended(
+        jsonb_build_array('platform-mcp-registration-quota', $1::text, $2::text)::text,
+        0
+    )
+)
+`
+
+type LockPlatformMCPProjectRegistrationQuotaParams struct {
+	OrganizationID string
+	ProjectID      string
+}
+
+// Serialize active-registration counting and desired-state creation for one
+// project. Callers acquire the receipt lock first, then this quota lock, then
+// the candidate-specific desired-state lock.
+func (q *Queries) LockPlatformMCPProjectRegistrationQuota(ctx context.Context, arg LockPlatformMCPProjectRegistrationQuotaParams) error {
+	_, err := q.db.Exec(ctx, lockPlatformMCPProjectRegistrationQuota, arg.OrganizationID, arg.ProjectID)
+	return err
+}
+
 const lockPlatformMCPSetupHandoff = `-- name: LockPlatformMCPSetupHandoff :exec
 SELECT pg_advisory_xact_lock(
     hashtextextended(
@@ -1927,6 +2188,52 @@ type RecordPlatformMCPRegistrationSucceededParams struct {
 func (q *Queries) RecordPlatformMCPRegistrationSucceeded(ctx context.Context, arg RecordPlatformMCPRegistrationSucceededParams) error {
 	_, err := q.db.Exec(ctx, recordPlatformMCPRegistrationSucceeded,
 		arg.OrganizationID,
+		arg.ConnectionID,
+		arg.ConnectionGeneration,
+		arg.ProjectID,
+		arg.McpKey,
+		arg.AttemptID,
+	)
+	return err
+}
+
+const recordPlatformMCPSetupMilestone = `-- name: RecordPlatformMCPSetupMilestone :exec
+INSERT INTO platform_mcp_onboarding_milestones (
+    organization_id,
+    milestone,
+    connection_id,
+    connection_generation,
+    project_id,
+    mcp_key,
+    attempt_id
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7
+)
+ON CONFLICT (organization_id, milestone, project_id, mcp_key, attempt_id)
+WHERE attempt_id IS NOT NULL
+DO NOTHING
+`
+
+type RecordPlatformMCPSetupMilestoneParams struct {
+	OrganizationID       string
+	Milestone            string
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
+	ProjectID            uuid.NullUUID
+	McpKey               string
+	AttemptID            uuid.NullUUID
+}
+
+func (q *Queries) RecordPlatformMCPSetupMilestone(ctx context.Context, arg RecordPlatformMCPSetupMilestoneParams) error {
+	_, err := q.db.Exec(ctx, recordPlatformMCPSetupMilestone,
+		arg.OrganizationID,
+		arg.Milestone,
 		arg.ConnectionID,
 		arg.ConnectionGeneration,
 		arg.ProjectID,
@@ -2215,6 +2522,30 @@ func (q *Queries) RotatePlatformMCPSession(ctx context.Context, arg RotatePlatfo
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const softDeletePendingPlatformMCPCatalogRegistration = `-- name: SoftDeletePendingPlatformMCPCatalogRegistration :exec
+UPDATE platform_mcp_catalog_registrations
+SET deleted_at = clock_timestamp()
+WHERE id = $1
+  AND organization_id = $2
+  AND project_id = $3
+  AND status = 'pending'
+  AND remote_mcp_server_id IS NULL
+  AND user_session_issuer_id IS NULL
+  AND mcp_server_id IS NULL
+  AND mcp_endpoint_id IS NULL
+`
+
+type SoftDeletePendingPlatformMCPCatalogRegistrationParams struct {
+	RegistrationID uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) SoftDeletePendingPlatformMCPCatalogRegistration(ctx context.Context, arg SoftDeletePendingPlatformMCPCatalogRegistrationParams) error {
+	_, err := q.db.Exec(ctx, softDeletePendingPlatformMCPCatalogRegistration, arg.RegistrationID, arg.OrganizationID, arg.ProjectID)
+	return err
 }
 
 const updatePlatformMCPCatalogRegistrationComponents = `-- name: UpdatePlatformMCPCatalogRegistrationComponents :one

@@ -8,6 +8,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 )
 
 func TestRegistrationServiceRegistersReviewedCandidateWithServerComputedHash(t *testing.T) {
@@ -31,7 +33,7 @@ func TestRegistrationServiceRegistersReviewedCandidateWithServerComputedHash(t *
 			Status:         receiptStatusSucceeded,
 		},
 	}
-	service := NewRegistrationService(
+	service := newRegistrationService(
 		testCatalog{details: CatalogDetails{CatalogCandidate: CatalogCandidate{ProviderKey: "provider", CatalogRef: "reviewed/mcp", SetupIntent: "authorize"}, Transport: "streamable-http", remoteURL: "https://provider.test/mcp"}},
 		&testRegistrationGate{enabled: true},
 		store,
@@ -65,7 +67,7 @@ func TestRegistrationServiceRejectsUnreviewedCandidateAfterMutationGate(t *testi
 	catalog := testCatalog{err: ErrCatalogRejected}
 	gate := testRegistrationGate{enabled: true}
 	store := &recordingRegistrationStore{}
-	service := NewRegistrationService(catalog, &gate, store)
+	service := newRegistrationService(catalog, &gate, store)
 
 	_, err := service.RegisterCatalogMCP(t.Context(), registrationServicePrincipal(), RegisterCatalogMCPInput{
 		ProjectSlug:    "project",
@@ -79,12 +81,31 @@ func TestRegistrationServiceRejectsUnreviewedCandidateAfterMutationGate(t *testi
 	require.Zero(t, store.resolveCalls)
 }
 
+func TestRegistrationServiceRejectsIneligibleTargetBeforeReceipt(t *testing.T) {
+	t.Parallel()
+
+	project := ResolvedProject{ID: uuid.New(), Slug: "legacy-project"}
+	store := &recordingRegistrationStore{project: project, eligibilitySet: true}
+	service := newRegistrationService(
+		testCatalog{details: CatalogDetails{CatalogCandidate: CatalogCandidate{ProviderKey: "provider", CatalogRef: "reviewed/mcp", SetupIntent: "authorize"}, Transport: "streamable-http"}},
+		&testRegistrationGate{enabled: true},
+		store,
+	)
+
+	_, err := service.RegisterCatalogMCP(t.Context(), registrationServicePrincipal(), RegisterCatalogMCPInput{
+		ProjectSlug: project.Slug, ProviderKey: "provider", CatalogRef: "reviewed/mcp", IdempotencyKey: "request-key",
+	})
+
+	require.ErrorIs(t, err, ErrTargetIneligible)
+	require.Zero(t, store.beginCalls)
+}
+
 func TestRegistrationServiceFailsClosedWhenRegistrationGateIsDisabled(t *testing.T) {
 	t.Parallel()
 
 	gate := testRegistrationGate{}
 	store := &recordingRegistrationStore{}
-	service := NewRegistrationService(
+	service := newRegistrationService(
 		testCatalog{details: CatalogDetails{CatalogCandidate: CatalogCandidate{ProviderKey: "provider", CatalogRef: "reviewed/mcp", SetupIntent: "authorize"}, Transport: "streamable-http"}},
 		&gate,
 		store,
@@ -108,7 +129,7 @@ func TestRegistrationServiceIssuesSetupHandoffOnlyWhenRegistrationGateIsEnabled(
 	project := ResolvedProject{ID: uuid.New(), Slug: "project"}
 	store := &recordingRegistrationStore{project: project}
 	gate := &testRegistrationGate{enabled: true}
-	service := NewRegistrationService(
+	service := newRegistrationService(
 		testCatalog{details: CatalogDetails{CatalogCandidate: CatalogCandidate{ProviderKey: "provider", CatalogRef: "reviewed/mcp", SetupIntent: "setup"}, Transport: "streamable-http"}},
 		gate,
 		store,
@@ -143,7 +164,7 @@ func TestRegistrationServiceRejectsInvalidSetupHandoffInputs(t *testing.T) {
 	project := ResolvedProject{ID: uuid.New(), Slug: "project"}
 	store := &recordingRegistrationStore{project: project}
 	gate := &testRegistrationGate{enabled: true}
-	service := NewRegistrationService(
+	service := newRegistrationService(
 		testCatalog{details: CatalogDetails{CatalogCandidate: CatalogCandidate{ProviderKey: "provider", CatalogRef: "reviewed/mcp", SetupIntent: "setup"}, Transport: "streamable-http"}},
 		gate,
 		store,
@@ -162,6 +183,58 @@ func TestRegistrationServiceRejectsInvalidSetupHandoffInputs(t *testing.T) {
 	require.Equal(t, 1, store.resolveCalls)
 }
 
+func TestRegistrationServiceStopsBeforePersistenceWhenBudgetDenies(t *testing.T) {
+	t.Parallel()
+
+	project := ResolvedProject{ID: uuid.New(), Slug: "project"}
+	store := &recordingRegistrationStore{project: project}
+	denied := OperationBudget{
+		Connection:   &recordingOperationLimiter{result: ratelimit.Result{Allowed: false}},
+		Organization: allowOperationLimiter{},
+	}
+	service := NewRegistrationService(
+		testCatalog{details: CatalogDetails{CatalogCandidate: CatalogCandidate{ProviderKey: "provider", CatalogRef: "reviewed/mcp", SetupIntent: "authorize"}, Transport: "streamable-http"}},
+		&testRegistrationGate{enabled: true},
+		store,
+	).WithOperationBudgets(OperationBudgets{Registration: denied, Catalog: denied, Handoff: denied, SetupStart: denied, Repair: denied})
+
+	_, err := service.RegisterCatalogMCP(t.Context(), registrationServicePrincipal(), RegisterCatalogMCPInput{
+		ProjectSlug: project.Slug, ProviderKey: "provider", CatalogRef: "reviewed/mcp", IdempotencyKey: "request-key",
+	})
+
+	require.ErrorIs(t, err, ErrOperationRateLimited)
+	require.Zero(t, store.resolveCalls)
+	require.Zero(t, store.beginCalls)
+}
+
+func TestRegistrationServiceReturnsActiveRegistrationCapConflict(t *testing.T) {
+	t.Parallel()
+
+	project := ResolvedProject{ID: uuid.New(), Slug: "project"}
+	store := &recordingRegistrationStore{
+		project: project,
+		begin: OperationReceipt{
+			ID:         uuid.New(),
+			Status:     receiptStatusSucceeded,
+			ResultCode: receiptResultActiveCap,
+			Replayed:   true,
+		},
+	}
+	service := newRegistrationService(
+		testCatalog{details: CatalogDetails{CatalogCandidate: CatalogCandidate{ProviderKey: "provider", CatalogRef: "reviewed/mcp", SetupIntent: "authorize"}, Transport: "streamable-http"}},
+		&testRegistrationGate{enabled: true},
+		store,
+	)
+
+	_, err := service.RegisterCatalogMCP(t.Context(), registrationServicePrincipal(), RegisterCatalogMCPInput{
+		ProjectSlug: project.Slug, ProviderKey: "provider", CatalogRef: "reviewed/mcp", IdempotencyKey: "request-key",
+	})
+
+	require.ErrorIs(t, err, ErrRegistrationCap)
+	require.Zero(t, store.convergeCalls)
+	require.Zero(t, store.completeCalls)
+}
+
 func TestRegistrationServiceDoesNotReconvergeSucceededReplay(t *testing.T) {
 	t.Parallel()
 
@@ -176,7 +249,7 @@ func TestRegistrationServiceDoesNotReconvergeSucceededReplay(t *testing.T) {
 			Replayed:       true,
 		},
 	}
-	service := NewRegistrationService(
+	service := newRegistrationService(
 		testCatalog{details: CatalogDetails{CatalogCandidate: CatalogCandidate{ProviderKey: "provider", CatalogRef: "reviewed/mcp", SetupIntent: "authorize"}, Transport: "streamable-http"}},
 		&testRegistrationGate{enabled: true},
 		store,
@@ -223,22 +296,32 @@ func (g *testRegistrationGate) Enabled(_ context.Context, organizationID, projec
 }
 
 type recordingRegistrationStore struct {
-	project       ResolvedProject
-	begin         OperationReceipt
-	converged     OperationReceipt
-	completed     OperationReceipt
-	err           error
-	request       CatalogRegistrationRequest
-	resolveCalls  int
-	beginCalls    int
-	convergeCalls int
-	completeCalls int
-	handoffCalls  int
+	project        ResolvedProject
+	begin          OperationReceipt
+	converged      OperationReceipt
+	completed      OperationReceipt
+	err            error
+	eligible       bool
+	eligibilitySet bool
+	eligibilityErr error
+	request        CatalogRegistrationRequest
+	resolveCalls   int
+	beginCalls     int
+	convergeCalls  int
+	completeCalls  int
+	handoffCalls   int
 }
 
 func (s *recordingRegistrationStore) ResolveProject(context.Context, string, string) (ResolvedProject, error) {
 	s.resolveCalls++
 	return s.project, s.err
+}
+
+func (s *recordingRegistrationStore) EligibleCatalogRegistrationTarget(_ context.Context, _ string, _ ResolvedProject) (bool, error) {
+	if !s.eligibilitySet {
+		return true, s.eligibilityErr
+	}
+	return s.eligible, s.eligibilityErr
 }
 
 func (s *recordingRegistrationStore) BeginReceipt(_ context.Context, _ Principal, _ ResolvedProject, request CatalogRegistrationRequest, _ time.Time) (OperationReceipt, error) {
@@ -264,6 +347,23 @@ func (s *recordingRegistrationStore) IssueSetupHandoff(_ context.Context, _ Prin
 	return IssuedSetupHandoff{SetupHandoff: SetupHandoff{ProjectID: binding.ProjectID, RegistrationID: binding.RegistrationID, ProviderKey: binding.ProviderKey, Intent: binding.Intent}}, s.err
 }
 
+type allowOperationLimiter struct{}
+
+func (allowOperationLimiter) Allow(context.Context, string) (ratelimit.Result, error) {
+	return ratelimit.Result{Allowed: true}, nil
+}
+
+func newRegistrationService(catalog Catalog, gate CatalogRegistrationGateChecker, store RegistrationPersistence) *RegistrationService {
+	budget := OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}}
+	return NewRegistrationService(catalog, gate, store).WithOperationBudgets(OperationBudgets{
+		Catalog:      budget,
+		Registration: budget,
+		Handoff:      budget,
+		SetupStart:   budget,
+		Repair:       budget,
+	})
+}
+
 func registrationServicePrincipal() Principal {
 	return Principal{UserID: "user", OrganizationID: "organization", ConnectionID: uuid.NewString(), Generation: uuid.NewString(), ClientID: "client"}
 }
@@ -272,7 +372,7 @@ func TestRegistrationServiceReturnsCatalogInspectionErrors(t *testing.T) {
 	t.Parallel()
 
 	upstreamErr := errors.New("catalog unavailable")
-	service := NewRegistrationService(testCatalog{err: upstreamErr}, &testRegistrationGate{enabled: true}, &recordingRegistrationStore{})
+	service := newRegistrationService(testCatalog{err: upstreamErr}, &testRegistrationGate{enabled: true}, &recordingRegistrationStore{})
 
 	_, err := service.RegisterCatalogMCP(t.Context(), registrationServicePrincipal(), RegisterCatalogMCPInput{
 		ProjectSlug: "project", ProviderKey: "provider", CatalogRef: "reviewed/mcp", IdempotencyKey: "request-key",

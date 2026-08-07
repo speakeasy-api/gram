@@ -38,6 +38,9 @@ func registerSetupHandoffTool(server *mcp.Server, registrations *RegistrationSer
 		}
 		issued, err := registrations.IssueSetupHandoff(ctx, principal, IssueSetupHandoffInput(input))
 		if err != nil {
+			if budgetResult, ok := operationBudgetToolResult(err); ok {
+				return budgetResult, GetSetupHandoffToolOutput{}, nil
+			}
 			return nil, GetSetupHandoffToolOutput{}, err
 		}
 		return nil, GetSetupHandoffToolOutput{

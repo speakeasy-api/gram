@@ -73,6 +73,14 @@ func TestOperationReceiptFromRowPreservesRegistrationAssociation(t *testing.T) {
 	require.Equal(t, receiptStatusPending, receipt.Status)
 }
 
+func TestNewRegistrationStoreRequiresPositiveActiveRegistrationCap(t *testing.T) {
+	t.Parallel()
+
+	store, err := NewRegistrationStore(nil, RegistrationStoreConfig{ActiveRegistrationCap: 1})
+	require.ErrorIs(t, err, ErrRegistrationInvalid)
+	require.Nil(t, store)
+}
+
 func TestNewRegistrationComponentSuffixIsCollisionResistant(t *testing.T) {
 	t.Parallel()
 

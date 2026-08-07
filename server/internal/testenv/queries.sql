@@ -327,6 +327,16 @@ WHERE registration_id = @registration_id
 ORDER BY checked_at DESC, id DESC
 LIMIT 1;
 
+-- name: CountPlatformMCPSetupMilestoneFixture :one
+-- Test-only count for idempotent Platform MCP setup evidence.
+SELECT count(*)
+FROM platform_mcp_onboarding_milestones
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND mcp_key = @mcp_key
+  AND attempt_id = @attempt_id
+  AND milestone = @milestone;
+
 -- name: ExpireRemoteSessionAccessTokenFixture :exec
 -- Test-only fixture forcing the shared remote-session refresh path.
 UPDATE remote_sessions

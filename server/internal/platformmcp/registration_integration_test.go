@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -47,6 +48,201 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+func TestRegistrationStoreEnforcesActiveRegistrationCap(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_registration_cap")
+	require.NoError(t, err)
+
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 1})
+	require.NoError(t, err)
+
+	registeredRequest := registrationRequest(project, "registered", "registered-key")
+	registeredReceipt, err := store.BeginReceipt(ctx, principal, project, registeredRequest, time.Now().UTC())
+	require.NoError(t, err)
+	registeredReceipt, err = store.ConvergeRegistration(ctx, principal, project, registeredRequest, registeredReceipt)
+	require.NoError(t, err)
+	registeredReceipt, err = store.CompleteRegistration(ctx, principal, project, registeredRequest, registeredReceipt, "https://reviewed.example.test/registered")
+	require.NoError(t, err)
+
+	reusedRequest := registeredRequest
+	reusedRequest.IdempotencyKey = "reused-key"
+	reusedReceipt, err := store.BeginReceipt(ctx, principal, project, reusedRequest, time.Now().UTC())
+	require.NoError(t, err)
+	reusedReceipt, err = store.ConvergeRegistration(ctx, principal, project, reusedRequest, reusedReceipt)
+	require.NoError(t, err)
+	require.Equal(t, registeredReceipt.RegistrationID, reusedReceipt.RegistrationID)
+
+	deniedRequest := registrationRequest(project, "denied", "denied-key")
+	deniedReceipt, err := store.BeginReceipt(ctx, principal, project, deniedRequest, time.Now().UTC())
+	require.NoError(t, err)
+	deniedReceipt, err = store.ConvergeRegistration(ctx, principal, project, deniedRequest, deniedReceipt)
+	require.ErrorIs(t, err, ErrRegistrationCap)
+	require.Equal(t, receiptStatusSucceeded, deniedReceipt.Status)
+	require.Equal(t, receiptResultActiveCap, deniedReceipt.ResultCode)
+	require.False(t, deniedReceipt.RegistrationID.Valid)
+
+	storedDeniedReceipt, err := platformrepo.New(conn).GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{
+		OrganizationID: principal.OrganizationID,
+		SubjectUrn:     userSubjectURN(principal.UserID),
+		ProjectID:      project.ID,
+		Operation:      operationRegisterCatalogMCP,
+		IdempotencyKey: deniedRequest.IdempotencyKey,
+	})
+	require.NoError(t, err)
+	require.Equal(t, receiptStatusSucceeded, storedDeniedReceipt.Status)
+	require.Equal(t, receiptResultActiveCap, storedDeniedReceipt.ResultCode.String)
+	require.False(t, storedDeniedReceipt.RegistrationID.Valid)
+
+	registrations, err := platformrepo.New(conn).CountActiveRegisteredPlatformMCPCatalogRegistrations(ctx, platformrepo.CountActiveRegisteredPlatformMCPCatalogRegistrationsParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      project.ID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, registrations)
+	_, err = platformrepo.New(conn).GetActivePlatformMCPCatalogRegistration(ctx, platformrepo.GetActivePlatformMCPCatalogRegistrationParams{
+		OrganizationID:   principal.OrganizationID,
+		ProjectID:        project.ID,
+		SourceKind:       deniedRequest.SourceKind,
+		CatalogProvider:  deniedRequest.CatalogProvider,
+		CatalogReference: deniedRequest.CatalogReference,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	auditCount, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionPlatformMcpRegistrationCreate)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, auditCount)
+
+	replayedReceipt, err := store.BeginReceipt(ctx, principal, project, deniedRequest, time.Now().UTC())
+	require.NoError(t, err)
+	require.True(t, replayedReceipt.Replayed)
+	require.Equal(t, deniedReceipt.ID, replayedReceipt.ID)
+	replayedReceipt, err = store.ConvergeRegistration(ctx, principal, project, deniedRequest, replayedReceipt)
+	require.ErrorIs(t, err, ErrRegistrationCap)
+	require.True(t, replayedReceipt.Replayed)
+	require.Equal(t, receiptResultActiveCap, replayedReceipt.ResultCode)
+}
+
+func TestRegistrationStoreSerializesCapRejectionsForDistinctCandidates(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_registration_cap_concurrent")
+	require.NoError(t, err)
+
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 1})
+	require.NoError(t, err)
+
+	registeredRequest := registrationRequest(project, "registered", "registered-key")
+	registeredReceipt, err := store.BeginReceipt(ctx, principal, project, registeredRequest, time.Now().UTC())
+	require.NoError(t, err)
+	registeredReceipt, err = store.ConvergeRegistration(ctx, principal, project, registeredRequest, registeredReceipt)
+	require.NoError(t, err)
+	_, err = store.CompleteRegistration(ctx, principal, project, registeredRequest, registeredReceipt, "https://reviewed.example.test/registered")
+	require.NoError(t, err)
+
+	requests := []CatalogRegistrationRequest{
+		registrationRequest(project, "first", "first-key"),
+		registrationRequest(project, "second", "second-key"),
+	}
+	errorsByRequest := make(chan error, len(requests))
+	var start sync.WaitGroup
+	start.Add(1)
+	for _, request := range requests {
+		go func(request CatalogRegistrationRequest) {
+			start.Wait()
+			receipt, err := store.BeginReceipt(ctx, principal, project, request, time.Now().UTC())
+			if err == nil {
+				_, err = store.ConvergeRegistration(ctx, principal, project, request, receipt)
+			}
+			errorsByRequest <- err
+		}(request)
+	}
+	start.Done()
+	for range requests {
+		require.ErrorIs(t, <-errorsByRequest, ErrRegistrationCap)
+	}
+
+	registrations, err := platformrepo.New(conn).CountActiveRegisteredPlatformMCPCatalogRegistrations(ctx, platformrepo.CountActiveRegisteredPlatformMCPCatalogRegistrationsParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      project.ID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, registrations)
+}
+
+func TestRegistrationStoreDoesNotCountPendingRegistrationsTowardActiveCap(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_registration_pending_cap")
+	require.NoError(t, err)
+
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 1})
+	require.NoError(t, err)
+
+	pendingRequest := registrationRequest(project, "pending", "pending-key")
+	pendingReceipt, err := store.BeginReceipt(ctx, principal, project, pendingRequest, time.Now().UTC())
+	require.NoError(t, err)
+	pendingReceipt, err = store.ConvergeRegistration(ctx, principal, project, pendingRequest, pendingReceipt)
+	require.NoError(t, err)
+	require.True(t, pendingReceipt.RegistrationID.Valid)
+
+	secondRequest := registrationRequest(project, "second", "second-key")
+	secondReceipt, err := store.BeginReceipt(ctx, principal, project, secondRequest, time.Now().UTC())
+	require.NoError(t, err)
+	secondReceipt, err = store.ConvergeRegistration(ctx, principal, project, secondRequest, secondReceipt)
+	require.NoError(t, err)
+	require.True(t, secondReceipt.RegistrationID.Valid)
+
+	completeRequests := []struct {
+		request CatalogRegistrationRequest
+		receipt OperationReceipt
+		remote  string
+	}{
+		{request: pendingRequest, receipt: pendingReceipt, remote: "https://reviewed.example.test/pending"},
+		{request: secondRequest, receipt: secondReceipt, remote: "https://reviewed.example.test/second"},
+	}
+	completeErrors := make(chan error, len(completeRequests))
+	var start sync.WaitGroup
+	start.Add(1)
+	for _, complete := range completeRequests {
+		go func(complete struct {
+			request CatalogRegistrationRequest
+			receipt OperationReceipt
+			remote  string
+		}) {
+			start.Wait()
+			_, err := store.CompleteRegistration(ctx, principal, project, complete.request, complete.receipt, complete.remote)
+			completeErrors <- err
+		}(complete)
+	}
+	start.Done()
+
+	var succeeded, capped int
+	for range completeRequests {
+		err := <-completeErrors
+		if err == nil {
+			succeeded++
+			continue
+		}
+		require.ErrorIs(t, err, ErrRegistrationCap)
+		capped++
+	}
+	require.Equal(t, 1, succeeded)
+	require.Equal(t, 1, capped)
+
+	registrations, err := platformrepo.New(conn).CountActiveRegisteredPlatformMCPCatalogRegistrations(ctx, platformrepo.CountActiveRegisteredPlatformMCPCatalogRegistrationsParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      project.ID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, registrations)
+}
+
 func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *testing.T) {
 	t.Parallel()
 
@@ -55,7 +251,8 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 	require.NoError(t, err)
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	store := NewRegistrationStore(conn)
+	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 5})
+	require.NoError(t, err)
 	request := CatalogRegistrationRequest{
 		ProjectSlug:      project.Slug,
 		SourceKind:       "catalog",
@@ -144,6 +341,12 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 	require.ErrorIs(t, err, ErrProviderAdapterUnavailable, "an unavailable adapter must not consume the handoff")
 	_, err = store.BeginProviderSetup(ctx, principal, handoffBinding, issuedHandoff.Value, adapters)
 	require.NoError(t, err)
+	assertSetupMilestone(t, ctx, conn, principal.OrganizationID, project.ID, request.CatalogProvider+":"+request.CatalogReference, issuedHandoff.ID, "provider_setup_started")
+	ready, err := store.ProbeProviderReadiness(ctx, principal, project.ID, registration.ID, adapters)
+	require.NoError(t, err)
+	require.Equal(t, ReadinessReady, ready.State)
+	assertSetupMilestone(t, ctx, conn, principal.OrganizationID, project.ID, request.CatalogProvider+":"+request.CatalogReference, issuedHandoff.ID, "provider_setup_succeeded")
+	assertSetupMilestone(t, ctx, conn, principal.OrganizationID, project.ID, request.CatalogProvider+":"+request.CatalogReference, issuedHandoff.ID, "platform_flow_ready")
 	_, err = store.BeginProviderSetup(ctx, principal, handoffBinding, issuedHandoff.Value, adapters)
 	require.ErrorIs(t, err, ErrSetupHandoffInvalid)
 	for _, action := range []audit.Action{audit.ActionPlatformMcpRegistrationHandoffIssue, audit.ActionPlatformMcpRegistrationHandoffRedeem} {
@@ -228,7 +431,7 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 
 	dashboardGate := &testRegistrationGate{enabled: true}
 	dashboardAuthorizer := &testAuthorizer{}
-	dashboardSetup := NewDashboardSetupService(store, dashboardGate, dashboardAuthorizer, adapters)
+	dashboardSetup := NewDashboardSetupService(store, dashboardGate, dashboardAuthorizer, adapters, testOperationBudget())
 	providerSetup, err := dashboardSetup.StartDashboardSetup(ctx, principal.UserID, principal.OrganizationID, dashboardHandoff.Value)
 	require.NoError(t, err)
 	require.Equal(t, "https://provider.test/authorize", providerSetup.AuthorizationURL)
@@ -427,6 +630,35 @@ func TestRegistrationStoreCompleteRegistrationConvergesPrivateComponents(t *test
 	plugins, err := pluginsrepo.New(conn).ListPlugins(ctx, pluginsrepo.ListPluginsParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID})
 	require.NoError(t, err)
 	require.Empty(t, plugins)
+}
+
+func assertSetupMilestone(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID uuid.UUID, mcpKey string, attemptID uuid.UUID, milestone string) {
+	t.Helper()
+
+	count, err := testrepo.New(conn).CountPlatformMCPSetupMilestoneFixture(ctx, testrepo.CountPlatformMCPSetupMilestoneFixtureParams{
+		OrganizationID: organizationID,
+		ProjectID:      uuid.NullUUID{UUID: projectID, Valid: true},
+		McpKey:         mcpKey,
+		AttemptID:      uuid.NullUUID{UUID: attemptID, Valid: true},
+		Milestone:      milestone,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, count)
+}
+
+func testOperationBudget() OperationBudget {
+	return OperationBudget{Connection: allowOperationLimiter{}, Organization: allowOperationLimiter{}}
+}
+
+func registrationRequest(project ResolvedProject, catalogReference, idempotencyKey string) CatalogRegistrationRequest {
+	return CatalogRegistrationRequest{
+		ProjectSlug:      project.Slug,
+		SourceKind:       "catalog",
+		CatalogProvider:  "fixture",
+		CatalogReference: catalogReference,
+		IdempotencyKey:   idempotencyKey,
+		InputHash:        catalogRegistrationInputHash(project.Slug, "catalog", "fixture", catalogReference),
+	}
 }
 
 func connectionIDFromPrincipal(t *testing.T, principal Principal) uuid.UUID {

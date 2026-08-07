@@ -50,19 +50,36 @@ type Descriptor struct {
 
 // Adapter resolves one reviewed provider authorization and probes only its
 // configured Streamable HTTP endpoint.
-type Adapter struct {
-	logger     *slog.Logger
-	policy     *guardian.Policy
-	sessions   *remotesessions.ChallengeManager
-	descriptor Descriptor
+// ProviderClientConfigurator ensures the reviewed remote-session client exists
+// before a setup handoff is consumed. Implementations own their persistence and
+// provider registration behavior; the adapter stays responsible only for the
+// shared authorization and readiness paths.
+type ProviderClientConfigurator interface {
+	ConfigureProviderClient(ctx context.Context, request platformmcp.ProviderSetupRequest, descriptor Descriptor) error
 }
 
-func New(logger *slog.Logger, policy *guardian.Policy, sessions *remotesessions.ChallengeManager, descriptor Descriptor) *Adapter {
+type Adapter struct {
+	logger       *slog.Logger
+	policy       *guardian.Policy
+	sessions     *remotesessions.ChallengeManager
+	descriptor   Descriptor
+	configurator ProviderClientConfigurator
+}
+
+// New accepts an optional configurator so existing reviewed adapters retain
+// validate-only preflight behavior. Local fixture composition supplies the one
+// approved configurator; normal startup supplies none.
+func New(logger *slog.Logger, policy *guardian.Policy, sessions *remotesessions.ChallengeManager, descriptor Descriptor, configurator ...ProviderClientConfigurator) *Adapter {
+	var configured ProviderClientConfigurator
+	if len(configurator) > 0 {
+		configured = configurator[0]
+	}
 	return &Adapter{
-		logger:     logger,
-		policy:     policy,
-		sessions:   sessions,
-		descriptor: descriptor,
+		logger:       logger,
+		policy:       policy,
+		sessions:     sessions,
+		descriptor:   descriptor,
+		configurator: configured,
 	}
 }
 
@@ -85,6 +102,11 @@ func (a *Adapter) PreflightSetup(ctx context.Context, request platformmcp.Provid
 	descriptor := a.descriptor
 	if !validDescriptor(descriptor) || a.sessions == nil {
 		return platformmcp.ErrProviderAdapterUnavailable
+	}
+	if a.configurator != nil {
+		if err := a.configurator.ConfigureProviderClient(ctx, request, descriptor); err != nil {
+			return fmt.Errorf("configure reviewed provider client: %w", err)
+		}
 	}
 	_, err := a.reviewedClient(ctx, request, descriptor)
 	return err
