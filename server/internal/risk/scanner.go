@@ -37,6 +37,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 )
 
+// enforcementScanBudget caps wall time for blocking risk scans on the sync
+// hooks path (canonical ingest / classic hooks). Matches the documented gating
+// evaluation deadline (~1s). OpenRouter PI judges still carry a longer per-call
+// timeout for async batch work; the earlier deadline wins when nested.
+// Exceeding this fails open (allow) via the hooks ingest path.
+var enforcementScanBudget = time.Second
+
 // RiskScanner checks text against blocking risk policies.
 type RiskScanner interface {
 	// ScanForEnforcement scans text against enabled blocking policies that
@@ -44,6 +51,7 @@ type RiskScanner interface {
 	// targeted policies require a matching risk_policy:evaluate grant.
 	// toolName is the tool-call name for tool_request/tool_response messages
 	// ("" otherwise); it is surfaced to prompt-based policies.
+	// Bounded by enforcementScanBudget (~1s); a shorter parent deadline still wins.
 	ScanForEnforcement(ctx context.Context, organizationID string, projectID uuid.UUID, userID string, text string, messageType message.Type, toolName string) (*ScanResult, error)
 	// LookupShadowMCPBlockingPolicy returns the first enabled shadow-MCP
 	// policy that applies to the given user. Returns nil when no such policy
@@ -267,6 +275,12 @@ func (s *Scanner) ScanForEnforcement(
 		return nil, nil
 	}
 
+	// Cap sync-path scanners (Presidio, OpenRouter PI, prompt-policy judges)
+	// so a slow model call cannot hold the gating RPC for multi-seconds.
+	// Parent contexts with a tighter deadline still win.
+	ctx, cancel := context.WithTimeout(ctx, enforcementScanBudget)
+	defer cancel()
+
 	// Root span for the scan as a unit of work: gitleaks/presidio/judge spans
 	// spawned downstream (through gctx) attribute under this span and its
 	// per-policy children instead of dangling as siblings of the RPC span.
@@ -412,6 +426,14 @@ func (s *Scanner) ScanForEnforcement(
 		// separately in dashboards/metrics and don't inflate the block count.
 		s.recordScan(ctx, projectID.String(), "warned", time.Since(start))
 		return hit, nil
+	}
+
+	// Scanners often fail open on their own deadline (e.g. PI → SAFE with no
+	// error). Surface expiry so hooks fail-open explicitly and metrics record
+	// failure instead of a false clean allow.
+	if err := ctx.Err(); err != nil {
+		s.recordScan(ctx, projectID.String(), o11y.OutcomeFailure, time.Since(start))
+		return nil, fmt.Errorf("enforcement scan deadline exceeded: %w", err)
 	}
 
 	s.recordScan(ctx, projectID.String(), o11y.OutcomeSuccess, time.Since(start))

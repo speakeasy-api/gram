@@ -267,6 +267,49 @@ func TestScanner_FanOutAcrossPoliciesIsConcurrent(t *testing.T) {
 		"wall time %v >= half-of-sequential %v — fan-out not happening", elapsed, maxAllowed)
 }
 
+// TestScanner_ScanForEnforcement_RespectsDeadline verifies that a slow scanner
+// cannot hold the sync enforcement path past the context deadline. Production
+// applies a ~1s enforcementScanBudget via WithTimeout; a shorter parent
+// deadline still wins, which is what this test exercises without waiting a
+// full second.
+func TestScanner_ScanForEnforcement_RespectsDeadline(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	insertPresidioBlockPolicy(t, ti, ctx, "slow-pii", []string{"EMAIL_ADDRESS"})
+
+	pii := &instrumentedPIIScanner{delay: 2 * time.Second}
+	scanner, err := risk.NewScanner(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		ti.conn,
+		newTestCustomRuleAnalyzer(t, ti.conn),
+		pii,
+		nil,
+		nil,
+		nil,
+		testCELEngine(t),
+	)
+	require.NoError(t, err)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	deadlineCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+	t.Cleanup(cancel)
+
+	start := time.Now()
+	result, err := scanner.ScanForEnforcement(deadlineCtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "reach me at user@example.com", message.User, "")
+	elapsed := time.Since(start)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Contains(t, err.Error(), "enforcement scan deadline exceeded")
+	require.Nil(t, result)
+	require.Less(t, elapsed, 500*time.Millisecond,
+		"scan should abort near the deadline, not wait for the 2s Presidio delay")
+	require.Positive(t, pii.cancellations.Load(),
+		"Presidio AnalyzeBatch should observe context cancellation")
+}
+
 func TestScanner_ScanForEnforcement_SkipsGrantResolutionWhenNoPolicies(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
