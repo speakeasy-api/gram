@@ -6,7 +6,7 @@
 -- seed/demo/postgres.sql).
 --
 -- The MVs (trace/metrics/attribute_metrics/chat_token/chat_session summaries,
--- attribute_keys, spend_rule_usage) fire on INSERT, and a DELETE mutation on
+-- attribute_keys, spend_rule_usage) fire on INSERT, and a DELETE on
 -- telemetry_logs never shrinks their targets — so each target is deleted
 -- explicitly below before the fresh insert repopulates it through the MVs.
 -- Rows are inserted with recent timestamps (trailing ~12 days), safely past
@@ -45,31 +45,38 @@
 --   Prod:  run daily by the infra cron AFTER demo.ensure_demo_org() on
 --          Postgres (ClickHouse has no procedural functions, hence a script).
 
-SET mutations_sync = 1;
+SET lightweight_deletes_sync = 1;
 
 -- Scoped deletes: telemetry source + every MV target + the org-keyed tables.
-ALTER TABLE telemetry_logs DELETE WHERE gram_project_id IN
+-- Lightweight DELETEs, not ALTER TABLE ... DELETE: a heavy mutation on
+-- telemetry_logs rewrites every column of every part that contains demo rows
+-- (~12 days of shared, all-tenant partitions — the partition key is time-only,
+-- so project id cannot prune), which previously starved merges in prod. A
+-- lightweight delete only writes the _row_exists mask for matching parts and
+-- hides the rows as soon as the statement returns; physical cleanup happens in
+-- background merges.
+DELETE FROM telemetry_logs WHERE gram_project_id IN
   (toUUID('dec0de00-0000-4000-a000-000000000001'));
-ALTER TABLE trace_summaries DELETE WHERE gram_project_id IN
+DELETE FROM trace_summaries WHERE gram_project_id IN
   (toUUID('dec0de00-0000-4000-a000-000000000001'));
-ALTER TABLE metrics_summaries DELETE WHERE gram_project_id IN
+DELETE FROM metrics_summaries WHERE gram_project_id IN
   (toUUID('dec0de00-0000-4000-a000-000000000001'));
-ALTER TABLE attribute_metrics_summaries DELETE WHERE gram_project_id IN
+DELETE FROM attribute_metrics_summaries WHERE gram_project_id IN
   (toUUID('dec0de00-0000-4000-a000-000000000001'));
-ALTER TABLE chat_token_summaries DELETE WHERE gram_project_id IN
+DELETE FROM chat_token_summaries WHERE gram_project_id IN
   (toUUID('dec0de00-0000-4000-a000-000000000001'));
-ALTER TABLE chat_session_summaries DELETE WHERE gram_project_id IN
+DELETE FROM chat_session_summaries WHERE gram_project_id IN
   (toUUID('dec0de00-0000-4000-a000-000000000001'));
-ALTER TABLE spend_rule_usage_summaries DELETE WHERE gram_project_id IN
+DELETE FROM spend_rule_usage_summaries WHERE gram_project_id IN
   (toUUID('dec0de00-0000-4000-a000-000000000001'));
-ALTER TABLE attribute_keys DELETE WHERE gram_project_id IN
+DELETE FROM attribute_keys WHERE gram_project_id IN
   (toUUID('dec0de00-0000-4000-a000-000000000001'));
-ALTER TABLE shadow_mcp_inventory_urls DELETE WHERE gram_project_id IN
+DELETE FROM shadow_mcp_inventory_urls WHERE gram_project_id IN
   (toUUID('dec0de00-0000-4000-a000-000000000001'));
-ALTER TABLE authz_challenges DELETE WHERE organization_id = 'org_gram_demo_workspace';
-ALTER TABLE risk_findings DELETE WHERE organization_id = 'org_gram_demo_workspace';
-ALTER TABLE skill_session_versions DELETE WHERE organization_id = 'org_gram_demo_workspace';
-ALTER TABLE skill_efficacy_scores DELETE WHERE organization_id = 'org_gram_demo_workspace';
+DELETE FROM authz_challenges WHERE organization_id = 'org_gram_demo_workspace';
+DELETE FROM risk_findings WHERE organization_id = 'org_gram_demo_workspace';
+DELETE FROM skill_session_versions WHERE organization_id = 'org_gram_demo_workspace';
+DELETE FROM skill_efficacy_scores WHERE organization_id = 'org_gram_demo_workspace';
 
 -- Tool-execution rows: 3-12 per chat (hash-picked, so busy chats and quick
 -- ones both exist). gram.toolset.slug makes the Insights CTE's direct branch
