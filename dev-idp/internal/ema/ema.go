@@ -20,6 +20,9 @@
 package ema
 
 import (
+	"errors"
+	"fmt"
+	"net/url"
 	"slices"
 	"strings"
 
@@ -77,6 +80,24 @@ const (
 // own issuer identifier -- so it is declared once here.
 const ResourceASPrefix = "/resource-as"
 
+// ValidateResourceSlug rejects a slug that cannot round-trip through a
+// resource authorization server's URL.
+//
+// The server is mounted at a single-segment /{slug}/ wildcard and
+// ResourceSlugFromIssuer refuses anything containing a slash, so a slug with
+// one would be stored, handed back inside a plausible-looking issuer, and
+// then be unreachable at every endpoint it claims. Catching it at write time
+// turns a silent dead end into an error against the field that caused it.
+func ValidateResourceSlug(slug string) error {
+	if strings.TrimSpace(slug) == "" {
+		return errors.New("slug is required")
+	}
+	if slug != url.PathEscape(slug) {
+		return fmt.Errorf("slug %q must be a single URL path segment with no reserved characters", slug)
+	}
+	return nil
+}
+
 // ResourceASIssuer builds the canonical issuer identifier for a resource
 // slug. Canonical means no trailing slash, matching RFC 8414.
 func ResourceASIssuer(externalURL, slug string) string {
@@ -123,22 +144,38 @@ func ScopeList(scope string) []string {
 	return strings.Fields(scope)
 }
 
-// NarrowScope returns the members of `requested` that also appear in
-// `permitted`, preserving the requested order, joined back into a scope
-// string.
+// IntersectScope returns the members of `requested` that `granted` allows,
+// in the requested order.
 //
-// An empty `permitted` means "no ceiling configured" and passes `requested`
-// through untouched; an empty `requested` means the caller named no scopes
-// and gets none. Those two empties mean opposite things, which is why this
-// is one function rather than an inline intersection at each call site.
-func NarrowScope(requested, permitted string) string {
-	if strings.TrimSpace(permitted) == "" {
-		return strings.Join(ScopeList(requested), " ")
+// An empty `granted` allows nothing. An assignment that grants no scopes is a
+// denial, not a wildcard -- the two are one keystroke apart in the dashboard
+// and mean opposite things.
+func IntersectScope(requested, granted string) string {
+	return intersect(requested, granted)
+}
+
+// ApplyCeiling narrows `scope` to `ceiling`, in the original order.
+//
+// An empty `ceiling` means no ceiling was configured and passes `scope`
+// through untouched. A trust rule that names no scopes is not thereby
+// forbidding all of them.
+//
+// This is the opposite reading of an empty second argument from
+// IntersectScope, which is exactly why they are two functions: one shared
+// helper with a flag would put the decision at the call site, where getting
+// it backwards is invisible.
+func ApplyCeiling(scope, ceiling string) string {
+	if strings.TrimSpace(ceiling) == "" {
+		return strings.Join(ScopeList(scope), " ")
 	}
-	allowed := ScopeList(permitted)
-	kept := make([]string, 0, len(allowed))
+	return intersect(scope, ceiling)
+}
+
+func intersect(requested, allowed string) string {
+	permitted := ScopeList(allowed)
+	kept := make([]string, 0, len(permitted))
 	for _, s := range ScopeList(requested) {
-		if slices.Contains(allowed, s) && !slices.Contains(kept, s) {
+		if slices.Contains(permitted, s) && !slices.Contains(kept, s) {
 			kept = append(kept, s)
 		}
 	}

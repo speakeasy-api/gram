@@ -386,3 +386,33 @@ func TestAccessTokenDoesNotVerifyForAnotherResource(t *testing.T) {
 	_, err = h.parseAccessToken(&other, body.AccessToken)
 	require.Error(t, err, "a chat token must not verify as a billing token")
 }
+
+// `sub` only means something in its own issuer's namespace. A foreign issuer
+// shaping its subject like an existing local users.id must not thereby become
+// that user; the email claim is what carries identity across a trust boundary.
+func TestRedeemDoesNotLetAForeignIssuerClaimALocalSubject(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	foreign := newForeignIDP(t)
+	h.trustIssuer(t, foreign.issuer, "", "[]")
+
+	opts := h.defaultJAG()
+	opts.Issuer = foreign.issuer
+	opts.Key = foreign.key
+	opts.KID = foreign.kid
+	// Names the local user's id outright, and carries a different email.
+	opts.Subject = h.user.ID.String()
+	opts.Email = "impostor@partner.example"
+
+	body := decodeJSON[tokenResponse](t, h.redeem(t, h.signJAG(t, opts), testClientID))
+
+	form := url.Values{}
+	form.Set("token", body.AccessToken)
+	introspection := decodeJSON[introspectionResponse](t, h.postForm(t, "/introspect", form))
+
+	require.True(t, introspection.Active)
+	require.Equal(t, "impostor@partner.example", introspection.Username,
+		"a foreign subject must resolve by email, not by reusing the local id it names")
+	require.NotEqual(t, h.user.ID.String(), introspection.Sub)
+}

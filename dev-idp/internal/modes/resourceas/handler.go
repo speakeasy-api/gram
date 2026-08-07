@@ -303,7 +303,7 @@ func (h *Handler) handleToken(w http.ResponseWriter, r *http.Request) {
 		oauthError(w, http.StatusInternalServerError, "server_error", "failed to load trust rule")
 		return
 	}
-	granted := ema.NarrowScope(claims.Scope, rule.AllowedScopes)
+	granted := ema.ApplyCeiling(claims.Scope, rule.AllowedScopes)
 
 	now := time.Now()
 	expiresAt := now.Add(accessTokenLifetime)
@@ -444,8 +444,14 @@ func allowedByTrustRule(rule repo.EmaTrustRule, clientID string) error {
 // server would: RFC 8414 metadata, then the jwks_uri it names, then the key
 // matching the assertion's kid. Nothing is cached, because a dev-idp sees a
 // handful of redemptions and a stale key is a worse failure than a slow one.
+// isLocalIssuer reports whether an ID-JAG came from this dev-idp's own IdP
+// rather than a foreign trust domain.
+func (h *Handler) isLocalIssuer(issuer string) bool {
+	return issuer == strings.TrimRight(h.cfg.ExternalURL, "/")+"/oauth2-1"
+}
+
 func (h *Handler) verificationKey(ctx context.Context, issuer string, token *jwt.Token) (*rsa.PublicKey, error) {
-	if issuer == strings.TrimRight(h.cfg.ExternalURL, "/")+"/oauth2-1" {
+	if h.isLocalIssuer(issuer) {
 		return h.keystore.PublicKey(), nil
 	}
 
@@ -523,9 +529,15 @@ func (h *Handler) authenticateClient(ctx context.Context, r *http.Request, claim
 // created, which is what a real resource app does on first cross-domain
 // access.
 func (h *Handler) resolveSubject(ctx context.Context, queries *repo.Queries, claims ema.Claims) (uuid.UUID, error) {
-	if id, err := uuid.Parse(claims.Subject); err == nil {
-		if _, err := queries.GetUser(ctx, id); err == nil {
-			return id, nil
+	// `sub` only means something inside its own issuer's namespace. Ours puts
+	// a users.id there; a foreign issuer's subject means nothing here and must
+	// not be read as one, or a grant from another trust domain could name an
+	// existing local account just by shaping its subject like a UUID.
+	if h.isLocalIssuer(claims.Issuer) {
+		if id, err := uuid.Parse(claims.Subject); err == nil {
+			if _, err := queries.GetUser(ctx, id); err == nil {
+				return id, nil
+			}
 		}
 	}
 

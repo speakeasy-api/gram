@@ -126,7 +126,7 @@ func (h *Handler) handleTokenExchangeGrant(ctx context.Context, w http.ResponseW
 	// denial, not an empty success.
 	granted := assignment.GrantedScopes
 	if requested := r.Form.Get("scope"); requested != "" {
-		granted = ema.NarrowScope(requested, assignment.GrantedScopes)
+		granted = ema.IntersectScope(requested, assignment.GrantedScopes)
 		if granted == "" {
 			oauthError(w, http.StatusBadRequest, "invalid_scope", "none of the requested scopes are granted by this assignment")
 			return
@@ -205,6 +205,11 @@ func (h *Handler) authenticateEmaApp(ctx context.Context, w http.ResponseWriter,
 	// §2.2 puts the identity in the assertion's iss/sub), so fall back to the
 	// assertion before deciding the request is unidentified.
 	clientID := r.Form.Get("client_id")
+	if clientID == "" {
+		if user, _, ok := r.BasicAuth(); ok {
+			clientID = user
+		}
+	}
 	assertion := r.Form.Get("client_assertion")
 	if clientID == "" && assertion != "" {
 		clientID = unverifiedAssertionSubject(assertion)
@@ -261,8 +266,7 @@ func (h *Handler) authenticateEmaApp(ctx context.Context, w http.ResponseWriter,
 		}
 
 	case app.ClientSecret != "":
-		presented := r.Form.Get("client_secret")
-		if subtle.ConstantTimeCompare([]byte(presented), []byte(app.ClientSecret)) != 1 {
+		if subtle.ConstantTimeCompare([]byte(presentedSecret(r)), []byte(app.ClientSecret)) != 1 {
 			oauthError(w, http.StatusUnauthorized, "invalid_client", "client_secret does not match")
 			return nil
 		}
@@ -274,6 +278,17 @@ func (h *Handler) authenticateEmaApp(ctx context.Context, w http.ResponseWriter,
 	}
 
 	return &app
+}
+
+// presentedSecret reads the client secret from either place this server says
+// it accepts one. The discovery document advertises both client_secret_basic
+// and client_secret_post, so a client that reads the metadata and picks Basic
+// has to work; reading only the form would make that advertisement a lie.
+func presentedSecret(r *http.Request) string {
+	if _, secret, ok := r.BasicAuth(); ok {
+		return secret
+	}
+	return r.Form.Get("client_secret")
 }
 
 // unverifiedAssertionSubject reads `sub` out of a client assertion without
@@ -422,10 +437,19 @@ func (h *Handler) subjectFromIDToken(raw string) (uuid.UUID, error) {
 		jwt.WithIssuer(h.issuer()),
 		jwt.WithExpirationRequired(),
 	)
-	if _, err := parser.ParseWithClaims(raw, &claims, func(*jwt.Token) (any, error) {
+	token, err := parser.ParseWithClaims(raw, &claims, func(*jwt.Token) (any, error) {
 		return h.keystore.PublicKey(), nil
-	}); err != nil {
+	})
+	if err != nil {
 		return uuid.Nil, fmt.Errorf("parse id_token: %w", err)
+	}
+
+	// An ID-JAG is signed by this same key, carries this same issuer and puts
+	// a user id in `sub`, so it would otherwise sail through every check above
+	// and let a grant be spent as the identity that bought it. The typ header
+	// is what tells them apart, exactly as it does on the redeem leg.
+	if typ, _ := token.Header["typ"].(string); typ == ema.JWTType {
+		return uuid.Nil, errors.New("subject_token is an ID-JAG, not an id_token")
 	}
 
 	userID, err := uuid.Parse(strings.TrimSpace(claims.Subject))
