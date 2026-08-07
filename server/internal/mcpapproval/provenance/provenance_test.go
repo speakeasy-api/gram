@@ -76,15 +76,24 @@ func TestRead_UnparseableMetaIsNotCatalogued(t *testing.T) {
 
 // A catalogued entry that publishes nothing useful is still catalogued: the
 // registry knows the server, it just says little about it.
-func TestRead_EmptyObjectIsCataloguedButBare(t *testing.T) {
+// An empty object, a blob of unrelated keys, and a caller's zero-value struct
+// all carry no recognized content. Each must read as not catalogued: reporting
+// them as catalogued with every fact zeroed would be an empty panel presented
+// as a clean bill of health.
+func TestRead_EmptyOrUnrecognizedMetaIsNotCatalogued(t *testing.T) {
 	t.Parallel()
 
-	got := provenance.Read(decode(t, `{}`))
+	require.False(t, provenance.Read(decode(t, `{}`)).Catalogued)
+	require.False(t, provenance.Read(decode(t, `{"com.example/other":{"x":1}}`)).Catalogued)
 
-	require.True(t, got.Catalogued)
-	require.False(t, got.Official)
-	require.Empty(t, got.Status)
-	require.True(t, got.PublishedAt.IsZero())
+	// The registry client carries `_meta` as a non-pointer struct, so a
+	// response without one reaches Read as a zero value, never as nil.
+	var zero struct {
+		Server struct {
+			IsOfficial bool `json:"isOfficial"`
+		} `json:"com.pulsemcp/server"`
+	}
+	require.False(t, provenance.Read(zero).Catalogued)
 }
 
 // A cache hit rebuilds the blob as plain maps rather than the original struct,

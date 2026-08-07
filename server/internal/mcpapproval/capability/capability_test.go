@@ -168,3 +168,27 @@ func TestHintOf(t *testing.T) {
 	require.Equal(t, capability.HintTrue, capability.HintOf(new(true)))
 	require.Equal(t, capability.HintFalse, capability.HintOf(new(false)))
 }
+
+// Two properties sharing a name at different depths are distinct declarations,
+// and detection must not depend on which one a map iteration happens to visit
+// last. The benign `target` here is top-level; the dangerous one — a `uri`
+// format — is nested, and it must be found every run, not at random.
+func TestAssess_SameNamedPropertyAtTwoDepthsIsAlwaysExamined(t *testing.T) {
+	t.Parallel()
+
+	schema := `{
+		"type": "object",
+		"properties": {
+			"target": {"type": "string"},
+			"options": {"type": "object", "properties": {"target": {"type": "string", "format": "uri"}}}
+		}
+	}`
+
+	for range 50 {
+		got := capability.Assess(capability.Declaration{
+			Name: "fetch", Description: "", InputSchema: schema,
+			ReadOnly: nil, Destructive: nil, Idempotent: nil, OpenWorld: nil,
+		})
+		require.Contains(t, got.SchemaImplied, capability.CapabilityArbitraryURL)
+	}
+}

@@ -20,6 +20,7 @@ package capability
 
 import (
 	"encoding/json"
+	"maps"
 	"slices"
 	"strings"
 )
@@ -46,10 +47,9 @@ const (
 
 // DeclaresDestructive reports that a server annotated a tool destructive.
 //
-// The single reading of `destructiveHint` in the codebase, so a definition-
-// driven caller assembling approval evidence and a call-driven scanner
-// classifying recorded traffic cannot drift on what the annotation means.
-// An absent annotation is not a declaration, and is not treated as one.
+// Shared by the definition-driven evidence assembly here and the call-driven
+// destructive-tool scanner, so those two cannot drift on what the annotation
+// means. An absent annotation is not a declaration, and is not treated as one.
 func DeclaresDestructive(destructiveHint *bool) bool {
 	return HintOf(destructiveHint) == HintTrue
 }
@@ -241,10 +241,10 @@ func schemaImplied(schema string) []Capability {
 	}
 
 	var found []Capability
-	for name, definition := range walkProperties(parsed) {
-		lowered := strings.ToLower(name)
+	for _, parameter := range walkProperties(parsed) {
+		lowered := strings.ToLower(parameter.name)
 		format := ""
-		if object, ok := definition.(map[string]any); ok {
+		if object, ok := parameter.definition.(map[string]any); ok {
 			if value, ok := object["format"].(string); ok {
 				format = strings.ToLower(value)
 			}
@@ -275,12 +275,26 @@ func matchesSignal(name string, format string, substrings []string, formats []st
 	return format != "" && slices.Contains(formats, format)
 }
 
-// walkProperties yields every property name and definition in a JSON Schema,
-// descending through nested objects and array items so a dangerous parameter
-// cannot hide one level down.
-func walkProperties(schema map[string]any) map[string]any {
-	found := map[string]any{}
-	collectProperties(schema, found, 0)
+// property is one named parameter found somewhere in a tool's input schema.
+type property struct {
+	// name is the property's key in its enclosing object.
+	name string
+
+	// definition is the property's schema fragment.
+	definition any
+}
+
+// walkProperties yields every property in a JSON Schema in a deterministic
+// order, descending through nested objects and array items so a dangerous
+// parameter cannot hide one level down.
+//
+// Every occurrence is kept: two properties sharing a name at different depths
+// are distinct declarations, and keying by name would make which one gets
+// examined depend on map iteration order — a capability signal that appears
+// or vanishes at random across runs of the same input.
+func walkProperties(schema map[string]any) []property {
+	var found []property
+	collectProperties(schema, &found, 0)
 
 	return found
 }
@@ -290,14 +304,15 @@ func walkProperties(schema map[string]any) map[string]any {
 // stack.
 const maxSchemaDepth = 12
 
-func collectProperties(node map[string]any, into map[string]any, depth int) {
+func collectProperties(node map[string]any, into *[]property, depth int) {
 	if depth > maxSchemaDepth {
 		return
 	}
 
 	if properties, ok := node["properties"].(map[string]any); ok {
-		for name, definition := range properties {
-			into[name] = definition
+		for _, name := range slices.Sorted(maps.Keys(properties)) {
+			definition := properties[name]
+			*into = append(*into, property{name: name, definition: definition})
 			if object, ok := definition.(map[string]any); ok {
 				collectProperties(object, into, depth+1)
 			}

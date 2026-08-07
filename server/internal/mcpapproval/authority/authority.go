@@ -28,7 +28,11 @@ const (
 	// is nothing.
 	ModeUndeclared Mode = "undeclared"
 
-	// ModeNone means the server declares it needs no credential.
+	// ModeNone means the declaration carried no credential requirement. That
+	// can be an explicit "no auth", but it is also the residual for a
+	// declaration that published something — a transport, say — without any
+	// authentication detail, so it is weaker than a promise that none is
+	// needed.
 	ModeNone Mode = "none"
 
 	// ModeAPIKey means the server wants a static secret supplied at install:
@@ -141,7 +145,15 @@ func Summarise(declaration Declaration) Authority {
 	}
 
 	version := strings.ToLower(strings.TrimSpace(declaration.OAuthVersion))
-	oauth := declaration.RequiresOAuth || (version != "" && version != "none")
+
+	// A registration endpoint is OAuth authorization-server metadata, so
+	// publishing one is itself an OAuth declaration. Counting it here is also
+	// what keeps the summary coherent: a declaration carrying only that
+	// endpoint must not read as "nothing was published about authentication"
+	// while simultaneously advertising dynamic OAuth registration.
+	oauth := declaration.RequiresOAuth ||
+		(version != "" && version != "none") ||
+		strings.TrimSpace(declaration.RegistrationEndpoint) != ""
 
 	// A declaration is only empty when the server published nothing at all.
 	// A server that says it needs no credential has told us something, and
