@@ -60,6 +60,18 @@ func TestError_SlackSideEnvelopeCodesStayServerFaults(t *testing.T) {
 	}
 }
 
+func TestError_SlackMigrationEnvelopeCodeStaysServerFault(t *testing.T) {
+	t.Parallel()
+
+	err := newEnvelopeError("team.info", http.StatusOK, ResponseEnvelope{
+		Ok:    false,
+		Error: "team_added_to_org",
+	})
+
+	require.False(t, err.ClientFault(), "a workspace migration is a Slack-side outage")
+	require.False(t, oops.IsClientFault(err))
+}
+
 func TestError_UnnamedEnvelopeFailureStaysServerFault(t *testing.T) {
 	t.Parallel()
 

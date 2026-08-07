@@ -15,6 +15,8 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
 // upstreamRefusalError stands in for a typed upstream API error that attributes
@@ -102,4 +104,19 @@ func TestToolCallRejection_UpstreamServerRefusalIsNotARejection(t *testing.T) {
 	rejected, ok := toolCallRejection(ctx, logger, cause)
 	require.False(t, ok)
 	require.Nil(t, rejected)
+}
+
+func TestPlatformToolCallError_ShareableClientFaultIsRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx, logger, buf, _ := recordedToolCallLogger(t)
+	cause := oops.E(oops.CodeBadRequest, &upstreamRefusalError{code: "thread_not_found", caller: true}, "upstream refused")
+
+	err := platformToolCallError(ctx, logger, cause, attr.SlogToolName("platform_tool"))
+	var rejected *oops.ShareableError
+	require.ErrorAs(t, err, &rejected)
+	require.Equal(t, oops.CodeBadRequest, rejected.Code)
+
+	entry := decodeLogEntry(t, buf)
+	require.Equal(t, "WARN", entry["level"], "caller faults must use the same warning path when already shareable")
 }
