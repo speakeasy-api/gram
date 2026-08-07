@@ -121,6 +121,10 @@ type consentTemplateData struct {
 	// (connected or expired), so a change can be persisted immediately rather
 	// than only riding the next connect.
 	AutoRefreshHasSessions bool
+	// ToolsSection is the "Tool access" picker: annotation checkboxes plus a
+	// name-snapshot tool list, rendered only for toolset-backed endpoints on
+	// client-grant (non-first-party) pages.
+	ToolsSection consentToolsSection
 }
 
 // sessionDurationOption is one <option> of the consent page's session length
@@ -249,6 +253,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	clientName := "Gram"
 	clientIDOrigin := ""
 	loopbackRedirectWarning := false
+	var clientRowID uuid.UUID
 	if !challengeState.FirstParty {
 		client, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
 		if err != nil {
@@ -257,6 +262,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			}
 			return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 		}
+		clientRowID = client.ID
 		clientName = client.ClientName
 		if client.ClientIDMetadataUri.Valid {
 			if u, err := url.Parse(client.ClientIDMetadataUri.String); err == nil {
@@ -314,6 +320,22 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		}
 	}
 
+	// Tool picker: only client-grant pages on toolset-backed endpoints. A
+	// resolution failure fails the render — hiding the picker while leaving
+	// approval enabled would let a transient lookup error mint an all-tools
+	// session on an endpoint whose reauth was meant to narrow it.
+	toolsSection := consentToolsSection{Supported: false, FilteringEnabled: false, AnnotationOptions: nil, Tools: nil, Scopes: nil, UnannotatedCount: 0, ProxyExcludedCount: 0}
+	if !challengeState.FirstParty {
+		pickerToolset, terr := s.describeConsentToolset(ctx, endpoint)
+		if terr != nil {
+			return oops.E(oops.CodeUnexpected, terr, "resolve toolset for consent tool picker").LogError(ctx, logger)
+		}
+		if pickerToolset != nil {
+			prefill := s.consentToolSelectionPrefill(ctx, endpoint, *challengeState.Subject, clientRowID)
+			toolsSection = buildConsentToolsSection(pickerToolset, prefill)
+		}
+	}
+
 	data := consentTemplateData{
 		ClientName:              clientName,
 		MCPSlug:                 endpoint.Slug,
@@ -333,6 +355,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		AutoRefreshSupported:    autoRefreshSupported,
 		AutoRefreshOn:           autoRefreshOn,
 		AutoRefreshHasSessions:  autoRefreshHasSessions,
+		ToolsSection:            toolsSection,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -347,8 +370,10 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	ctx := r.Context()
 
 	// Cap form body to defend against memory exhaustion (gosec G120). The
-	// consent form has a few short fields; 16 KiB is generous.
-	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
+	// tool picker can post consentToolNameLimit names of up to
+	// consentToolNameMaxRunes runes; 128 KiB fits that worst case with room
+	// for the fixed fields while staying bounded.
+	r.Body = http.MaxBytesReader(w, r.Body, 128<<10)
 	if err := r.ParseForm(); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "failed to parse form").LogError(ctx, s.logger)
 	}
@@ -446,6 +471,11 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		return oops.E(oops.CodeUnexpected, err, "record consent").LogError(ctx, logger)
 	}
 
+	toolSelection, err := s.chosenToolSelection(ctx, endpoint, r.PostForm)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid tool selection").LogError(ctx, logger)
+	}
+
 	code, err := generateOpaqueToken()
 	if err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
@@ -463,6 +493,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		CodeChallengeMethod:         challengeState.CodeChallengeMethod,
 		Subject:                     subject,
 		DesiredSessionDurationHours: desiredSessionDurationHours(r.PostForm.Get("session_duration_hours")),
+		ToolSelection:               toolSelection,
 		CreatedAt:                   time.Now(),
 	}
 	if err := s.userSessionGrantCache.Store(ctx, grant); err != nil {

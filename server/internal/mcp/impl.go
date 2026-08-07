@@ -58,6 +58,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
@@ -150,6 +151,7 @@ type Service struct {
 	platformToolsets       map[string]platformtools.Toolset
 	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
 	userSessionGrantCache  cache.TypedCacheObject[UserSessionGrant]
+	toolSelectionCache     cache.TypedCacheObject[sessionToolSelectionEntry]
 	// sessionClientInfo holds the MCP client identity captured at initialize
 	// so tools/call on the same session can resolve it. Always usable: without
 	// Redis it records nothing and every caller resolves as unknown.
@@ -258,6 +260,10 @@ type mcpInputs struct {
 	// tools/call expose only tools whose variation row carries one of these
 	// tags. Empty means no filtering.
 	tags []string
+	// toolSelection is the consent-screen tool policy loaded from the
+	// session row by the issuer gate. Nil means all tools; non-nil is always
+	// restrictive and intersects with the live toolset, ?tags=, and RBAC.
+	toolSelection *toolfilter.SessionSelection
 }
 
 func NewService(
@@ -374,6 +380,11 @@ func NewService(
 		),
 		userSessionGrantCache: cache.NewTypedObjectCache[UserSessionGrant](
 			logger.With(attr.SlogCacheNamespace("user_session_grant")),
+			cacheImpl,
+			cache.SuffixNone,
+		),
+		toolSelectionCache: cache.NewTypedObjectCache[sessionToolSelectionEntry](
+			logger.With(attr.SlogCacheNamespace("session_tool_selection")),
 			cacheImpl,
 			cache.SuffixNone,
 		),
@@ -686,7 +697,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	// Legacy toolset-by-slug path has no mcp_server, so there is no
 	// server-level variation group override (ServeToolsetResolved falls back to
 	// the toolset's own column) and no fronting mcp_servers id to record.
-	return s.ServeToolsetResolved(w, r, toolset, mcpSlug, "mcp", false, nil, nil, nil)
+	return s.ServeToolsetResolved(w, r, toolset, mcpSlug, "mcp", false, nil, nil, nil, nil)
 }
 
 // ServeToolsetResolved serves an MCP runtime request after the slug has
@@ -725,7 +736,11 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 // off the row.
 //
 // The caller is responsible for closing r.Body.
-func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, toolset *toolsets_repo.Toolset, mcpSlug, mcpRouteBase string, skipIssuerGate bool, extraUpstreamTokens map[uuid.UUID]string, mcpServerVariationsGroupID *uuid.UUID, mcpServerID *uuid.UUID) error {
+// callerToolSelection is the consent-screen tool policy resolved by a
+// caller-side issuer gate (today: /x/mcp's pre-dispatch ApplyIssuerGate run).
+// Nil when the caller ran no gate or the session carries no policy; the
+// in-toolset gate below populates it for /mcp callers.
+func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, toolset *toolsets_repo.Toolset, mcpSlug, mcpRouteBase string, skipIssuerGate bool, extraUpstreamTokens map[uuid.UUID]string, callerToolSelection *toolfilter.SessionSelection, mcpServerVariationsGroupID *uuid.UUID, mcpServerID *uuid.UUID) error {
 	ctx := r.Context()
 	var err error
 
@@ -820,11 +835,12 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		// all need to match the caller's surface, not the toolset's
 		// canonical /mcp surface.
 		endpoint := newResolvedMcpEndpointFromToolset(toolset, mcpRouteBase)
-		newCtx, gateTokens, err := s.ApplyIssuerGate(ctx, w, authToken, baseURL, endpoint)
+		newCtx, gateTokens, gateToolSelection, err := s.ApplyIssuerGate(ctx, w, authToken, baseURL, endpoint)
 		if err != nil {
 			return err
 		}
 		ctx = newCtx
+		callerToolSelection = gateToolSelection
 		tokenInputs, err = appendRemoteSessionTokenInputs(tokenInputs, gateTokens)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for issuer-gated toolset").LogError(ctx, s.logger)
@@ -1004,6 +1020,7 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		toolVariationsGroupID: toolVariationsGroupID,
 		mcpServerID:           mcpServerID,
 		tags:                  tags,
+		toolSelection:         callerToolSelection,
 	}
 
 	// Record the resolved variation group and requested tag filter for

@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -128,19 +129,21 @@ func (s *Service) serveResolvedMCPEndpoint(
 	// remote-backed proxying forwards the upstream remote-session token
 	// via AuthorizationOverride.
 	var upstreamTokens map[uuid.UUID]string
+	var sessionToolSelection *toolfilter.SessionSelection
 	var wwwAuthenticate string
 	if issuerGated {
 		resolvedEndpoint, err := s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, mcpRouteBase)
 		if err != nil {
 			return err
 		}
-		newCtx, tokens, err := s.ApplyIssuerGate(ctx, w, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
+		newCtx, tokens, toolSelection, err := s.ApplyIssuerGate(ctx, w, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
 		if err != nil {
 			return fmt.Errorf("apply issuer gate: %w", err)
 		}
 		ctx = newCtx
 		r = r.WithContext(ctx)
 		upstreamTokens = tokens
+		sessionToolSelection = toolSelection
 
 		// Issuer-gated clients authenticate with this server's AS, so an
 		// upstream 401/403 relayed by the proxy must challenge them with
@@ -154,16 +157,21 @@ func (s *Service) serveResolvedMCPEndpoint(
 	}
 
 	switch {
-	case mcpServer.RemoteMcpServerID.Valid:
-		upstreamToken, err := singleUpstreamToken(upstreamTokens)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "resolve upstream token for remote MCP backend").LogError(ctx, logger)
+	case mcpServer.RemoteMcpServerID.Valid, mcpServer.TunneledMcpServerID.Valid:
+		// The consent picker is never offered for remote/tunneled backends,
+		// and the gate rejects any restrictive selection bound to another
+		// endpoint, so reaching here with a policy means a code path started
+		// offering the picker without adding proxy-side enforcement. Refuse
+		// rather than silently serving every upstream tool.
+		if sessionToolSelection != nil {
+			return oops.E(oops.CodeUnexpected, nil, "session tool selection is not enforceable on proxied MCP backends").LogError(ctx, logger)
 		}
-		return s.serveRemoteBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken, wwwAuthenticate)
-	case mcpServer.TunneledMcpServerID.Valid:
 		upstreamToken, err := singleUpstreamToken(upstreamTokens)
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "resolve upstream token for tunneled MCP backend").LogError(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "resolve upstream token for proxied MCP backend").LogError(ctx, logger)
+		}
+		if mcpServer.RemoteMcpServerID.Valid {
+			return s.serveRemoteBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken, wwwAuthenticate)
 		}
 		return s.serveTunneledBackend(w, r, logger, mcpEndpoint, mcpServer, upstreamToken, wwwAuthenticate)
 	case mcpServer.ToolsetID.Valid:
@@ -193,7 +201,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 			mcpServerVariationsGroupID = &id
 		}
 
-		if err := s.ServeToolsetResolved(w, r, &toolset, slug, mcpRouteBase, issuerGated, upstreamTokens, mcpServerVariationsGroupID, &mcpServer.ID); err != nil {
+		if err := s.ServeToolsetResolved(w, r, &toolset, slug, mcpRouteBase, issuerGated, upstreamTokens, sessionToolSelection, mcpServerVariationsGroupID, &mcpServer.ID); err != nil {
 			return fmt.Errorf("serve toolset-backed mcp: %w", err)
 		}
 		return nil

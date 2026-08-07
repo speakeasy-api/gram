@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -157,8 +158,12 @@ type UserSessionGrant struct {
 	// length choice. Token minting clamps it to the issuer maximum. Zero means
 	// "no explicit choice" and the mint uses that maximum. Keep the JSON key
 	// stable so grants survive rolling deploys.
-	DesiredSessionDurationHours int       `json:"session_duration_hours,omitempty"`
-	CreatedAt                   time.Time `json:"created_at"`
+	DesiredSessionDurationHours int `json:"session_duration_hours,omitempty"`
+	// ToolSelection is the subject's consent-screen tool policy, already
+	// validated against the endpoint's live tool inventory and resource-bound.
+	// Nil means all tools.
+	ToolSelection *toolfilter.SessionSelection `json:"tool_selection,omitempty"`
+	CreatedAt     time.Time                    `json:"created_at"`
 }
 
 var _ cache.CacheableObject[UserSessionGrant] = (*UserSessionGrant)(nil)
@@ -208,13 +213,28 @@ var errIssuerGateOrgLookup = errors.New("describe organization for issuer-gated 
 // authz.Engine.ShouldEnforce / PrepareContext treat the request as a real
 // authenticated session. AccountType is retained as session metadata but does
 // not control RBAC enforcement.
-func (s *Service) validateUserSessionToken(ctx context.Context, token string, endpoint *ResolvedMcpEndpoint) (context.Context, *urn.SessionSubject, error) {
+func (s *Service) validateUserSessionToken(ctx context.Context, token string, endpoint *ResolvedMcpEndpoint) (context.Context, *urn.SessionSubject, *toolfilter.SessionSelection, error) {
 	if token == "" {
-		return ctx, nil, nil
+		return ctx, nil, nil, nil
 	}
 	session, err := s.userSessionSigner.ValidateBearer(ctx, token, endpoint.AudienceURN, s.chatSessionsManager)
 	if err != nil {
-		return ctx, nil, fmt.Errorf("validate user-session bearer: %w", err)
+		return ctx, nil, nil, fmt.Errorf("validate user-session bearer: %w", err)
+	}
+
+	// The consent-screen tool selection loads for every subject kind —
+	// including anonymous, which early-returns below before AuthContext is
+	// stamped. Load failures fail closed: a policy-store outage must never
+	// widen a restrictive session to all tools.
+	toolSelection, err := s.loadSessionToolSelection(ctx, endpoint, session.JTI)
+	if err != nil {
+		return ctx, nil, nil, fmt.Errorf("resolve session tool selection: %w", err)
+	}
+	if toolSelection != nil && toolSelection.Resource != endpointToolSelectionResource(endpoint) {
+		// Issuer-scoped tokens are portable across endpoints sharing the
+		// issuer; a selection consented on endpoint A must not authorize
+		// same-named tools on endpoint B. Reject into reauth.
+		return ctx, nil, nil, errToolSelectionResourceMismatch
 	}
 
 	subject := session.Subject
@@ -223,12 +243,12 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, en
 	}
 
 	if subject.Kind == urn.SessionSubjectKindAnonymous {
-		return ctx, &subject, nil
+		return ctx, &subject, toolSelection, nil
 	}
 
 	orgMetadata, err := mv.DescribeOrganization(ctx, s.logger, s.orgsRepo, s.billingRepository, endpoint.OrganizationID)
 	if err != nil {
-		return ctx, nil, fmt.Errorf("%w: %w", errIssuerGateOrgLookup, err)
+		return ctx, nil, nil, fmt.Errorf("%w: %w", errIssuerGateOrgLookup, err)
 	}
 	projectID := endpoint.ProjectID
 	authCtx := &contextvalues.AuthContext{
@@ -258,7 +278,7 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, en
 		// Unreachable: anonymous subjects return ctx untouched above. Listed
 		// for exhaustiveness so the linter doesn't flag the switch.
 	}
-	return contextvalues.SetAuthContext(ctx, authCtx), &subject, nil
+	return contextvalues.SetAuthContext(ctx, authCtx), &subject, toolSelection, nil
 }
 
 // AuthenticateChallengeHeader builds the WWW-Authenticate value (RFC 9728
@@ -328,13 +348,13 @@ func (s *Service) ApplyIssuerGate(
 	w http.ResponseWriter,
 	authToken, baseURL string,
 	endpoint *ResolvedMcpEndpoint,
-) (context.Context, map[uuid.UUID]string, error) {
+) (context.Context, map[uuid.UUID]string, *toolfilter.SessionSelection, error) {
 	protectedResourceURL, err := endpoint.ProtectedResourceURL(baseURL)
 	if err != nil {
-		return ctx, nil, oops.E(oops.CodeUnexpected, err, "build protected-resource URL").LogError(ctx, s.logger)
+		return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "build protected-resource URL").LogError(ctx, s.logger)
 	}
 
-	newCtx, subject, valErr := s.validateUserSessionToken(ctx, authToken, endpoint)
+	newCtx, subject, toolSelection, valErr := s.validateUserSessionToken(ctx, authToken, endpoint)
 	if subject == nil {
 		// Accept an assistant-runtime JWT, but only when the assistant
 		// belongs to the endpoint's project — otherwise a token minted
@@ -358,13 +378,16 @@ func (s *Service) ApplyIssuerGate(
 			if errors.Is(valErr, errIssuerGateOrgLookup) {
 				failureReason = "org_lookup_failed"
 			}
+			if errors.Is(valErr, errToolSelectionResourceMismatch) {
+				failureReason = "tool_selection_resource_mismatch"
+			}
 			endpoint.LogWith(s.logger).WarnContext(ctx, "mcp issuer gate rejected bearer token",
 				attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
 				attr.SlogOAuthFailureReason(failureReason),
 				attr.SlogError(valErr),
 			)
 		}
-		return ctx, nil, WriteAuthenticateChallenge(w, protectedResourceURL, "expired or invalid access token")
+		return ctx, nil, nil, WriteAuthenticateChallenge(w, protectedResourceURL, "expired or invalid access token")
 	}
 
 	// Resolve the upstream remote_sessions for this subject before
@@ -392,13 +415,13 @@ func (s *Service) ApplyIssuerGate(
 				attr.SlogUserSessionIssuerID(endpoint.UserSessionIssuerID.String()),
 				attr.SlogOAuthFailureReason("invalid_remote_session"),
 			)
-			return ctx, nil, WriteAuthenticateChallenge(w, protectedResourceURL, "")
+			return ctx, nil, nil, WriteAuthenticateChallenge(w, protectedResourceURL, "")
 		case rerr != nil:
-			return ctx, nil, oops.E(oops.CodeUnexpected, rerr, "resolve remote session").LogError(newCtx, s.logger)
+			return ctx, nil, nil, oops.E(oops.CodeUnexpected, rerr, "resolve remote session").LogError(newCtx, s.logger)
 		}
 		upstreamTokens = tokens
 	}
-	return newCtx, upstreamTokens, nil
+	return newCtx, upstreamTokens, toolSelection, nil
 }
 
 var errToolsetEndpointMismatch = errors.New("authn challenge endpoint does not match toolset")
