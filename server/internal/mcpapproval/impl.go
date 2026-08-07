@@ -69,10 +69,11 @@ const (
 // statusRequested is the status a raised or reopened request carries.
 const statusRequested = "requested"
 
-// gatherTimeout bounds evidence gathering at intake. Gathering reaches
-// package registries over the network, and an admission must not be hostage
-// to a slow one — a source that misses the window lands in the document's
-// gaps rather than blocking the request.
+// gatherTimeout is the overall backstop for evidence gathering at intake.
+// Each source inside the assembler carries its own tighter deadline, so one
+// unreachable registry costs its own budget and lands in the document's gaps
+// rather than holding the admission for this whole window; this bound only
+// matters if every source is slow at once.
 const gatherTimeout = 10 * time.Second
 
 // statusFor maps a decision onto the status its request moves to.
