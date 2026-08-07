@@ -21,6 +21,8 @@ type StubClient struct {
 	eventCalls            []events.ListEventsOpts
 	userExternalIDUpdates []UserExternalIDUpdate
 	orgExternalIDUpdates  []OrgExternalIDUpdate
+	directories           map[string][]Directory
+	directoryUsers        map[string][]DirectoryUser
 	next                  int
 	nowFn                 func() time.Time
 }
@@ -56,6 +58,8 @@ func NewStubClient() *StubClient {
 		eventCalls:            make([]events.ListEventsOpts, 0),
 		userExternalIDUpdates: make([]UserExternalIDUpdate, 0),
 		orgExternalIDUpdates:  make([]OrgExternalIDUpdate, 0),
+		directories:           make(map[string][]Directory),
+		directoryUsers:        make(map[string][]DirectoryUser),
 		next:                  1,
 		nowFn:                 time.Now,
 	}
@@ -326,8 +330,32 @@ func (s *StubClient) ListConnections(_ context.Context, _ string) ([]Connection,
 	return nil, nil
 }
 
-func (s *StubClient) ListDirectories(_ context.Context, _ string) ([]Directory, error) {
-	return nil, nil
+func (s *StubClient) ListDirectories(_ context.Context, organizationID string) ([]Directory, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	return append([]Directory(nil), s.directories[organizationID]...), nil
+}
+
+func (s *StubClient) SetDirectories(organizationID string, directories ...Directory) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	s.directories[organizationID] = append([]Directory(nil), directories...)
+}
+
+func (s *StubClient) ListDirectoryUsers(_ context.Context, directoryID string) ([]DirectoryUser, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	return append([]DirectoryUser(nil), s.directoryUsers[directoryID]...), nil
+}
+
+func (s *StubClient) SetDirectoryUsers(directoryID string, users ...DirectoryUser) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	s.directoryUsers[directoryID] = append([]DirectoryUser(nil), users...)
 }
 
 func (s *StubClient) EnsureOrgExternalID(_ context.Context, workosOrgID, gramOrgID string) error {
