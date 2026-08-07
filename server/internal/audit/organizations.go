@@ -25,7 +25,7 @@ const (
 
 	ActionOrganizationDeviceAgentConfigurationUpdated Action = "organization:device_agent_configuration_updated"
 
-	ActionOrganizationEnterpriseTrialDemoted Action = "organization:enterprise_trial_demoted"
+	ActionOrganizationTrialDemoted Action = "organization:trial_demoted"
 )
 
 type LogOrganizationInviteCreateEvent struct {
@@ -325,7 +325,7 @@ func (l *Logger) LogOrganizationDeviceAgentConfigurationUpdated(
 	})
 }
 
-type LogOrganizationEnterpriseTrialDemotedEvent struct {
+type LogOrganizationTrialDemotedEvent struct {
 	OrganizationID string
 
 	Actor            urn.Principal
@@ -339,8 +339,8 @@ type LogOrganizationEnterpriseTrialDemotedEvent struct {
 	TrialEndsAt         time.Time
 }
 
-func (l *Logger) LogOrganizationEnterpriseTrialDemoted(ctx context.Context, dbtx repo.DBTX, event LogOrganizationEnterpriseTrialDemotedEvent) error {
-	action := ActionOrganizationEnterpriseTrialDemoted
+func (l *Logger) LogOrganizationTrialDemoted(ctx context.Context, dbtx repo.DBTX, event LogOrganizationTrialDemotedEvent) error {
+	action := ActionOrganizationTrialDemoted
 
 	metadata, err := marshalAuditPayload(map[string]any{
 		"previous_account_type": event.PreviousAccountType,
@@ -371,5 +371,5 @@ func (l *Logger) LogOrganizationEnterpriseTrialDemoted(ctx context.Context, dbtx
 		AfterSnapshot:  nil,
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationEnterpriseTrialV1})
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.OrganizationTrialV1})
 }

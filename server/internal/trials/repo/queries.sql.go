@@ -11,21 +11,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createEnterpriseTrial = `-- name: CreateEnterpriseTrial :exec
-INSERT INTO enterprise_trials (organization_id, ends_at)
-VALUES ($1, $2)
+const createTrial = `-- name: CreateTrial :exec
+INSERT INTO trials (organization_id, tier, ends_at)
+VALUES ($1, $2, $3)
 `
 
-type CreateEnterpriseTrialParams struct {
+type CreateTrialParams struct {
 	OrganizationID string
+	Tier           string
 	EndsAt         pgtype.Timestamptz
 }
 
 // Arms a trial on an organization the signup transaction just created. One row
 // per organization forever: a trial is extended by moving ends_at forward, not
 // by inserting a second row.
-func (q *Queries) CreateEnterpriseTrial(ctx context.Context, arg CreateEnterpriseTrialParams) error {
-	_, err := q.db.Exec(ctx, createEnterpriseTrial, arg.OrganizationID, arg.EndsAt)
+func (q *Queries) CreateTrial(ctx context.Context, arg CreateTrialParams) error {
+	_, err := q.db.Exec(ctx, createTrial, arg.OrganizationID, arg.Tier, arg.EndsAt)
 	return err
 }
 
@@ -60,17 +61,18 @@ func (q *Queries) DemoteOrganizationToFree(ctx context.Context, organizationID s
 	return i, err
 }
 
-const getEnterpriseTrial = `-- name: GetEnterpriseTrial :one
-SELECT organization_id, ends_at, converted_at, demoted_at, created_at, updated_at
-FROM enterprise_trials
+const getTrial = `-- name: GetTrial :one
+SELECT organization_id, tier, ends_at, converted_at, demoted_at, created_at, updated_at
+FROM trials
 WHERE organization_id = $1
 `
 
-func (q *Queries) GetEnterpriseTrial(ctx context.Context, organizationID string) (EnterpriseTrial, error) {
-	row := q.db.QueryRow(ctx, getEnterpriseTrial, organizationID)
-	var i EnterpriseTrial
+func (q *Queries) GetTrial(ctx context.Context, organizationID string) (Trial, error) {
+	row := q.db.QueryRow(ctx, getTrial, organizationID)
+	var i Trial
 	err := row.Scan(
 		&i.OrganizationID,
+		&i.Tier,
 		&i.EndsAt,
 		&i.ConvertedAt,
 		&i.DemotedAt,
@@ -80,9 +82,9 @@ func (q *Queries) GetEnterpriseTrial(ctx context.Context, organizationID string)
 	return i, err
 }
 
-const listExpiredEnterpriseTrials = `-- name: ListExpiredEnterpriseTrials :many
+const listExpiredTrials = `-- name: ListExpiredTrials :many
 SELECT organization_id
-FROM enterprise_trials
+FROM trials
 WHERE ends_at < clock_timestamp()
   AND converted_at IS NULL
   AND demoted_at IS NULL
@@ -93,8 +95,8 @@ ORDER BY ends_at
 // The table gains one row per trial signup ever and demoted_at bounds each row
 // to a single demotion, so the result set stays small enough to sweep in one
 // pass without a cursor.
-func (q *Queries) ListExpiredEnterpriseTrials(ctx context.Context) ([]string, error) {
-	rows, err := q.db.Query(ctx, listExpiredEnterpriseTrials)
+func (q *Queries) ListExpiredTrials(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listExpiredTrials)
 	if err != nil {
 		return nil, err
 	}
@@ -113,8 +115,8 @@ func (q *Queries) ListExpiredEnterpriseTrials(ctx context.Context) ([]string, er
 	return items, nil
 }
 
-const markEnterpriseTrialConverted = `-- name: MarkEnterpriseTrialConverted :execrows
-UPDATE enterprise_trials
+const markTrialConverted = `-- name: MarkTrialConverted :execrows
+UPDATE trials
 SET converted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE organization_id = $1
@@ -124,33 +126,34 @@ WHERE organization_id = $1
 // Records that the trial became a signed contract. The first conversion wins,
 // and a converted trial is out of the sweeper's reach for good. Zero rows means
 // the trial already converted.
-func (q *Queries) MarkEnterpriseTrialConverted(ctx context.Context, organizationID string) (int64, error) {
-	result, err := q.db.Exec(ctx, markEnterpriseTrialConverted, organizationID)
+func (q *Queries) MarkTrialConverted(ctx context.Context, organizationID string) (int64, error) {
+	result, err := q.db.Exec(ctx, markTrialConverted, organizationID)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
 }
 
-const markEnterpriseTrialDemoted = `-- name: MarkEnterpriseTrialDemoted :one
-UPDATE enterprise_trials
+const markTrialDemoted = `-- name: MarkTrialDemoted :one
+UPDATE trials
 SET demoted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE organization_id = $1
   AND ends_at < clock_timestamp()
   AND converted_at IS NULL
   AND demoted_at IS NULL
-RETURNING organization_id, ends_at, converted_at, demoted_at, created_at, updated_at
+RETURNING organization_id, tier, ends_at, converted_at, demoted_at, created_at, updated_at
 `
 
 // Repeats the sweep predicate so a conversion or a manual reinstatement that
 // lands between the list and this write wins, and so a retried sweep cannot
 // demote the same trial twice. No rows means another writer got there first.
-func (q *Queries) MarkEnterpriseTrialDemoted(ctx context.Context, organizationID string) (EnterpriseTrial, error) {
-	row := q.db.QueryRow(ctx, markEnterpriseTrialDemoted, organizationID)
-	var i EnterpriseTrial
+func (q *Queries) MarkTrialDemoted(ctx context.Context, organizationID string) (Trial, error) {
+	row := q.db.QueryRow(ctx, markTrialDemoted, organizationID)
+	var i Trial
 	err := row.Scan(
 		&i.OrganizationID,
+		&i.Tier,
 		&i.EndsAt,
 		&i.ConvertedAt,
 		&i.DemotedAt,

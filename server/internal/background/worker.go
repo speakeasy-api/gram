@@ -424,8 +424,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.EvaluateOrgSpendRules)
 	temporalWorker.RegisterActivity(activities.RefreshSpendRuleActor)
 
-	temporalWorker.RegisterActivity(activities.ListExpiredEnterpriseTrials)
-	temporalWorker.RegisterActivity(activities.DemoteExpiredEnterpriseTrial)
+	temporalWorker.RegisterActivity(activities.ListExpiredTrials)
+	temporalWorker.RegisterActivity(activities.DemoteExpiredTrial)
 	// Skill efficacy activities — the database steps run on the main queue and
 	// only the judged publication goes to the dedicated worker.
 	temporalWorker.RegisterActivity(activities.skillEfficacyScorer.EnqueueSkillEfficacyPage)
@@ -534,8 +534,8 @@ func NewTemporalWorker(
 	// Chat analysis workflows
 	temporalWorker.RegisterWorkflow(ChatAnalysisCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(ChatAnalysisSweepWorkflow)
-	// Enterprise trial expiry
-	temporalWorker.RegisterWorkflow(DemoteExpiredEnterpriseTrialsWorkflow)
+	// Trial expiry
+	temporalWorker.RegisterWorkflow(DemoteExpiredTrialsWorkflow)
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add platform usage metrics schedule", attr.SlogError(err))
@@ -634,9 +634,9 @@ func NewTemporalWorker(
 		logger.ErrorContext(context.Background(), "failed to add chat analysis sweep schedule", attr.SlogError(err))
 	}
 
-	if err := AddEnterpriseTrialDemotionSchedule(context.Background(), env); err != nil {
+	if err := AddTrialDemotionSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(context.Background(), "failed to add enterprise trial demotion schedule", attr.SlogError(err))
+			logger.ErrorContext(context.Background(), "failed to add trial demotion schedule", attr.SlogError(err))
 		}
 	}
 

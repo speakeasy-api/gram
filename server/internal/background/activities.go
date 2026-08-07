@@ -155,7 +155,7 @@ type Activities struct {
 	skillEfficacyScorer             *activities.SkillEfficacyScorer
 	skillSuggestionAnalyzer         *activities.SkillSuggestionAnalyzer
 	chatAnalysisScorer              *activities.ChatAnalysisScorer
-	demoteExpiredEnterpriseTrials   *activities.DemoteExpiredEnterpriseTrials
+	demoteExpiredTrials             *activities.DemoteExpiredTrials
 }
 
 func NewActivities(
@@ -328,7 +328,7 @@ func NewActivities(
 		publishOutbox:                   publish_outbox.New(logger, tracerProvider, meterProvider, db, publishers.Outbox),
 		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
 		listSpendRuleOrgs:               spend_rules.NewListOrgs(logger, db),
-		demoteExpiredEnterpriseTrials:   activities.NewDemoteExpiredEnterpriseTrials(logger, db, openrouterProvisioner, auditLogger),
+		demoteExpiredTrials:             activities.NewDemoteExpiredTrials(logger, db, openrouterProvisioner, auditLogger),
 		evaluateOrgSpendRules:           spend_rules.NewEvaluateOrg(logger, tracerProvider, db, spendRulesCH, cacheAdapter, features),
 		// The judge draws on the same per-(org, model) bucket and the same
 		// completion client as every other platform judge, so efficacy scoring
@@ -785,17 +785,17 @@ func (a *Activities) RefreshSpendRuleActor(ctx context.Context, args spend_rules
 	return nil
 }
 
-func (a *Activities) ListExpiredEnterpriseTrials(ctx context.Context) ([]string, error) {
-	orgs, err := a.demoteExpiredEnterpriseTrials.List(ctx)
+func (a *Activities) ListExpiredTrials(ctx context.Context) ([]string, error) {
+	orgs, err := a.demoteExpiredTrials.List(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list expired enterprise trials: %w", err)
+		return nil, fmt.Errorf("list expired trials: %w", err)
 	}
 	return orgs, nil
 }
 
-func (a *Activities) DemoteExpiredEnterpriseTrial(ctx context.Context, args activities.DemoteExpiredEnterpriseTrialArgs) error {
-	if err := a.demoteExpiredEnterpriseTrials.Demote(ctx, args); err != nil {
-		return fmt.Errorf("demote expired enterprise trial: %w", err)
+func (a *Activities) DemoteExpiredTrial(ctx context.Context, args activities.DemoteExpiredTrialArgs) error {
+	if err := a.demoteExpiredTrials.Demote(ctx, args); err != nil {
+		return fmt.Errorf("demote expired trial: %w", err)
 	}
 	return nil
 }

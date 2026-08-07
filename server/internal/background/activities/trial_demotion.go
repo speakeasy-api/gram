@@ -11,67 +11,67 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
-	enterprisetrialsrepo "github.com/speakeasy-api/gram/server/internal/enterprisetrials/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-type DemoteExpiredEnterpriseTrials struct {
+type DemoteExpiredTrials struct {
 	logger     *slog.Logger
 	db         *pgxpool.Pool
-	repo       *enterprisetrialsrepo.Queries
+	repo       *trialsrepo.Queries
 	openRouter openrouter.Provisioner
 	audit      *audit.Logger
 }
 
-func NewDemoteExpiredEnterpriseTrials(
+func NewDemoteExpiredTrials(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
 	openRouterProvisioner openrouter.Provisioner,
 	auditLogger *audit.Logger,
-) *DemoteExpiredEnterpriseTrials {
-	return &DemoteExpiredEnterpriseTrials{
-		logger:     logger.With(attr.SlogComponent("demote_expired_enterprise_trials")),
+) *DemoteExpiredTrials {
+	return &DemoteExpiredTrials{
+		logger:     logger.With(attr.SlogComponent("demote_expired_trials")),
 		db:         db,
-		repo:       enterprisetrialsrepo.New(db),
+		repo:       trialsrepo.New(db),
 		openRouter: openRouterProvisioner,
 		audit:      auditLogger,
 	}
 }
 
-func (d *DemoteExpiredEnterpriseTrials) List(ctx context.Context) ([]string, error) {
-	organizationIDs, err := d.repo.ListExpiredEnterpriseTrials(ctx)
+func (d *DemoteExpiredTrials) List(ctx context.Context) ([]string, error) {
+	organizationIDs, err := d.repo.ListExpiredTrials(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list expired enterprise trials: %w", err)
+		return nil, fmt.Errorf("list expired trials: %w", err)
 	}
 
 	return organizationIDs, nil
 }
 
-type DemoteExpiredEnterpriseTrialArgs struct {
+type DemoteExpiredTrialArgs struct {
 	OrganizationID string
 }
 
-func (d *DemoteExpiredEnterpriseTrials) Demote(ctx context.Context, args DemoteExpiredEnterpriseTrialArgs) error {
+func (d *DemoteExpiredTrials) Demote(ctx context.Context, args DemoteExpiredTrialArgs) error {
 	dbtx, err := d.db.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("begin enterprise trial demotion: %w", err)
+		return fmt.Errorf("begin trial demotion: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	tx := enterprisetrialsrepo.New(dbtx)
+	tx := trialsrepo.New(dbtx)
 
-	trial, err := tx.MarkEnterpriseTrialDemoted(ctx, args.OrganizationID)
+	trial, err := tx.MarkTrialDemoted(ctx, args.OrganizationID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		// A conversion or a manual reinstatement landed between the list and
 		// this write. The organization is no longer ours to demote.
-		d.logger.InfoContext(ctx, "expired enterprise trial changed before demotion",
+		d.logger.InfoContext(ctx, "expired trial changed before demotion",
 			attr.SlogOrganizationID(args.OrganizationID))
 		return nil
 	case err != nil:
-		return fmt.Errorf("mark enterprise trial demoted: %w", err)
+		return fmt.Errorf("mark trial demoted: %w", err)
 	}
 
 	// The stamp above holds a row lock until this transaction ends, so a
@@ -89,7 +89,7 @@ func (d *DemoteExpiredEnterpriseTrials) Demote(ctx context.Context, args DemoteE
 		return fmt.Errorf("demote organization to free: %w", err)
 	}
 
-	if err := d.audit.LogOrganizationEnterpriseTrialDemoted(ctx, dbtx, audit.LogOrganizationEnterpriseTrialDemotedEvent{
+	if err := d.audit.LogOrganizationTrialDemoted(ctx, dbtx, audit.LogOrganizationTrialDemotedEvent{
 		OrganizationID:      args.OrganizationID,
 		Actor:               urn.NewPrincipal(urn.PrincipalTypeUser, "system"),
 		ActorDisplayName:    nil,
@@ -99,11 +99,11 @@ func (d *DemoteExpiredEnterpriseTrials) Demote(ctx context.Context, args DemoteE
 		PreviousAccountType: organization.PreviousAccountType,
 		TrialEndsAt:         trial.EndsAt.Time,
 	}); err != nil {
-		return fmt.Errorf("log enterprise trial demotion: %w", err)
+		return fmt.Errorf("log trial demotion: %w", err)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit enterprise trial demotion: %w", err)
+		return fmt.Errorf("commit trial demotion: %w", err)
 	}
 
 	return nil

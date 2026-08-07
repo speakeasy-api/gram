@@ -8,8 +8,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type EnterpriseTrial struct {
+type Trial struct {
 	OrganizationID string
+	Tier           string
 	EndsAt         pgtype.Timestamptz
 	ConvertedAt    pgtype.Timestamptz
 	DemotedAt      pgtype.Timestamptz

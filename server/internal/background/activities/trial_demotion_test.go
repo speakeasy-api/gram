@@ -14,10 +14,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
-	trialsrepo "github.com/speakeasy-api/gram/server/internal/enterprisetrials/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
 // trialProvisioner records which of an organization's keys were locked down and
@@ -46,7 +46,7 @@ type trialTestInstance struct {
 	trials      *trialsrepo.Queries
 	orgs        *orgrepo.Queries
 	provisioner *trialProvisioner
-	activity    *activities.DemoteExpiredEnterpriseTrials
+	activity    *activities.DemoteExpiredTrials
 }
 
 func newTrialTestInstance(t *testing.T) (context.Context, *trialTestInstance) {
@@ -54,7 +54,7 @@ func newTrialTestInstance(t *testing.T) (context.Context, *trialTestInstance) {
 
 	ctx := t.Context()
 
-	conn, err := infra.CloneTestDatabase(t, "enterprisetrialdemotion")
+	conn, err := infra.CloneTestDatabase(t, "trialdemotion")
 	require.NoError(t, err)
 
 	provisioner := &trialProvisioner{Development: openrouter.NewDevelopment(""), disabled: nil, failWith: nil}
@@ -64,7 +64,7 @@ func newTrialTestInstance(t *testing.T) (context.Context, *trialTestInstance) {
 		trials:      trialsrepo.New(conn),
 		orgs:        orgrepo.New(conn),
 		provisioner: provisioner,
-		activity: activities.NewDemoteExpiredEnterpriseTrials(
+		activity: activities.NewDemoteExpiredTrials(
 			testenv.NewLogger(t),
 			conn,
 			provisioner,
@@ -94,8 +94,9 @@ func newTrialOrg(t *testing.T, ctx context.Context, ti *trialTestInstance, endsA
 		GramAccountType: "enterprise",
 	}))
 
-	err = ti.trials.CreateEnterpriseTrial(ctx, trialsrepo.CreateEnterpriseTrialParams{
+	err = ti.trials.CreateTrial(ctx, trialsrepo.CreateTrialParams{
 		OrganizationID: orgID,
+		Tier:           "enterprise",
 		EndsAt:         pgtype.Timestamptz{Time: endsAt, InfinityModifier: pgtype.Finite, Valid: true},
 	})
 	require.NoError(t, err)
@@ -103,38 +104,38 @@ func newTrialOrg(t *testing.T, ctx context.Context, ti *trialTestInstance, endsA
 	return orgID
 }
 
-func TestDemoteExpiredEnterpriseTrials_LocksOutExpiredTrial(t *testing.T) {
+func TestDemoteExpiredTrials_LocksOutExpiredTrial(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTrialTestInstance(t)
 	endsAt := time.Now().Add(-time.Hour).UTC()
 	orgID := newTrialOrg(t, ctx, ti, endsAt)
 
-	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationEnterpriseTrialDemoted)
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationTrialDemoted)
 	require.NoError(t, err)
 
 	expired, err := ti.activity.List(ctx)
 	require.NoError(t, err)
 	require.Equal(t, []string{orgID}, expired)
 
-	require.NoError(t, ti.activity.Demote(ctx, activities.DemoteExpiredEnterpriseTrialArgs{OrganizationID: orgID}))
+	require.NoError(t, ti.activity.Demote(ctx, activities.DemoteExpiredTrialArgs{OrganizationID: orgID}))
 
 	org, err := ti.orgs.GetOrganizationMetadata(ctx, orgID)
 	require.NoError(t, err)
 	require.Equal(t, "free", org.GramAccountType)
 	require.False(t, org.Whitelisted)
 
-	trial, err := ti.trials.GetEnterpriseTrial(ctx, orgID)
+	trial, err := ti.trials.GetTrial(ctx, orgID)
 	require.NoError(t, err)
 	require.True(t, trial.DemotedAt.Valid)
 
 	require.ElementsMatch(t, []string{orgID + ":chat", orgID + ":internal"}, ti.provisioner.disabled)
 
-	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationEnterpriseTrialDemoted)
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationTrialDemoted)
 	require.NoError(t, err)
 	require.Equal(t, before+1, after)
 
-	entry, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionOrganizationEnterpriseTrialDemoted)
+	entry, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionOrganizationTrialDemoted)
 	require.NoError(t, err)
 	require.Equal(t, "organization", entry.SubjectType)
 	require.Equal(t, orgID, entry.SubjectSlug)
@@ -147,7 +148,7 @@ func TestDemoteExpiredEnterpriseTrials_LocksOutExpiredTrial(t *testing.T) {
 
 // The sweep predicate is the only thing standing between a paying customer and
 // a lockout, so each of its three clauses is pinned.
-func TestDemoteExpiredEnterpriseTrials_ListSkipsTrialsThatAreNotDue(t *testing.T) {
+func TestDemoteExpiredTrials_ListSkipsTrialsThatAreNotDue(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTrialTestInstance(t)
@@ -157,10 +158,10 @@ func TestDemoteExpiredEnterpriseTrials_ListSkipsTrialsThatAreNotDue(t *testing.T
 	demoted := newTrialOrg(t, ctx, ti, time.Now().Add(-time.Hour).UTC())
 	expired := newTrialOrg(t, ctx, ti, time.Now().Add(-time.Hour).UTC())
 
-	_, err := ti.trials.MarkEnterpriseTrialConverted(ctx, converted)
+	_, err := ti.trials.MarkTrialConverted(ctx, converted)
 	require.NoError(t, err)
 
-	require.NoError(t, ti.activity.Demote(ctx, activities.DemoteExpiredEnterpriseTrialArgs{OrganizationID: demoted}))
+	require.NoError(t, ti.activity.Demote(ctx, activities.DemoteExpiredTrialArgs{OrganizationID: demoted}))
 
 	due, err := ti.activity.List(ctx)
 	require.NoError(t, err)
@@ -170,7 +171,7 @@ func TestDemoteExpiredEnterpriseTrials_ListSkipsTrialsThatAreNotDue(t *testing.T
 
 // A conversion that lands between the list and the write must win, and the
 // organization must be left exactly as the conversion left it.
-func TestDemoteExpiredEnterpriseTrials_DemoteSkipsTrialConvertedAfterListing(t *testing.T) {
+func TestDemoteExpiredTrials_DemoteSkipsTrialConvertedAfterListing(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTrialTestInstance(t)
@@ -180,17 +181,17 @@ func TestDemoteExpiredEnterpriseTrials_DemoteSkipsTrialConvertedAfterListing(t *
 	require.NoError(t, err)
 	require.Equal(t, []string{orgID}, expired)
 
-	_, err = ti.trials.MarkEnterpriseTrialConverted(ctx, orgID)
+	_, err = ti.trials.MarkTrialConverted(ctx, orgID)
 	require.NoError(t, err)
 
-	require.NoError(t, ti.activity.Demote(ctx, activities.DemoteExpiredEnterpriseTrialArgs{OrganizationID: orgID}))
+	require.NoError(t, ti.activity.Demote(ctx, activities.DemoteExpiredTrialArgs{OrganizationID: orgID}))
 
 	org, err := ti.orgs.GetOrganizationMetadata(ctx, orgID)
 	require.NoError(t, err)
 	require.Equal(t, "enterprise", org.GramAccountType)
 	require.True(t, org.Whitelisted)
 
-	trial, err := ti.trials.GetEnterpriseTrial(ctx, orgID)
+	trial, err := ti.trials.GetTrial(ctx, orgID)
 	require.NoError(t, err)
 	require.False(t, trial.DemotedAt.Valid)
 
@@ -199,28 +200,28 @@ func TestDemoteExpiredEnterpriseTrials_DemoteSkipsTrialConvertedAfterListing(t *
 
 // Temporal retries a failed activity, so a second demotion of the same trial
 // must not write a second audit entry.
-func TestDemoteExpiredEnterpriseTrials_DemoteIsIdempotent(t *testing.T) {
+func TestDemoteExpiredTrials_DemoteIsIdempotent(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTrialTestInstance(t)
 	orgID := newTrialOrg(t, ctx, ti, time.Now().Add(-time.Hour).UTC())
 
-	require.NoError(t, ti.activity.Demote(ctx, activities.DemoteExpiredEnterpriseTrialArgs{OrganizationID: orgID}))
+	require.NoError(t, ti.activity.Demote(ctx, activities.DemoteExpiredTrialArgs{OrganizationID: orgID}))
 
-	trial, err := ti.trials.GetEnterpriseTrial(ctx, orgID)
+	trial, err := ti.trials.GetTrial(ctx, orgID)
 	require.NoError(t, err)
 	firstDemotedAt := trial.DemotedAt.Time
 
-	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationEnterpriseTrialDemoted)
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationTrialDemoted)
 	require.NoError(t, err)
 
-	require.NoError(t, ti.activity.Demote(ctx, activities.DemoteExpiredEnterpriseTrialArgs{OrganizationID: orgID}))
+	require.NoError(t, ti.activity.Demote(ctx, activities.DemoteExpiredTrialArgs{OrganizationID: orgID}))
 
-	trial, err = ti.trials.GetEnterpriseTrial(ctx, orgID)
+	trial, err = ti.trials.GetTrial(ctx, orgID)
 	require.NoError(t, err)
 	require.Equal(t, firstDemotedAt, trial.DemotedAt.Time)
 
-	again, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationEnterpriseTrialDemoted)
+	again, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionOrganizationTrialDemoted)
 	require.NoError(t, err)
 	require.Equal(t, after, again)
 }
@@ -228,21 +229,21 @@ func TestDemoteExpiredEnterpriseTrials_DemoteIsIdempotent(t *testing.T) {
 // The lockdown runs inside the demotion transaction on purpose: a stamped
 // demoted_at drops the row out of the next sweep, so a lockdown that failed
 // after the commit would never be retried.
-func TestDemoteExpiredEnterpriseTrials_KeyLockdownFailureLeavesTrialArmed(t *testing.T) {
+func TestDemoteExpiredTrials_KeyLockdownFailureLeavesTrialArmed(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTrialTestInstance(t)
 	orgID := newTrialOrg(t, ctx, ti, time.Now().Add(-time.Hour).UTC())
 	ti.provisioner.failWith = errors.New("openrouter unavailable")
 
-	require.Error(t, ti.activity.Demote(ctx, activities.DemoteExpiredEnterpriseTrialArgs{OrganizationID: orgID}))
+	require.Error(t, ti.activity.Demote(ctx, activities.DemoteExpiredTrialArgs{OrganizationID: orgID}))
 
 	org, err := ti.orgs.GetOrganizationMetadata(ctx, orgID)
 	require.NoError(t, err)
 	require.Equal(t, "enterprise", org.GramAccountType)
 	require.True(t, org.Whitelisted)
 
-	trial, err := ti.trials.GetEnterpriseTrial(ctx, orgID)
+	trial, err := ti.trials.GetTrial(ctx, orgID)
 	require.NoError(t, err)
 	require.False(t, trial.DemotedAt.Valid)
 

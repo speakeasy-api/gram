@@ -12,7 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 )
 
-func TestDemoteExpiredEnterpriseTrialsWorkflow_DemotesEveryExpiredTrial(t *testing.T) {
+func TestDemoteExpiredTrialsWorkflow_DemotesEveryExpiredTrial(t *testing.T) {
 	t.Parallel()
 
 	var suite testsuite.WorkflowTestSuite
@@ -22,19 +22,19 @@ func TestDemoteExpiredEnterpriseTrialsWorkflow_DemotesEveryExpiredTrial(t *testi
 		func(_ context.Context) ([]string, error) {
 			return []string{"org_1", "org_2", "org_3"}, nil
 		},
-		activity.RegisterOptions{Name: "ListExpiredEnterpriseTrials"},
+		activity.RegisterOptions{Name: "ListExpiredTrials"},
 	)
 
 	var demoted []string
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, args activities.DemoteExpiredEnterpriseTrialArgs) error {
+		func(_ context.Context, args activities.DemoteExpiredTrialArgs) error {
 			demoted = append(demoted, args.OrganizationID)
 			return nil
 		},
-		activity.RegisterOptions{Name: "DemoteExpiredEnterpriseTrial"},
+		activity.RegisterOptions{Name: "DemoteExpiredTrial"},
 	)
 
-	env.ExecuteWorkflow(DemoteExpiredEnterpriseTrialsWorkflow)
+	env.ExecuteWorkflow(DemoteExpiredTrialsWorkflow)
 
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
@@ -43,7 +43,7 @@ func TestDemoteExpiredEnterpriseTrialsWorkflow_DemotesEveryExpiredTrial(t *testi
 
 // One organization whose provider calls keep failing must not stop the others
 // from being locked out, and the run still has to report the failure.
-func TestDemoteExpiredEnterpriseTrialsWorkflow_FailedDemotionDoesNotAbortSweep(t *testing.T) {
+func TestDemoteExpiredTrialsWorkflow_FailedDemotionDoesNotAbortSweep(t *testing.T) {
 	t.Parallel()
 
 	var suite testsuite.WorkflowTestSuite
@@ -53,22 +53,22 @@ func TestDemoteExpiredEnterpriseTrialsWorkflow_FailedDemotionDoesNotAbortSweep(t
 		func(_ context.Context) ([]string, error) {
 			return []string{"org_1", "org_2", "org_3"}, nil
 		},
-		activity.RegisterOptions{Name: "ListExpiredEnterpriseTrials"},
+		activity.RegisterOptions{Name: "ListExpiredTrials"},
 	)
 
 	var demoted []string
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, args activities.DemoteExpiredEnterpriseTrialArgs) error {
+		func(_ context.Context, args activities.DemoteExpiredTrialArgs) error {
 			if args.OrganizationID == "org_2" {
 				return temporal.NewNonRetryableApplicationError("openrouter unavailable", "", nil)
 			}
 			demoted = append(demoted, args.OrganizationID)
 			return nil
 		},
-		activity.RegisterOptions{Name: "DemoteExpiredEnterpriseTrial"},
+		activity.RegisterOptions{Name: "DemoteExpiredTrial"},
 	)
 
-	env.ExecuteWorkflow(DemoteExpiredEnterpriseTrialsWorkflow)
+	env.ExecuteWorkflow(DemoteExpiredTrialsWorkflow)
 
 	require.True(t, env.IsWorkflowCompleted())
 	require.ErrorContains(t, env.GetWorkflowError(), "1 of 3 organizations failed")
