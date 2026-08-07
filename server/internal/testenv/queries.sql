@@ -294,3 +294,12 @@ INSERT INTO risk_results (
   @id, @project_id, @organization_id, @risk_policy_id, @risk_policy_version,
   @chat_content_part_id, @source, TRUE, @rule_id, @description, @match, @tags
 );
+
+-- name: GetToolCallBlockLinksFixture :one
+-- Test-only. The block page query deliberately does not expose the optional
+-- foreign keys, but asserting that the salvage cleared exactly the link the
+-- database rejected — and left the others alone — requires reading them off
+-- the row.
+SELECT chat_id, chat_message_id, risk_result_id, risk_policy_id
+FROM tool_call_blocks
+WHERE id = @id;

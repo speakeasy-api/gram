@@ -250,7 +250,7 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	// idempotency key but failed its cache write with no inventory for its
 	// whole life — under block_all every later meta-tool call would then deny,
 	// including Gram-hosted targets, with no path to recover.
-	s.cacheCanonicalMCPList(context.WithoutCancel(ctx), canonicalSessionID(payload), canonicalMCPInventoryEntries(payload))
+	s.cacheCanonicalMCPList(context.WithoutCancel(ctx), canonicalSessionID(payload), canonicalMCPInventoryEntries(payload), canonicalMCPInventoryRead(payload))
 	// Transcript-derived MCP attribution (Claude Stop/SubagentStop): stash
 	// tuples for the scheduled staged-telemetry sweep to join. Runs for
 	// duplicate deliveries too — the Redis Set is idempotent, and skipping
@@ -803,23 +803,48 @@ func (s *Service) resolveEvidenceFromSessionInventory(ctx context.Context, evide
 // and TTL the legacy per-provider endpoints use, so the shadow-MCP guard can
 // resolve a later tool call's target to a configured server. Best-effort: a
 // cache miss downgrades a deny's detail, it never changes the decision.
-func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, entries []MCPServerEntry) {
+func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, entries []MCPServerEntry, inventoryRead bool) {
 	if sessionID == "" {
 		return
 	}
-	if len(entries) == 0 {
-		// Every other event in the session extends the snapshot's life, as the
-		// legacy endpoints do. Without this a session outliving the TTL loses
-		// its inventory and every later meta-tool call denies.
-		s.refreshMCPListTTL(ctx, sessionID)
-		return
-	}
-	if err := s.cache.Set(ctx, sessionMCPListCacheKey(sessionID), entries, sessionMCPListTTL); err != nil {
-		s.logger.WarnContext(ctx, "failed to cache MCP list snapshot",
-			attr.SlogEvent("hook_mcp_list_cache_set_failed"),
+
+	// Extend both keys on every event, as the legacy endpoints do for the
+	// snapshot: a session outliving its TTL loses the inventory, and losing the
+	// read status silently disables the guard for the rest of that session.
+	s.refreshMCPListTTL(ctx, sessionID)
+	if err := s.cache.Expire(ctx, sessionMCPInventoryReadCacheKey(sessionID), sessionMCPInventoryReadTTL); err != nil {
+		s.logger.DebugContext(ctx, "failed to extend MCP inventory read status",
 			attr.SlogError(err),
 			attr.SlogGenAIConversationID(sessionID),
 		)
+	}
+
+	// Write the entries before the read status. The status is what licenses the
+	// guard to treat an empty inventory as proof no servers exist, so recording
+	// it while the entries write failed would leave the session claiming a read
+	// it cannot back up — and under block_all every later meta-tool call denies
+	// for the rest of the session.
+	if len(entries) > 0 {
+		if err := s.cache.Set(ctx, sessionMCPListCacheKey(sessionID), entries, sessionMCPListTTL); err != nil {
+			s.logger.WarnContext(ctx, "failed to cache MCP list snapshot",
+				attr.SlogEvent("hook_mcp_list_cache_set_failed"),
+				attr.SlogError(err),
+				attr.SlogGenAIConversationID(sessionID),
+			)
+			return
+		}
+	}
+
+	// The sender only reports this on session start; the meta-tool calls it
+	// gates arrive later carrying nothing, so it has to be held per session.
+	if inventoryRead {
+		if err := s.cache.Set(ctx, sessionMCPInventoryReadCacheKey(sessionID), inventoryRead, sessionMCPInventoryReadTTL); err != nil {
+			s.logger.WarnContext(ctx, "failed to cache MCP inventory read status",
+				attr.SlogEvent("hook_mcp_list_read_cache_set_failed"),
+				attr.SlogError(err),
+				attr.SlogGenAIConversationID(sessionID),
+			)
+		}
 	}
 }
 
@@ -836,7 +861,7 @@ func (s *Service) canonicalCodexMetaTool(ctx context.Context, payload *gen.Inges
 	if !isMetaTool {
 		return false
 	}
-	if !canonicalClientReportsMCPInventory(payload) {
+	if !s.canonicalClientReportsMCPInventory(ctx, payload) {
 		// Counts the un-upgraded population: once this stops firing, the
 		// capability check can go and the guard can apply unconditionally.
 		s.logger.InfoContext(ctx, "skipping codex meta-tool shadow-mcp guard: client cannot report MCP inventory",
@@ -848,27 +873,41 @@ func (s *Service) canonicalCodexMetaTool(ctx context.Context, payload *gen.Inges
 	return true
 }
 
-// canonicalClientReportsMCPInventory reports whether the sending client is new
-// enough to collect the Codex MCP inventory the meta-tool guard resolves
-// against.
+// canonicalClientReportsMCPInventory reports whether this session's MCP server
+// list was actually read, which is what makes an empty inventory mean anything.
 //
-// Every relay released before that change left adapter_version unset, and
-// nothing else has ever populated it, so its absence identifies them exactly.
-// Enforcing regardless would deny every meta-tool call from those clients —
-// including reads of Gram-hosted servers that work today — because they send
-// no inventory for the guard to clear the target against. Degrading instead
-// keeps them at their current behavior and lets enforcement arrive with the
-// hooks upgrade, rather than depending on a server deploy and a hooks release
-// being ordered correctly.
+// The guard denies a meta-tool call it cannot clear against an inventory, so it
+// has to tell "the agent has no MCP servers" from "we could not read the list".
+// Both arrive as zero entries. Only the sender knows which happened, and it
+// says so with mcp_inventory_collected — true means the list was read (an empty
+// one then genuinely means no servers, and denying is right), false or absent
+// means it could not be, so the inventory proves nothing and the guard must not
+// treat it as proof of absence.
 //
-// A capable client that reports no inventory is a different case and is denied
-// — deliberately, not because no servers exist. It may have none configured,
-// but collection is best-effort and can also come back empty when the codex
-// binary cannot be located, `codex mcp list` errors or times out, or the
-// session's inventory never reached the cache. All of those leave the target
-// unproven, and an unproven target is not an absent one.
-func canonicalClientReportsMCPInventory(payload *gen.IngestPayload) bool {
-	return payload != nil && strings.TrimSpace(conv.PtrValOr(payload.Source.AdapterVersion, "")) != ""
+// Absent also covers every relay released before the flag existed. Those send
+// no inventory at all, and enforcing on them would deny every meta-tool call
+// including reads of Gram-hosted servers that work today — so they keep their
+// current behavior until they upgrade, rather than enforcement depending on a
+// server deploy and a hooks release landing in the right order.
+func (s *Service) canonicalClientReportsMCPInventory(ctx context.Context, payload *gen.IngestPayload) bool {
+	if canonicalMCPInventoryRead(payload) {
+		return true
+	}
+	sessionID := canonicalSessionID(payload)
+	if sessionID == "" {
+		return false
+	}
+	var read bool
+	if err := s.cache.Get(ctx, sessionMCPInventoryReadCacheKey(sessionID), &read); err != nil {
+		return false
+	}
+	return read
+}
+
+// canonicalMCPInventoryRead reports the sender's own claim on this event, which
+// only session-start events carry.
+func canonicalMCPInventoryRead(payload *gen.IngestPayload) bool {
+	return payload != nil && payload.Data != nil && conv.PtrValOr(payload.Data.McpInventoryCollected, false)
 }
 
 func canonicalShadowMCPEvidence(payload *gen.IngestPayload, rawToolName string) shadowmcp.AccessEvidence {

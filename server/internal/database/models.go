@@ -694,15 +694,6 @@ type DirectoryUserGroupMembership struct {
 	WorkosCreatedAt        pgtype.Timestamptz
 }
 
-type EnterpriseTrial struct {
-	OrganizationID string
-	EndsAt         pgtype.Timestamptz
-	ConvertedAt    pgtype.Timestamptz
-	DemotedAt      pgtype.Timestamptz
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-}
-
 type Environment struct {
 	ID             uuid.UUID
 	OrganizationID string
@@ -2347,6 +2338,16 @@ type ToolsetVersion struct {
 	UpdatedAt     pgtype.Timestamptz
 	DeletedAt     pgtype.Timestamptz
 	Deleted       bool
+}
+
+type Trial struct {
+	OrganizationID string
+	Tier           string
+	EndsAt         pgtype.Timestamptz
+	ConvertedAt    pgtype.Timestamptz
+	DemotedAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type TriggerInstance struct {
