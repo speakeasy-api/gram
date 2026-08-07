@@ -16,7 +16,6 @@ import { useProject } from "@/contexts/Auth";
 import { useRoutes } from "@/routes";
 import { useAssistantsDeleteMutation } from "@gram/client/react-query/assistantsDelete.js";
 import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useTriggers } from "@gram/client/react-query/triggers.js";
 import { Icon } from "@/components/ui/Icon";
 import { Stack } from "@/components/ui/Stack";
@@ -41,7 +40,6 @@ export function AssistantDraftPanel(): JSX.Element {
   const routes = useRoutes();
   const project = useProject();
   const queryClient = useQueryClient();
-  const { data: productFeatures } = useProductFeatures();
   const [activeTab, setActiveTab] = useQueryState(
     "tab",
     parseAsStringLiteral(DETAIL_TABS).withDefault("overview"),
@@ -197,15 +195,13 @@ export function AssistantDraftPanel(): JSX.Element {
                 )}
               </Section>
 
-              {productFeatures?.skillsEnabled === true && (
-                <RequireScope
-                  scope="skill:read"
-                  resourceId={project.id}
-                  level="section"
-                >
-                  <AssistantSkillsSection />
-                </RequireScope>
-              )}
+              <RequireScope
+                scope="skill:read"
+                resourceId={project.id}
+                level="section"
+              >
+                <AssistantSkillsSection />
+              </RequireScope>
 
               <Section
                 title={`MCP Servers (${

@@ -121,6 +121,7 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker) 
 		audit.NewLogger(),
 		serverURL,
 		cache.NewRedisCacheAdapter(redisClient),
+		remotesessions.NewRefreshService(logger, conn, enc, guardianPolicy, cache.NewRedisCacheAdapter(redisClient)),
 	)
 
 	var tokenRevoker usersessions.TokenRevoker = chatSessionsManager

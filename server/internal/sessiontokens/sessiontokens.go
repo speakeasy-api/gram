@@ -48,7 +48,11 @@ type MintParams struct {
 	Audience string
 	Issuer   string
 	Lifetime time.Duration
-	ClientID string
+	// ExpiresAt, when set, is the exact JWT expiration and takes precedence
+	// over Lifetime. Use it when the token must not outlive an external
+	// authorization deadline.
+	ExpiresAt *time.Time
+	ClientID  string
 	// JTI optionally supplies a unique high-entropy base64url credential. When
 	// empty, Mint generates a UUID. Callers must not use stable identifiers:
 	// revocation is keyed globally by JTI.
@@ -66,6 +70,11 @@ func (s *Signer) Mint(params MintParams) (token string, jti string, err error) {
 		return "", "", errors.New("mint session token: supplied jti is invalid")
 	}
 
+	expiresAt := now.Add(params.Lifetime)
+	if params.ExpiresAt != nil {
+		expiresAt = *params.ExpiresAt
+	}
+
 	claims := SessionClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        jti,
@@ -73,7 +82,7 @@ func (s *Signer) Mint(params MintParams) (token string, jti string, err error) {
 			Subject:   params.Subject.String(),
 			Audience:  jwt.ClaimStrings{params.Audience},
 			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(params.Lifetime)),
+			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			NotBefore: nil,
 		},
 		ClientID: params.ClientID,

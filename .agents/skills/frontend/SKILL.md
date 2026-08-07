@@ -483,7 +483,7 @@ A page that renders its own `<h1>` instead of this pattern is a defect; if a cus
 
 The dashboard follows an editorial, print-like design language. The load-bearing rules:
 
-- **Square corners.** The Tailwind radius scale is wiped (`--radius-*: initial` in `App.css`), so `rounded-sm/md/lg/...` generate nothing — never write them. `rounded-full` is reserved for true circles (avatars, status dots, spinners); pills on wide elements are off-style. The login/marketing surfaces keep documented pill styling — do not "fix" them.
+- **Square corners.** The Tailwind radius scale is wiped (`--radius-*: initial` in `App.css`), so `rounded-sm/md/lg/...` generate nothing — never write them. `rounded-full` is reserved for true circles (avatars, status dots, spinners); pills on wide elements are off-style.
 - **Flat.** No `shadow-*` on in-flow surfaces (cards, buttons, inputs, tiles, sticky bars). Shadows are allowed only on floating overlays (menus, dialogs, tooltips, sheets). No gradients, no colored tint washes (`bg-blue-500/10`, `bg-amber-100`, `bg-*-softest` panels) — express semantics with colored text, borders, or a small dot on a neutral surface.
 - **Hairline borders** via the default border token; the content area is a white `bg-card` sheet on the gray page gutter. Beware: `bg-background` is the page-gray token, NOT white — use `bg-card` for white surfaces.
 - **Page pattern**: every page shows an area micro-label + thin serif title. `Page.Section.Title` renders both automatically (`area` prop overrides, `""` suppresses); custom headers render `<PageEyebrow />` from `@/components/page-eyebrow` above an `h1` with `text-display-sm font-thin`. The area derives from the URL via `useNavArea()` — one source shared with the sidebar highlight.

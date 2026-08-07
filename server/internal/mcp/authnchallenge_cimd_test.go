@@ -382,6 +382,7 @@ func TestOAuthCIMD_ASMetadataAdvertisesSupportWhenFlagOn(t *testing.T) {
 	var meta map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &meta))
 	require.Equal(t, true, meta["client_id_metadata_document_supported"])
+	require.Equal(t, []any{"authorization"}, meta["refresh_token_expiration_types_supported"])
 }
 
 func TestOAuthCIMD_ASMetadataOmitsSupportWhenFlagOff(t *testing.T) {

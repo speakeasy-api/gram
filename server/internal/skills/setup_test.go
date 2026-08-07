@@ -162,17 +162,6 @@ func enableSkills(t *testing.T, ctx context.Context, ti *testInstance) {
 	ti.features.UpdateFeatureCache(ctx, ti.authContext.ActiveOrganizationID, productfeatures.FeatureSkills, true)
 }
 
-func disableSkills(t *testing.T, ctx context.Context, ti *testInstance) {
-	t.Helper()
-
-	_, err := featurerepo.New(ti.conn).DeleteFeature(ctx, featurerepo.DeleteFeatureParams{
-		OrganizationID: ti.authContext.ActiveOrganizationID,
-		FeatureName:    string(productfeatures.FeatureSkills),
-	})
-	require.NoError(t, err)
-	ti.features.UpdateFeatureCache(ctx, ti.authContext.ActiveOrganizationID, productfeatures.FeatureSkills, false)
-}
-
 func createProjectContext(t *testing.T, ctx context.Context, ti *testInstance, grants ...authz.Scope) (context.Context, uuid.UUID) {
 	t.Helper()
 

@@ -7,7 +7,6 @@ import {
   useChatAnalysisSettings,
 } from "@gram/client/react-query/chatAnalysisSettings.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
-import { invalidateAllGrants } from "@gram/client/react-query/grants.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useSendEnterpriseAdminOnboardingEmailMutation } from "@gram/client/react-query/sendEnterpriseAdminOnboardingEmail.js";
 import { useTriggerChatAnalysisMutation } from "@gram/client/react-query/triggerChatAnalysis.js";
@@ -18,7 +17,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRightLeft,
   BarChart3,
-  BookOpen,
   Building2,
   Cloud,
   FileSearch,
@@ -27,6 +25,7 @@ import {
   KeyRound,
   Loader2,
   Mail,
+  RefreshCw,
 } from "lucide-react";
 import { ComponentType, ReactElement, useState } from "react";
 import { toast } from "sonner";
@@ -153,14 +152,8 @@ function ProductFeaturesSection(): ReactElement {
     error: mutError,
     variables,
   } = useFeaturesSetMutation({
-    onSuccess: (_data, mutationVariables) => {
+    onSuccess: () => {
       void invalidateAllProductFeatures(queryClient);
-      if (
-        mutationVariables.request?.setProductFeatureRequestBody?.featureName ===
-        FeatureName.Skills
-      ) {
-        void invalidateAllGrants(queryClient);
-      }
     },
   });
 
@@ -192,19 +185,6 @@ function ProductFeaturesSection(): ReactElement {
 
   return (
     <div className="space-y-2">
-      <FeatureToggle
-        label="Skills"
-        description="Enables the Skills page and provisions default Skills grants."
-        icon={BookOpen}
-        featureName={FeatureName.Skills}
-        enabled={features.skillsEnabled}
-        isPending={isPending && pendingFeature === FeatureName.Skills}
-        onToggle={handleToggle}
-        error={
-          pendingFeature === FeatureName.Skills ? mutError?.message : undefined
-        }
-      />
-
       <FeatureToggle
         label="Authz Challenge Logging"
         description='Log every authorization decision (allow/deny) to ClickHouse. Powers auditing of "why did X have access to Y?"'
@@ -250,6 +230,23 @@ function ProductFeaturesSection(): ReactElement {
         onToggle={handleToggle}
         error={
           pendingFeature === FeatureName.CustomModelKeys
+            ? mutError?.message
+            : undefined
+        }
+      />
+
+      <FeatureToggle
+        label="Automatic Remote Session Refresh"
+        description="Shows the Auto refresh opt-in on remote-session consent screens."
+        icon={RefreshCw}
+        featureName={FeatureName.RemoteSessionAutoRefresh}
+        enabled={features.remoteSessionAutoRefreshEnabled}
+        isPending={
+          isPending && pendingFeature === FeatureName.RemoteSessionAutoRefresh
+        }
+        onToggle={handleToggle}
+        error={
+          pendingFeature === FeatureName.RemoteSessionAutoRefresh
             ? mutError?.message
             : undefined
         }

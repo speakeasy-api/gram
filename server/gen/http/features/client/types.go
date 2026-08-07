@@ -56,6 +56,9 @@ type GetProductFeaturesResponseBody struct {
 	// Whether the organization can manage the external credentials and cloud KMS
 	// keys backing customer-managed encryption
 	CustomerManagedEncryptionKeysEnabled *bool `form:"customer_managed_encryption_keys_enabled,omitempty" json:"customer_managed_encryption_keys_enabled,omitempty" xml:"customer_managed_encryption_keys_enabled,omitempty"`
+	// Whether consent screens expose automatic remote-session refresh for the
+	// organization
+	RemoteSessionAutoRefreshEnabled *bool `form:"remote_session_auto_refresh_enabled,omitempty" json:"remote_session_auto_refresh_enabled,omitempty" xml:"remote_session_auto_refresh_enabled,omitempty"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -463,6 +466,7 @@ func NewGetProductFeaturesResultOK(body *GetProductFeaturesResponseBody) *featur
 		AiPlatformPushIntegrationsEnabled:    *body.AiPlatformPushIntegrationsEnabled,
 		PlatformMcpEnabled:                   *body.PlatformMcpEnabled,
 		CustomerManagedEncryptionKeysEnabled: *body.CustomerManagedEncryptionKeysEnabled,
+		RemoteSessionAutoRefreshEnabled:      *body.RemoteSessionAutoRefreshEnabled,
 		DeviceAgent:                          *body.DeviceAgent,
 	}
 
@@ -813,6 +817,9 @@ func ValidateGetProductFeaturesResponseBody(body *GetProductFeaturesResponseBody
 	}
 	if body.CustomerManagedEncryptionKeysEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("customer_managed_encryption_keys_enabled", "body"))
+	}
+	if body.RemoteSessionAutoRefreshEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("remote_session_auto_refresh_enabled", "body"))
 	}
 	if body.DeviceAgent == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("device_agent", "body"))

@@ -54,7 +54,7 @@ import { SearchBar } from "@/components/ui/SearchBar";
 import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { Network, Sparkles, Trash2 } from "lucide-react";
+import { Network, Trash2 } from "lucide-react";
 import {
   Fragment,
   useCallback,
@@ -671,49 +671,20 @@ export default function PluginDetail(): JSX.Element | null {
             </SettingsSection>
           )}
 
-          {/* Skills ride the same publish flow as servers, so changes offer a
-              republish. Orgs without the skills feature keep the teaser. */}
-          {section === PLUGIN_SKILLS_SECTION_ID &&
-            (productFeatures?.skillsEnabled ? (
-              // Skills is a whole page now, so a missing grant has to explain
-              // itself — hiding the section would leave the route blank.
-              <RequireScope
-                scope="skill:read"
-                resourceId={project.id}
-                level="page"
-              >
-                <PluginSkillsSection
-                  key={pluginId!}
-                  pluginId={pluginId!}
-                  viewMode="grid"
-                  onMutated={(message) => offerPublish(message)}
-                />
-              </RequireScope>
-            ) : (
-              <SettingsSection>
-                <SettingsSection.Header>
-                  <div className="flex items-center gap-2">
-                    <SettingsSection.Title>Skills</SettingsSection.Title>
-                    <Badge variant="neutral">
-                      <Badge.Text>Coming soon</Badge.Text>
-                    </Badge>
-                  </div>
-                  <SettingsSection.Description>
-                    Bundle reusable skills alongside your MCP servers in this
-                    plugin.
-                  </SettingsSection.Description>
-                </SettingsSection.Header>
-                <div className="border-border flex items-center gap-4 border border-dashed p-6 opacity-60">
-                  <div className="bg-muted flex h-14 w-14 shrink-0 items-center justify-center">
-                    <Sparkles className="text-muted-foreground h-7 w-7" />
-                  </div>
-                  <Text small muted>
-                    Skills distributed to this plugin will ship inside the
-                    plugin package and reach everyone who installs it.
-                  </Text>
-                </div>
-              </SettingsSection>
-            ))}
+          {section === PLUGIN_SKILLS_SECTION_ID && (
+            <RequireScope
+              scope="skill:read"
+              resourceId={project.id}
+              level="page"
+            >
+              <PluginSkillsSection
+                key={pluginId!}
+                pluginId={pluginId!}
+                viewMode="grid"
+                onMutated={(message) => offerPublish(message)}
+              />
+            </RequireScope>
+          )}
 
           {/* Assignments only affect device-agent delivery, so the section is
               hidden for marketplace-only orgs (see usePluginAssignmentsVisible).
