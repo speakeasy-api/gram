@@ -4,7 +4,6 @@ import { AIIntegrationConnectionRow } from "@/pages/org/ai-integration-connectio
 import { AI_INTEGRATION_PROVIDERS } from "@/pages/org/ai-integration-providers";
 import { LiteLLMIntegrationRow } from "@/pages/org/litellm-integration-row";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 
 // AI Integrations: one row per provider connection that expands to reveal its
 // event and metric streams, each with its own status and pause toggle.
@@ -25,10 +24,6 @@ export default function OrgAIIntegrations(): JSX.Element {
 
 export function OrgAIIntegrationsInner(): JSX.Element {
   const { hasScope } = useRBAC();
-  const { data: productFeatures } = useProductFeatures(undefined, undefined, {
-    staleTime: 30_000,
-    throwOnError: false,
-  });
 
   return (
     <Page.Section>
@@ -40,10 +35,7 @@ export function OrgAIIntegrationsInner(): JSX.Element {
       </Page.Section.Description>
       <Page.Section.Body>
         <div className="border-border bg-card divide-border divide-y overflow-hidden rounded-lg border">
-          {productFeatures?.aiPlatformPushIntegrationsEnabled === true &&
-          hasScope("org:admin") ? (
-            <LiteLLMIntegrationRow />
-          ) : null}
+          {hasScope("org:admin") ? <LiteLLMIntegrationRow /> : null}
           {AI_INTEGRATION_PROVIDERS.map((provider) => (
             <AIIntegrationConnectionRow
               key={provider.provider}

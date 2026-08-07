@@ -256,23 +256,6 @@ function ProductFeaturesSection(): ReactElement {
       />
 
       <FeatureToggle
-        label="AI Platform Push Integrations"
-        description="Allows this organization to provision project-bound ingestion credentials for AI platforms such as LiteLLM."
-        icon={ArrowRightLeft}
-        featureName={FeatureName.AiPlatformPushIntegrations}
-        enabled={features.aiPlatformPushIntegrationsEnabled}
-        isPending={
-          isPending && pendingFeature === FeatureName.AiPlatformPushIntegrations
-        }
-        onToggle={handleToggle}
-        error={
-          pendingFeature === FeatureName.AiPlatformPushIntegrations
-            ? mutError?.message
-            : undefined
-        }
-      />
-
-      <FeatureToggle
         label="SSO"
         description="Enables WorkOS portal link creation for managing SSO."
         icon={KeyRound}
