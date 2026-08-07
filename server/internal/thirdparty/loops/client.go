@@ -37,7 +37,9 @@ type WorkflowClient interface {
 	SendEvent(ctx context.Context, input SendEventInput) error
 }
 
-// FindContactInput identifies a Loops contact by email or user ID.
+var errInvalidFindContactInput = errors.New("find contact requires exactly one of email or user ID")
+
+// FindContactInput identifies a Loops contact by exactly one of email or user ID.
 type FindContactInput struct {
 	// Email is the contact's email address.
 	Email string
@@ -73,11 +75,17 @@ type SendEventInput struct {
 
 // Contact is the subset of Loops contact data needed by workflow callers.
 type Contact struct {
-	Email        string         `json:"email"`
-	FirstName    *string        `json:"firstName"`
-	UserID       *string        `json:"userId"`
-	Subscribed   bool           `json:"subscribed"`
-	CustomFields map[string]any `json:"-"`
+	// Email is the contact's email address.
+	Email string `json:"email"`
+
+	// FirstName is the contact's first name when configured in Loops.
+	FirstName *string `json:"firstName"`
+
+	// UserID is the contact's external user ID.
+	UserID *string `json:"userId"`
+
+	// Subscribed reports whether the contact can receive workflow emails.
+	Subscribed bool `json:"subscribed"`
 }
 
 // SendTransactionalInput is the boundary type for sending a transactional
@@ -220,6 +228,10 @@ type eventRequest struct {
 }
 
 func (c *httpClient) FindContact(ctx context.Context, input FindContactInput) (*Contact, error) {
+	if (input.Email == "") == (input.UserID == "") {
+		return nil, errInvalidFindContactInput
+	}
+
 	query := url.Values{}
 	if input.Email != "" {
 		query.Set("email", input.Email)
@@ -338,7 +350,10 @@ type noopClient struct {
 	logger *slog.Logger
 }
 
-func (c *noopClient) FindContact(context.Context, FindContactInput) (*Contact, error) {
+func (c *noopClient) FindContact(_ context.Context, input FindContactInput) (*Contact, error) {
+	if (input.Email == "") == (input.UserID == "") {
+		return nil, errInvalidFindContactInput
+	}
 	return nil, nil
 }
 

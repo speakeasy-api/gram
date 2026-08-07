@@ -287,6 +287,19 @@ func TestHTTPClient_FindContact_ReturnsNilWhenNotFound(t *testing.T) {
 	require.Nil(t, contact)
 }
 
+func TestHTTPClient_FindContact_RejectsAmbiguousIdentity(t *testing.T) {
+	t.Parallel()
+
+	client := newTestHTTPClient(t, "http://invalid", "workflow-key")
+	for _, input := range []FindContactInput{
+		{},
+		{Email: "<EMAIL>@example.com", UserID: "<USER_ID>"},
+	} {
+		_, err := client.FindContact(t.Context(), input)
+		require.ErrorContains(t, err, "find contact requires exactly one of email or user ID")
+	}
+}
+
 func TestHTTPClient_UpdateContact_SendsTypedCamelCaseProperties(t *testing.T) {
 	t.Parallel()
 

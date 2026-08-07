@@ -18,25 +18,36 @@ const (
 	trialLifecycleEmailActivityTimeout  = 5 * time.Minute
 )
 
+// TrialLifecycleEmailKind identifies the trial lifecycle change that starts a
+// Loops workflow.
 type TrialLifecycleEmailKind string
 
 const (
-	TrialStartedEmailKind  TrialLifecycleEmailKind = "trial-started"
-	AdminAddedEmailKind    TrialLifecycleEmailKind = "admin-added"
+	// TrialStartedEmailKind starts the trial workflow for an organization.
+	TrialStartedEmailKind TrialLifecycleEmailKind = "trial-started"
+	// AdminAddedEmailKind starts the trial workflow for an added administrator.
+	AdminAddedEmailKind TrialLifecycleEmailKind = "admin-added"
+	// TrialInactiveEmailKind stops pending trial reminders for an organization.
 	TrialInactiveEmailKind TrialLifecycleEmailKind = "trial-inactive"
 )
 
 // TrialLifecycleEmailInput identifies the lifecycle change to process in the
 // worker. The worker re-reads current state before contacting Loops.
 type TrialLifecycleEmailInput struct {
-	Kind           TrialLifecycleEmailKind `json:"kind"`
-	OrganizationID string                  `json:"organization_id"`
-	UserID         string                  `json:"user_id,omitempty"`
+	// Kind identifies the lifecycle change to process.
+	Kind TrialLifecycleEmailKind `json:"kind"`
+
+	// OrganizationID identifies the organization whose trial changed.
+	OrganizationID string `json:"organization_id"`
+
+	// UserID identifies the administrator affected by an admin-added event.
+	UserID string `json:"user_id,omitempty"`
 }
 
 // TemporalTrialEmailNotifier enqueues trial email work without performing the
 // database fan-out or calling Loops on the API request path.
 type TemporalTrialEmailNotifier struct {
+	// TemporalEnv provides the client and task queue used to enqueue workflows.
 	TemporalEnv *tenvironment.Environment
 }
 

@@ -100,7 +100,9 @@ type WorkerOptions struct {
 	ProductFeatures     *productfeatures.Client
 	PluginPublisher     *plugins.Service
 	Publishers          *Publishers
-	TrialEmailsService  *trialemails.Service
+
+	// TrialEmailsService synchronizes trial lifecycle changes with Loops.
+	TrialEmailsService *trialemails.Service
 }
 
 func ForDeploymentProcessing(
