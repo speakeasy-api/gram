@@ -4,11 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import {
-  ServeImageForm,
-  ServeImageForm$Outbound,
-  ServeImageForm$outboundSchema,
-} from "../components/serveimageform.js";
 
 export type RefreshMcpApprovalEvidenceSecurityOption1 = {
   projectSlugHeaderGramProject: string;
@@ -27,6 +22,10 @@ export type RefreshMcpApprovalEvidenceSecurity = {
 
 export type RefreshMcpApprovalEvidenceRequest = {
   /**
+   * The approval request ID.
+   */
+  id: string;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -38,7 +37,6 @@ export type RefreshMcpApprovalEvidenceRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  serveImageForm: ServeImageForm;
 };
 
 /** @internal */
@@ -150,10 +148,10 @@ export function refreshMcpApprovalEvidenceSecurityToJSON(
 
 /** @internal */
 export type RefreshMcpApprovalEvidenceRequest$Outbound = {
+  id: string;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  ServeImageForm: ServeImageForm$Outbound;
 };
 
 /** @internal */
@@ -162,17 +160,16 @@ export const RefreshMcpApprovalEvidenceRequest$outboundSchema: z.ZodMiniType<
   RefreshMcpApprovalEvidenceRequest
 > = z.pipe(
   z.object({
+    id: z.string(),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    serveImageForm: ServeImageForm$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",
-      serveImageForm: "ServeImageForm",
     });
   }),
 );

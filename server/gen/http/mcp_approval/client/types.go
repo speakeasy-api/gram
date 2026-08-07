@@ -31,13 +31,6 @@ type PromoteRequestBody struct {
 	RiskPolicyBypassRequestID string `form:"risk_policy_bypass_request_id" json:"risk_policy_bypass_request_id" xml:"risk_policy_bypass_request_id"`
 }
 
-// RefreshEvidenceRequestBody is the type of the "mcpApproval" service
-// "refreshEvidence" endpoint HTTP request body.
-type RefreshEvidenceRequestBody struct {
-	// The approval request ID.
-	ID string `form:"id" json:"id" xml:"id"`
-}
-
 // RecordDecisionRequestBody is the type of the "mcpApproval" service
 // "recordDecision" endpoint HTTP request body.
 type RecordDecisionRequestBody struct {
@@ -1400,15 +1393,6 @@ func NewCreateRequestRequestBody(p *mcpapproval.CreateRequestPayload) *CreateReq
 func NewPromoteRequestBody(p *mcpapproval.PromotePayload) *PromoteRequestBody {
 	body := &PromoteRequestBody{
 		RiskPolicyBypassRequestID: p.RiskPolicyBypassRequestID,
-	}
-	return body
-}
-
-// NewRefreshEvidenceRequestBody builds the HTTP request body from the payload
-// of the "refreshEvidence" endpoint of the "mcpApproval" service.
-func NewRefreshEvidenceRequestBody(p *mcpapproval.RefreshEvidencePayload) *RefreshEvidenceRequestBody {
-	body := &RefreshEvidenceRequestBody{
-		ID: p.ID,
 	}
 	return body
 }

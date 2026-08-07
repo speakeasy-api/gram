@@ -982,30 +982,16 @@ func DecodeRefreshEvidenceRequest(mux goahttp.Muxer, decoder func(*http.Request)
 	return func(r *http.Request) (*mcpapproval.RefreshEvidencePayload, error) {
 		var payload *mcpapproval.RefreshEvidencePayload
 		var (
-			body RefreshEvidenceRequestBody
-			err  error
-		)
-		err = decoder(r).Decode(&body)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return payload, goa.MissingPayloadError()
-			}
-			var gerr *goa.ServiceError
-			if errors.As(err, &gerr) {
-				return payload, gerr
-			}
-			return payload, goa.DecodePayloadError(err.Error())
-		}
-		err = ValidateRefreshEvidenceRequestBody(&body)
-		if err != nil {
-			return payload, err
-		}
-
-		var (
+			id               string
 			sessionToken     *string
 			apikeyToken      *string
 			projectSlugInput *string
+			err              error
 		)
+		id = r.URL.Query().Get("id")
+		if id == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("id", "query string"))
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -1018,7 +1004,10 @@ func DecodeRefreshEvidenceRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload = NewRefreshEvidencePayload(&body, sessionToken, apikeyToken, projectSlugInput)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewRefreshEvidencePayload(id, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
