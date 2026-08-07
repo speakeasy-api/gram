@@ -374,7 +374,7 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 		return "", oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
 	}
 
-	creditAmount := o.defaultLimitForOrg(ctx, dbtx, org)
+	creditAmount := o.defaultLimitForAccountType(ctx, dbtx, org)
 
 	// Cap the upstream call so guardian's retry backoff cannot stretch the
 	// advisory-lock hold to minutes during an OpenRouter outage; a burst of
@@ -436,7 +436,7 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyTy
 	if limit != nil {
 		keyLimit = *limit
 	} else {
-		keyLimit = o.defaultLimitForOrg(ctx, o.db, org)
+		keyLimit = o.defaultLimitForAccountType(ctx, o.db, org)
 	}
 
 	creditLimit := float64(keyLimit)
@@ -523,7 +523,7 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string, keyType K
 	if err != nil {
 		return 0, 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
 	}
-	limit := o.defaultLimitForOrg(ctx, o.db, org)
+	limit := o.defaultLimitForAccountType(ctx, o.db, org)
 
 	key, err := o.repo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
@@ -631,15 +631,15 @@ func (o *OpenRouter) ReconcileMonthlyCredits(ctx context.Context, orgID string, 
 	return newLimit, nil
 }
 
-// defaultLimitForOrg resolves the monthly credit ceiling an organization is
-// entitled to by policy. It answers what a key would be minted at today, not
-// what an existing key carries: an operator raise leaves the key above this
-// amount, and only the key row records that.
+// Resolves the monthly credit ceiling an organization is entitled to by
+// policy. It answers what a key would be minted at today, not what an existing
+// key carries: an operator raise leaves the key above this amount, and only
+// the key row records that.
 //
 // dbtx arrives from the caller because the provisioning path runs inside a
 // transaction that already holds an advisory lock and a pool connection, so it
 // must read through that same transaction.
-func (o *OpenRouter) defaultLimitForOrg(ctx context.Context, dbtx trialsRepo.DBTX, org orgRepo.OrganizationMetadatum) int {
+func (o *OpenRouter) defaultLimitForAccountType(ctx context.Context, dbtx trialsRepo.DBTX, org orgRepo.OrganizationMetadatum) int {
 	if slices.Contains(specialLimitOrgs, org.ID) {
 		return 500
 	}
