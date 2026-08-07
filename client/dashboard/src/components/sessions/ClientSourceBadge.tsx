@@ -11,12 +11,8 @@ import {
 
 // How the client registered with Gram: CIMD or DCR. Rendered on the clients
 // listing and on both session listings, so the distinction reads the same
-// everywhere.
-//
-// Deliberately neutral in both states: neither registration mode is a warning,
-// and coloring one of them would imply CIMD clients are less trustworthy than
-// DCR clients. They differ in how identity is established, not in how much it
-// is worth.
+// everywhere. Each mode carries its own color so the two are separable at a
+// glance in a long list; the colors say "different", not "better" or "worse".
 export function ClientSourceBadge({
   client,
 }: {
@@ -32,7 +28,12 @@ export function ClientSourceBadge({
     : presentation.tooltip;
   return (
     <SimpleTooltip tooltip={tooltip}>
-      <Badge size="sm" variant="neutral" background className="shrink-0">
+      <Badge
+        size="sm"
+        variant={presentation.badgeVariant}
+        background
+        className="shrink-0"
+      >
         <Badge.Text>{presentation.label}</Badge.Text>
       </Badge>
     </SimpleTooltip>

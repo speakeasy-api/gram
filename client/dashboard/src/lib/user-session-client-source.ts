@@ -26,17 +26,22 @@ export function userSessionClientSource(
   return client.clientIdMetadataUri ? "cimd" : "dcr";
 }
 
+// Badge variant names are hooks onto the brand palette rather than literal
+// alert semantics: these two are a visual distinction between registration
+// modes, not a ranking of them.
 export const SOURCE_PRESENTATION: Record<
   UserSessionClientSource,
-  { label: string; tooltip: string }
+  { label: string; tooltip: string; badgeVariant: "success" | "warning" }
 > = {
   cimd: {
     label: "CIMD",
+    badgeVariant: "success",
     tooltip:
       "Client ID Metadata Document. The client identified itself with a URL, and Gram fetched its OAuth metadata from that document instead of requiring it to register first. The document's origin is its identity.",
   },
   dcr: {
     label: "DCR",
+    badgeVariant: "warning",
     tooltip:
       "Dynamic Client Registration (RFC 7591). The client registered with Gram up front and was issued a client_id.",
   },

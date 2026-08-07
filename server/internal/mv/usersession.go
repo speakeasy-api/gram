@@ -33,6 +33,14 @@ func BuildUserSessionView(row repo.ListUserSessionsByProjectIDRow) *types.UserSe
 		revokedAt = &s
 	}
 
+	// A session can be issued without a client (the API key and anonymous
+	// paths mint one directly), so the column is nullable.
+	var clientID *string
+	if row.UserSessionClientID.Valid {
+		s := row.UserSessionClientID.UUID.String()
+		clientID = &s
+	}
+
 	return &types.UserSession{
 		ID:                  row.ID.String(),
 		UserSessionIssuerID: row.UserSessionIssuerID.String(),
@@ -43,11 +51,15 @@ func BuildUserSessionView(row repo.ListUserSessionsByProjectIDRow) *types.UserSe
 		CreatedAt:           row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:           row.UpdatedAt.Time.Format(time.RFC3339),
 		IssuerSlug:          row.IssuerSlug,
+		UserSessionClientID: clientID,
 		ClientName:          conv.FromPGText[string](row.ClientName),
 		ClientIDMetadataURI: conv.FromPGText[string](row.ClientIDMetadataUri),
 		SubjectType:         subjectType,
 		SubjectDisplayName:  subjectName,
-		RevokedAt:           revokedAt,
+		// Only a user subject resolves to a users row, so the join leaves this
+		// NULL for API key and anonymous subjects.
+		SubjectPhotoURL: conv.FromPGText[string](row.UserPhotoUrl),
+		RevokedAt:       revokedAt,
 	}
 }
 

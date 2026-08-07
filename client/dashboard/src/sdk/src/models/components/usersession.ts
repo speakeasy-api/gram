@@ -50,6 +50,10 @@ export type UserSession = {
    */
   subjectDisplayName?: string | undefined;
   /**
+   * Avatar URL for the subject when it resolves to a Gram user with one. Null for API key and anonymous subjects, and for users who have no photo.
+   */
+  subjectPhotoUrl?: string | undefined;
+  /**
    * Subject kind: 'user', 'apikey', or 'anonymous'.
    */
   subjectType: string;
@@ -58,6 +62,10 @@ export type UserSession = {
    */
   subjectUrn: string;
   updatedAt: Date;
+  /**
+   * The user_session_client this session was issued through. Null for sessions with no bound client. Unlike client_name, this identifies the registration unambiguously, so it is what a per-client drill-down should match on.
+   */
+  userSessionClientId?: string | undefined;
   /**
    * The issuing user_session_issuer id.
    */
@@ -89,12 +97,14 @@ export const UserSession$inboundSchema: z.ZodMiniType<UserSession, unknown> = z
         z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
       ),
       subject_display_name: z.optional(z.string()),
+      subject_photo_url: z.optional(z.string()),
       subject_type: z.string(),
       subject_urn: z.string(),
       updated_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
       ),
+      user_session_client_id: z.optional(z.string()),
       user_session_issuer_id: z.string(),
     }),
     z.transform((v) => {
@@ -107,9 +117,11 @@ export const UserSession$inboundSchema: z.ZodMiniType<UserSession, unknown> = z
         "refresh_expires_at": "refreshExpiresAt",
         "revoked_at": "revokedAt",
         "subject_display_name": "subjectDisplayName",
+        "subject_photo_url": "subjectPhotoUrl",
         "subject_type": "subjectType",
         "subject_urn": "subjectUrn",
         "updated_at": "updatedAt",
+        "user_session_client_id": "userSessionClientId",
         "user_session_issuer_id": "userSessionIssuerId",
       });
     }),

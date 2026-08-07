@@ -1,4 +1,5 @@
 import { AccountRow } from "@/components/observe/account-display";
+import { getInitials } from "@/lib/initials";
 import {
   Popover,
   PopoverContent,
@@ -1099,15 +1100,6 @@ function LastActivityCell({ employee }: { employee: Employee }) {
       accounts={[employee.mostRecentAccount]}
     />
   );
-}
-
-function getInitials(name: string) {
-  return name
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
 }
 
 async function fetchEmployeeUsage(

@@ -47,6 +47,10 @@ type GetUserSessionClientResponseBody struct {
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
 	CreatedAt             string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt             string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// How many live user_sessions this client currently holds. Counted the same
+	// way the sessions listing's active filter counts: not revoked, and the
+	// refresh token has not expired.
+	ActiveSessionCount int `form:"active_session_count" json:"active_session_count" xml:"active_session_count"`
 }
 
 // ListUserSessionClientsUnauthorizedResponseBody is the type of the
@@ -645,6 +649,10 @@ type UserSessionClientResponseBody struct {
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
 	CreatedAt             string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt             string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// How many live user_sessions this client currently holds. Counted the same
+	// way the sessions listing's active filter counts: not revoked, and the
+	// refresh token has not expired.
+	ActiveSessionCount int `form:"active_session_count" json:"active_session_count" xml:"active_session_count"`
 }
 
 // NewListUserSessionClientsResponseBody builds the HTTP response body from the
@@ -683,6 +691,7 @@ func NewGetUserSessionClientResponseBody(res *types.UserSessionClient) *GetUserS
 		ClientSecretExpiresAt: res.ClientSecretExpiresAt,
 		CreatedAt:             res.CreatedAt,
 		UpdatedAt:             res.UpdatedAt,
+		ActiveSessionCount:    res.ActiveSessionCount,
 	}
 	if res.RedirectUris != nil {
 		body.RedirectUris = make([]string, len(res.RedirectUris))
