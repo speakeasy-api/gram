@@ -134,6 +134,8 @@ var ApprovalDecision = Type("ApprovalDecision", func() {
 	Attribute("decided_by", String, "Who decided.")
 	Attribute("rationale", String, "Why. Written to be cited when explaining the decision to the requester.")
 	Attribute("granted_principal_urns", ArrayOf(String), "Principals the approval covers. Empty for a denial.")
+	Attribute("evidence", Any, "The evidence as it stood when this decision was made. Frozen at decision time: a later re-gather updates the request's evidence but never this snapshot, so what the reviewer actually saw stays inspectable.")
+	Attribute("evidence_version", Int, "Shape version of the frozen evidence payload, copied from the request at decision time.")
 	Attribute("decided_at", String, "When the decision was made.", func() { Format(FormatDateTime) })
 
 	Required("id", "decision", "decided_by", "decided_at")

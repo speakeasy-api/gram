@@ -23,6 +23,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/mcp_approval/server"
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_approval"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -31,6 +32,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // defaultPageLimit bounds a queue page when the caller names no limit.
@@ -54,11 +57,13 @@ var statusFor = map[string]string{
 }
 
 type Service struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	auth   *auth.Auth
-	authz  *authz.Engine
+	tracer   trace.Tracer
+	logger   *slog.Logger
+	db       *pgxpool.Pool
+	auth     *auth.Auth
+	authz    *authz.Engine
+	features *productfeatures.Client
+	audit    *audit.Logger
 }
 
 var (
@@ -66,15 +71,17 @@ var (
 	_ gen.Auther  = (*Service)(nil)
 )
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, features *productfeatures.Client, auditLogger *audit.Logger) *Service {
 	logger = logger.With(attr.SlogComponent("mcpapproval"))
 
 	return &Service{
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcpapproval"),
-		logger: logger,
-		db:     db,
-		auth:   auth.New(logger, db, sessions, authzEngine),
-		authz:  authzEngine,
+		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcpapproval"),
+		logger:   logger,
+		db:       db,
+		auth:     auth.New(logger, db, sessions, authzEngine),
+		authz:    authzEngine,
+		features: features,
+		audit:    auditLogger,
 	}
 }
 
@@ -101,6 +108,17 @@ func (s *Service) project(ctx context.Context, scope authz.Scope) (uuid.UUID, st
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	if authCtx == nil || authCtx.ProjectID == nil {
 		return uuid.Nil, "", oops.C(oops.CodeUnauthorized)
+	}
+
+	// The product-feature gate is independent of the RBAC check: a grant says
+	// who may use the surface, the feature says whether the organization has
+	// it at all, and holding the first must not bypass the second.
+	enabled, err := s.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureMCPApproval)
+	if err != nil {
+		return uuid.Nil, "", oops.E(oops.CodeUnexpected, err, "check mcp approval feature").LogError(ctx, s.logger)
+	}
+	if !enabled {
+		return uuid.Nil, "", oops.E(oops.CodeForbidden, nil, "MCP approval is not enabled for this organization")
 	}
 
 	if err := s.authz.Require(ctx, authz.Check{
@@ -276,6 +294,19 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error recording decision").LogError(ctx, s.logger)
+	}
+
+	if err := s.audit.LogMCPApprovalRequestDecide(ctx, dbtx, audit.LogMCPApprovalRequestDecideEvent{
+		OrganizationID:   request.OrganizationID,
+		ProjectID:        projectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		RequestURN:       urn.NewMCPApprovalRequest(requestID),
+		Approved:         payload.Decision == decisionApproved,
+		TargetRaw:        request.TargetRaw,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error auditing decision").LogError(ctx, s.logger)
 	}
 
 	if err := queries.SetApprovalRequestStatus(ctx, repo.SetApprovalRequestStatusParams{
