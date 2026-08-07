@@ -248,15 +248,6 @@ Directory: `<plugin-slug>-codex/`
 
 Codex always uses `bearer_token_env_var` (a reference to an env var) rather than embedding the key directly.
 
-### `plugin.json` (marketplace metadata)
-
-```json
-{
-  "name": "<plugin-slug>-codex",
-  "description": "Plugin description"
-}
-```
-
 ## Observability plugin
 
 The observability plugin is included in every publish (once per org per platform) and ships **before** any MCP server plugins in the marketplace.
