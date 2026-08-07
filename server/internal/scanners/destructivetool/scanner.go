@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/capability"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/toolref"
@@ -69,7 +70,10 @@ func (s *Scanner) Scan(ctx context.Context, orgID string, calls []ToolCall) []sc
 
 		bareName := toolref.MCPFunctionOf(call.Name)
 		resolved, ok := s.resolver.ResolveToolsetCall(ctx, toolInput, bareName, orgID)
-		if !ok || resolved.Tool.Annotations == nil || resolved.Tool.Annotations.DestructiveHint == nil || !*resolved.Tool.Annotations.DestructiveHint {
+		if !ok || resolved.Tool.Annotations == nil {
+			continue
+		}
+		if !capability.DeclaresDestructive(resolved.Tool.Annotations.DestructiveHint) {
 			continue
 		}
 
