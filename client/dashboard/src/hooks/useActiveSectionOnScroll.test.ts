@@ -4,15 +4,23 @@ import { useActiveSectionOnScroll } from "./useActiveSectionOnScroll";
 
 type ObserverCallback = (entries: unknown[]) => void;
 
-const observerCallbacks: ObserverCallback[] = [];
+type ObserverRecord = {
+  callback: ObserverCallback;
+  options: IntersectionObserverInit | undefined;
+  observed: Element[];
+};
+
+const observers: ObserverRecord[] = [];
 
 class MockIntersectionObserver {
-  callback: ObserverCallback;
-  constructor(callback: ObserverCallback) {
-    this.callback = callback;
-    observerCallbacks.push(callback);
+  record: ObserverRecord;
+  constructor(callback: ObserverCallback, options?: IntersectionObserverInit) {
+    this.record = { callback, options, observed: [] };
+    observers.push(this.record);
   }
-  observe() {}
+  observe(el: Element) {
+    this.record.observed.push(el);
+  }
   unobserve() {}
   disconnect() {}
 }
@@ -21,7 +29,7 @@ class MockIntersectionObserver {
 // same signal a real IntersectionObserver delivers when a section crosses the
 // activation line.
 function fireObservers() {
-  for (const callback of observerCallbacks) {
+  for (const { callback } of observers) {
     callback([]);
   }
 }
@@ -39,14 +47,27 @@ function setSectionTops(tops: Record<string, number>) {
   }
 }
 
-function createSection(id: string) {
+function createSection(id: string, parent: HTMLElement = document.body) {
   const el = document.createElement("section");
   el.id = id;
   Object.defineProperty(el, "getBoundingClientRect", {
     configurable: true,
     value: () => ({ top: sectionTops.get(id) ?? 0 }) as DOMRect,
   });
+  parent.appendChild(el);
+}
+
+// Stands in for the app shell's scrolling container, which is what the observer
+// must use as its root rather than the viewport.
+function createScrollContainer() {
+  const el = document.createElement("div");
+  el.style.overflowY = "auto";
+  Object.defineProperty(el, "getBoundingClientRect", {
+    configurable: true,
+    value: () => ({ top: 0 }) as DOMRect,
+  });
   document.body.appendChild(el);
+  return el;
 }
 
 // The hook batches recomputes on an animation frame. Queue them so the handle
@@ -64,7 +85,7 @@ function flushFrames() {
 }
 
 beforeEach(() => {
-  observerCallbacks.length = 0;
+  observers.length = 0;
   frameQueue = [];
   nextFrameHandle = 1;
   vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
@@ -95,6 +116,45 @@ describe("useActiveSectionOnScroll", () => {
     act(() => flushFrames());
 
     expect(result.current).toBe("a");
+  });
+
+  // The app shell scrolls an inner container, so observing against the viewport
+  // would place the activation line a header's height off.
+  it("observes the sections' scroll container with the activation line offset", () => {
+    const container = createScrollContainer();
+    createSection("a", container);
+    createSection("b", container);
+    setSectionTops({ a: -10, b: 500 });
+
+    renderHook(() =>
+      useActiveSectionOnScroll(["a", "b"], { topOffset: TOP_OFFSET }),
+    );
+    act(() => flushFrames());
+
+    expect(observers).toHaveLength(1);
+    expect(observers[0]?.options?.root).toBe(container);
+    expect(observers[0]?.options?.rootMargin).toBe(
+      `-${TOP_OFFSET}px 0px 0px 0px`,
+    );
+    expect(observers[0]?.observed).toEqual([
+      document.getElementById("a"),
+      document.getElementById("b"),
+    ]);
+  });
+
+  it("observes against the viewport when no ancestor scrolls", () => {
+    createSection("a");
+    setSectionTops({ a: -10 });
+
+    renderHook(() =>
+      useActiveSectionOnScroll(["a"], { topOffset: TOP_OFFSET }),
+    );
+    act(() => flushFrames());
+
+    expect(observers[0]?.options?.root).toBe(null);
+    expect(observers[0]?.options?.rootMargin).toBe(
+      `-${TOP_OFFSET}px 0px 0px 0px`,
+    );
   });
 
   it("advances the active section as later sections cross the activation line", () => {
@@ -155,7 +215,7 @@ describe("useActiveSectionOnScroll", () => {
     act(() => flushFrames());
 
     // No sections in the DOM yet.
-    expect(observerCallbacks.length).toBe(0);
+    expect(observers).toHaveLength(0);
 
     createSection("a");
     createSection("b");
@@ -168,7 +228,8 @@ describe("useActiveSectionOnScroll", () => {
       flushFrames();
     });
 
-    expect(observerCallbacks.length).toBeGreaterThan(0);
+    expect(observers.length).toBeGreaterThan(0);
+    expect(observers.at(-1)?.observed).toHaveLength(3);
     expect(result.current).toBe("b");
   });
 
