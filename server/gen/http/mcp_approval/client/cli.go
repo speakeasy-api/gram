@@ -193,6 +193,45 @@ func BuildPromotePayload(mcpApprovalPromoteBody string, mcpApprovalPromoteSessio
 	return v, nil
 }
 
+// BuildRefreshEvidencePayload builds the payload for the mcpApproval
+// refreshEvidence endpoint from CLI flags.
+func BuildRefreshEvidencePayload(mcpApprovalRefreshEvidenceBody string, mcpApprovalRefreshEvidenceSessionToken string, mcpApprovalRefreshEvidenceApikeyToken string, mcpApprovalRefreshEvidenceProjectSlugInput string) (*mcpapproval.RefreshEvidencePayload, error) {
+	var err error
+	var body RefreshEvidenceRequestBody
+	{
+		err = json.Unmarshal([]byte(mcpApprovalRefreshEvidenceBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"abc123\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpApprovalRefreshEvidenceSessionToken != "" {
+			sessionToken = &mcpApprovalRefreshEvidenceSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpApprovalRefreshEvidenceApikeyToken != "" {
+			apikeyToken = &mcpApprovalRefreshEvidenceApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpApprovalRefreshEvidenceProjectSlugInput != "" {
+			projectSlugInput = &mcpApprovalRefreshEvidenceProjectSlugInput
+		}
+	}
+	v := &mcpapproval.RefreshEvidencePayload{
+		ID: body.ID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildRecordDecisionPayload builds the payload for the mcpApproval
 // recordDecision endpoint from CLI flags.
 func BuildRecordDecisionPayload(mcpApprovalRecordDecisionBody string, mcpApprovalRecordDecisionSessionToken string, mcpApprovalRecordDecisionApikeyToken string, mcpApprovalRecordDecisionProjectSlugInput string) (*mcpapproval.RecordDecisionPayload, error) {

@@ -18,12 +18,13 @@ import (
 
 // Server lists the mcpApproval service endpoint HTTP handlers.
 type Server struct {
-	Mounts         []*MountPoint
-	ListRequests   http.Handler
-	GetRequest     http.Handler
-	CreateRequest  http.Handler
-	Promote        http.Handler
-	RecordDecision http.Handler
+	Mounts          []*MountPoint
+	ListRequests    http.Handler
+	GetRequest      http.Handler
+	CreateRequest   http.Handler
+	Promote         http.Handler
+	RefreshEvidence http.Handler
+	RecordDecision  http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -57,13 +58,15 @@ func New(
 			{"GetRequest", "GET", "/rpc/mcpApproval.getRequest"},
 			{"CreateRequest", "POST", "/rpc/mcpApproval.createRequest"},
 			{"Promote", "POST", "/rpc/mcpApproval.promote"},
+			{"RefreshEvidence", "POST", "/rpc/mcpApproval.refreshEvidence"},
 			{"RecordDecision", "POST", "/rpc/mcpApproval.recordDecision"},
 		},
-		ListRequests:   NewListRequestsHandler(e.ListRequests, mux, decoder, encoder, errhandler, formatter),
-		GetRequest:     NewGetRequestHandler(e.GetRequest, mux, decoder, encoder, errhandler, formatter),
-		CreateRequest:  NewCreateRequestHandler(e.CreateRequest, mux, decoder, encoder, errhandler, formatter),
-		Promote:        NewPromoteHandler(e.Promote, mux, decoder, encoder, errhandler, formatter),
-		RecordDecision: NewRecordDecisionHandler(e.RecordDecision, mux, decoder, encoder, errhandler, formatter),
+		ListRequests:    NewListRequestsHandler(e.ListRequests, mux, decoder, encoder, errhandler, formatter),
+		GetRequest:      NewGetRequestHandler(e.GetRequest, mux, decoder, encoder, errhandler, formatter),
+		CreateRequest:   NewCreateRequestHandler(e.CreateRequest, mux, decoder, encoder, errhandler, formatter),
+		Promote:         NewPromoteHandler(e.Promote, mux, decoder, encoder, errhandler, formatter),
+		RefreshEvidence: NewRefreshEvidenceHandler(e.RefreshEvidence, mux, decoder, encoder, errhandler, formatter),
+		RecordDecision:  NewRecordDecisionHandler(e.RecordDecision, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -76,6 +79,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetRequest = m(s.GetRequest)
 	s.CreateRequest = m(s.CreateRequest)
 	s.Promote = m(s.Promote)
+	s.RefreshEvidence = m(s.RefreshEvidence)
 	s.RecordDecision = m(s.RecordDecision)
 }
 
@@ -88,6 +92,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetRequestHandler(mux, h.GetRequest)
 	MountCreateRequestHandler(mux, h.CreateRequest)
 	MountPromoteHandler(mux, h.Promote)
+	MountRefreshEvidenceHandler(mux, h.RefreshEvidence)
 	MountRecordDecisionHandler(mux, h.RecordDecision)
 }
 
@@ -285,6 +290,59 @@ func NewPromoteHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "promote")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpApproval")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRefreshEvidenceHandler configures the mux to serve the "mcpApproval"
+// service "refreshEvidence" endpoint.
+func MountRefreshEvidenceHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/mcpApproval.refreshEvidence", f)
+}
+
+// NewRefreshEvidenceHandler creates a HTTP handler which loads the HTTP
+// request and calls the "mcpApproval" service "refreshEvidence" endpoint.
+func NewRefreshEvidenceHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRefreshEvidenceRequest(mux, decoder)
+		encodeResponse = EncodeRefreshEvidenceResponse(encoder)
+		encodeError    = EncodeRefreshEvidenceError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "refreshEvidence")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "mcpApproval")
 		payload, err := decodeRequest(r)
 		if err != nil {
