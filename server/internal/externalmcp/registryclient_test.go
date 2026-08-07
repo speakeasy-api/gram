@@ -1026,6 +1026,19 @@ func TestListServers_PreservesRepositoryAndPackages(t *testing.T) {
 								Identifier:   "@example/mcp-server",
 								Version:      "1.2.3",
 								RuntimeHint:  "npx",
+								Transport: struct {
+									Type string `json:"type"`
+								}{Type: "stdio"},
+								EnvironmentVariables: []serverPackageEnvironmentVariableJSON{
+									{
+										Name:        "EXAMPLE_API_KEY",
+										Description: "API key for the example service",
+										IsSecret:    true,
+										IsRequired:  true,
+									},
+									// Nameless declarations identify nothing.
+									{Description: "orphaned", IsSecret: true, IsRequired: true},
+								},
 							},
 							// Too incomplete to identify an artifact: dropped,
 							// not surfaced as an empty declaration.
@@ -1075,6 +1088,17 @@ func TestListServers_PreservesRepositoryAndPackages(t *testing.T) {
 	require.NotNil(t, linked.Packages[0].RuntimeHint)
 	require.Equal(t, "npx", *linked.Packages[0].RuntimeHint)
 	require.Nil(t, linked.Packages[0].FileSha256)
+	require.NotNil(t, linked.Packages[0].TransportType)
+	require.Equal(t, "stdio", *linked.Packages[0].TransportType)
+
+	// The demanded credential rides along: a required secret named by the
+	// package is an approval signal in its own right.
+	require.Len(t, linked.Packages[0].EnvironmentVariables, 1, "a nameless declaration is dropped")
+	variable := linked.Packages[0].EnvironmentVariables[0]
+	require.Equal(t, "EXAMPLE_API_KEY", variable.Name)
+	require.True(t, variable.IsSecret)
+	require.True(t, variable.IsRequired)
+	require.NotNil(t, variable.Description)
 
 	// A registry that links nothing surfaces as absent, never as empty links.
 	bare := result.Servers[1]

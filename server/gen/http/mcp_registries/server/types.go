@@ -1123,8 +1123,27 @@ type ExternalMCPPackageResponseBody struct {
 	Version string `form:"version" json:"version" xml:"version"`
 	// Launcher the publisher suggests, such as npx or uvx
 	RuntimeHint *string `form:"runtime_hint,omitempty" json:"runtime_hint,omitempty" xml:"runtime_hint,omitempty"`
+	// Execution transport the package declares, such as stdio
+	TransportType *string `form:"transport_type,omitempty" json:"transport_type,omitempty" xml:"transport_type,omitempty"`
+	// Environment variables the package asks an install to supply. What a server
+	// demands — a required secret named here is an approval signal in its own
+	// right.
+	EnvironmentVariables []*ExternalMCPPackageEnvironmentVariableResponseBody `form:"environment_variables,omitempty" json:"environment_variables,omitempty" xml:"environment_variables,omitempty"`
 	// SHA-256 of the packaged artifact, when the registry publishes one
 	FileSha256 *string `form:"file_sha256,omitempty" json:"file_sha256,omitempty" xml:"file_sha256,omitempty"`
+}
+
+// ExternalMCPPackageEnvironmentVariableResponseBody is used to define fields
+// on response body types.
+type ExternalMCPPackageEnvironmentVariableResponseBody struct {
+	// Variable name the install must populate
+	Name string `form:"name" json:"name" xml:"name"`
+	// The publisher's explanation of the variable. Untrusted text.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether the publisher marked the value sensitive
+	IsSecret bool `form:"is_secret" json:"is_secret" xml:"is_secret"`
+	// Whether an install cannot proceed without it
+	IsRequired bool `form:"is_required" json:"is_required" xml:"is_required"`
 }
 
 // ExternalMCPToolResponseBody is used to define fields on response body types.

@@ -19,6 +19,12 @@ type ExternalMCPPackage struct {
 	Version string
 	// Launcher the publisher suggests, such as npx or uvx
 	RuntimeHint *string
+	// Execution transport the package declares, such as stdio
+	TransportType *string
+	// Environment variables the package asks an install to supply. What a server
+	// demands — a required secret named here is an approval signal in its own
+	// right.
+	EnvironmentVariables []*ExternalMCPPackageEnvironmentVariable
 	// SHA-256 of the packaged artifact, when the registry publishes one
 	FileSha256 *string
 }

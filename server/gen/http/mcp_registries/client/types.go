@@ -1123,8 +1123,27 @@ type ExternalMCPPackageResponseBody struct {
 	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 	// Launcher the publisher suggests, such as npx or uvx
 	RuntimeHint *string `form:"runtime_hint,omitempty" json:"runtime_hint,omitempty" xml:"runtime_hint,omitempty"`
+	// Execution transport the package declares, such as stdio
+	TransportType *string `form:"transport_type,omitempty" json:"transport_type,omitempty" xml:"transport_type,omitempty"`
+	// Environment variables the package asks an install to supply. What a server
+	// demands — a required secret named here is an approval signal in its own
+	// right.
+	EnvironmentVariables []*ExternalMCPPackageEnvironmentVariableResponseBody `form:"environment_variables,omitempty" json:"environment_variables,omitempty" xml:"environment_variables,omitempty"`
 	// SHA-256 of the packaged artifact, when the registry publishes one
 	FileSha256 *string `form:"file_sha256,omitempty" json:"file_sha256,omitempty" xml:"file_sha256,omitempty"`
+}
+
+// ExternalMCPPackageEnvironmentVariableResponseBody is used to define fields
+// on response body types.
+type ExternalMCPPackageEnvironmentVariableResponseBody struct {
+	// Variable name the install must populate
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The publisher's explanation of the variable. Untrusted text.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether the publisher marked the value sensitive
+	IsSecret *bool `form:"is_secret,omitempty" json:"is_secret,omitempty" xml:"is_secret,omitempty"`
+	// Whether an install cannot proceed without it
+	IsRequired *bool `form:"is_required,omitempty" json:"is_required,omitempty" xml:"is_required,omitempty"`
 }
 
 // ExternalMCPToolResponseBody is used to define fields on response body types.
@@ -3444,6 +3463,28 @@ func ValidateExternalMCPPackageResponseBody(body *ExternalMCPPackageResponseBody
 	}
 	if body.RegistryBaseURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.registry_base_url", *body.RegistryBaseURL, goa.FormatURI))
+	}
+	for _, e := range body.EnvironmentVariables {
+		if e != nil {
+			if err2 := ValidateExternalMCPPackageEnvironmentVariableResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateExternalMCPPackageEnvironmentVariableResponseBody runs the
+// validations defined on ExternalMCPPackageEnvironmentVariableResponseBody
+func ValidateExternalMCPPackageEnvironmentVariableResponseBody(body *ExternalMCPPackageEnvironmentVariableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.IsSecret == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_secret", "body"))
+	}
+	if body.IsRequired == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_required", "body"))
 	}
 	return
 }

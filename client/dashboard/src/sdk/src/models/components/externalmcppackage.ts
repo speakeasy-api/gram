@@ -7,11 +7,21 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  ExternalMCPPackageEnvironmentVariable,
+  ExternalMCPPackageEnvironmentVariable$inboundSchema,
+} from "./externalmcppackageenvironmentvariable.js";
 
 /**
  * A published package that runs this server, as declared by the registry
  */
 export type ExternalMCPPackage = {
+  /**
+   * Environment variables the package asks an install to supply. What a server demands — a required secret named here is an approval signal in its own right.
+   */
+  environmentVariables?:
+    | Array<ExternalMCPPackageEnvironmentVariable>
+    | undefined;
   /**
    * SHA-256 of the packaged artifact, when the registry publishes one
    */
@@ -33,6 +43,10 @@ export type ExternalMCPPackage = {
    */
   runtimeHint?: string | undefined;
   /**
+   * Execution transport the package declares, such as stdio
+   */
+  transportType?: string | undefined;
+  /**
    * Published version
    */
   version: string;
@@ -44,19 +58,25 @@ export const ExternalMCPPackage$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    environment_variables: z.optional(
+      z.array(ExternalMCPPackageEnvironmentVariable$inboundSchema),
+    ),
     file_sha256: z.optional(z.string()),
     identifier: z.string(),
     registry_base_url: z.optional(z.string()),
     registry_type: z.string(),
     runtime_hint: z.optional(z.string()),
+    transport_type: z.optional(z.string()),
     version: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "environment_variables": "environmentVariables",
       "file_sha256": "fileSha256",
       "registry_base_url": "registryBaseUrl",
       "registry_type": "registryType",
       "runtime_hint": "runtimeHint",
+      "transport_type": "transportType",
     });
   }),
 );

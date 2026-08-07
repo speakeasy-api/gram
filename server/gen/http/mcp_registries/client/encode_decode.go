@@ -1386,7 +1386,35 @@ func unmarshalExternalMCPPackageResponseBodyToTypesExternalMCPPackage(v *Externa
 		Identifier:      *v.Identifier,
 		Version:         *v.Version,
 		RuntimeHint:     v.RuntimeHint,
+		TransportType:   v.TransportType,
 		FileSha256:      v.FileSha256,
+	}
+	if v.EnvironmentVariables != nil {
+		res.EnvironmentVariables = make([]*types.ExternalMCPPackageEnvironmentVariable, len(v.EnvironmentVariables))
+		for i, val := range v.EnvironmentVariables {
+			if val == nil {
+				res.EnvironmentVariables[i] = nil
+				continue
+			}
+			res.EnvironmentVariables[i] = unmarshalExternalMCPPackageEnvironmentVariableResponseBodyToTypesExternalMCPPackageEnvironmentVariable(val)
+		}
+	}
+
+	return res
+}
+
+// unmarshalExternalMCPPackageEnvironmentVariableResponseBodyToTypesExternalMCPPackageEnvironmentVariable
+// builds a value of type *types.ExternalMCPPackageEnvironmentVariable from a
+// value of type *ExternalMCPPackageEnvironmentVariableResponseBody.
+func unmarshalExternalMCPPackageEnvironmentVariableResponseBodyToTypesExternalMCPPackageEnvironmentVariable(v *ExternalMCPPackageEnvironmentVariableResponseBody) *types.ExternalMCPPackageEnvironmentVariable {
+	if v == nil {
+		return nil
+	}
+	res := &types.ExternalMCPPackageEnvironmentVariable{
+		Name:        *v.Name,
+		Description: v.Description,
+		IsSecret:    *v.IsSecret,
+		IsRequired:  *v.IsRequired,
 	}
 
 	return res

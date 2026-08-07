@@ -359,9 +359,24 @@ var ExternalMCPPackage = Type("ExternalMCPPackage", func() {
 	Attribute("identifier", String, "Package identifier, scope included")
 	Attribute("version", String, "Published version")
 	Attribute("runtime_hint", String, "Launcher the publisher suggests, such as npx or uvx")
+	Attribute("transport_type", String, "Execution transport the package declares, such as stdio")
+	Attribute("environment_variables", ArrayOf(ExternalMCPPackageEnvironmentVariable), "Environment variables the package asks an install to supply. What a server demands — a required secret named here is an approval signal in its own right.")
 	Attribute("file_sha256", String, "SHA-256 of the packaged artifact, when the registry publishes one")
 
 	Required("registry_type", "identifier", "version")
+})
+
+var ExternalMCPPackageEnvironmentVariable = Type("ExternalMCPPackageEnvironmentVariable", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("An environment variable a package declares its install requires")
+
+	Attribute("name", String, "Variable name the install must populate")
+	Attribute("description", String, "The publisher's explanation of the variable. Untrusted text.")
+	Attribute("is_secret", Boolean, "Whether the publisher marked the value sensitive")
+	Attribute("is_required", Boolean, "Whether an install cannot proceed without it")
+
+	Required("name", "is_secret", "is_required")
 })
 
 var ExternalMCPRemote = Type("ExternalMCPRemote", func() {

@@ -151,6 +151,17 @@ type serverPackageJSON struct {
 	Version         string `json:"version"`
 	RuntimeHint     string `json:"runtimeHint"`
 	FileSHA256      string `json:"fileSha256"`
+	Transport       struct {
+		Type string `json:"type"`
+	} `json:"transport"`
+	EnvironmentVariables []serverPackageEnvironmentVariableJSON `json:"environmentVariables"`
+}
+
+type serverPackageEnvironmentVariableJSON struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	IsSecret    bool   `json:"isSecret"`
+	IsRequired  bool   `json:"isRequired"`
 }
 
 type serverRemoteJSON struct {
@@ -183,13 +194,27 @@ func toExternalMCPPackages(packages []serverPackageJSON) []*types.ExternalMCPPac
 		if entry.RegistryType == "" || entry.Identifier == "" || entry.Version == "" {
 			continue
 		}
+		var variables []*types.ExternalMCPPackageEnvironmentVariable
+		for _, variable := range entry.EnvironmentVariables {
+			if variable.Name == "" {
+				continue
+			}
+			variables = append(variables, &types.ExternalMCPPackageEnvironmentVariable{
+				Name:        variable.Name,
+				Description: conv.PtrEmpty(variable.Description),
+				IsSecret:    variable.IsSecret,
+				IsRequired:  variable.IsRequired,
+			})
+		}
 		out = append(out, &types.ExternalMCPPackage{
-			RegistryType:    entry.RegistryType,
-			RegistryBaseURL: conv.PtrEmpty(entry.RegistryBaseURL),
-			Identifier:      entry.Identifier,
-			Version:         entry.Version,
-			RuntimeHint:     conv.PtrEmpty(entry.RuntimeHint),
-			FileSha256:      conv.PtrEmpty(entry.FileSHA256),
+			RegistryType:         entry.RegistryType,
+			RegistryBaseURL:      conv.PtrEmpty(entry.RegistryBaseURL),
+			Identifier:           entry.Identifier,
+			Version:              entry.Version,
+			RuntimeHint:          conv.PtrEmpty(entry.RuntimeHint),
+			TransportType:        conv.PtrEmpty(entry.Transport.Type),
+			EnvironmentVariables: variables,
+			FileSha256:           conv.PtrEmpty(entry.FileSHA256),
 		})
 	}
 

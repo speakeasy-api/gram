@@ -58369,6 +58369,11 @@ components:
     ExternalMCPPackage:
       type: object
       properties:
+        environment_variables:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExternalMCPPackageEnvironmentVariable'
+          description: Environment variables the package asks an install to supply. What a server demands — a required secret named here is an approval signal in its own right.
         file_sha256:
           type: string
           description: SHA-256 of the packaged artifact, when the registry publishes one
@@ -58385,6 +58390,9 @@ components:
         runtime_hint:
           type: string
           description: Launcher the publisher suggests, such as npx or uvx
+        transport_type:
+          type: string
+          description: Execution transport the package declares, such as stdio
         version:
           type: string
           description: Published version
@@ -58393,6 +58401,26 @@ components:
         - registry_type
         - identifier
         - version
+    ExternalMCPPackageEnvironmentVariable:
+      type: object
+      properties:
+        description:
+          type: string
+          description: The publisher's explanation of the variable. Untrusted text.
+        is_required:
+          type: boolean
+          description: Whether an install cannot proceed without it
+        is_secret:
+          type: boolean
+          description: Whether the publisher marked the value sensitive
+        name:
+          type: string
+          description: Variable name the install must populate
+      description: An environment variable a package declares its install requires
+      required:
+        - name
+        - is_secret
+        - is_required
     ExternalMCPRemote:
       type: object
       properties:
