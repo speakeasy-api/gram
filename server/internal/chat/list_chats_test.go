@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // defaultPayload returns a ListChatsPayload with required non-pointer fields
@@ -818,6 +819,138 @@ func TestListChats_SeverityBandCounts(t *testing.T) {
 	require.Equal(t, 0, *safeChat.MediumRiskFindingsCount)
 	require.NotNil(t, safeChat.HighRiskFindingsCount)
 	require.Equal(t, 0, *safeChat.HighRiskFindingsCount)
+}
+
+// seedContentPartRisk seeds a risk_results row anchored to a standalone
+// chat_content_part (e.g. an uploaded file, which has no chat_message_id),
+// via the shared testenv fixtures also used by heal_deleted_chat_test.go and
+// the riskfindingscols migration tool's tests.
+func seedContentPartRisk(t *testing.T, ctx context.Context, ti *chatTestInstance, chatID uuid.UUID, policyID uuid.UUID, ruleID, match string) {
+	t.Helper()
+	tr := testrepo.New(ti.conn)
+
+	partID, err := tr.InsertChatContentPartFixture(ctx, testrepo.InsertChatContentPartFixtureParams{
+		ChatID:          chatID,
+		ProjectID:       uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		Kind:            "prompt_attachment",
+		ContentAssetUrl: "asset://test",
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, tr.InsertContentPartRiskResultFixture(ctx, testrepo.InsertContentPartRiskResultFixtureParams{
+		ID:                uuid.Must(uuid.NewV7()),
+		ProjectID:         ti.projectID,
+		OrganizationID:    ti.orgID,
+		RiskPolicyID:      policyID,
+		RiskPolicyVersion: 1,
+		ChatContentPartID: uuid.NullUUID{UUID: partID, Valid: true},
+		Source:            "test",
+		RuleID:            pgtype.Text{String: ruleID, Valid: true},
+		Match:             pgtype.Text{String: match, Valid: true},
+	}))
+}
+
+// TestListChats_RiskFindingsCount_ChatContentPartAnchored verifies that a
+// finding anchored to a chat_content_part (e.g. an uploaded file, which has
+// no chat_message_id) is still counted in risk_findings_count and bucketed
+// into the correct severity band — not silently dropped, which previously
+// left the histogram showing "No risk findings" despite an active finding.
+func TestListChats_RiskFindingsCount_ChatContentPartAnchored(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := externalUserCtx(t, ti, "ext-content-part")
+	r := repo.New(ti.conn)
+
+	chatID := seedChat(t, ctx, ti, "", "ext-content-part", "chat with content-part finding")
+	policyID, err := r.SeedRiskPolicyWithScore(ctx, repo.SeedRiskPolicyWithScoreParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		Score:          8.5,
+	})
+	require.NoError(t, err)
+	seedContentPartRisk(t, ctx, ti, chatID, policyID, "pii.email_address", "alice@example.com")
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	require.Len(t, result.Chats, 1)
+	require.NotNil(t, result.Chats[0].RiskFindingsCount)
+	require.Equal(t, 1, *result.Chats[0].RiskFindingsCount, "content-part-anchored finding must count")
+	require.NotNil(t, result.Chats[0].HighRiskFindingsCount)
+	require.Equal(t, 1, *result.Chats[0].HighRiskFindingsCount, "content-part-anchored finding must land in its policy's severity band")
+	require.NotNil(t, result.Chats[0].LowRiskFindingsCount)
+	require.Equal(t, 0, *result.Chats[0].LowRiskFindingsCount)
+	require.NotNil(t, result.Chats[0].MediumRiskFindingsCount)
+	require.Equal(t, 0, *result.Chats[0].MediumRiskFindingsCount)
+}
+
+// TestListChats_RiskFindingsCount_SamePolicyIdentityDedupesAcrossAnchors
+// verifies the dedup key stays (risk_policy_id, source, rule_id, match): the
+// same value flagged twice under one policy — once anchored via a chat
+// message, once via a chat_content_part — still collapses to one finding,
+// while the same value flagged by a second, distinct policy still counts and
+// buckets separately, so a session's histogram bars can never disagree with
+// the badge total.
+func TestListChats_RiskFindingsCount_SamePolicyIdentityDedupesAcrossAnchors(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := externalUserCtx(t, ti, "ext-cross-policy")
+	r := repo.New(ti.conn)
+
+	chatID := seedChat(t, ctx, ti, "", "ext-cross-policy", "chat with overlapping policy findings")
+	lowPolicyID, err := r.SeedRiskPolicyWithScore(ctx, repo.SeedRiskPolicyWithScoreParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		Score:          2.0,
+	})
+	require.NoError(t, err)
+	highPolicyID, err := r.SeedRiskPolicyWithScore(ctx, repo.SeedRiskPolicyWithScoreParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		Score:          9.0,
+	})
+	require.NoError(t, err)
+
+	// Same (rule_id, match) matched by the low policy once via a chat message
+	// and once via a chat_content_part must collapse to a single low finding.
+	msgID, err := r.SeedChatMessage(ctx, repo.SeedChatMessageParams{
+		ChatID:    chatID,
+		ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+	})
+	require.NoError(t, err)
+	require.NoError(t, r.SeedRiskResultWithRuleMatch(ctx, repo.SeedRiskResultWithRuleMatchParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		RiskPolicyID:   lowPolicyID,
+		ChatMessageID:  uuid.NullUUID{UUID: msgID, Valid: true},
+		RuleID:         pgtype.Text{String: "pii.ip_address", Valid: true},
+		Match:          pgtype.Text{String: "10.0.0.1", Valid: true},
+		Found:          true,
+	}))
+	seedContentPartRisk(t, ctx, ti, chatID, lowPolicyID, "pii.ip_address", "10.0.0.1")
+	// The exact same (rule_id, match) also matched by a second, distinct
+	// policy in the high band must still count and bucket separately.
+	require.NoError(t, r.SeedRiskResultWithRuleMatch(ctx, repo.SeedRiskResultWithRuleMatchParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		RiskPolicyID:   highPolicyID,
+		ChatMessageID:  uuid.NullUUID{UUID: msgID, Valid: true},
+		RuleID:         pgtype.Text{String: "pii.ip_address", Valid: true},
+		Match:          pgtype.Text{String: "10.0.0.1", Valid: true},
+		Found:          true,
+	}))
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	require.Len(t, result.Chats, 1)
+	chat := result.Chats[0]
+	require.NotNil(t, chat.RiskFindingsCount)
+	require.Equal(t, 2, *chat.RiskFindingsCount, "one finding per matching policy, deduped within each policy across both anchor kinds")
+	require.NotNil(t, chat.LowRiskFindingsCount)
+	require.Equal(t, 1, *chat.LowRiskFindingsCount)
+	require.NotNil(t, chat.HighRiskFindingsCount)
+	require.Equal(t, 1, *chat.HighRiskFindingsCount)
+	require.Equal(t, *chat.LowRiskFindingsCount+*chat.MediumRiskFindingsCount+*chat.HighRiskFindingsCount, *chat.RiskFindingsCount,
+		"band counts must sum to the total; a finding must not double-count across bands")
 }
 
 // TestListChats_DisabledPolicyFinding_NotCounted verifies that a found risk

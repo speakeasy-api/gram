@@ -43,7 +43,7 @@ function getTraceId(chatId: string): string {
 // them for a solid bar fill is illegible. The "-foreground" variants are the
 // same hue at a legible, saturated weight in both themes.
 const SEVERITY_BAND_STYLE = {
-  low: { bar: "bg-foreground/60", label: "Low" },
+  low: { bar: "bg-success-foreground", label: "Low" },
   medium: { bar: "bg-warning-foreground", label: "Medium" },
   high: { bar: "bg-destructive", label: "High" },
 } as const;
@@ -68,6 +68,12 @@ function RiskHistogram({
 }) {
   const total = counts.low + counts.medium + counts.high;
   const hasRisk = total > 0;
+  // Bar height is a rough visual proxy scaled against message count (capped
+  // at 100%), not a claim about how many messages are affected: one message
+  // can carry several distinct findings, so a findings count can exceed
+  // numMessages. The tooltip below therefore reports finding counts, not a
+  // "% of messages" figure, which could otherwise overstate how much of the
+  // session is affected.
   const percentFor = (count: number) =>
     numMessages > 0 ? Math.min(100, (count / numMessages) * 100) : 0;
 
@@ -76,10 +82,10 @@ function RiskHistogram({
       tooltip={
         hasRisk
           ? SEVERITY_BANDS.filter((band) => counts[band] > 0)
-              .map(
-                (band) =>
-                  `${SEVERITY_BAND_STYLE[band].label}: ${counts[band]} (${percentFor(counts[band]).toFixed(0)}% of messages)`,
-              )
+              .map((band) => {
+                const count = counts[band];
+                return `${SEVERITY_BAND_STYLE[band].label}: ${count} finding${count === 1 ? "" : "s"}`;
+              })
               .join(" · ")
           : "No risk findings on this session"
       }
