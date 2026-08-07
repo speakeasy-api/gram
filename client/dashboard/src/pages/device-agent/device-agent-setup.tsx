@@ -672,9 +672,9 @@ function FleetIdentity() {
     <div className="flex flex-col gap-8">
       <Text muted>
         On an MDM-managed device the agent reads its identity from a{" "}
-        <code>managed.json</code> that IT deploys (Kandji, Jamf, Intune, ...)
-        with no per-user enrollment. IT owns this file; the agent only reads it,
-        and it wins over anything a user sets locally.
+        <code>managed.json</code> that IT deploys (Jamf, Iru (formerly Kandji),
+        Intune, ...) with no per-user enrollment. IT owns this file; the agent
+        only reads it, and it wins over anything a user sets locally.
       </Text>
 
       <div>
@@ -706,7 +706,7 @@ function FleetIdentity() {
         <Text small muted className="mt-2">
           <code>org_slug</code> and <code>org_name</code> are pre-filled for
           this org. <code>email</code> is per-user; have your MDM substitute its
-          per-user email variable (Kandji / Jamf <code>$EMAIL</code>, or your
+          per-user email variable (Jamf / Iru <code>$EMAIL</code>, or your
           platform's equivalent) so one profile serves the whole fleet, or omit{" "}
           <code>email</code> and have each user run{" "}
           <code>speakeasy enroll</code>. Click{" "}
@@ -1087,9 +1087,10 @@ export function DeviceAgentSetup(): React.JSX.Element {
             <p className="text-eyebrow mb-2">Fleet rollout</p>
             <Text small muted>
               Rolling out to more than a few machines? We recommend deploying
-              the agent through your MDM (Kandji, Jamf, Intune, or similar). It
-              installs the binaries and drops a <code>managed.json</code> so
-              identity and enrollment are set centrally — no per-user setup. The{" "}
+              the agent through your MDM (Jamf, Iru (formerly Kandji), Intune,
+              or similar). It installs the binaries and drops a{" "}
+              <code>managed.json</code> so identity and enrollment are set
+              centrally — no per-user setup. The{" "}
               <strong className="text-foreground font-medium">
                 Fleet (MDM)
               </strong>{" "}
