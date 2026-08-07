@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -131,7 +132,9 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 // project is rejected as if the toolset did not exist, rather than relying on
 // downstream tools to refuse the call.
 func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, authCtx *contextvalues.AuthContext) error {
-	if slug != platformtools.ManagedAssistantPlatformToolsetSlug {
+	switch slug {
+	case platformtools.ManagedAssistantPlatformToolsetSlug, platformtools.PlatformMCPReadToolsetSlug:
+	default:
 		return nil
 	}
 
@@ -150,6 +153,23 @@ func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, aut
 
 	if managed.ID != principal.AssistantID {
 		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+	}
+
+	// The Platform MCP read toolset is rollout-gated per organization. The
+	// attachment decision in the assistants service uses the same flag, but
+	// the assistant token lives inside the runner VM, so the serve path
+	// re-checks rather than trusting attachment. Fail closed on evaluation
+	// errors.
+	if slug == platformtools.PlatformMCPReadToolsetSlug {
+		enabled, err := s.features.IsFlagEnabled(ctx, feature.FlagAssistantPlatformMCP,
+			authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
+		if err != nil {
+			s.logger.WarnContext(ctx, "evaluate assistant platform mcp flag", attr.SlogError(err))
+			return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+		}
+		if !enabled {
+			return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+		}
 	}
 
 	return nil
