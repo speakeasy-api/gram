@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
@@ -25,28 +27,52 @@ type shadowMCPRequestLinkParams struct {
 	ToolName        string
 	ToolInput       any
 	RiskPolicyID    string
+	// PolicyName feeds the structured "block" effect on the canonical ingest
+	// path; legacy per-provider handlers may leave it empty.
+	PolicyName string
+}
+
+// shadowMCPRequestLink is a minted approval-request link plus the fields the
+// structured "block" effect needs alongside it.
+type shadowMCPRequestLink struct {
+	URL        string
+	Token      string
+	ExpiresAt  time.Time
+	ServerName string
+	ServerURL  string
 }
 
 func (s *Service) renderShadowMCPUserBlockReason(ctx context.Context, params shadowMCPRequestLinkParams) string {
 	message := renderUserBlockReason(params.UserMessage, params.AuditReason)
-	requestURL, ok := s.shadowMCPApprovalRequestURL(ctx, params)
+	link, ok := s.shadowMCPApprovalRequestURL(ctx, params)
 	if !ok {
 		return message
 	}
-	return strings.TrimSpace(message) + "\n\nRequest access:\n" + requestURL + "\n\n" + shadowMCPApprovalRequestPrompt
+	setBlockEffect(ctx, blockEffect{
+		Category:         string(categories.CategoryShadowMCP),
+		RequestToken:     link.Token,
+		RequestURL:       link.URL,
+		RequestExpiresAt: link.ExpiresAt,
+		ServerName:       link.ServerName,
+		ServerURL:        link.ServerURL,
+		PolicyName:       params.PolicyName,
+		ToolName:         params.ToolName,
+		BlockURL:         "",
+	})
+	return strings.TrimSpace(message) + "\n\nRequest access:\n" + link.URL + "\n\n" + shadowMCPApprovalRequestPrompt
 }
 
-func (s *Service) shadowMCPApprovalRequestURL(ctx context.Context, params shadowMCPRequestLinkParams) (string, bool) {
+func (s *Service) shadowMCPApprovalRequestURL(ctx context.Context, params shadowMCPRequestLinkParams) (shadowMCPRequestLink, bool) {
 	if s.siteURL == nil || s.cache == nil || strings.TrimSpace(s.jwtSecret) == "" {
-		return "", false
+		return shadowMCPRequestLink{}, false
 	}
 
 	evidence := shadowmcp.NormalizeAccessEvidence(params.Evidence)
 	if evidence.FullURL == "" && evidence.URLHost == "" && evidence.ServerIdentity == "" {
-		return "", false
+		return shadowMCPRequestLink{}, false
 	}
 
-	requestURL, _, err := risk.GeneratePolicyBypassRequestURL(ctx, s.cache, s.siteURL, risk.PolicyBypassRequestTokenInput{
+	requestURL, token, expiry, err := risk.GeneratePolicyBypassRequestURL(ctx, s.cache, s.siteURL, risk.PolicyBypassRequestTokenInput{
 		OrganizationID:         params.OrganizationID,
 		ProjectID:              params.ProjectID,
 		RequesterUserID:        params.RequesterUserID,
@@ -66,10 +92,16 @@ func (s *Service) shadowMCPApprovalRequestURL(ctx context.Context, params shadow
 			attr.SlogOrganizationID(params.OrganizationID),
 			attr.SlogProjectID(params.ProjectID),
 		)
-		return "", false
+		return shadowMCPRequestLink{}, false
 	}
 
-	return requestURL, true
+	return shadowMCPRequestLink{
+		URL:        requestURL,
+		Token:      token,
+		ExpiresAt:  expiry,
+		ServerName: conv.PtrValOr(shadowmcp.ObservedName(evidence, params.ToolName), ""),
+		ServerURL:  evidence.FullURL,
+	}, true
 }
 
 func stringPtrOrNil(value string) *string {
