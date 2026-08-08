@@ -29,6 +29,8 @@ import { invalidateAllRiskOverview } from "@gram/client/react-query/riskOverview
 import { useRiskSuggestExclusionMutation } from "@gram/client/react-query/riskSuggestExclusion.js";
 import { useRiskUpdateExclusionMutation } from "@gram/client/react-query/riskUpdateExclusion.js";
 import type { RiskExclusion } from "@gram/client/models/components/riskexclusion.js";
+import type { RiskResult } from "@gram/client/models/components/riskresult.js";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Sparkles } from "lucide-react";
 import type { JSX } from "react";
@@ -40,11 +42,20 @@ import {
   parseExclusionExpression,
   serializeExclusionExpression,
 } from "./exclusion-expression";
+import { exclusionOptions, type ExclusionOption } from "./exclusion-options";
 
 export const GLOBAL_SCOPE = "__global__";
 
 export type ExclusionSheetState =
-  | { mode: "create"; initialExpression?: string; initialScope?: string }
+  | {
+      mode: "create";
+      /** Findings the create was started from. Drives the ready-made rule
+       * picker; absent for the Exclusions tab / Policy Center buttons, which
+       * have no finding and open straight onto the criteria box. */
+      results?: RiskResult[];
+      initialExpression?: string;
+      initialScope?: string;
+    }
   | { mode: "edit"; exclusion: RiskExclusion };
 
 /**
@@ -111,7 +122,7 @@ export function ExclusionEditor({
   const formKey =
     state.mode === "edit"
       ? `edit-${state.exclusion.id}`
-      : `create-${state.initialExpression ?? ""}-${state.initialScope ?? ""}`;
+      : `create-${(state.results ?? []).map((r) => r.id).join(",")}-${state.initialExpression ?? ""}-${state.initialScope ?? ""}`;
 
   return (
     <ExclusionForm
@@ -225,6 +236,14 @@ function ExclusionForm({
   onSubmit,
 }: ExclusionFormProps) {
   const editing = state.mode === "edit" ? state.exclusion : null;
+  // Ready-made rules for the selection. Always at least ["custom"], so an
+  // edit or a no-finding create renders no picker and opens on the DSL box.
+  const options = exclusionOptions(
+    state.mode === "create" ? (state.results ?? []) : [],
+  );
+  const [choice, setChoice] = useState<ExclusionOption["value"]>(
+    options[0]?.value ?? "custom",
+  );
   const [scope, setScope] = useState<string>(initialScopeFor(state));
   const [expression, setExpression] = useState<string>(
     initialExpressionFor(state),
@@ -276,6 +295,15 @@ function ExclusionForm({
   };
 
   const handleSave = () => {
+    // A picked option is already a complete rule, so it skips the
+    // serialize -> parse round trip; only "custom" carries no fields.
+    const picked = options.find((o) => o.value === choice);
+    if (picked?.fields) {
+      setError(null);
+      onSubmit({ fields: picked.fields, scope, enabled });
+      return;
+    }
+
     const parsed = parseExclusionExpression(expression);
     if (!parsed.ok) {
       setError(parsed.error);
@@ -287,7 +315,38 @@ function ExclusionForm({
 
   return (
     <>
-      <div className="flex-1 space-y-5 overflow-y-auto px-6">
+      <div className="flex-1 space-y-5 overflow-y-auto px-6 py-2">
+        {options.length > 1 && (
+          <div className="space-y-2">
+            <Label>What should we stop flagging?</Label>
+            <RadioGroup
+              value={choice}
+              onValueChange={(v) => setChoice(v as ExclusionOption["value"])}
+              className="gap-2"
+            >
+              {options.map((option) => (
+                <label
+                  key={option.value}
+                  htmlFor={`exclusion-${option.value}`}
+                  className="hover:bg-muted/40 flex cursor-pointer items-start gap-3 border px-3 py-2.5"
+                >
+                  <RadioGroupItem
+                    id={`exclusion-${option.value}`}
+                    value={option.value}
+                    className="mt-0.5"
+                  />
+                  <div className="min-w-0">
+                    <div className="text-sm break-all">{option.title}</div>
+                    <div className="text-muted-foreground text-xs">
+                      {option.hint}
+                    </div>
+                  </div>
+                </label>
+              ))}
+            </RadioGroup>
+          </div>
+        )}
+
         <div className="space-y-2">
           <Label>Scope</Label>
           <Select value={scope} onValueChange={setScope}>
@@ -307,51 +366,57 @@ function ExclusionForm({
           </Select>
         </div>
 
-        <div className="space-y-2">
-          <Label>Suggest with AI</Label>
-          <TextArea
-            rows={2}
-            value={askPrompt}
-            onChange={setAskPrompt}
-            placeholder="e.g. stop flagging our shared test account jane.doe@acme.com in email findings"
-          />
-          <div className="flex items-center justify-between gap-3">
-            <Text className="text-muted-foreground" small>
-              Describe what to stop flagging. We'll write the criteria
-              expression, you tweak before saving.
-            </Text>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={
-                askPrompt.trim().length < 3 || suggestMutation.isPending
-              }
-              onClick={handleSuggest}
-            >
-              <Button.LeftIcon>
-                {suggestMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Sparkles className="h-4 w-4" />
-                )}
-              </Button.LeftIcon>
-              <Button.Text>Suggest with AI</Button.Text>
-            </Button>
-          </div>
-        </div>
+        {choice === "custom" && (
+          <>
+            <div className="space-y-2">
+              <Label>Suggest with AI</Label>
+              <TextArea
+                rows={2}
+                value={askPrompt}
+                onChange={setAskPrompt}
+                placeholder="e.g. stop flagging our shared test account jane.doe@acme.com in email findings"
+              />
+              <div className="flex items-center justify-between gap-3">
+                <Text className="text-muted-foreground" small>
+                  Describe what to stop flagging. We'll write the criteria
+                  expression, you tweak before saving.
+                </Text>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={
+                    askPrompt.trim().length < 3 || suggestMutation.isPending
+                  }
+                  onClick={handleSuggest}
+                >
+                  <Button.LeftIcon>
+                    {suggestMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-4 w-4" />
+                    )}
+                  </Button.LeftIcon>
+                  <Button.Text>Suggest with AI</Button.Text>
+                </Button>
+              </div>
+            </div>
 
-        <div className="space-y-2">
-          <Label>Exclusion criteria</Label>
-          <TextArea
-            rows={4}
-            value={expression}
-            onChange={setExpression}
-            placeholder={'e.g. match == "jane.doe@acme.com"'}
-            className="font-mono text-sm"
-          />
-          {error && <Text className="text-destructive text-sm">{error}</Text>}
-          <ExclusionExamples />
-        </div>
+            <div className="space-y-2">
+              <Label>Exclusion criteria</Label>
+              <TextArea
+                rows={4}
+                value={expression}
+                onChange={setExpression}
+                placeholder={'e.g. match == "jane.doe@acme.com"'}
+                className="font-mono text-sm"
+              />
+              {error && (
+                <Text className="text-destructive text-sm">{error}</Text>
+              )}
+              <ExclusionExamples />
+            </div>
+          </>
+        )}
 
         {editing && (
           <div className="flex items-center justify-between">

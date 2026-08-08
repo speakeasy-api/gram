@@ -2,11 +2,6 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { cn } from "@/lib/utils";
 import { ruleIdCategoryLabel } from "@/pages/security/rule-ids";
-import { serializeExclusionExpression } from "@/pages/security/exclusion-expression";
-import {
-  type ExclusionSheetState,
-  GLOBAL_SCOPE,
-} from "@/pages/security/exclusion-sheet";
 import {
   getCategoryCodeForFinding,
   getRuleTitleFallback,
@@ -316,31 +311,4 @@ export function highlightMatches(
   });
   if (pos < text.length) nodes.push(text.slice(pos));
   return nodes;
-}
-
-export function findingToExclusionState(
-  result: RiskResult,
-): ExclusionSheetState {
-  let expression: string;
-  if (result.match) {
-    expression = serializeExclusionExpression({
-      matchType: "exact",
-      matchValue: result.match,
-    });
-  } else if (result.ruleId) {
-    expression = serializeExclusionExpression({
-      matchType: "rule_id",
-      matchValue: result.ruleId,
-    });
-  } else {
-    expression = serializeExclusionExpression({
-      matchType: "source",
-      matchValue: result.source,
-    });
-  }
-  return {
-    mode: "create",
-    initialExpression: expression,
-    initialScope: result.policyId ?? GLOBAL_SCOPE,
-  };
 }

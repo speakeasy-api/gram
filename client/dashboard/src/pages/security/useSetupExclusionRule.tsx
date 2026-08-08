@@ -2,7 +2,6 @@ import { useCallback, useRef, useState, type JSX } from "react";
 import { toast } from "sonner";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useRiskSuggestExclusionMutation } from "@gram/client/react-query/riskSuggestExclusion.js";
-import { findingToExclusionState } from "@/pages/chatLogs/chatHelpers";
 import { BUILTIN_RULE_ID_LIST } from "./detection-rules-data";
 import { serializeExclusionExpression } from "./exclusion-expression";
 import {
@@ -22,8 +21,8 @@ const SUGGEST_TIMEOUT_MS = 6000;
  * Category Detail; the chat transcript wires its own single-finding case
  * directly via CreateExclusionContext instead, since it predates this hook).
  *
- * A single finding prefills the expression directly, mirroring the chat
- * transcript's per-finding flow (same `findingToExclusionState` helper). Two
+ * A single finding hands the sheet the finding itself, so it opens on the
+ * ready-made rule picker (the chat transcript does the same). Two
  * or more triggers an AI-suggested pattern derived from the batch — the
  * caller should show `isSuggesting` as a spinner on its trigger button. The
  * sheet still opens (unprefilled, so the operator can finish manually)
@@ -55,7 +54,7 @@ export function useSetupExclusionRule(): {
 
       if (results.length === 1) {
         setIsSuggesting(false);
-        setSheetState(findingToExclusionState(results[0]!));
+        setSheetState({ mode: "create", results });
         return;
       }
 

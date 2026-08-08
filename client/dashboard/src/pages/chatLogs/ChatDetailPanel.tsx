@@ -76,7 +76,7 @@ import {
 import { useChatTranscript } from "./useChatTranscript";
 import { useWindowedTranscript } from "./useWindowedTranscript";
 import { CreateExclusionContext } from "./exclusionContext";
-import { findingToExclusionState, riskResultAnchorId } from "./chatHelpers";
+import { riskResultAnchorId } from "./chatHelpers";
 import {
   ChatTranscript,
   type RowContext,
@@ -1409,7 +1409,7 @@ function ChatDetailPanel({
   // "Setup exclusion rule" swaps the transcript for the exclusion editor
   // in-place (with a back button) rather than stacking a second sheet on top.
   const openExclusion = useCallback((result: RiskResult) => {
-    setExclusionState(findingToExclusionState(result));
+    setExclusionState({ mode: "create", results: [result] });
     setPendingExclusionKey(findingKey(result));
     setView("exclusion");
   }, []);
