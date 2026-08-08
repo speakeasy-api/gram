@@ -1,6 +1,5 @@
-import { Page } from "@/components/page-layout";
+import { FormPage } from "@/components/page-templates";
 import { Textarea } from "@/components/moon/textarea";
-import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/Badge";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Text } from "@/components/ui/Text";
@@ -42,18 +41,7 @@ type ServerOption = {
 };
 
 export default function CreateCollection(): JSX.Element {
-  return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope="org:admin" level="page">
-          <CreateCollectionForm />
-        </RequireScope>
-      </Page.Body>
-    </Page>
-  );
+  return <CreateCollectionForm />;
 }
 
 function CreateCollectionForm() {
@@ -210,19 +198,17 @@ function CreateCollectionForm() {
   };
 
   return (
-    <Page.Section>
-      <Page.Section.Title>Create Collection</Page.Section.Title>
-      <Page.Section.Description>
-        Create a curated collection of MCP servers that can be installed
-        together
-      </Page.Section.Description>
-      <Page.Section.Body>
-        <form
-          onSubmit={(e) => {
-            void handleSubmit(e);
-          }}
-          className="max-w-lg"
-        >
+    <FormPage
+      scope="org:admin"
+      title="Create Collection"
+      description="Create a curated collection of MCP servers that can be installed together"
+    >
+      <form
+        onSubmit={(e) => {
+          void handleSubmit(e);
+        }}
+        className="max-w-lg"
+      >
           <Stack direction="vertical" gap={4}>
             <div>
               <label htmlFor="name" className="mb-1 block text-sm font-medium">
@@ -425,7 +411,6 @@ function CreateCollectionForm() {
             </Stack>
           </Stack>
         </form>
-      </Page.Section.Body>
-    </Page.Section>
+    </FormPage>
   );
 }
