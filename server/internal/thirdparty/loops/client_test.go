@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -285,6 +286,18 @@ func TestHTTPClient_FindContact_ReturnsNilWhenNotFound(t *testing.T) {
 	contact, err := newTestHTTPClient(t, server.URL, "workflow-key").FindContact(t.Context(), FindContactInput{UserID: "<USER_ID>"})
 	require.NoError(t, err)
 	require.Nil(t, contact)
+}
+
+func TestHTTPClient_WorkflowResponseRejectsOversizedBody(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(strings.Repeat("x", maxWorkflowResponseBytes+1)))
+	}))
+	t.Cleanup(server.Close)
+
+	_, err := newTestHTTPClient(t, server.URL, "workflow-key").FindContact(t.Context(), FindContactInput{Email: "<EMAIL>@example.com"})
+	require.ErrorContains(t, err, "workflow response body exceeded")
 }
 
 func TestHTTPClient_FindContact_RejectsAmbiguousIdentity(t *testing.T) {

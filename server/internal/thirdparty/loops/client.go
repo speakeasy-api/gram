@@ -23,7 +23,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
-const defaultBaseURL = "https://app.loops.so/api/v1"
+const (
+	defaultBaseURL           = "https://app.loops.so/api/v1"
+	maxWorkflowResponseBytes = 64 << 10
+)
 
 // Client sends transactional emails via Loops.
 type Client interface {
@@ -327,9 +330,12 @@ func (c *httpClient) doWorkflowRequestWithRequest(req *http.Request) ([]byte, er
 		return nil, fmt.Errorf("execute workflow request: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxWorkflowResponseBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("read workflow response: %w", err)
+	}
+	if len(respBody) > maxWorkflowResponseBytes {
+		return nil, fmt.Errorf("workflow response body exceeded %d bytes", maxWorkflowResponseBytes)
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return nil, &workflowResponseError{statusCode: resp.StatusCode, body: string(respBody)}
