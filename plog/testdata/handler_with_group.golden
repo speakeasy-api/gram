@@ -1,7 +1,5 @@
 00:00:00.000 INFO  connected
-    db.host: localhost
-    db.port: 5432
-
+│ 	db.host: localhost
+│ 	db.port: 5432
 00:00:00.000 INFO  hit
-    cache.key: user:123
-
+│ 	cache.key: user:123
