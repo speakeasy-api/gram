@@ -52,28 +52,3 @@ export function ListStateBoundary({
 
   return <>{children}</>;
 }
-
-/** "Load more" bar shared by both paginated listings. */
-export function LoadMoreRow({
-  hasNextPage,
-  isFetchingNextPage,
-  onLoadMore,
-}: {
-  hasNextPage: boolean;
-  isFetchingNextPage: boolean;
-  onLoadMore: () => void;
-}): JSX.Element | null {
-  if (!hasNextPage) return null;
-  return (
-    <div className="flex justify-center pt-2">
-      <Button
-        variant="tertiary"
-        size="sm"
-        disabled={isFetchingNextPage}
-        onClick={onLoadMore}
-      >
-        {isFetchingNextPage ? "Loading…" : "Load more"}
-      </Button>
-    </div>
-  );
-}

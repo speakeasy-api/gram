@@ -33,4 +33,8 @@ type UserSessionClient struct {
 	ClientSecretExpiresAt *string
 	CreatedAt             string
 	UpdatedAt             string
+	// How many live user_sessions this client currently holds. Counted the same
+	// way the sessions listing's active filter counts: not revoked, and the
+	// refresh token has not expired.
+	ActiveSessionCount int
 }
