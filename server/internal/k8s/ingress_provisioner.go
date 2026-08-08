@@ -204,6 +204,18 @@ func (p *IngressProvisioner) buildIngress(domain string, ipAllowlist []string) (
 									},
 								},
 								{
+									// Public skill share pages (/shared/skills/{token})
+									// are served by the app on custom domains.
+									Path:     "/shared/skills",
+									PathType: &pathTypePrefix,
+									Backend: networkingv1.IngressBackend{
+										Service: &networkingv1.IngressServiceBackend{
+											Name: p.backendService,
+											Port: networkingv1.ServiceBackendPort{Number: 80},
+										},
+									},
+								},
+								{
 									Path:     "/.well-known/openai-apps-challenge",
 									PathType: &pathTypeExact,
 									Backend: networkingv1.IngressBackend{
