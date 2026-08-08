@@ -50,7 +50,7 @@ import {
 import { hasRevealableEvent, REVEAL_SCOPE, useUnmaskedMatch } from "./unmask";
 import { useRBAC } from "@/hooks/useRBAC";
 
-export const GLOBAL_SCOPE = "__global__";
+const GLOBAL_SCOPE = "__global__";
 
 export type ExclusionSheetState =
   | {
