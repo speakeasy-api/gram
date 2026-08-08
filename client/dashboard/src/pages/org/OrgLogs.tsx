@@ -1,8 +1,6 @@
-import { PageEyebrow } from "@/components/page-eyebrow";
-import { Page } from "@/components/page-layout";
+import { SettingsPage } from "@/components/page-templates";
 import { LogDataRetentionBanner } from "@/components/observe/LoggingPageHeader";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/Heading";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
@@ -16,18 +14,7 @@ import { handleAPIError } from "@/lib/errors";
 import { SkillContentUploadSetting } from "./SkillContentUploadSetting";
 
 export default function OrgLogs(): JSX.Element {
-  return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope={["org:read", "org:admin"]} level="page">
-          <OrgLogsInner />
-        </RequireScope>
-      </Page.Body>
-    </Page>
-  );
+  return <OrgLogsInner />;
 }
 
 function OrgLogsInner() {
@@ -150,18 +137,11 @@ function OrgLogsInner() {
   };
 
   return (
-    <>
-      <div className="mb-6">
-        <PageEyebrow className="mb-2" />
-        <Heading variant="h4" className="mb-2 text-display-sm font-thin">
-          Logs
-        </Heading>
-        <Text muted small className="mt-1">
-          Configure logging and telemetry settings for all your tool capture.
-          When enabled, tool calls and traces are recorded for debugging and
-          analytics. These power the insights and logs page on the platform.
-        </Text>
-      </div>
+    <SettingsPage
+      scope={["org:read", "org:admin"]}
+      title="Logs"
+      description="Configure logging and telemetry settings for all your tool capture. When enabled, tool calls and traces are recorded for debugging and analytics. These power the insights and logs page on the platform."
+    >
       <LogDataRetentionBanner />
       <div className="border-border bg-card border p-4">
         <Stack gap={4}>
@@ -320,9 +300,7 @@ function OrgLogsInner() {
         </Stack>
       </div>
 
-      <div className="mt-8">
-        <OtelForwardingSection />
-      </div>
-    </>
+      <OtelForwardingSection />
+    </SettingsPage>
   );
 }

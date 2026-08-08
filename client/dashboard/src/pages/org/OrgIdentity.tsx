@@ -1,4 +1,4 @@
-import { Page } from "@/components/page-layout";
+import { SettingsPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/Heading";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
@@ -286,18 +286,7 @@ function IdentitySection({
 }
 
 export default function OrgIdentity(): JSX.Element {
-  return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope={["org:read", "org:admin"]} level="page">
-          <OrgIdentityInner />
-        </RequireScope>
-      </Page.Body>
-    </Page>
-  );
+  return <OrgIdentityInner />;
 }
 
 function OrgIdentityInner() {
@@ -310,10 +299,8 @@ function OrgIdentityInner() {
   const scimActive = organization.scimEnabled === true;
 
   return (
-    <Page.Section>
-      <Page.Section.Title>Identity</Page.Section.Title>
-      <Page.Section.Body>
-        <div className="flex flex-col gap-6">
+    <SettingsPage scope={["org:read", "org:admin"]} title="Identity">
+      <div className="flex flex-col gap-6">
           <IdentitySection
             sectionId="sso"
             heading="Single Sign-On"
@@ -372,7 +359,6 @@ function OrgIdentityInner() {
             }
           />
         </div>
-      </Page.Section.Body>
-    </Page.Section>
+    </SettingsPage>
   );
 }
