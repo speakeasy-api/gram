@@ -8,6 +8,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -179,19 +180,75 @@ func TestListMcpServers_FilterByMalformedRemoteMcpServerID(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
-func TestListMcpServers_RBACForbidden(t *testing.T) {
+func TestListMcpServers_RBACEmptyWithNoGrants(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	_, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		Name:              "rbac hidden server",
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &serverID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+
 	ctx = withExactAuthzGrants(t, ctx, ti.conn)
 
-	_, err := ti.service.ListMcpServers(ctx, &gen.ListMcpServersPayload{
+	result, err := ti.service.ListMcpServers(ctx, &gen.ListMcpServersPayload{
 		SessionToken:      nil,
 		ApikeyToken:       nil,
 		ProjectSlugInput:  nil,
 		RemoteMcpServerID: nil,
 		ToolsetID:         nil,
 	})
-	requireOopsCode(t, err, oops.CodeForbidden)
+	require.NoError(t, err)
+	require.Empty(t, result.McpServers)
+}
+
+func TestListMcpServers_RBACFiltersToGrantedServers(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	var created []string
+	for i := range 2 {
+		serverID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+		server, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+			SessionToken:      nil,
+			ApikeyToken:       nil,
+			ProjectSlugInput:  nil,
+			Name:              fmt.Sprintf("rbac filter server %d", i),
+			EnvironmentID:     nil,
+			RemoteMcpServerID: &serverID,
+			ToolsetID:         nil,
+			Visibility:        types.McpServerVisibility("disabled"),
+		})
+		require.NoError(t, err)
+		created = append(created, server.ID)
+	}
+
+	ctx = withExactAuthzGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPRead, created[0]))
+
+	result, err := ti.service.ListMcpServers(ctx, &gen.ListMcpServersPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		RemoteMcpServerID: nil,
+		ToolsetID:         nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.McpServers, 1)
+	require.Equal(t, created[0], result.McpServers[0].ID)
 }

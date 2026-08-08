@@ -9,6 +9,8 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
@@ -256,6 +258,50 @@ func TestToolsetsService_ListToolsetsForOrg_VerifyDetails(t *testing.T) {
 	afterCount, err := audittest.AuditLogCount(ctx, ti.conn)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount, afterCount)
+}
+
+func TestToolsetsService_ListToolsetsForOrg_RBACEmptyWithOrgReadOnly(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	_ = createMinimalPrivateToolset(t, ctx, ti, "org-rbac-hidden-test")
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	// org:read alone passes the endpoint gate but grants mcp:read on nothing.
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgRead, authCtx.ActiveOrganizationID))
+
+	result, err := ti.service.ListToolsetsForOrg(ctx, &gen.ListToolsetsForOrgPayload{
+		SessionToken: nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, result.Toolsets)
+}
+
+func TestToolsetsService_ListToolsetsForOrg_RBACFiltersToGrantedToolsets(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	granted := createMinimalPrivateToolset(t, ctx, ti, "org-rbac-granted-test")
+	_ = createMinimalPrivateToolset(t, ctx, ti, "org-rbac-ungranted-test")
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.NewGrant(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+		authz.NewGrant(authz.ScopeMCPRead, granted.ID),
+	)
+
+	result, err := ti.service.ListToolsetsForOrg(ctx, &gen.ListToolsetsForOrgPayload{
+		SessionToken: nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Toolsets, 1)
+	require.Equal(t, granted.ID, result.Toolsets[0].ID)
 }
 
 func TestToolsetsService_ListToolsetsForOrg_ExcludesDeletedToolsets(t *testing.T) {
