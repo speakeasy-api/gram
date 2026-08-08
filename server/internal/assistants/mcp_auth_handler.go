@@ -150,13 +150,66 @@ func (s *Service) handleCreateMCPAuthFlow(w http.ResponseWriter, r *http.Request
 		return oops.E(oops.CodeUnexpected, nil, "mcp authorization server does not advertise RFC 8414 endpoints").LogError(ctx, s.logger)
 	}
 
-	registration, err := s.registerMCPAuthClient(ctx, metadata.RegistrationEndpoint, redirectURI)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "register assistant mcp oauth client").LogError(ctx, s.logger)
-	}
-	encryptedSecret, err := s.core.encryptionClient.Encrypt([]byte(registration.ClientSecret))
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "encrypt mcp client secret").LogError(ctx, s.logger)
+	// Try to get existing OAuth client for this assistant + MCP server combination
+	var clientID string
+	var encryptedSecretStr string
+	
+	repo := assistantrepo.New(s.core.db)
+	existingClient, err := repo.GetAssistantMCPOAuthClient(ctx, assistantrepo.GetAssistantMCPOAuthClientParams{
+		AssistantID: principal.AssistantID,
+		ProjectID:   projectID,
+		McpUrl:      mcpURL.String(),
+	})
+	
+	if err == nil {
+		// Reuse existing client
+		clientID = existingClient.ClientID
+		encryptedSecretStr = string(existingClient.EncryptedClientSecret)
+		s.logger.InfoContext(ctx, "reusing existing mcp oauth client",
+			attr.SlogAssistantID(principal.AssistantID.String()),
+			attr.SlogProjectID(projectID.String()),
+			attr.SlogToolsetMCPSlug(mcpSlug),
+			slog.String("client_id", clientID),
+		)
+	} else if errors.Is(err, pgx.ErrNoRows) {
+		// No existing client, register a new one
+		registration, err := s.registerMCPAuthClient(ctx, metadata.RegistrationEndpoint, redirectURI)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "register assistant mcp oauth client").LogError(ctx, s.logger)
+		}
+		
+		encryptedSecretStr, err = s.core.encryptionClient.Encrypt([]byte(registration.ClientSecret))
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "encrypt mcp client secret").LogError(ctx, s.logger)
+		}
+		
+		// Store the new client for future reuse
+		_, err = repo.UpsertAssistantMCPOAuthClient(ctx, assistantrepo.UpsertAssistantMCPOAuthClientParams{
+			AssistantID:            principal.AssistantID,
+			ProjectID:              projectID,
+			McpUrl:                 mcpURL.String(),
+			ClientID:               registration.ClientID,
+			EncryptedClientSecret:  []byte(encryptedSecretStr),
+		})
+		if err != nil {
+			// Log but don't fail - we can continue with the newly registered client
+			s.logger.WarnContext(ctx, "failed to store mcp oauth client for reuse",
+				attr.SlogAssistantID(principal.AssistantID.String()),
+				attr.SlogProjectID(projectID.String()),
+				attr.SlogError(err),
+			)
+		}
+		
+		clientID = registration.ClientID
+		s.logger.InfoContext(ctx, "registered new mcp oauth client",
+			attr.SlogAssistantID(principal.AssistantID.String()),
+			attr.SlogProjectID(projectID.String()),
+			attr.SlogToolsetMCPSlug(mcpSlug),
+			slog.String("client_id", clientID),
+		)
+	} else {
+		// Unexpected error
+		return oops.E(oops.CodeUnexpected, err, "check for existing mcp oauth client").LogError(ctx, s.logger)
 	}
 
 	state, err := s.core.assistantTokens.GenerateMCPAuthFlow(assistanttokens.MCPAuthFlowInput{
@@ -168,8 +221,8 @@ func (s *Service) handleCreateMCPAuthFlow(w http.ResponseWriter, r *http.Request
 		FlowID:        flowID,
 		ServerID:      req.ServerID,
 		McpURL:        mcpURL.String(),
-		ClientID:      registration.ClientID,
-		ClientSecret:  encryptedSecret,
+		ClientID:      clientID,
+		ClientSecret:  encryptedSecretStr,
 		RedirectURI:   redirectURI,
 		CodeVerifier:  encryptedVerifier,
 		TokenEndpoint: metadata.TokenEndpoint,
@@ -179,7 +232,7 @@ func (s *Service) handleCreateMCPAuthFlow(w http.ResponseWriter, r *http.Request
 		return oops.E(oops.CodeUnexpected, err, "sign mcp auth flow state").LogError(ctx, s.logger)
 	}
 
-	authURL, err := buildMCPAuthURL(metadata.AuthorizationEndpoint, registration.ClientID, redirectURI, state, codeChallenge)
+	authURL, err := buildMCPAuthURL(metadata.AuthorizationEndpoint, clientID, redirectURI, state, codeChallenge)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build mcp auth url").LogError(ctx, s.logger)
 	}

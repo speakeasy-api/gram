@@ -1354,3 +1354,32 @@ WHERE assistant_thread_id = @assistant_thread_id
   AND project_id = @project_id
 ORDER BY created_at DESC
 LIMIT 1;
+
+-- name: GetAssistantMCPOAuthClient :one
+SELECT id, assistant_id, project_id, mcp_url, client_id, encrypted_client_secret, created_at, updated_at
+FROM assistant_mcp_oauth_clients
+WHERE assistant_id = @assistant_id
+  AND project_id = @project_id
+  AND mcp_url = @mcp_url
+  AND deleted IS FALSE;
+
+-- name: UpsertAssistantMCPOAuthClient :one
+INSERT INTO assistant_mcp_oauth_clients (
+  assistant_id,
+  project_id,
+  mcp_url,
+  client_id,
+  encrypted_client_secret
+) VALUES (
+  @assistant_id,
+  @project_id,
+  @mcp_url,
+  @client_id,
+  @encrypted_client_secret
+)
+ON CONFLICT (assistant_id, mcp_url) WHERE deleted IS FALSE
+DO UPDATE SET
+  client_id = EXCLUDED.client_id,
+  encrypted_client_secret = EXCLUDED.encrypted_client_secret,
+  updated_at = clock_timestamp()
+RETURNING id, assistant_id, project_id, mcp_url, client_id, encrypted_client_secret, created_at, updated_at;

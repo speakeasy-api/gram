@@ -1,4 +1,4 @@
-h1:E05/fgXe/Gl67ilPpWYLVe5//KBvu5e3Pj32Z28JX9k=
+h1:Y2RiZux+4/jxV/qjPM9Y61uWYmSqdeSSQ6Yt7WW//cE=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -322,3 +322,4 @@ h1:E05/fgXe/Gl67ilPpWYLVe5//KBvu5e3Pj32Z28JX9k=
 20260806224308_trials-table-tier.sql h1:77p16W+Y+06uZULh/GZxFuIvSLmaMsSPp6uGlfmjfUI=
 20260807090620_risk-results-fk-cascade-indexes.sql h1:kViSEj0zhDuK1yw9ti+36gkApVeRf/E0TbK4b53C27c=
 20260807103825_remote-session-refresh-support.sql h1:TDffGSjAKJYFJ7ZtmkmUkwnt31NO69kJBpOOBPMrQEw=
+20260808130923_assistant-mcp-oauth-client-reuse.sql h1:BnRiOyU4WNxA4eQW+VxMLiOECcd0SBtDGWN3ufHPUDw=
