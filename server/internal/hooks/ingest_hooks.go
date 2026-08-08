@@ -157,6 +157,7 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	orgSlug := ""
 	outcome := hookMetricOutcomeAccepted
 	ctx, riskScanned := withRiskScanTracker(ctx)
+	ctx, blockEffects := withBlockEffectCollector(ctx)
 	defer func() {
 		if err != nil && outcome == hookMetricOutcomeAccepted {
 			outcome = hookMetricOutcomeFailure
@@ -270,7 +271,7 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 	s.captureMCPAttribution(context.WithoutCancel(ctx), payload, authCtx)
 	if blockReason != "" {
 		return &AuthenticatedIngestResult{
-			Result: s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalDenyResult(userReason), skillCapture),
+			Result: withBlockEffect(blockEffects, s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalDenyResult(userReason), skillCapture)),
 			Actor:  ResolvedActor(actor),
 		}, nil
 	}
@@ -774,6 +775,7 @@ func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *conte
 			ToolName:        toolName,
 			ToolInput:       toolInput,
 			RiskPolicyID:    policy.ID,
+			PolicyName:      policy.Name,
 		})
 		// Retried deliveries still get the deny decision, but must not mint
 		// another block row (and a second block URL) for the same call.
@@ -796,6 +798,7 @@ func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *conte
 				ChatMessageID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			}); bURL != "" {
 				userReason = appendBlockURL(userReason, bURL)
+				setBlockEffectBlockURL(ctx, bURL)
 			}
 		}
 		return auditReason, userReason
