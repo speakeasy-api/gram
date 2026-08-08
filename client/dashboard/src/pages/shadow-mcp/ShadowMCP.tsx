@@ -1,5 +1,4 @@
-import { Page } from "@/components/page-layout";
-import { RequireScope } from "@/components/require-scope";
+import { ResourceListPage } from "@/components/page-templates";
 import type { ShadowMCPPolicy } from "@/components/shadow-mcp/ShadowMCPInventoryActions";
 import { ShadowMCPInventoryTable } from "@/components/shadow-mcp/ShadowMCPInventoryTable";
 import { ShadowMCPPolicyStatus } from "@/components/shadow-mcp/ShadowMCPPolicyStatus";
