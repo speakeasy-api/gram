@@ -50,49 +50,35 @@ export default function ShadowMCP(): JSX.Element {
   const disposition = shadowMCPBlockingPolicyDisposition(shadowMCPPolicies);
 
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs
-          substitutions={{ ["shadow-mcp"]: pageTitle }}
+    <ResourceListPage
+      scope="org:admin"
+      breadcrumbSubstitutions={{ ["shadow-mcp"]: pageTitle }}
+      title={pageTitle}
+      stage="beta"
+      description="Manage the Shadow MCP server inventory, allow decisions, and requests."
+      primaryAction={
+        policyDataReady ? (
+          <ShadowMCPPolicyStatus
+            disposition={disposition}
+            policyState={policyState}
+          />
+        ) : undefined
+      }
+      isLoading={!policyDataReady}
+      loadingFallback={<ShadowMCPLoadingState />}
+    >
+      <div className="flex flex-col pb-8">
+        <ShadowMCPInventoryTable
+          members={membersQuery.data?.members ?? []}
+          onOpenServer={(server) =>
+            routes.shadowMCP.detail.goTo(server.serverSlug)
+          }
+          policyState={policyState}
+          projectID={project.id}
+          roles={rolesQuery.data?.roles ?? []}
+          shadowMCPPolicies={shadowMCPPolicies}
         />
-      </Page.Header>
-      <Page.Body fullHeight className="pb-8">
-        <RequireScope scope="org:admin" level="page">
-          <Page.Section>
-            <Page.Section.Title stage="beta">{pageTitle}</Page.Section.Title>
-            <Page.Section.Description>
-              Manage the Shadow MCP server inventory, allow decisions, and
-              requests.
-            </Page.Section.Description>
-            {policyDataReady ? (
-              <Page.Section.CTA>
-                <ShadowMCPPolicyStatus
-                  disposition={disposition}
-                  policyState={policyState}
-                />
-              </Page.Section.CTA>
-            ) : null}
-            <Page.Section.Body>
-              {policyDataReady ? (
-                <div className="flex flex-col pb-8">
-                  <ShadowMCPInventoryTable
-                    members={membersQuery.data?.members ?? []}
-                    onOpenServer={(server) =>
-                      routes.shadowMCP.detail.goTo(server.serverSlug)
-                    }
-                    policyState={policyState}
-                    projectID={project.id}
-                    roles={rolesQuery.data?.roles ?? []}
-                    shadowMCPPolicies={shadowMCPPolicies}
-                  />
-                </div>
-              ) : (
-                <ShadowMCPLoadingState />
-              )}
-            </Page.Section.Body>
-          </Page.Section>
-        </RequireScope>
-      </Page.Body>
-    </Page>
+      </div>
+    </ResourceListPage>
   );
 }
