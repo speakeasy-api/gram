@@ -74,3 +74,35 @@ export function SegmentedControl<T extends string>({
     </div>
   );
 }
+
+/**
+ * ToggleButton — a single inline segment (billing chart granularity, usage-unit
+ * toggle). Same mono/uppercase idiom as a SegmentedControl segment, with the
+ * active option filling as a solid ink block. Lives here so the segment idiom
+ * has one home; use SegmentedControl for a full option group.
+ */
+export function ToggleButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        "px-2 py-0.5 font-mono text-xs tracking-[0.08em] uppercase transition-colors",
+        active
+          ? "bg-primary text-primary-foreground"
+          : "text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
+  );
+}

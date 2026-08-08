@@ -4,7 +4,6 @@ import { RankedBarList } from "@/components/chart/RankedBarList";
 import { Page } from "@/components/page-layout";
 import { Avatar, AvatarFallback } from "@/components/ui/Avatar";
 import { getIdentityTint } from "@/components/gradient-colors";
-import { DashboardCard } from "@/components/ui/DashboardCard";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
@@ -560,7 +559,7 @@ export function ProjectDashboard(): JSX.Element {
 
               {/* Row 1: Top Activity */}
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                <DashboardCard
+                <Card.Dashboard
                   title={hasHookData ? "Top Users" : "Top End Users"}
                   tooltip={
                     hasHookData
@@ -601,9 +600,9 @@ export function ProjectDashboard(): JSX.Element {
                       items={hasHookData ? topUsersByTokens : topEndUsers}
                     />
                   )}
-                </DashboardCard>
+                </Card.Dashboard>
 
-                <DashboardCard
+                <Card.Dashboard
                   title="Top Servers"
                   tooltip="Servers ranked by the number of tool calls they served in the selected period, based on logs captured from user sessions in addition to MCP servers hosted in your project."
                   action={
@@ -641,14 +640,14 @@ export function ProjectDashboard(): JSX.Element {
                         }))}
                     />
                   )}
-                </DashboardCard>
+                </Card.Dashboard>
               </div>
 
               {/* Row 2: Sessions (hook view) / Tools (MCP view) */}
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 {hasHookData ? (
                   <>
-                    <DashboardCard
+                    <Card.Dashboard
                       title="Most Agent Sessions by User"
                       tooltip="Employees ranked by the number of distinct agent sessions in the selected period."
                       action={
@@ -715,9 +714,9 @@ export function ProjectDashboard(): JSX.Element {
                           ))}
                         </ul>
                       )}
-                    </DashboardCard>
+                    </Card.Dashboard>
 
-                    <DashboardCard
+                    <Card.Dashboard
                       title="Most Used Agents"
                       tooltip="Coding agents ranked by token volume in the selected period, identified from client metadata sent with each call."
                       action={
@@ -747,11 +746,11 @@ export function ProjectDashboard(): JSX.Element {
                       ) : (
                         <RankedBarList items={mostUsedAgents} />
                       )}
-                    </DashboardCard>
+                    </Card.Dashboard>
                   </>
                 ) : (
                   <>
-                    <DashboardCard
+                    <Card.Dashboard
                       title="Most Used Tools"
                       tooltip="Tools ranked by the number of MCP calls they served in the selected period."
                       action={
@@ -767,9 +766,9 @@ export function ProjectDashboard(): JSX.Element {
                       ) : (
                         <RankedBarList items={mostUsedTools} />
                       )}
-                    </DashboardCard>
+                    </Card.Dashboard>
 
-                    <DashboardCard
+                    <Card.Dashboard
                       title="Top Tools by Failure Rate"
                       tooltip="Tools with the highest share of failed MCP calls (HTTP 4xx/5xx) in the selected period. Only tools with at least one failure are shown."
                       action={
@@ -785,7 +784,7 @@ export function ProjectDashboard(): JSX.Element {
                       ) : (
                         <RankedBarList items={topToolsByFailureRate} />
                       )}
-                    </DashboardCard>
+                    </Card.Dashboard>
                   </>
                 )}
               </div>

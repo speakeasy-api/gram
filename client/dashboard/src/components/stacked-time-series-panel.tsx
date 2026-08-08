@@ -19,7 +19,7 @@ import {
 } from "react";
 import { Bar } from "react-chartjs-2";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { ToggleButton } from "@/components/ui/ToggleButton";
+import { ToggleButton } from "@/components/ui/SegmentedControl";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { AXIS, TOOLTIP, withAlpha } from "@/components/chart/palette";
 import {

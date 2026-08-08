@@ -11,7 +11,7 @@ import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { DashboardCard } from "@/components/ui/DashboardCard";
+import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
@@ -546,9 +546,9 @@ function DashboardChartCard({
   action?: ReactNode;
 }) {
   return (
-    <DashboardCard title={title} action={action}>
+    <Card.Dashboard title={title} action={action}>
       {loading ? <SkeletonList /> : empty ? <ChartEmptyState /> : children}
-    </DashboardCard>
+    </Card.Dashboard>
   );
 }
 

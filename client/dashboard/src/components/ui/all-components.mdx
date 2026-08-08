@@ -38,7 +38,6 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/ContextMenu";
 import { CopyButton } from "@/components/ui/CopyButton";
-import { DashboardCard } from "@/components/ui/DashboardCard";
 import { Dialog } from "@/components/ui/Dialog";
 import { DotRow } from "@/components/ui/DotRow";
 import { DotTable } from "@/components/ui/DotTable";
@@ -48,7 +47,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
-import { Editable } from "@/components/ui/Editable";
 import {
   Field,
   FieldDescription,
@@ -112,7 +110,7 @@ import {
 } from "@/components/ui/Tabs";
 import { TextArea } from "@/components/ui/Textarea";
 import { ThemeSwitcher } from "@/components/ui/ThemeSwitcher";
-import { ToggleButton } from "@/components/ui/ToggleButton";
+import { ToggleButton } from "@/components/ui/SegmentedControl";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/ToggleGroup";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
@@ -364,12 +362,6 @@ export const Row = ({ name, origin, children }) => {
   </div>
 </Row>
 
-<Row name="Editable" origin="Gram">
-  <Editable onClick={() => {}}>
-    <span className="text-lg font-medium">Petstore</span>
-  </Editable>
-</Row>
-
 ## Overlays
 
 <Row name="Tooltip" origin="DS">
@@ -490,11 +482,11 @@ export const Row = ({ name, origin, children }) => {
   </div>
 </Row>
 
-<Row name="DashboardCard" origin="Gram">
+<Row name="Card.Dashboard" origin="Gram">
   <div className="w-80">
-    <DashboardCard title="Tool calls">
+    <Card.Dashboard title="Tool calls">
       <div className="text-3xl font-semibold tabular-nums">12,480</div>
-    </DashboardCard>
+    </Card.Dashboard>
   </div>
 </Row>
 
