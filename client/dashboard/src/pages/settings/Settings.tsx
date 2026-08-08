@@ -28,12 +28,7 @@ export default function Settings(): JSX.Element {
 
       {isAdmin && (
         <div className="border-destructive-default bg-card border p-4">
-          <Stack
-            direction="horizontal"
-            align="center"
-            gap={2}
-            className="mb-3"
-          >
+          <Stack direction="horizontal" align="center" gap={2} className="mb-3">
             <ShieldAlert className="text-default-destructive h-5 w-5" />
             <Heading variant="h4" className="text-default-destructive">
               Platform Admin Only
