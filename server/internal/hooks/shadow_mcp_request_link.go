@@ -100,8 +100,24 @@ func (s *Service) shadowMCPApprovalRequestURL(ctx context.Context, params shadow
 		Token:      token,
 		ExpiresAt:  expiry,
 		ServerName: conv.PtrValOr(shadowmcp.ObservedName(evidence, params.ToolName), ""),
-		ServerURL:  evidence.FullURL,
+		ServerURL:  redactedServerURL(evidence.FullURL),
 	}, true
+}
+
+// redactedServerURL reduces an observed server URL to the inventory
+// convention (scheme/host/path — no userinfo, query, or fragment) before it
+// rides the machine-readable block effect: NormalizeAccessEvidence keeps the
+// query string and any embedded credentials, and this channel must not
+// re-expose them.
+func redactedServerURL(fullURL string) string {
+	if fullURL == "" {
+		return ""
+	}
+	inventory, ok := shadowmcp.CanonicalizeInventoryURL(fullURL)
+	if !ok {
+		return ""
+	}
+	return inventory.CanonicalURL
 }
 
 func stringPtrOrNil(value string) *string {
