@@ -230,7 +230,9 @@ func TestDenyNotifyBoundedByHungAgent(t *testing.T) {
 	res := invoke(t, authedConfig(t, fs.URL), agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 	elapsed := time.Since(start)
 	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
-	require.Less(t, elapsed, 3*time.Second, "a hung agent must cost at most the notify budget, elapsed=%s", elapsed)
+	// Bound = the 300ms budget plus slack for the local ingest exchange and
+	// runner overhead — tight enough that a budget regression to even 1s fails.
+	require.Less(t, elapsed, 1300*time.Millisecond, "a hung agent must cost at most the notify budget, elapsed=%s", elapsed)
 }
 
 func TestDecodeBlockEffectRejectsNonObjects(t *testing.T) {
