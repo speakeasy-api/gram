@@ -2198,6 +2198,7 @@ func ParseEndpoint(
 		riskCreateRiskPolicyBypassRequestFlags            = flag.NewFlagSet("create-risk-policy-bypass-request", flag.ExitOnError)
 		riskCreateRiskPolicyBypassRequestBodyFlag         = riskCreateRiskPolicyBypassRequestFlags.String("body", "REQUIRED", "")
 		riskCreateRiskPolicyBypassRequestSessionTokenFlag = riskCreateRiskPolicyBypassRequestFlags.String("session-token", "", "")
+		riskCreateRiskPolicyBypassRequestApikeyTokenFlag  = riskCreateRiskPolicyBypassRequestFlags.String("apikey-token", "", "")
 
 		riskAcknowledgeRiskPolicyChallengeFlags            = flag.NewFlagSet("acknowledge-risk-policy-challenge", flag.ExitOnError)
 		riskAcknowledgeRiskPolicyChallengeBodyFlag         = riskAcknowledgeRiskPolicyChallengeFlags.String("body", "REQUIRED", "")
@@ -7241,7 +7242,7 @@ func ParseEndpoint(
 				data, err = riskc.BuildGetRiskPolicyStatusPayload(*riskGetRiskPolicyStatusIDFlag, *riskGetRiskPolicyStatusApikeyTokenFlag, *riskGetRiskPolicyStatusSessionTokenFlag, *riskGetRiskPolicyStatusProjectSlugInputFlag)
 			case "create-risk-policy-bypass-request":
 				endpoint = c.CreateRiskPolicyBypassRequest()
-				data, err = riskc.BuildCreateRiskPolicyBypassRequestPayload(*riskCreateRiskPolicyBypassRequestBodyFlag, *riskCreateRiskPolicyBypassRequestSessionTokenFlag)
+				data, err = riskc.BuildCreateRiskPolicyBypassRequestPayload(*riskCreateRiskPolicyBypassRequestBodyFlag, *riskCreateRiskPolicyBypassRequestSessionTokenFlag, *riskCreateRiskPolicyBypassRequestApikeyTokenFlag)
 			case "acknowledge-risk-policy-challenge":
 				endpoint = c.AcknowledgeRiskPolicyChallenge()
 				data, err = riskc.BuildAcknowledgeRiskPolicyChallengePayload(*riskAcknowledgeRiskPolicyChallengeBodyFlag, *riskAcknowledgeRiskPolicyChallengeSessionTokenFlag)
@@ -16868,6 +16869,7 @@ func riskCreateRiskPolicyBypassRequestUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] risk create-risk-policy-bypass-request", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -16877,10 +16879,11 @@ func riskCreateRiskPolicyBypassRequestUsage() {
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy-bypass-request --body '{\n      \"request_token\": \"abc123\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy-bypass-request --body '{\n      \"request_token\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\"")
 }
 
 func riskAcknowledgeRiskPolicyChallengeUsage() {
