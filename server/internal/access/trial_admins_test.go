@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -81,6 +82,23 @@ func TestListActiveOrganizationAdmins(t *testing.T) {
 		{ID: globalAdminUserID, Email: "global-admin@example.test", DisplayName: "Global Admin"},
 		{ID: orgAdminUserID, Email: "org-admin@example.test", DisplayName: "Organization Admin"},
 	}, admins)
+
+	admin, err := queries.GetActiveOrganizationAdmin(ctx, accessrepo.GetActiveOrganizationAdminParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGText(orgAdminUserID),
+	})
+	require.NoError(t, err)
+	require.Equal(t, accessrepo.GetActiveOrganizationAdminRow{
+		ID:          orgAdminUserID,
+		Email:       "org-admin@example.test",
+		DisplayName: "Organization Admin",
+	}, admin)
+
+	_, err = queries.GetActiveOrganizationAdmin(ctx, accessrepo.GetActiveOrganizationAdminParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGText(memberUserID),
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 func seedAdminQueryUser(t *testing.T, ctx context.Context, ti *testInstance, organizationID, userID, email, displayName, workosUserID string) {
