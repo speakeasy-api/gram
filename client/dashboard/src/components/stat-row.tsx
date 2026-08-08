@@ -1,7 +1,4 @@
-import {
-  MetricCard,
-  type MetricCardProps,
-} from "@/components/ui/MetricCard";
+import { MetricCard, type MetricCardProps } from "@/components/ui/MetricCard";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
 
@@ -36,10 +33,7 @@ export function StatRow({
     <MetricCard.Group className={cn(className)}>
       {isLoading
         ? metrics.map((metric, index) => (
-            <Skeleton
-              key={metric.key ?? index}
-              className="h-[136px] flex-1"
-            />
+            <Skeleton key={metric.key ?? index} className="h-[136px] flex-1" />
           ))
         : metrics.map(({ key, ...metric }, index) => (
             <MetricCard key={key ?? index} {...metric} />

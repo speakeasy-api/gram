@@ -44,13 +44,13 @@ export function InlineEmptyState({
   orientation?: "vertical" | "horizontal";
   className?: string;
 }): JSX.Element {
-  const tile = graphic ?? (
-    icon ? (
+  const tile =
+    graphic ??
+    (icon ? (
       <div className="text-muted-foreground flex h-12 w-12 shrink-0 items-center justify-center border">
         <Icon name={icon} className="h-5 w-5" />
       </div>
-    ) : null
-  );
+    ) : null);
 
   if (orientation === "horizontal") {
     return (
