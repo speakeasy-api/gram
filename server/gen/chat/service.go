@@ -156,10 +156,21 @@ type Chat struct {
 	TotalCost *float64
 	// When the last message in the chat was created.
 	LastMessageTimestamp string
-	// Number of risk findings recorded against messages in this chat
-	// (project-scoped, found=true). Only populated by endpoints that join risk
-	// data; absent elsewhere.
+	// Number of distinct risk findings recorded against messages in this chat
+	// (deduped by source/rule/match; project-scoped, found=true, excluding
+	// excluded and false-positive results). Only populated by endpoints that join
+	// risk data; absent elsewhere.
 	RiskFindingsCount *int
+	// Number of distinct active findings (same dedup as risk_findings_count) whose
+	// policy severity is low (score < 4.0). Only populated by endpoints that join
+	// risk data.
+	LowRiskFindingsCount *int
+	// Number of distinct active findings whose policy severity is medium (4.0 <=
+	// score < 7.0). Only populated by endpoints that join risk data.
+	MediumRiskFindingsCount *int
+	// Number of distinct active findings whose policy severity is high or critical
+	// (score >= 7.0). Only populated by endpoints that join risk data.
+	HighRiskFindingsCount *int
 	// Work units of value delivered in this chat as judged by the work-units
 	// analysis. Absent unless the organization has work-units analysis enabled and
 	// this chat has been scored.
@@ -264,10 +275,21 @@ type ChatOverview struct {
 	TotalCost *float64
 	// When the last message in the chat was created.
 	LastMessageTimestamp string
-	// Number of risk findings recorded against messages in this chat
-	// (project-scoped, found=true). Only populated by endpoints that join risk
-	// data; absent elsewhere.
+	// Number of distinct risk findings recorded against messages in this chat
+	// (deduped by source/rule/match; project-scoped, found=true, excluding
+	// excluded and false-positive results). Only populated by endpoints that join
+	// risk data; absent elsewhere.
 	RiskFindingsCount *int
+	// Number of distinct active findings (same dedup as risk_findings_count) whose
+	// policy severity is low (score < 4.0). Only populated by endpoints that join
+	// risk data.
+	LowRiskFindingsCount *int
+	// Number of distinct active findings whose policy severity is medium (4.0 <=
+	// score < 7.0). Only populated by endpoints that join risk data.
+	MediumRiskFindingsCount *int
+	// Number of distinct active findings whose policy severity is high or critical
+	// (score >= 7.0). Only populated by endpoints that join risk data.
+	HighRiskFindingsCount *int
 	// Work units of value delivered in this chat as judged by the work-units
 	// analysis. Absent unless the organization has work-units analysis enabled and
 	// this chat has been scored.

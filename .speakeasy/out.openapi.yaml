@@ -54352,6 +54352,10 @@ components:
         has_more_before:
           type: boolean
           description: Whether older messages exist before the first message in this page (within the returned generation). Load them with a `before_seq` cursor.
+        high_risk_findings_count:
+          type: integer
+          description: Number of distinct active findings whose policy severity is high or critical (score >= 7.0). Only populated by endpoints that join risk data.
+          format: int64
         id:
           type: string
           description: The ID of the chat
@@ -54359,6 +54363,10 @@ components:
           type: string
           description: When the last message in the chat was created.
           format: date-time
+        low_risk_findings_count:
+          type: integer
+          description: Number of distinct active findings (same dedup as risk_findings_count) whose policy severity is low (score < 4.0). Only populated by endpoints that join risk data.
+          format: int64
         match_segments:
           type: array
           items:
@@ -54367,6 +54375,10 @@ components:
         max_generation:
           type: integer
           description: The highest generation number present for this chat. To load the full history, walk from `max_generation` down to 0, requesting each generation in turn.
+          format: int64
+        medium_risk_findings_count:
+          type: integer
+          description: Number of distinct active findings whose policy severity is medium (4.0 <= score < 7.0). Only populated by endpoints that join risk data.
           format: int64
         messages:
           type: array
@@ -54382,7 +54394,7 @@ components:
           description: True when the chat is pinned
         risk_findings_count:
           type: integer
-          description: Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
+          description: Number of distinct risk findings recorded against messages in this chat (deduped by source/rule/match; project-scoped, found=true, excluding excluded and false-positive results). Only populated by endpoints that join risk data; absent elsewhere.
           format: int64
         risk_segments:
           type: array
@@ -54588,6 +54600,10 @@ components:
         external_user_id:
           type: string
           description: The ID of the external user who created the chat
+        high_risk_findings_count:
+          type: integer
+          description: Number of distinct active findings whose policy severity is high or critical (score >= 7.0). Only populated by endpoints that join risk data.
+          format: int64
         id:
           type: string
           description: The ID of the chat
@@ -54595,6 +54611,14 @@ components:
           type: string
           description: When the last message in the chat was created.
           format: date-time
+        low_risk_findings_count:
+          type: integer
+          description: Number of distinct active findings (same dedup as risk_findings_count) whose policy severity is low (score < 4.0). Only populated by endpoints that join risk data.
+          format: int64
+        medium_risk_findings_count:
+          type: integer
+          description: Number of distinct active findings whose policy severity is medium (4.0 <= score < 7.0). Only populated by endpoints that join risk data.
+          format: int64
         num_messages:
           type: integer
           description: The number of messages in the chat
@@ -54604,7 +54628,7 @@ components:
           description: True when the chat is pinned
         risk_findings_count:
           type: integer
-          description: Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
+          description: Number of distinct risk findings recorded against messages in this chat (deduped by source/rule/match; project-scoped, found=true, excluding excluded and false-positive results). Only populated by endpoints that join risk data; absent elsewhere.
           format: int64
         source:
           type: string

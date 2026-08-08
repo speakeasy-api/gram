@@ -361,20 +361,31 @@ DO NOTHING;
 -- filters become a cheap join instead of a correlated subquery per chat. The
 -- parameter-only gate makes it a one-time filter that skips the scan entirely
 -- when neither risk filter is active.
+-- risk_counts collapses to distinct (risk_policy_id, source, rule_id, match)
+-- findings per chat, resolved through either a chat_message or a
+-- chat_content_part anchor — the same dedup key and anchor union the
+-- displayed risk_findings_count below uses — so the has_risk/min_risk_score
+-- filters can never disagree with what a returned chat's own row shows.
 WITH risk_counts AS (
-  SELECT cm.chat_id, COUNT(*)::integer AS cnt
-  FROM risk_results rr
-  JOIN chat_messages cm ON cm.id = rr.chat_message_id
-  -- A finding only counts while its policy is still enabled and not deleted, so
-  -- disabling/deleting a policy retires its findings everywhere (keeps this
-  -- count in sync with the risk.results.list detail view).
-  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-  WHERE (@has_risk_filter::text <> '' OR @min_risk_score::int >= 0)
-    AND rr.project_id = @project_id
-    AND rr.found IS TRUE
-    AND rr.excluded_at IS NULL
-    AND rr.false_positive_at IS NULL
-  GROUP BY cm.chat_id
+  SELECT chat_id, COUNT(*)::integer AS cnt
+  FROM (
+    SELECT DISTINCT
+      COALESCE(cm.chat_id, ccp.chat_id) AS chat_id,
+      rr.risk_policy_id, rr.source, rr.rule_id, rr.match
+    FROM risk_results rr
+    LEFT JOIN chat_messages cm ON cm.id = rr.chat_message_id
+    LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
+    -- A finding only counts while its policy is still enabled and not deleted, so
+    -- disabling/deleting a policy retires its findings everywhere (keeps this
+    -- count in sync with the risk.results.list detail view).
+    JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+    WHERE (@has_risk_filter::text <> '' OR @min_risk_score::int >= 0)
+      AND rr.project_id = @project_id
+      AND rr.found IS TRUE
+      AND rr.excluded_at IS NULL
+      AND rr.false_positive_at IS NULL
+  ) findings
+  GROUP BY chat_id
 ),
 candidate_chats AS (
   SELECT c.id, c.created_at
@@ -477,20 +488,31 @@ WHERE (@from_time::timestamptz IS NULL OR ca.last_message_timestamp >= @from_tim
 -- filters. The parameter-only gate makes it a one-time filter that skips the
 -- scan entirely when neither risk filter is active; the displayed
 -- risk_findings_count is computed per returned page row in the final SELECT.
+-- risk_counts collapses to distinct (risk_policy_id, source, rule_id, match)
+-- findings per chat, resolved through either a chat_message or a
+-- chat_content_part anchor — the same dedup key and anchor union the
+-- displayed risk_findings_count below uses — so the has_risk/min_risk_score
+-- filters can never disagree with what a returned chat's own row shows.
 WITH risk_counts AS (
-  SELECT cm.chat_id, COUNT(*)::integer AS cnt
-  FROM risk_results rr
-  JOIN chat_messages cm ON cm.id = rr.chat_message_id
-  -- A finding only counts while its policy is still enabled and not deleted, so
-  -- disabling/deleting a policy retires its findings everywhere (keeps this
-  -- count in sync with the risk.results.list detail view).
-  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-  WHERE (@has_risk_filter::text <> '' OR @min_risk_score::int >= 0)
-    AND rr.project_id = @project_id
-    AND rr.found IS TRUE
-    AND rr.excluded_at IS NULL
-    AND rr.false_positive_at IS NULL
-  GROUP BY cm.chat_id
+  SELECT chat_id, COUNT(*)::integer AS cnt
+  FROM (
+    SELECT DISTINCT
+      COALESCE(cm.chat_id, ccp.chat_id) AS chat_id,
+      rr.risk_policy_id, rr.source, rr.rule_id, rr.match
+    FROM risk_results rr
+    LEFT JOIN chat_messages cm ON cm.id = rr.chat_message_id
+    LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
+    -- A finding only counts while its policy is still enabled and not deleted, so
+    -- disabling/deleting a policy retires its findings everywhere (keeps this
+    -- count in sync with the risk.results.list detail view).
+    JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+    WHERE (@has_risk_filter::text <> '' OR @min_risk_score::int >= 0)
+      AND rr.project_id = @project_id
+      AND rr.found IS TRUE
+      AND rr.excluded_at IS NULL
+      AND rr.false_positive_at IS NULL
+  ) findings
+  GROUP BY chat_id
 ),
 candidate_chats AS (
   SELECT
@@ -660,25 +682,71 @@ SELECT
   lc.pinned_at,
   lc.num_messages,
   lc.last_message_timestamp,
-  -- Active findings for the returned page rows only; must stay in sync with
-  -- the risk_counts predicate above (and the risk.results.list detail view).
-  (
-    SELECT COUNT(*)::integer
-    FROM risk_results rr
-    JOIN chat_messages cm ON cm.id = rr.chat_message_id
-    JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
-    WHERE rr.project_id = @project_id
-      AND cm.chat_id = lc.id
-      AND rr.found IS TRUE
-      AND rr.excluded_at IS NULL
-      AND rr.false_positive_at IS NULL
-  ) AS risk_findings_count,
+  -- Active, deduplicated findings for the returned page rows only; must stay
+  -- in sync with the risk_counts predicate above (and the risk.results.list
+  -- detail view). A finding anchors to either a chat message or a standalone
+  -- chat_content_part (e.g. an uploaded file), so both anchors are resolved
+  -- via COALESCE(cm.chat_id, ccp.chat_id), mirroring risk/queries.sql's
+  -- GetRiskResultByID / ListRiskResultsByProjectFound.
+  --
+  -- Deduped by (risk_policy_id, source, rule_id, match): the same value (e.g.
+  -- one IP address pasted many times in a log dump) is flagged once per
+  -- occurrence in risk_results, but reads as a single repeated finding to a
+  -- reviewer. risk_policy_id stays part of the dedup key so the same value
+  -- flagged by two different policies still counts as two distinct findings —
+  -- only repeats within a single policy collapse. Because the key pins one
+  -- policy per deduplicated finding, each finding's severity is unambiguous
+  -- (its policy's score), so risk_findings_count and the three band counts
+  -- below are all derived from the exact same finding set below and can
+  -- never disagree (a finding cannot land in two bands, and the bands always
+  -- sum to risk_findings_count).
+  --
+  -- Computed as a single LATERAL pass over a chat's risk_results instead of
+  -- four independent correlated subqueries, so listing a page of chats scans
+  -- each chat's findings once rather than four times.
+  rs.risk_findings_count,
+  -- Distinct findings bucketed by their policy's severity band (mirrors
+  -- risk-utils.ts's scoreToRating, folding high/critical together since the
+  -- histogram only has three segments), for a mini per-session severity
+  -- histogram instead of a single flat-alarming indicator.
+  rs.low_risk_findings_count,
+  rs.medium_risk_findings_count,
+  rs.high_risk_findings_count,
   lc.account_type,
   lc.account_email,
   lc.assistant_id,
   lc.assistant_name,
   lc.total_count
-FROM limited_chats lc;
+FROM limited_chats lc
+-- A plain (not LEFT) JOIN is correct and sufficient here: the subquery is a
+-- bare aggregate with no GROUP BY, so it always produces exactly one row
+-- (COUNT(*) = 0 for a chat with no active findings) and never needs an outer
+-- NULL fallback.
+JOIN LATERAL (
+  SELECT
+    COUNT(*)::integer AS risk_findings_count,
+    COUNT(*) FILTER (WHERE f.finding_score < 4.0)::integer AS low_risk_findings_count,
+    COUNT(*) FILTER (WHERE f.finding_score >= 4.0 AND f.finding_score < 7.0)::integer AS medium_risk_findings_count,
+    COUNT(*) FILTER (WHERE f.finding_score >= 7.0)::integer AS high_risk_findings_count
+  FROM (
+    SELECT
+      rr.risk_policy_id, rr.source, rr.rule_id, rr.match,
+      -- MAX is just how SQL spells "the value" under a GROUP BY, not real
+      -- aggregation: risk_policy_id is part of the grouping key and rp is
+      -- joined 1:1 on it, so every row in a group already shares one score.
+      MAX(rp.score) AS finding_score
+    FROM risk_results rr
+    LEFT JOIN chat_messages cm ON cm.id = rr.chat_message_id
+    LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
+    JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
+    WHERE rr.project_id = @project_id
+      AND COALESCE(cm.chat_id, ccp.chat_id) = lc.id
+      AND rr.found IS TRUE
+      AND rr.excluded_at IS NULL
+      AND rr.false_positive_at IS NULL
+    GROUP BY rr.risk_policy_id, rr.source, rr.rule_id, rr.match
+  ) f
+) rs ON TRUE;
 
 -- name: ListChatSources :many
 -- Distinct inferred source (the latest non-null message source) across the
@@ -1452,6 +1520,14 @@ INSERT INTO risk_policies (project_id, organization_id, name, sources, enabled, 
 VALUES (@project_id, @organization_id, 'test-policy', '{}', TRUE, 'flag', TRUE, 1)
 RETURNING id;
 
+-- name: SeedRiskPolicyWithScore :one
+-- Test fixture: insert a risk policy with an explicit severity score, for
+-- tests asserting the low/medium/high risk findings counts bucket a chat's
+-- active findings by their policy's score.
+INSERT INTO risk_policies (project_id, organization_id, name, sources, enabled, action, auto_name, version, score)
+VALUES (@project_id, @organization_id, 'test-policy-scored', '{}', TRUE, 'flag', TRUE, 1, @score)
+RETURNING id;
+
 -- name: SeedDisabledRiskPolicy :one
 -- Test fixture: insert a disabled risk policy and return its id. Findings under
 -- a disabled (or deleted) policy must drop out of every risk surface — the
@@ -1462,13 +1538,31 @@ RETURNING id;
 
 -- name: SeedRiskResult :exec
 -- Test fixture: insert a risk result linking a chat message to a risk policy.
+-- rule_id is a fresh UUID per row (rather than a shared constant) so that
+-- seeding N results always produces N results distinct by (source, rule_id,
+-- match), matching risk_findings_count's dedup key — callers that want
+-- fixture rows to collapse under dedup should seed the same rule_id/match
+-- explicitly instead of relying on this default.
 INSERT INTO risk_results (
     project_id, organization_id, risk_policy_id, risk_policy_version,
-    chat_message_id, source, found
+    chat_message_id, source, rule_id, found
 )
 VALUES (
     @project_id, @organization_id, @risk_policy_id, 1,
-    @chat_message_id, 'test', @found
+    @chat_message_id, 'test', gen_random_uuid()::text, @found
+);
+
+-- name: SeedRiskResultWithRuleMatch :exec
+-- Test fixture: like SeedRiskResult, but with an explicit rule_id/match
+-- instead of an always-unique generated rule_id — for tests that need
+-- multiple rows sharing the same dedup key (source, rule_id, match).
+INSERT INTO risk_results (
+    project_id, organization_id, risk_policy_id, risk_policy_version,
+    chat_message_id, source, rule_id, match, found
+)
+VALUES (
+    @project_id, @organization_id, @risk_policy_id, 1,
+    @chat_message_id, 'test', @rule_id, @match, @found
 );
 
 -- name: SeedAssistant :one
