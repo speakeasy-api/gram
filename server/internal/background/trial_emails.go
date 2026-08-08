@@ -14,8 +14,9 @@ import (
 )
 
 const (
-	trialLifecycleEmailWorkflowIDPrefix = "v1:trial-lifecycle-email"
-	trialLifecycleEmailActivityTimeout  = 5 * time.Minute
+	trialLifecycleEmailWorkflowIDPrefix   = "v1:trial-lifecycle-email"
+	trialLifecycleEmailActivityTimeout    = 5 * time.Minute
+	trialLifecycleEmailWorkflowRunTimeout = 30 * time.Minute
 )
 
 // TrialLifecycleEmailKind identifies the trial lifecycle change that starts a
@@ -86,7 +87,7 @@ func (n *TemporalTrialEmailNotifier) enqueue(ctx context.Context, input TrialLif
 		ID:                    trialLifecycleEmailWorkflowID(input),
 		TaskQueue:             string(n.TemporalEnv.Queue()),
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		WorkflowRunTimeout:    10 * time.Minute,
+		WorkflowRunTimeout:    trialLifecycleEmailWorkflowRunTimeout,
 	}, TrialLifecycleEmailWorkflow, input)
 	if err != nil {
 		return fmt.Errorf("enqueue trial lifecycle email workflow: %w", err)
