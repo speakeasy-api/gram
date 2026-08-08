@@ -46,7 +46,7 @@ func TestUpsertExternalChatTitleRegimes(t *testing.T) {
 			PreferStoredTitle: preferStored,
 		})
 		require.NoError(t, err)
-		row, err := queries.GetChat(ctx, id)
+		row, err := queries.GetChat(ctx, repo.GetChatParams{ID: id, ProjectID: ti.projectID})
 		require.NoError(t, err)
 		return row.Title.String
 	}

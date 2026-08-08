@@ -444,7 +444,7 @@ func TestClaude_LinksChatToUserAccount(t *testing.T) {
 	var chat chatRepo.GetChatRow
 	require.Eventually(t, func() bool {
 		var err error
-		chat, err = chatRepo.New(ti.conn).GetChat(ctx, chatID)
+		chat, err = chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{ID: chatID, ProjectID: *authCtx.ProjectID})
 		return err == nil
 	}, 2*time.Second, 25*time.Millisecond)
 
@@ -494,7 +494,7 @@ func TestLogs_BackfillsChatAccountLinkOnExistingChat(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	chat, err := chatRepo.New(ti.conn).GetChat(ctx, chatID)
+	chat, err := chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{ID: chatID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
 	require.True(t, chat.UserAccountID.Valid)
 	require.Equal(t, account.ID, chat.UserAccountID.UUID)

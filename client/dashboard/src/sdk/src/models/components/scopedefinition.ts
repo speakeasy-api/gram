@@ -78,6 +78,7 @@ export const Slug = {
   RiskPolicyBypass: "risk_policy:bypass",
   RiskPolicyBlock: "risk_policy:block",
   ChatRead: "chat:read",
+  ChatWrite: "chat:write",
 } as const;
 /**
  * Unique scope identifier.

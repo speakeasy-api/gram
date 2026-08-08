@@ -81,13 +81,23 @@ func RiskPolicyApplies(policyID string, bypassDims RiskPolicyDimensions) GrantEx
 }
 
 // ChatReadCheck builds a Check authorizing read access to agent chat sessions.
-// It is satisfied only by an unrestricted chat:read grant (held by admins).
-// Members hold no chat:read grant; their access to sessions they own is granted
-// by owner-matching in the chat handlers, not by this scope. resourceID is a
-// placeholder that does not affect matching — every chat:read grant wildcards
-// resource_id — so any concrete value (the chat or project id) works.
+// It is satisfied by an unrestricted chat:read grant, or by chat:write via
+// scope expansion. No system role holds either — not even admin — so access to
+// sessions a caller owns comes from owner-matching in the chat handlers, not
+// from this scope. resourceID is a placeholder that does not affect matching —
+// every chat grant wildcards resource_id — so any concrete value (the chat or
+// project id) works.
 func ChatReadCheck(resourceID string) Check {
 	return Check{Scope: ScopeChatRead, ResourceKind: "", ResourceID: resourceID, Dimensions: nil, selectorMatch: selectorMatchNormal}
+}
+
+// ChatWriteCheck builds a Check authorizing mutation of agent chat sessions —
+// pinning, renaming, attaching feedback, and deleting. It is deliberately
+// separate from ChatReadCheck: a session reviewer granted chat:read can read
+// every transcript but must not be able to destroy one. Owner-matching in the
+// chat handlers still lets anyone mutate their own sessions without a grant.
+func ChatWriteCheck(resourceID string) Check {
+	return Check{Scope: ScopeChatWrite, ResourceKind: "", ResourceID: resourceID, Dimensions: nil, selectorMatch: selectorMatchNormal}
 }
 
 func RiskPolicyBypassCheck(policyID string, dims RiskPolicyDimensions) Check {

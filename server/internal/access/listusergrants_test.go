@@ -30,6 +30,7 @@ var expectedFullAccessScopes = []string{
 	string(authz.ScopeRiskPolicyBypass),
 	string(authz.ScopeRiskPolicyBlock),
 	string(authz.ScopeChatRead),
+	string(authz.ScopeChatWrite),
 }
 
 func TestService_ListGrants(t *testing.T) {

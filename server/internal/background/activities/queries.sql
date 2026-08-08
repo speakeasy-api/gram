@@ -143,7 +143,7 @@ WHERE d.organization_id = ANY($1::text[])
 SELECT id, seq, content, created_at
 FROM chat_messages
 WHERE chat_id = @chat_id
-  AND (project_id IS NULL OR project_id = @project_id)
+  AND project_id = @project_id
   AND role = 'user'
   AND content != ''
   AND (message_id IS NULL OR message_id = '')
@@ -156,7 +156,7 @@ UPDATE chat_messages
 SET message_id = @prompt_id
 WHERE id = @message_id
   AND chat_id = @chat_id
-  AND (project_id IS NULL OR project_id = @project_id)
+  AND project_id = @project_id
   AND role = 'user'
   AND (message_id IS NULL OR message_id = '');
 

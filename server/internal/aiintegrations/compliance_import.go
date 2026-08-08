@@ -225,6 +225,7 @@ func (s *ComplianceImportService) writeMessagePages(ctx context.Context, cfg Con
 				if err := chatrepo.New(s.db).UpdateAIIntegrationConfigChatCursor(ctx, chatrepo.UpdateAIIntegrationConfigChatCursorParams{
 					LastCursorID: conv.ToPGText(batch.lastID),
 					ChatID:       batch.chatID,
+					ProjectID:    cfg.ProjectID,
 				}); err != nil {
 					return oops.E(oops.CodeUnexpected, err, "record anthropic compliance chat cursor")
 				}
@@ -430,6 +431,7 @@ func (s *ComplianceImportService) upsertActivityChat(ctx context.Context, cfg Co
 	messagesCursor, err := chatrepo.New(s.db).LinkAIIntegrationConfigChat(ctx, chatrepo.LinkAIIntegrationConfigChatParams{
 		AiIntegrationConfigID: cfg.ID,
 		ChatID:                chatID,
+		ProjectID:             cfg.ProjectID,
 	})
 	if err != nil {
 		return uuid.Nil, "", oops.E(oops.CodeUnexpected, err, "link anthropic compliance chat")
