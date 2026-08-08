@@ -1,6 +1,6 @@
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { describe, expect, it } from "vitest";
-import { exclusionOptions } from "./exclusion-options";
+import { exactCandidate, exclusionOptions } from "./exclusion-options";
 
 function result(overrides: Partial<RiskResult> = {}): RiskResult {
   return {
@@ -14,8 +14,8 @@ function result(overrides: Partial<RiskResult> = {}): RiskResult {
   };
 }
 
-const values = (results: RiskResult[], revealed?: string) =>
-  exclusionOptions(results, revealed).map((o) => o.value);
+const values = (results: RiskResult[]) =>
+  exclusionOptions(results).map((o) => o.value);
 
 describe("exclusionOptions", () => {
   it("offers only custom for an empty selection", () => {
@@ -40,11 +40,23 @@ describe("exclusionOptions", () => {
   });
 
   it("offers exact from a revealed value on a masked finding", () => {
-    const options = exclusionOptions([result()], "jane@acme.com");
+    const options = exclusionOptions([result()], {
+      value: "jane@acme.com",
+      label: "jane@acme.com",
+    });
     expect(options[0]).toMatchObject({
       value: "exact",
       fields: { matchType: "exact", matchValue: "jane@acme.com" },
     });
+  });
+
+  it("labels a pending reveal but leaves it unsavable", () => {
+    const options = exclusionOptions([result()], {
+      label: "<redacted len=13 sha=ab12>",
+    });
+    expect(options[0]?.value).toBe("exact");
+    expect(options[0]?.title).toContain("<redacted len=13 sha=ab12>");
+    expect(options[0]?.fields).toBeUndefined();
   });
 
   it("offers rule and source but never exact for a shared-rule batch", () => {
@@ -70,5 +82,34 @@ describe("exclusionOptions", () => {
         result({ id: "b", source: "gitleaks", ruleId: "generic-api-key" }),
       ]),
     ).toEqual(["custom"]);
+  });
+});
+
+describe("exactCandidate", () => {
+  const masked = result({ matchRedacted: "<redacted len=13 sha=ab12>" });
+
+  it("prefers a match the finding already carries", () => {
+    expect(
+      exactCandidate(result({ match: "jane@acme.com" }), null, true),
+    ).toEqual({ value: "jane@acme.com", label: "jane@acme.com" });
+  });
+
+  it("labels the redaction while the reveal is unfired", () => {
+    expect(exactCandidate(masked, null, true)).toEqual({
+      label: "<redacted len=13 sha=ab12>",
+    });
+  });
+
+  it("takes the plaintext once the reveal resolves", () => {
+    expect(exactCandidate(masked, "jane@acme.com", true)).toEqual({
+      value: "jane@acme.com",
+      label: "jane@acme.com",
+    });
+  });
+
+  it("offers nothing without the reveal scope, or with nothing to reveal", () => {
+    expect(exactCandidate(masked, null, false)).toBeUndefined();
+    expect(exactCandidate(result(), null, true)).toBeUndefined();
+    expect(exactCandidate(undefined, null, true)).toBeUndefined();
   });
 });

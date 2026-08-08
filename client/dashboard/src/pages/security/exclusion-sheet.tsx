@@ -42,7 +42,13 @@ import {
   parseExclusionExpression,
   serializeExclusionExpression,
 } from "./exclusion-expression";
-import { exclusionOptions, type ExclusionOption } from "./exclusion-options";
+import {
+  exactCandidate,
+  exclusionOptions,
+  type ExclusionOption,
+} from "./exclusion-options";
+import { hasRevealableEvent, REVEAL_SCOPE, useUnmaskedMatch } from "./unmask";
+import { useRBAC } from "@/hooks/useRBAC";
 
 export const GLOBAL_SCOPE = "__global__";
 
@@ -221,12 +227,31 @@ function ExclusionForm({
 }: ExclusionFormProps) {
   const editing = state.mode === "edit" ? state.exclusion : null;
   const results = state.mode === "create" ? (state.results ?? []) : [];
+  const single = results.length === 1 ? results[0] : undefined;
+
+  // Risk Events and Risk Overview null the raw match at the API boundary, so
+  // an exact rule there needs the same audited, chat:read-gated reveal the row
+  // itself offers. Fired on selecting the option rather than on open: an
+  // operator who picks "any finding from this rule" should not leave an audit
+  // entry for a value they never looked at.
+  const { hasScope } = useRBAC();
+  const reveals = useUnmaskedMatch(single?.id ?? "");
+  const exact = exactCandidate(
+    single,
+    reveals.value,
+    hasScope(REVEAL_SCOPE) && hasRevealableEvent(single?.matchRedacted),
+  );
+
   // Ready-made rules for the selection. Always at least ["custom"], so an
   // edit or a no-finding create renders no picker and opens on the DSL box.
-  const options = exclusionOptions(results);
+  const options = exclusionOptions(results, exact);
   const [choice, setChoice] = useState<ExclusionOption["value"]>(
-    options[0]?.value ?? "custom",
+    // A pending exact option is not savable yet, so never open on it —
+    // selecting it is the gesture that fires the reveal.
+    () =>
+      options.find((o) => o.value !== "exact" || o.fields)?.value ?? "custom",
   );
+  const picked = options.find((o) => o.value === choice);
   // A finding-originated create is always global: "stop flagging this" means
   // everywhere, and the Scope select is there to narrow it.
   const [scope, setScope] = useState<string>(
@@ -292,7 +317,6 @@ function ExclusionForm({
   const handleSave = () => {
     // A picked option is already a complete rule, so it skips the
     // serialize -> parse round trip; only "custom" carries no fields.
-    const picked = options.find((o) => o.value === choice);
     if (picked?.fields) {
       setError(null);
       onSubmit({ fields: picked.fields, scope, enabled });
@@ -316,7 +340,10 @@ function ExclusionForm({
             <Label>What should we stop flagging?</Label>
             <RadioGroup
               value={choice}
-              onValueChange={(v) => setChoice(v as ExclusionOption["value"])}
+              onValueChange={(v) => {
+                setChoice(v as ExclusionOption["value"]);
+                if (v === "exact") reveals.reveal();
+              }}
               className="gap-2"
             >
               {options.map((option) => (
@@ -424,8 +451,13 @@ function ExclusionForm({
       </div>
 
       <SheetFooter className="px-6 pb-6">
-        <Button onClick={handleSave} disabled={submitting}>
-          {submitting && (
+        {/* An exact rule stays unsavable until the reveal resolves — there is
+            no client-side stand-in for the plaintext to write it against. */}
+        <Button
+          onClick={handleSave}
+          disabled={submitting || (choice === "exact" && !picked?.fields)}
+        >
+          {(submitting || reveals.isLoading) && (
             <Button.LeftIcon>
               <Loader2 className="h-4 w-4 animate-spin" />
             </Button.LeftIcon>
