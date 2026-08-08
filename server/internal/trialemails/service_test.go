@@ -109,7 +109,8 @@ func TestAdminAddedStartsSequenceForNewActiveAdmin(t *testing.T) {
 	require.NoError(t, ti.service.AdminAdded(ctx, ti.organizationID, admin.id))
 	require.Equal(t, []loops.SendEventInput{trialStartedEvent(ti, admin)}, ti.client.events())
 
-	require.NoError(t, ti.service.AdminAdded(ctx, ti.organizationID, "<MEMBER_USER_ID>"))
+	err := ti.service.AdminAdded(ctx, ti.organizationID, "<MEMBER_USER_ID>")
+	require.ErrorContains(t, err, "not found in active organization administrators")
 	require.Len(t, ti.client.updates(), 1)
 	require.Len(t, ti.client.events(), 1)
 }

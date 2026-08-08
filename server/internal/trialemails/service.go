@@ -102,7 +102,7 @@ func (s *Service) AdminAdded(ctx context.Context, organizationID, userID string)
 		}, trial.CreatedAt.Time)
 	}
 
-	return nil
+	return errors.New("administrator not found in active organization administrators")
 }
 
 // TrialInactive prevents active administrators from receiving pending trial reminders.
