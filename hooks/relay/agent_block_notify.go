@@ -84,14 +84,21 @@ func (r *Relay) notifyAgentBlock(ctx context.Context, effect *blockEffect, typed
 	// notify of its own 300ms.
 	requestCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), agentBlockNotifyTimeout)
 	defer cancel()
-	client := &http.Client{Transport: &http.Transport{
-		DialContext: func(dialCtx context.Context, _, _ string) (net.Conn, error) {
-			return dialAgentSocket(dialCtx, socket)
+	client := &http.Client{
+		Transport: &http.Transport{
+			DialContext: func(dialCtx context.Context, _, _ string) (net.Conn, error) {
+				return dialAgentSocket(dialCtx, socket)
+			},
+			// One-shot client, same as socketIdentityEmail: without this the
+			// transport pools the socket connection for the process lifetime.
+			DisableKeepAlives: true,
 		},
-		// One-shot client, same as socketIdentityEmail: without this the
-		// transport pools the socket connection for the process lifetime.
-		DisableKeepAlives: true,
-	}}
+		// One attempt means one request: a redirect answer is terminal, not a
+		// license to re-send the report at another path.
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 	req, err := http.NewRequestWithContext(requestCtx, http.MethodPost, "http://speakeasy-agent"+agentBlockReportPath, bytes.NewReader(body))
 	if err != nil {
 		return
