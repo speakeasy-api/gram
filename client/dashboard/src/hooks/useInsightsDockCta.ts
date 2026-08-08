@@ -1,5 +1,5 @@
 import { useSlugs } from "@/contexts/Sdk";
-import { createDismissedCtaStore } from "@/hooks/useDismissedCtaStore";
+import { createPersistedFlagStore } from "@/hooks/usePersistedFlagStore";
 import { withViewTransition } from "@/lib/view-transition";
 
 // Shared Tailwind classes that tag BOTH the docked Project Assistant composer
@@ -15,7 +15,7 @@ export const INSIGHTS_DOCK_CONTENT_VT_CLASS =
 // The dock floats over the page content and the resume button lives in the
 // sidebar footer — different parts of the tree — so they sync off this
 // localStorage-backed store instead of a shared React context.
-const store = createDismissedCtaStore("gram-insights-dock-dismissed");
+const store = createPersistedFlagStore("gram-insights-dock-dismissed");
 
 /**
  * Coordinates the docked Project Assistant composer across its two surfaces:
@@ -29,7 +29,7 @@ export function useInsightsDockCta(): {
   resume: () => void;
 } {
   const { orgSlug } = useSlugs();
-  const dismissed = store.useDismissed(orgSlug);
+  const dismissed = store.useFlag(orgSlug);
 
   const dismiss = () => {
     if (orgSlug) withViewTransition(() => store.write(orgSlug, true));

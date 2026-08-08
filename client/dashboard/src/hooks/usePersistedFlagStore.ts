@@ -1,33 +1,33 @@
 import { useSyncExternalStore } from "react";
 
 /**
- * Creates a localStorage-backed, slug-scoped boolean flag with a module-level
- * pub/sub. Used for "dismiss to the sidebar" CTAs whose two surfaces live in
- * different parts of the tree (e.g. a banner or dock plus a sidebar resume
- * button), so they sync off a single source of truth instead of a shared
- * React context.
+ * Creates a localStorage-backed, key-scoped boolean flag with a module-level
+ * pub/sub, so surfaces living in different parts of the tree sync off a
+ * single source of truth instead of a shared React context. Used for
+ * "dismiss to the sidebar" CTAs (e.g. a banner or dock plus a sidebar resume
+ * button) and for persisted per-resource consent (e.g. MCP Connect).
  */
-export function createDismissedCtaStore(prefix: string): {
-  useDismissed: (slug: string | undefined) => boolean;
-  write: (slug: string, value: boolean) => void;
+export function createPersistedFlagStore(prefix: string): {
+  useFlag: (key: string | undefined) => boolean;
+  write: (key: string, value: boolean) => void;
 } {
   const listeners = new Set<() => void>();
-  const storageKey = (slug: string) => `${prefix}:${slug}`;
+  const storageKey = (key: string) => `${prefix}:${key}`;
   // Session-scoped fallback for when localStorage is unavailable (storage
   // disabled, some private-browsing modes): writes land here regardless, so
   // dismiss/resume still works for the session — it just won't persist.
   const memory = new Map<string, boolean>();
 
-  function read(slug: string): boolean {
+  function read(key: string): boolean {
     // `write()` always lands the value in `memory`, so once this session has
-    // touched a slug, `memory` is the freshest source of truth — prefer it.
+    // touched a key, `memory` is the freshest source of truth — prefer it.
     // localStorage may be stale (its write threw on quota/disabled) or simply
     // unreadable here, and we must not let either case mask a just-applied
     // dismiss/resume.
-    const cached = memory.get(slug);
+    const cached = memory.get(key);
     if (cached !== undefined) return cached;
     try {
-      return localStorage.getItem(storageKey(slug)) === "true";
+      return localStorage.getItem(storageKey(key)) === "true";
     } catch {
       return false;
     }
@@ -40,13 +40,13 @@ export function createDismissedCtaStore(prefix: string): {
     };
   }
 
-  function write(slug: string, value: boolean) {
-    memory.set(slug, value);
+  function write(key: string, value: boolean) {
+    memory.set(key, value);
     try {
       if (value) {
-        localStorage.setItem(storageKey(slug), "true");
+        localStorage.setItem(storageKey(key), "true");
       } else {
-        localStorage.removeItem(storageKey(slug));
+        localStorage.removeItem(storageKey(key));
       }
     } catch {
       // localStorage unavailable — `memory` above keeps the value readable
@@ -55,13 +55,13 @@ export function createDismissedCtaStore(prefix: string): {
     listeners.forEach((listener) => listener());
   }
 
-  function useDismissed(slug: string | undefined): boolean {
+  function useFlag(key: string | undefined): boolean {
     return useSyncExternalStore(
       subscribe,
-      () => (slug ? read(slug) : false),
+      () => (key ? read(key) : false),
       () => false,
     );
   }
 
-  return { useDismissed, write };
+  return { useFlag, write };
 }
