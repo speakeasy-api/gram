@@ -239,7 +239,7 @@ function ExclusionForm({
   const exact = exactCandidate(
     single,
     reveals.value,
-    hasScope(REVEAL_SCOPE) && hasRevealableEvent(single?.matchRedacted),
+    hasScope(REVEAL_SCOPE, single?.chatId) && hasRevealableEvent(single?.matchRedacted),
   );
 
   // Ready-made rules for the selection. Always at least ["custom"], so an
@@ -342,7 +342,7 @@ function ExclusionForm({
               value={choice}
               onValueChange={(v) => {
                 setChoice(v as ExclusionOption["value"]);
-                if (v === "exact") reveals.reveal();
+                if (v === "exact" && !single?.match) reveals.reveal();
               }}
               className="gap-2"
             >
