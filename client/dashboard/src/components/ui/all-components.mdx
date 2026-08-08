@@ -63,7 +63,6 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/HoverCard";
 import { Icon } from "@/components/ui/Icon";
-import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
 import {
   InputGroup,
@@ -205,15 +204,6 @@ export const Row = ({ name, origin, children }) => {
   <Button size="sm">sm</Button>
   <Button size="md">md</Button>
   <Button size="lg">lg</Button>
-</Row>
-
-<Row name="IconButton" origin="DS">
-  <IconButton icon="plus" aria-label="Add" />
-  <IconButton
-    icon="trash"
-    aria-label="Delete"
-    variant="destructive-secondary"
-  />
 </Row>
 
 <Row name="CopyButton" origin="Gram">
@@ -619,5 +609,5 @@ export const Row = ({ name, origin, children }) => {
   </XYFade>
 </Row>
 
-Sidebar, Toolbar and Modal own the whole page frame, so they live in their own
+Sidebar and Toolbar own the whole page frame, so they live in their own
 stories rather than in this gallery.
