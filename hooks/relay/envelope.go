@@ -140,6 +140,12 @@ func buildEnvelope(typed any, hostname string) components.IngestRequestBody {
 	case *agenthooks.ModelEvent:
 		applyModelResponse(data, base)
 	}
+	if activation := agenthooks.SkillActivationOf(typed); activation != nil && (base.Kind != agenthooks.KindToolPost || activation.Explicit) {
+		data.Skill = &components.HookSkillData{Name: activation.Name, Source: nil}
+		if activation.Explicit {
+			eventType = components.TypeSkillActivated
+		}
+	}
 
 	payload := components.IngestRequestBody{
 		SchemaVersion: schemaVersion,
@@ -264,25 +270,6 @@ func applyToolCall(data *components.HookIngestData, base *agenthooks.Event, tool
 		data.Mcp = m
 	}
 
-	if base.Provider == agenthooks.ProviderClaudeCode && strings.EqualFold(tool.Name, "Skill") {
-		if name := skillNameOf(tool.Input); name != "" {
-			data.Skill = &components.HookSkillData{Name: name, Source: nil}
-			return components.TypeSkillActivated
-		}
-	}
-	// Codex and Cursor skill activations are inferred from ordinary tool
-	// payloads, so the event keeps its true type: only pre-tool events count
-	// (completions must not re-report, permission previews may be denied).
-	if base.Provider == agenthooks.ProviderCodex && base.Kind == agenthooks.KindToolPre {
-		if name := codexToolSkillName(tool); name != "" {
-			data.Skill = &components.HookSkillData{Name: name, Source: nil}
-		}
-	}
-	if base.Provider == agenthooks.ProviderCursor && base.Kind == agenthooks.KindToolPre {
-		if name := cursorToolSkillName(tool, base.Session.CWD, base.Session.WorkspaceRoots); name != "" {
-			data.Skill = &components.HookSkillData{Name: name, Source: nil}
-		}
-	}
 	return eventType
 }
 
@@ -400,20 +387,6 @@ func toolErrorPayload(ev *agenthooks.ToolPostEvent) json.RawMessage {
 		}
 	}
 	return nil
-}
-
-func skillNameOf(input json.RawMessage) string {
-	var obj struct {
-		Skill string `json:"skill"`
-		Name  string `json:"name"`
-	}
-	if json.Unmarshal(input, &obj) == nil {
-		if obj.Skill != "" {
-			return obj.Skill
-		}
-		return obj.Name
-	}
-	return ""
 }
 
 func isEmptyData(d *components.HookIngestData) bool {

@@ -949,7 +949,7 @@ func TestEnvelopeCursorSkillInference(t *testing.T) {
 	require.Empty(t, skillOf(envelope(payload("preToolUse", "Read", map[string]any{}))))
 	require.Empty(t, skillOf(envelope(payload("preToolUse", "Read", map[string]any{"file_path": "SKILL.md"}))))
 	require.Empty(t, skillOf(envelope(payload("preToolUse", "Read", map[string]any{"file_path": filepath.Join(t.TempDir(), "docs", "not-a-skill", "SKILL.md")}))))
-	require.Empty(t, skillOf(envelope(payload("preToolUse", "Read", map[string]any{"file_path": filepath.Join(t.TempDir(), "docs", "skills", "example", "SKILL.md")}))))
+	require.Equal(t, "example", skillOf(envelope(payload("preToolUse", "Read", map[string]any{"file_path": filepath.Join(t.TempDir(), "docs", "skills", "example", "SKILL.md")}))))
 	require.Empty(t, skillOf(envelope(payload("preToolUse", "Read", map[string]any{"file_path": filepath.Join(t.TempDir(), "plugin", "skills", "SKILL.md")}))))
 }
 
