@@ -5,11 +5,18 @@ import (
 	"errors"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"
 )
+
+func TestTrialLifecycleEmailWorkflowRunTimeoutCoversRetryBudget(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, 30*time.Minute, trialLifecycleEmailWorkflowRunTimeout)
+}
 
 func TestTrialLifecycleEmailWorkflowDispatchesAdminAdded(t *testing.T) {
 	t.Parallel()
