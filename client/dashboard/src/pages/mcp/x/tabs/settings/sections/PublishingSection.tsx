@@ -6,7 +6,10 @@ import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js"
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
-import { FooterSaveButton, SettingsSection } from "../SettingsSection";
+import {
+  FooterSaveButton,
+  SettingsSection,
+} from "@/components/detail/settings-section";
 
 export function PublishingSection({
   mcpServer,

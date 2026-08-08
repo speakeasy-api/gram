@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
-import { SettingsSection } from "@/pages/mcp/x/tabs/settings/SettingsSection";
+import { SettingsSection } from "@/components/detail/settings-section";
 import type { SkillFeedback } from "@gram/client/models/components/skillfeedback.js";
 import type { SkillFeedbackCounts } from "@gram/client/models/components/skillfeedbackcounts.js";
 import type { SkillFeedbackMetrics } from "@gram/client/models/components/skillfeedbackmetrics.js";

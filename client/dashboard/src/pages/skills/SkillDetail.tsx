@@ -17,7 +17,7 @@ import { isNotFoundError } from "@/lib/route-errors";
 import {
   DangerSettingsSection,
   SettingsSection,
-} from "@/pages/mcp/x/tabs/settings/SettingsSection";
+} from "@/components/detail/settings-section";
 import { useRoutes } from "@/routes";
 import type { SkillVersion } from "@gram/client/models/components/skillversion.js";
 import { useSkill } from "@gram/client/react-query/skill.js";

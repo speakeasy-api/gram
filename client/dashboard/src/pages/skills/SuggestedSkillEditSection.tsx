@@ -5,7 +5,7 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
-import { SettingsSection } from "@/pages/mcp/x/tabs/settings/SettingsSection";
+import { SettingsSection } from "@/components/detail/settings-section";
 import type { SkillVersion } from "@gram/client/models/components/skillversion.js";
 import { lazy, Suspense, useMemo, useState } from "react";
 import { changeAnchor, type SkillDiffAnchor } from "./skill-diff-anchors";

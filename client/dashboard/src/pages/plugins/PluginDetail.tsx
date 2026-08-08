@@ -16,7 +16,7 @@ import { mcpServerRouteParam } from "@/lib/sources";
 import {
   DangerSettingsSection,
   SettingsSection,
-} from "@/pages/mcp/x/tabs/settings/SettingsSection";
+} from "@/components/detail/settings-section";
 import { useRoutes } from "@/routes";
 import {
   invalidateAllPlugin,

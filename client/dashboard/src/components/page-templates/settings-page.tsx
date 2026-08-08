@@ -70,4 +70,4 @@ export {
   SettingsSection,
   DangerSettingsSection,
   FooterSaveButton,
-} from "@/pages/mcp/x/tabs/settings/SettingsSection";
+} from "@/components/detail/settings-section";

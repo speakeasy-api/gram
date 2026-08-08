@@ -1,5 +1,5 @@
 import { CodeBlock, type CodeBlockSlot } from "@/components/code";
-import { McpSidebarInfoLabel } from "@/components/mcp-sidebar-nav-shell";
+import { DetailSidebarInfoLabel } from "@/components/detail/detail-sidebar-nav";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/Tabs";
@@ -477,7 +477,7 @@ function ConfigGroup({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <McpSidebarInfoLabel>{label}</McpSidebarInfoLabel>
+      <DetailSidebarInfoLabel>{label}</DetailSidebarInfoLabel>
       {children}
     </div>
   );

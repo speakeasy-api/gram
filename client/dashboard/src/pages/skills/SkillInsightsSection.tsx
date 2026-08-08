@@ -20,7 +20,7 @@ import { useProject } from "@/contexts/Auth";
 import { Markdown } from "@/elements/components/Markdown";
 import { useRBAC } from "@/hooks/useRBAC";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
-import { SettingsSection } from "@/pages/mcp/x/tabs/settings/SettingsSection";
+import { SettingsSection } from "@/components/detail/settings-section";
 import { useRoutes } from "@/routes";
 import { cn } from "@/lib/utils";
 import type { SkillEfficacyInsight } from "@gram/client/models/components/skillefficacyinsight.js";

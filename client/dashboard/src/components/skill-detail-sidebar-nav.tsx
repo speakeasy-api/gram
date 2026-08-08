@@ -1,8 +1,8 @@
 import {
-  McpSidebarInfoLabel,
-  McpSidebarNavShell,
-  type McpSidebarNavItem,
-} from "@/components/mcp-sidebar-nav-shell";
+  DetailSidebarInfoLabel,
+  DetailSidebarNav,
+  type DetailSidebarNavItem,
+} from "@/components/detail/detail-sidebar-nav";
 import { Text } from "@/components/ui/Text";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { HumanizeDateTime } from "@/lib/dates";
@@ -74,7 +74,7 @@ export function SkillDetailSidebarNav(): React.JSX.Element | null {
     title: string,
     Icon: React.ComponentType<{ className?: string }>,
     isDefault = false,
-  ): McpSidebarNavItem => ({
+  ): DetailSidebarNavItem => ({
     key: sectionId,
     title,
     Icon,
@@ -83,7 +83,7 @@ export function SkillDetailSidebarNav(): React.JSX.Element | null {
       activeSectionId === sectionId || (isDefault && activeSectionId === ""),
   });
 
-  const items: McpSidebarNavItem[] = [
+  const items: DetailSidebarNavItem[] = [
     sectionItem(
       SKILL_ADOPTION_SECTION_ID,
       "Adoption and drift",
@@ -128,7 +128,7 @@ export function SkillDetailSidebarNav(): React.JSX.Element | null {
       <SkillSharingCardBlocks skill={skill} />
 
       <div className="flex flex-col gap-1">
-        <McpSidebarInfoLabel>Distributions</McpSidebarInfoLabel>
+        <DetailSidebarInfoLabel>Distributions</DetailSidebarInfoLabel>
         <Text variant="small" muted className="text-xs">
           {distributionCount === 1
             ? "1 plugin"
@@ -139,7 +139,7 @@ export function SkillDetailSidebarNav(): React.JSX.Element | null {
       </div>
 
       <div className="flex flex-col gap-1">
-        <McpSidebarInfoLabel>Versions</McpSidebarInfoLabel>
+        <DetailSidebarInfoLabel>Versions</DetailSidebarInfoLabel>
         <Text variant="small" muted className="text-xs">
           {skill.versionCount} · updated{" "}
           <HumanizeDateTime date={skill.updatedAt} />
@@ -147,7 +147,7 @@ export function SkillDetailSidebarNav(): React.JSX.Element | null {
       </div>
 
       <div className="flex flex-col gap-1">
-        <McpSidebarInfoLabel>Activations</McpSidebarInfoLabel>
+        <DetailSidebarInfoLabel>Activations</DetailSidebarInfoLabel>
         <Text variant="small" muted className="text-xs">
           {skill.seenCount}
           {skill.lastSeenAt && (
@@ -162,7 +162,7 @@ export function SkillDetailSidebarNav(): React.JSX.Element | null {
   );
 
   return (
-    <McpSidebarNavShell
+    <DetailSidebarNav
       backHref={routes.skills.href()}
       backLabel="Back to all skills"
       cardContent={cardContent}

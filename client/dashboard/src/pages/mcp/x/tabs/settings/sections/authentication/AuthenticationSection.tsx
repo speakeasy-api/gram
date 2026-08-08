@@ -13,7 +13,7 @@ import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionI
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { useMemo, useState, type ReactNode } from "react";
 import { SettingsInlineEmptyState } from "../../SettingsInlineEmptyState";
-import { SettingsSection } from "../../SettingsSection";
+import { SettingsSection } from "@/components/detail/settings-section";
 import { AttachRemoteIdentityProviderSheet } from "./AttachRemoteIdentityProviderSheet";
 import { AuthenticationSetupActions } from "./AuthenticationSetupActions";
 import { type AuthTarget, useMcpServerAuthTarget } from "./authTarget";
