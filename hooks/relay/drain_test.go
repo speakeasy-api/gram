@@ -90,12 +90,10 @@ func TestDrainReplaysOldestFirstWithStoredKeys(t *testing.T) {
 	}
 }
 
-func TestDrainReplaysEnrichedSkillMetadataAndUploadsContent(t *testing.T) {
+func TestDrainReplaysSkillContent(t *testing.T) {
 	drainEnv(t)
 	content := []byte("# Offline skill\n")
 	rawSHA256 := sha256Hex(content)
-	root := filepath.Join(t.TempDir(), ".claude", "skills")
-	path := filepath.Join(root, "offline", "SKILL.md")
 	originalUpload := executeSkillUpload
 	t.Cleanup(func() { executeSkillUpload = originalUpload })
 	var capturedTasks []skillUploadTask
@@ -117,10 +115,8 @@ func TestDrainReplaysEnrichedSkillMetadataAndUploadsContent(t *testing.T) {
 	entry, err := decodeSpoolEntry(data)
 	require.NoError(t, err)
 	entry.Envelope.Data = activatedSkillPayload("offline").Data
-	entry.Envelope.Data.Skill.SourceLevel = new("project")
-	entry.Envelope.Data.Skill.SourcePath = new(path)
 	entry.Envelope.Data.Skill.RawSha256 = new(rawSHA256)
-	entry.SkillSourceRoot = root
+	entry.Envelope.Data.ToolCall = &components.HookToolCallData{Output: json.RawMessage(strconv.Quote(string(content)))}
 	data, err = json.Marshal(entry)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(spoolPath, data, 0o600))
@@ -137,15 +133,15 @@ func TestDrainReplaysEnrichedSkillMetadataAndUploadsContent(t *testing.T) {
 	require.Empty(t, spoolFiles(t), "a successful upload must remove the replayed entry")
 	require.Equal(t, []skillUploadTask{{
 		ServerURL: fs.URL, Project: "default", APIKey: "drain-key", RawSHA256: rawSHA256,
-		SourcePath: path, SourceRoot: root,
+		Content: string(content),
 	}, {
 		ServerURL: fs.URL, Project: "default", APIKey: "drain-key", RawSHA256: rawSHA256,
-		SourcePath: path, SourceRoot: root,
+		Content: string(content),
 	}}, capturedTasks)
 	replayed := fs.last().Data.Skill
 	require.Equal(t, "offline", replayed.Name)
-	require.Equal(t, "project", *replayed.SourceLevel)
-	require.Equal(t, path, *replayed.SourcePath)
+	require.Nil(t, replayed.SourceLevel)
+	require.Nil(t, replayed.SourcePath)
 	require.Equal(t, rawSHA256, *replayed.RawSha256)
 }
 

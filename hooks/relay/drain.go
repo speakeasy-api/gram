@@ -190,17 +190,25 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 }
 
 func replayedSkill(entry spoolEntry) *resolvedSkill {
-	if entry.SkillSourceRoot == "" || entry.Envelope.Data == nil || entry.Envelope.Data.Skill == nil ||
-		entry.Envelope.Data.Skill.SourcePath == nil || entry.Envelope.Data.Skill.RawSha256 == nil {
+	if entry.Envelope.Data == nil || entry.Envelope.Data.Skill == nil || entry.Envelope.Data.Skill.RawSha256 == nil || entry.Envelope.Data.ToolCall == nil {
+		return nil
+	}
+	var content string
+	switch output := entry.Envelope.Data.ToolCall.Output.(type) {
+	case string:
+		content = output
+	case json.RawMessage:
+		if json.Unmarshal(output, &content) != nil {
+			return nil
+		}
+	default:
 		return nil
 	}
 	return &resolvedSkill{
-		content:      "",
+		content:      content,
 		rawSHA256:    *entry.Envelope.Data.Skill.RawSha256,
-		sourcePath:   *entry.Envelope.Data.Skill.SourcePath,
-		sourceLevel:  "",
-		root:         entry.SkillSourceRoot,
 		captureReady: true,
+		name:         entry.Envelope.Data.Skill.Name,
 	}
 }
 
@@ -392,10 +400,10 @@ func (r *Relay) maybeSpawnDrain() {
 // finishExchange runs the spool bookkeeping for a final exchange result: an
 // unsent payload is kept for replay; a healthy exchange flushes any backlog
 // via a detached drain.
-func (r *Relay) finishExchange(idemKey string, payload components.IngestRequestBody, res ingestResult, skill *resolvedSkill) {
+func (r *Relay) finishExchange(idemKey string, payload components.IngestRequestBody, res ingestResult) {
 	switch {
 	case res.unsent():
-		r.spoolUnsent(idemKey, payload, skill)
+		r.spoolUnsent(idemKey, payload)
 	case res.accepted():
 		r.maybeSpawnDrain()
 	}
