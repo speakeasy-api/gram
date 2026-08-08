@@ -2455,3 +2455,64 @@ func TestServiceCoreEnqueueTriggerTaskSkipsMissingAssistant(t *testing.T) {
 	require.False(t, result.ShouldSignal)
 	require.Equal(t, uuid.Nil, result.AssistantID)
 }
+
+// A chat nobody owns is a chat nobody can read, continue, rename or delete
+// without an explicit chat:read/chat:write grant, so externally-triggered turns
+// fall back to the assistant's creator rather than leaving the row owner-less.
+func TestAssistantChatOwnerID(t *testing.T) {
+	t.Parallel()
+
+	dashboardPayload, err := json.Marshal(dashboardEventPayload{UserID: "user-sender"})
+	require.NoError(t, err)
+
+	tests := []struct {
+		name       string
+		sourceKind string
+		payload    []byte
+		creator    string
+		want       string
+	}{
+		{
+			name:       "dashboard turn is owned by its sender, not the creator",
+			sourceKind: sourceKindDashboard,
+			payload:    dashboardPayload,
+			creator:    "user-creator",
+			want:       "user-sender",
+		},
+		{
+			name:       "cron turn falls back to the assistant creator",
+			sourceKind: "cron",
+			payload:    []byte("{}"),
+			creator:    "user-creator",
+			want:       "user-creator",
+		},
+		{
+			name:       "creatorless assistant stays owner-less, as before",
+			sourceKind: "cron",
+			payload:    []byte("{}"),
+			creator:    "",
+			want:       "",
+		},
+		{
+			name:       "dashboard turn without a user id falls back to the creator",
+			sourceKind: sourceKindDashboard,
+			payload:    []byte("{}"),
+			creator:    "user-creator",
+			want:       "user-creator",
+		},
+		{
+			name:       "unparseable dashboard payload falls back rather than dropping ownership",
+			sourceKind: sourceKindDashboard,
+			payload:    []byte("not json"),
+			creator:    "user-creator",
+			want:       "user-creator",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, assistantChatOwnerID(tt.sourceKind, tt.payload, tt.creator))
+		})
+	}
+}
