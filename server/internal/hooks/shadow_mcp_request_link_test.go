@@ -136,3 +136,37 @@ func TestObservedShadowMCPName_PrefersURLHostOverServerIdentity(t *testing.T) {
 	require.NotNil(t, name)
 	require.Equal(t, "mcp.calendly.com", *name)
 }
+
+// The machine-readable channel must not re-expose credentials or query
+// parameters the deny prose never carried: server_url follows the inventory
+// convention (scheme/host/path only).
+func TestShadowMCPApprovalRequestURLRedactsServerURL(t *testing.T) {
+	t.Parallel()
+
+	siteURL, err := url.Parse("https://app.example.test")
+	require.NoError(t, err)
+	service := &Service{
+		logger:    testenv.NewLogger(t),
+		siteURL:   siteURL,
+		jwtSecret: "test-jwt-secret",
+		cache:     cache.NoopCache,
+	}
+
+	link, ok := service.shadowMCPApprovalRequestURL(t.Context(), shadowMCPRequestLinkParams{
+		OrganizationID:  "org_test",
+		ProjectID:       "00000000-0000-0000-0000-000000000001",
+		RequesterUserID: "user_test",
+		AuditReason:     "blocked",
+		Evidence: shadowmcp.AccessEvidence{
+			FullURL:        "https://user:hunter2@mcp.example.com/sse?api_key=sk-123#frag",
+			URLHost:        "",
+			ServerIdentity: "",
+		},
+		ToolName:     "search",
+		RiskPolicyID: "00000000-0000-0000-0000-000000000002",
+	})
+	require.True(t, ok)
+	require.Equal(t, "https://mcp.example.com/sse", link.ServerURL)
+	require.NotContains(t, link.ServerURL, "hunter2")
+	require.NotContains(t, link.ServerURL, "api_key")
+}
