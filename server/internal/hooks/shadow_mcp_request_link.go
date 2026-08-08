@@ -64,12 +64,12 @@ func (s *Service) renderShadowMCPUserBlockReason(ctx context.Context, params sha
 
 func (s *Service) shadowMCPApprovalRequestURL(ctx context.Context, params shadowMCPRequestLinkParams) (shadowMCPRequestLink, bool) {
 	if s.siteURL == nil || s.cache == nil || strings.TrimSpace(s.jwtSecret) == "" {
-		return shadowMCPRequestLink{}, false
+		return shadowMCPRequestLink{URL: "", Token: "", ExpiresAt: time.Time{}, ServerName: "", ServerURL: ""}, false
 	}
 
 	evidence := shadowmcp.NormalizeAccessEvidence(params.Evidence)
 	if evidence.FullURL == "" && evidence.URLHost == "" && evidence.ServerIdentity == "" {
-		return shadowMCPRequestLink{}, false
+		return shadowMCPRequestLink{URL: "", Token: "", ExpiresAt: time.Time{}, ServerName: "", ServerURL: ""}, false
 	}
 
 	requestURL, token, expiry, err := risk.GeneratePolicyBypassRequestURL(ctx, s.cache, s.siteURL, risk.PolicyBypassRequestTokenInput{
@@ -92,7 +92,7 @@ func (s *Service) shadowMCPApprovalRequestURL(ctx context.Context, params shadow
 			attr.SlogOrganizationID(params.OrganizationID),
 			attr.SlogProjectID(params.ProjectID),
 		)
-		return shadowMCPRequestLink{}, false
+		return shadowMCPRequestLink{URL: "", Token: "", ExpiresAt: time.Time{}, ServerName: "", ServerURL: ""}, false
 	}
 
 	return shadowMCPRequestLink{
