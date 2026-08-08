@@ -59,6 +59,7 @@ func TestMain(m *testing.M) {
 type realTestInstance struct {
 	service   *Service
 	hooks     *hooks.Service
+	cache     cache.Cache
 	conn      *pgxpool.Pool
 	chConn    clickhouse.Conn
 	telemetry *telemetry.Logger
@@ -182,6 +183,7 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 	return ctx, &realTestInstance{
 		service:   service,
 		hooks:     hookService,
+		cache:     cacheAdapter,
 		conn:      conn,
 		chConn:    chConn,
 		telemetry: telemetryLogger,

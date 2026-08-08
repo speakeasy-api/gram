@@ -13,6 +13,23 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const acquireChatPromptCorrelationLock = `-- name: AcquireChatPromptCorrelationLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended(
+  'chat-prompt-correlation:' || ($1::uuid)::text || ':' || ($2::uuid)::text,
+  0
+))
+`
+
+type AcquireChatPromptCorrelationLockParams struct {
+	ProjectID uuid.UUID
+	ChatID    uuid.UUID
+}
+
+func (q *Queries) AcquireChatPromptCorrelationLock(ctx context.Context, arg AcquireChatPromptCorrelationLockParams) error {
+	_, err := q.db.Exec(ctx, acquireChatPromptCorrelationLock, arg.ProjectID, arg.ChatID)
+	return err
+}
+
 const addUserFeedbackChatResolution = `-- name: AddUserFeedbackChatResolution :exec
 UPDATE chat_user_feedback
 SET chat_resolution_id = $1
@@ -963,6 +980,30 @@ func (q *Queries) GetLLMClientBreakdownByMessages(ctx context.Context, arg GetLL
 		return nil, err
 	}
 	return items, nil
+}
+
+const getLatestChatUserPromptSource = `-- name: GetLatestChatUserPromptSource :one
+SELECT source
+FROM chat_messages
+WHERE chat_id = $1
+  AND project_id = $2::uuid
+  AND role = 'user'
+ORDER BY created_at DESC, seq DESC
+LIMIT 1
+`
+
+type GetLatestChatUserPromptSourceParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// The chat_id/created_at index serves this backward LIMIT 1 scan. Unlike a
+// source-filtered EXISTS, a negative result does not walk the full transcript.
+func (q *Queries) GetLatestChatUserPromptSource(ctx context.Context, arg GetLatestChatUserPromptSourceParams) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, getLatestChatUserPromptSource, arg.ChatID, arg.ProjectID)
+	var source pgtype.Text
+	err := row.Scan(&source)
+	return source, err
 }
 
 const getMaxGenerationForChat = `-- name: GetMaxGenerationForChat :one
@@ -3252,6 +3293,141 @@ func (q *Queries) UpsertChat(ctx context.Context, arg UpsertChatParams) (uuid.UU
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const upsertCorrelatedChatMessage = `-- name: UpsertCorrelatedChatMessage :execrows
+INSERT INTO chat_messages (
+    chat_id
+  , role
+  , project_id
+  , content
+  , content_raw
+  , content_asset_url
+  , storage_error
+  , model
+  , message_id
+  , tool_call_id
+  , user_id
+  , external_user_id
+  , external_message_id
+  , finish_reason
+  , tool_calls
+  , prompt_tokens
+  , completion_tokens
+  , total_tokens
+  , origin
+  , user_agent
+  , ip_address
+  , source
+  , content_hash
+  , generation
+  , replayed
+  , created_at
+)
+VALUES (
+    $1
+  , $2
+  , $3::uuid
+  , $4
+  , $5
+  , $6
+  , $7
+  , $8
+  , $9
+  , $10
+  , $11
+  , $12
+  , $13
+  , $14
+  , $15
+  , $16
+  , $17
+  , $18
+  , $19
+  , $20
+  , $21
+  , $22
+  , $23
+  , $24
+  , $25
+  , $26
+)
+ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
+DO UPDATE SET
+    source = EXCLUDED.source
+  , user_id = COALESCE(EXCLUDED.user_id, chat_messages.user_id)
+  , external_user_id = COALESCE(EXCLUDED.external_user_id, chat_messages.external_user_id)
+  , model = COALESCE(EXCLUDED.model, chat_messages.model)
+  , replayed = chat_messages.replayed OR EXCLUDED.replayed
+  , created_at = EXCLUDED.created_at
+  , risk_analyzed_at = NULL
+WHERE chat_messages.project_id = EXCLUDED.project_id
+  AND EXCLUDED.source IN ('codex', 'opencode')
+  AND chat_messages.source = 'litellm'
+`
+
+type UpsertCorrelatedChatMessageParams struct {
+	ChatID            uuid.UUID
+	Role              string
+	ProjectID         uuid.UUID
+	Content           string
+	ContentRaw        []byte
+	ContentAssetUrl   pgtype.Text
+	StorageError      pgtype.Text
+	Model             pgtype.Text
+	MessageID         pgtype.Text
+	ToolCallID        pgtype.Text
+	UserID            pgtype.Text
+	ExternalUserID    pgtype.Text
+	ExternalMessageID pgtype.Text
+	FinishReason      pgtype.Text
+	ToolCalls         []byte
+	PromptTokens      int64
+	CompletionTokens  int64
+	TotalTokens       int64
+	Origin            pgtype.Text
+	UserAgent         pgtype.Text
+	IpAddress         pgtype.Text
+	Source            pgtype.Text
+	ContentHash       []byte
+	Generation        int32
+	Replayed          bool
+	CreatedAt         pgtype.Timestamptz
+}
+
+func (q *Queries) UpsertCorrelatedChatMessage(ctx context.Context, arg UpsertCorrelatedChatMessageParams) (int64, error) {
+	result, err := q.db.Exec(ctx, upsertCorrelatedChatMessage,
+		arg.ChatID,
+		arg.Role,
+		arg.ProjectID,
+		arg.Content,
+		arg.ContentRaw,
+		arg.ContentAssetUrl,
+		arg.StorageError,
+		arg.Model,
+		arg.MessageID,
+		arg.ToolCallID,
+		arg.UserID,
+		arg.ExternalUserID,
+		arg.ExternalMessageID,
+		arg.FinishReason,
+		arg.ToolCalls,
+		arg.PromptTokens,
+		arg.CompletionTokens,
+		arg.TotalTokens,
+		arg.Origin,
+		arg.UserAgent,
+		arg.IpAddress,
+		arg.Source,
+		arg.ContentHash,
+		arg.Generation,
+		arg.Replayed,
+		arg.CreatedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const upsertExternalChat = `-- name: UpsertExternalChat :one

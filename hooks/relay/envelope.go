@@ -11,7 +11,10 @@ import (
 	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
 )
 
-const schemaVersion = "hook.ingest.v1"
+const (
+	schemaVersion   = "hook.ingest.v1"
+	agentTurnPrefix = "agent-turn:v1:"
+)
 
 // adapterSlug maps an agenthooks provider onto the stable Gram adapter slug the
 // backend expects (it keys its provider-style telemetry vocabulary on these).
@@ -320,9 +323,22 @@ func applyModelResponse(data *components.HookIngestData, base *agenthooks.Event)
 }
 
 func sessionOf(base *agenthooks.Event) *components.HookIngestSession {
+	turnID := base.Session.TurnID
+	if turnID == "" && base.Provider == agenthooks.ProviderOpenCode && base.Kind == agenthooks.KindPromptSubmitted {
+		for _, path := range []string{"output.message.id", "input.messageID"} {
+			var messageID string
+			if raw := base.RawField(path); len(raw) > 0 && json.Unmarshal(raw, &messageID) == nil && strings.TrimSpace(messageID) != "" {
+				turnID = strings.TrimSpace(messageID)
+				break
+			}
+		}
+	}
+	if turnID != "" && (base.Provider == agenthooks.ProviderCodex || base.Provider == agenthooks.ProviderOpenCode) {
+		turnID = agentTurnPrefix + adapterSlug(base.Provider) + ":" + turnID
+	}
 	s := &components.HookIngestSession{
 		ID:     optStr(base.Session.ID),
-		TurnID: optStr(base.Session.TurnID),
+		TurnID: optStr(turnID),
 		Cwd:    optStr(base.Session.CWD),
 		Model:  optStr(base.Session.Model),
 	}

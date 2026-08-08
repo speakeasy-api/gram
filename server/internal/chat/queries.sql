@@ -219,6 +219,93 @@ VALUES (
   , @created_at
 );
 
+-- name: UpsertCorrelatedChatMessage :execrows
+INSERT INTO chat_messages (
+    chat_id
+  , role
+  , project_id
+  , content
+  , content_raw
+  , content_asset_url
+  , storage_error
+  , model
+  , message_id
+  , tool_call_id
+  , user_id
+  , external_user_id
+  , external_message_id
+  , finish_reason
+  , tool_calls
+  , prompt_tokens
+  , completion_tokens
+  , total_tokens
+  , origin
+  , user_agent
+  , ip_address
+  , source
+  , content_hash
+  , generation
+  , replayed
+  , created_at
+)
+VALUES (
+    @chat_id
+  , @role
+  , @project_id::uuid
+  , @content
+  , @content_raw
+  , @content_asset_url
+  , @storage_error
+  , @model
+  , @message_id
+  , @tool_call_id
+  , @user_id
+  , @external_user_id
+  , @external_message_id
+  , @finish_reason
+  , @tool_calls
+  , @prompt_tokens
+  , @completion_tokens
+  , @total_tokens
+  , @origin
+  , @user_agent
+  , @ip_address
+  , @source
+  , @content_hash
+  , @generation
+  , @replayed
+  , @created_at
+)
+ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
+DO UPDATE SET
+    source = EXCLUDED.source
+  , user_id = COALESCE(EXCLUDED.user_id, chat_messages.user_id)
+  , external_user_id = COALESCE(EXCLUDED.external_user_id, chat_messages.external_user_id)
+  , model = COALESCE(EXCLUDED.model, chat_messages.model)
+  , replayed = chat_messages.replayed OR EXCLUDED.replayed
+  , created_at = EXCLUDED.created_at
+  , risk_analyzed_at = NULL
+WHERE chat_messages.project_id = EXCLUDED.project_id
+  AND EXCLUDED.source IN ('codex', 'opencode')
+  AND chat_messages.source = 'litellm';
+
+-- name: AcquireChatPromptCorrelationLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended(
+  'chat-prompt-correlation:' || (@project_id::uuid)::text || ':' || (@chat_id::uuid)::text,
+  0
+));
+
+-- name: GetLatestChatUserPromptSource :one
+-- The chat_id/created_at index serves this backward LIMIT 1 scan. Unlike a
+-- source-filtered EXISTS, a negative result does not walk the full transcript.
+SELECT source
+FROM chat_messages
+WHERE chat_id = @chat_id
+  AND project_id = @project_id::uuid
+  AND role = 'user'
+ORDER BY created_at DESC, seq DESC
+LIMIT 1;
+
 -- name: CreateChatContentPart :copyfrom
 INSERT INTO chat_content_parts (
     chat_id
