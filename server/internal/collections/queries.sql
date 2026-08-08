@@ -135,9 +135,11 @@ WHERE
   AND deleted IS FALSE;
 
 -- name: ListOrganizationMcpCollectionServerAttachments :many
-SELECT t.*, rt.published_at AS published_at FROM toolsets t
+SELECT t.*, rt.published_at AS published_at, la.id AS logo_id FROM toolsets t
 JOIN organization_mcp_collection_server_attachments rt ON t.id = rt.toolset_id
 JOIN organization_mcp_collections c ON c.id = rt.collection_id
+LEFT JOIN mcp_metadata m ON m.toolset_id = t.id
+LEFT JOIN assets la ON la.id = m.logo_id AND la.deleted IS FALSE
 WHERE
   rt.collection_id = @collection_id
   AND c.organization_id = @organization_id
@@ -228,11 +230,14 @@ SELECT
   ep.slug AS endpoint_slug,
   ep.custom_domain_id AS endpoint_custom_domain_id,
   ep.custom_domain AS endpoint_custom_domain,
-  rt.published_at AS published_at
+  rt.published_at AS published_at,
+  la.id AS logo_id
 FROM organization_mcp_collection_server_attachments rt
 JOIN organization_mcp_collections c ON c.id = rt.collection_id
 JOIN mcp_servers s ON s.id = rt.mcp_server_id
 JOIN projects p ON p.id = s.project_id
+LEFT JOIN mcp_metadata m ON m.mcp_server_id = s.id
+LEFT JOIN assets la ON la.id = m.logo_id AND la.deleted IS FALSE
 LEFT JOIN LATERAL (
   SELECT e.slug, e.custom_domain_id, cd.domain AS custom_domain, e.created_at
   FROM mcp_endpoints e

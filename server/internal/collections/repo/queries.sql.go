@@ -605,11 +605,14 @@ SELECT
   ep.slug AS endpoint_slug,
   ep.custom_domain_id AS endpoint_custom_domain_id,
   ep.custom_domain AS endpoint_custom_domain,
-  rt.published_at AS published_at
+  rt.published_at AS published_at,
+  la.id AS logo_id
 FROM organization_mcp_collection_server_attachments rt
 JOIN organization_mcp_collections c ON c.id = rt.collection_id
 JOIN mcp_servers s ON s.id = rt.mcp_server_id
 JOIN projects p ON p.id = s.project_id
+LEFT JOIN mcp_metadata m ON m.mcp_server_id = s.id
+LEFT JOIN assets la ON la.id = m.logo_id AND la.deleted IS FALSE
 LEFT JOIN LATERAL (
   SELECT e.slug, e.custom_domain_id, cd.domain AS custom_domain, e.created_at
   FROM mcp_endpoints e
@@ -654,6 +657,7 @@ type ListOrganizationMcpCollectionMcpServerAttachmentsRow struct {
 	EndpointCustomDomainID uuid.NullUUID
 	EndpointCustomDomain   pgtype.Text
 	PublishedAt            pgtype.Timestamptz
+	LogoID                 uuid.NullUUID
 }
 
 // mcp_server-backed attachments for a collection. Scoped through the
@@ -680,6 +684,7 @@ func (q *Queries) ListOrganizationMcpCollectionMcpServerAttachments(ctx context.
 			&i.EndpointCustomDomainID,
 			&i.EndpointCustomDomain,
 			&i.PublishedAt,
+			&i.LogoID,
 		); err != nil {
 			return nil, err
 		}
@@ -692,9 +697,11 @@ func (q *Queries) ListOrganizationMcpCollectionMcpServerAttachments(ctx context.
 }
 
 const listOrganizationMcpCollectionServerAttachments = `-- name: ListOrganizationMcpCollectionServerAttachments :many
-SELECT t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.default_environment_slug, t.mcp_slug, t.mcp_is_public, t.mcp_enabled, t.tool_selection_mode, t.custom_domain_id, t.external_oauth_server_id, t.oauth_proxy_server_id, t.user_session_issuer_id, t.tool_variations_group_id, t.created_at, t.updated_at, t.deleted_at, t.deleted, rt.published_at AS published_at FROM toolsets t
+SELECT t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.default_environment_slug, t.mcp_slug, t.mcp_is_public, t.mcp_enabled, t.tool_selection_mode, t.custom_domain_id, t.external_oauth_server_id, t.oauth_proxy_server_id, t.user_session_issuer_id, t.tool_variations_group_id, t.created_at, t.updated_at, t.deleted_at, t.deleted, rt.published_at AS published_at, la.id AS logo_id FROM toolsets t
 JOIN organization_mcp_collection_server_attachments rt ON t.id = rt.toolset_id
 JOIN organization_mcp_collections c ON c.id = rt.collection_id
+LEFT JOIN mcp_metadata m ON m.toolset_id = t.id
+LEFT JOIN assets la ON la.id = m.logo_id AND la.deleted IS FALSE
 WHERE
   rt.collection_id = $1
   AND c.organization_id = $2
@@ -732,6 +739,7 @@ type ListOrganizationMcpCollectionServerAttachmentsRow struct {
 	DeletedAt              pgtype.Timestamptz
 	Deleted                bool
 	PublishedAt            pgtype.Timestamptz
+	LogoID                 uuid.NullUUID
 }
 
 func (q *Queries) ListOrganizationMcpCollectionServerAttachments(ctx context.Context, arg ListOrganizationMcpCollectionServerAttachmentsParams) ([]ListOrganizationMcpCollectionServerAttachmentsRow, error) {
@@ -765,6 +773,7 @@ func (q *Queries) ListOrganizationMcpCollectionServerAttachments(ctx context.Con
 			&i.DeletedAt,
 			&i.Deleted,
 			&i.PublishedAt,
+			&i.LogoID,
 		); err != nil {
 			return nil, err
 		}

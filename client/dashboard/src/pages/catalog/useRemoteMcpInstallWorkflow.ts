@@ -19,6 +19,7 @@ import type { RequestOptions } from "@gram/client/lib/sdks.js";
 import type { ExternalMCPRemote } from "@gram/client/models/components/externalmcpremote.js";
 import type { ExternalMCPRemoteHeader } from "@gram/client/models/components/externalmcpremoteheader.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import { invalidateAllGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllRemoteMcpServerHeaders } from "@gram/client/react-query/remoteMcpServerHeaders.js";
@@ -189,6 +190,41 @@ function buildInstallTargets(config: ServerConfig): InstallTarget[] {
   }));
 }
 
+/** Best-effort: a logo failure never fails the install. */
+async function persistServerIconBestEffort(
+  client: Gram,
+  target: InstallTarget,
+  mcpServerId: string,
+  reqOpts: RequestOptions | undefined,
+): Promise<void> {
+  const iconUrl = target.server.iconUrl;
+  if (!iconUrl) return;
+
+  try {
+    const uploaded = await client.assets.fetchImageFromURL(
+      { fetchImageFromURLForm2: { url: iconUrl } },
+      undefined,
+      reqOpts,
+    );
+    await client.mcpMetadata.set(
+      {
+        setMcpMetadataRequestBody: {
+          mcpServerId,
+          logoAssetId: uploaded.asset.id,
+        },
+      },
+      undefined,
+      reqOpts,
+    );
+  } catch (iconError) {
+    console.warn("Failed to persist server icon during install.", {
+      mcpServerId,
+      iconUrl,
+      iconError,
+    });
+  }
+}
+
 /**
  * Installs one target as an unproxied MCP server instead of a Gram-proxied
  * remote one: creates the unproxied_mcp_servers row, links an mcp_servers
@@ -253,6 +289,8 @@ async function installUnproxiedTarget(
     }
     throw linkError instanceof Error ? linkError : new Error(String(linkError));
   }
+
+  await persistServerIconBestEffort(client, target, mcpServer.id, reqOpts);
 
   return { mcpServer, mcpEndpointUrl: undefined, authConfigured: false };
 }
@@ -575,6 +613,8 @@ export function useRemoteMcpInstallWorkflow({
         }
       }
 
+      await persistServerIconBestEffort(client, target, mcpServer.id, reqOpts);
+
       const authAutoConfig = await autoConfigureRemoteMcpAuth({
         client,
         authedFetch,
@@ -685,6 +725,8 @@ export function useRemoteMcpInstallWorkflow({
       invalidateAllRemoteMcpServerHeaders(queryClient, { refetchType: "all" }),
       invalidateAllMcpServers(queryClient, { refetchType: "all" }),
       invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
+      // Installs may have persisted a catalog icon into MCP metadata.
+      invalidateAllGetMcpMetadata(queryClient, { refetchType: "all" }),
       // Every create links a fresh user_session_issuer.
       invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
     ];

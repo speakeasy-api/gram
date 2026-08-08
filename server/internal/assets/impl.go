@@ -1000,12 +1000,18 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 	}, nil
 }
 
-// FetchImageFromURL downloads an image from a URL and stores it as an asset.
-// Mirrors FetchOpenAPIv3FromURL but for images, and is meant to be called
-// in-process by other services (e.g. defaulting an unproxied MCP server's
-// icon to the vendor's favicon) rather than exposed over HTTP, so it takes a
-// plain URL instead of a Goa payload/form type.
-func (s *Service) FetchImageFromURL(ctx context.Context, imageURL string) (*gen.Asset, error) {
+// FetchImageFromURL is the endpoint wrapper over [Service.FetchImageAssetFromURL],
+// letting the dashboard ingest third-party images that CORS blocks it from fetching.
+func (s *Service) FetchImageFromURL(ctx context.Context, payload *gen.FetchImageFromURLForm) (*gen.UploadImageResult, error) {
+	asset, err := s.FetchImageAssetFromURL(ctx, payload.URL)
+	if err != nil {
+		return nil, err
+	}
+	return &gen.UploadImageResult{Asset: asset}, nil
+}
+
+// FetchImageAssetFromURL downloads an image from a URL and stores it as an asset.
+func (s *Service) FetchImageAssetFromURL(ctx context.Context, imageURL string) (*gen.Asset, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -1040,11 +1046,6 @@ func (s *Service) FetchImageFromURL(ctx context.Context, imageURL string) (*gen.
 		return nil, oops.E(oops.CodeBadRequest, nil, "failed to fetch URL: received status %d", resp.StatusCode)
 	}
 
-	contentType := resp.Header.Get("Content-Type")
-	if contentType == "" {
-		contentType = "image/png"
-	}
-
 	contentLength := resp.ContentLength
 	if contentLength <= 0 {
 		contentLength = MaxFileSizeImage
@@ -1056,7 +1057,7 @@ func (s *Service) FetchImageFromURL(ctx context.Context, imageURL string) (*gen.
 	result, err := s.downloadPendingAsset(ctx, resp.Body, &downloadPendingAssetParams{
 		maxLength:     MaxFileSizeImage,
 		contentLength: contentLength,
-		contentType:   contentType,
+		contentType:   resp.Header.Get("Content-Type"),
 	})
 	if err != nil {
 		return nil, err
@@ -1086,9 +1087,17 @@ func (s *Service) FetchImageFromURL(ctx context.Context, imageURL string) (*gen.
 		return existing, nil
 	}
 
-	inContentType, _, err := mime.ParseMediaType(contentType)
+	// Hosts routinely mislabel images (application/octet-stream, or an HTML
+	// error page served with a 200), so the stored type comes from the bytes
+	// rather than the declared one.
+	var head [512]byte
+	n, err := result.file.ReadAt(head[:], 0)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("read image header: %w", err), "error reading file")
+	}
+	inContentType, _, err := mime.ParseMediaType(http.DetectContentType(head[:n]))
 	if err != nil {
-		inContentType = contentType
+		return nil, oops.E(oops.CodeUnsupportedMedia, fmt.Errorf("parse detected content type: %w", err), "unsupported content type")
 	}
 
 	mimeType, ext, err := sniffMimeType(sniffMimeTypeParams{

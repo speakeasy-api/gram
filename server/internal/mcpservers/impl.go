@@ -265,14 +265,14 @@ func (s *Service) setDefaultUnproxiedIcon(ctx context.Context, logger *slog.Logg
 		return
 	}
 
-	asset, err := s.assets.FetchImageFromURL(ctx, unproxiedFaviconURL(vendorURL.Scheme, vendorURL.Host))
+	asset, err := s.assets.FetchImageAssetFromURL(ctx, unproxiedFaviconURL(vendorURL.Scheme, vendorURL.Host))
 	if err != nil {
 		// Some vendors only register a favicon against their registrable
 		// domain, not the specific subdomain hosting the MCP endpoint (e.g.
 		// mcp.figma.com has none, figma.com does) -- retry once against that
 		// before giving up.
 		if registrable, rErr := publicsuffix.EffectiveTLDPlusOne(vendorURL.Hostname()); rErr == nil && registrable != vendorURL.Host {
-			asset, err = s.assets.FetchImageFromURL(ctx, unproxiedFaviconURL(vendorURL.Scheme, registrable))
+			asset, err = s.assets.FetchImageAssetFromURL(ctx, unproxiedFaviconURL(vendorURL.Scheme, registrable))
 		}
 	}
 	if err != nil {
