@@ -56,7 +56,13 @@ function useCalBranding() {
   }, []);
 }
 
-export function DemoBookingFlow(): JSX.Element {
+export function DemoBookingFlow({
+  title = "Looks like your company is new to Speakeasy.",
+  subtitle = "Book time with our team to activate your account and get started.",
+}: {
+  title?: string;
+  subtitle?: string;
+} = {}): JSX.Element {
   const { session } = useSessionData();
   const telemetry = useTelemetry();
 
@@ -100,11 +106,9 @@ export function DemoBookingFlow(): JSX.Element {
   return (
     <div className="flex w-full flex-col items-center gap-6">
       <div className="text-center">
-        <p className="text-[16px] tracking-[0.0025em]">
-          Looks like your company is new to Speakeasy.
-        </p>
+        <p className="text-[16px] tracking-[0.0025em]">{title}</p>
         <p className="mt-1.5 text-[14px] tracking-[0.0025em] text-[var(--muted-strong)]">
-          Book time with our team to activate your account and get started.
+          {subtitle}
         </p>
       </div>
 

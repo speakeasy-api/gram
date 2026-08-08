@@ -223,6 +223,33 @@ export function useCaptureEnterpriseGateViewed({
   }, [email, organizationId, organizationName, organizationSlug, telemetry]);
 }
 
+// Kept separate from `enterprise_gate_viewed` so that event keeps meaning "cold
+// org that never trialed" and the two funnels stay separable.
+export function useCaptureTrialExpiredGateViewed({
+  email,
+  organizationId,
+  organizationName,
+  organizationSlug,
+}: {
+  email: string;
+  organizationId: string;
+  organizationName: string;
+  organizationSlug: string;
+}): void {
+  const telemetry = useTelemetry();
+
+  useEffect(() => {
+    if (!email) return;
+    if (!organizationId) return;
+    telemetry.capture("trial_expired_gate_viewed", {
+      email,
+      organization_id: organizationId,
+      organization_name: organizationName,
+      organization_slug: organizationSlug,
+    });
+  }, [email, organizationId, organizationName, organizationSlug, telemetry]);
+}
+
 export function useRegisterChatTelemetry({
   chatId,
   chatUrl,

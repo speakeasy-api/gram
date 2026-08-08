@@ -13,6 +13,8 @@ import {
 import { Skeleton } from "@/components/ui/Skeleton";
 import BookDemo from "@/pages/demo/BookDemo";
 import SwitchOrg from "@/pages/demo/SwitchOrg";
+import TrialEnded from "@/pages/demo/TrialEnded";
+import { getTrialLifecycleFromDates } from "@/lib/trial-status";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useIsPlatformAdminRef } from "@/contexts/Sdk";
@@ -126,6 +128,11 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   ) {
     if (session.organizations.length > 1) {
       return <SwitchOrg gate />;
+    }
+    // An org demoted after its trial ran out gets told so; an org that never
+    // trialed (or is still mid-trial) falls through to the cold-signup gate.
+    if (getTrialLifecycleFromDates(session.trial, new Date()) === "expired") {
+      return <TrialEnded />;
     }
     return <BookDemo />;
   }
