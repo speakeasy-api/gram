@@ -53,8 +53,6 @@ export type ExclusionSheetState =
        * picker; absent for the Exclusions tab / Policy Center buttons, which
        * have no finding and open straight onto the criteria box. */
       results?: RiskResult[];
-      initialExpression?: string;
-      initialScope?: string;
     }
   | { mode: "edit"; exclusion: RiskExclusion };
 
@@ -122,7 +120,7 @@ export function ExclusionEditor({
   const formKey =
     state.mode === "edit"
       ? `edit-${state.exclusion.id}`
-      : `create-${(state.results ?? []).map((r) => r.id).join(",")}-${state.initialExpression ?? ""}-${state.initialScope ?? ""}`;
+      : `create-${(state.results ?? []).map((r) => r.id).join(",")}`;
 
   return (
     <ExclusionForm
@@ -215,20 +213,6 @@ interface ExclusionFormProps {
   }) => void;
 }
 
-function initialExpressionFor(state: ExclusionSheetState): string {
-  if (state.mode === "edit") {
-    return serializeExclusionExpression(state.exclusion);
-  }
-  return state.initialExpression ?? "";
-}
-
-function initialScopeFor(state: ExclusionSheetState): string {
-  if (state.mode === "edit") {
-    return state.exclusion.riskPolicyId ?? GLOBAL_SCOPE;
-  }
-  return state.initialScope ?? GLOBAL_SCOPE;
-}
-
 function ExclusionForm({
   policies,
   state,
@@ -236,17 +220,20 @@ function ExclusionForm({
   onSubmit,
 }: ExclusionFormProps) {
   const editing = state.mode === "edit" ? state.exclusion : null;
+  const results = state.mode === "create" ? (state.results ?? []) : [];
   // Ready-made rules for the selection. Always at least ["custom"], so an
   // edit or a no-finding create renders no picker and opens on the DSL box.
-  const options = exclusionOptions(
-    state.mode === "create" ? (state.results ?? []) : [],
-  );
+  const options = exclusionOptions(results);
   const [choice, setChoice] = useState<ExclusionOption["value"]>(
     options[0]?.value ?? "custom",
   );
-  const [scope, setScope] = useState<string>(initialScopeFor(state));
+  // A finding-originated create is always global: "stop flagging this" means
+  // everywhere, and the Scope select is there to narrow it.
+  const [scope, setScope] = useState<string>(
+    editing?.riskPolicyId ?? GLOBAL_SCOPE,
+  );
   const [expression, setExpression] = useState<string>(
-    initialExpressionFor(state),
+    editing ? serializeExclusionExpression(editing) : "",
   );
   const [enabled, setEnabled] = useState<boolean>(editing?.enabled ?? true);
   const [error, setError] = useState<string | null>(null);
@@ -278,6 +265,13 @@ function ExclusionForm({
     },
   });
 
+  // A batch the picker can't cover (no shared rule or source) is exactly what
+  // the server generalizes well, so hand it the selection alongside the
+  // prompt. Single findings gain nothing — their local options are complete —
+  // and the endpoint caps the list at 50 ids.
+  const findingIds =
+    results.length > 1 ? results.slice(0, 50).map((r) => r.id) : [];
+
   const handleSuggest = () => {
     const prompt = askPrompt.trim();
     if (prompt.length < 3) {
@@ -288,6 +282,7 @@ function ExclusionForm({
       request: {
         suggestExclusionRequestBody: {
           prompt,
+          findingIds: findingIds.length > 0 ? findingIds : undefined,
           knownRuleIds: BUILTIN_RULE_ID_LIST,
         },
       },
@@ -378,8 +373,10 @@ function ExclusionForm({
               />
               <div className="flex items-center justify-between gap-3">
                 <Text className="text-muted-foreground" small>
-                  Describe what to stop flagging. We'll write the criteria
-                  expression, you tweak before saving.
+                  {"Describe what to stop flagging. We'll write the criteria expression, you tweak before saving." +
+                    (findingIds.length > 0
+                      ? ` Your ${findingIds.length} selected findings go along as context.`
+                      : "")}
                 </Text>
                 <Button
                   variant="secondary"

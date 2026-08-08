@@ -43,7 +43,6 @@ export interface BulkAction {
 export function BulkActionBar({
   selectedCount,
   actions,
-  loading,
   leftOffsetPx,
   heightPx,
 }: {
@@ -51,10 +50,6 @@ export function BulkActionBar({
   /** One or two actions (e.g. "Mark as false positive" and "Setup exclusion
    * rule"), listed in the "Bulk actions" dropdown in the order given. */
   actions: BulkAction[];
-  /** An action is running asynchronously (e.g. an AI suggestion) — shows a
-   * spinner on the "Bulk actions" trigger itself, since the action that
-   * triggered it is inside a menu that isn't necessarily open right now. */
-  loading?: boolean;
   /** Width of the header row's own select-all checkbox column in pixels —
    * the bar starts immediately after it, leaving that checkbox uncovered
    * and clickable. */
@@ -108,7 +103,6 @@ export function BulkActionBar({
       </span>
       <MoreActions
         triggerLabel="Bulk actions"
-        triggerLoading={loading}
         triggerStyle={{ transitionProperty: "none" }}
         actions={actions.map(
           (a): Action => ({
