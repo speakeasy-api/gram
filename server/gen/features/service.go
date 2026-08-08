@@ -88,6 +88,10 @@ type GetProductFeaturesResult struct {
 	// Whether consent screens expose automatic remote-session refresh for the
 	// organization
 	RemoteSessionAutoRefreshEnabled bool
+	// Whether automatic remote-session refresh is enforced as the organization
+	// default: forced on for every user, shown locked on consent screens, and
+	// applied by the keepalive regardless of per-session preference
+	RemoteSessionAutoRefreshEnforcedEnabled bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.

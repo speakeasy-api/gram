@@ -161,6 +161,50 @@ func TestConsentTemplateShowsAutoRefreshAndServiceExpiry(t *testing.T) {
 	require.NotContains(t, html, "Current access expires in")
 }
 
+func TestConsentTemplateLocksAutoRefreshWhenOrganizationEnforces(t *testing.T) {
+	t.Parallel()
+
+	var page bytes.Buffer
+	err := consentTemplate.Execute(&page, consentTemplateData{
+		ClientName:     "Gram",
+		MCPSlug:        "example",
+		MCPRouteBase:   "mcp",
+		State:          "state",
+		CSRFToken:      "csrf",
+		SubjectDisplay: "user@example.com",
+		ScriptURL:      "/mcp/consent-page-test.js",
+		RemoteSessionCards: []remoteSessionCard{{
+			ClientID:             "client-id",
+			IssuerSlug:           "example-issuer",
+			Connected:            true,
+			Expired:              false,
+			CanRefresh:           true,
+			AccessExpiresAt:      "2026-08-05T18:00:00Z",
+			AccessExpiresIn:      "3 hours",
+			AutoRefreshSupported: true,
+			AutoRefreshChecked:   true,
+		}},
+		ConsentEnabled:         true,
+		AutoRefreshSupported:   true,
+		AutoRefreshOn:          true,
+		AutoRefreshHasSessions: true,
+		AutoRefreshLocked:      true,
+	})
+	require.NoError(t, err)
+
+	html := page.String()
+	// The value is shown read-only, managed by the org — no editable control
+	// and no user-driven persistence form.
+	require.Contains(t, html, "Managed by your organization")
+	require.Contains(t, html, `data-auto-refresh-managed`)
+	require.NotContains(t, html, `data-auto-refresh-select`)
+	require.NotContains(t, html, `id="auto-refresh-form"`)
+	// The per-card hidden input still carries the enforced "on" value so the
+	// connect action persists auto_refresh=on.
+	require.Contains(t, html, `value="on"`)
+	require.Contains(t, html, "Auto refresh")
+}
+
 func TestConsentTemplateHidesAutoRefreshWhenOrganizationFeatureDisabled(t *testing.T) {
 	t.Parallel()
 

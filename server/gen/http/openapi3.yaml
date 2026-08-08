@@ -59406,6 +59406,9 @@ components:
                 remote_session_auto_refresh_enabled:
                     type: boolean
                     description: Whether consent screens expose automatic remote-session refresh for the organization
+                remote_session_auto_refresh_enforced_enabled:
+                    type: boolean
+                    description: 'Whether automatic remote-session refresh is enforced as the organization default: forced on for every user, shown locked on consent screens, and applied by the keepalive regardless of per-session preference'
                 scim_enabled:
                     type: boolean
                     description: Whether SCIM/directory sync setup is enabled for the organization
@@ -59440,6 +59443,7 @@ components:
                 - platform_mcp_enabled
                 - customer_managed_encryption_keys_enabled
                 - remote_session_auto_refresh_enabled
+                - remote_session_auto_refresh_enforced_enabled
                 - device_agent
         GetProjectForm:
             type: object
@@ -68425,6 +68429,7 @@ components:
                         - platform_mcp
                         - customer_managed_encryption_keys
                         - remote_session_auto_refresh
+                        - remote_session_auto_refresh_enforced
                     maxLength: 60
             required:
                 - feature_name
