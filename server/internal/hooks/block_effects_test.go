@@ -24,7 +24,7 @@ type blockEffectShadowMCPScanner struct {
 }
 
 func (s blockEffectShadowMCPScanner) LookupShadowMCPBlockingPolicy(_ context.Context, _ string, _ uuid.UUID, userID string) (*risk.ShadowMCPPolicy, error) {
-	if userID != s.ingestUserScopedShadowMCPScanner.userID {
+	if userID != s.userID {
 		return nil, nil
 	}
 	return &risk.ShadowMCPPolicy{ID: s.policyID, Name: "shadow-mcp-block"}, nil
@@ -84,7 +84,9 @@ func TestIngest_ShadowMCPDenyCarriesBlockEffect(t *testing.T) {
 	require.NotNil(t, result.Message)
 	require.Contains(t, *result.Message, requestURL, "effect must mirror the link in the prose, not mint a second one")
 
-	expiresAt, err := time.Parse(time.RFC3339, effect["request_expires_at"].(string))
+	expiresAtRaw, ok := effect["request_expires_at"].(string)
+	require.True(t, ok)
+	expiresAt, err := time.Parse(time.RFC3339, expiresAtRaw)
 	require.NoError(t, err)
 	require.WithinDuration(t, time.Now().Add(shadowMCPApprovalRequestTokenTTL), expiresAt, time.Minute)
 
