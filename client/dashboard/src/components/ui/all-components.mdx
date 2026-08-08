@@ -17,7 +17,6 @@ import { Avatar, AvatarFallback } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { MiniCard } from "@/components/ui/CardMini";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { CodeSnippet } from "@/components/ui/CodeSnippet";
 import {
@@ -41,7 +40,6 @@ import {
 import { CopyButton } from "@/components/ui/CopyButton";
 import { DashboardCard } from "@/components/ui/DashboardCard";
 import { Dialog } from "@/components/ui/Dialog";
-import { DotCard } from "@/components/ui/DotCard";
 import { DotRow } from "@/components/ui/DotRow";
 import { DotTable } from "@/components/ui/DotTable";
 import {
@@ -502,28 +500,11 @@ export const Row = ({ name, origin, children }) => {
   </div>
 </Row>
 
-<Row name="MiniCard" origin="Gram">
-  <div className="w-80">
-    <MiniCard>
-      <MiniCard.Title>Petstore</MiniCard.Title>
-      <MiniCard.Description>12 tools · 3 environments</MiniCard.Description>
-    </MiniCard>
-  </div>
-</Row>
-
 <Row name="DashboardCard" origin="Gram">
   <div className="w-80">
     <DashboardCard title="Tool calls">
       <div className="text-3xl font-semibold tabular-nums">12,480</div>
     </DashboardCard>
-  </div>
-</Row>
-
-<Row name="DotCard" origin="Gram">
-  <div className="w-96">
-    <DotCard icon={<Icon name="server" className="size-6" />}>
-      <div className="p-4 text-sm">Petstore</div>
-    </DotCard>
   </div>
 </Row>
 
