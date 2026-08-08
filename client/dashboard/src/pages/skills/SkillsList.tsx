@@ -1,6 +1,6 @@
 import { defineFilters, useFilterState } from "@/components/filters";
 import type { FilterValue } from "@/components/filters/filter-schema";
-import { Page } from "@/components/page-layout";
+import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -445,204 +445,178 @@ export default function SkillsList(): JSX.Element {
   }
 
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <Page.Section>
-          <Page.Section.Title>Skills</Page.Section.Title>
-          <Page.Section.Description>
-            Record, inspect, and version the skills available to this project.
-          </Page.Section.Description>
-          <Page.Section.CTA>
-            <AddSkillButton onClick={() => setDialogOpen(true)} />
-          </Page.Section.CTA>
-          <Page.Section.Body>
-            <div className="space-y-4">
-              {!isEmptyProject && (
-                <Page.Toolbar>
-                  <Page.Toolbar.Search
-                    value={search}
-                    onChange={(value) => {
-                      setSearch(value);
-                      resetPage();
-                    }}
-                    debounceMs={150}
-                    placeholder="Search skills"
-                  />
-                  <Page.Toolbar.Filters
-                    schema={SKILL_FILTERS}
-                    values={filters.values}
-                    optionsById={filterOptions}
-                    onChange={(id, value) => {
-                      (
-                        filters.setValue as (
-                          id: string,
-                          value: FilterValue,
-                        ) => void
-                      )(id, value);
-                      resetPage();
-                    }}
-                    onClear={(id) => {
-                      (filters.clearValue as (id: string) => void)(id);
-                      resetPage();
-                    }}
-                    onClearAll={() => {
-                      filters.clearAll();
-                      resetPage();
-                    }}
-                  />
-                  <Page.Toolbar.Count>{countLabel}</Page.Toolbar.Count>
-                  <Page.Toolbar.Refresh
-                    onRefresh={() => {
-                      void Promise.all([
-                        effectiveMetricSort
-                          ? metricQuery.refetch()
-                          : pageQuery.refetch(),
-                        insightsQuery.refetch(),
-                        openSuggestions.query.refetch(),
-                        tagsQuery.refetch(),
-                      ]);
-                    }}
-                    isRefreshing={
-                      pageQuery.isFetching ||
-                      metricQuery.isFetching ||
-                      insightsQuery.isFetching ||
-                      openSuggestions.query.isFetching ||
-                      tagsQuery.isFetching
-                    }
-                  />
-                </Page.Toolbar>
-              )}
+    <ResourceListPage
+      title="Skills"
+      description="Record, inspect, and version the skills available to this project."
+      primaryAction={<AddSkillButton onClick={() => setDialogOpen(true)} />}
+      hideToolbar={isEmptyProject}
+      search={{
+        value: search,
+        onChange: (value) => {
+          setSearch(value);
+          resetPage();
+        },
+        debounceMs: 150,
+        placeholder: "Search skills",
+      }}
+      filters={{
+        schema: SKILL_FILTERS,
+        values: filters.values,
+        optionsById: filterOptions,
+        onChange: (id, value) => {
+          (filters.setValue as (id: string, value: FilterValue) => void)(
+            id,
+            value,
+          );
+          resetPage();
+        },
+        onClear: (id) => {
+          (filters.clearValue as (id: string) => void)(id);
+          resetPage();
+        },
+        onClearAll: () => {
+          filters.clearAll();
+          resetPage();
+        },
+      }}
+      count={countLabel}
+      onRefresh={() => {
+        void Promise.all([
+          effectiveMetricSort ? metricQuery.refetch() : pageQuery.refetch(),
+          insightsQuery.refetch(),
+          openSuggestions.query.refetch(),
+          tagsQuery.refetch(),
+        ]);
+      }}
+      isRefreshing={
+        pageQuery.isFetching ||
+        metricQuery.isFetching ||
+        insightsQuery.isFetching ||
+        openSuggestions.query.isFetching ||
+        tagsQuery.isFetching
+      }
+    >
+      <div className="space-y-4">
+        {draining && (
+          <Text small muted role="status" aria-live="polite">
+            Loading all skills to finish this view...
+          </Text>
+        )}
 
-              {draining && (
-                <Text small muted role="status" aria-live="polite">
-                  Loading all skills to finish this view...
-                </Text>
-              )}
-
-              {openSuggestions.query.error && (
-                <div className="space-y-2">
-                  <ErrorAlert
-                    title="Unable to load suggested edits"
-                    error={openSuggestions.query.error}
-                  />
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => void openSuggestions.query.refetch()}
-                  >
-                    Retry suggested edits
-                  </Button>
-                </div>
-              )}
-
-              {openSuggestions.total > 0 &&
-                !openSuggestions.fullyLoaded &&
-                !openSuggestions.query.error && (
-                  <Text small muted role="status" aria-live="polite">
-                    Loading all suggested edits...
-                  </Text>
-                )}
-
-              {insightsUnavailable && (
-                <div className="space-y-2">
-                  <ErrorAlert
-                    title="Unable to load skill insights"
-                    error={insightsQuery.error}
-                  />
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => void insightsQuery.refetch()}
-                  >
-                    Retry insights
-                  </Button>
-                </div>
-              )}
-
-              {query.isPending && !query.data && <SkeletonTable />}
-              {query.error && !query.data && (
-                <ErrorAlert
-                  title="Unable to load skills"
-                  error={
-                    query.error instanceof Error ? query.error : "Try again."
-                  }
-                />
-              )}
-              {isEmptyProject && (
-                <SkillsEmptyState onAdd={() => setDialogOpen(true)} />
-              )}
-              {query.data && !isEmptyProject && !draining && (
-                <div className="overflow-x-auto">
-                  <Table
-                    columns={columns}
-                    data={displayedSkills}
-                    rowKey={(skill) => skill.id}
-                    sort={effectiveSort}
-                    onSortChange={(nextSort) => {
-                      setSort(nextSort);
-                      resetPage();
-                    }}
-                    onRowClick={(skill) =>
-                      void navigate(routes.skills.detail.href(skill.id))
-                    }
-                    className="min-w-[1100px]"
-                    noResultsMessage={noResultsMessage(
-                      active,
-                      effectiveMetricSort && metricQuery.isFetchNextPageError,
-                    )}
-                  />
-                </div>
-              )}
-
-              {effectiveMetricSort && metricQuery.isFetchNextPageError && (
-                <LoadMoreError
-                  onRetry={() => void metricQuery.fetchNextPage()}
-                />
-              )}
-
-              {!draining && totalPages > 1 && (
-                <div className="flex items-center justify-between border-t px-4 py-3">
-                  <Text small muted>
-                    {page * RESULT_PAGE_SIZE + 1}-
-                    {Math.min((page + 1) * RESULT_PAGE_SIZE, paginationCount)}{" "}
-                    of {paginationCount}
-                  </Text>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => setPage((current) => current - 1)}
-                      disabled={page === 0}
-                    >
-                      Previous
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={nextPage}
-                      disabled={page >= totalPages - 1}
-                    >
-                      Next
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              <UnknownSkillActivationsSection />
-            </div>
-
-            <SkillManifestDialog
-              mode="create"
-              open={dialogOpen}
-              onOpenChange={setDialogOpen}
+        {openSuggestions.query.error && (
+          <div className="space-y-2">
+            <ErrorAlert
+              title="Unable to load suggested edits"
+              error={openSuggestions.query.error}
             />
-          </Page.Section.Body>
-        </Page.Section>
-      </Page.Body>
-    </Page>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => void openSuggestions.query.refetch()}
+            >
+              Retry suggested edits
+            </Button>
+          </div>
+        )}
+
+        {openSuggestions.total > 0 &&
+          !openSuggestions.fullyLoaded &&
+          !openSuggestions.query.error && (
+            <Text small muted role="status" aria-live="polite">
+              Loading all suggested edits...
+            </Text>
+          )}
+
+        {insightsUnavailable && (
+          <div className="space-y-2">
+            <ErrorAlert
+              title="Unable to load skill insights"
+              error={insightsQuery.error}
+            />
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => void insightsQuery.refetch()}
+            >
+              Retry insights
+            </Button>
+          </div>
+        )}
+
+        {query.isPending && !query.data && <SkeletonTable />}
+        {query.error && !query.data && (
+          <ErrorAlert
+            title="Unable to load skills"
+            error={query.error instanceof Error ? query.error : "Try again."}
+          />
+        )}
+        {isEmptyProject && (
+          <SkillsEmptyState onAdd={() => setDialogOpen(true)} />
+        )}
+        {query.data && !isEmptyProject && !draining && (
+          <div className="overflow-x-auto">
+            <Table
+              columns={columns}
+              data={displayedSkills}
+              rowKey={(skill) => skill.id}
+              sort={effectiveSort}
+              onSortChange={(nextSort) => {
+                setSort(nextSort);
+                resetPage();
+              }}
+              onRowClick={(skill) =>
+                void navigate(routes.skills.detail.href(skill.id))
+              }
+              className="min-w-[1100px]"
+              noResultsMessage={noResultsMessage(
+                active,
+                effectiveMetricSort && metricQuery.isFetchNextPageError,
+              )}
+            />
+          </div>
+        )}
+
+        {effectiveMetricSort && metricQuery.isFetchNextPageError && (
+          <LoadMoreError onRetry={() => void metricQuery.fetchNextPage()} />
+        )}
+
+        {!draining && totalPages > 1 && (
+          <div className="flex items-center justify-between border-t px-4 py-3">
+            <Text small muted>
+              {page * RESULT_PAGE_SIZE + 1}-
+              {Math.min((page + 1) * RESULT_PAGE_SIZE, paginationCount)} of{" "}
+              {paginationCount}
+            </Text>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setPage((current) => current - 1)}
+                disabled={page === 0}
+              >
+                Previous
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={nextPage}
+                disabled={page >= totalPages - 1}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <UnknownSkillActivationsSection />
+      </div>
+
+      <SkillManifestDialog
+        mode="create"
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+      />
+    </ResourceListPage>
   );
 }
 
