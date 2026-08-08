@@ -733,9 +733,18 @@ var _ = Service("risk", func() {
 	Method("createRiskPolicyBypassRequest", func() {
 		Description("Create or refresh a risk policy bypass request from a signed request URL token.")
 		Security(security.Session)
+		// The device agent files the request on the user's behalf with the
+		// per-user `agent_user` key minted by token-exchange. The key owner is
+		// the enrolled user, so the handler's requester binding applies
+		// unchanged. Deliberately no ProjectSlug scheme: the project resolves
+		// from the request token's claims.
+		Security(security.ByKey, func() {
+			Scope("agent_user")
+		})
 
 		Payload(func() {
 			security.SessionPayload()
+			security.ByKeyPayload()
 			Attribute("request_token", String, "Signed request token generated when a risk policy blocks an action.")
 			Required("request_token")
 		})
@@ -745,6 +754,7 @@ var _ = Service("risk", func() {
 		HTTP(func() {
 			POST("/rpc/risk.createPolicyBypassRequest")
 			security.SessionHeader()
+			security.ByKeyHeader()
 			Response(StatusCreated)
 		})
 
