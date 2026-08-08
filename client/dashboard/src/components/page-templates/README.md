@@ -12,18 +12,18 @@ chrome; you own the content.
 
 ## Which template?
 
-| Your page is…                                                        | Use              |
-| -------------------------------------------------------------------- | ---------------- |
+| Your page is…                                                        | Use                |
+| -------------------------------------------------------------------- | ------------------ |
 | a collection: search/filter + a table or card grid + empty state     | `ResourceListPage` |
-| one entity: a hero + sections (routed subpages, or a scroll)         | `DetailPage`     |
-| tabs that are *different resources* (not one entity's sections)       | `TabbedPage`     |
-| a single create/edit form                                            | `FormPage`       |
-| stacked titled config sections (or a prose/tool column)              | `SettingsPage`   |
-| a dashboard: a stat row + summary/chart cards                        | `OverviewPage`   |
-| a fullbleed analytics surface (sticky filter bar + big table/charts) | `WorkbenchPage`  |
-| a multi-step flow                                                    | `WizardPage`     |
-| auth / standalone, outside the app shell                            | `CenteredPage`   |
-| a genuine bespoke app canvas (chat, playground, builder)            | `FullBleedPage`* |
+| one entity: a hero + sections (routed subpages, or a scroll)         | `DetailPage`       |
+| tabs that are _different resources_ (not one entity's sections)      | `TabbedPage`       |
+| a single create/edit form                                            | `FormPage`         |
+| stacked titled config sections (or a prose/tool column)              | `SettingsPage`     |
+| a dashboard: a stat row + summary/chart cards                        | `OverviewPage`     |
+| a fullbleed analytics surface (sticky filter bar + big table/charts) | `WorkbenchPage`    |
+| a multi-step flow                                                    | `WizardPage`       |
+| auth / standalone, outside the app shell                             | `CenteredPage`     |
+| a genuine bespoke app canvas (chat, playground, builder)             | `FullBleedPage`\*  |
 
 \* `FullBleedPage` is the **escape hatch**, not a content template. If your page
 doesn't fit one of the real templates, it's this — build custom inside it and
@@ -32,23 +32,31 @@ get a design review. Don't bend `ResourceListPage` into a chat window.
 All imports come from the barrel:
 
 ```tsx
-import { ResourceListPage, DetailPage, FormPage /* … */ } from "@/components/page-templates";
+import {
+  ResourceListPage,
+  DetailPage,
+  FormPage /* … */,
+} from "@/components/page-templates";
 ```
 
 ## ResourceListPage
 
 ```tsx
 <ResourceListPage
-  scope={["mcp:read", "mcp:write"]}        // page-level scope gate
+  scope={["mcp:read", "mcp:write"]} // page-level scope gate
   title="MCP Servers"
   description="Servers exposed to your agents."
-  primaryAction={<NewServerButton />}       // header CTA
+  primaryAction={<NewServerButton />} // header CTA
   search={{ value: q, onChange: setQ, placeholder: "Search servers" }}
-  viewToggle={{ value: view, onChange: setView }}   // grid ⇄ table
-  metrics={metrics}                         // optional stat-header row
+  viewToggle={{ value: view, onChange: setView }} // grid ⇄ table
+  metrics={metrics} // optional stat-header row
   isLoading={query.isPending}
   isEmpty={rows.length === 0}
-  empty={{ icon: "server", heading: "No servers yet", action: <NewServerButton /> }}
+  empty={{
+    icon: "server",
+    heading: "No servers yet",
+    action: <NewServerButton />,
+  }}
 >
   <Table columns={columns} data={rows} rowKey={(r) => r.id} />
 </ResourceListPage>
@@ -72,12 +80,29 @@ sections. Pass `layout="routed"` (default) for one-section-at-a-time by URL path
   hero={<DetailHero>…</DetailHero>}
   activeSection={sectionFromPath(pathname)}
   sections={[
-    { id: "overview", label: "Overview", href: overviewHref, content: <Overview /> },
-    { id: "settings", label: "Settings", href: settingsHref, content: <Settings /> },
-    { id: "danger", label: "Danger zone", href: dangerHref, content: <DangerZone /> },
+    {
+      id: "overview",
+      label: "Overview",
+      href: overviewHref,
+      content: <Overview />,
+    },
+    {
+      id: "settings",
+      label: "Settings",
+      href: settingsHref,
+      content: <Settings />,
+    },
+    {
+      id: "danger",
+      label: "Danger zone",
+      href: dangerHref,
+      content: <DangerZone />,
+    },
   ]}
   loading={query.isPending}
-  notFound={query.isError ? { title: "Not found", backTo: listHref } : undefined}
+  notFound={
+    query.isError ? { title: "Not found", backTo: listHref } : undefined
+  }
 />
 ```
 

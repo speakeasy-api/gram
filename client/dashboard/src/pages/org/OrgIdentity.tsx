@@ -301,64 +301,64 @@ function OrgIdentityInner() {
   return (
     <SettingsPage scope={["org:read", "org:admin"]} title="Identity">
       <div className="flex flex-col gap-6">
-          <IdentitySection
-            sectionId="sso"
-            heading="Single Sign-On"
-            description="Set up Single Sign-On (SSO) to allow your team to sign in to Speakeasy with your identity provider."
-            providerIcon={<Lock className="text-muted-foreground h-5 w-5" />}
-            providerTitle="SSO"
-            providerSubtitle={
-              ssoActive
-                ? "Your identity provider is connected."
-                : "Choose an identity provider to get started."
-            }
-            learnMoreText="Learn more about SSO"
-            learnMoreHref="https://www.speakeasy.com/docs"
-            active={ssoActive}
-            configureButton={
-              <SSOConfigureControl
-                featureEnabled={ssoFeatureEnabled}
-                active={ssoActive}
-              />
-            }
-          />
+        <IdentitySection
+          sectionId="sso"
+          heading="Single Sign-On"
+          description="Set up Single Sign-On (SSO) to allow your team to sign in to Speakeasy with your identity provider."
+          providerIcon={<Lock className="text-muted-foreground h-5 w-5" />}
+          providerTitle="SSO"
+          providerSubtitle={
+            ssoActive
+              ? "Your identity provider is connected."
+              : "Choose an identity provider to get started."
+          }
+          learnMoreText="Learn more about SSO"
+          learnMoreHref="https://www.speakeasy.com/docs"
+          active={ssoActive}
+          configureButton={
+            <SSOConfigureControl
+              featureEnabled={ssoFeatureEnabled}
+              active={ssoActive}
+            />
+          }
+        />
 
-          <IdentitySection
-            sectionId="directory_sync"
-            heading="Directory Sync"
-            description={
-              <>
-                Sync members and roles directly from your identity provider:
-                <ul className="mt-1.5 list-disc space-y-0.5 pl-5">
-                  <li>
-                    Members are provisioned automatically from your directory
-                  </li>
-                  <li>Roles are assigned from your IDP group mappings</li>
-                  <li>Members can&apos;t be invited manually</li>
-                  <li>Roles can&apos;t be assigned to members manually</li>
-                </ul>
-              </>
-            }
-            providerIcon={
-              <FolderSync className="text-muted-foreground h-5 w-5" />
-            }
-            providerTitle="SCIM"
-            providerSubtitle={
-              scimActive
-                ? "Your directory provider is connected."
-                : "Choose an identity provider to get started."
-            }
-            learnMoreText="Learn more about SCIM Directory Sync"
-            learnMoreHref="https://www.speakeasy.com/docs"
-            active={scimActive}
-            configureButton={
-              <DirectorySyncConfigureControl
-                featureEnabled={scimFeatureEnabled}
-                active={scimActive}
-              />
-            }
-          />
-        </div>
+        <IdentitySection
+          sectionId="directory_sync"
+          heading="Directory Sync"
+          description={
+            <>
+              Sync members and roles directly from your identity provider:
+              <ul className="mt-1.5 list-disc space-y-0.5 pl-5">
+                <li>
+                  Members are provisioned automatically from your directory
+                </li>
+                <li>Roles are assigned from your IDP group mappings</li>
+                <li>Members can&apos;t be invited manually</li>
+                <li>Roles can&apos;t be assigned to members manually</li>
+              </ul>
+            </>
+          }
+          providerIcon={
+            <FolderSync className="text-muted-foreground h-5 w-5" />
+          }
+          providerTitle="SCIM"
+          providerSubtitle={
+            scimActive
+              ? "Your directory provider is connected."
+              : "Choose an identity provider to get started."
+          }
+          learnMoreText="Learn more about SCIM Directory Sync"
+          learnMoreHref="https://www.speakeasy.com/docs"
+          active={scimActive}
+          configureButton={
+            <DirectorySyncConfigureControl
+              featureEnabled={scimFeatureEnabled}
+              active={scimActive}
+            />
+          }
+        />
+      </div>
     </SettingsPage>
   );
 }
