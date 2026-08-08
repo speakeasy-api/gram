@@ -1,6 +1,7 @@
 package risk_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	oops "github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
@@ -907,4 +909,113 @@ func TestDenyPolicyBypassRequest_AllowAllLeavesBlockedListUntouched(t *testing.T
 	assert.Equal(t, "denied", denied.Status)
 
 	require.Equal(t, []string{blockedURL}, shadowMCPPolicyBlockedURLs(t, ctx, ti.conn, policy.ID))
+}
+
+// withAgentKeyAuth rewrites the auth context to look like an API-key-
+// authenticated device agent: no session, the given key scopes, and the key
+// owner as the caller. Mirrors what internal/auth/key.go builds for a
+// Gram-Key request.
+func withAgentKeyAuth(t *testing.T, ctx context.Context, scopes []string, ownerUserID string) context.Context {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	clone := *authCtx
+	clone.APIKeyScopes = scopes
+	clone.SessionID = nil
+	clone.UserID = ownerUserID
+	return contextvalues.SetAuthContext(ctx, &clone)
+}
+
+// The device agent files the request with the per-user `agent_user` key. Its
+// owner is the enrolled user, so the token's requester binding passes and the
+// request is attributed to the key owner.
+func TestCreateRiskPolicyBypassRequest_AgentUserKeyCreatesForKeyOwner(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	adminCtx := withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	policy, err := ti.service.CreateRiskPolicy(adminCtx, &gen.CreateRiskPolicyPayload{
+		Name: new("Agent Key Bypass Request"),
+	})
+	require.NoError(t, err)
+
+	fullURL := "https://mcp.example.com/agent-key"
+	token := riskPolicyBypassRequestToken(t, ti, authCtx, policy.ID, fullURL)
+
+	beforeAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyBypassRequestCreate)
+	require.NoError(t, err)
+
+	keyCtx := withAgentKeyAuth(t, ctx, []string{"agent_user"}, authCtx.UserID)
+	request, err := ti.service.CreateRiskPolicyBypassRequest(keyCtx, &gen.CreateRiskPolicyBypassRequestPayload{
+		RequestToken: token,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, request)
+	assert.Equal(t, "requested", request.Status)
+	assert.Equal(t, authCtx.UserID, request.RequesterUserID)
+	require.NotNil(t, request.TargetKey)
+	assert.Equal(t, fullURL, *request.TargetKey)
+
+	afterAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRiskPolicyBypassRequestCreate)
+	require.NoError(t, err)
+	require.Equal(t, beforeAuditCount+1, afterAuditCount, "key-auth create must audit like the session path")
+}
+
+// A key owned by anyone other than the token's requester must not redeem it —
+// the same binding that stops a leaked link stops a leaked or wrong key.
+func TestCreateRiskPolicyBypassRequest_OtherUsersKeyForbidden(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	adminCtx := withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	policy, err := ti.service.CreateRiskPolicy(adminCtx, &gen.CreateRiskPolicyPayload{
+		Name: new("Agent Key Bypass Wrong Owner"),
+	})
+	require.NoError(t, err)
+
+	token := riskPolicyBypassRequestToken(t, ti, authCtx, policy.ID, "https://mcp.example.com/wrong-owner")
+
+	keyCtx := withAgentKeyAuth(t, ctx, []string{"agent_user"}, "user_someone_else")
+	_, err = ti.service.CreateRiskPolicyBypassRequest(keyCtx, &gen.CreateRiskPolicyBypassRequestPayload{
+		RequestToken: token,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+// The shared org install key (`agent` scope) is owned by the provisioning
+// admin, not the developer named in an attributed token — it must not be able
+// to file requests on that developer's behalf. The daemon only ever uses the
+// per-user key for this call; this pins the server-side backstop.
+func TestCreateRiskPolicyBypassRequest_OrgKeyAttributedTokenForbidden(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	adminCtx := withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	policy, err := ti.service.CreateRiskPolicy(adminCtx, &gen.CreateRiskPolicyPayload{
+		Name: new("Agent Org Key Bypass Request"),
+	})
+	require.NoError(t, err)
+
+	token := riskPolicyBypassRequestToken(t, ti, authCtx, policy.ID, "https://mcp.example.com/org-key")
+
+	orgKeyCtx := withAgentKeyAuth(t, ctx, []string{"agent", "agent_user"}, "user_provisioning_admin")
+	_, err = ti.service.CreateRiskPolicyBypassRequest(orgKeyCtx, &gen.CreateRiskPolicyBypassRequestPayload{
+		RequestToken: token,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
 }
