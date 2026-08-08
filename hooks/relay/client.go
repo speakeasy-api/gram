@@ -52,6 +52,24 @@ type skillCapture struct {
 	contentRequired bool
 }
 
+// blockEffect is the structured mirror of a requestable deny, decoded from the
+// response's "block" effect. It exists so the device agent can offer a native
+// "request access" flow without parsing the deny prose. Absence means the deny
+// is not requestable.
+type blockEffect struct {
+	V                int    `json:"v"`
+	Category         string `json:"category"`
+	Requestable      bool   `json:"requestable"`
+	RequestToken     string `json:"request_token"`
+	RequestURL       string `json:"request_url"`
+	RequestExpiresAt string `json:"request_expires_at"`
+	ServerName       string `json:"server_name"`
+	ServerURL        string `json:"server_url"`
+	PolicyName       string `json:"policy_name"`
+	ToolName         string `json:"tool_name"`
+	BlockURL         string `json:"block_url"`
+}
+
 // ingestResult reports the outcome of an ingest attempt.
 type ingestResult struct {
 	// statusCode is the final HTTP status, or 0 if the server was never
@@ -64,6 +82,9 @@ type ingestResult struct {
 	// org_settings effects; nil when the server sent none.
 	failOpen     *bool
 	skillCapture *skillCapture
+	// blockEffect carries the structured requestable-block metadata from the
+	// response's "block" effects; nil when the server sent none.
+	blockEffect *blockEffect
 }
 
 // accepted reports a definitive 2xx exchange — the server stored (or
@@ -217,7 +238,7 @@ func (cl *client) send(ctx context.Context, c creds, body components.IngestReque
 		}
 	}
 
-	out := ingestResult{statusCode: res.StatusCode, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil, skillCapture: nil}
+	out := ingestResult{statusCode: res.StatusCode, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil}
 	if res.IngestHookResult != nil {
 		out.decision = decision{
 			Decision: string(res.IngestHookResult.Decision),
@@ -236,6 +257,7 @@ func (cl *client) send(ctx context.Context, c creds, body components.IngestReque
 				out.skillCapture = &skillCapture{rawSHA256: rawSHA256, contentRequired: contentRequired}
 			}
 		}
+		out.blockEffect = decodeBlockEffect(res.IngestHookResult.Effects["block"])
 	}
 	return out
 }
@@ -253,6 +275,7 @@ func interpretError(err error) ingestResult {
 			authRejected: status == http.StatusUnauthorized || status == http.StatusForbidden,
 			failOpen:     nil,
 			skillCapture: nil,
+			blockEffect:  nil,
 		}
 	}
 	var apiErr *apierrors.APIError
@@ -269,6 +292,7 @@ func interpretError(err error) ingestResult {
 				authRejected: false,
 				failOpen:     nil,
 				skillCapture: nil,
+				blockEffect:  nil,
 			}
 		}
 		return ingestResult{
@@ -277,9 +301,10 @@ func interpretError(err error) ingestResult {
 			authRejected: apiErr.StatusCode == http.StatusUnauthorized || apiErr.StatusCode == http.StatusForbidden,
 			failOpen:     nil,
 			skillCapture: nil,
+			blockEffect:  nil,
 		}
 	}
-	return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil, skillCapture: nil}
+	return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil, skillCapture: nil, blockEffect: nil}
 }
 
 func validRawSHA256(value string) bool {
