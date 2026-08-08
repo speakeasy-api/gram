@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { Dialog } from "@/components/ui/Dialog";
 import { DotRow } from "@/components/ui/DotRow";
@@ -58,24 +59,24 @@ export function ExternalServicesPage(): JSX.Element {
     !featuresLoading &&
     features?.customerManagedEncryptionKeysEnabled === false;
 
-  return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        {gated ? (
+  // The product-feature gate lives outside ResourceListPage's RBAC scope gate:
+  // a gated org sees only the framed refusal, with no header or toolbar.
+  if (gated) {
+    return (
+      <Page>
+        <Page.Header>
+          <Page.Header.Breadcrumbs />
+        </Page.Header>
+        <Page.Body>
           <Text muted className="py-8 text-center">
             Customer-managed keys are not enabled for this organization.
           </Text>
-        ) : (
-          <RequireScope scope={["org:read", "org:admin"]} level="page">
-            <ExternalServicesOverview />
-          </RequireScope>
-        )}
-      </Page.Body>
-    </Page>
-  );
+        </Page.Body>
+      </Page>
+    );
+  }
+
+  return <ExternalServicesOverview />;
 }
 
 function ExternalServicesOverview(): JSX.Element {
@@ -120,9 +121,11 @@ function ExternalServicesOverview(): JSX.Element {
 
   return (
     <>
-      <Page.Section>
-        <Page.Section.Title>External Services</Page.Section.Title>
-        <Page.Section.CTA>
+      <ResourceListPage
+        scope={["org:read", "org:admin"]}
+        title="External Services"
+        description="How Gram authenticates into your cloud account to reach the keys you manage there. Gram impersonates a service account you nominate, so it never holds long-lived credentials of your own."
+        primaryAction={
           <RequireScope scope="org:admin" level="component">
             <Button size="sm" onClick={() => setCreateOpen(true)}>
               <Button.LeftIcon>
@@ -131,28 +134,22 @@ function ExternalServicesOverview(): JSX.Element {
               <Button.Text>New External Credential</Button.Text>
             </Button>
           </RequireScope>
-        </Page.Section.CTA>
-        <Page.Section.Description className="max-w-2xl">
-          How Gram authenticates into your cloud account to reach the keys you
-          manage there. Gram impersonates a service account you nominate, so it
-          never holds long-lived credentials of your own.
-        </Page.Section.Description>
-        <Page.Section.Body>
-          <CredentialTable
-            credentials={credentials}
-            isLoading={isLoading}
-            isError={isError}
-            onRetry={() => void refetch()}
-            onVerify={handleVerify}
-            detailHref={(credential) =>
-              orgRoutes.externalServices.credentialDetail.href(
-                providerSlug(credential.provider),
-                credential.id,
-              )
-            }
-          />
-        </Page.Section.Body>
-      </Page.Section>
+        }
+      >
+        <CredentialTable
+          credentials={credentials}
+          isLoading={isLoading}
+          isError={isError}
+          onRetry={() => void refetch()}
+          onVerify={handleVerify}
+          detailHref={(credential) =>
+            orgRoutes.externalServices.credentialDetail.href(
+              providerSlug(credential.provider),
+              credential.id,
+            )
+          }
+        />
+      </ResourceListPage>
 
       <CreateExternalCredentialSheet
         open={createOpen}
