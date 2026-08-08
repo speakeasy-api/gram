@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
@@ -85,24 +86,27 @@ func (s *Service) AdminAdded(ctx context.Context, organizationID, userID string)
 	if err != nil {
 		return fmt.Errorf("get organization metadata: %w", err)
 	}
-	admins, err := accessrepo.New(s.db).ListActiveOrganizationAdmins(ctx, organizationID)
+	admin, err := accessrepo.New(s.db).GetActiveOrganizationAdmin(ctx, accessrepo.GetActiveOrganizationAdminParams{
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(userID),
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return errors.New("administrator not found in active organization administrators")
+	}
 	if err != nil {
-		return fmt.Errorf("list active organization administrators: %w", err)
+		return fmt.Errorf("get active organization administrator: %w", err)
 	}
 
-	for _, admin := range admins {
-		if admin.ID != userID {
-			continue
-		}
-		return s.syncTrialAdmins(ctx, organizationID, []accessrepo.ListActiveOrganizationAdminsRow{admin}, map[string]any{
-			"organizationName": organization.Name,
-			"dashboardUrl":     s.siteURL + "/" + organization.Slug,
-			"trialEndsAt":      trial.EndsAt.Time.UTC().Format(time.RFC3339),
-			"trialActive":      true,
-		}, trial.CreatedAt.Time)
-	}
-
-	return errors.New("administrator not found in active organization administrators")
+	return s.syncTrialAdmins(ctx, organizationID, []accessrepo.ListActiveOrganizationAdminsRow{{
+		ID:          admin.ID,
+		DisplayName: admin.DisplayName,
+		Email:       admin.Email,
+	}}, map[string]any{
+		"organizationName": organization.Name,
+		"dashboardUrl":     s.siteURL + "/" + organization.Slug,
+		"trialEndsAt":      trial.EndsAt.Time.UTC().Format(time.RFC3339),
+		"trialActive":      true,
+	}, trial.CreatedAt.Time)
 }
 
 // TrialInactive prevents active administrators from receiving pending trial reminders.
