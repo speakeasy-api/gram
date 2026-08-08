@@ -889,6 +889,48 @@ func (q *Queries) GetAssistantIgnoringDeleted(ctx context.Context, arg GetAssist
 	return i, err
 }
 
+const getAssistantMCPOAuthClient = `-- name: GetAssistantMCPOAuthClient :one
+SELECT id, assistant_id, project_id, mcp_url, client_id, encrypted_client_secret, created_at, updated_at
+FROM assistant_mcp_oauth_clients
+WHERE assistant_id = $1
+  AND project_id = $2
+  AND mcp_url = $3
+  AND deleted IS FALSE
+`
+
+type GetAssistantMCPOAuthClientParams struct {
+	AssistantID uuid.UUID
+	ProjectID   uuid.UUID
+	McpUrl      string
+}
+
+type GetAssistantMCPOAuthClientRow struct {
+	ID                    uuid.UUID
+	AssistantID           uuid.UUID
+	ProjectID             uuid.UUID
+	McpUrl                string
+	ClientID              string
+	EncryptedClientSecret []byte
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+}
+
+func (q *Queries) GetAssistantMCPOAuthClient(ctx context.Context, arg GetAssistantMCPOAuthClientParams) (GetAssistantMCPOAuthClientRow, error) {
+	row := q.db.QueryRow(ctx, getAssistantMCPOAuthClient, arg.AssistantID, arg.ProjectID, arg.McpUrl)
+	var i GetAssistantMCPOAuthClientRow
+	err := row.Scan(
+		&i.ID,
+		&i.AssistantID,
+		&i.ProjectID,
+		&i.McpUrl,
+		&i.ClientID,
+		&i.EncryptedClientSecret,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getAssistantRuntime = `-- name: GetAssistantRuntime :one
 SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, runtime_version, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
 WHERE id = $1
@@ -3537,6 +3579,69 @@ func (q *Queries) UpsertAssistantChat(ctx context.Context, arg UpsertAssistantCh
 		arg.Title,
 	)
 	return err
+}
+
+const upsertAssistantMCPOAuthClient = `-- name: UpsertAssistantMCPOAuthClient :one
+INSERT INTO assistant_mcp_oauth_clients (
+  assistant_id,
+  project_id,
+  mcp_url,
+  client_id,
+  encrypted_client_secret
+) VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5
+)
+ON CONFLICT (assistant_id, mcp_url) WHERE deleted IS FALSE
+DO UPDATE SET
+  client_id = EXCLUDED.client_id,
+  encrypted_client_secret = EXCLUDED.encrypted_client_secret,
+  updated_at = clock_timestamp()
+RETURNING id, assistant_id, project_id, mcp_url, client_id, encrypted_client_secret, created_at, updated_at
+`
+
+type UpsertAssistantMCPOAuthClientParams struct {
+	AssistantID           uuid.UUID
+	ProjectID             uuid.UUID
+	McpUrl                string
+	ClientID              string
+	EncryptedClientSecret []byte
+}
+
+type UpsertAssistantMCPOAuthClientRow struct {
+	ID                    uuid.UUID
+	AssistantID           uuid.UUID
+	ProjectID             uuid.UUID
+	McpUrl                string
+	ClientID              string
+	EncryptedClientSecret []byte
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+}
+
+func (q *Queries) UpsertAssistantMCPOAuthClient(ctx context.Context, arg UpsertAssistantMCPOAuthClientParams) (UpsertAssistantMCPOAuthClientRow, error) {
+	row := q.db.QueryRow(ctx, upsertAssistantMCPOAuthClient,
+		arg.AssistantID,
+		arg.ProjectID,
+		arg.McpUrl,
+		arg.ClientID,
+		arg.EncryptedClientSecret,
+	)
+	var i UpsertAssistantMCPOAuthClientRow
+	err := row.Scan(
+		&i.ID,
+		&i.AssistantID,
+		&i.ProjectID,
+		&i.McpUrl,
+		&i.ClientID,
+		&i.EncryptedClientSecret,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const upsertAssistantThread = `-- name: UpsertAssistantThread :one

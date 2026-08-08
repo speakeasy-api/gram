@@ -127,6 +127,19 @@ type AssistantDashboardMessage struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+type AssistantMcpOauthClient struct {
+	ID                    uuid.UUID
+	AssistantID           uuid.UUID
+	ProjectID             uuid.UUID
+	McpUrl                string
+	ClientID              string
+	EncryptedClientSecret []byte
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
+}
+
 type AssistantMcpServer struct {
 	ID            uuid.UUID
 	AssistantID   uuid.UUID

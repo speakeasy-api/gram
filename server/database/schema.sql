@@ -4217,6 +4217,39 @@ CREATE TABLE IF NOT EXISTS assistant_mcp_servers (
 CREATE INDEX IF NOT EXISTS assistant_mcp_servers_mcp_server_id_idx ON assistant_mcp_servers (mcp_server_id);
 CREATE INDEX IF NOT EXISTS assistant_mcp_servers_project_id_idx ON assistant_mcp_servers (project_id);
 
+-- OAuth 2.1 client credentials for assistant MCP server authentication.
+-- Stores one reusable client per (assistant, mcp_url) pair to avoid
+-- accumulating abandoned per-use registrations.
+CREATE TABLE IF NOT EXISTS assistant_mcp_oauth_clients (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  assistant_id uuid NOT NULL,
+  project_id uuid NOT NULL,
+  
+  -- MCP server authorization endpoint URL, used as the lookup key
+  -- since MCP servers are identified by their hosted URL
+  mcp_url TEXT NOT NULL,
+  
+  -- OAuth client credentials (encrypted client_secret stored separately)
+  client_id TEXT NOT NULL,
+  encrypted_client_secret BYTEA NOT NULL,
+  
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+  
+  CONSTRAINT assistant_mcp_oauth_clients_pkey PRIMARY KEY (id),
+  CONSTRAINT assistant_mcp_oauth_clients_assistant_id_fkey FOREIGN KEY (assistant_id) REFERENCES assistants (id) ON DELETE CASCADE,
+  CONSTRAINT assistant_mcp_oauth_clients_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS assistant_mcp_oauth_clients_assistant_id_mcp_url_key 
+ON assistant_mcp_oauth_clients (assistant_id, mcp_url) 
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS assistant_mcp_oauth_clients_assistant_id_idx ON assistant_mcp_oauth_clients (assistant_id);
+CREATE INDEX IF NOT EXISTS assistant_mcp_oauth_clients_project_id_idx ON assistant_mcp_oauth_clients (project_id);
+
 -- Admin-authoritative per-tool annotation metadata for an MCP server, read by
 -- the runtime proxy to fill the disposition dimension of RBAC checks.
 CREATE TABLE IF NOT EXISTS mcp_server_tool_metadata (
