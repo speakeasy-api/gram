@@ -176,6 +176,83 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 	return nil
 }
 
+func (s *Service) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, payload *gen.SetRemoteSessionAutoRefreshPolicyPayload) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+		return oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return fmt.Errorf("require org admin: %w", err)
+	}
+
+	var visible, enforced bool
+	switch payload.Policy {
+	case "disabled":
+	case "user_controlled":
+		visible = true
+	case "enforced":
+		enforced = true
+	default:
+		return oops.C(oops.CodeBadRequest)
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin remote session refresh policy transaction").LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	q := repo.New(dbtx)
+	setFeatureState := func(feature Feature, enabled bool) error {
+		if enabled {
+			_, err := q.EnableFeature(ctx, repo.EnableFeatureParams{
+				OrganizationID: authCtx.ActiveOrganizationID,
+				FeatureName:    string(feature),
+			})
+			return err
+		}
+
+		_, err := q.DeleteFeature(ctx, repo.DeleteFeatureParams{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			FeatureName:    string(feature),
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return err
+	}
+
+	if err := setFeatureState(FeatureRemoteSessionAutoRefresh, visible); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "set remote session refresh visibility").LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+	}
+	if err := setFeatureState(FeatureRemoteSessionAutoRefreshEnforced, enforced); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "set remote session refresh enforcement").LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit remote session refresh policy").LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+	}
+
+	for feature, enabled := range map[Feature]bool{
+		FeatureRemoteSessionAutoRefresh:         visible,
+		FeatureRemoteSessionAutoRefreshEnforced: enforced,
+	} {
+		cacheEntry := FeatureCache{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Feature:        feature,
+			Enabled:        enabled,
+		}
+		if cacheErr := s.featureCache.Store(ctx, cacheEntry); cacheErr != nil {
+			s.logger.WarnContext(ctx, "failed to cache remote session refresh policy",
+				attr.SlogError(cacheErr),
+				attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+				attr.SlogProductFeatureName(string(feature)),
+			)
+		}
+	}
+
+	return nil
+}
+
 func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProductFeaturesPayload) (*gen.GetProductFeaturesResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {

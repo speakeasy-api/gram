@@ -25,7 +25,6 @@ import {
   KeyRound,
   Loader2,
   Mail,
-  RefreshCw,
 } from "lucide-react";
 import { ComponentType, ReactElement, useState } from "react";
 import { toast } from "sonner";
@@ -230,41 +229,6 @@ function ProductFeaturesSection(): ReactElement {
         onToggle={handleToggle}
         error={
           pendingFeature === FeatureName.CustomModelKeys
-            ? mutError?.message
-            : undefined
-        }
-      />
-
-      <FeatureToggle
-        label="Automatic Remote Session Refresh"
-        description="Shows the Auto refresh opt-in on remote-session consent screens."
-        icon={RefreshCw}
-        featureName={FeatureName.RemoteSessionAutoRefresh}
-        enabled={features.remoteSessionAutoRefreshEnabled}
-        isPending={
-          isPending && pendingFeature === FeatureName.RemoteSessionAutoRefresh
-        }
-        onToggle={handleToggle}
-        error={
-          pendingFeature === FeatureName.RemoteSessionAutoRefresh
-            ? mutError?.message
-            : undefined
-        }
-      />
-
-      <FeatureToggle
-        label="Enforce Remote Session Refresh"
-        description="Forces Auto refresh on for every user (shown locked on consent screens) and keeps all eligible sessions alive, regardless of per-user settings."
-        icon={RefreshCw}
-        featureName={FeatureName.RemoteSessionAutoRefreshEnforced}
-        enabled={features.remoteSessionAutoRefreshEnforcedEnabled}
-        isPending={
-          isPending &&
-          pendingFeature === FeatureName.RemoteSessionAutoRefreshEnforced
-        }
-        onToggle={handleToggle}
-        error={
-          pendingFeature === FeatureName.RemoteSessionAutoRefreshEnforced
             ? mutError?.message
             : undefined
         }

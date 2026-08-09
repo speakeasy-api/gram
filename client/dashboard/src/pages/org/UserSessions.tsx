@@ -30,6 +30,7 @@ import { sessionStatus, subjectLabel } from "@/lib/user-session-status";
 import { useUserSessionFacets } from "@gram/client/react-query/userSessionFacets.js";
 import { useUserSessionsInfinite } from "@gram/client/react-query/userSessions.js";
 import type { QueryParamStatus as ListUserSessionsQueryParamStatus } from "@gram/client/models/operations/listusersessions.js";
+import { RemoteSessionRefreshPolicySetting } from "./RemoteSessionRefreshPolicySetting";
 
 const USER_SESSION_FILTERS = defineFilters([
   { id: "status", label: "Status", kind: "select", pinned: true },
@@ -273,6 +274,8 @@ function UserSessionsInner(): JSX.Element {
       </Page.Section.Description>
       <Page.Section.Body>
         <div className="space-y-4">
+          <RemoteSessionRefreshPolicySetting />
+
           <div className="flex flex-col gap-1.5">
             <Text small muted>
               Project

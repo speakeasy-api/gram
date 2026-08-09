@@ -65,3 +65,34 @@ func BuildSetProductFeaturePayload(featuresSetProductFeatureBody string, feature
 
 	return v, nil
 }
+
+// BuildSetRemoteSessionAutoRefreshPolicyPayload builds the payload for the
+// features setRemoteSessionAutoRefreshPolicy endpoint from CLI flags.
+func BuildSetRemoteSessionAutoRefreshPolicyPayload(featuresSetRemoteSessionAutoRefreshPolicyBody string, featuresSetRemoteSessionAutoRefreshPolicySessionToken string) (*features.SetRemoteSessionAutoRefreshPolicyPayload, error) {
+	var err error
+	var body SetRemoteSessionAutoRefreshPolicyRequestBody
+	{
+		err = json.Unmarshal([]byte(featuresSetRemoteSessionAutoRefreshPolicyBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"policy\": \"user_controlled\"\n   }'")
+		}
+		if !(body.Policy == "disabled" || body.Policy == "user_controlled" || body.Policy == "enforced") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.policy", body.Policy, []any{"disabled", "user_controlled", "enforced"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if featuresSetRemoteSessionAutoRefreshPolicySessionToken != "" {
+			sessionToken = &featuresSetRemoteSessionAutoRefreshPolicySessionToken
+		}
+	}
+	v := &features.SetRemoteSessionAutoRefreshPolicyPayload{
+		Policy: body.Policy,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}

@@ -16,3 +16,8 @@ func GetProductFeaturesFeaturesPath() string {
 func SetProductFeatureFeaturesPath() string {
 	return "/rpc/productFeatures.set"
 }
+
+// SetRemoteSessionAutoRefreshPolicyFeaturesPath returns the URL path to the features service setRemoteSessionAutoRefreshPolicy HTTP endpoint.
+func SetRemoteSessionAutoRefreshPolicyFeaturesPath() string {
+	return "/rpc/productFeatures.setRemoteSessionAutoRefreshPolicy"
+}

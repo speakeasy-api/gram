@@ -75,4 +75,27 @@ var _ = Service("features", func() {
 		Meta("openapi:operationId", "setProductFeature")
 		Meta("openapi:extension:x-speakeasy-name-override", "set")
 	})
+
+	Method("setRemoteSessionAutoRefreshPolicy", func() {
+		Description("Set the organization policy for automatic remote-session refresh.")
+
+		Payload(func() {
+			Attribute("policy", String, "Organization policy for automatic remote-session refresh", func() {
+				Enum("disabled", "user_controlled", "enforced")
+			})
+			Required("policy")
+
+			security.SessionPayload()
+		})
+
+		HTTP(func() {
+			POST("/rpc/productFeatures.setRemoteSessionAutoRefreshPolicy")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setRemoteSessionAutoRefreshPolicy")
+		Meta("openapi:extension:x-speakeasy-name-override", "setRemoteSessionAutoRefreshPolicy")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetRemoteSessionAutoRefreshPolicy"}`)
+	})
 })

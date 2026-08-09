@@ -15,15 +15,17 @@ import (
 
 // Client is the "features" service client.
 type Client struct {
-	GetProductFeaturesEndpoint goa.Endpoint
-	SetProductFeatureEndpoint  goa.Endpoint
+	GetProductFeaturesEndpoint                goa.Endpoint
+	SetProductFeatureEndpoint                 goa.Endpoint
+	SetRemoteSessionAutoRefreshPolicyEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "features" service client given the endpoints.
-func NewClient(getProductFeatures, setProductFeature goa.Endpoint) *Client {
+func NewClient(getProductFeatures, setProductFeature, setRemoteSessionAutoRefreshPolicy goa.Endpoint) *Client {
 	return &Client{
-		GetProductFeaturesEndpoint: getProductFeatures,
-		SetProductFeatureEndpoint:  setProductFeature,
+		GetProductFeaturesEndpoint:                getProductFeatures,
+		SetProductFeatureEndpoint:                 setProductFeature,
+		SetRemoteSessionAutoRefreshPolicyEndpoint: setRemoteSessionAutoRefreshPolicy,
 	}
 }
 
@@ -66,5 +68,24 @@ func (c *Client) GetProductFeatures(ctx context.Context, p *GetProductFeaturesPa
 //   - error: internal error
 func (c *Client) SetProductFeature(ctx context.Context, p *SetProductFeaturePayload) (err error) {
 	_, err = c.SetProductFeatureEndpoint(ctx, p)
+	return
+}
+
+// SetRemoteSessionAutoRefreshPolicy calls the
+// "setRemoteSessionAutoRefreshPolicy" endpoint of the "features" service.
+// SetRemoteSessionAutoRefreshPolicy may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, p *SetRemoteSessionAutoRefreshPolicyPayload) (err error) {
+	_, err = c.SetRemoteSessionAutoRefreshPolicyEndpoint(ctx, p)
 	return
 }
