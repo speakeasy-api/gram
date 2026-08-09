@@ -134,15 +134,16 @@ export function RemoteSessionRefreshPolicySetting(): JSX.Element {
                     value={option.value}
                     aria-label={option.label}
                     checked={selected}
-                    onChange={() =>
+                    onChange={() => {
+                      if (disabled || mutation.isPending) return;
                       mutation.mutate({
                         request: {
                           setRemoteSessionAutoRefreshPolicyRequestBody: {
                             policy: option.value,
                           },
                         },
-                      })
-                    }
+                      });
+                    }}
                     className="sr-only"
                   />
                   <span className="flex items-center justify-between gap-2">
