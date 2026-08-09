@@ -209,7 +209,10 @@ func (s *Service) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, payload
 				OrganizationID: authCtx.ActiveOrganizationID,
 				FeatureName:    string(feature),
 			})
-			return err
+			if err != nil {
+				return fmt.Errorf("enable %s: %w", feature, err)
+			}
+			return nil
 		}
 
 		_, err := q.DeleteFeature(ctx, repo.DeleteFeatureParams{
@@ -219,7 +222,10 @@ func (s *Service) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, payload
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}
-		return err
+		if err != nil {
+			return fmt.Errorf("disable %s: %w", feature, err)
+		}
+		return nil
 	}
 
 	if err := setFeatureState(FeatureRemoteSessionAutoRefresh, visible); err != nil {
@@ -232,20 +238,23 @@ func (s *Service) SetRemoteSessionAutoRefreshPolicy(ctx context.Context, payload
 		return oops.E(oops.CodeUnexpected, err, "commit remote session refresh policy").LogError(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
-	for feature, enabled := range map[Feature]bool{
-		FeatureRemoteSessionAutoRefresh:         visible,
-		FeatureRemoteSessionAutoRefreshEnforced: enforced,
+	for _, state := range []struct {
+		feature Feature
+		enabled bool
+	}{
+		{feature: FeatureRemoteSessionAutoRefresh, enabled: visible},
+		{feature: FeatureRemoteSessionAutoRefreshEnforced, enabled: enforced},
 	} {
 		cacheEntry := FeatureCache{
 			OrganizationID: authCtx.ActiveOrganizationID,
-			Feature:        feature,
-			Enabled:        enabled,
+			Feature:        state.feature,
+			Enabled:        state.enabled,
 		}
 		if cacheErr := s.featureCache.Store(ctx, cacheEntry); cacheErr != nil {
 			s.logger.WarnContext(ctx, "failed to cache remote session refresh policy",
 				attr.SlogError(cacheErr),
 				attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
-				attr.SlogProductFeatureName(string(feature)),
+				attr.SlogProductFeatureName(string(state.feature)),
 			)
 		}
 	}
