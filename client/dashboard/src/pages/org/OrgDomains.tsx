@@ -519,7 +519,7 @@ function OrgDomainsInner() {
                     This custom domain was disabled
                   </Type>
                   <Type variant="body" className="text-sm">
-                    Gram disabled routing after repeated health checks found a
+                    The platform disabled routing after repeated health checks found a
                     persistent problem. Fix the DNS or certificate
                     configuration, then reverify the domain to reactivate it.
                   </Type>
