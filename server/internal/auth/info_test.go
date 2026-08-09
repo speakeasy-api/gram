@@ -19,7 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
 func TestInfoTransport_TrialNull(t *testing.T) {
@@ -87,7 +87,7 @@ func TestService_Info(t *testing.T) {
 	insertTrial := func(t *testing.T, ctx context.Context, instance *testInstance, organizationID string, createdAt, endsAt time.Time, convertedAt, demotedAt *time.Time) {
 		t.Helper()
 
-		require.NoError(t, testrepo.New(instance.conn).InsertTrialFixture(ctx, testrepo.InsertTrialFixtureParams{
+		require.NoError(t, trialsRepo.New(instance.conn).InsertTrialFixture(ctx, trialsRepo.InsertTrialFixtureParams{
 			OrganizationID: organizationID,
 			CreatedAt:      conv.ToPGTimestamptz(createdAt),
 			EndsAt:         conv.ToPGTimestamptz(endsAt),

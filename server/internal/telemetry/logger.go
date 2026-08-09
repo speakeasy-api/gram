@@ -180,26 +180,40 @@ func (l *Logger) Log(ctx context.Context, params LogParams) {
 }
 
 func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
-	return l.logBulk(ctx, l.shutdownCtx(), params)
+	_, err := l.logBulk(ctx, l.shutdownCtx(), params, false)
+	return err
 }
 
 // LogBulkBounded respects the caller's context for every part of the write.
 func (l *Logger) LogBulkBounded(ctx context.Context, params []LogParams) error {
-	return l.logBulk(ctx, ctx, params)
+	_, err := l.logBulk(ctx, ctx, params, false)
+	return err
 }
 
-func (l *Logger) logBulk(ctx context.Context, writeCtx context.Context, params []LogParams) error {
+// logBulk writes params to telemetry_logs and returns how many rows it
+// inserted, which is not len(params): rows belonging to an organization with
+// telemetry logs disabled, and rows that fail to build, are dropped here.
+//
+// When synchronous is set the rows are committed before the call returns
+// instead of being queued in ClickHouse's async insert buffer, which callers
+// whose next read must see these rows require.
+func (l *Logger) logBulk(ctx context.Context, writeCtx context.Context, params []LogParams, synchronous bool) (int, error) {
 	logParams := l.buildBulkParams(ctx, writeCtx, params)
 	if len(logParams) == 0 {
 		if err := writeCtx.Err(); err != nil {
-			return fmt.Errorf("prepare telemetry logs: %w", err)
+			return 0, fmt.Errorf("prepare telemetry logs: %w", err)
 		}
-		return nil
+		return 0, nil
 	}
 	writeCtx = trace.ContextWithSpan(writeCtx, trace.SpanFromContext(ctx))
-	err := repo.New(l.chConn).InsertTelemetryLogs(writeCtx, logParams)
+	queries := repo.New(l.chConn)
+	insert := queries.InsertTelemetryLogs
+	if synchronous {
+		insert = queries.InsertTelemetryLogsSync
+	}
+	err := insert(writeCtx, logParams)
 	if err != nil {
-		return fmt.Errorf("insert telemetry logs: %w", err)
+		return 0, fmt.Errorf("insert telemetry logs: %w", err)
 	}
 
 	// Shadow dual-write: mirror the rows onto Pub/Sub only after ClickHouse
@@ -210,7 +224,7 @@ func (l *Logger) logBulk(ctx context.Context, writeCtx context.Context, params [
 	for _, obs := range l.observers {
 		obs.OnTelemetryLogsWritten(ctx, params)
 	}
-	return nil
+	return len(logParams), nil
 }
 
 // LogBulkStaging writes rows to telemetry_logs_staging instead of

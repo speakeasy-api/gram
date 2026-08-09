@@ -3,7 +3,6 @@
  */
 
 import { toolsetsAddExternalOAuthServer } from "../funcs/toolsetsAddExternalOAuthServer.js";
-import { toolsetsAddOAuthProxyServer } from "../funcs/toolsetsAddOAuthProxyServer.js";
 import { toolsetsCheckMCPSlugAvailability } from "../funcs/toolsetsCheckMCPSlugAvailability.js";
 import { toolsetsCloneBySlug } from "../funcs/toolsetsCloneBySlug.js";
 import { toolsetsCreate } from "../funcs/toolsetsCreate.js";
@@ -16,7 +15,6 @@ import { toolsetsRemoveOAuthServer } from "../funcs/toolsetsRemoveOAuthServer.js
 import { toolsetsSetToolVariationsGroup } from "../funcs/toolsetsSetToolVariationsGroup.js";
 import { toolsetsSetUserSessionIssuer } from "../funcs/toolsetsSetUserSessionIssuer.js";
 import { toolsetsUpdateBySlug } from "../funcs/toolsetsUpdateBySlug.js";
-import { toolsetsUpdateOAuthProxyServer } from "../funcs/toolsetsUpdateOAuthProxyServer.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { ListToolFiltersResult } from "../models/components/listtoolfiltersresult.js";
 import { ListToolsetsResult } from "../models/components/listtoolsetsresult.js";
@@ -26,10 +24,6 @@ import {
   AddExternalOAuthServerRequest,
   AddExternalOAuthServerSecurity,
 } from "../models/operations/addexternaloauthserver.js";
-import {
-  AddOAuthProxyServerRequest,
-  AddOAuthProxyServerSecurity,
-} from "../models/operations/addoauthproxyserver.js";
 import {
   CheckMCPSlugAvailabilityRequest,
   CheckMCPSlugAvailabilitySecurity,
@@ -75,10 +69,6 @@ import {
   SetToolsetUserSessionIssuerSecurity,
 } from "../models/operations/settoolsetusersessionissuer.js";
 import {
-  UpdateOAuthProxyServerRequest,
-  UpdateOAuthProxyServerSecurity,
-} from "../models/operations/updateoauthproxyserver.js";
-import {
   UpdateToolsetRequest,
   UpdateToolsetSecurity,
 } from "../models/operations/updatetoolset.js";
@@ -97,25 +87,6 @@ export class Toolsets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<Toolset> {
     return unwrapAsync(toolsetsAddExternalOAuthServer(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * addOAuthProxyServer toolsets
-   *
-   * @remarks
-   * Associate an OAuth proxy server with a toolset (admin only)
-   */
-  async addOAuthProxyServer(
-    request: AddOAuthProxyServerRequest,
-    security?: AddOAuthProxyServerSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<Toolset> {
-    return unwrapAsync(toolsetsAddOAuthProxyServer(
       this,
       request,
       security,
@@ -344,25 +315,6 @@ export class Toolsets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<Toolset> {
     return unwrapAsync(toolsetsUpdateBySlug(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * updateOAuthProxyServer toolsets
-   *
-   * @remarks
-   * Update an existing OAuth proxy server associated with a toolset
-   */
-  async updateOAuthProxyServer(
-    request: UpdateOAuthProxyServerRequest,
-    security?: UpdateOAuthProxyServerSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<Toolset> {
-    return unwrapAsync(toolsetsUpdateOAuthProxyServer(
       this,
       request,
       security,

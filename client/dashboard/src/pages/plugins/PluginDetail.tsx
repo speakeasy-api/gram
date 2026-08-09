@@ -71,7 +71,10 @@ import { useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { toast } from "sonner";
 import { DEFAULT_PLUGIN_DESCRIPTION } from "./default-plugin";
-import { downloadPluginPackage } from "./downloadPluginPackage";
+import {
+  type PluginPackagePlatform,
+  usePluginPackageDownload,
+} from "./downloadPluginPackage";
 import { InstallInstructionsDialog } from "./InstallInstructionsDialog";
 import { PluginInstallButton } from "./PluginInstallButton";
 import { PluginAssignmentsSheet } from "./PluginAssignmentsSheet";
@@ -148,6 +151,11 @@ export default function PluginDetail(): JSX.Element | null {
   });
 
   const client = useSdkClient();
+  const { isDownloading, download } = usePluginPackageDownload(
+    client,
+    pluginId!,
+    setIsDownloadMenuOpen,
+  );
 
   const { data: toolsetsData, isLoading: isLoadingToolsets } =
     useListToolsets();
@@ -385,15 +393,6 @@ export default function PluginDetail(): JSX.Element | null {
     });
   };
 
-  const handleDownload = async (platform: "claude" | "cursor" | "codex") => {
-    setIsDownloadMenuOpen(false);
-    try {
-      await downloadPluginPackage(client, pluginId!, platform);
-    } catch (_err) {
-      toast.error("Failed to download plugin package");
-    }
-  };
-
   const toolsetById = useMemo(() => {
     const map = new Map<string, ToolsetEntry>();
     for (const t of toolsets) map.set(t.id, t);
@@ -566,11 +565,13 @@ export default function PluginDetail(): JSX.Element | null {
                       name: plugin.name,
                       slug: plugin.slug,
                       description: plugin.description,
+                      agentPluginsV1Compatible: plugin.agentPluginsV1Compatible,
                     }}
                     publishStatus={publishStatus}
                     isDownloadMenuOpen={isDownloadMenuOpen}
                     onDownloadMenuOpenChange={setIsDownloadMenuOpen}
-                    onDownload={(platform) => void handleDownload(platform)}
+                    onDownload={(platform) => void download(platform)}
+                    isDownloading={isDownloading}
                     isInstallSheetOpen={isInstallSheetOpen}
                     onInstallSheetOpenChange={setIsInstallSheetOpen}
                   />
@@ -1029,20 +1030,27 @@ function MarketplaceSyncButton({
 // Install affordance for the plugin overview: a download menu offering the
 // preferred GitHub-marketplace install (when the marketplace is set up) and
 // per-platform zip downloads, plus the install-instructions sheet.
-function PluginInstallControl({
+export function PluginInstallControl({
   plugin,
   publishStatus,
   isDownloadMenuOpen,
   onDownloadMenuOpenChange,
   onDownload,
+  isDownloading,
   isInstallSheetOpen,
   onInstallSheetOpenChange,
 }: {
-  plugin: { name: string; slug: string; description?: string };
+  plugin: {
+    name: string;
+    slug: string;
+    description?: string;
+    agentPluginsV1Compatible: boolean;
+  };
   publishStatus: PublishStatusResult | undefined;
   isDownloadMenuOpen: boolean;
   onDownloadMenuOpenChange: (open: boolean) => void;
-  onDownload: (platform: "claude" | "cursor" | "codex") => void;
+  onDownload: (platform: PluginPackagePlatform) => void;
+  isDownloading: boolean;
   isInstallSheetOpen: boolean;
   onInstallSheetOpenChange: (open: boolean) => void;
 }): JSX.Element {
@@ -1059,7 +1067,7 @@ function PluginInstallControl({
         onOpenChange={onDownloadMenuOpenChange}
       >
         <DropdownMenuTrigger asChild>
-          <PluginInstallButton />
+          <PluginInstallButton loading={isDownloading} />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem
@@ -1081,15 +1089,32 @@ function PluginInstallControl({
             </div>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => onDownload("claude")}>
+          <DropdownMenuItem
+            disabled={isDownloading}
+            onClick={() => onDownload("claude")}
+          >
             Download as zip — Claude
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => onDownload("cursor")}>
+          <DropdownMenuItem
+            disabled={isDownloading}
+            onClick={() => onDownload("cursor")}
+          >
             Download as zip — Cursor
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => onDownload("codex")}>
+          <DropdownMenuItem
+            disabled={isDownloading}
+            onClick={() => onDownload("codex")}
+          >
             Download as zip — Codex
           </DropdownMenuItem>
+          {plugin.agentPluginsV1Compatible && (
+            <DropdownMenuItem
+              disabled={isDownloading}
+              onClick={() => onDownload("agent-plugin")}
+            >
+              Download Agent Plugins ZIP
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
       {marketplaceReady && publishStatus && (

@@ -2674,6 +2674,35 @@ JOIN LATERAL (
 WHERE l.token = @token
   AND l.revoked_at IS NULL;
 
+-- name: GetSharedSkillByTokenForOrganization :one
+-- Custom-domain variant of GetSharedSkillByToken: the extra projects join pins
+-- the share link to the organization that owns the serving domain, so one
+-- tenant's skill can never be rendered under another tenant's custom domain.
+SELECT
+  s.name,
+  s.display_name,
+  s.summary,
+  latest.content,
+  latest.created_at AS version_created_at
+FROM skill_share_links l
+JOIN projects p
+  ON p.id = l.project_id
+  AND p.organization_id = @organization_id
+  AND NOT p.deleted
+JOIN skills s
+  ON s.project_id = l.project_id
+  AND s.id = l.skill_id
+  AND s.archived_at IS NULL
+JOIN LATERAL (
+  SELECT sv.content, COALESCE(sv.promoted_at, sv.created_at) AS created_at
+  FROM skill_versions sv
+  WHERE sv.skill_id = l.skill_id
+  ORDER BY COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
+  LIMIT 1
+) latest ON TRUE
+WHERE l.token = @token
+  AND l.revoked_at IS NULL;
+
 -- name: ListSkillEditSuggestionFeedback :many
 SELECT feedback.*
 FROM skill_edit_suggestion_feedback link

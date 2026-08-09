@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
@@ -316,11 +317,12 @@ func createTestToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, na
 // server stands in for a Remote MCP-backed one without the remote_mcp_server /
 // user_session_issuer fixture weight.
 type mcpServerFixture struct {
-	id           uuid.UUID
-	idStr        string
-	name         string
-	slug         string
-	endpointSlug string
+	id                 uuid.UUID
+	idStr              string
+	name               string
+	slug               string
+	endpointSlug       string
+	backingToolsetSlug string
 }
 
 // createTestMcpServer creates an mcp_server in the active project with a single
@@ -340,6 +342,10 @@ func createTestMcpServerWithEndpoint(t *testing.T, ctx context.Context, conn *pg
 	// Back the mcp_server with a toolset to satisfy the backend-exclusivity
 	// check; the plugin path does not distinguish remote- vs toolset-backed.
 	backing := createTestToolset(t, ctx, conn, name+"-backing")
+	if visibility == mcpservers.VisibilityPublic {
+		err := toolsetsrepo.New(conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: backing.ID, ProjectID: backing.ProjectID})
+		require.NoError(t, err)
+	}
 
 	slug := fmt.Sprintf("mcp-%s-%s", name, uuid.New().String()[:8])
 	serverID := uuid.New()
@@ -354,7 +360,7 @@ func createTestMcpServerWithEndpoint(t *testing.T, ctx context.Context, conn *pg
 	})
 	require.NoError(t, err)
 
-	fixture := mcpServerFixture{id: serverID, idStr: serverID.String(), name: name, slug: slug}
+	fixture := mcpServerFixture{id: serverID, idStr: serverID.String(), name: name, slug: slug, backingToolsetSlug: backing.Slug}
 
 	if withEndpoint {
 		endpointSlug := slug + "-endpoint"

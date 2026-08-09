@@ -29,6 +29,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/auth/server"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -45,6 +46,7 @@ import (
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
 const dispositionAssistants = "assistants"
@@ -114,6 +116,8 @@ type Service struct {
 	envRepo             *envRepo.Queries
 	orgRepo             *orgRepo.Queries
 	authzProvisioner    *authz.Provisioner
+	trialBundleSeeder   EnterpriseTrialBundleSeeder
+	auditLogger         *audit.Logger
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -131,6 +135,8 @@ func NewService(
 	posthogClient *posthog.Posthog,
 	nonceStore cache.Cache,
 	authzProvisioner *authz.Provisioner,
+	trialBundleSeeder EnterpriseTrialBundleSeeder,
+	auditLogger *audit.Logger,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("auth"))
 
@@ -150,6 +156,8 @@ func NewService(
 		envRepo:             envRepo.New(db),
 		orgRepo:             orgRepo.New(db),
 		authzProvisioner:    authzProvisioner,
+		trialBundleSeeder:   trialBundleSeeder,
+		auditLogger:         auditLogger,
 	}
 }
 
@@ -316,7 +324,10 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		// A user-typed name beats a generated one, so this wins over the
 		// assistants disposition below.
 		if intent != nil && intent.OrgName != "" {
-			org, err := s.provisionOrgForUser(ctx, userID, intent.OrgName, false)
+			org, err := s.provisionOrgForUser(ctx, userID, intent.OrgName, orgProvisionOptions{
+				Whitelisted:    true,
+				ProvisionTrial: true,
+			})
 			if err != nil {
 				return s.redirectSignupError(ctx, err)
 			}
@@ -737,7 +748,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 	trial := loadActiveTrial(
 		ctx,
 		authCtx.ActiveOrganizationID,
-		s.orgRepo.GetActiveTrial,
+		trialsRepo.New(s.db).GetActiveTrial,
 		s.logger,
 	)
 
@@ -869,7 +880,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 func loadActiveTrial(
 	ctx context.Context,
 	organizationID string,
-	getTrial func(context.Context, string) (orgRepo.GetActiveTrialRow, error),
+	getTrial func(context.Context, string) (trialsRepo.GetActiveTrialRow, error),
 	logger *slog.Logger,
 ) *gen.Trial {
 	trial, err := getTrial(ctx, organizationID)
@@ -892,6 +903,19 @@ func loadActiveTrial(
 	}
 }
 
+// orgProvisionOptions carries the per-caller choices for a new organization.
+// The choices are a struct rather than positional booleans because every call
+// site then names what it asks for, and exhaustruct forces a new field to be
+// answered everywhere instead of defaulting to false.
+type orgProvisionOptions struct {
+	// Whitelisted clears the dashboard's book-a-demo gate for the organization.
+	Whitelisted bool
+
+	// ProvisionTrial arms a 14-day enterprise trial in the same transaction
+	// that creates the organization.
+	ProvisionTrial bool
+}
+
 // provisionOrgForUser creates an organization and attaches a user to it as the
 // first member. Shared by the three paths that create orgs: self-serve register,
 // signup with a company name carried through login, and assistants
@@ -900,10 +924,7 @@ func loadActiveTrial(
 // Session mutation is deliberately left to the caller. Register updates an
 // already-stored session; the callback-side callers assign
 // ActiveOrganizationID on an in-memory session before storing it once.
-//
-// whitelisted is a parameter because the callers disagree: register and signup
-// create gated orgs, assistants auto-provisioning does not.
-func (s *Service) provisionOrgForUser(ctx context.Context, userID, orgName string, whitelisted bool) (orgRepo.OrganizationMetadatum, error) {
+func (s *Service) provisionOrgForUser(ctx context.Context, userID, orgName string, opts orgProvisionOptions) (orgRepo.OrganizationMetadatum, error) {
 	var empty orgRepo.OrganizationMetadatum
 
 	slug, err := orgslug.FindUnique(ctx, s.orgRepo, orgslug.Slugify(orgName))
@@ -917,10 +938,10 @@ func (s *Service) provisionOrgForUser(ctx context.Context, userID, orgName strin
 		return empty, fmt.Errorf("provision org in WorkOS: %w", err)
 	}
 
-	// Metadata, the user relationship, and the admin grant all land in one
-	// transaction, so a failure part-way cannot leave an organization a user
-	// can authenticate into without access control.
-	org, err := s.persistProvisionedOrganization(ctx, provisionedOrg, orgName, slug, userID, whitelisted)
+	// Metadata, the user relationship, the admin grant, and any trial all land
+	// in one transaction, so a failure part-way cannot leave an organization a
+	// user can authenticate into without access control.
+	org, err := s.persistProvisionedOrganization(ctx, provisionedOrg, orgName, slug, userID, opts)
 	if err != nil {
 		return empty, fmt.Errorf("persist provisioned organization: %w", err)
 	}
@@ -946,7 +967,10 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		return err
 	}
 
-	org, err := s.provisionOrgForUser(ctx, authCtx.UserID, payload.OrgName, false)
+	org, err := s.provisionOrgForUser(ctx, authCtx.UserID, payload.OrgName, orgProvisionOptions{
+		Whitelisted:    true,
+		ProvisionTrial: true,
+	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error creating organization").LogError(ctx, s.logger)
 	}
@@ -966,7 +990,12 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *sessions.CachedUserInfo, session *sessions.Session) (string, error) {
 	orgName := generateLegibleOrgName()
 
-	org, err := s.provisionOrgForUser(ctx, userInfo.UserID, orgName, true)
+	// Assistants is a live product for users who never asked for a trial, so a
+	// trial armed here would strip their entitlements two weeks later.
+	org, err := s.provisionOrgForUser(ctx, userInfo.UserID, orgName, orgProvisionOptions{
+		Whitelisted:    true,
+		ProvisionTrial: false,
+	})
 	if err != nil {
 		return "", err
 	}
@@ -1012,13 +1041,17 @@ func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *sess
 	return fmt.Sprintf("/%s/projects/%s/assistants/new?disposition=%s", org.Slug, projects[0].Slug, dispositionAssistants), nil
 }
 
+// persistProvisionedOrganization writes the Gram-side records for an
+// organization that already exists in WorkOS, and returns the row as it stood
+// before any trial arming. A trial armed under opts.ProvisionTrial joins the
+// same transaction, so a failure leaves neither behind.
 func (s *Service) persistProvisionedOrganization(
 	ctx context.Context,
 	provisionedOrg identity.ProvisionedOrganization,
 	orgName string,
 	slug string,
 	userID string,
-	whitelisted bool,
+	opts orgProvisionOptions,
 ) (orgRepo.OrganizationMetadatum, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -1032,7 +1065,7 @@ func (s *Service) persistProvisionedOrganization(
 		Name:        orgName,
 		Slug:        slug,
 		WorkosID:    pgtype.Text{String: provisionedOrg.WorkOSOrganizationID, Valid: provisionedOrg.WorkOSOrganizationID != ""},
-		Whitelisted: pgtype.Bool{Bool: whitelisted, Valid: true},
+		Whitelisted: pgtype.Bool{Bool: opts.Whitelisted, Valid: true},
 	})
 	if err != nil {
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("create organization metadata: %w", err)
@@ -1051,6 +1084,12 @@ func (s *Service) persistProvisionedOrganization(
 		WorkOSMembershipID: provisionedOrg.WorkOSMembershipID,
 	}); err != nil {
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("provision organization access: %w", err)
+	}
+
+	if opts.ProvisionTrial {
+		if err := s.armEnterpriseTrialTx(ctx, tx, org, userID); err != nil {
+			return orgRepo.OrganizationMetadatum{}, fmt.Errorf("arm enterprise trial: %w", err)
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {

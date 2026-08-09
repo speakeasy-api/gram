@@ -675,38 +675,6 @@ func (q *Queries) InsertPluginAssignmentFixture(ctx context.Context, arg InsertP
 	return err
 }
 
-const insertTrialFixture = `-- name: InsertTrialFixture :exec
-INSERT INTO trials (organization_id, tier, created_at, ends_at, converted_at, demoted_at)
-VALUES (
-    $1,
-    'enterprise',
-    $2,
-    $3,
-    $4::timestamptz,
-    $5::timestamptz
-)
-`
-
-type InsertTrialFixtureParams struct {
-	OrganizationID string
-	CreatedAt      pgtype.Timestamptz
-	EndsAt         pgtype.Timestamptz
-	ConvertedAt    pgtype.Timestamptz
-	DemotedAt      pgtype.Timestamptz
-}
-
-// Test-only fixture for exercising active trial lifecycle states.
-func (q *Queries) InsertTrialFixture(ctx context.Context, arg InsertTrialFixtureParams) error {
-	_, err := q.db.Exec(ctx, insertTrialFixture,
-		arg.OrganizationID,
-		arg.CreatedAt,
-		arg.EndsAt,
-		arg.ConvertedAt,
-		arg.DemotedAt,
-	)
-	return err
-}
-
 const insertUserFixture = `-- name: InsertUserFixture :exec
 INSERT INTO users (id, email, display_name)
 VALUES ($1, $2, $3)

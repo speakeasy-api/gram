@@ -220,3 +220,42 @@ func TestMigratePreflight_CanMigrate(t *testing.T) {
 	conflicted := migratePreflight{conflictingMcpServerNames: []string{"Acme"}}
 	require.False(t, conflicted.canMigrate())
 }
+
+// TestIssuerURLsCanonicallyEqual_CollapsesEquivalentSpellings covers the axes
+// parseCanonicalIssuerURL treats as one upstream. These are the duplicates
+// consolidation exists to clean up, and discovery finds candidates by the same
+// equality, so a stricter comparison here would surface candidates that could
+// never be migrated.
+func TestIssuerURLsCanonicallyEqual_CollapsesEquivalentSpellings(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, issuerURLsCanonicallyEqual("https://idp.example.com", "https://idp.example.com/"))
+	require.True(t, issuerURLsCanonicallyEqual("https://idp.example.com", "https://idp.example.com:443"))
+	require.True(t, issuerURLsCanonicallyEqual("https://IDP.example.com", "https://idp.example.com"))
+	require.True(t, issuerURLsCanonicallyEqual("http://idp.example.com:80/x", "http://idp.example.com/x"))
+}
+
+// TestIssuerURLsCanonicallyEqual_KeepsDistinctUpstreamsApart pins the axes that
+// stay distinct. http and https are deliberately different: same host, different
+// security properties.
+func TestIssuerURLsCanonicallyEqual_KeepsDistinctUpstreamsApart(t *testing.T) {
+	t.Parallel()
+
+	require.False(t, issuerURLsCanonicallyEqual("https://idp.example.com", "http://idp.example.com"))
+	require.False(t, issuerURLsCanonicallyEqual("https://idp.example.com", "https://other.example.com"))
+	require.False(t, issuerURLsCanonicallyEqual("https://idp.example.com/a", "https://idp.example.com/A"))
+	require.False(t, issuerURLsCanonicallyEqual("https://idp.example.com", "https://idp.example.com:8443"))
+}
+
+// TestIssuerURLsCanonicallyEqual_UnparseableIsOnlyEqualToItself proves a stored
+// value that is not an issuer identifier never widens the comparison. Rows
+// predating URL validation can hold anything, and migration must not decide two
+// of them name the same authorization server on input it could not understand.
+func TestIssuerURLsCanonicallyEqual_UnparseableIsOnlyEqualToItself(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, issuerURLsCanonicallyEqual("not a url", "not a url"))
+	require.False(t, issuerURLsCanonicallyEqual("not a url", "not a url/"))
+	require.False(t, issuerURLsCanonicallyEqual("not a url", "https://idp.example.com"))
+	require.False(t, issuerURLsCanonicallyEqual("", "https://idp.example.com"))
+}
