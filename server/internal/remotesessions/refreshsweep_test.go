@@ -69,6 +69,23 @@ func seedGramSession(
 	require.NoError(t, err)
 }
 
+// enableOrgAutoRefreshFeature turns on one of the organization features that
+// back the automatic-refresh policy the sweep queries evaluate.
+func enableOrgAutoRefreshFeature(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	org string,
+	feature productfeatures.Feature,
+) {
+	t.Helper()
+	_, err := productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
+		OrganizationID: org,
+		FeatureName:    string(feature),
+	})
+	require.NoError(t, err)
+}
+
 func seedSweepSession(
 	t *testing.T,
 	ctx context.Context,
@@ -129,6 +146,7 @@ func TestRefreshSweep_DueSessionDiscoveredAndRechecked(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 	sessionID, org := seedSweepSession(t, ctx, ti, "sweep-due", true, true, 25*time.Hour, true)
+	enableOrgAutoRefreshFeature(t, ctx, ti, org, productfeatures.FeatureRemoteSessionAutoRefresh)
 	window := newSweepWindow()
 	q := repo.New(ti.conn)
 
@@ -170,7 +188,7 @@ func TestRefreshSweep_RequiresDueOptedInRenewableSession(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestService(t)
-			sessionID, _ := seedSweepSession(
+			sessionID, org := seedSweepSession(
 				t,
 				ctx,
 				ti,
@@ -180,6 +198,9 @@ func TestRefreshSweep_RequiresDueOptedInRenewableSession(t *testing.T) {
 				tt.updatedAgo,
 				tt.withGramSession,
 			)
+			// The organization lets subjects choose, so each case is skipped
+			// for the reason it names rather than for the policy.
+			enableOrgAutoRefreshFeature(t, ctx, ti, org, productfeatures.FeatureRemoteSessionAutoRefresh)
 
 			rows, err := repo.New(ti.conn).ClaimDueRemoteSessionRefreshCandidates(ctx, newSweepWindow().claimParams())
 			require.NoError(t, err)
@@ -190,31 +211,28 @@ func TestRefreshSweep_RequiresDueOptedInRenewableSession(t *testing.T) {
 	}
 }
 
-func TestRefreshSweep_EnforcedOrgClaimsOptedOutSession(t *testing.T) {
+func TestRefreshSweep_RequiredOrgClaimsOptedOutSession(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	// An opted-out session (auto_refresh = false) that would normally be
 	// skipped by the keepalive.
-	sessionID, org := seedSweepSession(t, ctx, ti, "sweep-enforced", true, false, 25*time.Hour, true)
+	sessionID, org := seedSweepSession(t, ctx, ti, "sweep-required", true, false, 25*time.Hour, true)
 
 	q := repo.New(ti.conn)
 	window := newSweepWindow()
 
-	// Baseline: without enforcement the opted-out session is not claimed.
+	// Baseline: while subjects choose, an opted-out session is not claimed.
+	enableOrgAutoRefreshFeature(t, ctx, ti, org, productfeatures.FeatureRemoteSessionAutoRefresh)
 	rows, err := q.ClaimDueRemoteSessionRefreshCandidates(ctx, window.claimParams())
 	require.NoError(t, err)
 	for _, row := range rows {
 		require.NotEqual(t, sessionID, row.ID)
 	}
 
-	// Enabling the organization-level enforcement feature makes every eligible
-	// session due regardless of its persisted per-session preference.
-	_, err = productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
-		OrganizationID: org,
-		FeatureName:    string(productfeatures.FeatureRemoteSessionAutoRefreshEnforced),
-	})
-	require.NoError(t, err)
+	// Requiring refresh org-wide makes every eligible session due regardless of
+	// its persisted per-session preference.
+	enableOrgAutoRefreshFeature(t, ctx, ti, org, productfeatures.FeatureRemoteSessionAutoRefreshEnforced)
 
 	rows, err = q.ClaimDueRemoteSessionRefreshCandidates(ctx, window.claimParams())
 	require.NoError(t, err)
@@ -225,20 +243,58 @@ func TestRefreshSweep_EnforcedOrgClaimsOptedOutSession(t *testing.T) {
 			require.Equal(t, org, row.OrganizationID)
 		}
 	}
-	require.True(t, claimed, "enforced organization must claim the opted-out session")
+	require.True(t, claimed, "an organization requiring refresh must claim the opted-out session")
 
-	// The authoritative re-check also honors enforcement.
+	// The authoritative re-check applies the same policy.
 	candidate, err := q.GetDueRemoteSessionRefreshCandidate(ctx, window.candidateParams(sessionID, org))
 	require.NoError(t, err)
 	require.Equal(t, sessionID, candidate.RemoteSession.ID)
-	require.False(t, candidate.RemoteSession.AutoRefresh, "the per-session preference is untouched; enforcement is applied at query time")
+	require.False(t, candidate.RemoteSession.AutoRefresh, "the per-session preference is untouched; the policy is applied at query time")
+}
+
+func TestRefreshSweep_DisabledOrgSkipsOptedInSession(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	// A session that opted in while the organization still offered the choice.
+	sessionID, org := seedSweepSession(t, ctx, ti, "sweep-disabled", true, true, 25*time.Hour, true)
+
+	q := repo.New(ti.conn)
+	window := newSweepWindow()
+
+	// With refresh disabled for the organization, a preference left over from
+	// an earlier policy must not keep renewing the connection — otherwise the
+	// consent page would report "Off" while the keepalive kept working.
+	rows, err := q.ClaimDueRemoteSessionRefreshCandidates(ctx, window.claimParams())
+	require.NoError(t, err)
+	for _, row := range rows {
+		require.NotEqual(t, sessionID, row.ID)
+	}
+
+	_, err = q.GetDueRemoteSessionRefreshCandidate(ctx, window.candidateParams(sessionID, org))
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	// Restoring the opt-in policy restores the subject's own choice, because
+	// the preference was read rather than rewritten.
+	enableOrgAutoRefreshFeature(t, ctx, ti, org, productfeatures.FeatureRemoteSessionAutoRefresh)
+
+	rows, err = q.ClaimDueRemoteSessionRefreshCandidates(ctx, window.claimParams())
+	require.NoError(t, err)
+	var claimed bool
+	for _, row := range rows {
+		if row.ID == sessionID {
+			claimed = true
+		}
+	}
+	require.True(t, claimed, "restoring the opt-in policy must honor the stored preference again")
 }
 
 func TestRefreshSweep_CandidateRejectsWrongOrganization(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	sessionID, _ := seedSweepSession(t, ctx, ti, "sweep-wrong-org", true, true, 25*time.Hour, true)
+	sessionID, org := seedSweepSession(t, ctx, ti, "sweep-wrong-org", true, true, 25*time.Hour, true)
+	enableOrgAutoRefreshFeature(t, ctx, ti, org, productfeatures.FeatureRemoteSessionAutoRefresh)
 
 	_, err := repo.New(ti.conn).GetDueRemoteSessionRefreshCandidate(
 		ctx,
@@ -254,7 +310,8 @@ func TestRefreshSweep_ExpiredGramSessionSkipped(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	sessionID, _ := seedSweepSession(t, ctx, ti, "sweep-expired-gram", true, true, 25*time.Hour, false)
+	sessionID, org := seedSweepSession(t, ctx, ti, "sweep-expired-gram", true, true, 25*time.Hour, false)
+	enableOrgAutoRefreshFeature(t, ctx, ti, org, productfeatures.FeatureRemoteSessionAutoRefresh)
 	session, err := repo.New(ti.conn).GetRemoteSessionByID(ctx, repo.GetRemoteSessionByIDParams{
 		ID:        sessionID,
 		ProjectID: *authCtx.ProjectID,
@@ -281,8 +338,9 @@ func TestRefreshSweep_ClaimAdvancesPastOldestSession(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
-	firstID, _ := seedSweepSession(t, ctx, ti, "sweep-rotate-first", true, true, 26*time.Hour, true)
+	firstID, org := seedSweepSession(t, ctx, ti, "sweep-rotate-first", true, true, 26*time.Hour, true)
 	secondID, _ := seedSweepSession(t, ctx, ti, "sweep-rotate-second", true, true, 25*time.Hour, true)
+	enableOrgAutoRefreshFeature(t, ctx, ti, org, productfeatures.FeatureRemoteSessionAutoRefresh)
 	window := newSweepWindow()
 	params := window.claimParams()
 	params.LimitValue = 1

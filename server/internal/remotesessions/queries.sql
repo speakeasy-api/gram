@@ -879,10 +879,20 @@ WHERE s.subject_urn = @subject_urn
 -- Best-effort refresh-grant keepalive. Each hourly workflow chain drains
 -- cross-project batches. Claiming stamps an independent attempt clock before
 -- any network call, so failed sessions rotate out for 24 hours instead of
--- pinning the oldest batch. A session is eligible when the subject opted in
--- (auto_refresh) OR the organization enforces refresh as its default via the
--- remote_session_auto_refresh_enforced product feature; the
--- remote_session_auto_refresh feature (opt-in visibility) remains UI-only.
+-- pinning the oldest batch.
+--
+-- Eligibility is the organization's automatic-refresh policy applied to the
+-- session's own preference, so the policy the dashboard shows is the policy the
+-- keepalive runs:
+--
+--   * remote_session_auto_refresh_enforced -> every eligible session, whatever
+--     its stored preference.
+--   * remote_session_auto_refresh -> subjects choose, so auto_refresh decides.
+--   * neither -> refresh is off for the organization, and a preference left
+--     over from an earlier policy does not resurrect it.
+--
+-- Preferences are read, never rewritten, so restoring the opt-in policy
+-- restores each subject's original choice.
 
 -- name: ClaimDueRemoteSessionRefreshCandidates :many
 WITH due AS (
@@ -901,16 +911,21 @@ WITH due AS (
       s.last_refresh_attempt_at IS NULL
       OR s.last_refresh_attempt_at <= @attempt_cutoff::timestamptz
     )
-    -- Per-session opt-in OR the organization enforces refresh as its default
-    -- (remote_session_auto_refresh_enforced product feature), which keeps every
-    -- eligible session alive regardless of the persisted preference.
     AND (
-      s.auto_refresh IS TRUE
-      OR EXISTS (
+      EXISTS (
         SELECT 1 FROM organization_features AS orgf
         WHERE orgf.organization_id = p.organization_id
           AND orgf.feature_name = 'remote_session_auto_refresh_enforced'
           AND orgf.deleted IS FALSE
+      )
+      OR (
+        s.auto_refresh IS TRUE
+        AND EXISTS (
+          SELECT 1 FROM organization_features AS orgf
+          WHERE orgf.organization_id = p.organization_id
+            AND orgf.feature_name = 'remote_session_auto_refresh'
+            AND orgf.deleted IS FALSE
+        )
       )
     )
     AND EXISTS (
@@ -958,16 +973,23 @@ WHERE s.id = @id
   AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > @now_ts::timestamptz)
   AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > @now_ts::timestamptz)
   AND s.updated_at <= @keepalive_cutoff::timestamptz
-  -- Per-session opt-in OR the organization enforces refresh as its default
-  -- (remote_session_auto_refresh_enforced product feature). Kept in sync with
-  -- ClaimDueRemoteSessionRefreshCandidates.
+  -- The organization's automatic-refresh policy applied to this session's own
+  -- preference, kept in sync with ClaimDueRemoteSessionRefreshCandidates.
   AND (
-    s.auto_refresh IS TRUE
-    OR EXISTS (
+    EXISTS (
       SELECT 1 FROM organization_features AS orgf
       WHERE orgf.organization_id = p.organization_id
         AND orgf.feature_name = 'remote_session_auto_refresh_enforced'
         AND orgf.deleted IS FALSE
+    )
+    OR (
+      s.auto_refresh IS TRUE
+      AND EXISTS (
+        SELECT 1 FROM organization_features AS orgf
+        WHERE orgf.organization_id = p.organization_id
+          AND orgf.feature_name = 'remote_session_auto_refresh'
+          AND orgf.deleted IS FALSE
+      )
     )
   )
   AND EXISTS (

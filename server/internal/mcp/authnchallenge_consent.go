@@ -110,22 +110,28 @@ type consentTemplateData struct {
 	// maximum, preselecting the maximum. Empty hides the picker (first-party
 	// pages, or a lookup failure — the mint then falls back to the maximum).
 	SessionDurationOptions []sessionDurationOption
-	// AutoRefreshSupported shows the page-level "Auto refresh" control when
-	// the organization feature is enabled.
-	AutoRefreshSupported bool
-	// AutoRefreshOn is the control's current value: on only when every card's
-	// stored preference is on. New connections default on while the feature is
-	// visible. Changing it applies to all providers at once. Always on when
-	// AutoRefreshLocked.
+	// AutoRefreshVisible shows the page-level "Auto refresh" info row. True
+	// whenever this page has remote-session cards, so the subject always
+	// learns whether their connections will be renewed — including when the
+	// organization disabled refresh, where the row is the only signal that
+	// idle connections will lapse.
+	AutoRefreshVisible bool
+
+	// AutoRefreshEditable lets the subject change the value. False when the
+	// organization either disabled or requires refresh; the row then renders
+	// read-only as "Managed by your organization".
+	AutoRefreshEditable bool
+
+	// AutoRefreshOn is the row's current value: forced off when the
+	// organization disabled refresh, forced on when it requires refresh, and
+	// otherwise on only when every card's stored preference is on. Changing an
+	// editable value applies to all providers at once.
 	AutoRefreshOn bool
+
 	// AutoRefreshHasSessions marks that at least one remote_session row exists
 	// (connected or expired), so a change can be persisted immediately rather
 	// than only riding the next connect.
 	AutoRefreshHasSessions bool
-	// AutoRefreshLocked marks that the organization enforces automatic refresh:
-	// the control is rendered read-only ("Managed by your organization"), the
-	// value is pinned on, and the user cannot opt out.
-	AutoRefreshLocked bool
 }
 
 // sessionDurationOption is one <option> of the consent page's session length
@@ -159,12 +165,48 @@ type remoteSessionCard struct {
 	AccessExpiresIn  string
 	RefreshExpiresAt string
 	RefreshExpiresIn string
-	// AutoRefreshSupported gates the card's hidden auto_refresh input.
-	// The visible control is the page-level "Auto refresh" combobox.
-	AutoRefreshSupported bool
-	// AutoRefreshChecked is the card's stored preference, or true for a new
-	// connection while the organization feature is visible.
+	// AutoRefreshChecked is the effective auto-refresh value for this card:
+	// the stored preference when the organization lets subjects choose,
+	// otherwise the organization's own policy value.
 	AutoRefreshChecked bool
+}
+
+// autoRefreshPolicy is an organization's policy for automatic remote-session
+// refresh, resolved from the two product features that back it.
+type autoRefreshPolicy int
+
+const (
+	// autoRefreshDisabled keeps every connection manual. The consent page
+	// shows the state read-only so the subject knows idle connections will
+	// lapse, and the keepalive skips the organization even for sessions whose
+	// stored preference is on.
+	autoRefreshDisabled autoRefreshPolicy = iota
+
+	// autoRefreshUserControlled exposes the opt-in and lets each subject
+	// choose per connection. This is the only policy under which a posted
+	// form value is trusted.
+	autoRefreshUserControlled
+
+	// autoRefreshEnforced pins refresh on for every subject: the consent row
+	// is read-only and the keepalive ignores stored preferences.
+	autoRefreshEnforced
+)
+
+// resolveAutoRefreshPolicy reports the organization's automatic-refresh policy.
+// Enforcement wins over the opt-in so an organization that turns on both still
+// gets the stricter behavior, and an unavailable feature checker degrades to
+// disabled rather than silently refreshing connections.
+func (s *Service) resolveAutoRefreshPolicy(ctx context.Context, organizationID string) autoRefreshPolicy {
+	if s.platformFeatureChecker == nil {
+		return autoRefreshDisabled
+	}
+	if s.platformFeatureChecker(ctx, organizationID, string(productfeatures.FeatureRemoteSessionAutoRefreshEnforced)) {
+		return autoRefreshEnforced
+	}
+	if s.platformFeatureChecker(ctx, organizationID, string(productfeatures.FeatureRemoteSessionAutoRefresh)) {
+		return autoRefreshUserControlled
+	}
+	return autoRefreshDisabled
 }
 
 // HandleConsent serves the GET (consent UI) and POST (Give Access /
@@ -279,23 +321,17 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 
 	subjectDisplay := resolveSubjectDisplay(ctx, s.db, *challengeState.Subject)
 
-	// Auto refresh is surfaced either when the organization exposes the opt-in
-	// (users choose per connection) or when it enforces refresh org-wide (the
-	// control is shown locked). Enforcement pins the value on and removes the
-	// per-user choice.
-	autoRefreshEnforced := s.platformFeatureChecker != nil &&
-		s.platformFeatureChecker(ctx, endpoint.OrganizationID, string(productfeatures.FeatureRemoteSessionAutoRefreshEnforced))
-	autoRefreshFeatureEnabled := autoRefreshEnforced || (s.platformFeatureChecker != nil &&
-		s.platformFeatureChecker(ctx, endpoint.OrganizationID, string(productfeatures.FeatureRemoteSessionAutoRefresh)))
-	cards, err := s.buildRemoteSessionCards(ctx, endpoint, challengeState, autoRefreshFeatureEnabled, autoRefreshEnforced)
+	autoRefreshPolicy := s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID)
+	cards, err := s.buildRemoteSessionCards(ctx, endpoint, challengeState, autoRefreshPolicy)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build remote session cards").LogError(ctx, logger)
 	}
 
 	hasConnectedCard := false
-	autoRefreshSupported := false
-	autoRefreshOn := true
 	autoRefreshHasSessions := false
+	// Every card already carries the organization's policy applied to its own
+	// stored preference, so the page value is on only when none of them is off.
+	everyCardAutoRefreshes := true
 	for _, c := range cards {
 		if c.Connected {
 			hasConnectedCard = true
@@ -303,18 +339,13 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		if c.Connected || c.Expired {
 			autoRefreshHasSessions = true
 		}
-		if c.AutoRefreshSupported {
-			autoRefreshSupported = true
-			autoRefreshOn = autoRefreshOn && c.AutoRefreshChecked
-		}
+		everyCardAutoRefreshes = everyCardAutoRefreshes && c.AutoRefreshChecked
 	}
-	autoRefreshOn = autoRefreshOn && autoRefreshSupported
-	// Enforcement pins the control on regardless of any stored per-session
-	// preference, so a locked page always renders "On".
-	autoRefreshLocked := autoRefreshEnforced && autoRefreshSupported
-	if autoRefreshLocked {
-		autoRefreshOn = true
-	}
+	// Auto refresh is only a meaningful concept once this page has services to
+	// connect; the policy alone does not put a row on an empty page.
+	autoRefreshVisible := len(cards) > 0
+	autoRefreshEditable := autoRefreshVisible && autoRefreshPolicy == autoRefreshUserControlled
+	autoRefreshOn := autoRefreshVisible && everyCardAutoRefreshes
 	consentEnabled := len(cards) == 0 || hasConnectedCard
 
 	// First-party pages mint no user session, so there is no length to pick.
@@ -346,10 +377,10 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		LoopbackRedirectWarning: loopbackRedirectWarning,
 		AutoClose:               shouldAutoCloseFirstParty(challengeState.FirstParty, cards),
 		SessionDurationOptions:  durationOptions,
-		AutoRefreshSupported:    autoRefreshSupported,
+		AutoRefreshVisible:      autoRefreshVisible,
+		AutoRefreshEditable:     autoRefreshEditable,
 		AutoRefreshOn:           autoRefreshOn,
 		AutoRefreshHasSessions:  autoRefreshHasSessions,
-		AutoRefreshLocked:       autoRefreshLocked,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -651,8 +682,7 @@ func (s *Service) buildRemoteSessionCards(
 	ctx context.Context,
 	endpoint *ResolvedMcpEndpoint,
 	challengeState AuthnChallengeState,
-	autoRefreshFeatureEnabled bool,
-	autoRefreshEnforced bool,
+	policy autoRefreshPolicy,
 ) ([]remoteSessionCard, error) {
 	clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
 	if err != nil {
@@ -678,14 +708,19 @@ func (s *Service) buildRemoteSessionCards(
 	renderedAt := time.Now()
 	for _, c := range clients {
 		state, hasSession := statuses[c.ID]
-		checked := autoRefreshFeatureEnabled
-		if hasSession {
-			checked = state.AutoRefresh
-		}
-		// Enforcement overrides any stored per-session preference: refresh is
-		// the organization default and the user cannot opt out.
-		if autoRefreshEnforced {
+		var checked bool
+		switch policy {
+		case autoRefreshEnforced:
 			checked = true
+		case autoRefreshUserControlled:
+			// A new connection defaults on; an existing one keeps the choice
+			// the subject already made.
+			checked = true
+			if hasSession {
+				checked = state.AutoRefresh
+			}
+		case autoRefreshDisabled:
+			checked = false
 		}
 		accessExpiresAt := ""
 		accessExpiresIn := ""
@@ -699,19 +734,17 @@ func (s *Service) buildRemoteSessionCards(
 			refreshExpiresAt = state.RefreshExpiresAt.UTC().Format(time.RFC3339)
 			refreshExpiresIn = formatTimeRemaining(renderedAt, *state.RefreshExpiresAt)
 		}
-		autoRefreshSupported := autoRefreshFeatureEnabled
 		cards = append(cards, remoteSessionCard{
-			ClientID:             c.ID.String(),
-			IssuerSlug:           c.IssuerSlug,
-			Connected:            state.Status == remotesessions.RemoteSessionActive,
-			Expired:              state.Status == remotesessions.RemoteSessionExpired,
-			CanRefresh:           state.CanRefresh,
-			AccessExpiresAt:      accessExpiresAt,
-			AccessExpiresIn:      accessExpiresIn,
-			RefreshExpiresAt:     refreshExpiresAt,
-			RefreshExpiresIn:     refreshExpiresIn,
-			AutoRefreshSupported: autoRefreshSupported,
-			AutoRefreshChecked:   checked && autoRefreshSupported,
+			ClientID:           c.ID.String(),
+			IssuerSlug:         c.IssuerSlug,
+			Connected:          state.Status == remotesessions.RemoteSessionActive,
+			Expired:            state.Status == remotesessions.RemoteSessionExpired,
+			CanRefresh:         state.CanRefresh,
+			AccessExpiresAt:    accessExpiresAt,
+			AccessExpiresIn:    accessExpiresIn,
+			RefreshExpiresAt:   refreshExpiresAt,
+			RefreshExpiresIn:   refreshExpiresIn,
+			AutoRefreshChecked: checked,
 		})
 	}
 	return cards, nil

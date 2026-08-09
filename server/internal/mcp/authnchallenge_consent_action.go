@@ -21,7 +21,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
@@ -100,11 +99,11 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 
 	backURL := fmt.Sprintf("/%s/%s/connect?state=%s", endpoint.RouteBase, endpoint.Slug, url.QueryEscape(stateID))
 
-	// When the organization enforces automatic refresh it is the org default
-	// and cannot be turned off; the form value is never trusted for the
-	// enforced case (a crafted "off" must not disable a managed connection).
-	autoRefreshEnforced := s.platformFeatureChecker != nil &&
-		s.platformFeatureChecker(ctx, endpoint.OrganizationID, string(productfeatures.FeatureRemoteSessionAutoRefreshEnforced))
+	// Auto refresh is only the subject's choice while the organization lets
+	// them choose. Under either managed policy the posted value is ignored, so
+	// a crafted form can neither disable a required connection nor opt into
+	// refresh the organization disabled.
+	autoRefreshPolicy := s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID)
 
 	switch r.PostForm.Get("action") {
 	case "connect":
@@ -113,13 +112,14 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 			return cerr
 		}
 		var autoRefresh *bool
-		if _, posted := r.PostForm["auto_refresh"]; posted {
-			v := r.PostForm.Get("auto_refresh") == "on"
-			autoRefresh = &v
-		}
-		if autoRefreshEnforced {
-			enforced := true
-			autoRefresh = &enforced
+		if autoRefreshPolicy == autoRefreshUserControlled {
+			if _, posted := r.PostForm["auto_refresh"]; posted {
+				v := r.PostForm.Get("auto_refresh") == "on"
+				autoRefresh = &v
+			}
+		} else {
+			managed := autoRefreshPolicy == autoRefreshEnforced
+			autoRefresh = &managed
 		}
 		challengeURL, berr := s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
 			ID:                  challengeState.ID,
@@ -183,11 +183,11 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 	case "set_auto_refresh":
 		// Page-level "Auto refresh": persist the choice for every bound client.
 		// Clients without a stored session update zero rows; their preference
-		// rides the next connect instead. Enforcement pins the value on
-		// regardless of the posted choice.
+		// rides the next connect instead. A managed policy writes the
+		// organization's own value instead of the posted one.
 		enabled := r.PostForm.Get("auto_refresh") == "on"
-		if autoRefreshEnforced {
-			enabled = true
+		if autoRefreshPolicy != autoRefreshUserControlled {
+			enabled = autoRefreshPolicy == autoRefreshEnforced
 		}
 		for i := range clients {
 			if _, err := s.remoteChallengeMgr.SetRemoteSessionAutoRefresh(ctx, subject, endpoint.ProjectID, endpoint.UserSessionIssuerID, clients[i].ID, enabled); err != nil {

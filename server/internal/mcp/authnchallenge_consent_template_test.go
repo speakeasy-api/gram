@@ -23,17 +23,16 @@ func TestConsentTemplateCompletedFirstPartyConnectionAutoCloses(t *testing.T) {
 		RedirectURI:    "",
 		ScriptURL:      "/mcp/consent-page-test.js",
 		RemoteSessionCards: []remoteSessionCard{{
-			ClientID:             "client-id",
-			IssuerSlug:           "example-issuer",
-			Connected:            true,
-			Expired:              false,
-			CanRefresh:           true,
-			AccessExpiresAt:      "2026-08-05T18:00:00Z",
-			AccessExpiresIn:      "3 hours",
-			RefreshExpiresAt:     "",
-			RefreshExpiresIn:     "",
-			AutoRefreshSupported: true,
-			AutoRefreshChecked:   true,
+			ClientID:           "client-id",
+			IssuerSlug:         "example-issuer",
+			Connected:          true,
+			Expired:            false,
+			CanRefresh:         true,
+			AccessExpiresAt:    "2026-08-05T18:00:00Z",
+			AccessExpiresIn:    "3 hours",
+			RefreshExpiresAt:   "",
+			RefreshExpiresIn:   "",
+			AutoRefreshChecked: true,
 		}},
 		ConsentEnabled: true,
 		FirstParty:     true,
@@ -60,17 +59,16 @@ func TestConsentTemplateIncompleteFirstPartyConnectionStaysOpen(t *testing.T) {
 		RedirectURI:    "",
 		ScriptURL:      "/mcp/consent-page-test.js",
 		RemoteSessionCards: []remoteSessionCard{{
-			ClientID:             "client-id",
-			IssuerSlug:           "example-issuer",
-			Connected:            false,
-			Expired:              false,
-			CanRefresh:           false,
-			AccessExpiresAt:      "",
-			AccessExpiresIn:      "",
-			RefreshExpiresAt:     "",
-			RefreshExpiresIn:     "",
-			AutoRefreshSupported: true,
-			AutoRefreshChecked:   true,
+			ClientID:           "client-id",
+			IssuerSlug:         "example-issuer",
+			Connected:          false,
+			Expired:            false,
+			CanRefresh:         false,
+			AccessExpiresAt:    "",
+			AccessExpiresIn:    "",
+			RefreshExpiresAt:   "",
+			RefreshExpiresIn:   "",
+			AutoRefreshChecked: true,
 		}},
 		ConsentEnabled: false,
 		FirstParty:     true,
@@ -113,20 +111,20 @@ func TestConsentTemplateShowsAutoRefreshAndServiceExpiry(t *testing.T) {
 		SubjectDisplay: "user@example.com",
 		ScriptURL:      "/mcp/consent-page-test.js",
 		RemoteSessionCards: []remoteSessionCard{{
-			ClientID:             "client-id",
-			IssuerSlug:           "example-issuer",
-			Connected:            true,
-			Expired:              false,
-			CanRefresh:           true,
-			AccessExpiresAt:      "2026-08-05T18:00:00Z",
-			AccessExpiresIn:      "3 hours 12 minutes",
-			RefreshExpiresAt:     "2026-09-05T18:00:00Z",
-			RefreshExpiresIn:     "31 days",
-			AutoRefreshSupported: true,
-			AutoRefreshChecked:   true,
+			ClientID:           "client-id",
+			IssuerSlug:         "example-issuer",
+			Connected:          true,
+			Expired:            false,
+			CanRefresh:         true,
+			AccessExpiresAt:    "2026-08-05T18:00:00Z",
+			AccessExpiresIn:    "3 hours 12 minutes",
+			RefreshExpiresAt:   "2026-09-05T18:00:00Z",
+			RefreshExpiresIn:   "31 days",
+			AutoRefreshChecked: true,
 		}},
 		ConsentEnabled:         true,
-		AutoRefreshSupported:   true,
+		AutoRefreshVisible:     true,
+		AutoRefreshEditable:    true,
 		AutoRefreshOn:          true,
 		AutoRefreshHasSessions: true,
 	})
@@ -161,7 +159,7 @@ func TestConsentTemplateShowsAutoRefreshAndServiceExpiry(t *testing.T) {
 	require.NotContains(t, html, "Current access expires in")
 }
 
-func TestConsentTemplateLocksAutoRefreshWhenOrganizationEnforces(t *testing.T) {
+func TestConsentTemplateLocksAutoRefreshWhenOrganizationRequires(t *testing.T) {
 	t.Parallel()
 
 	var page bytes.Buffer
@@ -174,38 +172,37 @@ func TestConsentTemplateLocksAutoRefreshWhenOrganizationEnforces(t *testing.T) {
 		SubjectDisplay: "user@example.com",
 		ScriptURL:      "/mcp/consent-page-test.js",
 		RemoteSessionCards: []remoteSessionCard{{
-			ClientID:             "client-id",
-			IssuerSlug:           "example-issuer",
-			Connected:            true,
-			Expired:              false,
-			CanRefresh:           true,
-			AccessExpiresAt:      "2026-08-05T18:00:00Z",
-			AccessExpiresIn:      "3 hours",
-			AutoRefreshSupported: true,
-			AutoRefreshChecked:   true,
+			ClientID:           "client-id",
+			IssuerSlug:         "example-issuer",
+			Connected:          true,
+			Expired:            false,
+			CanRefresh:         true,
+			AccessExpiresAt:    "2026-08-05T18:00:00Z",
+			AccessExpiresIn:    "3 hours",
+			AutoRefreshChecked: true,
 		}},
 		ConsentEnabled:         true,
-		AutoRefreshSupported:   true,
+		AutoRefreshVisible:     true,
+		AutoRefreshEditable:    false,
 		AutoRefreshOn:          true,
 		AutoRefreshHasSessions: true,
-		AutoRefreshLocked:      true,
 	})
 	require.NoError(t, err)
 
 	html := page.String()
 	// The value is shown read-only, managed by the org — no editable control
 	// and no user-driven persistence form.
-	require.Contains(t, html, "Managed by your organization")
+	require.Contains(t, html, "On · Managed by your organization")
 	require.Contains(t, html, `data-auto-refresh-managed`)
 	require.NotContains(t, html, `data-auto-refresh-select`)
 	require.NotContains(t, html, `id="auto-refresh-form"`)
-	// The per-card hidden input still carries the enforced "on" value so the
+	// The per-card hidden input still carries the required "on" value so the
 	// connect action persists auto_refresh=on.
 	require.Contains(t, html, `value="on"`)
-	require.Contains(t, html, "Auto refresh")
+	require.Contains(t, html, "✓ Auto refresh on")
 }
 
-func TestConsentTemplateHidesAutoRefreshWhenOrganizationFeatureDisabled(t *testing.T) {
+func TestConsentTemplateShowsAutoRefreshOffWhenOrganizationDisables(t *testing.T) {
 	t.Parallel()
 
 	var page bytes.Buffer
@@ -218,31 +215,61 @@ func TestConsentTemplateHidesAutoRefreshWhenOrganizationFeatureDisabled(t *testi
 		SubjectDisplay: "user@example.com",
 		ScriptURL:      "/mcp/consent-page-test.js",
 		RemoteSessionCards: []remoteSessionCard{{
-			ClientID:             "client-id",
-			IssuerSlug:           "example-issuer",
-			Connected:            true,
-			Expired:              false,
-			CanRefresh:           true,
-			AccessExpiresAt:      "2026-08-05T18:00:00Z",
-			AccessExpiresIn:      "3 hours",
-			RefreshExpiresAt:     "",
-			RefreshExpiresIn:     "",
-			AutoRefreshSupported: false,
-			AutoRefreshChecked:   false,
+			ClientID:           "client-id",
+			IssuerSlug:         "example-issuer",
+			Connected:          true,
+			Expired:            false,
+			CanRefresh:         true,
+			AccessExpiresAt:    "2026-08-05T18:00:00Z",
+			AccessExpiresIn:    "3 hours",
+			RefreshExpiresAt:   "",
+			RefreshExpiresIn:   "",
+			AutoRefreshChecked: false,
 		}},
-		ConsentEnabled:       true,
-		AutoRefreshSupported: false,
+		ConsentEnabled:      true,
+		AutoRefreshVisible:  true,
+		AutoRefreshEditable: false,
+		AutoRefreshOn:       false,
 	})
 	require.NoError(t, err)
 
 	html := page.String()
-	require.NotContains(t, html, `aria-label="Auto refresh"`)
-	require.NotContains(t, html, "Auto refresh on")
-	require.Contains(t, html, "Refresh now")
-	// Refresh lifetime unknown: no expiry tooltip at all.
-	require.NotContains(t, html, `role="tooltip"`)
-	require.NotContains(t, html, "Renews on use")
-	require.NotContains(t, html, "The provider did not report")
+	// A disabled organization policy is stated rather than hidden, so the
+	// subject knows idle connections will lapse.
+	require.Contains(t, html, "Off · Managed by your organization")
+	require.Contains(t, html, `data-auto-refresh-managed`)
+	require.Contains(t, html, "Auto refresh off")
+	// Nothing to change and nothing to persist.
+	require.NotContains(t, html, `data-auto-refresh-select`)
+	require.NotContains(t, html, `id="auto-refresh-form"`)
+	// The connect action carries the organization's "off" value explicitly.
+	require.Contains(t, html, `value="off"`)
+	require.NotContains(t, html, "✓ Auto refresh on")
+}
+
+func TestConsentTemplateOmitsAutoRefreshRowWithoutRemoteSessions(t *testing.T) {
+	t.Parallel()
+
+	var page bytes.Buffer
+	err := consentTemplate.Execute(&page, consentTemplateData{
+		ClientName:         "Gram",
+		MCPSlug:            "example",
+		MCPRouteBase:       "mcp",
+		State:              "state",
+		CSRFToken:          "csrf",
+		SubjectDisplay:     "user@example.com",
+		ScriptURL:          "/mcp/consent-page-test.js",
+		RemoteSessionCards: nil,
+		ConsentEnabled:     true,
+		AutoRefreshVisible: false,
+	})
+	require.NoError(t, err)
+
+	html := page.String()
+	// With no services to connect there is no refresh behavior to describe.
+	require.NotContains(t, html, "Auto refresh")
+	require.NotContains(t, html, "Managed by your organization")
+	require.NotContains(t, html, `data-auto-refresh-select`)
 }
 
 func TestConsentTemplateOmitsExpiryTooltipWhenNoExpiryReported(t *testing.T) {
@@ -258,20 +285,21 @@ func TestConsentTemplateOmitsExpiryTooltipWhenNoExpiryReported(t *testing.T) {
 		SubjectDisplay: "user@example.com",
 		ScriptURL:      "/mcp/consent-page-test.js",
 		RemoteSessionCards: []remoteSessionCard{{
-			ClientID:             "client-id",
-			IssuerSlug:           "example-issuer",
-			Connected:            true,
-			Expired:              false,
-			CanRefresh:           true,
-			AccessExpiresAt:      "",
-			AccessExpiresIn:      "",
-			RefreshExpiresAt:     "",
-			RefreshExpiresIn:     "",
-			AutoRefreshSupported: false,
-			AutoRefreshChecked:   false,
+			ClientID:           "client-id",
+			IssuerSlug:         "example-issuer",
+			Connected:          true,
+			Expired:            false,
+			CanRefresh:         true,
+			AccessExpiresAt:    "",
+			AccessExpiresIn:    "",
+			RefreshExpiresAt:   "",
+			RefreshExpiresIn:   "",
+			AutoRefreshChecked: true,
 		}},
-		ConsentEnabled:       true,
-		AutoRefreshSupported: false,
+		ConsentEnabled:      true,
+		AutoRefreshVisible:  true,
+		AutoRefreshEditable: true,
+		AutoRefreshOn:       true,
 	})
 	require.NoError(t, err)
 
@@ -281,7 +309,8 @@ func TestConsentTemplateOmitsExpiryTooltipWhenNoExpiryReported(t *testing.T) {
 	require.NotContains(t, html, `id="refresh-expiry-client-id"`)
 	require.NotContains(t, html, "Renews on use")
 	require.NotContains(t, html, "The provider did not report")
-	require.NotContains(t, html, `role="tooltip"`)
+	// Only the auto-refresh tooltip remains; no expiry tooltip is rendered.
+	require.Equal(t, 1, strings.Count(html, `role="tooltip"`))
 }
 
 func TestFormatTimeRemaining(t *testing.T) {
