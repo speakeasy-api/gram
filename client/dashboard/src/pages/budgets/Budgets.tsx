@@ -1,4 +1,4 @@
-import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
+import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -227,8 +227,8 @@ function StatusSummaryCards({
       : 0;
 
   return (
-    <MetricCardGroup className="flex-wrap">
-      <MetricCard
+    <StatTileGroup className="flex-wrap">
+      <StatTile
         title="Spend vs budget"
         value={overview.totalSpendUsd}
         tone="information"
@@ -236,7 +236,7 @@ function StatusSummaryCards({
         format="number"
         subtext={`${spendPct}% of budgeted spend used across enabled rules`}
       />
-      <MetricCard
+      <StatTile
         title="Users over budget"
         value={overview.usersBreached}
         tone={overview.usersBreached > 0 ? "destructive" : "neutral"}
@@ -248,7 +248,7 @@ function StatusSummaryCards({
             : "people at or past a per-person limit"
         }
       />
-      <MetricCard
+      <StatTile
         title="Rules needing attention"
         value={overview.rulesUnhealthy}
         tone={overview.rulesUnhealthy > 0 ? "warning" : "neutral"}
@@ -260,7 +260,7 @@ function StatusSummaryCards({
             : "rules approaching or over budget"
         }
       />
-      <MetricCard
+      <StatTile
         title="Spend over budget"
         value={overview.spendOverBudgetUsd}
         tone={overview.spendOverBudgetUsd > 0 ? "destructive" : "neutral"}
@@ -273,7 +273,7 @@ function StatusSummaryCards({
             : "overages across individual limits"
         }
       />
-    </MetricCardGroup>
+    </StatTileGroup>
   );
 }
 

@@ -14,7 +14,7 @@ import { formatPlatform } from "@/lib/formatPlatform";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { useSeriesColors } from "@/components/chart/useSeriesColors";
 import { formatChartLabel } from "@/components/chart/chartUtils";
-import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
+import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
@@ -519,14 +519,14 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
             <DetailLoadingState isInsightsOpen={isInsightsOpen} />
           ) : (
             <>
-              <MetricCardGroup>
-                <MetricCard
+              <StatTileGroup>
+                <StatTile
                   title="Total Tokens"
                   value={totalTokens}
                   tone="information"
                   icon="gauge"
                 />
-                <MetricCard
+                <StatTile
                   title="Total Cost"
                   value={totalCost}
                   tone="information"
@@ -538,7 +538,7 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                       : "No cost data reported"
                   }
                 />
-                <MetricCard
+                <StatTile
                   title="Tool Calls"
                   value={summary?.totalToolCalls ?? 0}
                   tone="information"
@@ -546,7 +546,7 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                   subtext={`${(summary?.toolCallSuccess ?? 0).toLocaleString()} succeeded / ${(summary?.toolCallFailure ?? 0).toLocaleString()} failed`}
                   link={toolLogsHref}
                 />
-                <MetricCard
+                <StatTile
                   title="Agent Sessions"
                   value={summary?.totalChats ?? 0}
                   tone="information"
@@ -554,7 +554,7 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                   subtext={`Over ${rangeLabel}`}
                   link={agentSessionsHref}
                 />
-                <MetricCard
+                <StatTile
                   title="Risk Events"
                   value={riskEventsCount}
                   tone={riskEventsCount > 0 ? "destructive" : "neutral"}
@@ -567,7 +567,7 @@ export function InsightsEmployeeDetailContent(): JSX.Element {
                   subtext={`Over ${rangeLabel}`}
                   link={riskEventsHref}
                 />
-              </MetricCardGroup>
+              </StatTileGroup>
 
               <section
                 className={cn(

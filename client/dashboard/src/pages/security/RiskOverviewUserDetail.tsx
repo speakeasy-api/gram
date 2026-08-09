@@ -1,4 +1,4 @@
-import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
+import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import {
   formatDateRangeLabel,
   useDateRangeFilter,
@@ -139,8 +139,8 @@ function RiskOverviewUserDetailContent() {
         <Page.Section.CTA>{controls}</Page.Section.CTA>
         <Page.Section.Body>
           <div className="space-y-6">
-            <MetricCardGroup>
-              <MetricCard
+            <StatTileGroup>
+              <StatTile
                 title="Findings"
                 value={userEntry?.findings ?? 0}
                 tone={
@@ -149,14 +149,14 @@ function RiskOverviewUserDetailContent() {
                 format="compact"
                 icon="flag"
               />
-              <MetricCard
+              <StatTile
                 title="Chat Sessions"
                 value={totalChats}
                 tone="information"
                 format="compact"
                 icon="message-square"
               />
-            </MetricCardGroup>
+            </StatTileGroup>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <CategoryBreakdown
                 categories={breakdownQuery.data?.categories ?? []}

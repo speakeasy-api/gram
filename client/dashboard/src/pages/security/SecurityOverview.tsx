@@ -1,4 +1,4 @@
-import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
+import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { AXIS, TOOLTIP } from "@/components/chart/palette";
 import { useSeriesColors } from "@/components/chart/useSeriesColors";
@@ -371,11 +371,11 @@ function SecurityOverviewContent() {
             </Button>
           </div>
         )}
-        <MetricCardGroup>
+        <StatTileGroup>
           {isOverviewLoading ? (
             <Skeleton className="h-[100px] flex-1" />
           ) : (
-            <MetricCard
+            <StatTile
               title="Events Scanned"
               value={overview?.messagesScanned ?? 0}
               tone="information"
@@ -386,7 +386,7 @@ function SecurityOverviewContent() {
           {isOverviewLoading ? (
             <Skeleton className="h-[100px] flex-1" />
           ) : (
-            <MetricCard
+            <StatTile
               title="Findings"
               value={overview?.findings ?? 0}
               tone={(overview?.findings ?? 0) > 0 ? "destructive" : "neutral"}
@@ -397,7 +397,7 @@ function SecurityOverviewContent() {
           {isOverviewLoading ? (
             <Skeleton className="h-[100px] flex-1" />
           ) : (
-            <MetricCard
+            <StatTile
               title="Flagged Sessions"
               value={overview?.flaggedSessions ?? 0}
               tone={
@@ -410,7 +410,7 @@ function SecurityOverviewContent() {
           {isOverviewLoading ? (
             <Skeleton className="h-[100px] flex-1" />
           ) : (
-            <MetricCard
+            <StatTile
               title="Active Policies"
               value={overview?.activePolicies ?? 0}
               tone="success"
@@ -418,7 +418,7 @@ function SecurityOverviewContent() {
               icon="shield-check"
             />
           )}
-        </MetricCardGroup>
+        </StatTileGroup>
       </RiskOverviewShell>
 
       <RiskActivitySection>

@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router";
-import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
+import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { RankedBarList } from "@/components/chart/RankedBarList";
 import { Page } from "@/components/page-layout";
 import { Avatar, AvatarFallback } from "@/components/ui/Avatar";
@@ -486,11 +486,11 @@ export function ProjectDashboard(): JSX.Element {
           {logsEnabled && (
             <>
               {/* Row 0: KPI Cards */}
-              <MetricCardGroup>
+              <StatTileGroup>
                 {isOverviewPending ? (
                   <Skeleton className="h-[100px] flex-1" />
                 ) : (
-                  <MetricCard
+                  <StatTile
                     title="Active Servers"
                     value={overview?.summary.activeServersCount ?? 0}
                     tone="information"
@@ -502,7 +502,7 @@ export function ProjectDashboard(): JSX.Element {
                 {isOverviewPending ? (
                   <Skeleton className="h-[100px] flex-1" />
                 ) : (
-                  <MetricCard
+                  <StatTile
                     title="Tool Calls"
                     value={overview?.summary.totalToolCalls ?? 0}
                     tone="information"
@@ -514,7 +514,7 @@ export function ProjectDashboard(): JSX.Element {
                 {modePending || (!hasHookData && mcpUsersPending) ? (
                   <Skeleton className="h-[100px] flex-1" />
                 ) : hasHookData ? (
-                  <MetricCard
+                  <StatTile
                     title="Total Spend"
                     value={totalSpend}
                     tone="information"
@@ -523,7 +523,7 @@ export function ProjectDashboard(): JSX.Element {
                     tooltip="Total LLM spend recorded for this project in the selected period. Matches the figure on the Costs page."
                   />
                 ) : (
-                  <MetricCard
+                  <StatTile
                     title="End Users"
                     value={endUsersCount}
                     tone="information"
@@ -534,7 +534,7 @@ export function ProjectDashboard(): JSX.Element {
                 {modePending || isOverviewPending ? (
                   <Skeleton className="h-[100px] flex-1" />
                 ) : hasHookData ? (
-                  <MetricCard
+                  <StatTile
                     title="Sessions"
                     value={totalSessions}
                     tone="information"
@@ -542,7 +542,7 @@ export function ProjectDashboard(): JSX.Element {
                     tooltip="Distinct agent sessions across project members in the selected period."
                   />
                 ) : (
-                  <MetricCard
+                  <StatTile
                     title="Failed Tool Calls"
                     value={overview?.summary.failedToolCalls ?? 0}
                     tone={
@@ -555,7 +555,7 @@ export function ProjectDashboard(): JSX.Element {
                     tooltip="MCP tool calls that returned an error (HTTP 4xx/5xx) in the selected period."
                   />
                 )}
-              </MetricCardGroup>
+              </StatTileGroup>
 
               {/* Row 1: Top Activity */}
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">

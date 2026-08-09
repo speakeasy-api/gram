@@ -8,7 +8,7 @@ import { useChartZoom } from "@/components/chart/useChartZoom";
 import { buildAgentTokenTimeSeriesChartData } from "@/components/observe/agentTokenTimeSeriesChartData";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { formatCompact } from "@/lib/format";
-import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
+import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { useInsightsState } from "@/components/insights-context";
@@ -529,49 +529,45 @@ export function InsightsAgentsContent(): JSX.Element {
             <AgentsLoadingState isInsightsOpen={isInsightsOpen} />
           ) : (
             <>
-              <MetricCardGroup>
-                <MetricCard
+              <StatTileGroup>
+                <StatTile
                   title="Total Tokens"
                   value={filteredTotalTokens}
                   tone="information"
                   icon="gauge"
-                  accentColor="blue"
                   subtext={`${formatCompact(filteredTotalTokens)} across ${formatCompact(filteredTotalSessions)} sessions`}
                 />
-                <MetricCard
+                <StatTile
                   title="Total Cost"
                   value={filteredTotalCost}
                   tone="information"
                   format="currency"
                   icon="credit-card"
-                  accentColor="purple"
                   subtext={
                     filteredTotalCost > 0
                       ? formatCost(filteredTotalCost)
                       : "No cost data reported"
                   }
                 />
-                <MetricCard
+                <StatTile
                   title="Active Users"
                   value={filteredActiveUsers}
                   tone="information"
                   icon="user"
-                  accentColor="green"
                   subtext={`of ${(membersData?.members ?? []).length} org members`}
                 />
-                <MetricCard
+                <StatTile
                   title="AI Clients"
                   value={clientBreakdown.length}
                   tone="information"
                   icon="terminal"
-                  accentColor="orange"
                   subtext={
                     clientBreakdown.length > 0
                       ? clientBreakdown.map((c) => c.label).join(", ")
                       : "No client data"
                   }
                 />
-              </MetricCardGroup>
+              </StatTileGroup>
 
               <section
                 className={cn(

@@ -11,9 +11,9 @@ vi.mock("@/components/chart/ChartCard", () => ({
   ChartCard: () => null,
 }));
 
-vi.mock("@/components/chart/MetricCard", () => ({
-  MetricCard: () => null,
-  MetricCardGroup: () => null,
+vi.mock("@/components/chart/stat-tile", () => ({
+  StatTile: () => null,
+  StatTileGroup: () => null,
 }));
 
 vi.mock("@/components/insights-dock", () => ({

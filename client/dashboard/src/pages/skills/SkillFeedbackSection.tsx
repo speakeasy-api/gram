@@ -1,4 +1,4 @@
-import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
+import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { RequireScope } from "@/components/require-scope";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
@@ -246,22 +246,22 @@ function FeedbackOverview({
 
   return (
     <>
-      <MetricCardGroup>
-        <MetricCard
+      <StatTileGroup>
+        <StatTile
           title="30-day feedback"
           value={metrics.feedbackInWindow}
           tone="information"
           format="number"
           subtext="Reports collected"
         />
-        <MetricCard
+        <StatTile
           title="Unreviewed"
           value={metrics.unreviewed}
           tone={metrics.unreviewed > 0 ? "warning" : "neutral"}
           format="number"
           subtext="Awaiting suggestion analysis"
         />
-        <MetricCard
+        <StatTile
           title="Activation coverage"
           value={coverage}
           tone="success"
@@ -273,7 +273,7 @@ function FeedbackOverview({
           }
           subtext={`${metrics.feedbackActivationsInWindow.toLocaleString()} of ${metrics.activationsInWindow.toLocaleString()} activations produced feedback`}
         />
-        <MetricCard
+        <StatTile
           title="Suggestion conversion"
           value={conversion}
           tone="success"
@@ -283,7 +283,7 @@ function FeedbackOverview({
           }
           subtext={`${metrics.converted.toLocaleString()} of ${counts.total.toLocaleString()} reports cited`}
         />
-      </MetricCardGroup>
+      </StatTileGroup>
 
       <OutcomeDistribution counts={counts} />
       <FeedbackTimeline timeline={timeline} />
