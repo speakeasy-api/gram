@@ -1301,14 +1301,15 @@ func newStartCommand() *cli.Command {
 			triggers.Attach(mux, triggers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, triggerApp, auditLogger))
 			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, authzEngine, platformFeatureChecker, assistantPlatformExtras))
 			resources.Attach(mux, resources.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
-			mcpapproval.Attach(mux, mcpapproval.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger,
+			mcpApprovalService := mcpapproval.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger,
 				mcpapprovalevidence.NewAssembler(
 					packagemeta.NewClient(guardianPolicy.PooledClient()),
 					telemetryrepo.New(chDB),
 					remoteprobe.New(logger, guardianPolicy),
 					remoteprobe.New(logger, guardianPolicy),
 					mcpapprovalcatalog.New(logger, db, mcpRegistryClient),
-				)))
+				))
+			mcpapproval.Attach(mux, mcpApprovalService)
 			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, billingTracker, telemLogger, productFeatures, serverURL, authzEngine))
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, authzEngine, serverURL))
@@ -1370,6 +1371,7 @@ func newStartCommand() *cli.Command {
 				auditLogger,
 				cache.NewRedisCacheAdapter(redisClient),
 				c.String(usersessions.JWTSigningKeyFlag),
+				mcpApprovalService,
 				hookPIIScanner,
 				hookPIScanner,
 				featureFlags,

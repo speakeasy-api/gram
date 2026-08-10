@@ -301,6 +301,48 @@ func (s *Service) admit(ctx context.Context, projectID uuid.UUID, organizationID
 	return summaryView(fromGetRow(row)), nil
 }
 
+// AdmitBlockedServer is the block-link intake: a blocked employee's redeemed
+// token attaches them as a requester on the server's single review, evidence
+// and all, exactly as a proactive createRequest would. It implements the
+// risk service's ShadowMCPApprovalIntake seam — injected at wiring so the
+// block path and the API share one admission, and approval stays the only
+// flow a shadow-MCP ask can land in.
+//
+// The caller has already bound the redemption to the requester; the feature
+// gate still applies, and its forbidden error is the documented signal to
+// fall back to the legacy bypass request.
+func (s *Service) AdmitBlockedServer(ctx context.Context, organizationID string, projectID uuid.UUID, serverURL, requesterUserID, requesterEmail, note string) (string, string, error) {
+	enabled, err := s.features.IsFeatureEnabled(ctx, organizationID, productfeatures.FeatureMCPApproval)
+	if err != nil {
+		return "", "", oops.E(oops.CodeUnexpected, err, "check mcp approval feature").LogError(ctx, s.logger)
+	}
+	if !enabled {
+		return "", "", oops.E(oops.CodeForbidden, nil, "MCP approval is not enabled for this organization")
+	}
+
+	key, display, err := admittableServerURL(serverURL)
+	if err != nil {
+		return "", "", err
+	}
+
+	summary, err := s.admit(ctx, projectID, organizationID, admission{
+		targetKind:      targetKindServerURL,
+		targetRaw:       display,
+		targetKey:       key,
+		bypassRequestID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		requesterID:     requesterUserID,
+		requesterEmail:  conv.PtrEmpty(requesterEmail),
+		note:            conv.PtrEmpty(strings.TrimSpace(note)),
+		actor:           requesterUserID,
+		actorEmail:      conv.PtrEmpty(requesterEmail),
+	})
+	if err != nil {
+		return "", "", err
+	}
+
+	return summary.ID, summary.Status, nil
+}
+
 func (s *Service) CreateRequest(ctx context.Context, payload *gen.CreateRequestPayload) (*gen.ApprovalRequestSummary, error) {
 	projectID, authCtx, err := s.member(ctx)
 	if err != nil {

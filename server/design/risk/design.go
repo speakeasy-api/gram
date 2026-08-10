@@ -740,7 +740,7 @@ var _ = Service("risk", func() {
 			Required("request_token")
 		})
 
-		Result(RiskPolicyBypassRequest)
+		Result(PolicyBypassRedemption)
 
 		HTTP(func() {
 			POST("/rpc/risk.createPolicyBypassRequest")
@@ -1846,6 +1846,17 @@ var RiskOverviewTimeSeriesFinding = Type("RiskOverviewTimeSeriesFinding", func()
 	Attribute("findings", Int64, "Finding count for this category and time bucket.")
 
 	Required("bucket_start", "category", "findings")
+})
+
+var PolicyBypassRedemption = Type("PolicyBypassRedemption", func() {
+	Description("What a redeemed block-link token turned into: an MCP access request when the approval workflow handles the server, or a legacy policy bypass request otherwise.")
+	Required("kind", "id", "status")
+
+	Attribute("kind", String, "The kind of request the token redeemed into.", func() {
+		Enum("approval_request", "bypass_request")
+	})
+	Attribute("id", String, "The id of the created or refreshed request.")
+	Attribute("status", String, "The request's current status.")
 })
 
 var RiskPolicyBypassRequest = Type("RiskPolicyBypassRequest", func() {
