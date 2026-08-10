@@ -519,6 +519,14 @@ WHERE id = @id
   AND organization_id = @organization_id
 RETURNING *;
 
+-- name: LockLivePlatformMCPProjectForRegistration :one
+SELECT id
+FROM projects
+WHERE id = @project_id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE
+FOR UPDATE;
+
 -- name: LockPlatformMCPProjectRegistrationQuota :exec
 -- Serialize active-registration counting and desired-state creation for one
 -- project. Callers acquire the receipt lock first, then this quota lock, then

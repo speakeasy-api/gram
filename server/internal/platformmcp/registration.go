@@ -270,6 +270,14 @@ func (s *RegistrationStore) ConvergeRegistration(ctx context.Context, principal 
 	if storedReceipt.Status != receiptStatusPending {
 		return OperationReceipt{}, ErrRegistrationInvalid
 	}
+	if _, err := q.LockLivePlatformMCPProjectForRegistration(ctx, platformrepo.LockLivePlatformMCPProjectForRegistrationParams{
+		ProjectID:      project.ID,
+		OrganizationID: principal.OrganizationID,
+	}); errors.Is(err, pgx.ErrNoRows) {
+		return OperationReceipt{}, ErrTargetIneligible
+	} else if err != nil {
+		return OperationReceipt{}, fmt.Errorf("lock live platform mcp registration project: %w", err)
+	}
 	if err := q.LockPlatformMCPProjectRegistrationQuota(ctx, platformrepo.LockPlatformMCPProjectRegistrationQuotaParams{
 		OrganizationID: principal.OrganizationID,
 		ProjectID:      project.ID.String(),
@@ -424,6 +432,14 @@ func (s *RegistrationStore) CompleteRegistration(ctx context.Context, principal 
 	}
 	if storedReceipt.Status != receiptStatusPending {
 		return OperationReceipt{}, ErrRegistrationInvalid
+	}
+	if _, err := q.LockLivePlatformMCPProjectForRegistration(ctx, platformrepo.LockLivePlatformMCPProjectForRegistrationParams{
+		ProjectID:      project.ID,
+		OrganizationID: principal.OrganizationID,
+	}); errors.Is(err, pgx.ErrNoRows) {
+		return OperationReceipt{}, ErrTargetIneligible
+	} else if err != nil {
+		return OperationReceipt{}, fmt.Errorf("lock live platform mcp component project: %w", err)
 	}
 	if err := q.LockPlatformMCPProjectRegistrationQuota(ctx, platformrepo.LockPlatformMCPProjectRegistrationQuotaParams{
 		OrganizationID: principal.OrganizationID,
@@ -648,7 +664,7 @@ func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Cont
 
 func validRegistrationRemoteURL(rawURL string) bool {
 	parsed, err := url.Parse(rawURL)
-	return err == nil && parsed.Scheme == "https" && parsed.Host != "" && parsed.User == nil && parsed.Fragment == "" && !hasUnresolvedRemoteTemplate(rawURL)
+	return err == nil && parsed.Scheme == "https" && parsed.Hostname() != "" && parsed.User == nil && parsed.Fragment == "" && !hasUnresolvedRemoteTemplate(rawURL)
 }
 
 func platformMCPEndpointSlug(organizationSlug, suffix string) string {

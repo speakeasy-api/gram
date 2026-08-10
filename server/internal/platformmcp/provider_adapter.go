@@ -109,7 +109,7 @@ func validateProviderSetupPreflightRequest(request ProviderSetupRequest) error {
 
 func validateProviderSetupResult(result ProviderSetupResult) error {
 	parsed, err := url.Parse(result.AuthorizationURL)
-	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.Fragment != "" {
+	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil || parsed.Fragment != "" {
 		return ErrSetupHandoffInvalid
 	}
 	return nil

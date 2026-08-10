@@ -84,7 +84,7 @@ func TestNewRegistrationStoreRequiresDatabase(t *testing.T) {
 func TestPlatformMCPEndpointSlugStaysWithinDatabaseCharacterLimit(t *testing.T) {
 	t.Parallel()
 
-	slug := platformMCPEndpointSlug("🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀", "0123456789abcdef")
+	slug := platformMCPEndpointSlug("🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀", "0123456789abcdef")
 
 	require.Len(t, []rune(slug), maxMCPEndpointSlugLength)
 	require.Contains(t, slug, "-platform-mcp-endpoint-0123456789abcdef")

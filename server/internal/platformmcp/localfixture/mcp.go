@@ -89,7 +89,11 @@ func (s *MCPHTTP) handlePost(w http.ResponseWriter, r *http.Request) {
 			writeFixtureMCPError(w, request.ID, -32603, "could not create session")
 			return
 		}
-		s.createSession(sessionID)
+		if !s.createSession(sessionID) {
+			w.Header().Set("Retry-After", "60")
+			http.Error(w, "too many active sessions", http.StatusTooManyRequests)
+			return
+		}
 		w.Header().Set(fixtureMCPSessionHeader, sessionID)
 		writeFixtureMCPResult(w, request.ID, map[string]any{
 			"protocolVersion": "2025-03-26",
@@ -114,43 +118,34 @@ func (s *MCPHTTP) handlePost(w http.ResponseWriter, r *http.Request) {
 
 func (s *MCPHTTP) handleDelete(w http.ResponseWriter, r *http.Request) {
 	sessionID := r.Header.Get(fixtureMCPSessionHeader)
-	if !s.deleteSession(sessionID) {
-		http.Error(w, "unknown session", http.StatusNotFound)
+	if sessionID == "" {
+		http.Error(w, "missing session", http.StatusBadRequest)
 		return
 	}
+	s.deleteSession(sessionID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *MCPHTTP) createSession(sessionID string) {
+func (s *MCPHTTP) createSession(sessionID string) bool {
 	now := time.Now()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.pruneSessions(now)
 	if len(s.sessions) >= maxFixtureMCPSessions {
-		var oldest string
-		var oldestAt time.Time
-		for id, createdAt := range s.sessions {
-			if oldest == "" || createdAt.Before(oldestAt) {
-				oldest, oldestAt = id, createdAt
-			}
-		}
-		delete(s.sessions, oldest)
+		return false
 	}
 	s.sessions[sessionID] = now
+	return true
 }
 
-func (s *MCPHTTP) deleteSession(sessionID string) bool {
+func (s *MCPHTTP) deleteSession(sessionID string) {
 	if sessionID == "" {
-		return false
+		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.pruneSessions(time.Now())
-	if _, ok := s.sessions[sessionID]; !ok {
-		return false
-	}
 	delete(s.sessions, sessionID)
-	return true
 }
 
 func (s *MCPHTTP) hasSession(sessionID string) bool {

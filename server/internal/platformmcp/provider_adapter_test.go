@@ -54,6 +54,7 @@ func TestProviderSetupResultRequiresTransientAuthorizationURL(t *testing.T) {
 	require.ErrorIs(t, validateProviderSetupResult(ProviderSetupResult{}), ErrSetupHandoffInvalid)
 	require.ErrorIs(t, validateProviderSetupResult(ProviderSetupResult{AuthorizationURL: "http://provider.test/authorize"}), ErrSetupHandoffInvalid)
 	require.ErrorIs(t, validateProviderSetupResult(ProviderSetupResult{AuthorizationURL: "https://user:password@provider.test/authorize"}), ErrSetupHandoffInvalid)
+	require.ErrorIs(t, validateProviderSetupResult(ProviderSetupResult{AuthorizationURL: "https://:443/authorize"}), ErrSetupHandoffInvalid)
 	require.ErrorIs(t, validateProviderSetupResult(ProviderSetupResult{AuthorizationURL: "javascript:alert(1)"}), ErrSetupHandoffInvalid)
 	require.NoError(t, validateProviderSetupResult(ProviderSetupResult{AuthorizationURL: "https://provider.test/authorize?state=opaque"}))
 }

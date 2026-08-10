@@ -33,6 +33,8 @@ func TestHTTPSURLRejectsUnsafeURLs(t *testing.T) {
 	require.True(t, isHTTPSURL("https://example.test/mcp"))
 	require.False(t, isHTTPSURL("http://example.test/mcp"))
 	require.False(t, isHTTPSURL("https://user:password@example.test/mcp"))
+	require.False(t, isHTTPSURL("https://:443/mcp"))
+	require.False(t, isHTTPSURL("https://example.test/mcp#fragment"))
 	require.False(t, isHTTPSURL("javascript:alert(1)"))
 }
 

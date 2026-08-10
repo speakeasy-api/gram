@@ -36,6 +36,19 @@ func (s *DashboardSetupService) StartDashboardSetup(ctx context.Context, userID,
 		return ProviderSetupResult{}, ErrUnavailable
 	}
 
+	principal := Principal{
+		UserID:         userID,
+		OrganizationID: organizationID,
+		ConnectionID:   "",
+		Generation:     "",
+		ClientID:       "",
+	}
+	if err := s.authorizer.RequireLiveOrgAdmin(ctx, principal); err != nil {
+		if isAuthorizationDenied(err) {
+			return ProviderSetupResult{}, ErrForbidden
+		}
+		return ProviderSetupResult{}, fmt.Errorf("authorize platform mcp dashboard setup: %w: %w", ErrUnavailable, err)
+	}
 	row, err := platformrepo.New(s.store.db).GetPlatformMCPSetupHandoffForDashboardStart(ctx, platformrepo.GetPlatformMCPSetupHandoffForDashboardStartParams{
 		HandoffHash:    setupHandoffHash(handoff),
 		OrganizationID: organizationID,
@@ -47,20 +60,8 @@ func (s *DashboardSetupService) StartDashboardSetup(ctx context.Context, userID,
 	if err != nil {
 		return ProviderSetupResult{}, fmt.Errorf("load platform mcp setup handoff for dashboard start: %w", err)
 	}
-
-	principal := Principal{
-		UserID:         userID,
-		OrganizationID: organizationID,
-		ConnectionID:   row.ConnectionID.String(),
-		Generation:     row.ConnectionGeneration.String(),
-		ClientID:       "",
-	}
-	if err := s.authorizer.RequireLiveOrgAdmin(ctx, principal); err != nil {
-		if isAuthorizationDenied(err) {
-			return ProviderSetupResult{}, ErrForbidden
-		}
-		return ProviderSetupResult{}, fmt.Errorf("authorize platform mcp dashboard setup: %w: %w", ErrUnavailable, err)
-	}
+	principal.ConnectionID = row.ConnectionID.String()
+	principal.Generation = row.ConnectionGeneration.String()
 	if err := s.setupBudget.Allow(ctx, principal); err != nil {
 		return ProviderSetupResult{}, err
 	}

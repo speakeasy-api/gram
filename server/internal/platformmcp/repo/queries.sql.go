@@ -2005,6 +2005,27 @@ func (q *Queries) ListPlatformMCPServers(ctx context.Context, arg ListPlatformMC
 	return items, nil
 }
 
+const lockLivePlatformMCPProjectForRegistration = `-- name: LockLivePlatformMCPProjectForRegistration :one
+SELECT id
+FROM projects
+WHERE id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockLivePlatformMCPProjectForRegistrationParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockLivePlatformMCPProjectForRegistration(ctx context.Context, arg LockLivePlatformMCPProjectForRegistrationParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockLivePlatformMCPProjectForRegistration, arg.ProjectID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const lockPlatformMCPCatalogRegistration = `-- name: LockPlatformMCPCatalogRegistration :exec
 SELECT pg_advisory_xact_lock(
     hashtextextended(

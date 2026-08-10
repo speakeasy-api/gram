@@ -148,7 +148,7 @@ func entryHasAllowedStreamableHTTPRemote(entry *types.ExternalMCPServerEntry, al
 
 func isHTTPSURL(rawURL string) bool {
 	parsed, err := url.Parse(rawURL)
-	return err == nil && parsed.Scheme == "https" && parsed.Host != "" && parsed.User == nil
+	return err == nil && parsed.Scheme == "https" && parsed.Hostname() != "" && parsed.User == nil && parsed.Fragment == ""
 }
 
 func hasUnresolvedRemoteTemplate(rawURL string) bool {

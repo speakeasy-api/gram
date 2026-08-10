@@ -2,12 +2,14 @@ package localfixture
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -90,8 +92,26 @@ func TestMCPHTTPRequiresLiveBearerAndServesInitializeAndToolsList(t *testing.T) 
 	handler.ServeHTTP(deleteResponse, deleteRequest)
 	require.Equal(t, http.StatusNoContent, deleteResponse.Code)
 
+	deleteResponse = httptest.NewRecorder()
+	handler.ServeHTTP(deleteResponse, deleteRequest)
+	require.Equal(t, http.StatusNoContent, deleteResponse.Code)
+
 	deletedSession := mcpRequest(t, handler, accessToken, sessionID, 3, "tools/list")
 	require.Equal(t, http.StatusBadRequest, deletedSession.Code)
+}
+
+func TestMCPHTTPLimitsActiveSessionsWithoutEvictingExistingSession(t *testing.T) {
+	t.Parallel()
+
+	handler := NewMCPHTTP(nil)
+	handler.sessions = make(map[string]time.Time, maxFixtureMCPSessions)
+	for index := range maxFixtureMCPSessions {
+		handler.sessions[fmt.Sprintf("session-%d", index)] = time.Now()
+	}
+
+	require.False(t, handler.createSession("new-session"))
+	require.Len(t, handler.sessions, maxFixtureMCPSessions)
+	require.Contains(t, handler.sessions, "session-0")
 }
 
 func TestMCPHTTPRejectsRevokedBearer(t *testing.T) {
