@@ -128,30 +128,41 @@ func TestService_Info(t *testing.T) {
 
 	// An expired trial has to reach the dashboard so it can tell the user their
 	// trial ended instead of falling back to the generic never-trialed gate.
+	// Demotion is reported whether or not the clock ran out first: the query
+	// filters on conversion alone, so an organization demoted by hand mid-trial
+	// still resolves.
 	for _, test := range []struct {
 		name      string
+		endsAt    time.Time
 		demotedAt *time.Time
 	}{
 		{
 			name:      "expired",
+			endsAt:    time.Date(2026, time.August, 4, 12, 0, 0, 0, time.UTC),
 			demotedAt: nil,
 		},
 		{
 			name:      "demoted",
+			endsAt:    time.Date(2026, time.August, 4, 12, 0, 0, 0, time.UTC),
 			demotedAt: timestampPtr(time.Date(2026, time.August, 4, 13, 0, 0, 0, time.UTC)),
+		},
+		{
+			name:      "demoted before the trial ran out",
+			endsAt:    time.Date(2100, time.August, 15, 12, 0, 0, 0, time.UTC),
+			demotedAt: timestampPtr(time.Date(2026, time.August, 2, 12, 0, 0, 0, time.UTC)),
 		},
 	} {
 		t.Run("returns "+test.name+" trial", func(t *testing.T) {
 			t.Parallel()
 
 			ctx, instance, organizationID := setupInfoRequest(t)
-			insertTrial(t, ctx, instance, organizationID, time.Date(2026, time.August, 1, 12, 0, 0, 0, time.UTC), time.Date(2026, time.August, 4, 12, 0, 0, 0, time.UTC), nil, test.demotedAt)
+			insertTrial(t, ctx, instance, organizationID, time.Date(2026, time.August, 1, 12, 0, 0, 0, time.UTC), test.endsAt, nil, test.demotedAt)
 
 			result, err := instance.service.Info(ctx, &gen.InfoPayload{})
 			require.NoError(t, err)
 			require.Equal(t, &gen.Trial{
 				StartedAt: "2026-08-01T12:00:00Z",
-				EndsAt:    "2026-08-04T12:00:00Z",
+				EndsAt:    test.endsAt.Format(time.RFC3339),
 			}, result.Trial)
 		})
 	}
