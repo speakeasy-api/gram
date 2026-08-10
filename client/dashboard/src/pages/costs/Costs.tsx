@@ -50,7 +50,11 @@ function NewCostsPage(): JSX.Element {
       scope="org:admin"
       breadcrumbSubstitutions={breadcrumbSubstitutions}
     >
-      <CostsExplorer />
+      {/* WorkbenchPage owns overflow-hidden; the explorer expects its container
+          to scroll (matching the Costs tab in TabbedCostsPage). */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <CostsExplorer />
+      </div>
     </WorkbenchPage>
   );
 }

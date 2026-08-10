@@ -1,6 +1,7 @@
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { TabbedPage } from "@/components/page-templates";
+import { RequireScope } from "@/components/require-scope";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import type { Action } from "@/components/ui/MoreActions";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
@@ -539,7 +540,11 @@ function PolicyDateCell({ date }: { date: Date }): JSX.Element {
 const POLICY_CENTER_TABS = ["policies", "exclusions", "dismissed"] as const;
 
 export default function PolicyCenter(): JSX.Element {
-  return <PolicyCenterContent />;
+  return (
+    <RequireScope scope="org:admin" level="page">
+      <PolicyCenterContent />
+    </RequireScope>
+  );
 }
 
 // Layout route wrapper: the policy list and the policy detail subpage render
@@ -892,7 +897,6 @@ function PolicyCenterContent() {
 
   return (
     <TabbedPage
-      scope="org:admin"
       title="Policies"
       stage="beta"
       description="Configure policies to detect secrets, sensitive information, and prompt-defined risks in agent session interactions."

@@ -219,7 +219,14 @@ function DeploymentsTable() {
   const { data: activeDeployment } = useActiveDeployment();
 
   if (deployments.length === 0) {
-    return <DeploymentsEmptyState />;
+    // Keep the "what creates a deployment" copy visible for first-time users;
+    // it explains the empty state rather than only annotating a populated list.
+    return (
+      <>
+        <DeploymentsExplainer />
+        <DeploymentsEmptyState />
+      </>
+    );
   }
 
   const columnsWithData: TableProps<DeploymentSummary>["columns"] = [
@@ -302,16 +309,7 @@ function DeploymentsTable() {
 
   return (
     <>
-      <div className="bg-card border-border mb-6 space-y-2 border p-6">
-        <p className="text-muted-foreground text-sm">
-          Each time you add a new source or update an existing source a new
-          deployment is created.
-        </p>
-        <p className="text-muted-foreground text-sm">
-          For each deployment all sources are analyzed in the project to
-          generate or update the corresponding tool definitions.
-        </p>
-      </div>
+      <DeploymentsExplainer />
 
       <Table<DeploymentSummary>
         columns={columnsWithData}
@@ -329,6 +327,21 @@ function DeploymentsTable() {
         )}
       />
     </>
+  );
+}
+
+function DeploymentsExplainer() {
+  return (
+    <div className="bg-card border-border mb-6 space-y-2 border p-6">
+      <p className="text-muted-foreground text-sm">
+        Each time you add a new source or update an existing source a new
+        deployment is created.
+      </p>
+      <p className="text-muted-foreground text-sm">
+        For each deployment all sources are analyzed in the project to generate
+        or update the corresponding tool definitions.
+      </p>
+    </div>
   );
 }
 

@@ -48,7 +48,7 @@ export function InlineEmptyState({
     graphic ??
     (icon ? (
       <div className="text-muted-foreground flex h-12 w-12 shrink-0 items-center justify-center border">
-        <Icon name={icon} className="h-5 w-5" />
+        <Icon name={icon} className="h-5 w-5" aria-hidden="true" />
       </div>
     ) : null);
 

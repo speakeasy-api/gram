@@ -76,7 +76,11 @@ export function ExternalServicesPage(): JSX.Element {
     );
   }
 
-  return <ExternalServicesOverview />;
+  return (
+    <RequireScope scope={["org:read", "org:admin"]} level="page">
+      <ExternalServicesOverview />
+    </RequireScope>
+  );
 }
 
 function ExternalServicesOverview(): JSX.Element {
@@ -122,7 +126,6 @@ function ExternalServicesOverview(): JSX.Element {
   return (
     <>
       <ResourceListPage
-        scope={["org:read", "org:admin"]}
         title="External Services"
         description="How Gram authenticates into your cloud account to reach the keys you manage there. Gram impersonates a service account you nominate, so it never holds long-lived credentials of your own."
         primaryAction={

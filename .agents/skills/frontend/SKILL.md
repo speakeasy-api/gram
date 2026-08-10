@@ -445,20 +445,35 @@ The `@/components/ui/link` wrapper sets `target="_blank"` when `external` is tru
 ```tsx
 import { ResourceListPage } from "@/components/page-templates";
 
+// Gate the DATA-OWNING component from outside so its query never fires for
+// unauthorized users. A data hook called in the same component that renders the
+// template runs BEFORE the template's own `scope` gate — so wrap it here.
 export default function Environments(): JSX.Element {
   return (
+    <RequireScope scope="project:read" level="page">
+      <EnvironmentsInner />
+    </RequireScope>
+  );
+}
+
+function EnvironmentsInner(): JSX.Element {
+  const q = useEnvironments(); // runs only after the page gate above passes
+  const rows = q.data ?? [];
+  // Write affordances get their OWN component-level gate — the page scope is
+  // read, so an any-of page scope must never be what hides a write button.
+  const newButton = (
+    <RequireScope scope="project:write" level="component">
+      <Button>New environment</Button>
+    </RequireScope>
+  );
+  return (
     <ResourceListPage
-      scope={["project:read", "project:write"]} // wraps RequireScope + Page frame
       title="Environments"
       description="One-line purpose."
-      primaryAction={<NewButton />}
+      primaryAction={rows.length > 0 ? newButton : undefined}
       isLoading={q.isPending}
       isEmpty={rows.length === 0}
-      empty={{
-        icon: "blocks",
-        heading: "No environments yet",
-        action: <NewButton />,
-      }}
+      empty={{ icon: "blocks", heading: "No environments yet", action: newButton }}
     >
       <Table columns={columns} data={rows} rowKey={(r) => r.id} />
     </ResourceListPage>
@@ -466,7 +481,7 @@ export default function Environments(): JSX.Element {
 }
 ```
 
-`scope` accepts a single scope string (`scope="org:admin"`) or an array (`scope={["project:read", "project:write"]}`, any-of by default); every template takes it and wraps `RequireScope` around the page.
+**Scope gating (important):** wrap the data-owning component in `RequireScope` (the view scope, e.g. `project:read`) and call data hooks inside it, so the query never fires for unauthorized users. The templates also accept a `scope` prop, but it only gates *rendering* — a hook in the same component that renders the template runs before that gate, so prefer the outer wrapper for anything that fetches. Gate write-only affordances (create/delete buttons, mutation tabs) with their own `level="component"` `RequireScope` for the write scope; never rely on an any-of page scope to hide them.
 
 Only a page that fits **none** of the templates falls back to the raw skeleton (and it still must render the header exactly once — no bespoke `<h1>`):
 
@@ -517,7 +532,7 @@ Checklist for the content below the title:
 - Tables → design-system `Table` (headers come out as eyebrows for free); hand-rolled grids use `text-eyebrow` header labels.
 - List/filter controls → `Page.Toolbar` (see the `page-toolbar` skill), mono uppercase segments for mode switches.
 - Empty states → **`InlineEmptyState`** from `@/components/inline-empty-state` (`icon`/`graphic` + `heading` + `description` + `action`, `orientation="horizontal"` variant) for empty regions inside a page; `EmptyState` from `@/components/page-layout` for full-page voids. **Never hand-roll** the `border-dashed` + `rounded-full` icon-blob block — `InlineEmptyState` is the square-hairline-tile idiom and the templates' `empty` prop routes through it.
-- Chart/summary panels → `SummaryCard` from `@/components/summary-card` (titled panel with loading/empty states); the detail-column width wrapper is `DetailBody` from `@/components/detail-body` (never re-type `max-w-[1270px] px-8 py-8`).
+- Chart/summary panels → `ChartCard` from `@/components/chart/ChartCard` (titled panel with loading/error states); the detail-column width wrapper is `DetailBody` from `@/components/detail-body` (never re-type `max-w-[1270px] px-8 py-8`).
 - Loading → content-shaped skeletons (`SkeletonTable`, geometry-matched rows), never a lone spinner or a premature empty state.
 - Cards white (`bg-card`), page gutter gray, hairline borders, no shadows/gradients/washes, square corners — per the styling rules below.
 

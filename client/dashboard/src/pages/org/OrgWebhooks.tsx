@@ -16,7 +16,11 @@ import React from "react";
 import "svix-react/style.css";
 
 export default function OrgWebhooks(): React.JSX.Element {
-  return <OrgWebhooksInner />;
+  return (
+    <RequireScope scope={["org:read"]} level="page">
+      <OrgWebhooksInner />
+    </RequireScope>
+  );
 }
 
 function OrgWebhooksInner() {
@@ -35,7 +39,6 @@ function OrgWebhooksInner() {
 
   return (
     <SettingsPage
-      scope={["org:read"]}
       title="Webhooks"
       stage="beta"
       description="Configure webhook delivery for various platform events."

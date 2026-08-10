@@ -12,7 +12,8 @@ import {
  * OverviewPage — a dashboard: a stat row over a grid of summary/chart cards.
  * Owns the frame, the single header (with an optional time-range control in
  * the CTA slot), and the metric row's loading swap (via StatRow). Compose the
- * body from `SummaryCard`s.
+ * body from `ChartCard`s (`@/components/chart/ChartCard`) — the shared titled
+ * panel with loading/error states.
  *
  *   <OverviewPage
  *     scope="observe:read"
@@ -22,7 +23,7 @@ import {
  *     metricsLoading={q.isPending}
  *   >
  *     <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
- *       <SummaryCard …>…</SummaryCard>
+ *       <ChartCard …>…</ChartCard>
  *     </div>
  *   </OverviewPage>
  */

@@ -194,7 +194,6 @@ export function Input({
         {reveal && !asTextarea && (
           <button
             type="button"
-            tabIndex={-1}
             onClick={() => setIsRevealed((v) => !v)}
             disabled={disabled || props.readOnly}
             aria-label={isRevealed ? "Hide value" : "Show value"}

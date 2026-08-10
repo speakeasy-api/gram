@@ -1,4 +1,5 @@
 import { ResourceListPage } from "@/components/page-templates";
+import { RequireScope } from "@/components/require-scope";
 import { DotTable } from "@/components/ui/DotTable";
 import { Heading } from "@/components/ui/Heading";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -49,7 +50,11 @@ export function CatalogRoot(): JSX.Element {
 }
 
 export default function Catalog(): JSX.Element {
-  return <CatalogInner />;
+  return (
+    <RequireScope scope={["project:read", "mcp:write"]} level="page">
+      <CatalogInner />
+    </RequireScope>
+  );
 }
 
 function CatalogInner() {
@@ -132,7 +137,6 @@ function CatalogInner() {
   return (
     <>
       <ResourceListPage
-        scope={["project:read", "mcp:write"]}
         title="MCP Catalog"
         description={
           <>

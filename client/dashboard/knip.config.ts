@@ -27,7 +27,6 @@ const config: KnipConfig = {
     // (all templates + widgets) whose full API is exposed whether or not every
     // page has migrated onto it yet — same rationale as components/ui above.
     "src/components/page-templates/**/*",
-    "src/components/summary-card.tsx",
   ],
 };
 

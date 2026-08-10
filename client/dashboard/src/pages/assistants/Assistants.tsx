@@ -157,7 +157,11 @@ export default function AssistantsIndex(): JSX.Element {
       ]}
     >
       {activeTab === "assistants" && content}
-      {activeTab === "triggers" && <TriggersPanel />}
+      {activeTab === "triggers" && (
+        <RequireScope scope="project:write" level="section">
+          <TriggersPanel />
+        </RequireScope>
+      )}
       {activeTab === "audit" && (
         <RequireScope scope="org:read" level="section">
           <AssistantsAuditLog />

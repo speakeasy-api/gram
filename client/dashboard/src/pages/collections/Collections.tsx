@@ -13,7 +13,11 @@ export function CollectionsRoot(): JSX.Element {
 }
 
 export default function Collections(): JSX.Element {
-  return <CollectionsInner />;
+  return (
+    <RequireScope scope={["org:read", "org:admin"]} level="page">
+      <CollectionsInner />
+    </RequireScope>
+  );
 }
 
 function CollectionsInner() {
@@ -24,7 +28,6 @@ function CollectionsInner() {
 
   return (
     <ResourceListPage
-      scope={["org:read", "org:admin"]}
       title="Collections"
       description="Collections allow you to create reusable groups of MCP servers and skills to install into multiple projects in one go."
       search={{

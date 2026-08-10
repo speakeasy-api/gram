@@ -24,8 +24,13 @@ import { RequireScope } from "@/components/require-scope";
 
 export default function OrgApiKeys(): JSX.Element {
   // The key fetching request returns a forbidden error without the org:admin
-  // scope; the ResourceListPage `scope` prop gates rendering on that scope.
-  return <OrgApiKeysInner />;
+  // scope; the outer RequireScope gates rendering (and the data hook) on that
+  // scope.
+  return (
+    <RequireScope scope="org:admin" level="page">
+      <OrgApiKeysInner />
+    </RequireScope>
+  );
 }
 
 function OrgApiKeysInner() {
@@ -199,7 +204,6 @@ function OrgApiKeysInner() {
   return (
     <>
       <ResourceListPage
-        scope="org:admin"
         title="API Keys"
         description="Create and manage API keys to authenticate programmatic access to platform services, including MCP service deployments, tool management, and other connections."
         primaryAction={newApiKeyButton}

@@ -1,4 +1,5 @@
 import { ResourceListPage } from "@/components/page-templates";
+import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -82,7 +83,11 @@ type SelectedRule =
   | { kind: "custom"; rule: CustomDetectionRule };
 
 export default function DetectionRules(): JSX.Element {
-  return <DetectionRulesContent />;
+  return (
+    <RequireScope scope="org:admin" level="page">
+      <DetectionRulesContent />
+    </RequireScope>
+  );
 }
 
 function DetectionRulesContent() {
@@ -139,7 +144,6 @@ function DetectionRulesContent() {
   return (
     <>
       <ResourceListPage
-        scope="org:admin"
         title="Detection Rules"
         stage="beta"
         description="Reusable built-in and custom rules your policies use to flag — or exempt — messages."

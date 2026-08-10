@@ -53,6 +53,7 @@ export function ResourceListPage({
   scopeAll,
   resourceId,
   breadcrumbSubstitutions,
+  fullHeight,
   // header
   title,
   description,
@@ -81,6 +82,12 @@ export function ResourceListPage({
   bodyClassName,
 }: TemplateFrameProps &
   TemplateHeaderProps & {
+    /**
+     * Constrain the body to the viewport so a long table/grid scrolls inside
+     * its own pane (mirrors the old `Page.Body fullHeight` contract) instead of
+     * growing the whole page. Use for inventory tables with internal paging.
+     */
+    fullHeight?: boolean;
     metrics?: StatRowMetric[];
     metricsLoading?: boolean;
     search?: {
@@ -122,6 +129,7 @@ export function ResourceListPage({
       scopeAll={scopeAll}
       resourceId={resourceId}
       breadcrumbSubstitutions={breadcrumbSubstitutions}
+      fullHeight={fullHeight}
     >
       <TemplateHeader
         title={title}
@@ -158,7 +166,12 @@ export function ResourceListPage({
         </Page.Toolbar>
       )}
 
-      <div className={cn(bodyClassName)}>
+      <div
+        className={cn(
+          fullHeight && "flex min-h-0 flex-1 flex-col",
+          bodyClassName,
+        )}
+      >
         <ResourceListBody
           isLoading={isLoading}
           isEmpty={isEmpty}

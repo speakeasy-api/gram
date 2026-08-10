@@ -1,4 +1,5 @@
 import { ResourceListPage } from "@/components/page-templates";
+import { RequireScope } from "@/components/require-scope";
 import type { ShadowMCPPolicy } from "@/components/shadow-mcp/ShadowMCPInventoryActions";
 import { ShadowMCPInventoryTable } from "@/components/shadow-mcp/ShadowMCPInventoryTable";
 import { ShadowMCPPolicyStatus } from "@/components/shadow-mcp/ShadowMCPPolicyStatus";
@@ -32,6 +33,16 @@ function ShadowMCPLoadingState(): JSX.Element {
 }
 
 export default function ShadowMCP(): JSX.Element {
+  // Keep the scope gate OUTSIDE the data-owning component so the risk-policy /
+  // members / roles queries never fire for unauthorized visitors.
+  return (
+    <RequireScope scope="org:admin" level="page">
+      <ShadowMCPInner />
+    </RequireScope>
+  );
+}
+
+function ShadowMCPInner(): JSX.Element {
   const pageTitle = "Shadow MCP";
   const project = useProject();
   const routes = useRoutes();
@@ -51,7 +62,6 @@ export default function ShadowMCP(): JSX.Element {
 
   return (
     <ResourceListPage
-      scope="org:admin"
       breadcrumbSubstitutions={{ ["shadow-mcp"]: pageTitle }}
       title={pageTitle}
       stage="beta"
@@ -66,8 +76,9 @@ export default function ShadowMCP(): JSX.Element {
       }
       isLoading={!policyDataReady}
       loadingFallback={<ShadowMCPLoadingState />}
+      fullHeight
     >
-      <div className="flex flex-col pb-8">
+      <div className="flex min-h-0 flex-1 flex-col pb-8">
         <ShadowMCPInventoryTable
           members={membersQuery.data?.members ?? []}
           onOpenServer={(server) =>

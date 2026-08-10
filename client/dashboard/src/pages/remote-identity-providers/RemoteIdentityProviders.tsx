@@ -55,7 +55,11 @@ export function RemoteIdentityProvidersRoot(): JSX.Element {
 }
 
 export function RemoteIdentityProvidersPage(): JSX.Element {
-  return <RemoteIdentityProvidersOverview />;
+  return (
+    <RequireScope scope={["org:read", "org:admin"]} level="page">
+      <RemoteIdentityProvidersOverview />
+    </RequireScope>
+  );
 }
 
 function RemoteIdentityProvidersOverview() {
@@ -160,7 +164,6 @@ function RemoteIdentityProvidersOverview() {
   return (
     <>
       <ResourceListPage
-        scope={["org:read", "org:admin"]}
         title="Organizational Remote Identity Providers"
         description="Identity providers shared across every project in the organization. Prefer creating clients on platform maintained providers when available unless client setup documentation needs customization for your organization workflows."
         primaryAction={

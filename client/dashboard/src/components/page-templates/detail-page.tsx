@@ -1,9 +1,8 @@
 import { DetailBody } from "@/components/detail-body";
+import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/Button";
-import { Heading } from "@/components/ui/Heading";
 import { SkeletonTable } from "@/components/ui/Skeleton";
-import { Text } from "@/components/ui/Text";
 import type { ReleaseStage } from "@/components/release-stage-badge";
 import type { ReactNode } from "react";
 import { TabbedPage, type PageTab } from "./tabbed-page";
@@ -47,6 +46,7 @@ export function DetailPage({
   description,
   stage,
   area,
+  primaryAction,
   sections,
   activeSection,
   layout = "routed",
@@ -66,6 +66,8 @@ export function DetailPage({
     return (
       <TemplateFrame
         scope={scope}
+        scopeAll={scopeAll}
+        resourceId={resourceId}
         breadcrumbSubstitutions={breadcrumbSubstitutions}
         fullWidth
         fullWidthBreadcrumbs
@@ -82,41 +84,50 @@ export function DetailPage({
     return (
       <TemplateFrame
         scope={scope}
+        scopeAll={scopeAll}
+        resourceId={resourceId}
         breadcrumbSubstitutions={breadcrumbSubstitutions}
         fullWidth
         fullWidthBreadcrumbs
         bodyClassName="gap-0"
       >
         <DetailBody>
-          <div className="flex flex-col items-center gap-3 border border-dashed px-8 py-16 text-center">
-            <Heading variant="h5" className="font-medium">
-              {notFound.title}
-            </Heading>
-            {notFound.description != null && (
-              <Text small muted className="max-w-md">
-                {notFound.description}
-              </Text>
-            )}
-            {notFound.backTo != null && (
-              <Link to={notFound.backTo}>
-                <Button variant="tertiary" size="sm">
-                  Go back
-                </Button>
-              </Link>
-            )}
-          </div>
+          <InlineEmptyState
+            heading={notFound.title}
+            description={notFound.description}
+            action={
+              notFound.backTo != null ? (
+                <Link to={notFound.backTo}>
+                  <Button variant="tertiary" size="sm">
+                    Go back
+                  </Button>
+                </Link>
+              ) : undefined
+            }
+          />
         </DetailBody>
       </TemplateFrame>
     );
   }
 
   if (layout === "routed") {
-    const tabs: PageTab[] = sections.map((section) => ({
-      value: section.id,
-      label: section.label,
-      href: section.href ?? "#",
-      stage: section.stage,
-    }));
+    if (import.meta.env.DEV) {
+      const missing = sections.filter((section) => section.href == null);
+      if (missing.length > 0) {
+        console.warn(
+          `DetailPage(layout="routed"): sections must have an href to navigate; ` +
+            `missing on: ${missing.map((section) => section.id).join(", ")}`,
+        );
+      }
+    }
+    const tabs: PageTab[] = sections
+      .filter((section) => section.href != null)
+      .map((section) => ({
+        value: section.id,
+        label: section.label,
+        href: section.href as string,
+        stage: section.stage,
+      }));
     const active =
       sections.find((section) => section.id === activeSection) ?? sections[0];
     return (
@@ -130,6 +141,7 @@ export function DetailPage({
         description={description}
         stage={stage}
         area={area}
+        primaryAction={primaryAction}
         tabs={tabs}
         activeTab={active?.id ?? ""}
       >
@@ -157,6 +169,7 @@ export function DetailPage({
               description={description}
               stage={stage}
               area={area}
+              primaryAction={primaryAction}
             />
           </div>
         ))}
