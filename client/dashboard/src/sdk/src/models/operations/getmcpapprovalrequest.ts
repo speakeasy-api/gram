@@ -5,19 +5,9 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 
-export type GetMcpApprovalRequestSecurityOption1 = {
-  projectSlugHeaderGramProject: string;
-  sessionHeaderGramSession: string;
-};
-
-export type GetMcpApprovalRequestSecurityOption2 = {
-  apikeyHeaderGramKey: string;
-  projectSlugHeaderGramProject: string;
-};
-
 export type GetMcpApprovalRequestSecurity = {
-  option1?: GetMcpApprovalRequestSecurityOption1 | undefined;
-  option2?: GetMcpApprovalRequestSecurityOption2 | undefined;
+  sessionHeaderGramSession?: string | undefined;
+  apikeyHeaderGramKey?: string | undefined;
 };
 
 export type GetMcpApprovalRequestRequest = {
@@ -33,82 +23,12 @@ export type GetMcpApprovalRequestRequest = {
    * API Key header
    */
   gramKey?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
 };
-
-/** @internal */
-export type GetMcpApprovalRequestSecurityOption1$Outbound = {
-  "project_slug_header_Gram-Project": string;
-  "session_header_Gram-Session": string;
-};
-
-/** @internal */
-export const GetMcpApprovalRequestSecurityOption1$outboundSchema: z.ZodMiniType<
-  GetMcpApprovalRequestSecurityOption1$Outbound,
-  GetMcpApprovalRequestSecurityOption1
-> = z.pipe(
-  z.object({
-    projectSlugHeaderGramProject: z.string(),
-    sessionHeaderGramSession: z.string(),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-      sessionHeaderGramSession: "session_header_Gram-Session",
-    });
-  }),
-);
-
-export function getMcpApprovalRequestSecurityOption1ToJSON(
-  getMcpApprovalRequestSecurityOption1: GetMcpApprovalRequestSecurityOption1,
-): string {
-  return JSON.stringify(
-    GetMcpApprovalRequestSecurityOption1$outboundSchema.parse(
-      getMcpApprovalRequestSecurityOption1,
-    ),
-  );
-}
-
-/** @internal */
-export type GetMcpApprovalRequestSecurityOption2$Outbound = {
-  "apikey_header_Gram-Key": string;
-  "project_slug_header_Gram-Project": string;
-};
-
-/** @internal */
-export const GetMcpApprovalRequestSecurityOption2$outboundSchema: z.ZodMiniType<
-  GetMcpApprovalRequestSecurityOption2$Outbound,
-  GetMcpApprovalRequestSecurityOption2
-> = z.pipe(
-  z.object({
-    apikeyHeaderGramKey: z.string(),
-    projectSlugHeaderGramProject: z.string(),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      apikeyHeaderGramKey: "apikey_header_Gram-Key",
-      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    });
-  }),
-);
-
-export function getMcpApprovalRequestSecurityOption2ToJSON(
-  getMcpApprovalRequestSecurityOption2: GetMcpApprovalRequestSecurityOption2,
-): string {
-  return JSON.stringify(
-    GetMcpApprovalRequestSecurityOption2$outboundSchema.parse(
-      getMcpApprovalRequestSecurityOption2,
-    ),
-  );
-}
 
 /** @internal */
 export type GetMcpApprovalRequestSecurity$Outbound = {
-  Option1?: GetMcpApprovalRequestSecurityOption1$Outbound | undefined;
-  Option2?: GetMcpApprovalRequestSecurityOption2$Outbound | undefined;
+  "session_header_Gram-Session"?: string | undefined;
+  "apikey_header_Gram-Key"?: string | undefined;
 };
 
 /** @internal */
@@ -117,17 +37,13 @@ export const GetMcpApprovalRequestSecurity$outboundSchema: z.ZodMiniType<
   GetMcpApprovalRequestSecurity
 > = z.pipe(
   z.object({
-    option1: z.optional(
-      z.lazy(() => GetMcpApprovalRequestSecurityOption1$outboundSchema),
-    ),
-    option2: z.optional(
-      z.lazy(() => GetMcpApprovalRequestSecurityOption2$outboundSchema),
-    ),
+    sessionHeaderGramSession: z.optional(z.string()),
+    apikeyHeaderGramKey: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
-      option1: "Option1",
-      option2: "Option2",
+      sessionHeaderGramSession: "session_header_Gram-Session",
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
     });
   }),
 );
@@ -147,7 +63,6 @@ export type GetMcpApprovalRequestRequest$Outbound = {
   id: string;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
-  "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
@@ -159,13 +74,11 @@ export const GetMcpApprovalRequestRequest$outboundSchema: z.ZodMiniType<
     id: z.string(),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
-    gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",
-      gramProject: "Gram-Project",
     });
   }),
 );

@@ -13,7 +13,7 @@ import (
 
 func refreshPayload(id string) *gen.RefreshEvidencePayload {
 	return &gen.RefreshEvidencePayload{
-		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, ID: id,
+		SessionToken: nil, ApikeyToken: nil, ID: id,
 	}
 }
 
@@ -25,7 +25,7 @@ func TestRefreshEvidence_ReplacesStoredEvidence(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	stale := `{"identity": {"kind": "remote"}, "note": "stale gather"}`
-	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{
+	requestID := seedRequest(t, ctx, ti, ti.organizationID, seededRequest{
 		targetKey: "https://mcp.example.com/refresh", status: "requested", evidence: stale, version: 1,
 	})
 
@@ -41,15 +41,15 @@ func TestRefreshEvidence_ReplacesStoredEvidence(t *testing.T) {
 	require.Contains(t, decoded, "identity", "the fresh gather carries a resolved identity")
 }
 
-// A request id is guessable from a dashboard URL, so the project predicate —
-// not the id alone — decides whether it may be refreshed.
-func TestRefreshEvidence_OtherProjectIsNotFound(t *testing.T) {
+// A request id is guessable from a dashboard URL, so the organization
+// predicate — not the id alone — decides whether it may be refreshed.
+func TestRefreshEvidence_OtherOrganizationIsNotFound(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 
-	otherProject := createProject(t, ctx, ti.conn, ti.organizationID)
-	theirs := seedRequest(t, ctx, ti, otherProject, seededRequest{targetKey: "https://theirs.example.com", status: "", evidence: "", version: 0})
+	otherOrg := createOrganization(t, ctx, ti.conn)
+	theirs := seedRequest(t, ctx, ti, otherOrg, seededRequest{targetKey: "https://theirs.example.com", status: "", evidence: "", version: 0})
 
 	_, err := ti.service.RefreshEvidence(ctx, refreshPayload(theirs.String()))
 	require.Error(t, err)
@@ -75,8 +75,8 @@ func TestRefreshEvidence_RequiresScope(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "", evidence: "", version: 0})
-	ungranted := withProject(t, ctx, ti, ti.projectID)
+	requestID := seedRequest(t, ctx, ti, ti.organizationID, seededRequest{targetKey: "", status: "", evidence: "", version: 0})
+	ungranted := withGrants(t, ctx, ti)
 
 	_, err := ti.service.RefreshEvidence(ungranted, refreshPayload(requestID.String()))
 	require.Error(t, err)
@@ -91,8 +91,8 @@ func TestRefreshEvidence_ReadScopeSuffices(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "https://mcp.example.com/read-scope", status: "", evidence: "", version: 0})
-	readOnly := withProject(t, ctx, ti, ti.projectID, authz.ScopeMCPApprovalRead)
+	requestID := seedRequest(t, ctx, ti, ti.organizationID, seededRequest{targetKey: "https://mcp.example.com/read-scope", status: "", evidence: "", version: 0})
+	readOnly := withGrants(t, ctx, ti, authz.ScopeMCPApprovalRead)
 
 	detail, err := ti.service.RefreshEvidence(readOnly, refreshPayload(requestID.String()))
 	require.NoError(t, err)
@@ -104,7 +104,7 @@ func TestRefreshEvidence_FeatureDisabledIsForbidden(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "", evidence: "", version: 0})
+	requestID := seedRequest(t, ctx, ti, ti.organizationID, seededRequest{targetKey: "", status: "", evidence: "", version: 0})
 	disableMCPApproval(t, ctx, ti)
 
 	_, err := ti.service.RefreshEvidence(ctx, refreshPayload(requestID.String()))

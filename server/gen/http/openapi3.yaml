@@ -19491,13 +19491,6 @@ paths:
                   schema:
                     description: API Key header
                     type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
-                    type: string
             requestBody:
                 content:
                     application/json:
@@ -19566,10 +19559,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
             summary: createRequest mcpApproval
             tags:
                 - mcpApproval
@@ -19602,13 +19593,6 @@ paths:
                   name: Gram-Key
                   schema:
                     description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
                     type: string
             responses:
                 "200":
@@ -19672,10 +19656,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
             summary: getRequest mcpApproval
             tags:
                 - mcpApproval
@@ -19722,13 +19704,6 @@ paths:
                   name: Gram-Key
                   schema:
                     description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
                     type: string
             responses:
                 "200":
@@ -19792,10 +19767,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
             summary: listRequests mcpApproval
             tags:
                 - mcpApproval
@@ -19820,13 +19793,6 @@ paths:
                   name: Gram-Key
                   schema:
                     description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
                     type: string
             requestBody:
                 content:
@@ -19896,10 +19862,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
             summary: promote mcpApproval
             tags:
                 - mcpApproval
@@ -19924,13 +19888,6 @@ paths:
                   name: Gram-Key
                   schema:
                     description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
                     type: string
             requestBody:
                 content:
@@ -20000,10 +19957,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
             summary: recordDecision mcpApproval
             tags:
                 - mcpApproval
@@ -20036,13 +19991,6 @@ paths:
                   name: Gram-Key
                   schema:
                     description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
                     type: string
             responses:
                 "200":
@@ -20106,10 +20054,8 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
                 - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
             summary: refreshEvidence mcpApproval
             tags:
                 - mcpApproval

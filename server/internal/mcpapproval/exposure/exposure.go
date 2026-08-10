@@ -1,6 +1,7 @@
 // Package exposure answers "are we already exposed?" for a requested MCP
-// server: whether this project is already talking to it, since when, how much,
-// and by how many people.
+// server: whether this organization is already talking to it, since when, how
+// much, and by how many people. The shadow inventory is keyed by project, so
+// the org-wide answer reads across every project the organization owns.
 //
 // This is the one part of an approval request's evidence that is observed
 // rather than declared. Every other signal in the approval workflow is
@@ -106,8 +107,8 @@ func (s Signals) InUse() bool {
 // Narrow so callers can substitute a fake: the real implementation is
 // *telemetryrepo.Queries, which reaches ClickHouse.
 type Reader interface {
-	GetShadowMCPInventoryURL(ctx context.Context, arg telemetryrepo.GetShadowMCPInventoryURLParams) (*telemetryrepo.ShadowMCPInventoryURLRow, error)
-	ListShadowMCPInventoryUsage(ctx context.Context, arg telemetryrepo.ListShadowMCPInventoryUsageParams) ([]telemetryrepo.ShadowMCPInventoryUsageRow, error)
+	GetShadowMCPInventoryURLAcrossProjects(ctx context.Context, arg telemetryrepo.GetShadowMCPInventoryURLAcrossProjectsParams) (*telemetryrepo.ShadowMCPInventoryURLRow, error)
+	ListShadowMCPInventoryUsageAcrossProjects(ctx context.Context, arg telemetryrepo.ListShadowMCPInventoryUsageAcrossProjectsParams) ([]telemetryrepo.ShadowMCPInventoryUsageRow, error)
 }
 
 var _ Reader = (*telemetryrepo.Queries)(nil)
@@ -124,7 +125,7 @@ var _ Reader = (*telemetryrepo.Queries)(nil)
 // projectID bounds every read. The inventory is project-scoped and this
 // function is the only thing that decides which project is asked about, so it
 // takes the id rather than reading one from anywhere ambient.
-func Assess(ctx context.Context, reader Reader, projectID uuid.UUID, target string) (Signals, error) {
+func Assess(ctx context.Context, reader Reader, projectIDs []uuid.UUID, target string) (Signals, error) {
 	inventoryURL, ok := shadowmcp.CanonicalizeInventoryURL(target)
 	if !ok {
 		return Signals{
@@ -142,8 +143,20 @@ func Assess(ctx context.Context, reader Reader, projectID uuid.UUID, target stri
 		CallCount: 0, UserCount: 0,
 	}
 
-	row, err := reader.GetShadowMCPInventoryURL(ctx, telemetryrepo.GetShadowMCPInventoryURLParams{
-		GramProjectID:      projectID.String(),
+	// No projects means the caller could not resolve the organization's
+	// project set — the lookup cannot run, and reporting unseen would let a
+	// failed resolution read as "nobody here uses this".
+	if len(projectIDs) == 0 {
+		return Signals{}, fmt.Errorf("no projects to read exposure from")
+	}
+
+	ids := make([]string, 0, len(projectIDs))
+	for _, projectID := range projectIDs {
+		ids = append(ids, projectID.String())
+	}
+
+	row, err := reader.GetShadowMCPInventoryURLAcrossProjects(ctx, telemetryrepo.GetShadowMCPInventoryURLAcrossProjectsParams{
+		GramProjectIDs:     ids,
 		CanonicalServerURL: inventoryURL.CanonicalURL,
 	})
 	if err != nil {
@@ -162,8 +175,8 @@ func Assess(ctx context.Context, reader Reader, projectID uuid.UUID, target stri
 	signals.FirstSeen = row.FirstSeen
 	signals.LastSeen = row.LastSeen
 
-	usage, err := reader.ListShadowMCPInventoryUsage(ctx, telemetryrepo.ListShadowMCPInventoryUsageParams{
-		GramProjectID:       projectID.String(),
+	usage, err := reader.ListShadowMCPInventoryUsageAcrossProjects(ctx, telemetryrepo.ListShadowMCPInventoryUsageAcrossProjectsParams{
+		GramProjectIDs:      ids,
 		CanonicalServerURLs: []string{inventoryURL.CanonicalURL},
 		Limit:               usageLookupLimit,
 	})

@@ -20,7 +20,7 @@ func createPayload(kind, target, note string) *gen.CreateRequestPayload {
 	}
 
 	return &gen.CreateRequestPayload{
-		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+		SessionToken: nil, ApikeyToken: nil,
 		TargetKind: kind, Target: target, Note: note,
 	}
 }
@@ -149,7 +149,7 @@ func TestCreateRequest_NeedsNoScopeButRespectsTheGate(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	ungranted := withProject(t, ctx, ti, ti.projectID)
+	ungranted := withGrants(t, ctx, ti)
 	created, err := ti.service.CreateRequest(ungranted, createPayload("server_url", "https://mcp.example.com/sse", "no grants held"))
 	require.NoError(t, err)
 	require.Equal(t, 1, created.RequesterCount)
@@ -206,7 +206,7 @@ func TestCreateRequest_ReopensADeniedReview(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, pending.ID, pendingAgain.ID)
 	require.Equal(t, "requested", pendingAgain.Status)
-	require.Len(t, decisionsFor(t, ctx, ti, ti.projectID, uuid.MustParse(created.ID)), 2, "the history is intact")
+	require.Len(t, decisionsFor(t, ctx, ti, ti.organizationID, uuid.MustParse(created.ID)), 2, "the history is intact")
 }
 
 // Intake assembles the evidence document, so it is already on the request by

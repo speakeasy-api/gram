@@ -31,11 +31,11 @@ type fakeTraffic struct {
 	usageErr error
 }
 
-func (f *fakeTraffic) GetShadowMCPInventoryURL(_ context.Context, _ telemetryrepo.GetShadowMCPInventoryURLParams) (*telemetryrepo.ShadowMCPInventoryURLRow, error) {
+func (f *fakeTraffic) GetShadowMCPInventoryURLAcrossProjects(_ context.Context, _ telemetryrepo.GetShadowMCPInventoryURLAcrossProjectsParams) (*telemetryrepo.ShadowMCPInventoryURLRow, error) {
 	return f.row, f.rowErr
 }
 
-func (f *fakeTraffic) ListShadowMCPInventoryUsage(_ context.Context, _ telemetryrepo.ListShadowMCPInventoryUsageParams) ([]telemetryrepo.ShadowMCPInventoryUsageRow, error) {
+func (f *fakeTraffic) ListShadowMCPInventoryUsageAcrossProjects(_ context.Context, _ telemetryrepo.ListShadowMCPInventoryUsageAcrossProjectsParams) ([]telemetryrepo.ShadowMCPInventoryUsageRow, error) {
 	return f.usage, f.usageErr
 }
 
@@ -87,7 +87,7 @@ func TestAssemble_PackageReference(t *testing.T) {
 		err: nil,
 	}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{}, quietProbes{})
 
-	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y @scope/mcp-server@1.2.3"))
+	raw, err := assembler.Assemble(t.Context(), []uuid.UUID{uuid.New()}, identity.Resolve("npx -y @scope/mcp-server@1.2.3"))
 	require.NoError(t, err)
 	doc := decode(t, raw)
 
@@ -125,7 +125,7 @@ func TestAssemble_RemoteReferenceCarriesExposure(t *testing.T) {
 		rowErr: nil, usageErr: nil,
 	}, quietProbes{}, quietProbes{}, quietProbes{})
 
-	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("https://mcp.example.com/sse"))
+	raw, err := assembler.Assemble(t.Context(), []uuid.UUID{uuid.New()}, identity.Resolve("https://mcp.example.com/sse"))
 	require.NoError(t, err)
 	doc := decode(t, raw)
 
@@ -145,14 +145,14 @@ func TestAssemble_NotPublishedVersusGap(t *testing.T) {
 	reference := identity.Resolve("npx -y @scope/unknown-server")
 
 	clean := evidence.NewAssembler(&fakePackages{metadata: nil, err: nil}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{}, quietProbes{})
-	raw, err := clean.Assemble(t.Context(), uuid.New(), reference)
+	raw, err := clean.Assemble(t.Context(), []uuid.UUID{uuid.New()}, reference)
 	require.NoError(t, err)
 	doc := decode(t, raw)
 	require.Equal(t, true, doc["package_not_published"])
 	require.NotContains(t, doc, "gaps")
 
 	failing := evidence.NewAssembler(&fakePackages{metadata: nil, err: errors.New("registry down")}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{}, quietProbes{})
-	raw, err = failing.Assemble(t.Context(), uuid.New(), reference)
+	raw, err = failing.Assemble(t.Context(), []uuid.UUID{uuid.New()}, reference)
 	require.NoError(t, err, "one source failing must not lose the gather")
 	doc = decode(t, raw)
 	require.NotContains(t, doc, "package_not_published")
@@ -169,7 +169,7 @@ func TestAssemble_ExposureFailureIsAGap(t *testing.T) {
 		row: nil, usage: nil, rowErr: errors.New("clickhouse down"), usageErr: nil,
 	}, quietProbes{}, quietProbes{}, quietProbes{})
 
-	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("https://mcp.example.com/sse"))
+	raw, err := assembler.Assemble(t.Context(), []uuid.UUID{uuid.New()}, identity.Resolve("https://mcp.example.com/sse"))
 	require.NoError(t, err)
 	doc := decode(t, raw)
 	gaps, ok := doc["gaps"].([]any)
@@ -185,7 +185,7 @@ func TestAssemble_UnresolvedIsStillADocument(t *testing.T) {
 
 	assembler := evidence.NewAssembler(&fakePackages{metadata: nil, err: nil}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{}, quietProbes{})
 
-	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("./run-my-server --local"))
+	raw, err := assembler.Assemble(t.Context(), []uuid.UUID{uuid.New()}, identity.Resolve("./run-my-server --local"))
 	require.NoError(t, err)
 	doc := decode(t, raw)
 
@@ -213,7 +213,7 @@ func TestAssemble_MCPRemoteCommandReachesExposure(t *testing.T) {
 		usage: nil, rowErr: nil, usageErr: nil,
 	}, quietProbes{}, quietProbes{}, quietProbes{})
 
-	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y mcp-remote https://mcp.example.com/sse"))
+	raw, err := assembler.Assemble(t.Context(), []uuid.UUID{uuid.New()}, identity.Resolve("npx -y mcp-remote https://mcp.example.com/sse"))
 	require.NoError(t, err)
 	doc := decode(t, raw)
 
@@ -235,7 +235,7 @@ func TestAssemble_WithRealPackageClient(t *testing.T) {
 	client := packagemeta.NewClient(server.Client(), packagemeta.WithNPMBaseURL(server.URL))
 	assembler := evidence.NewAssembler(client, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{}, quietProbes{})
 
-	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y p@1.0.0"))
+	raw, err := assembler.Assemble(t.Context(), []uuid.UUID{uuid.New()}, identity.Resolve("npx -y p@1.0.0"))
 	require.NoError(t, err)
 	doc := decode(t, raw)
 	packageSection, ok := doc["package"].(map[string]any)
@@ -250,7 +250,7 @@ func TestDecodeDocument_RoundTripAndVersionGate(t *testing.T) {
 	t.Parallel()
 
 	assembler := evidence.NewAssembler(&fakePackages{metadata: nil, err: nil}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{}, quietProbes{})
-	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y @scope/mcp-server@1.2.3"))
+	raw, err := assembler.Assemble(t.Context(), []uuid.UUID{uuid.New()}, identity.Resolve("npx -y @scope/mcp-server@1.2.3"))
 	require.NoError(t, err)
 
 	document, err := evidence.DecodeDocument(raw, evidence.Version)
@@ -288,7 +288,7 @@ func TestAssemble_UnreachableSourceIsBoundedAndBecomesAGap(t *testing.T) {
 	)
 
 	started := time.Now()
-	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y @scope/mcp-server@1.2.3"))
+	raw, err := assembler.Assemble(t.Context(), []uuid.UUID{uuid.New()}, identity.Resolve("npx -y @scope/mcp-server@1.2.3"))
 	require.NoError(t, err)
 	require.Less(t, time.Since(started), 5*time.Second)
 
@@ -432,7 +432,7 @@ func TestAssemble_RegistryCopyFillsCapabilitiesWhenServerRefuses(t *testing.T) {
 		cataloguedOnlyProbes{},
 	)
 
-	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("https://mcp.example.com/mcp"))
+	raw, err := assembler.Assemble(t.Context(), []uuid.UUID{uuid.New()}, identity.Resolve("https://mcp.example.com/mcp"))
 	require.NoError(t, err)
 	doc := decode(t, raw)
 
@@ -468,7 +468,7 @@ func TestAssemble_UncataloguedServerReadsAsCheckedAndAbsent(t *testing.T) {
 		quietProbes{},
 	)
 
-	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("https://mcp.example.com/mcp"))
+	raw, err := assembler.Assemble(t.Context(), []uuid.UUID{uuid.New()}, identity.Resolve("https://mcp.example.com/mcp"))
 	require.NoError(t, err)
 	doc := decode(t, raw)
 
@@ -493,7 +493,7 @@ func TestAssemble_RemoteProbesFillAuthorityAndCapabilities(t *testing.T) {
 		declaringProbes{},
 	)
 
-	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("https://mcp.example.com/mcp"))
+	raw, err := assembler.Assemble(t.Context(), []uuid.UUID{uuid.New()}, identity.Resolve("https://mcp.example.com/mcp"))
 	require.NoError(t, err)
 	doc := decode(t, raw)
 
@@ -528,7 +528,7 @@ func TestAssemble_FailedProbesAreGaps(t *testing.T) {
 		failingProbes{},
 	)
 
-	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("https://mcp.example.com/mcp"))
+	raw, err := assembler.Assemble(t.Context(), []uuid.UUID{uuid.New()}, identity.Resolve("https://mcp.example.com/mcp"))
 	require.NoError(t, err)
 	doc := decode(t, raw)
 
@@ -540,7 +540,7 @@ func TestAssemble_FailedProbesAreGaps(t *testing.T) {
 	require.NotContains(t, doc, "capabilities")
 
 	// Package references have no server to probe, so no probe gaps appear.
-	packageRaw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y @scope/pkg@1.0.0"))
+	packageRaw, err := assembler.Assemble(t.Context(), []uuid.UUID{uuid.New()}, identity.Resolve("npx -y @scope/pkg@1.0.0"))
 	require.NoError(t, err)
 	packageDoc := decode(t, packageRaw)
 	require.NotContains(t, packageDoc, "gaps")

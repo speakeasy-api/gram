@@ -52,7 +52,6 @@ export function buildGetMcpApprovalRequestQuery(
       id: request.id,
       gramSession: request.gramSession,
       gramKey: request.gramKey,
-      gramProject: request.gramProject,
     }),
     queryFn: async function getMcpApprovalRequestQueryFn(
       ctx,
@@ -83,7 +82,6 @@ export function queryKeyGetMcpApprovalRequest(
     id: string;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
-    gramProject?: string | undefined;
   },
 ): QueryKey {
   return ["@gram/client", "mcpApproval", "getRequest", parameters];

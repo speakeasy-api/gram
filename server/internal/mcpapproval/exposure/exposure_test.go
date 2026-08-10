@@ -21,11 +21,11 @@ type fakeReader struct {
 	rowErr   error
 	usageErr error
 
-	gotInventory []telemetryrepo.GetShadowMCPInventoryURLParams
-	gotUsage     []telemetryrepo.ListShadowMCPInventoryUsageParams
+	gotInventory []telemetryrepo.GetShadowMCPInventoryURLAcrossProjectsParams
+	gotUsage     []telemetryrepo.ListShadowMCPInventoryUsageAcrossProjectsParams
 }
 
-func (f *fakeReader) GetShadowMCPInventoryURL(_ context.Context, arg telemetryrepo.GetShadowMCPInventoryURLParams) (*telemetryrepo.ShadowMCPInventoryURLRow, error) {
+func (f *fakeReader) GetShadowMCPInventoryURLAcrossProjects(_ context.Context, arg telemetryrepo.GetShadowMCPInventoryURLAcrossProjectsParams) (*telemetryrepo.ShadowMCPInventoryURLRow, error) {
 	f.gotInventory = append(f.gotInventory, arg)
 	if f.rowErr != nil {
 		return nil, f.rowErr
@@ -34,7 +34,7 @@ func (f *fakeReader) GetShadowMCPInventoryURL(_ context.Context, arg telemetryre
 	return f.row, nil
 }
 
-func (f *fakeReader) ListShadowMCPInventoryUsage(_ context.Context, arg telemetryrepo.ListShadowMCPInventoryUsageParams) ([]telemetryrepo.ShadowMCPInventoryUsageRow, error) {
+func (f *fakeReader) ListShadowMCPInventoryUsageAcrossProjects(_ context.Context, arg telemetryrepo.ListShadowMCPInventoryUsageAcrossProjectsParams) ([]telemetryrepo.ShadowMCPInventoryUsageRow, error) {
 	f.gotUsage = append(f.gotUsage, arg)
 	if f.usageErr != nil {
 		return nil, f.usageErr
@@ -82,7 +82,7 @@ func TestAssess_SeenAndInUse(t *testing.T) {
 		rowErr: nil, usageErr: nil, gotInventory: nil, gotUsage: nil,
 	}
 
-	got, err := exposure.Assess(t.Context(), reader, projectID, target)
+	got, err := exposure.Assess(t.Context(), reader, []uuid.UUID{projectID}, target)
 	require.NoError(t, err)
 
 	require.Equal(t, exposure.StatusSeen, got.Status)
@@ -95,11 +95,12 @@ func TestAssess_SeenAndInUse(t *testing.T) {
 	require.Equal(t, 2026, got.FirstSeen.Year())
 	require.False(t, got.FirstCalled.IsZero())
 
-	// Every read is bounded by the project it was asked about.
+	// Every read is bounded by the organization's project set it was asked
+	// about.
 	require.Len(t, reader.gotInventory, 1)
-	require.Equal(t, projectID.String(), reader.gotInventory[0].GramProjectID)
+	require.Equal(t, []string{projectID.String()}, reader.gotInventory[0].GramProjectIDs)
 	require.Len(t, reader.gotUsage, 1)
-	require.Equal(t, projectID.String(), reader.gotUsage[0].GramProjectID)
+	require.Equal(t, []string{projectID.String()}, reader.gotUsage[0].GramProjectIDs)
 }
 
 // A server nobody here has touched is a real finding, and denying it costs
@@ -109,7 +110,7 @@ func TestAssess_UnseenIsAFinding(t *testing.T) {
 
 	reader := &fakeReader{row: nil, usage: nil, rowErr: nil, usageErr: nil, gotInventory: nil, gotUsage: nil}
 
-	got, err := exposure.Assess(t.Context(), reader, uuid.New(), "https://mcp.example.com/sse")
+	got, err := exposure.Assess(t.Context(), reader, []uuid.UUID{uuid.New()}, "https://mcp.example.com/sse")
 	require.NoError(t, err)
 
 	require.Equal(t, exposure.StatusUnseen, got.Status)
@@ -132,7 +133,7 @@ func TestAssess_UnaddressableIsNotUnseen(t *testing.T) {
 	reader := &fakeReader{row: nil, usage: nil, rowErr: nil, usageErr: nil, gotInventory: nil, gotUsage: nil}
 
 	for _, target := range []string{"npx -y @scope/mcp-server", "", "   ", "not a url"} {
-		got, err := exposure.Assess(t.Context(), reader, uuid.New(), target)
+		got, err := exposure.Assess(t.Context(), reader, []uuid.UUID{uuid.New()}, target)
 		require.NoError(t, err)
 		require.Equal(t, exposure.StatusUnaddressable, got.Status, "target %q", target)
 		require.NotEqual(t, exposure.StatusUnseen, got.Status)
@@ -152,7 +153,7 @@ func TestAssess_CanonicalizesTheLookupKey(t *testing.T) {
 
 	reader := &fakeReader{row: nil, usage: nil, rowErr: nil, usageErr: nil, gotInventory: nil, gotUsage: nil}
 
-	_, err := exposure.Assess(t.Context(), reader, uuid.New(), "HTTPS://MCP.Example.com:443/sse?token=abc#frag")
+	_, err := exposure.Assess(t.Context(), reader, []uuid.UUID{uuid.New()}, "HTTPS://MCP.Example.com:443/sse?token=abc#frag")
 	require.NoError(t, err)
 	require.Len(t, reader.gotInventory, 1)
 
@@ -172,7 +173,7 @@ func TestAssess_InInventoryButNeverCalled(t *testing.T) {
 		rowErr: nil, usageErr: nil, gotInventory: nil, gotUsage: nil,
 	}
 
-	got, err := exposure.Assess(t.Context(), reader, uuid.New(), target)
+	got, err := exposure.Assess(t.Context(), reader, []uuid.UUID{uuid.New()}, target)
 	require.NoError(t, err)
 
 	require.Equal(t, exposure.StatusSeen, got.Status)
@@ -196,7 +197,7 @@ func TestAssess_IgnoresUsageForAnotherServer(t *testing.T) {
 		rowErr: nil, usageErr: nil, gotInventory: nil, gotUsage: nil,
 	}
 
-	got, err := exposure.Assess(t.Context(), reader, uuid.New(), target)
+	got, err := exposure.Assess(t.Context(), reader, []uuid.UUID{uuid.New()}, target)
 	require.NoError(t, err)
 	require.Equal(t, uint64(3), got.CallCount)
 	require.Equal(t, uint64(1), got.UserCount)
@@ -214,7 +215,7 @@ func TestAssess_PrefersNameOverride(t *testing.T) {
 		row: row, usage: nil, rowErr: nil, usageErr: nil, gotInventory: nil, gotUsage: nil,
 	}
 
-	got, err := exposure.Assess(t.Context(), reader, uuid.New(), target)
+	got, err := exposure.Assess(t.Context(), reader, []uuid.UUID{uuid.New()}, target)
 	require.NoError(t, err)
 	require.Equal(t, "Vendor (approved name)", got.ServerName)
 }
@@ -230,13 +231,13 @@ func TestAssess_ReadFailuresAreErrors(t *testing.T) {
 		row: nil, usage: nil, rowErr: errors.New("clickhouse down"), usageErr: nil,
 		gotInventory: nil, gotUsage: nil,
 	}
-	_, err := exposure.Assess(t.Context(), inventoryFailure, uuid.New(), target)
+	_, err := exposure.Assess(t.Context(), inventoryFailure, []uuid.UUID{uuid.New()}, target)
 	require.Error(t, err)
 
 	usageFailure := &fakeReader{
 		row: inventoryRow(target), usage: nil, rowErr: nil, usageErr: errors.New("clickhouse down"),
 		gotInventory: nil, gotUsage: nil,
 	}
-	_, err = exposure.Assess(t.Context(), usageFailure, uuid.New(), target)
+	_, err = exposure.Assess(t.Context(), usageFailure, []uuid.UUID{uuid.New()}, target)
 	require.Error(t, err)
 }

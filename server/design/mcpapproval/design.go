@@ -8,8 +8,8 @@ import (
 
 var _ = Service("mcpApproval", func() {
 	Description("Dashboard API for reviewing and deciding MCP server approval requests.")
-	Security(security.Session, security.ProjectSlug)
-	Security(security.ByKey, security.ProjectSlug)
+	Security(security.Session)
+	Security(security.ByKey)
 	shared.DeclareErrorResponses()
 
 	Method("listRequests", func() {
@@ -18,7 +18,6 @@ var _ = Service("mcpApproval", func() {
 		Payload(func() {
 			security.SessionPayload()
 			security.ByKeyPayload()
-			security.ProjectPayload()
 			Attribute("status", String, "Only return requests in this status.")
 			Attribute("cursor", String, "The cursor to fetch results from")
 			Attribute("limit", Int32, "The number of requests to return per page")
@@ -33,7 +32,6 @@ var _ = Service("mcpApproval", func() {
 			Param("limit")
 			security.SessionHeader()
 			security.ByKeyHeader()
-			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
@@ -48,7 +46,6 @@ var _ = Service("mcpApproval", func() {
 		Payload(func() {
 			security.SessionPayload()
 			security.ByKeyPayload()
-			security.ProjectPayload()
 			Attribute("id", String, "The approval request ID.")
 			Required("id")
 		})
@@ -60,7 +57,6 @@ var _ = Service("mcpApproval", func() {
 			Param("id")
 			security.SessionHeader()
 			security.ByKeyHeader()
-			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
@@ -75,7 +71,6 @@ var _ = Service("mcpApproval", func() {
 		Payload(func() {
 			security.SessionPayload()
 			security.ByKeyPayload()
-			security.ProjectPayload()
 			Attribute("target_kind", String, func() {
 				Description("The namespace of the reference.")
 				Enum("server_url", "stdio_command")
@@ -91,7 +86,6 @@ var _ = Service("mcpApproval", func() {
 			POST("/rpc/mcpApproval.createRequest")
 			security.SessionHeader()
 			security.ByKeyHeader()
-			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
@@ -106,7 +100,6 @@ var _ = Service("mcpApproval", func() {
 		Payload(func() {
 			security.SessionPayload()
 			security.ByKeyPayload()
-			security.ProjectPayload()
 			Attribute("risk_policy_bypass_request_id", String, "The bypass request to promote.")
 			Required("risk_policy_bypass_request_id")
 		})
@@ -117,7 +110,6 @@ var _ = Service("mcpApproval", func() {
 			POST("/rpc/mcpApproval.promote")
 			security.SessionHeader()
 			security.ByKeyHeader()
-			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
@@ -132,7 +124,6 @@ var _ = Service("mcpApproval", func() {
 		Payload(func() {
 			security.SessionPayload()
 			security.ByKeyPayload()
-			security.ProjectPayload()
 			Attribute("id", String, "The approval request ID.")
 			Required("id")
 		})
@@ -148,7 +139,6 @@ var _ = Service("mcpApproval", func() {
 			Param("id")
 			security.SessionHeader()
 			security.ByKeyHeader()
-			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
@@ -163,7 +153,6 @@ var _ = Service("mcpApproval", func() {
 		Payload(func() {
 			security.SessionPayload()
 			security.ByKeyPayload()
-			security.ProjectPayload()
 			Attribute("id", String, "The approval request ID.")
 			Attribute("decision", String, "Either approved or denied.")
 			Attribute("rationale", String, "Why the decision was made. This is the artifact cited when explaining the decision to the requester, so it cannot be blank.")
@@ -178,7 +167,6 @@ var _ = Service("mcpApproval", func() {
 			POST("/rpc/mcpApproval.recordDecision")
 			security.SessionHeader()
 			security.ByKeyHeader()
-			security.ProjectHeader()
 			Response(StatusOK)
 		})
 

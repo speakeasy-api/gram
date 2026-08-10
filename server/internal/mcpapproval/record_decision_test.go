@@ -15,7 +15,7 @@ import (
 
 func decisionPayload(id, decision string) *gen.RecordDecisionPayload {
 	return &gen.RecordDecisionPayload{
-		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+		SessionToken: nil, ApikeyToken: nil,
 		ID: id, Decision: decision, Rationale: "recorded in a test", GrantedPrincipalUrns: nil,
 	}
 }
@@ -25,7 +25,7 @@ func TestRecordDecision_Approve(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
+	requestID := seedRequest(t, ctx, ti, ti.organizationID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
 
 	payload := decisionPayload(requestID.String(), "approved")
 	payload.Rationale = "read-only tools, pinned version, vendor we already use"
@@ -38,7 +38,7 @@ func TestRecordDecision_Approve(t *testing.T) {
 	require.NotNil(t, decision.Rationale)
 	require.Equal(t, []string{"urn:gram:team:platform"}, decision.GrantedPrincipalUrns)
 
-	require.Equal(t, "approved", requestStatus(t, ctx, ti, ti.projectID, requestID))
+	require.Equal(t, "approved", requestStatus(t, ctx, ti, ti.organizationID, requestID))
 }
 
 // A denial grants nobody anything, whatever the caller sent alongside it.
@@ -47,7 +47,7 @@ func TestRecordDecision_DenyDropsGrants(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
+	requestID := seedRequest(t, ctx, ti, ti.organizationID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
 
 	payload := decisionPayload(requestID.String(), "denied")
 	payload.Rationale = "demands a broad token and publishes no source"
@@ -57,7 +57,7 @@ func TestRecordDecision_DenyDropsGrants(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "denied", decision.Decision)
 	require.Empty(t, decision.GrantedPrincipalUrns)
-	require.Equal(t, "denied", requestStatus(t, ctx, ti, ti.projectID, requestID))
+	require.Equal(t, "denied", requestStatus(t, ctx, ti, ti.organizationID, requestID))
 }
 
 // The evidence a reviewer actually saw is frozen onto the decision, so a later
@@ -68,14 +68,14 @@ func TestRecordDecision_FreezesEvidence(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	evidence := `{"authority": {"mode": "api_key"}}`
-	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{
+	requestID := seedRequest(t, ctx, ti, ti.organizationID, seededRequest{
 		targetKey: "", status: "requested", evidence: evidence, version: 7,
 	})
 
 	_, err := ti.service.RecordDecision(ctx, decisionPayload(requestID.String(), "approved"))
 	require.NoError(t, err)
 
-	frozen := decisionsFor(t, ctx, ti, ti.projectID, requestID)
+	frozen := decisionsFor(t, ctx, ti, ti.organizationID, requestID)
 	require.Len(t, frozen, 1)
 	require.JSONEq(t, evidence, string(frozen[0].EvidenceSnapshot))
 
@@ -84,9 +84,9 @@ func TestRecordDecision_FreezesEvidence(t *testing.T) {
 	require.Equal(t, int32(7), frozen[0].EvidenceVersion)
 
 	// Re-gathering the request's evidence leaves the decision untouched.
-	seedEvidence(t, ctx, ti, ti.projectID, requestID, `{"authority":{"mode":"none"}}`, 8)
+	seedEvidence(t, ctx, ti, ti.organizationID, requestID, `{"authority":{"mode":"none"}}`, 8)
 
-	after := decisionsFor(t, ctx, ti, ti.projectID, requestID)
+	after := decisionsFor(t, ctx, ti, ti.organizationID, requestID)
 	require.Len(t, after, 1)
 	require.JSONEq(t, evidence, string(after[0].EvidenceSnapshot))
 	require.Equal(t, int32(7), after[0].EvidenceVersion)
@@ -99,7 +99,7 @@ func TestRecordDecision_AccumulatesHistory(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
+	requestID := seedRequest(t, ctx, ti, ti.organizationID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
 
 	first := decisionPayload(requestID.String(), "denied")
 	first.Rationale = "no pinned version"
@@ -118,25 +118,25 @@ func TestRecordDecision_AccumulatesHistory(t *testing.T) {
 	// Newest first, so a repeat request starts from the last rationale.
 	require.Equal(t, "approved", detail.Decisions[0].Decision)
 	require.Equal(t, "denied", detail.Decisions[1].Decision)
-	require.Equal(t, "approved", requestStatus(t, ctx, ti, ti.projectID, requestID))
+	require.Equal(t, "approved", requestStatus(t, ctx, ti, ti.organizationID, requestID))
 }
 
-// Deciding on another project's request must fail before anything is written,
-// even though the caller holds the decide scope in their own project.
-func TestRecordDecision_OtherProjectIsNotFound(t *testing.T) {
+// Deciding on another organization's request must fail before anything is
+// written, even though the caller holds the decide scope in their own.
+func TestRecordDecision_OtherOrganizationIsNotFound(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 
-	otherProject := createProject(t, ctx, ti.conn, ti.organizationID)
-	theirs := seedRequest(t, ctx, ti, otherProject, seededRequest{targetKey: "https://theirs.example.com", status: "requested", evidence: "", version: 0})
+	otherOrg := createOrganization(t, ctx, ti.conn)
+	theirs := seedRequest(t, ctx, ti, otherOrg, seededRequest{targetKey: "https://theirs.example.com", status: "requested", evidence: "", version: 0})
 
 	_, err := ti.service.RecordDecision(ctx, decisionPayload(theirs.String(), "approved"))
 	requireOopsCode(t, err, oops.CodeNotFound)
 
 	// Nothing was written, and their request is untouched.
-	require.Equal(t, "requested", requestStatus(t, ctx, ti, otherProject, theirs))
-	require.Empty(t, decisionsFor(t, ctx, ti, otherProject, theirs))
+	require.Equal(t, "requested", requestStatus(t, ctx, ti, otherOrg, theirs))
+	require.Empty(t, decisionsFor(t, ctx, ti, otherOrg, theirs))
 }
 
 // The organisation on a decision is derived from the request it decides, not
@@ -146,17 +146,17 @@ func TestRecordDecision_OrganizationFollowsRequest(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
+	requestID := seedRequest(t, ctx, ti, ti.organizationID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
 
 	_, err := ti.service.RecordDecision(ctx, decisionPayload(requestID.String(), "approved"))
 	require.NoError(t, err)
 
 	request, err := ti.repo.GetApprovalRequest(ctx, repo.GetApprovalRequestParams{
-		ID: requestID, ProjectID: ti.projectID,
+		ID: requestID, OrganizationID: ti.organizationID,
 	})
 	require.NoError(t, err)
 
-	decisions := decisionsFor(t, ctx, ti, ti.projectID, requestID)
+	decisions := decisionsFor(t, ctx, ti, ti.organizationID, requestID)
 	require.Len(t, decisions, 1)
 	require.Equal(t, request.OrganizationID, decisions[0].OrganizationID)
 }
@@ -166,14 +166,14 @@ func TestRecordDecision_RejectsUnknownDecision(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
+	requestID := seedRequest(t, ctx, ti, ti.organizationID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
 
 	for _, decision := range []string{"", "maybe", "APPROVED", "approve"} {
 		_, err := ti.service.RecordDecision(ctx, decisionPayload(requestID.String(), decision))
 		requireOopsCode(t, err, oops.CodeBadRequest)
 	}
 
-	require.Equal(t, "requested", requestStatus(t, ctx, ti, ti.projectID, requestID))
+	require.Equal(t, "requested", requestStatus(t, ctx, ti, ti.organizationID, requestID))
 }
 
 func TestRecordDecision_InvalidID(t *testing.T) {
@@ -192,12 +192,12 @@ func TestRecordDecision_ReadScopeIsNotEnough(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
-	readOnly := withProject(t, ctx, ti, ti.projectID, authz.ScopeMCPApprovalRead)
+	requestID := seedRequest(t, ctx, ti, ti.organizationID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
+	readOnly := withGrants(t, ctx, ti, authz.ScopeMCPApprovalRead)
 
 	_, err := ti.service.RecordDecision(readOnly, decisionPayload(requestID.String(), "approved"))
 	requireOopsCode(t, err, oops.CodeForbidden)
-	require.Equal(t, "requested", requestStatus(t, ctx, ti, ti.projectID, requestID))
+	require.Equal(t, "requested", requestStatus(t, ctx, ti, ti.organizationID, requestID))
 }
 
 // Each decision carries the evidence frozen at its own decision time, so after
@@ -208,14 +208,14 @@ func TestRecordDecision_DecisionsExposeTheirFrozenEvidence(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{
+	requestID := seedRequest(t, ctx, ti, ti.organizationID, seededRequest{
 		targetKey: "", status: "requested", evidence: `{"authority":{"mode":"api_key"}}`, version: 3,
 	})
 
 	_, err := ti.service.RecordDecision(ctx, decisionPayload(requestID.String(), "denied"))
 	require.NoError(t, err)
 
-	seedEvidence(t, ctx, ti, ti.projectID, requestID, `{"authority":{"mode":"oauth"}}`, 4)
+	seedEvidence(t, ctx, ti, ti.organizationID, requestID, `{"authority":{"mode":"oauth"}}`, 4)
 
 	detail, err := ti.service.GetRequest(ctx, getPayload(requestID.String()))
 	require.NoError(t, err)
@@ -246,7 +246,7 @@ func TestRecordDecision_WritesAnAuditEntry(t *testing.T) {
 	denyBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMCPApprovalRequestDeny)
 	require.NoError(t, err)
 
-	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
+	requestID := seedRequest(t, ctx, ti, ti.organizationID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
 
 	_, err = ti.service.RecordDecision(ctx, decisionPayload(requestID.String(), "approved"))
 	require.NoError(t, err)
@@ -270,7 +270,7 @@ func TestRecordDecision_FeatureDisabledIsForbidden(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
+	requestID := seedRequest(t, ctx, ti, ti.organizationID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
 	disableMCPApproval(t, ctx, ti)
 
 	_, err := ti.service.RecordDecision(ctx, decisionPayload(requestID.String(), "approved"))
@@ -290,7 +290,7 @@ func TestRecordDecision_RequiresARationale(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
+	requestID := seedRequest(t, ctx, ti, ti.organizationID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
 
 	for _, blank := range []string{"", "   ", "\n\t"} {
 		payload := decisionPayload(requestID.String(), "approved")
@@ -299,7 +299,7 @@ func TestRecordDecision_RequiresARationale(t *testing.T) {
 		requireOopsCode(t, err, oops.CodeBadRequest)
 	}
 
-	require.Equal(t, "requested", requestStatus(t, ctx, ti, ti.projectID, requestID))
+	require.Equal(t, "requested", requestStatus(t, ctx, ti, ti.organizationID, requestID))
 }
 
 // A re-request reopens a denied review — the denial stays in the history and
@@ -310,21 +310,21 @@ func TestUpsertApprovalRequest_ReopensDeniedOnly(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	denied := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "https://denied.example.com", status: "requested", evidence: "", version: 0})
+	denied := seedRequest(t, ctx, ti, ti.organizationID, seededRequest{targetKey: "https://denied.example.com", status: "requested", evidence: "", version: 0})
 	_, err := ti.service.RecordDecision(ctx, decisionPayload(denied.String(), "denied"))
 	require.NoError(t, err)
 
-	reopened := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "https://denied.example.com", status: "requested", evidence: "", version: 0})
+	reopened := seedRequest(t, ctx, ti, ti.organizationID, seededRequest{targetKey: "https://denied.example.com", status: "requested", evidence: "", version: 0})
 	require.Equal(t, denied, reopened, "a re-request reuses the same row")
-	require.Equal(t, "requested", requestStatus(t, ctx, ti, ti.projectID, denied))
-	require.Len(t, decisionsFor(t, ctx, ti, ti.projectID, denied), 1, "the denial stays in the history")
+	require.Equal(t, "requested", requestStatus(t, ctx, ti, ti.organizationID, denied))
+	require.Len(t, decisionsFor(t, ctx, ti, ti.organizationID, denied), 1, "the denial stays in the history")
 
-	approved := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "https://approved.example.com", status: "requested", evidence: "", version: 0})
+	approved := seedRequest(t, ctx, ti, ti.organizationID, seededRequest{targetKey: "https://approved.example.com", status: "requested", evidence: "", version: 0})
 	_, err = ti.service.RecordDecision(ctx, decisionPayload(approved.String(), "approved"))
 	require.NoError(t, err)
 
-	seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "https://approved.example.com", status: "requested", evidence: "", version: 0})
-	require.Equal(t, "approved", requestStatus(t, ctx, ti, ti.projectID, approved), "re-asking for an approved server changes nothing")
+	seedRequest(t, ctx, ti, ti.organizationID, seededRequest{targetKey: "https://approved.example.com", status: "requested", evidence: "", version: 0})
+	require.Equal(t, "approved", requestStatus(t, ctx, ti, ti.organizationID, approved), "re-asking for an approved server changes nothing")
 }
 
 // A decision can cite the research report that informed it — but only a
@@ -335,8 +335,8 @@ func TestRecordDecision_CitesAResearchReport(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
-	reportID := seedResearchReport(t, ctx, ti, ti.projectID, requestID, "completed", `{"claims":[]}`)
+	requestID := seedRequest(t, ctx, ti, ti.organizationID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
+	reportID := seedResearchReport(t, ctx, ti, ti.organizationID, requestID, "completed", `{"claims":[]}`)
 
 	payload := decisionPayload(requestID.String(), "approved")
 	payload.ResearchReportID = new(reportID.String())
@@ -347,7 +347,7 @@ func TestRecordDecision_CitesAResearchReport(t *testing.T) {
 	require.Equal(t, reportID.String(), *decision.ResearchReportID)
 
 	// Another request's report cannot be cited, however real it is.
-	otherRequest := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
+	otherRequest := seedRequest(t, ctx, ti, ti.organizationID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
 	otherPayload := decisionPayload(otherRequest.String(), "approved")
 	otherPayload.ResearchReportID = new(reportID.String())
 

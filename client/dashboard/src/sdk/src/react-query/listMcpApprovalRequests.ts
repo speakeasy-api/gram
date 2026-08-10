@@ -122,7 +122,6 @@ export function setListMcpApprovalRequestsData(
       limit?: number | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
-      gramProject?: string | undefined;
     },
   ],
   data: ListMcpApprovalRequestsQueryData,
@@ -141,7 +140,6 @@ export function invalidateListMcpApprovalRequests(
       limit?: number | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
-      gramProject?: string | undefined;
     }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,

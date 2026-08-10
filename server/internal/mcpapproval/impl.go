@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -127,24 +128,25 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-// project resolves the caller's project and enforces scope.
+// organization resolves the caller's organization and enforces scope.
 //
 // Every read and write in this service goes through here, so no handler can
-// reach the database without a project id that the server derived and a scope
-// the caller actually holds.
-func (s *Service) project(ctx context.Context, scope authz.Scope) (uuid.UUID, string, error) {
+// reach the database without an organization id that the server derived and a
+// scope the caller actually holds. Approvals are org-scoped: one review per
+// server per organization, whatever project the ask was raised from.
+func (s *Service) organization(ctx context.Context, scope authz.Scope) (string, error) {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	if authCtx == nil || authCtx.ProjectID == nil {
-		return uuid.Nil, "", oops.C(oops.CodeUnauthorized)
+	if authCtx == nil {
+		return "", oops.C(oops.CodeUnauthorized)
 	}
 
 	if err := s.authz.Require(ctx, authz.Check{
 		Scope:        scope,
 		ResourceKind: "",
-		ResourceID:   authCtx.ProjectID.String(),
+		ResourceID:   authCtx.ActiveOrganizationID,
 		Dimensions:   nil,
 	}); err != nil {
-		return uuid.Nil, "", fmt.Errorf("authorize mcp approval access: %w", err)
+		return "", fmt.Errorf("authorize mcp approval access: %w", err)
 	}
 
 	// The product-feature gate is independent of the RBAC check: a grant says
@@ -154,37 +156,37 @@ func (s *Service) project(ctx context.Context, scope authz.Scope) (uuid.UUID, st
 	// feature lookup failure never masks a denial.
 	enabled, err := s.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureMCPApproval)
 	if err != nil {
-		return uuid.Nil, "", oops.E(oops.CodeUnexpected, err, "check mcp approval feature").LogError(ctx, s.logger)
+		return "", oops.E(oops.CodeUnexpected, err, "check mcp approval feature").LogError(ctx, s.logger)
 	}
 	if !enabled {
-		return uuid.Nil, "", oops.E(oops.CodeForbidden, nil, "MCP approval is not enabled for this organization")
+		return "", oops.E(oops.CodeForbidden, nil, "MCP approval is not enabled for this organization")
 	}
 
-	return *authCtx.ProjectID, authCtx.ActiveOrganizationID, nil
+	return authCtx.ActiveOrganizationID, nil
 }
 
-// member resolves the caller's project and enforces the feature gate without
-// demanding a scope. Raising a request deliberately carries no RBAC grant:
-// the people asking typically cannot reach the dashboard, and a scope for it
-// would either be ungranted for everyone who needs it or granted so
-// universally it means nothing — the same posture as the block and bypass
-// surfaces. Authentication and project membership still apply, and the
+// member resolves the caller and enforces the feature gate without demanding
+// a scope. Raising a request deliberately carries no RBAC grant: the people
+// asking typically cannot reach the dashboard, and a scope for it would
+// either be ungranted for everyone who needs it or granted so universally it
+// means nothing — the same posture as the block and bypass surfaces.
+// Authentication and organization membership still apply, and the
 // product-feature gate holds either way.
-func (s *Service) member(ctx context.Context) (uuid.UUID, *contextvalues.AuthContext, error) {
+func (s *Service) member(ctx context.Context) (*contextvalues.AuthContext, error) {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	if authCtx == nil || authCtx.ProjectID == nil || authCtx.UserID == "" {
-		return uuid.Nil, nil, oops.C(oops.CodeUnauthorized)
+	if authCtx == nil || authCtx.UserID == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
 	enabled, err := s.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureMCPApproval)
 	if err != nil {
-		return uuid.Nil, nil, oops.E(oops.CodeUnexpected, err, "check mcp approval feature").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "check mcp approval feature").LogError(ctx, s.logger)
 	}
 	if !enabled {
-		return uuid.Nil, nil, oops.E(oops.CodeForbidden, nil, "MCP approval is not enabled for this organization")
+		return nil, oops.E(oops.CodeForbidden, nil, "MCP approval is not enabled for this organization")
 	}
 
-	return *authCtx.ProjectID, authCtx, nil
+	return authCtx, nil
 }
 
 // admission is one ask for a server, ready to be written.
@@ -192,6 +194,11 @@ type admission struct {
 	targetKind string
 	targetRaw  string
 	targetKey  string
+
+	// projectID is provenance of where the ask was raised — a block hook
+	// fires inside a project — never a tenancy bound. Null when the ask
+	// arrived without a project context.
+	projectID uuid.NullUUID
 
 	// bypassRequestID links the promotion source, when there is one.
 	bypassRequestID uuid.NullUUID
@@ -212,9 +219,29 @@ type admission struct {
 	actorEmail *string
 }
 
+// organizationProjectIDs resolves every project the organization owns, for
+// the org-wide exposure lookup. Best-effort: exposure is one evidence source
+// among several, and a failed project listing must cost that source alone —
+// an empty set makes the traffic lookup report a gap, never lose the
+// admission.
+func (s *Service) organizationProjectIDs(ctx context.Context, organizationID string) []uuid.UUID {
+	projects, err := projectsrepo.New(s.db).ListProjectsByOrganization(ctx, organizationID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to list organization projects for exposure lookup", attr.SlogError(err))
+		return nil
+	}
+
+	ids := make([]uuid.UUID, 0, len(projects))
+	for _, project := range projects {
+		ids = append(ids, project.ID)
+	}
+
+	return ids
+}
+
 // admit records one ask: the request row is created or reopened, the
 // requester is attached, and the create is audited — atomically.
-func (s *Service) admit(ctx context.Context, projectID uuid.UUID, organizationID string, adm admission) (*gen.ApprovalRequestSummary, error) {
+func (s *Service) admit(ctx context.Context, organizationID string, adm admission) (*gen.ApprovalRequestSummary, error) {
 	resolved := identity.Resolve(adm.targetRaw)
 
 	// Evidence is gathered before the transaction — it does network and
@@ -223,7 +250,7 @@ func (s *Service) admit(ctx context.Context, projectID uuid.UUID, organizationID
 	// per-source failures are recorded inside the document itself as gaps.
 	gatherCtx, cancelGather := context.WithTimeout(ctx, gatherTimeout)
 	defer cancelGather()
-	document, gatherErr := s.evidence.Assemble(gatherCtx, projectID, resolved)
+	document, gatherErr := s.evidence.Assemble(gatherCtx, s.organizationProjectIDs(gatherCtx, organizationID), resolved)
 	if gatherErr != nil {
 		s.logger.ErrorContext(ctx, "failed to assemble approval evidence", attr.SlogError(gatherErr))
 	}
@@ -238,7 +265,7 @@ func (s *Service) admit(ctx context.Context, projectID uuid.UUID, organizationID
 
 	request, err := queries.UpsertApprovalRequest(ctx, repo.UpsertApprovalRequestParams{
 		OrganizationID:            organizationID,
-		ProjectID:                 projectID,
+		ProjectID:                 adm.projectID,
 		TargetKind:                adm.targetKind,
 		TargetRaw:                 adm.targetRaw,
 		TargetKey:                 adm.targetKey,
@@ -256,7 +283,7 @@ func (s *Service) admit(ctx context.Context, projectID uuid.UUID, organizationID
 			CurrentEvidence: document,
 			EvidenceVersion: evidence.Version,
 			ID:              request.ID,
-			ProjectID:       projectID,
+			OrganizationID:  organizationID,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error storing evidence").LogError(ctx, s.logger)
 		}
@@ -265,7 +292,7 @@ func (s *Service) admit(ctx context.Context, projectID uuid.UUID, organizationID
 	if adm.requesterID != "" {
 		if _, err := queries.UpsertApprovalRequestRequester(ctx, repo.UpsertApprovalRequestRequesterParams{
 			OrganizationID:       organizationID,
-			ProjectID:            projectID,
+			ProjectID:            adm.projectID,
 			McpApprovalRequestID: request.ID,
 			UserID:               adm.requesterID,
 			UserEmail:            conv.PtrToPGTextEmpty(adm.requesterEmail),
@@ -277,7 +304,7 @@ func (s *Service) admit(ctx context.Context, projectID uuid.UUID, organizationID
 
 	if err := s.audit.LogMCPApprovalRequestCreate(ctx, dbtx, audit.LogMCPApprovalRequestCreateEvent{
 		OrganizationID:   organizationID,
-		ProjectID:        projectID,
+		ProjectID:        adm.projectID.UUID,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, adm.actor),
 		ActorDisplayName: adm.actorEmail,
 		ActorSlug:        nil,
@@ -293,7 +320,7 @@ func (s *Service) admit(ctx context.Context, projectID uuid.UUID, organizationID
 
 	// Re-read for the response so the summary carries the requester count the
 	// write just changed.
-	row, err := repo.New(s.db).GetApprovalRequest(ctx, repo.GetApprovalRequestParams{ID: request.ID, ProjectID: projectID})
+	row, err := repo.New(s.db).GetApprovalRequest(ctx, repo.GetApprovalRequestParams{ID: request.ID, OrganizationID: organizationID})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error reading approval request").LogError(ctx, s.logger)
 	}
@@ -302,9 +329,16 @@ func (s *Service) admit(ctx context.Context, projectID uuid.UUID, organizationID
 }
 
 func (s *Service) CreateRequest(ctx context.Context, payload *gen.CreateRequestPayload) (*gen.ApprovalRequestSummary, error) {
-	projectID, authCtx, err := s.member(ctx)
+	authCtx, err := s.member(ctx)
 	if err != nil {
 		return nil, err
+	}
+
+	// Provenance only: the project the ask was raised from, when the caller
+	// had one in context at all.
+	var raisedIn uuid.NullUUID
+	if authCtx.ProjectID != nil {
+		raisedIn = uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}
 	}
 
 	raw := strings.TrimSpace(payload.Target)
@@ -341,10 +375,11 @@ func (s *Service) CreateRequest(ctx context.Context, payload *gen.CreateRequestP
 	}
 	note := &trimmedNote
 
-	return s.admit(ctx, projectID, authCtx.ActiveOrganizationID, admission{
+	return s.admit(ctx, authCtx.ActiveOrganizationID, admission{
 		targetKind:      payload.TargetKind,
 		targetRaw:       raw,
 		targetKey:       key,
+		projectID:       raisedIn,
 		bypassRequestID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		requesterID:     authCtx.UserID,
 		requesterEmail:  authCtx.Email,
@@ -355,7 +390,7 @@ func (s *Service) CreateRequest(ctx context.Context, payload *gen.CreateRequestP
 }
 
 func (s *Service) Promote(ctx context.Context, payload *gen.PromotePayload) (*gen.ApprovalRequestSummary, error) {
-	projectID, _, err := s.project(ctx, authz.ScopeMCPApprovalDecide)
+	organizationID, err := s.organization(ctx, authz.ScopeMCPApprovalDecide)
 	if err != nil {
 		return nil, err
 	}
@@ -370,13 +405,13 @@ func (s *Service) Promote(ctx context.Context, payload *gen.PromotePayload) (*ge
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid bypass request id")
 	}
 
-	// Resolved under the caller's project, never by id alone. The id arrives
-	// from the caller, and there is no database-level pin for this pair (see
-	// AIS-470), so this read is the primary control against promoting another
-	// project's bypass request into this project's queue.
+	// Resolved under the caller's organization, never by id alone. The id
+	// arrives from the caller, and there is no database-level pin for this
+	// pair (see AIS-470), so this read is the primary control against
+	// promoting another organization's bypass request into this queue.
 	bypass, err := repo.New(s.db).GetBypassRequestForPromotion(ctx, repo.GetBypassRequestForPromotionParams{
-		ID:        bypassID,
-		ProjectID: projectID,
+		ID:             bypassID,
+		OrganizationID: organizationID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -397,10 +432,11 @@ func (s *Service) Promote(ctx context.Context, payload *gen.PromotePayload) (*ge
 		return nil, err
 	}
 
-	return s.admit(ctx, projectID, bypass.OrganizationID, admission{
+	return s.admit(ctx, bypass.OrganizationID, admission{
 		targetKind:      targetKindServerURL,
 		targetRaw:       display,
 		targetKey:       key,
+		projectID:       uuid.NullUUID{UUID: bypass.ProjectID, Valid: true},
 		bypassRequestID: uuid.NullUUID{UUID: bypass.ID, Valid: true},
 		requesterID:     bypass.RequesterUserID,
 		requesterEmail:  conv.FromPGText[string](bypass.RequesterEmail),
@@ -454,7 +490,7 @@ func bypassServerURL(bypass repo.GetBypassRequestForPromotionRow) string {
 }
 
 func (s *Service) ListRequests(ctx context.Context, payload *gen.ListRequestsPayload) (*gen.ListApprovalRequestsResult, error) {
-	projectID, _, err := s.project(ctx, authz.ScopeMCPApprovalRead)
+	organizationID, err := s.organization(ctx, authz.ScopeMCPApprovalRead)
 	if err != nil {
 		return nil, err
 	}
@@ -465,9 +501,9 @@ func (s *Service) ListRequests(ctx context.Context, payload *gen.ListRequestsPay
 	}
 
 	rows, err := repo.New(s.db).ListApprovalRequests(ctx, repo.ListApprovalRequestsParams{
-		ProjectID: projectID,
-		Status:    pgText(payload.Status),
-		PageLimit: limit,
+		OrganizationID: organizationID,
+		Status:         pgText(payload.Status),
+		PageLimit:      limit,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing approval requests").LogError(ctx, s.logger)
@@ -482,7 +518,7 @@ func (s *Service) ListRequests(ctx context.Context, payload *gen.ListRequestsPay
 }
 
 func (s *Service) GetRequest(ctx context.Context, payload *gen.GetRequestPayload) (*gen.ApprovalRequestDetail, error) {
-	projectID, _, err := s.project(ctx, authz.ScopeMCPApprovalRead)
+	organizationID, err := s.organization(ctx, authz.ScopeMCPApprovalRead)
 	if err != nil {
 		return nil, err
 	}
@@ -492,7 +528,7 @@ func (s *Service) GetRequest(ctx context.Context, payload *gen.GetRequestPayload
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid approval request id")
 	}
 
-	return s.requestDetail(ctx, projectID, requestID)
+	return s.requestDetail(ctx, organizationID, requestID)
 }
 
 // RefreshEvidence re-runs every evidence source for a request and replaces its
@@ -506,7 +542,7 @@ func (s *Service) GetRequest(ctx context.Context, payload *gen.GetRequestPayload
 // failed gather must not lose the admission, an explicit refresh that gathered
 // nothing reports the failure instead of silently keeping stale evidence.
 func (s *Service) RefreshEvidence(ctx context.Context, payload *gen.RefreshEvidencePayload) (*gen.ApprovalRequestDetail, error) {
-	projectID, _, err := s.project(ctx, authz.ScopeMCPApprovalRead)
+	organizationID, err := s.organization(ctx, authz.ScopeMCPApprovalRead)
 	if err != nil {
 		return nil, err
 	}
@@ -518,9 +554,10 @@ func (s *Service) RefreshEvidence(ctx context.Context, payload *gen.RefreshEvide
 
 	queries := repo.New(s.db)
 
-	// Resolved with the project id in the predicate, so a caller who learns an
-	// id from a dashboard URL cannot refresh another tenant's request.
-	row, err := queries.GetApprovalRequest(ctx, repo.GetApprovalRequestParams{ID: requestID, ProjectID: projectID})
+	// Resolved with the organization id in the predicate, so a caller who
+	// learns an id from a dashboard URL cannot refresh another tenant's
+	// request.
+	row, err := queries.GetApprovalRequest(ctx, repo.GetApprovalRequestParams{ID: requestID, OrganizationID: organizationID})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "approval request not found")
@@ -535,7 +572,7 @@ func (s *Service) RefreshEvidence(ctx context.Context, payload *gen.RefreshEvide
 
 	gatherCtx, cancelGather := context.WithTimeout(ctx, gatherTimeout)
 	defer cancelGather()
-	document, err := s.evidence.Assemble(gatherCtx, projectID, resolved)
+	document, err := s.evidence.Assemble(gatherCtx, s.organizationProjectIDs(gatherCtx, organizationID), resolved)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error gathering evidence").LogError(ctx, s.logger)
 	}
@@ -549,7 +586,7 @@ func (s *Service) RefreshEvidence(ctx context.Context, payload *gen.RefreshEvide
 		CurrentEvidence:     document,
 		EvidenceVersion:     evidence.Version,
 		ID:                  requestID,
-		ProjectID:           projectID,
+		OrganizationID:      organizationID,
 		PreviousCollectedAt: row.EvidenceCollectedAt,
 	})
 	if err != nil {
@@ -559,17 +596,17 @@ func (s *Service) RefreshEvidence(ctx context.Context, payload *gen.RefreshEvide
 		s.logger.InfoContext(ctx, "discarded refresh gather superseded by a concurrent write")
 	}
 
-	return s.requestDetail(ctx, projectID, requestID)
+	return s.requestDetail(ctx, organizationID, requestID)
 }
 
 // requestDetail assembles the full detail view of one request, already
-// resolved to the caller's project.
-func (s *Service) requestDetail(ctx context.Context, projectID uuid.UUID, requestID uuid.UUID) (*gen.ApprovalRequestDetail, error) {
+// resolved to the caller's organization.
+func (s *Service) requestDetail(ctx context.Context, organizationID string, requestID uuid.UUID) (*gen.ApprovalRequestDetail, error) {
 	queries := repo.New(s.db)
 
-	// Resolved with the project id in the predicate, so a caller who learns an
-	// id from a dashboard URL cannot read another tenant's request.
-	row, err := queries.GetApprovalRequest(ctx, repo.GetApprovalRequestParams{ID: requestID, ProjectID: projectID})
+	// Resolved with the organization id in the predicate, so a caller who
+	// learns an id from a dashboard URL cannot read another tenant's request.
+	row, err := queries.GetApprovalRequest(ctx, repo.GetApprovalRequestParams{ID: requestID, OrganizationID: organizationID})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "approval request not found")
@@ -579,7 +616,7 @@ func (s *Service) requestDetail(ctx context.Context, projectID uuid.UUID, reques
 
 	requesterRows, err := queries.ListRequestersForApprovalRequest(ctx, repo.ListRequestersForApprovalRequestParams{
 		McpApprovalRequestID: requestID,
-		ProjectID:            projectID,
+		OrganizationID:       organizationID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error reading approval requesters").LogError(ctx, s.logger)
@@ -587,7 +624,7 @@ func (s *Service) requestDetail(ctx context.Context, projectID uuid.UUID, reques
 
 	decisionRows, err := queries.ListDecisionsForApprovalRequest(ctx, repo.ListDecisionsForApprovalRequestParams{
 		McpApprovalRequestID: requestID,
-		ProjectID:            projectID,
+		OrganizationID:       organizationID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error reading approval decisions").LogError(ctx, s.logger)
@@ -595,7 +632,7 @@ func (s *Service) requestDetail(ctx context.Context, projectID uuid.UUID, reques
 
 	reportRows, err := queries.ListResearchReportsForApprovalRequest(ctx, repo.ListResearchReportsForApprovalRequestParams{
 		McpApprovalRequestID: requestID,
-		ProjectID:            projectID,
+		OrganizationID:       organizationID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error reading research reports").LogError(ctx, s.logger)
@@ -633,7 +670,7 @@ func (s *Service) requestDetail(ctx context.Context, projectID uuid.UUID, reques
 }
 
 func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisionPayload) (*gen.ApprovalDecision, error) {
-	projectID, _, err := s.project(ctx, authz.ScopeMCPApprovalDecide)
+	organizationID, err := s.organization(ctx, authz.ScopeMCPApprovalDecide)
 	if err != nil {
 		return nil, err
 	}
@@ -685,7 +722,7 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 	// concurrent decisions serialise: the request's status always ends up
 	// matching the newest decision rather than whichever transaction happened
 	// to commit last.
-	request, err := queries.GetApprovalRequestForDecision(ctx, repo.GetApprovalRequestForDecisionParams{ID: requestID, ProjectID: projectID})
+	request, err := queries.GetApprovalRequestForDecision(ctx, repo.GetApprovalRequestForDecisionParams{ID: requestID, OrganizationID: organizationID})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "approval request not found")
@@ -700,7 +737,7 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 		if _, err := queries.GetResearchReportForDecision(ctx, repo.GetResearchReportForDecisionParams{
 			ID:                   citedReportID.UUID,
 			McpApprovalRequestID: requestID,
-			ProjectID:            projectID,
+			OrganizationID:       organizationID,
 		}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return nil, oops.E(oops.CodeBadRequest, nil, "research report does not belong to this request")
@@ -722,12 +759,12 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 	// copied rather than defaulted, so a later re-gather cannot rewrite what
 	// this reviewer actually saw.
 	// The organisation is taken from the request that was just resolved under
-	// this project, not from the auth context. The composite foreign key pins
-	// a decision to its request's project but not to its organisation, so
-	// deriving it here is what stops the two ever disagreeing.
+	// the caller's organization bound, so the composite foreign key pinning
+	// the decision to its request's organization can never disagree with it.
+	// A decision carries no project provenance: deciding is an org-level act.
 	decision, err := queries.CreateApprovalDecision(ctx, repo.CreateApprovalDecisionParams{
 		OrganizationID:       request.OrganizationID,
-		ProjectID:            projectID,
+		ProjectID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		McpApprovalRequestID: requestID,
 		Decision:             payload.Decision,
 		DecidedBy:            authCtx.UserID,
@@ -743,7 +780,7 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 
 	if err := s.audit.LogMCPApprovalRequestDecide(ctx, dbtx, audit.LogMCPApprovalRequestDecideEvent{
 		OrganizationID:   request.OrganizationID,
-		ProjectID:        projectID,
+		ProjectID:        uuid.Nil,
 		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
 		ActorDisplayName: authCtx.Email,
 		ActorSlug:        nil,
@@ -755,9 +792,9 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 	}
 
 	if err := queries.SetApprovalRequestStatus(ctx, repo.SetApprovalRequestStatusParams{
-		ID:        requestID,
-		ProjectID: projectID,
-		Status:    statusFor[payload.Decision],
+		ID:             requestID,
+		OrganizationID: organizationID,
+		Status:         statusFor[payload.Decision],
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating approval request status").LogError(ctx, s.logger)
 	}

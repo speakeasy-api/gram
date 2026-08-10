@@ -2402,33 +2402,31 @@ func NewRecordDecisionGatewayErrorResponseBody(res *goa.ServiceError) *RecordDec
 
 // NewListRequestsPayload builds a mcpApproval service listRequests endpoint
 // payload.
-func NewListRequestsPayload(status *string, cursor *string, limit *int32, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpapproval.ListRequestsPayload {
+func NewListRequestsPayload(status *string, cursor *string, limit *int32, sessionToken *string, apikeyToken *string) *mcpapproval.ListRequestsPayload {
 	v := &mcpapproval.ListRequestsPayload{}
 	v.Status = status
 	v.Cursor = cursor
 	v.Limit = limit
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewGetRequestPayload builds a mcpApproval service getRequest endpoint
 // payload.
-func NewGetRequestPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpapproval.GetRequestPayload {
+func NewGetRequestPayload(id string, sessionToken *string, apikeyToken *string) *mcpapproval.GetRequestPayload {
 	v := &mcpapproval.GetRequestPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewCreateRequestPayload builds a mcpApproval service createRequest endpoint
 // payload.
-func NewCreateRequestPayload(body *CreateRequestRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpapproval.CreateRequestPayload {
+func NewCreateRequestPayload(body *CreateRequestRequestBody, sessionToken *string, apikeyToken *string) *mcpapproval.CreateRequestPayload {
 	v := &mcpapproval.CreateRequestPayload{
 		TargetKind: *body.TargetKind,
 		Target:     *body.Target,
@@ -2436,38 +2434,35 @@ func NewCreateRequestPayload(body *CreateRequestRequestBody, sessionToken *strin
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewPromotePayload builds a mcpApproval service promote endpoint payload.
-func NewPromotePayload(body *PromoteRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpapproval.PromotePayload {
+func NewPromotePayload(body *PromoteRequestBody, sessionToken *string, apikeyToken *string) *mcpapproval.PromotePayload {
 	v := &mcpapproval.PromotePayload{
 		RiskPolicyBypassRequestID: *body.RiskPolicyBypassRequestID,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewRefreshEvidencePayload builds a mcpApproval service refreshEvidence
 // endpoint payload.
-func NewRefreshEvidencePayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpapproval.RefreshEvidencePayload {
+func NewRefreshEvidencePayload(id string, sessionToken *string, apikeyToken *string) *mcpapproval.RefreshEvidencePayload {
 	v := &mcpapproval.RefreshEvidencePayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
 
 // NewRecordDecisionPayload builds a mcpApproval service recordDecision
 // endpoint payload.
-func NewRecordDecisionPayload(body *RecordDecisionRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpapproval.RecordDecisionPayload {
+func NewRecordDecisionPayload(body *RecordDecisionRequestBody, sessionToken *string, apikeyToken *string) *mcpapproval.RecordDecisionPayload {
 	v := &mcpapproval.RecordDecisionPayload{
 		ID:               *body.ID,
 		Decision:         *body.Decision,
@@ -2482,7 +2477,6 @@ func NewRecordDecisionPayload(body *RecordDecisionRequestBody, sessionToken *str
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }

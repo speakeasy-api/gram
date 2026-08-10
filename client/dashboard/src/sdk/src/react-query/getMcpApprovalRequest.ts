@@ -120,7 +120,6 @@ export function setGetMcpApprovalRequestData(
       id: string;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
-      gramProject?: string | undefined;
     },
   ],
   data: GetMcpApprovalRequestQueryData,
@@ -137,7 +136,6 @@ export function invalidateGetMcpApprovalRequest(
       id: string;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
-      gramProject?: string | undefined;
     }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,

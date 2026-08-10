@@ -13,7 +13,7 @@ import (
 
 func getPayload(id string) *gen.GetRequestPayload {
 	return &gen.GetRequestPayload{
-		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, ID: id,
+		SessionToken: nil, ApikeyToken: nil, ID: id,
 	}
 }
 
@@ -23,10 +23,10 @@ func TestGetRequest_Success(t *testing.T) {
 	ctx, ti := newTestService(t)
 
 	evidence := `{"authority": {"mode": "oauth"}, "capability": {"declares_destructive": true}}`
-	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{
+	requestID := seedRequest(t, ctx, ti, ti.organizationID, seededRequest{
 		targetKey: "https://mcp.example.com/x", status: "requested", evidence: evidence, version: 3,
 	})
-	seedRequester(t, ctx, ti, ti.projectID, requestID, "user-a", "needed for oncall")
+	seedRequester(t, ctx, ti, ti.organizationID, requestID, "user-a", "needed for oncall")
 
 	detail, err := ti.service.GetRequest(ctx, getPayload(requestID.String()))
 	require.NoError(t, err)
@@ -50,53 +50,52 @@ func TestGetRequest_Success(t *testing.T) {
 	require.Contains(t, decoded, "capability")
 }
 
-// A request id is guessable from a dashboard URL, so the project predicate —
-// not the id alone — is what decides whether it may be read.
-func TestGetRequest_OtherProjectIsNotFound(t *testing.T) {
+// A request id is guessable from a dashboard URL, so the organization
+// predicate — not the id alone — is what decides whether it may be read.
+func TestGetRequest_OtherOrganizationIsNotFound(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 
-	otherProject := createProject(t, ctx, ti.conn, ti.organizationID)
-	theirs := seedRequest(t, ctx, ti, otherProject, seededRequest{targetKey: "https://theirs.example.com", status: "", evidence: "", version: 0})
+	otherOrg := createOrganization(t, ctx, ti.conn)
+	theirs := seedRequest(t, ctx, ti, otherOrg, seededRequest{targetKey: "https://theirs.example.com", status: "", evidence: "", version: 0})
 
 	_, err := ti.service.GetRequest(ctx, getPayload(theirs.String()))
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
-// The child queries carry their own project predicates. The handler's parent
-// lookup 404s before they run, so the predicates are exercised directly at
-// the repo layer: another project's request id under this project's bound
-// must yield nothing, whatever the handler above happens to check first.
-func TestGetRequest_ChildQueriesAreProjectBounded(t *testing.T) {
+// The child queries carry their own organization predicates. The handler's
+// parent lookup 404s before they run, so the predicates are exercised
+// directly at the repo layer: another organization's request id under this
+// organization's bound must yield nothing, whatever the handler above happens
+// to check first.
+func TestGetRequest_ChildQueriesAreOrgBounded(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 
-	otherProject := createProject(t, ctx, ti.conn, ti.organizationID)
-	theirs := seedRequest(t, ctx, ti, otherProject, seededRequest{targetKey: "https://theirs.example.com", status: "", evidence: "", version: 0})
-	seedRequester(t, ctx, ti, otherProject, theirs, "their-user", "their reason")
+	otherOrg := createOrganization(t, ctx, ti.conn)
+	theirs := seedRequest(t, ctx, ti, otherOrg, seededRequest{targetKey: "https://theirs.example.com", status: "", evidence: "", version: 0})
+	seedRequester(t, ctx, ti, otherOrg, theirs, "their-user", "their reason")
 
-	// A decision in the other project too, so the empty result below proves
-	// the predicate filters rather than the data being absent.
-	otherCtx := withProject(t, ctx, ti, otherProject, authz.ScopeMCPApprovalDecide)
-	_, err := ti.service.RecordDecision(otherCtx, decisionPayload(theirs.String(), "denied"))
-	require.NoError(t, err)
+	// A decision in the other organization too, so the empty result below
+	// proves the predicate filters rather than the data being absent.
+	seedDecision(t, ctx, ti, otherOrg, theirs, "denied")
 
-	_, err = ti.service.GetRequest(ctx, getPayload(theirs.String()))
+	_, err := ti.service.GetRequest(ctx, getPayload(theirs.String()))
 	requireOopsCode(t, err, oops.CodeNotFound)
 
 	requesters, err := ti.repo.ListRequestersForApprovalRequest(ctx, repo.ListRequestersForApprovalRequestParams{
 		McpApprovalRequestID: theirs,
-		ProjectID:            ti.projectID,
+		OrganizationID:       ti.organizationID,
 	})
 	require.NoError(t, err)
 	require.Empty(t, requesters)
 
 	decisions, err := ti.repo.ListDecisionsForApprovalRequest(ctx, repo.ListDecisionsForApprovalRequestParams{
 		McpApprovalRequestID: theirs,
-		ProjectID:            ti.projectID,
+		OrganizationID:       ti.organizationID,
 	})
 	require.NoError(t, err)
 	require.Empty(t, decisions)
@@ -125,8 +124,8 @@ func TestGetRequest_RequiresScope(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "", evidence: "", version: 0})
-	ungranted := withProject(t, ctx, ti, ti.projectID)
+	requestID := seedRequest(t, ctx, ti, ti.organizationID, seededRequest{targetKey: "", status: "", evidence: "", version: 0})
+	ungranted := withGrants(t, ctx, ti)
 
 	_, err := ti.service.GetRequest(ungranted, getPayload(requestID.String()))
 	requireOopsCode(t, err, oops.CodeForbidden)
@@ -137,8 +136,8 @@ func TestGetRequest_ReadScopeSuffices(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "", evidence: "", version: 0})
-	readOnly := withProject(t, ctx, ti, ti.projectID, authz.ScopeMCPApprovalRead)
+	requestID := seedRequest(t, ctx, ti, ti.organizationID, seededRequest{targetKey: "", status: "", evidence: "", version: 0})
+	readOnly := withGrants(t, ctx, ti, authz.ScopeMCPApprovalRead)
 
 	detail, err := ti.service.GetRequest(readOnly, getPayload(requestID.String()))
 	require.NoError(t, err)
@@ -152,9 +151,9 @@ func TestGetRequest_IncludesResearchReports(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "", evidence: "", version: 0})
-	seedResearchReport(t, ctx, ti, ti.projectID, requestID, "completed", `{"claims":[{"text":"vendor is real","tier":"independently_reported"}]}`)
-	seedResearchReport(t, ctx, ti, ti.projectID, requestID, "running", `{}`)
+	requestID := seedRequest(t, ctx, ti, ti.organizationID, seededRequest{targetKey: "", status: "", evidence: "", version: 0})
+	seedResearchReport(t, ctx, ti, ti.organizationID, requestID, "completed", `{"claims":[{"text":"vendor is real","tier":"independently_reported"}]}`)
+	seedResearchReport(t, ctx, ti, ti.organizationID, requestID, "running", `{}`)
 
 	detail, err := ti.service.GetRequest(ctx, getPayload(requestID.String()))
 	require.NoError(t, err)
@@ -168,7 +167,7 @@ func TestGetRequest_IncludesResearchReports(t *testing.T) {
 	require.Contains(t, report, "claims")
 
 	// A request with no runs reports none rather than failing.
-	bare := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "", evidence: "", version: 0})
+	bare := seedRequest(t, ctx, ti, ti.organizationID, seededRequest{targetKey: "", status: "", evidence: "", version: 0})
 	bareDetail, err := ti.service.GetRequest(ctx, getPayload(bare.String()))
 	require.NoError(t, err)
 	require.Empty(t, bareDetail.ResearchReports)

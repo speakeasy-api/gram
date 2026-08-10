@@ -13,7 +13,7 @@ import (
 
 func listPayload() *gen.ListRequestsPayload {
 	return &gen.ListRequestsPayload{
-		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+		SessionToken: nil, ApikeyToken: nil,
 		Status: nil, Cursor: nil, Limit: nil,
 	}
 }
@@ -23,9 +23,9 @@ func TestListRequests_Success(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "https://a.example.com", status: "", evidence: "", version: 0})
-	seedRequester(t, ctx, ti, ti.projectID, requestID, "user-a", "we need it for triage")
-	seedRequester(t, ctx, ti, ti.projectID, requestID, "user-b", "same here")
+	requestID := seedRequest(t, ctx, ti, ti.organizationID, seededRequest{targetKey: "https://a.example.com", status: "", evidence: "", version: 0})
+	seedRequester(t, ctx, ti, ti.organizationID, requestID, "user-a", "we need it for triage")
+	seedRequester(t, ctx, ti, ti.organizationID, requestID, "user-b", "same here")
 
 	result, err := ti.service.ListRequests(ctx, listPayload())
 	require.NoError(t, err)
@@ -51,7 +51,7 @@ func TestListRequests_UnresolvedArtifactIsAbsent(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	seedUnresolvedRequest(t, ctx, ti, ti.projectID, "npx some-server")
+	seedUnresolvedRequest(t, ctx, ti, ti.organizationID, "npx some-server")
 
 	result, err := ti.service.ListRequests(ctx, listPayload())
 	require.NoError(t, err)
@@ -65,8 +65,8 @@ func TestListRequests_FiltersByStatus(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "https://open.example.com", status: "requested", evidence: "", version: 0})
-	approved := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "https://done.example.com", status: "approved", evidence: "", version: 0})
+	seedRequest(t, ctx, ti, ti.organizationID, seededRequest{targetKey: "https://open.example.com", status: "requested", evidence: "", version: 0})
+	approved := seedRequest(t, ctx, ti, ti.organizationID, seededRequest{targetKey: "https://done.example.com", status: "approved", evidence: "", version: 0})
 
 	payload := listPayload()
 	payload.Status = new("approved")
@@ -85,7 +85,7 @@ func TestListRequests_CapsPageSize(t *testing.T) {
 	// One more request than the cap, so the clamp is what bounds the result
 	// rather than the data running out first.
 	for i := range 201 {
-		seedRequest(t, ctx, ti, ti.projectID, seededRequest{
+		seedRequest(t, ctx, ti, ti.organizationID, seededRequest{
 			targetKey: fmt.Sprintf("https://mcp.example.com/%03d", i), status: "", evidence: "", version: 0,
 		})
 	}
@@ -104,16 +104,16 @@ func TestListRequests_CapsPageSize(t *testing.T) {
 	require.Len(t, result.Requests, 200)
 }
 
-// The queue must never carry another project's requests, whatever the caller
-// holds in their own.
-func TestListRequests_DoesNotLeakOtherProjects(t *testing.T) {
+// The queue must never carry another organization's requests, whatever the
+// caller holds in their own.
+func TestListRequests_DoesNotLeakOtherOrganizations(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 
-	otherProject := createProject(t, ctx, ti.conn, ti.organizationID)
-	seedRequest(t, ctx, ti, otherProject, seededRequest{targetKey: "https://theirs.example.com", status: "", evidence: "", version: 0})
-	mine := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "https://mine.example.com", status: "", evidence: "", version: 0})
+	otherOrg := createOrganization(t, ctx, ti.conn)
+	seedRequest(t, ctx, ti, otherOrg, seededRequest{targetKey: "https://theirs.example.com", status: "", evidence: "", version: 0})
+	mine := seedRequest(t, ctx, ti, ti.organizationID, seededRequest{targetKey: "https://mine.example.com", status: "", evidence: "", version: 0})
 
 	result, err := ti.service.ListRequests(ctx, listPayload())
 	require.NoError(t, err)
@@ -126,8 +126,8 @@ func TestListRequests_RequiresScope(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "", evidence: "", version: 0})
-	ungranted := withProject(t, ctx, ti, ti.projectID)
+	seedRequest(t, ctx, ti, ti.organizationID, seededRequest{targetKey: "", status: "", evidence: "", version: 0})
+	ungranted := withGrants(t, ctx, ti)
 
 	_, err := ti.service.ListRequests(ungranted, listPayload())
 	require.Error(t, err)
@@ -141,8 +141,8 @@ func TestListRequests_ReadScopeSuffices(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "", evidence: "", version: 0})
-	readOnly := withProject(t, ctx, ti, ti.projectID, authz.ScopeMCPApprovalRead)
+	seedRequest(t, ctx, ti, ti.organizationID, seededRequest{targetKey: "", status: "", evidence: "", version: 0})
+	readOnly := withGrants(t, ctx, ti, authz.ScopeMCPApprovalRead)
 
 	result, err := ti.service.ListRequests(readOnly, listPayload())
 	require.NoError(t, err)

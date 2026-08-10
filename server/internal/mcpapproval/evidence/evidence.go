@@ -279,10 +279,11 @@ func NewAssembler(packages PackageLookup, traffic exposure.Reader, authorityProb
 
 // Assemble gathers one evidence document for a requested server.
 //
-// resolved is the reference's identity; projectID bounds the traffic lookup.
+// resolved is the reference's identity; projectIDs are the organization's
+// projects, bounding the org-wide traffic lookup.
 // Sources are best-effort: a failing source lands in Gaps and the rest of the
 // document stands, so intake never loses an admission to a flaky registry.
-func (a *Assembler) Assemble(ctx context.Context, projectID uuid.UUID, resolved identity.Identity) ([]byte, error) {
+func (a *Assembler) Assemble(ctx context.Context, projectIDs []uuid.UUID, resolved identity.Identity) ([]byte, error) {
 	document := Document{
 		Identity: IdentitySection{
 			Kind:              string(resolved.Kind),
@@ -335,7 +336,7 @@ func (a *Assembler) Assemble(ctx context.Context, projectID uuid.UUID, resolved 
 	if resolved.Kind == identity.KindRemote {
 		target := strings.TrimPrefix(resolved.ArtifactRef, "url:")
 		assessCtx, cancel := context.WithTimeout(ctx, a.sourceTimeout)
-		signals, err := exposure.Assess(assessCtx, a.traffic, projectID, target)
+		signals, err := exposure.Assess(assessCtx, a.traffic, projectIDs, target)
 		cancel()
 		if err != nil {
 			document.Gaps = append(document.Gaps, GapExposureLookup)

@@ -50,10 +50,6 @@ func EncodeListRequestsRequest(encoder func(*http.Request) goahttp.Encoder) func
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
 		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
-		}
 		values := req.URL.Query()
 		if p.Status != nil {
 			values.Add("status", *p.Status)
@@ -299,10 +295,6 @@ func EncodeGetRequestRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
 		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
-		}
 		values := req.URL.Query()
 		values.Add("id", p.ID)
 		req.URL.RawQuery = values.Encode()
@@ -539,10 +531,6 @@ func EncodeCreateRequestRequest(encoder func(*http.Request) goahttp.Encoder) fun
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
-		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
 		}
 		body := NewCreateRequestRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
@@ -782,10 +770,6 @@ func EncodePromoteRequest(encoder func(*http.Request) goahttp.Encoder) func(*htt
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
 		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
-		}
 		body := NewPromoteRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
 			return goahttp.ErrEncodingError("mcpApproval", "promote", err)
@@ -1024,10 +1008,6 @@ func EncodeRefreshEvidenceRequest(encoder func(*http.Request) goahttp.Encoder) f
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
 		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
-		}
 		values := req.URL.Query()
 		values.Add("id", p.ID)
 		req.URL.RawQuery = values.Encode()
@@ -1264,10 +1244,6 @@ func EncodeRecordDecisionRequest(encoder func(*http.Request) goahttp.Encoder) fu
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
-		}
-		if p.ProjectSlugInput != nil {
-			head := *p.ProjectSlugInput
-			req.Header.Set("Gram-Project", head)
 		}
 		body := NewRecordDecisionRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {

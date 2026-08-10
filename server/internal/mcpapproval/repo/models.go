@@ -13,7 +13,7 @@ import (
 type McpApprovalDecision struct {
 	ID                   uuid.UUID
 	OrganizationID       string
-	ProjectID            uuid.UUID
+	ProjectID            uuid.NullUUID
 	McpApprovalRequestID uuid.UUID
 	Decision             string
 	DecidedBy            string
@@ -30,11 +30,11 @@ type McpApprovalDecision struct {
 	Deleted              bool
 }
 
-// One review per MCP server per project. Re-requests reopen the same row so decisions accumulate as history, giving "have we decided on this before?" for free.
+// One review per MCP server per organization. Re-requests reopen the same row so decisions accumulate as history, giving "have we decided on this before?" for free.
 type McpApprovalRequest struct {
 	ID             uuid.UUID
 	OrganizationID string
-	ProjectID      uuid.UUID
+	ProjectID      uuid.NullUUID
 	TargetKind     string
 	TargetRaw      string
 	TargetKey      string
@@ -57,7 +57,7 @@ type McpApprovalRequest struct {
 type McpApprovalRequestRequester struct {
 	ID                   uuid.UUID
 	OrganizationID       string
-	ProjectID            uuid.UUID
+	ProjectID            uuid.NullUUID
 	McpApprovalRequestID uuid.UUID
 	UserID               string
 	UserEmail            pgtype.Text
@@ -73,7 +73,7 @@ type McpApprovalRequestRequester struct {
 type McpResearchReport struct {
 	ID                   uuid.UUID
 	OrganizationID       string
-	ProjectID            uuid.UUID
+	ProjectID            uuid.NullUUID
 	McpApprovalRequestID uuid.UUID
 	Status               string
 	Report               []byte

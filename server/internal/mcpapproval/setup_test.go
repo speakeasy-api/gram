@@ -126,7 +126,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	}
 
 	enableMCPApproval(t, ctx, ti)
-	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeMCPApprovalDecide, projectID.String()))
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeMCPApprovalDecide, organizationID))
 
 	return ctx, ti
 }
@@ -170,21 +170,35 @@ func createProject(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organi
 	return project.ID
 }
 
-// withProject rebinds the auth context onto a project, so a test can act as the
-// same caller with a different set of grants.
-func withProject(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, grants ...authz.Scope) context.Context {
+// withGrants rebinds the caller onto an exact grant set at the organization
+// level, so a test can act as the same caller with different authority.
+func withGrants(t *testing.T, ctx context.Context, ti *testInstance, grants ...authz.Scope) context.Context {
 	t.Helper()
-
-	authContext := *ti.authContext
-	authContext.ProjectID = &projectID
-	scoped := contextvalues.SetAuthContext(ctx, &authContext)
 
 	exact := make([]authz.Grant, len(grants))
 	for i, scope := range grants {
-		exact[i] = authz.NewGrant(scope, projectID.String())
+		exact[i] = authz.NewGrant(scope, ti.organizationID)
 	}
 
-	return authztest.WithExactGrants(t, scoped, exact...)
+	return authztest.WithExactGrants(t, ctx, exact...)
+}
+
+// createOrganization plants a second tenant, for asserting that org-scoped
+// reads never cross it.
+func createOrganization(t *testing.T, ctx context.Context, conn *pgxpool.Pool) string {
+	t.Helper()
+
+	organizationID := "mcpapproval-other-org-" + uuid.NewString()
+	_, err := orgrepo.New(conn).UpsertOrganizationMetadata(ctx, orgrepo.UpsertOrganizationMetadataParams{
+		ID:          organizationID,
+		Name:        organizationID,
+		Slug:        organizationID,
+		WorkosID:    pgtype.Text{},
+		Whitelisted: pgtype.Bool{},
+	})
+	require.NoError(t, err)
+
+	return organizationID
 }
 
 // seededRequest describes an approval request to plant.
@@ -193,7 +207,7 @@ func withProject(t *testing.T, ctx context.Context, ti *testInstance, projectID 
 // work, so until then the read and decide handlers are exercised against rows
 // seeded through the repo.
 type seededRequest struct {
-	// targetKey deduplicates the request within its project. Empty picks a
+	// targetKey deduplicates the request within its organization. Empty picks a
 	// unique one.
 	targetKey string
 
@@ -208,7 +222,7 @@ type seededRequest struct {
 	version int32
 }
 
-func seedRequest(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, seed seededRequest) uuid.UUID {
+func seedRequest(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, seed seededRequest) uuid.UUID {
 	t.Helper()
 
 	if seed.targetKey == "" {
@@ -219,8 +233,8 @@ func seedRequest(t *testing.T, ctx context.Context, ti *testInstance, projectID 
 	}
 
 	request, err := ti.repo.UpsertApprovalRequest(ctx, repo.UpsertApprovalRequestParams{
-		OrganizationID:            ti.organizationID,
-		ProjectID:                 projectID,
+		OrganizationID:            organizationID,
+		ProjectID:                 uuid.NullUUID{UUID: ti.projectID, Valid: true},
 		TargetKind:                "server_url",
 		TargetRaw:                 seed.targetKey,
 		TargetKey:                 seed.targetKey,
@@ -233,7 +247,7 @@ func seedRequest(t *testing.T, ctx context.Context, ti *testInstance, projectID 
 
 	if seed.evidence != "" || seed.version != 0 {
 		evidence := conv.Default(seed.evidence, "{}")
-		seedEvidence(t, ctx, ti, projectID, request.ID, evidence, max(seed.version, 1))
+		seedEvidence(t, ctx, ti, organizationID, request.ID, evidence, max(seed.version, 1))
 	}
 
 	return request.ID
@@ -241,12 +255,12 @@ func seedRequest(t *testing.T, ctx context.Context, ti *testInstance, projectID 
 
 // seedUnresolvedRequest plants a request identity resolution could not place,
 // which is a legitimate outcome rather than an error state.
-func seedUnresolvedRequest(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, raw string) uuid.UUID {
+func seedUnresolvedRequest(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, raw string) uuid.UUID {
 	t.Helper()
 
 	request, err := ti.repo.UpsertApprovalRequest(ctx, repo.UpsertApprovalRequestParams{
-		OrganizationID:            ti.organizationID,
-		ProjectID:                 projectID,
+		OrganizationID:            organizationID,
+		ProjectID:                 uuid.NullUUID{UUID: ti.projectID, Valid: true},
 		TargetKind:                "stdio_command",
 		TargetRaw:                 raw,
 		TargetKey:                 raw,
@@ -260,23 +274,23 @@ func seedUnresolvedRequest(t *testing.T, ctx context.Context, ti *testInstance, 
 	return request.ID
 }
 
-func seedEvidence(t *testing.T, ctx context.Context, ti *testInstance, projectID, requestID uuid.UUID, evidence string, version int32) {
+func seedEvidence(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, requestID uuid.UUID, evidence string, version int32) {
 	t.Helper()
 
 	require.NoError(t, ti.repo.SetApprovalRequestEvidence(ctx, repo.SetApprovalRequestEvidenceParams{
 		CurrentEvidence: []byte(evidence),
 		EvidenceVersion: version,
 		ID:              requestID,
-		ProjectID:       projectID,
+		OrganizationID:  organizationID,
 	}))
 }
 
-func seedRequester(t *testing.T, ctx context.Context, ti *testInstance, projectID, requestID uuid.UUID, userID, note string) {
+func seedRequester(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, requestID uuid.UUID, userID, note string) {
 	t.Helper()
 
 	_, err := ti.repo.UpsertApprovalRequestRequester(ctx, repo.UpsertApprovalRequestRequesterParams{
-		OrganizationID:       ti.organizationID,
-		ProjectID:            projectID,
+		OrganizationID:       organizationID,
+		ProjectID:            uuid.NullUUID{UUID: ti.projectID, Valid: true},
 		McpApprovalRequestID: requestID,
 		UserID:               userID,
 		UserEmail:            conv.ToPGText(userID + "@example.test"),
@@ -285,22 +299,22 @@ func seedRequester(t *testing.T, ctx context.Context, ti *testInstance, projectI
 	require.NoError(t, err)
 }
 
-func decisionsFor(t *testing.T, ctx context.Context, ti *testInstance, projectID, requestID uuid.UUID) []repo.McpApprovalDecision {
+func decisionsFor(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, requestID uuid.UUID) []repo.McpApprovalDecision {
 	t.Helper()
 
 	decisions, err := ti.repo.ListDecisionsForApprovalRequest(ctx, repo.ListDecisionsForApprovalRequestParams{
 		McpApprovalRequestID: requestID,
-		ProjectID:            projectID,
+		OrganizationID:       organizationID,
 	})
 	require.NoError(t, err)
 
 	return decisions
 }
 
-func requestStatus(t *testing.T, ctx context.Context, ti *testInstance, projectID, requestID uuid.UUID) string {
+func requestStatus(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, requestID uuid.UUID) string {
 	t.Helper()
 
-	request, err := ti.repo.GetApprovalRequest(ctx, repo.GetApprovalRequestParams{ID: requestID, ProjectID: projectID})
+	request, err := ti.repo.GetApprovalRequest(ctx, repo.GetApprovalRequestParams{ID: requestID, OrganizationID: organizationID})
 	require.NoError(t, err)
 
 	return request.Status
@@ -346,12 +360,12 @@ func requireOopsCode(t *testing.T, err error, code oops.Code) {
 	require.Equal(t, code, oopsErr.Code)
 }
 
-func seedResearchReport(t *testing.T, ctx context.Context, ti *testInstance, projectID, requestID uuid.UUID, status, report string) uuid.UUID {
+func seedResearchReport(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, requestID uuid.UUID, status, report string) uuid.UUID {
 	t.Helper()
 
 	row, err := ti.repo.CreateResearchReport(ctx, repo.CreateResearchReportParams{
-		OrganizationID:       ti.organizationID,
-		ProjectID:            projectID,
+		OrganizationID:       organizationID,
+		ProjectID:            uuid.NullUUID{UUID: ti.projectID, Valid: true},
 		McpApprovalRequestID: requestID,
 		Status:               status,
 		Report:               []byte(report),
@@ -366,4 +380,24 @@ func seedResearchReport(t *testing.T, ctx context.Context, ti *testInstance, pro
 	require.NoError(t, err)
 
 	return row.ID
+}
+
+// seedDecision plants one decision row directly, for asserting org bounds on
+// reads without routing through the handler's own tenancy checks.
+func seedDecision(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, requestID uuid.UUID, decision string) {
+	t.Helper()
+
+	_, err := ti.repo.CreateApprovalDecision(ctx, repo.CreateApprovalDecisionParams{
+		OrganizationID:       organizationID,
+		ProjectID:            uuid.NullUUID{},
+		McpApprovalRequestID: requestID,
+		Decision:             decision,
+		DecidedBy:            "seed-admin",
+		Rationale:            conv.ToPGText("seeded decision"),
+		EvidenceSnapshot:     []byte("{}"),
+		EvidenceVersion:      1,
+		GrantedPrincipalUrns: []string{},
+		McpResearchReportID:  uuid.NullUUID{},
+	})
+	require.NoError(t, err)
 }

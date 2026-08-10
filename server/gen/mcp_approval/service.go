@@ -146,9 +146,8 @@ type ApprovalRequester struct {
 // CreateRequestPayload is the payload type of the mcpApproval service
 // createRequest method.
 type CreateRequestPayload struct {
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
+	SessionToken *string
+	ApikeyToken  *string
 	// The namespace of the reference.
 	TargetKind string
 	// The server reference: a URL, or the stdio command that launches it.
@@ -161,9 +160,8 @@ type CreateRequestPayload struct {
 // GetRequestPayload is the payload type of the mcpApproval service getRequest
 // method.
 type GetRequestPayload struct {
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
+	SessionToken *string
+	ApikeyToken  *string
 	// The approval request ID.
 	ID string
 }
@@ -180,9 +178,8 @@ type ListApprovalRequestsResult struct {
 // ListRequestsPayload is the payload type of the mcpApproval service
 // listRequests method.
 type ListRequestsPayload struct {
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
+	SessionToken *string
+	ApikeyToken  *string
 	// Only return requests in this status.
 	Status *string
 	// The cursor to fetch results from
@@ -193,9 +190,8 @@ type ListRequestsPayload struct {
 
 // PromotePayload is the payload type of the mcpApproval service promote method.
 type PromotePayload struct {
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
+	SessionToken *string
+	ApikeyToken  *string
 	// The bypass request to promote.
 	RiskPolicyBypassRequestID string
 }
@@ -203,9 +199,8 @@ type PromotePayload struct {
 // RecordDecisionPayload is the payload type of the mcpApproval service
 // recordDecision method.
 type RecordDecisionPayload struct {
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
+	SessionToken *string
+	ApikeyToken  *string
 	// The approval request ID.
 	ID string
 	// Either approved or denied.
@@ -223,9 +218,8 @@ type RecordDecisionPayload struct {
 // RefreshEvidencePayload is the payload type of the mcpApproval service
 // refreshEvidence method.
 type RefreshEvidencePayload struct {
-	SessionToken     *string
-	ApikeyToken      *string
-	ProjectSlugInput *string
+	SessionToken *string
+	ApikeyToken  *string
 	// The approval request ID.
 	ID string
 }

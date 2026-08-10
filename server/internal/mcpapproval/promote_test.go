@@ -19,21 +19,21 @@ import (
 
 func promotePayload(id string) *gen.PromotePayload {
 	return &gen.PromotePayload{
-		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+		SessionToken: nil, ApikeyToken: nil,
 		RiskPolicyBypassRequestID: id,
 	}
 }
 
 // seedBypassRequest plants a shadow-MCP bypass request the way a block does,
 // through the risk repo.
-func seedBypassRequest(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, serverURL, requesterID, note string) uuid.UUID {
+func seedBypassRequest(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID uuid.UUID, serverURL, requesterID, note string) uuid.UUID {
 	t.Helper()
 
 	policyID := uuid.New()
 	_, err := riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
 		ID:             policyID,
 		ProjectID:      projectID,
-		OrganizationID: ti.organizationID,
+		OrganizationID: organizationID,
 		Name:           "shadow mcp policy " + policyID.String()[:8],
 		Sources:        []string{"shadow_mcp"},
 		AnalyzerConfig: []byte(`{}`),
@@ -60,7 +60,7 @@ func seedBypassRequest(t *testing.T, ctx context.Context, ti *testInstance, proj
 
 	row, err := riskrepo.New(ti.conn).UpsertRiskPolicyBypassRequest(ctx, riskrepo.UpsertRiskPolicyBypassRequestParams{
 		ID:               uuid.New(),
-		OrganizationID:   ti.organizationID,
+		OrganizationID:   organizationID,
 		ProjectID:        projectID,
 		RiskPolicyID:     policyID,
 		TargetKind:       targetKind,
@@ -82,7 +82,7 @@ func TestPromote_CarriesRequesterAndLinksSource(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	bypassID := seedBypassRequest(t, ctx, ti, ti.projectID, "https://mcp.example.com/sse", "blocked-user", "hit the block during oncall")
+	bypassID := seedBypassRequest(t, ctx, ti, ti.organizationID, ti.projectID, "https://mcp.example.com/sse", "blocked-user", "hit the block during oncall")
 
 	promoted, err := ti.service.Promote(ctx, promotePayload(bypassID.String()))
 	require.NoError(t, err)
@@ -103,28 +103,29 @@ func TestPromote_CarriesRequesterAndLinksSource(t *testing.T) {
 
 	// The promotion source is linked on the request row.
 	row, err := ti.repo.GetApprovalRequest(ctx, repo.GetApprovalRequestParams{
-		ID: uuid.MustParse(promoted.ID), ProjectID: ti.projectID,
+		ID: uuid.MustParse(promoted.ID), OrganizationID: ti.organizationID,
 	})
 	require.NoError(t, err)
 	require.True(t, row.RiskPolicyBypassRequestID.Valid)
 	require.Equal(t, bypassID, row.RiskPolicyBypassRequestID.UUID)
 }
 
-// Promoting another project's bypass request is the sharpest IDOR risk in the
-// workflow: the id is caller-supplied and there is no database-level pin for
-// this pair, so the project-scoped resolve is the primary control.
-func TestPromote_OtherProjectBypassIsNotFound(t *testing.T) {
+// Promoting another organization's bypass request is the sharpest IDOR risk
+// in the workflow: the id is caller-supplied and there is no database-level
+// pin for this pair, so the org-scoped resolve is the primary control.
+func TestPromote_OtherOrganizationBypassIsNotFound(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 
-	otherProject := createProject(t, ctx, ti.conn, ti.organizationID)
-	theirs := seedBypassRequest(t, ctx, ti, otherProject, "https://theirs.example.com/sse", "their-user", "their reason")
+	otherOrg := createOrganization(t, ctx, ti.conn)
+	otherProject := createProject(t, ctx, ti.conn, otherOrg)
+	theirs := seedBypassRequest(t, ctx, ti, otherOrg, otherProject, "https://theirs.example.com/sse", "their-user", "their reason")
 
 	_, err := ti.service.Promote(ctx, promotePayload(theirs.String()))
 	requireOopsCode(t, err, oops.CodeNotFound)
 
-	// Nothing entered this project's queue.
+	// Nothing entered this organization's queue.
 	result, err := ti.service.ListRequests(ctx, listPayload())
 	require.NoError(t, err)
 	require.Empty(t, result.Requests)
@@ -136,7 +137,7 @@ func TestPromote_WholePolicyBypassIsRejected(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	bypassID := seedBypassRequest(t, ctx, ti, ti.projectID, "", "someone", "let me past everything")
+	bypassID := seedBypassRequest(t, ctx, ti, ti.organizationID, ti.projectID, "", "someone", "let me past everything")
 
 	_, err := ti.service.Promote(ctx, promotePayload(bypassID.String()))
 	requireOopsCode(t, err, oops.CodeBadRequest)
@@ -149,7 +150,7 @@ func TestPromote_UnattributedRequesterIsNotLost(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	bypassID := seedBypassRequest(t, ctx, ti, ti.projectID, "https://mcp.example.com/sse", "", "")
+	bypassID := seedBypassRequest(t, ctx, ti, ti.organizationID, ti.projectID, "https://mcp.example.com/sse", "", "")
 
 	promoted, err := ti.service.Promote(ctx, promotePayload(bypassID.String()))
 	require.NoError(t, err)
@@ -166,7 +167,7 @@ func TestPromote_JoinsAnExistingReview(t *testing.T) {
 	created, err := ti.service.CreateRequest(ctx, createPayload("server_url", "https://mcp.example.com/sse", "proactive ask"))
 	require.NoError(t, err)
 
-	bypassID := seedBypassRequest(t, ctx, ti, ti.projectID, "https://mcp.example.com:443/sse", "blocked-user", "hit the block")
+	bypassID := seedBypassRequest(t, ctx, ti, ti.organizationID, ti.projectID, "https://mcp.example.com:443/sse", "blocked-user", "hit the block")
 
 	promoted, err := ti.service.Promote(ctx, promotePayload(bypassID.String()))
 	require.NoError(t, err)
@@ -187,7 +188,7 @@ func TestPromote_EmptyBypassNoteKeepsTheEarlierJustification(t *testing.T) {
 	created, err := ti.service.CreateRequest(proactiveCtx, createPayload("server_url", "https://mcp.example.com/sse", "the original why"))
 	require.NoError(t, err)
 
-	bypassID := seedBypassRequest(t, ctx, ti, ti.projectID, "https://mcp.example.com/sse", "blocked-user", "")
+	bypassID := seedBypassRequest(t, ctx, ti, ti.organizationID, ti.projectID, "https://mcp.example.com/sse", "blocked-user", "")
 
 	promoted, err := ti.service.Promote(ctx, promotePayload(bypassID.String()))
 	require.NoError(t, err)
@@ -206,8 +207,8 @@ func TestPromote_RequiresDecideScope(t *testing.T) {
 
 	ctx, ti := newTestService(t)
 
-	bypassID := seedBypassRequest(t, ctx, ti, ti.projectID, "https://mcp.example.com/sse", "someone", "why")
-	readOnly := withProject(t, ctx, ti, ti.projectID, authz.ScopeMCPApprovalRead)
+	bypassID := seedBypassRequest(t, ctx, ti, ti.organizationID, ti.projectID, "https://mcp.example.com/sse", "someone", "why")
+	readOnly := withGrants(t, ctx, ti, authz.ScopeMCPApprovalRead)
 
 	_, err := ti.service.Promote(readOnly, promotePayload(bypassID.String()))
 	requireOopsCode(t, err, oops.CodeForbidden)

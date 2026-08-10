@@ -64,18 +64,6 @@ func NewListRequestsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 			key = *p.SessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err == nil {
-			sc := security.APIKeyScheme{
-				Name:           "project_slug",
-				Scopes:         []string{},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.ProjectSlugInput != nil {
-				key = *p.ProjectSlugInput
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-		}
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
@@ -87,18 +75,6 @@ func NewListRequestsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 				key = *p.ApikeyToken
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
-			if err == nil {
-				sc := security.APIKeyScheme{
-					Name:           "project_slug",
-					Scopes:         []string{},
-					RequiredScopes: []string{},
-				}
-				var key string
-				if p.ProjectSlugInput != nil {
-					key = *p.ProjectSlugInput
-				}
-				ctx, err = authAPIKeyFn(ctx, key, &sc)
-			}
 		}
 		if err != nil {
 			return nil, err
@@ -123,18 +99,6 @@ func NewGetRequestEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 			key = *p.SessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err == nil {
-			sc := security.APIKeyScheme{
-				Name:           "project_slug",
-				Scopes:         []string{},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.ProjectSlugInput != nil {
-				key = *p.ProjectSlugInput
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-		}
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
@@ -146,18 +110,6 @@ func NewGetRequestEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 				key = *p.ApikeyToken
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
-			if err == nil {
-				sc := security.APIKeyScheme{
-					Name:           "project_slug",
-					Scopes:         []string{},
-					RequiredScopes: []string{},
-				}
-				var key string
-				if p.ProjectSlugInput != nil {
-					key = *p.ProjectSlugInput
-				}
-				ctx, err = authAPIKeyFn(ctx, key, &sc)
-			}
 		}
 		if err != nil {
 			return nil, err
@@ -182,18 +134,6 @@ func NewCreateRequestEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 			key = *p.SessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err == nil {
-			sc := security.APIKeyScheme{
-				Name:           "project_slug",
-				Scopes:         []string{},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.ProjectSlugInput != nil {
-				key = *p.ProjectSlugInput
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-		}
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
@@ -205,18 +145,6 @@ func NewCreateRequestEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 				key = *p.ApikeyToken
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
-			if err == nil {
-				sc := security.APIKeyScheme{
-					Name:           "project_slug",
-					Scopes:         []string{},
-					RequiredScopes: []string{},
-				}
-				var key string
-				if p.ProjectSlugInput != nil {
-					key = *p.ProjectSlugInput
-				}
-				ctx, err = authAPIKeyFn(ctx, key, &sc)
-			}
 		}
 		if err != nil {
 			return nil, err
@@ -241,18 +169,6 @@ func NewPromoteEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.End
 			key = *p.SessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err == nil {
-			sc := security.APIKeyScheme{
-				Name:           "project_slug",
-				Scopes:         []string{},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.ProjectSlugInput != nil {
-				key = *p.ProjectSlugInput
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-		}
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
@@ -264,18 +180,6 @@ func NewPromoteEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.End
 				key = *p.ApikeyToken
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
-			if err == nil {
-				sc := security.APIKeyScheme{
-					Name:           "project_slug",
-					Scopes:         []string{},
-					RequiredScopes: []string{},
-				}
-				var key string
-				if p.ProjectSlugInput != nil {
-					key = *p.ProjectSlugInput
-				}
-				ctx, err = authAPIKeyFn(ctx, key, &sc)
-			}
 		}
 		if err != nil {
 			return nil, err
@@ -300,18 +204,6 @@ func NewRefreshEvidenceEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			key = *p.SessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err == nil {
-			sc := security.APIKeyScheme{
-				Name:           "project_slug",
-				Scopes:         []string{},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.ProjectSlugInput != nil {
-				key = *p.ProjectSlugInput
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-		}
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
@@ -323,18 +215,6 @@ func NewRefreshEvidenceEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 				key = *p.ApikeyToken
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
-			if err == nil {
-				sc := security.APIKeyScheme{
-					Name:           "project_slug",
-					Scopes:         []string{},
-					RequiredScopes: []string{},
-				}
-				var key string
-				if p.ProjectSlugInput != nil {
-					key = *p.ProjectSlugInput
-				}
-				ctx, err = authAPIKeyFn(ctx, key, &sc)
-			}
 		}
 		if err != nil {
 			return nil, err
@@ -359,18 +239,6 @@ func NewRecordDecisionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 			key = *p.SessionToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err == nil {
-			sc := security.APIKeyScheme{
-				Name:           "project_slug",
-				Scopes:         []string{},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.ProjectSlugInput != nil {
-				key = *p.ProjectSlugInput
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-		}
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
@@ -382,18 +250,6 @@ func NewRecordDecisionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 				key = *p.ApikeyToken
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
-			if err == nil {
-				sc := security.APIKeyScheme{
-					Name:           "project_slug",
-					Scopes:         []string{},
-					RequiredScopes: []string{},
-				}
-				var key string
-				if p.ProjectSlugInput != nil {
-					key = *p.ProjectSlugInput
-				}
-				ctx, err = authAPIKeyFn(ctx, key, &sc)
-			}
 		}
 		if err != nil {
 			return nil, err

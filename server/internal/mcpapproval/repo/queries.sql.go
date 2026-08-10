@@ -26,7 +26,7 @@ INSERT INTO mcp_approval_decisions (
   , mcp_research_report_id
 ) VALUES (
   $1
-  , $2
+  , $2::uuid
   , $3
   , $4
   , $5
@@ -41,7 +41,7 @@ RETURNING id, organization_id, project_id, mcp_approval_request_id, decision, de
 
 type CreateApprovalDecisionParams struct {
 	OrganizationID       string
-	ProjectID            uuid.UUID
+	ProjectID            uuid.NullUUID
 	McpApprovalRequestID uuid.UUID
 	Decision             string
 	DecidedBy            string
@@ -106,7 +106,7 @@ INSERT INTO mcp_research_reports (
   , error
 ) VALUES (
   $1
-  , $2
+  , $2::uuid
   , $3
   , $4
   , $5
@@ -123,7 +123,7 @@ RETURNING id, organization_id, project_id, mcp_approval_request_id, status, repo
 
 type CreateResearchReportParams struct {
 	OrganizationID       string
-	ProjectID            uuid.UUID
+	ProjectID            uuid.NullUUID
 	McpApprovalRequestID uuid.UUID
 	Status               string
 	Report               []byte
@@ -181,24 +181,24 @@ SELECT
       SELECT count(*)
       FROM mcp_approval_request_requesters req
       WHERE req.mcp_approval_request_id = r.id
-        AND req.project_id = r.project_id
+        AND req.organization_id = r.organization_id
         AND req.deleted IS FALSE
     ) AS requester_count
 FROM mcp_approval_requests r
 WHERE r.id = $1
-  AND r.project_id = $2
+  AND r.organization_id = $2
   AND r.deleted IS FALSE
 `
 
 type GetApprovalRequestParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+	ID             uuid.UUID
+	OrganizationID string
 }
 
 type GetApprovalRequestRow struct {
 	ID                        uuid.UUID
 	OrganizationID            string
-	ProjectID                 uuid.UUID
+	ProjectID                 uuid.NullUUID
 	TargetKind                string
 	TargetRaw                 string
 	TargetKey                 string
@@ -217,7 +217,7 @@ type GetApprovalRequestRow struct {
 }
 
 func (q *Queries) GetApprovalRequest(ctx context.Context, arg GetApprovalRequestParams) (GetApprovalRequestRow, error) {
-	row := q.db.QueryRow(ctx, getApprovalRequest, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, getApprovalRequest, arg.ID, arg.OrganizationID)
 	var i GetApprovalRequestRow
 	err := row.Scan(
 		&i.ID,
@@ -246,14 +246,14 @@ const getApprovalRequestForDecision = `-- name: GetApprovalRequestForDecision :o
 SELECT id, organization_id, target_raw, status, current_evidence, evidence_version
 FROM mcp_approval_requests
 WHERE id = $1
-  AND project_id = $2
+  AND organization_id = $2
   AND deleted IS FALSE
 FOR UPDATE
 `
 
 type GetApprovalRequestForDecisionParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+	ID             uuid.UUID
+	OrganizationID string
 }
 
 type GetApprovalRequestForDecisionRow struct {
@@ -269,7 +269,7 @@ type GetApprovalRequestForDecisionRow struct {
 // decisions on the same request, so the request's status always matches the
 // newest decision rather than whichever transaction happened to commit last.
 func (q *Queries) GetApprovalRequestForDecision(ctx context.Context, arg GetApprovalRequestForDecisionParams) (GetApprovalRequestForDecisionRow, error) {
-	row := q.db.QueryRow(ctx, getApprovalRequestForDecision, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, getApprovalRequestForDecision, arg.ID, arg.OrganizationID)
 	var i GetApprovalRequestForDecisionRow
 	err := row.Scan(
 		&i.ID,
@@ -287,13 +287,13 @@ SELECT id, organization_id, project_id, target_kind, target_label, target_key,
        target_dimensions, requester_user_id, requester_email, note
 FROM risk_policy_bypass_requests
 WHERE id = $1
-  AND project_id = $2
+  AND organization_id = $2
   AND deleted IS FALSE
 `
 
 type GetBypassRequestForPromotionParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+	ID             uuid.UUID
+	OrganizationID string
 }
 
 type GetBypassRequestForPromotionRow struct {
@@ -309,13 +309,13 @@ type GetBypassRequestForPromotionRow struct {
 	Note             pgtype.Text
 }
 
-// Resolved under the caller's project, never by id alone: the id arrives from
-// the caller, and promotion of another project's bypass request into this
-// project's queue is the exact horizontal escalation the org standard forbids.
-// There is deliberately no database-level pin for this pair (see AIS-470), so
-// this predicate is the primary control.
+// Resolved under the caller's organization, never by id alone: the id arrives
+// from the caller, and promotion of another organization's bypass request
+// into this organization's queue is the exact horizontal escalation the org
+// standard forbids. There is deliberately no database-level pin for this pair
+// (see AIS-470), so this predicate is the primary control.
 func (q *Queries) GetBypassRequestForPromotion(ctx context.Context, arg GetBypassRequestForPromotionParams) (GetBypassRequestForPromotionRow, error) {
-	row := q.db.QueryRow(ctx, getBypassRequestForPromotion, arg.ID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, getBypassRequestForPromotion, arg.ID, arg.OrganizationID)
 	var i GetBypassRequestForPromotionRow
 	err := row.Scan(
 		&i.ID,
@@ -337,21 +337,21 @@ SELECT id
 FROM mcp_research_reports
 WHERE id = $1
   AND mcp_approval_request_id = $2
-  AND project_id = $3
+  AND organization_id = $3
   AND deleted IS FALSE
 `
 
 type GetResearchReportForDecisionParams struct {
 	ID                   uuid.UUID
 	McpApprovalRequestID uuid.UUID
-	ProjectID            uuid.UUID
+	OrganizationID       string
 }
 
 // Resolves a report a decision wants to cite, pinned to the request being
-// decided and to the caller's project, so a decision can never attribute
+// decided and to the caller's organization, so a decision can never attribute
 // research about one server to another.
 func (q *Queries) GetResearchReportForDecision(ctx context.Context, arg GetResearchReportForDecisionParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, getResearchReportForDecision, arg.ID, arg.McpApprovalRequestID, arg.ProjectID)
+	row := q.db.QueryRow(ctx, getResearchReportForDecision, arg.ID, arg.McpApprovalRequestID, arg.OrganizationID)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
@@ -364,11 +364,11 @@ SELECT
       SELECT count(*)
       FROM mcp_approval_request_requesters req
       WHERE req.mcp_approval_request_id = r.id
-        AND req.project_id = r.project_id
+        AND req.organization_id = r.organization_id
         AND req.deleted IS FALSE
     ) AS requester_count
 FROM mcp_approval_requests r
-WHERE r.project_id = $1
+WHERE r.organization_id = $1
   AND r.deleted IS FALSE
   AND ($2::text IS NULL OR r.status = $2::text)
 ORDER BY r.updated_at DESC
@@ -376,15 +376,15 @@ LIMIT $3::int
 `
 
 type ListApprovalRequestsParams struct {
-	ProjectID uuid.UUID
-	Status    pgtype.Text
-	PageLimit int32
+	OrganizationID string
+	Status         pgtype.Text
+	PageLimit      int32
 }
 
 type ListApprovalRequestsRow struct {
 	ID                        uuid.UUID
 	OrganizationID            string
-	ProjectID                 uuid.UUID
+	ProjectID                 uuid.NullUUID
 	TargetKind                string
 	TargetRaw                 string
 	TargetKey                 string
@@ -402,11 +402,11 @@ type ListApprovalRequestsRow struct {
 	RequesterCount            int64
 }
 
-// Every query in this file is bounded by project_id without exception. A
+// Every query in this file is bounded by organization_id without exception. A
 // request id appears in dashboard URLs and is not a secret, so a lookup keyed
 // on id alone would let any caller who learns one read another tenant's data.
 func (q *Queries) ListApprovalRequests(ctx context.Context, arg ListApprovalRequestsParams) ([]ListApprovalRequestsRow, error) {
-	rows, err := q.db.Query(ctx, listApprovalRequests, arg.ProjectID, arg.Status, arg.PageLimit)
+	rows, err := q.db.Query(ctx, listApprovalRequests, arg.OrganizationID, arg.Status, arg.PageLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -448,18 +448,18 @@ const listDecisionsForApprovalRequest = `-- name: ListDecisionsForApprovalReques
 SELECT id, organization_id, project_id, mcp_approval_request_id, decision, decided_by, rationale, evidence_snapshot, evidence_version, mcp_research_report_id, granted_principal_urns, decided_at, created_at, updated_at, deleted_at, deleted
 FROM mcp_approval_decisions
 WHERE mcp_approval_request_id = $1
-  AND project_id = $2
+  AND organization_id = $2
   AND deleted IS FALSE
 ORDER BY decided_at DESC
 `
 
 type ListDecisionsForApprovalRequestParams struct {
 	McpApprovalRequestID uuid.UUID
-	ProjectID            uuid.UUID
+	OrganizationID       string
 }
 
 func (q *Queries) ListDecisionsForApprovalRequest(ctx context.Context, arg ListDecisionsForApprovalRequestParams) ([]McpApprovalDecision, error) {
-	rows, err := q.db.Query(ctx, listDecisionsForApprovalRequest, arg.McpApprovalRequestID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listDecisionsForApprovalRequest, arg.McpApprovalRequestID, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -499,18 +499,18 @@ const listRequestersForApprovalRequest = `-- name: ListRequestersForApprovalRequ
 SELECT id, organization_id, project_id, mcp_approval_request_id, user_id, user_email, note, requested_at, created_at, updated_at, deleted_at, deleted
 FROM mcp_approval_request_requesters
 WHERE mcp_approval_request_id = $1
-  AND project_id = $2
+  AND organization_id = $2
   AND deleted IS FALSE
 ORDER BY requested_at ASC
 `
 
 type ListRequestersForApprovalRequestParams struct {
 	McpApprovalRequestID uuid.UUID
-	ProjectID            uuid.UUID
+	OrganizationID       string
 }
 
 func (q *Queries) ListRequestersForApprovalRequest(ctx context.Context, arg ListRequestersForApprovalRequestParams) ([]McpApprovalRequestRequester, error) {
-	rows, err := q.db.Query(ctx, listRequestersForApprovalRequest, arg.McpApprovalRequestID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listRequestersForApprovalRequest, arg.McpApprovalRequestID, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -546,18 +546,18 @@ const listResearchReportsForApprovalRequest = `-- name: ListResearchReportsForAp
 SELECT id, organization_id, project_id, mcp_approval_request_id, status, report, report_version, model, prompt_version, requested_by, started_at, completed_at, error, created_at, updated_at, deleted_at, deleted
 FROM mcp_research_reports
 WHERE mcp_approval_request_id = $1
-  AND project_id = $2
+  AND organization_id = $2
   AND deleted IS FALSE
 ORDER BY created_at DESC
 `
 
 type ListResearchReportsForApprovalRequestParams struct {
 	McpApprovalRequestID uuid.UUID
-	ProjectID            uuid.UUID
+	OrganizationID       string
 }
 
 func (q *Queries) ListResearchReportsForApprovalRequest(ctx context.Context, arg ListResearchReportsForApprovalRequestParams) ([]McpResearchReport, error) {
-	rows, err := q.db.Query(ctx, listResearchReportsForApprovalRequest, arg.McpApprovalRequestID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listResearchReportsForApprovalRequest, arg.McpApprovalRequestID, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -601,7 +601,7 @@ SET current_evidence = $1
   , evidence_collected_at = clock_timestamp()
   , updated_at = clock_timestamp()
 WHERE id = $3
-  AND project_id = $4
+  AND organization_id = $4
   AND deleted IS FALSE
 `
 
@@ -609,7 +609,7 @@ type SetApprovalRequestEvidenceParams struct {
 	CurrentEvidence []byte
 	EvidenceVersion int32
 	ID              uuid.UUID
-	ProjectID       uuid.UUID
+	OrganizationID  string
 }
 
 // Overwrites the current gather. The copy a decision rested on is frozen onto
@@ -619,7 +619,7 @@ func (q *Queries) SetApprovalRequestEvidence(ctx context.Context, arg SetApprova
 		arg.CurrentEvidence,
 		arg.EvidenceVersion,
 		arg.ID,
-		arg.ProjectID,
+		arg.OrganizationID,
 	)
 	return err
 }
@@ -631,7 +631,7 @@ SET current_evidence = $1
   , evidence_collected_at = clock_timestamp()
   , updated_at = clock_timestamp()
 WHERE id = $3
-  AND project_id = $4
+  AND organization_id = $4
   AND evidence_collected_at IS NOT DISTINCT FROM $5
   AND deleted IS FALSE
 `
@@ -640,7 +640,7 @@ type SetApprovalRequestEvidenceIfUnchangedParams struct {
 	CurrentEvidence     []byte
 	EvidenceVersion     int32
 	ID                  uuid.UUID
-	ProjectID           uuid.UUID
+	OrganizationID      string
 	PreviousCollectedAt pgtype.Timestamptz
 }
 
@@ -653,7 +653,7 @@ func (q *Queries) SetApprovalRequestEvidenceIfUnchanged(ctx context.Context, arg
 		arg.CurrentEvidence,
 		arg.EvidenceVersion,
 		arg.ID,
-		arg.ProjectID,
+		arg.OrganizationID,
 		arg.PreviousCollectedAt,
 	)
 	if err != nil {
@@ -667,18 +667,18 @@ UPDATE mcp_approval_requests
 SET status = $1
   , updated_at = clock_timestamp()
 WHERE id = $2
-  AND project_id = $3
+  AND organization_id = $3
   AND deleted IS FALSE
 `
 
 type SetApprovalRequestStatusParams struct {
-	Status    string
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+	Status         string
+	ID             uuid.UUID
+	OrganizationID string
 }
 
 func (q *Queries) SetApprovalRequestStatus(ctx context.Context, arg SetApprovalRequestStatusParams) error {
-	_, err := q.db.Exec(ctx, setApprovalRequestStatus, arg.Status, arg.ID, arg.ProjectID)
+	_, err := q.db.Exec(ctx, setApprovalRequestStatus, arg.Status, arg.ID, arg.OrganizationID)
 	return err
 }
 
@@ -695,7 +695,7 @@ INSERT INTO mcp_approval_requests (
   , risk_policy_bypass_request_id
 ) VALUES (
   $1
-  , $2
+  , $2::uuid
   , $3
   , $4
   , $5
@@ -704,7 +704,7 @@ INSERT INTO mcp_approval_requests (
   , $8
   , $9::uuid
 )
-ON CONFLICT (project_id, target_kind, target_key) WHERE deleted IS FALSE DO UPDATE
+ON CONFLICT (organization_id, target_kind, target_key) WHERE deleted IS FALSE DO UPDATE
 SET updated_at = clock_timestamp()
   , status = CASE
       WHEN mcp_approval_requests.status = 'denied' THEN EXCLUDED.status
@@ -713,12 +713,13 @@ SET updated_at = clock_timestamp()
   -- A later promotion links its bypass request onto an existing review; a
   -- proactive re-request never clears an existing link.
   , risk_policy_bypass_request_id = COALESCE(EXCLUDED.risk_policy_bypass_request_id, mcp_approval_requests.risk_policy_bypass_request_id)
+  , project_id = COALESCE(mcp_approval_requests.project_id, EXCLUDED.project_id)
 RETURNING id, organization_id, project_id, target_kind, target_raw, target_key, artifact_ref, version_pinned, risk_policy_bypass_request_id, status, current_evidence, evidence_version, evidence_collected_at, created_at, updated_at, deleted_at, deleted
 `
 
 type UpsertApprovalRequestParams struct {
 	OrganizationID            string
-	ProjectID                 uuid.UUID
+	ProjectID                 uuid.NullUUID
 	TargetKind                string
 	TargetRaw                 string
 	TargetKey                 string
@@ -729,8 +730,10 @@ type UpsertApprovalRequestParams struct {
 }
 
 // Re-requesting a server reuses the same row rather than starting a second
-// review, so decisions accumulate as history against one target per project.
-// target_key is what deduplicates; target_raw stays as the requester wrote it.
+// review, so decisions accumulate as history against one target per
+// organization. target_key is what deduplicates; target_raw stays as the
+// requester wrote it. project_id is provenance of where the ask was raised,
+// never a tenancy bound, and a re-request never erases it.
 //
 // A re-request reopens a denied review: the denial stays in the decision
 // history, and the request returns to the queue. An approved or still-pending
@@ -781,7 +784,7 @@ INSERT INTO mcp_approval_request_requesters (
   , note
 ) VALUES (
   $1
-  , $2
+  , $2::uuid
   , $3
   , $4
   , $5::text
@@ -797,7 +800,7 @@ RETURNING id, organization_id, project_id, mcp_approval_request_id, user_id, use
 
 type UpsertApprovalRequestRequesterParams struct {
 	OrganizationID       string
-	ProjectID            uuid.UUID
+	ProjectID            uuid.NullUUID
 	McpApprovalRequestID uuid.UUID
 	UserID               string
 	UserEmail            pgtype.Text

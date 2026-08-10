@@ -377,6 +377,17 @@ type ListShadowMCPInventoryUsageParams struct {
 	Limit               int
 }
 
+type ListShadowMCPInventoryUsageAcrossProjectsParams struct {
+	GramProjectIDs      []string
+	CanonicalServerURLs []string
+	Limit               int
+}
+
+type GetShadowMCPInventoryURLAcrossProjectsParams struct {
+	GramProjectIDs     []string
+	CanonicalServerURL string
+}
+
 type ShadowMCPInventoryUsageRow struct {
 	CanonicalServerURL string
 	ServerName         string
@@ -699,7 +710,17 @@ func (q *Queries) insertShadowMCPInventoryURLRows(ctx context.Context, rows []*s
 }
 
 func (q *Queries) GetShadowMCPInventoryURL(ctx context.Context, arg GetShadowMCPInventoryURLParams) (*ShadowMCPInventoryURLRow, error) {
-	return q.getShadowMCPInventoryURL(ctx, arg.GramProjectID, arg.CanonicalServerURL)
+	return q.getShadowMCPInventoryURL(ctx, []string{arg.GramProjectID}, arg.CanonicalServerURL)
+}
+
+// GetShadowMCPInventoryURLAcrossProjects aggregates one URL's inventory row
+// across a set of projects — the org-wide read for surfaces whose tenancy is
+// the organization while the inventory stays keyed by project.
+func (q *Queries) GetShadowMCPInventoryURLAcrossProjects(ctx context.Context, arg GetShadowMCPInventoryURLAcrossProjectsParams) (*ShadowMCPInventoryURLRow, error) {
+	if len(arg.GramProjectIDs) == 0 {
+		return nil, nil
+	}
+	return q.getShadowMCPInventoryURL(ctx, arg.GramProjectIDs, arg.CanonicalServerURL)
 }
 
 func (q *Queries) ListExistingShadowMCPInventoryURLs(
@@ -746,7 +767,7 @@ func (q *Queries) UpdateShadowMCPInventoryURLNameOverride(
 	ctx context.Context,
 	arg UpdateShadowMCPInventoryURLNameOverrideParams,
 ) (bool, error) {
-	existing, err := q.getShadowMCPInventoryURL(ctx, arg.GramProjectID, arg.CanonicalServerURL)
+	existing, err := q.getShadowMCPInventoryURL(ctx, []string{arg.GramProjectID}, arg.CanonicalServerURL)
 	if err != nil {
 		return false, err
 	}
@@ -871,7 +892,7 @@ func (q *Queries) listShadowMCPInventoryURLRowsByURLs(ctx context.Context, proje
 	return result, nil
 }
 
-func (q *Queries) getShadowMCPInventoryURL(ctx context.Context, projectID string, canonicalURL string) (*ShadowMCPInventoryURLRow, error) {
+func (q *Queries) getShadowMCPInventoryURL(ctx context.Context, projectIDs []string, canonicalURL string) (*ShadowMCPInventoryURLRow, error) {
 	sb := sq.Select(
 		"canonical_server_url",
 		"max(url_host) AS url_host",
@@ -882,9 +903,9 @@ func (q *Queries) getShadowMCPInventoryURL(ctx context.Context, projectID string
 		"max(updated_at) AS max_updated_at",
 	).
 		From("shadow_mcp_inventory_urls").
-		Where("gram_project_id = ?", projectID).
+		Where(squirrel.Eq{"gram_project_id": projectIDs}).
 		Where("canonical_server_url = ?", canonicalURL).
-		GroupBy("gram_project_id", "canonical_server_url").
+		GroupBy("canonical_server_url").
 		Limit(1)
 
 	query, queryArgs, err := sb.ToSql()
@@ -1036,12 +1057,27 @@ func (q *Queries) ListShadowMCPInventoryURLs(ctx context.Context, arg ListShadow
 }
 
 func (q *Queries) ListShadowMCPInventoryUsage(ctx context.Context, arg ListShadowMCPInventoryUsageParams) ([]ShadowMCPInventoryUsageRow, error) {
-	traceRows, err := q.listShadowMCPInventoryTraceUsage(ctx, arg.GramProjectID, arg.CanonicalServerURLs, arg.Limit)
+	return q.listShadowMCPInventoryUsage(ctx, []string{arg.GramProjectID}, arg.CanonicalServerURLs, arg.Limit)
+}
+
+// ListShadowMCPInventoryUsageAcrossProjects aggregates usage across a set of
+// projects — the org-wide read matching GetShadowMCPInventoryURLAcrossProjects.
+// Distinct users are counted across the whole set, so one person active in two
+// projects counts once.
+func (q *Queries) ListShadowMCPInventoryUsageAcrossProjects(ctx context.Context, arg ListShadowMCPInventoryUsageAcrossProjectsParams) ([]ShadowMCPInventoryUsageRow, error) {
+	if len(arg.GramProjectIDs) == 0 {
+		return []ShadowMCPInventoryUsageRow{}, nil
+	}
+	return q.listShadowMCPInventoryUsage(ctx, arg.GramProjectIDs, arg.CanonicalServerURLs, arg.Limit)
+}
+
+func (q *Queries) listShadowMCPInventoryUsage(ctx context.Context, projectIDs []string, canonicalServerURLs []string, limit int) ([]ShadowMCPInventoryUsageRow, error) {
+	traceRows, err := q.listShadowMCPInventoryTraceUsage(ctx, projectIDs, canonicalServerURLs, limit)
 	if err != nil {
 		return nil, err
 	}
 
-	canonicalURLSet := shadowMCPInventoryCanonicalURLSet(arg.CanonicalServerURLs)
+	canonicalURLSet := shadowMCPInventoryCanonicalURLSet(canonicalServerURLs)
 	usageByURL := make(map[string]*ShadowMCPInventoryUsageRow)
 	usersByURL := make(map[string]map[string]*ShadowMCPInventoryUserRow)
 	for _, traceRow := range traceRows {
@@ -1136,7 +1172,7 @@ func (q *Queries) ListShadowMCPInventoryUsers(ctx context.Context, arg ListShado
 		}
 	}
 
-	traceRows, err := q.listShadowMCPInventoryTraceUsage(ctx, arg.GramProjectID, []string{arg.CanonicalServerURL}, arg.Limit)
+	traceRows, err := q.listShadowMCPInventoryTraceUsage(ctx, []string{arg.GramProjectID}, []string{arg.CanonicalServerURL}, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -1197,7 +1233,7 @@ func (q *Queries) ListShadowMCPInventoryUsers(ctx context.Context, arg ListShado
 	return userRows, nil
 }
 
-func (q *Queries) listShadowMCPInventoryTraceUsage(ctx context.Context, projectID string, canonicalServerURLs []string, limit int) ([]shadowMCPInventoryTraceUsageRow, error) {
+func (q *Queries) listShadowMCPInventoryTraceUsage(ctx context.Context, projectIDs []string, canonicalServerURLs []string, limit int) ([]shadowMCPInventoryTraceUsageRow, error) {
 	sb := sq.Select(
 		"trace_id",
 		"max(mcp_server_url) AS server_url",
@@ -1208,7 +1244,7 @@ func (q *Queries) listShadowMCPInventoryTraceUsage(ctx context.Context, projectI
 		"fromUnixTimestamp64Nano(max(start_time_unix_nano)) AS called_at",
 	).
 		From("trace_summaries").
-		Where("gram_project_id = ?", projectID).
+		Where(squirrel.Eq{"gram_project_id": projectIDs}).
 		GroupBy("trace_id").
 		Having("server_url != ''").
 		OrderBy("max(start_time_unix_nano) DESC", "trace_id ASC")

@@ -18,7 +18,7 @@ import (
 
 // BuildListRequestsPayload builds the payload for the mcpApproval listRequests
 // endpoint from CLI flags.
-func BuildListRequestsPayload(mcpApprovalListRequestsStatus string, mcpApprovalListRequestsCursor string, mcpApprovalListRequestsLimit string, mcpApprovalListRequestsSessionToken string, mcpApprovalListRequestsApikeyToken string, mcpApprovalListRequestsProjectSlugInput string) (*mcpapproval.ListRequestsPayload, error) {
+func BuildListRequestsPayload(mcpApprovalListRequestsStatus string, mcpApprovalListRequestsCursor string, mcpApprovalListRequestsLimit string, mcpApprovalListRequestsSessionToken string, mcpApprovalListRequestsApikeyToken string) (*mcpapproval.ListRequestsPayload, error) {
 	var err error
 	var status *string
 	{
@@ -56,26 +56,19 @@ func BuildListRequestsPayload(mcpApprovalListRequestsStatus string, mcpApprovalL
 			apikeyToken = &mcpApprovalListRequestsApikeyToken
 		}
 	}
-	var projectSlugInput *string
-	{
-		if mcpApprovalListRequestsProjectSlugInput != "" {
-			projectSlugInput = &mcpApprovalListRequestsProjectSlugInput
-		}
-	}
 	v := &mcpapproval.ListRequestsPayload{}
 	v.Status = status
 	v.Cursor = cursor
 	v.Limit = limit
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildGetRequestPayload builds the payload for the mcpApproval getRequest
 // endpoint from CLI flags.
-func BuildGetRequestPayload(mcpApprovalGetRequestID string, mcpApprovalGetRequestSessionToken string, mcpApprovalGetRequestApikeyToken string, mcpApprovalGetRequestProjectSlugInput string) (*mcpapproval.GetRequestPayload, error) {
+func BuildGetRequestPayload(mcpApprovalGetRequestID string, mcpApprovalGetRequestSessionToken string, mcpApprovalGetRequestApikeyToken string) (*mcpapproval.GetRequestPayload, error) {
 	var id string
 	{
 		id = mcpApprovalGetRequestID
@@ -92,24 +85,17 @@ func BuildGetRequestPayload(mcpApprovalGetRequestID string, mcpApprovalGetReques
 			apikeyToken = &mcpApprovalGetRequestApikeyToken
 		}
 	}
-	var projectSlugInput *string
-	{
-		if mcpApprovalGetRequestProjectSlugInput != "" {
-			projectSlugInput = &mcpApprovalGetRequestProjectSlugInput
-		}
-	}
 	v := &mcpapproval.GetRequestPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildCreateRequestPayload builds the payload for the mcpApproval
 // createRequest endpoint from CLI flags.
-func BuildCreateRequestPayload(mcpApprovalCreateRequestBody string, mcpApprovalCreateRequestSessionToken string, mcpApprovalCreateRequestApikeyToken string, mcpApprovalCreateRequestProjectSlugInput string) (*mcpapproval.CreateRequestPayload, error) {
+func BuildCreateRequestPayload(mcpApprovalCreateRequestBody string, mcpApprovalCreateRequestSessionToken string, mcpApprovalCreateRequestApikeyToken string) (*mcpapproval.CreateRequestPayload, error) {
 	var err error
 	var body CreateRequestRequestBody
 	{
@@ -136,12 +122,6 @@ func BuildCreateRequestPayload(mcpApprovalCreateRequestBody string, mcpApprovalC
 			apikeyToken = &mcpApprovalCreateRequestApikeyToken
 		}
 	}
-	var projectSlugInput *string
-	{
-		if mcpApprovalCreateRequestProjectSlugInput != "" {
-			projectSlugInput = &mcpApprovalCreateRequestProjectSlugInput
-		}
-	}
 	v := &mcpapproval.CreateRequestPayload{
 		TargetKind: body.TargetKind,
 		Target:     body.Target,
@@ -149,14 +129,13 @@ func BuildCreateRequestPayload(mcpApprovalCreateRequestBody string, mcpApprovalC
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildPromotePayload builds the payload for the mcpApproval promote endpoint
 // from CLI flags.
-func BuildPromotePayload(mcpApprovalPromoteBody string, mcpApprovalPromoteSessionToken string, mcpApprovalPromoteApikeyToken string, mcpApprovalPromoteProjectSlugInput string) (*mcpapproval.PromotePayload, error) {
+func BuildPromotePayload(mcpApprovalPromoteBody string, mcpApprovalPromoteSessionToken string, mcpApprovalPromoteApikeyToken string) (*mcpapproval.PromotePayload, error) {
 	var err error
 	var body PromoteRequestBody
 	{
@@ -177,25 +156,18 @@ func BuildPromotePayload(mcpApprovalPromoteBody string, mcpApprovalPromoteSessio
 			apikeyToken = &mcpApprovalPromoteApikeyToken
 		}
 	}
-	var projectSlugInput *string
-	{
-		if mcpApprovalPromoteProjectSlugInput != "" {
-			projectSlugInput = &mcpApprovalPromoteProjectSlugInput
-		}
-	}
 	v := &mcpapproval.PromotePayload{
 		RiskPolicyBypassRequestID: body.RiskPolicyBypassRequestID,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildRefreshEvidencePayload builds the payload for the mcpApproval
 // refreshEvidence endpoint from CLI flags.
-func BuildRefreshEvidencePayload(mcpApprovalRefreshEvidenceID string, mcpApprovalRefreshEvidenceSessionToken string, mcpApprovalRefreshEvidenceApikeyToken string, mcpApprovalRefreshEvidenceProjectSlugInput string) (*mcpapproval.RefreshEvidencePayload, error) {
+func BuildRefreshEvidencePayload(mcpApprovalRefreshEvidenceID string, mcpApprovalRefreshEvidenceSessionToken string, mcpApprovalRefreshEvidenceApikeyToken string) (*mcpapproval.RefreshEvidencePayload, error) {
 	var id string
 	{
 		id = mcpApprovalRefreshEvidenceID
@@ -212,24 +184,17 @@ func BuildRefreshEvidencePayload(mcpApprovalRefreshEvidenceID string, mcpApprova
 			apikeyToken = &mcpApprovalRefreshEvidenceApikeyToken
 		}
 	}
-	var projectSlugInput *string
-	{
-		if mcpApprovalRefreshEvidenceProjectSlugInput != "" {
-			projectSlugInput = &mcpApprovalRefreshEvidenceProjectSlugInput
-		}
-	}
 	v := &mcpapproval.RefreshEvidencePayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
 
 // BuildRecordDecisionPayload builds the payload for the mcpApproval
 // recordDecision endpoint from CLI flags.
-func BuildRecordDecisionPayload(mcpApprovalRecordDecisionBody string, mcpApprovalRecordDecisionSessionToken string, mcpApprovalRecordDecisionApikeyToken string, mcpApprovalRecordDecisionProjectSlugInput string) (*mcpapproval.RecordDecisionPayload, error) {
+func BuildRecordDecisionPayload(mcpApprovalRecordDecisionBody string, mcpApprovalRecordDecisionSessionToken string, mcpApprovalRecordDecisionApikeyToken string) (*mcpapproval.RecordDecisionPayload, error) {
 	var err error
 	var body RecordDecisionRequestBody
 	{
@@ -250,12 +215,6 @@ func BuildRecordDecisionPayload(mcpApprovalRecordDecisionBody string, mcpApprova
 			apikeyToken = &mcpApprovalRecordDecisionApikeyToken
 		}
 	}
-	var projectSlugInput *string
-	{
-		if mcpApprovalRecordDecisionProjectSlugInput != "" {
-			projectSlugInput = &mcpApprovalRecordDecisionProjectSlugInput
-		}
-	}
 	v := &mcpapproval.RecordDecisionPayload{
 		ID:               body.ID,
 		Decision:         body.Decision,
@@ -270,7 +229,6 @@ func BuildRecordDecisionPayload(mcpApprovalRecordDecisionBody string, mcpApprova
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
