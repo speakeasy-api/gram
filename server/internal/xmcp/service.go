@@ -102,6 +102,7 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, http.MethodGet, "/x/mcp/{mcpSlug}/authorize", oops.ErrHandle(service.logger, service.handleOAuthAuthorize).ServeHTTP)
 	o11y.AttachHandler(mux, http.MethodGet, "/x/mcp/{mcpSlug}/connect", oops.ErrHandle(service.logger, service.handleOAuthConsent).ServeHTTP)
 	o11y.AttachHandler(mux, http.MethodPost, "/x/mcp/{mcpSlug}/connect", oops.ErrHandle(service.logger, service.handleOAuthConsent).ServeHTTP)
+	o11y.AttachHandler(mux, http.MethodPost, "/x/mcp/{mcpSlug}/connect/remote-session", oops.ErrHandle(service.logger, service.handleOAuthConsentAction).ServeHTTP)
 	o11y.AttachHandler(mux, http.MethodGet, "/x/mcp/{mcpSlug}/connect/first-party", oops.ErrHandle(service.logger, service.handleFirstPartyConnect).ServeHTTP)
 	o11y.AttachHandler(mux, http.MethodPost, "/x/mcp/{mcpSlug}/token", oops.ErrHandle(service.logger, service.handleOAuthToken).ServeHTTP)
 	o11y.AttachHandler(mux, http.MethodPost, "/x/mcp/{mcpSlug}/revoke", oops.ErrHandle(service.logger, service.handleOAuthRevoke).ServeHTTP)
@@ -145,6 +146,20 @@ func (s *Service) handleOAuthConsent(w http.ResponseWriter, r *http.Request) err
 	}
 	if err := s.mcpService.ServeConsent(w, r, endpoint); err != nil {
 		return fmt.Errorf("serve oauth consent: %w", err)
+	}
+	return nil
+}
+
+// handleOAuthConsentAction adapts the chi
+// /x/mcp/{mcpSlug}/connect/remote-session route to
+// mcp.Service.ServeConsentAction.
+func (s *Service) handleOAuthConsentAction(w http.ResponseWriter, r *http.Request) error {
+	endpoint, err := s.resolveOAuthEndpoint(r)
+	if err != nil {
+		return err
+	}
+	if err := s.mcpService.ServeConsentAction(w, r, endpoint); err != nil {
+		return fmt.Errorf("serve oauth consent action: %w", err)
 	}
 	return nil
 }

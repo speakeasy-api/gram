@@ -148,7 +148,7 @@ export function BrandingSection({
             <FieldLabel>Icon</FieldLabel>
             <Stack direction="horizontal" gap={3} align="center">
               {metadataForm.logoUploadHandlers.renderFilePreview() ?? (
-                <div className="bg-muted text-muted-foreground flex h-16 w-16 shrink-0 items-center justify-center rounded-md text-xs">
+                <div className="bg-muted text-muted-foreground flex h-16 w-16 shrink-0 items-center justify-center text-xs">
                   No icon
                 </div>
               )}

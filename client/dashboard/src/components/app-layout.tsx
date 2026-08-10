@@ -116,23 +116,33 @@ const ImpersonationBanner = () => {
     })();
   };
 
+  // Height must stay 2.25rem (h-9) to match --header-offset / --banner-offset.
+  // Solid ink-family bars (editorial): demo = ink, impersonation = deep brand
+  // red. White mono label; the exit action is a hairline-outlined light chip.
+  const toneClasses = isDemo
+    ? "bg-surface-primary-fixed-dark border-transparent"
+    : "bg-destructive-highlight border-transparent";
+  const labelTone = "text-default-fixed-light";
+
   return (
     <div
       className={cn(
-        "flex items-center justify-center gap-3 px-4 py-2 text-sm text-white",
-        isDemo ? "bg-purple-600" : "bg-red-600",
+        "flex h-9 items-center justify-center gap-3 border-b px-4",
+        toneClasses,
       )}
     >
-      <ShieldAlert className="h-4 w-4 shrink-0" />
-      <span className="font-mono font-bold">
+      <ShieldAlert className={cn("h-3.5 w-3.5 shrink-0", labelTone)} />
+      {/* Plain concatenation: tailwind-merge would treat text-eyebrow and the
+          text-default-* tone as conflicting text-* utilities and drop one. */}
+      <span className={`text-eyebrow ${labelTone}`}>
         {isDemo
           ? "Demo org — sample data"
           : `Impersonating ${organization.slug}`}
       </span>
       <button
         type="button"
-        className="ml-2 rounded bg-white/20 px-2 py-0.5 text-xs font-medium transition-colors hover:bg-white/30"
         onClick={exit}
+        className="border-neutral-softest text-default-fixed-light ml-2 border px-2 py-0.5 font-mono text-[11px] tracking-[0.08em] uppercase hover:bg-white/10"
       >
         {isDemo ? "Exit demo" : "Stop impersonating"}
       </button>
@@ -157,7 +167,7 @@ const AppLayoutContent = ({
             </MembershipSyncGuard>
             <Modal
               closable
-              className="h-full max-h-[450px] min-h-auto w-9/12 max-w-[1100px] min-w-auto rounded-sm p-0 2xl:w-2/3 2xl:max-w-[1000px]"
+              className="h-full max-h-[450px] min-h-auto w-9/12 max-w-[1100px] min-w-auto p-0 2xl:w-2/3 2xl:max-w-[1000px]"
               layout="custom"
             />
           </GlobalInsightsWrapper>
@@ -221,7 +231,7 @@ const MembershipSyncGuard = ({ children }: { children: React.ReactNode }) => {
         </p>
         <button
           type="button"
-          className="bg-primary text-primary-foreground hover:bg-primary/90 mt-2 rounded-md px-4 py-2 text-sm font-medium"
+          className="bg-primary text-primary-foreground hover:bg-primary/90 mt-2 px-4 py-2 text-sm font-medium"
           onClick={() => {
             void (async () => {
               await client.auth.logout();

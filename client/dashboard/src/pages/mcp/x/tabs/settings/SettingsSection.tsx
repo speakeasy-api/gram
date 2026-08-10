@@ -102,7 +102,7 @@ function SettingsSectionPanel({
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-xl border bg-card",
+        "overflow-hidden border bg-card",
         tone === "danger" && "border-destructive/30",
         className,
       )}

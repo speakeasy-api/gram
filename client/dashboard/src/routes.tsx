@@ -34,6 +34,7 @@ import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
 import ExploreDemo from "./pages/demo/ExploreDemo";
+import SignUp from "./pages/login/SignUp";
 import { LogsRoot } from "./pages/logs/Logs";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
 import { MCPDetailPage } from "./pages/mcp/MCPDetails";
@@ -83,6 +84,10 @@ import {
   PlatformRemoteIdentityProvidersRoot,
 } from "./pages/platform-remote-identity-providers/PlatformRemoteIdentityProviders";
 import PlatformRemoteIdentityProviderDetail from "./pages/platform-remote-identity-providers/PlatformRemoteIdentityProviderDetail";
+import PlatformAdminOverview from "./pages/platform-admin/Overview";
+import PlatformAdminRbacOverride from "./pages/platform-admin/RbacOverride";
+import PlatformAdminFeatures from "./pages/platform-admin/Features";
+import PlatformAdminOnboarding from "./pages/platform-admin/Onboarding";
 import Playground from "./pages/playground/Playground";
 import NewPromptPage from "./pages/prompts/NewPrompt";
 import PromptPage from "./pages/prompts/Prompt";
@@ -201,6 +206,12 @@ const ROUTE_STRUCTURE = {
     title: "Explore demo",
     url: "/explore-demo",
     component: ExploreDemo,
+    unauthenticated: true,
+  },
+  signUp: {
+    title: "Sign up",
+    url: "/sign-up",
+    component: SignUp,
     unauthenticated: true,
   },
   home: {
@@ -431,6 +442,10 @@ const ROUTE_STRUCTURE = {
             title: "MCP Server Team Access",
             url: "team-access",
           },
+          sessions: {
+            title: "MCP Server Clients and Sessions",
+            url: "sessions",
+          },
           settings: {
             title: "MCP Server Settings",
             url: "settings",
@@ -469,6 +484,10 @@ const ROUTE_STRUCTURE = {
           teamAccess: {
             title: "MCP Team Access",
             url: "team-access",
+          },
+          sessions: {
+            title: "MCP Clients and Sessions",
+            url: "sessions",
           },
           settings: {
             title: "MCP Settings",
@@ -1055,10 +1074,37 @@ const ORG_ROUTE_STRUCTURE = {
         component: PlatformRemoteIdentityProviderDetail,
         subPages: {
           overview: { title: "Overview", url: "overview" },
+          convergence: { title: "Convergence", url: "convergence" },
           settings: { title: "Settings", url: "settings" },
         },
       },
     },
+  },
+  // Platform Admin pages — the former floating Developer Toolkit, one page per
+  // old tab. Speakeasy staff only (plus local dev); see PlatformAdminGate.
+  platformAdminOverview: {
+    title: "Platform Admin Overview",
+    url: "platform-admin",
+    icon: "crown",
+    component: PlatformAdminOverview,
+  },
+  platformAdminRbac: {
+    title: "RBAC Override",
+    url: "platform-admin/rbac",
+    icon: "shield",
+    component: PlatformAdminRbacOverride,
+  },
+  platformAdminFeatures: {
+    title: "Platform Features",
+    url: "platform-admin/features",
+    icon: "sliders-horizontal",
+    component: PlatformAdminFeatures,
+  },
+  platformAdminOnboarding: {
+    title: "Enterprise Onboarding",
+    url: "platform-admin/onboarding",
+    icon: "mail",
+    component: PlatformAdminOnboarding,
   },
   deviceAgent: {
     title: "Device Agent",

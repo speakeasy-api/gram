@@ -50,6 +50,13 @@ const (
 	// registration and provider-setup handoffs. It is evaluated after the main
 	// Platform MCP gate and is default-off during the mutation rollout.
 	FlagPlatformMCPCatalogRegistration Flag = "platform-mcp-catalog-registration"
+	// FlagAssistantPlatformMCP grants a project's managed (dashboard)
+	// assistant the Platform MCP read toolset — the "platform" platform
+	// toolset re-serving the Platform MCP read tools over the assistant
+	// runtime channel. Targeted by PostHog organization group (org slug),
+	// like FlagBudgets. Evaluated server-side only; removed once the toolset
+	// is GA.
+	FlagAssistantPlatformMCP Flag = "assistant-platform-mcp"
 	// FlagRiskOverviewFromClickHouse serves the risk overview endpoint from
 	// ClickHouse risk_findings instead of Postgres risk_results. Per-org
 	// rollout gate; removed once the ClickHouse read path is GA.

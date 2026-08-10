@@ -8,6 +8,7 @@ export const UNAUTHENTICATED_PATHS = [
   "/login",
   "/register",
   "/explore-demo",
+  "/sign-up",
   "/invite",
   "/book-demo",
   "/shadow-mcp/request",

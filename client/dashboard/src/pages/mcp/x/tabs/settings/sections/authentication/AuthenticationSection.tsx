@@ -18,7 +18,6 @@ import { AttachRemoteIdentityProviderSheet } from "./AttachRemoteIdentityProvide
 import { AuthenticationSetupActions } from "./AuthenticationSetupActions";
 import { type AuthTarget, useMcpServerAuthTarget } from "./authTarget";
 import { DeleteRemoteIdentityProviderDialog } from "./DeleteRemoteIdentityProviderDialog";
-import { McpServerSessionsPanel } from "./McpServerSessionsPanel";
 import { ModifyRemoteIdentityProviderSheet } from "./ModifyRemoteIdentityProviderSheet";
 import { RemoteIdentityProvidersField } from "./RemoteIdentityProvidersField";
 import { UserSessionDurationField } from "./UserSessionDurationField";
@@ -71,7 +70,6 @@ export function AuthenticationSection({
           )}
         </SettingsSection.Panel>
       </SettingsSection>
-      {isUnproxied ? null : <McpServerSessionsPanel mcpServer={mcpServer} />}
     </>
   );
 }

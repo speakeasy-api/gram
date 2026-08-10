@@ -78,7 +78,7 @@ export function Combobox<T extends DropdownItem>({
       <Stack
         direction="horizontal"
         align="center"
-        className="w-fit rounded-md bg-stone-200 dark:bg-stone-800"
+        className="w-fit bg-stone-200 dark:bg-stone-800"
       >
         <Text variant="small" className="px-2">
           {label}

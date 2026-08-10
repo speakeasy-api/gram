@@ -293,7 +293,7 @@ export function ExternalOAuthForm({
           </Alert>
         )}
         {discovered && !external.prefilled && (
-          <div className="border-border bg-muted/50 mb-4 flex items-start justify-between gap-4 rounded-md border p-4">
+          <div className="border-border bg-muted/50 mb-4 flex items-start justify-between gap-4 border p-4">
             <div>
               <Text small className="font-medium">
                 OAuth detected from {discovered.name}
@@ -314,7 +314,7 @@ export function ExternalOAuthForm({
           </div>
         )}
         {external.prefilled && (
-          <div className="border-border bg-muted/50 mb-4 rounded-md border p-4">
+          <div className="border-border bg-muted/50 mb-4 border p-4">
             <Text small className="font-medium">
               Pre-filled from detected OAuth metadata
             </Text>
@@ -397,7 +397,7 @@ export function ExternalOAuthForm({
               </Alert>
             )}
             {feedback?.kind === "verified" && (
-              <div className="border-success-softest bg-success-softest text-success-foreground flex items-start gap-2 rounded-lg border p-3 text-sm">
+              <div className="border-success-softest bg-success-softest text-success-foreground flex items-start gap-2 border p-3 text-sm">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>{feedback.message}</span>
               </div>

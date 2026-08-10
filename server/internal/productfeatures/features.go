@@ -30,6 +30,7 @@ const (
 	// later, the keys themselves. Distinct from FeatureCustomModelKeys, which
 	// covers model provider API keys.
 	FeatureCustomerManagedEncryptionKeys Feature = "customer_managed_encryption_keys"
+	FeatureRemoteSessionAutoRefresh      Feature = "remote_session_auto_refresh"
 )
 
 type FeatureCache struct {
@@ -50,8 +51,4 @@ func FeatureCacheKey(organizationID string, feature Feature) string {
 
 func (f FeatureCache) TTL() time.Duration {
 	return 15 * time.Minute
-}
-
-func (c FeatureCache) AdditionalCacheKeys() []string {
-	return []string{}
 }

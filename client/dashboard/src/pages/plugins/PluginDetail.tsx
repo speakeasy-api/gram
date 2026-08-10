@@ -1,4 +1,4 @@
-import { MetricCard } from "@/components/chart/MetricCard";
+import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
 import { MCPStatusIndicator } from "@/components/mcp/MCPStatusIndicator";
@@ -7,7 +7,7 @@ import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Button as UiButton } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Dialog } from "@/components/ui/Dialog";
-import { DotCard } from "@/components/ui/DotCard";
+import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
@@ -54,7 +54,7 @@ import { SearchBar } from "@/components/ui/SearchBar";
 import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { Network, Sparkles, Trash2 } from "lucide-react";
+import { Network, Trash2 } from "lucide-react";
 import {
   Fragment,
   useCallback,
@@ -71,7 +71,10 @@ import { useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { toast } from "sonner";
 import { DEFAULT_PLUGIN_DESCRIPTION } from "./default-plugin";
-import { downloadPluginPackage } from "./downloadPluginPackage";
+import {
+  type PluginPackagePlatform,
+  usePluginPackageDownload,
+} from "./downloadPluginPackage";
 import { InstallInstructionsDialog } from "./InstallInstructionsDialog";
 import { PluginInstallButton } from "./PluginInstallButton";
 import { PluginAssignmentsSheet } from "./PluginAssignmentsSheet";
@@ -148,6 +151,11 @@ export default function PluginDetail(): JSX.Element | null {
   });
 
   const client = useSdkClient();
+  const { isDownloading, download } = usePluginPackageDownload(
+    client,
+    pluginId!,
+    setIsDownloadMenuOpen,
+  );
 
   const { data: toolsetsData, isLoading: isLoadingToolsets } =
     useListToolsets();
@@ -385,15 +393,6 @@ export default function PluginDetail(): JSX.Element | null {
     });
   };
 
-  const handleDownload = async (platform: "claude" | "cursor" | "codex") => {
-    setIsDownloadMenuOpen(false);
-    try {
-      await downloadPluginPackage(client, pluginId!, platform);
-    } catch (_err) {
-      toast.error("Failed to download plugin package");
-    }
-  };
-
   const toolsetById = useMemo(() => {
     const map = new Map<string, ToolsetEntry>();
     for (const t of toolsets) map.set(t.id, t);
@@ -566,27 +565,31 @@ export default function PluginDetail(): JSX.Element | null {
                       name: plugin.name,
                       slug: plugin.slug,
                       description: plugin.description,
+                      agentPluginsV1Compatible: plugin.agentPluginsV1Compatible,
                     }}
                     publishStatus={publishStatus}
                     isDownloadMenuOpen={isDownloadMenuOpen}
                     onDownloadMenuOpenChange={setIsDownloadMenuOpen}
-                    onDownload={(platform) => void handleDownload(platform)}
+                    onDownload={(platform) => void download(platform)}
+                    isDownloading={isDownloading}
                     isInstallSheetOpen={isInstallSheetOpen}
                     onInstallSheetOpenChange={setIsInstallSheetOpen}
                   />
                 </Stack>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+              <MetricCardGroup>
                 <MetricCard
                   title="MCP servers"
                   value={plugin.serverCount ?? servers.length}
+                  tone="information"
                   format="number"
                   icon="network"
                 />
                 <MetricCard
                   title="Skills"
                   value={plugin.skillCount ?? 0}
+                  tone="information"
                   format="number"
                   icon="sparkles"
                 />
@@ -595,6 +598,7 @@ export default function PluginDetail(): JSX.Element | null {
                     <MetricCard
                       title="Assignments"
                       value={plugin.assignmentCount ?? assignments.length}
+                      tone="information"
                       format="number"
                       icon="users"
                       subtext="Roles, users, and emails"
@@ -602,6 +606,7 @@ export default function PluginDetail(): JSX.Element | null {
                     <MetricCard
                       title="Installs"
                       value={installs}
+                      tone="information"
                       displayValue={installsUnavailable ? "—" : undefined}
                       format="number"
                       icon="download"
@@ -619,7 +624,7 @@ export default function PluginDetail(): JSX.Element | null {
                     />
                   </>
                 )}
-              </div>
+              </MetricCardGroup>
 
               <PublishFreshnessIndicator publishStatus={publishStatus} />
             </section>
@@ -632,7 +637,7 @@ export default function PluginDetail(): JSX.Element | null {
                   <div className="flex items-center gap-2">
                     <SettingsSection.Title>MCP Servers</SettingsSection.Title>
                     {servers.length > 0 && (
-                      <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums">
+                      <span className="border-border text-muted-foreground border px-1.5 py-0.5 font-mono text-xs tabular-nums">
                         {servers.length}
                       </span>
                     )}
@@ -667,49 +672,20 @@ export default function PluginDetail(): JSX.Element | null {
             </SettingsSection>
           )}
 
-          {/* Skills ride the same publish flow as servers, so changes offer a
-              republish. Orgs without the skills feature keep the teaser. */}
-          {section === PLUGIN_SKILLS_SECTION_ID &&
-            (productFeatures?.skillsEnabled ? (
-              // Skills is a whole page now, so a missing grant has to explain
-              // itself — hiding the section would leave the route blank.
-              <RequireScope
-                scope="skill:read"
-                resourceId={project.id}
-                level="page"
-              >
-                <PluginSkillsSection
-                  key={pluginId!}
-                  pluginId={pluginId!}
-                  viewMode="grid"
-                  onMutated={(message) => offerPublish(message)}
-                />
-              </RequireScope>
-            ) : (
-              <SettingsSection>
-                <SettingsSection.Header>
-                  <div className="flex items-center gap-2">
-                    <SettingsSection.Title>Skills</SettingsSection.Title>
-                    <Badge variant="neutral">
-                      <Badge.Text>Coming soon</Badge.Text>
-                    </Badge>
-                  </div>
-                  <SettingsSection.Description>
-                    Bundle reusable skills alongside your MCP servers in this
-                    plugin.
-                  </SettingsSection.Description>
-                </SettingsSection.Header>
-                <div className="border-border flex items-center gap-4 rounded-xl border border-dashed p-6 opacity-60">
-                  <div className="bg-muted flex h-14 w-14 shrink-0 items-center justify-center rounded-xl">
-                    <Sparkles className="text-muted-foreground h-7 w-7" />
-                  </div>
-                  <Text small muted>
-                    Skills distributed to this plugin will ship inside the
-                    plugin package and reach everyone who installs it.
-                  </Text>
-                </div>
-              </SettingsSection>
-            ))}
+          {section === PLUGIN_SKILLS_SECTION_ID && (
+            <RequireScope
+              scope="skill:read"
+              resourceId={project.id}
+              level="page"
+            >
+              <PluginSkillsSection
+                key={pluginId!}
+                pluginId={pluginId!}
+                viewMode="grid"
+                onMutated={(message) => offerPublish(message)}
+              />
+            </RequireScope>
+          )}
 
           {/* Assignments only affect device-agent delivery, so the section is
               hidden for marketplace-only orgs (see usePluginAssignmentsVisible).
@@ -742,7 +718,7 @@ export default function PluginDetail(): JSX.Element | null {
                   <div className="flex items-center gap-2">
                     <SettingsSection.Title>Assignments</SettingsSection.Title>
                     {assignments.length > 0 && (
-                      <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums">
+                      <span className="border-border text-muted-foreground border px-1.5 py-0.5 font-mono text-xs tabular-nums">
                         {assignments.length}
                       </span>
                     )}
@@ -939,7 +915,7 @@ export default function PluginDetail(): JSX.Element | null {
                 ) : availableServerOptions.length > 0 ? (
                   <select
                     name="serverKey"
-                    className="bg-background rounded-md border px-3 py-2 text-sm"
+                    className="bg-background border px-3 py-2 text-sm"
                     required
                   >
                     <option value="">Select an MCP server</option>
@@ -1054,20 +1030,27 @@ function MarketplaceSyncButton({
 // Install affordance for the plugin overview: a download menu offering the
 // preferred GitHub-marketplace install (when the marketplace is set up) and
 // per-platform zip downloads, plus the install-instructions sheet.
-function PluginInstallControl({
+export function PluginInstallControl({
   plugin,
   publishStatus,
   isDownloadMenuOpen,
   onDownloadMenuOpenChange,
   onDownload,
+  isDownloading,
   isInstallSheetOpen,
   onInstallSheetOpenChange,
 }: {
-  plugin: { name: string; slug: string; description?: string };
+  plugin: {
+    name: string;
+    slug: string;
+    description?: string;
+    agentPluginsV1Compatible: boolean;
+  };
   publishStatus: PublishStatusResult | undefined;
   isDownloadMenuOpen: boolean;
   onDownloadMenuOpenChange: (open: boolean) => void;
-  onDownload: (platform: "claude" | "cursor" | "codex") => void;
+  onDownload: (platform: PluginPackagePlatform) => void;
+  isDownloading: boolean;
   isInstallSheetOpen: boolean;
   onInstallSheetOpenChange: (open: boolean) => void;
 }): JSX.Element {
@@ -1084,7 +1067,7 @@ function PluginInstallControl({
         onOpenChange={onDownloadMenuOpenChange}
       >
         <DropdownMenuTrigger asChild>
-          <PluginInstallButton />
+          <PluginInstallButton loading={isDownloading} />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem
@@ -1106,15 +1089,32 @@ function PluginInstallControl({
             </div>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => onDownload("claude")}>
+          <DropdownMenuItem
+            disabled={isDownloading}
+            onClick={() => onDownload("claude")}
+          >
             Download as zip — Claude
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => onDownload("cursor")}>
+          <DropdownMenuItem
+            disabled={isDownloading}
+            onClick={() => onDownload("cursor")}
+          >
             Download as zip — Cursor
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => onDownload("codex")}>
+          <DropdownMenuItem
+            disabled={isDownloading}
+            onClick={() => onDownload("codex")}
+          >
             Download as zip — Codex
           </DropdownMenuItem>
+          {plugin.agentPluginsV1Compatible && (
+            <DropdownMenuItem
+              disabled={isDownloading}
+              onClick={() => onDownload("agent-plugin")}
+            >
+              Download Agent Plugins ZIP
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
       {marketplaceReady && publishStatus && (
@@ -1263,7 +1263,7 @@ function PluginServerCard({
   };
 
   return (
-    <DotCard
+    <Card.Entity
       className={cn(isClickable && "cursor-pointer")}
       onClick={isClickable ? handleClick : undefined}
       icon={<Network className="text-muted-foreground h-8 w-8" />}
@@ -1339,6 +1339,6 @@ function PluginServerCard({
           <Trash2 className="h-4 w-4" />
         </UiButton>
       </div>
-    </DotCard>
+    </Card.Entity>
   );
 }

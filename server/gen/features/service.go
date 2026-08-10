@@ -85,6 +85,9 @@ type GetProductFeaturesResult struct {
 	// Whether the organization can manage the external credentials and cloud KMS
 	// keys backing customer-managed encryption
 	CustomerManagedEncryptionKeysEnabled bool
+	// Whether consent screens expose automatic remote-session refresh for the
+	// organization
+	RemoteSessionAutoRefreshEnabled bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.

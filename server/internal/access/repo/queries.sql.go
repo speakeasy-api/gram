@@ -122,25 +122,22 @@ DELETE FROM principal_grants
 WHERE organization_id = $1
   AND principal_urn = $2
   AND scope = $3
-  AND COALESCE(effect, 'allow') = COALESCE($4::text, 'allow')
-  AND selectors = $5
+  AND selectors = $4
 `
 
 type DeletePrincipalGrantByIdentityParams struct {
 	OrganizationID string
 	PrincipalUrn   urn.Principal
 	Scope          string
-	Effect         string
 	Selectors      []byte
 }
 
-// Removes a specific grant row by principal, scope, effect, and selector.
+// Removes a specific grant row by principal, scope, and selector.
 func (q *Queries) DeletePrincipalGrantByIdentity(ctx context.Context, arg DeletePrincipalGrantByIdentityParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deletePrincipalGrantByIdentity,
 		arg.OrganizationID,
 		arg.PrincipalUrn,
 		arg.Scope,
-		arg.Effect,
 		arg.Selectors,
 	)
 	if err != nil {
@@ -205,26 +202,19 @@ const deletePrincipalGrantsByTarget = `-- name: DeletePrincipalGrantsByTarget :e
 DELETE FROM principal_grants
 WHERE organization_id = $1
   AND scope = $2
-  AND COALESCE(effect, 'allow') = COALESCE($3::text, 'allow')
-  AND selectors = $4
+  AND selectors = $3
 `
 
 type DeletePrincipalGrantsByTargetParams struct {
 	OrganizationID string
 	Scope          string
-	Effect         string
 	Selectors      []byte
 }
 
 // Removes every principal row for one exact grant target. Used by audience
 // replacement writes where the caller supplies the full desired principal set.
 func (q *Queries) DeletePrincipalGrantsByTarget(ctx context.Context, arg DeletePrincipalGrantsByTargetParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deletePrincipalGrantsByTarget,
-		arg.OrganizationID,
-		arg.Scope,
-		arg.Effect,
-		arg.Selectors,
-	)
+	result, err := q.db.Exec(ctx, deletePrincipalGrantsByTarget, arg.OrganizationID, arg.Scope, arg.Selectors)
 	if err != nil {
 		return 0, err
 	}
@@ -493,9 +483,10 @@ func (q *Queries) GetOrganizationRoleBySlug(ctx context.Context, arg GetOrganiza
 }
 
 const getPrincipalGrants = `-- name: GetPrincipalGrants :many
-SELECT principal_urn, scope, effect, selectors
+SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = $1
+  AND COALESCE(effect, 'allow') = 'allow'
   AND principal_urn = ANY($2::text[])
 `
 
@@ -507,7 +498,6 @@ type GetPrincipalGrantsParams struct {
 type GetPrincipalGrantsRow struct {
 	PrincipalUrn urn.Principal
 	Scope        string
-	Effect       pgtype.Text
 	Selectors    []byte
 }
 
@@ -522,12 +512,7 @@ func (q *Queries) GetPrincipalGrants(ctx context.Context, arg GetPrincipalGrants
 	var items []GetPrincipalGrantsRow
 	for rows.Next() {
 		var i GetPrincipalGrantsRow
-		if err := rows.Scan(
-			&i.PrincipalUrn,
-			&i.Scope,
-			&i.Effect,
-			&i.Selectors,
-		); err != nil {
+		if err := rows.Scan(&i.PrincipalUrn, &i.Scope, &i.Selectors); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -607,27 +592,29 @@ func (q *Queries) InsertChallengeResolutions(ctx context.Context, arg InsertChal
 }
 
 const insertPrincipalGrantIfAbsent = `-- name: InsertPrincipalGrantIfAbsent :execrows
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
-VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), selectors)
-DO NOTHING
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (organization_id, principal_urn, scope, selectors)
+DO UPDATE SET
+  effect = NULL,
+  updated_at = clock_timestamp()
+WHERE principal_grants.effect IS NOT NULL
 `
 
 type InsertPrincipalGrantIfAbsentParams struct {
 	OrganizationID string
 	PrincipalUrn   urn.Principal
 	Scope          string
-	Effect         pgtype.Text
 	Selectors      []byte
 }
 
-// Creates a single grant row and leaves existing identical rows untouched.
+// Creates a single grant row, leaves existing allow rows untouched, and converts
+// a conflicting legacy effect row to the allow-only NULL representation.
 func (q *Queries) InsertPrincipalGrantIfAbsent(ctx context.Context, arg InsertPrincipalGrantIfAbsentParams) (int64, error) {
 	result, err := q.db.Exec(ctx, insertPrincipalGrantIfAbsent,
 		arg.OrganizationID,
 		arg.PrincipalUrn,
 		arg.Scope,
-		arg.Effect,
 		arg.Selectors,
 	)
 	if err != nil {
@@ -1338,9 +1325,10 @@ func (q *Queries) ListOrganizationRolesByOrg(ctx context.Context, organizationID
 
 const listPrincipalGrantsByOrg = `-- name: ListPrincipalGrantsByOrg :many
 
-SELECT id, organization_id, principal_urn, principal_type, scope, effect, selectors, created_at, updated_at
+SELECT id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at
 FROM principal_grants
 WHERE organization_id = $1
+  AND COALESCE(effect, 'allow') = 'allow'
   AND ($2::text = '' OR principal_urn = $2)
 ORDER BY principal_urn, scope
 `
@@ -1356,7 +1344,6 @@ type ListPrincipalGrantsByOrgRow struct {
 	PrincipalUrn   urn.Principal
 	PrincipalType  string
 	Scope          string
-	Effect         pgtype.Text
 	Selectors      []byte
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
@@ -1380,7 +1367,6 @@ func (q *Queries) ListPrincipalGrantsByOrg(ctx context.Context, arg ListPrincipa
 			&i.PrincipalUrn,
 			&i.PrincipalType,
 			&i.Scope,
-			&i.Effect,
 			&i.Selectors,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -1396,9 +1382,10 @@ func (q *Queries) ListPrincipalGrantsByOrg(ctx context.Context, arg ListPrincipa
 }
 
 const listPrincipalGrantsByResource = `-- name: ListPrincipalGrantsByResource :many
-SELECT principal_urn, scope, effect, selectors
+SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = $1
+  AND COALESCE(effect, 'allow') = 'allow'
   AND scope = $2
   AND selectors @> jsonb_build_object(
     'resource_kind', $3::text,
@@ -1417,7 +1404,6 @@ type ListPrincipalGrantsByResourceParams struct {
 type ListPrincipalGrantsByResourceRow struct {
 	PrincipalUrn urn.Principal
 	Scope        string
-	Effect       pgtype.Text
 	Selectors    []byte
 }
 
@@ -1436,12 +1422,7 @@ func (q *Queries) ListPrincipalGrantsByResource(ctx context.Context, arg ListPri
 	var items []ListPrincipalGrantsByResourceRow
 	for rows.Next() {
 		var i ListPrincipalGrantsByResourceRow
-		if err := rows.Scan(
-			&i.PrincipalUrn,
-			&i.Scope,
-			&i.Effect,
-			&i.Selectors,
-		); err != nil {
+		if err := rows.Scan(&i.PrincipalUrn, &i.Scope, &i.Selectors); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1453,9 +1434,10 @@ func (q *Queries) ListPrincipalGrantsByResource(ctx context.Context, arg ListPri
 }
 
 const listPrincipalGrantsByResourceIDs = `-- name: ListPrincipalGrantsByResourceIDs :many
-SELECT principal_urn, scope, effect, selectors
+SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = $1
+  AND COALESCE(effect, 'allow') = 'allow'
   AND scope = $2
   AND selectors @> jsonb_build_object(
     'resource_kind', $3::text
@@ -1474,7 +1456,6 @@ type ListPrincipalGrantsByResourceIDsParams struct {
 type ListPrincipalGrantsByResourceIDsRow struct {
 	PrincipalUrn urn.Principal
 	Scope        string
-	Effect       pgtype.Text
 	Selectors    []byte
 }
 
@@ -1496,12 +1477,7 @@ func (q *Queries) ListPrincipalGrantsByResourceIDs(ctx context.Context, arg List
 	var items []ListPrincipalGrantsByResourceIDsRow
 	for rows.Next() {
 		var i ListPrincipalGrantsByResourceIDsRow
-		if err := rows.Scan(
-			&i.PrincipalUrn,
-			&i.Scope,
-			&i.Effect,
-			&i.Selectors,
-		); err != nil {
+		if err := rows.Scan(&i.PrincipalUrn, &i.Scope, &i.Selectors); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1957,18 +1933,19 @@ func (q *Queries) UpsertOrganizationRoleAssignment(ctx context.Context, arg Upse
 }
 
 const upsertPrincipalGrant = `-- name: UpsertPrincipalGrant :one
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
-VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), selectors)
-DO UPDATE SET updated_at = clock_timestamp()
-RETURNING id, organization_id, principal_urn, principal_type, scope, effect, selectors, created_at, updated_at
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (organization_id, principal_urn, scope, selectors)
+DO UPDATE SET
+  effect = NULL,
+  updated_at = clock_timestamp()
+RETURNING id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at
 `
 
 type UpsertPrincipalGrantParams struct {
 	OrganizationID string
 	PrincipalUrn   urn.Principal
 	Scope          string
-	Effect         pgtype.Text
 	Selectors      []byte
 }
 
@@ -1978,20 +1955,18 @@ type UpsertPrincipalGrantRow struct {
 	PrincipalUrn   urn.Principal
 	PrincipalType  string
 	Scope          string
-	Effect         pgtype.Text
 	Selectors      []byte
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 }
 
-// Creates or updates a single grant row. On conflict (same org/principal/scope/effect/selectors),
-// the updated_at is refreshed. Uses COALESCE to match the functional unique index.
+// Creates or updates a single grant row. On conflict (same org/principal/scope/selectors),
+// any legacy effect is normalized to the allow-only NULL representation.
 func (q *Queries) UpsertPrincipalGrant(ctx context.Context, arg UpsertPrincipalGrantParams) (UpsertPrincipalGrantRow, error) {
 	row := q.db.QueryRow(ctx, upsertPrincipalGrant,
 		arg.OrganizationID,
 		arg.PrincipalUrn,
 		arg.Scope,
-		arg.Effect,
 		arg.Selectors,
 	)
 	var i UpsertPrincipalGrantRow
@@ -2001,7 +1976,6 @@ func (q *Queries) UpsertPrincipalGrant(ctx context.Context, arg UpsertPrincipalG
 		&i.PrincipalUrn,
 		&i.PrincipalType,
 		&i.Scope,
-		&i.Effect,
 		&i.Selectors,
 		&i.CreatedAt,
 		&i.UpdatedAt,

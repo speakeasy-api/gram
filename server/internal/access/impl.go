@@ -267,6 +267,7 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{scope: authz.ScopeRiskPolicyBypass, description: "Bypass risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeRiskPolicyBlock, description: "Block specific shadow MCP servers under allow-by-default risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeChatRead, description: "Read every member's agent session transcripts and reveal the secret values flagged in Risk Events. Members can always read their own sessions, no one else's; this grant adds access to everyone else's sessions and to unmasking flagged secrets.", resourceType: "chat"},
+		{scope: authz.ScopeChatWrite, description: "Pin, rename, delete, and submit feedback on every member's agent sessions. Members can always do this to their own sessions; this grant adds it for everyone else's. Separate from chat:read so a session reviewer can read transcripts without being able to delete them.", resourceType: "chat"},
 	}
 	result := make([]*gen.ScopeDefinition, 0, len(scopes))
 	for _, scope := range scopes {
@@ -359,6 +360,13 @@ func (s *Service) ListGrants(ctx context.Context, _ *gen.ListGrantsPayload) (*ge
 	acPre, err := s.authContext(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+	// A session can exist before organization selection during login. Unlike
+	// sessionless or API-key requests, RBAC still applies and PrepareContext
+	// installs zero grants. Mirror that effective set so dashboard gates remain
+	// closed until registration or organization selection completes.
+	if acPre.ActiveOrganizationID == "" {
+		return &gen.ListUserGrantsResult{Grants: nil}, nil
 	}
 	// Sessions in the shared demo org have no membership rows. Return the
 	// full user-visible scope set so every dashboard page is browsable in the
@@ -532,7 +540,6 @@ func roleGrantPayloads(grants []*gen.RoleGrant) []*authz.RoleGrant {
 
 		out = append(out, &authz.RoleGrant{
 			Scope:     grant.Scope,
-			Effect:    authz.PolicyEffectAllow,
 			Selectors: selectors,
 		})
 	}
@@ -611,6 +618,7 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 		{Scope: string(authz.ScopeRiskPolicyBypass), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyBlock), Selectors: nil},
 		{Scope: string(authz.ScopeChatRead), Selectors: nil},
+		{Scope: string(authz.ScopeChatWrite), Selectors: nil},
 	}
 }
 

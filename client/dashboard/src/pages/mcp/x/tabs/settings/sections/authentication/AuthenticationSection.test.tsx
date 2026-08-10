@@ -89,10 +89,6 @@ vi.mock("./UserSessionDurationField", () => ({
   UserSessionDurationField: () => null,
 }));
 
-vi.mock("./McpServerSessionsPanel", () => ({
-  McpServerSessionsPanel: () => null,
-}));
-
 beforeEach(() => {
   useUserSessionIssuer.mockReturnValue({
     data: { id: "user-session-issuer" },

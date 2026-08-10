@@ -24,6 +24,7 @@ export const FeatureName = {
   AiPlatformPushIntegrations: "ai_platform_push_integrations",
   PlatformMcp: "platform_mcp",
   CustomerManagedEncryptionKeys: "customer_managed_encryption_keys",
+  RemoteSessionAutoRefresh: "remote_session_auto_refresh",
 } as const;
 /**
  * Name of the feature to update

@@ -116,7 +116,7 @@ describe("formatByteCount", () => {
 });
 
 describe("formatDurationFromNanos", () => {
-  it("carries rounded seconds into minutes", () => {
+  it("carries seconds into minutes", () => {
     expect(formatDurationFromNanos("0", "59999000000")).toBe("1m 0s");
   });
 });

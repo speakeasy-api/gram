@@ -110,11 +110,11 @@ const DOCK_REOPEN_WINDOW_MS = 2500;
 
 /** Icon-only buttons in the chat panel's Granola-style header. */
 const PANEL_ICON_BUTTON_CLASS =
-  "hover:bg-muted text-muted-foreground hover:text-foreground rounded-md p-1.5 transition-colors";
+  "hover:bg-muted text-muted-foreground hover:text-foreground p-1.5 transition-colors";
 
 /**
  * Restyles Elements' default chat composer (tall multi-row box with an
- * attachment/mention toolbar) into the same slim rounded-xl single-line row
+ * attachment/mention toolbar) into the same slim single-line row
  * as the docked pill that opens the panel, so the two read as one control.
  * Injected into the Elements shadow root via `theme.customCss` — host-page
  * CSS can't reach it. Targets Elements' stable `aui-*` class hooks; the
@@ -122,7 +122,7 @@ const PANEL_ICON_BUTTON_CLASS =
  */
 const DOCK_PANEL_COMPOSER_CSS = `
   .aui-composer-wrapper { padding-block: 0.5rem; }
-  .aui-composer-root { min-height: 0; border-radius: 0.75rem; padding: 0; }
+  .aui-composer-root { min-height: 0; border-radius: 0; padding: 0; }
   .aui-composer-input {
     min-height: 0;
     margin-bottom: 0;
@@ -221,7 +221,7 @@ function DockSubmitButton() {
     <button
       type="submit"
       aria-label="Send to Project Assistant"
-      className="bg-primary text-primary-foreground hover:bg-primary/90 flex size-6 shrink-0 items-center justify-center rounded-full transition-colors"
+      className="bg-primary text-primary-foreground hover:bg-primary/90 flex size-6 shrink-0 items-center justify-center transition-colors"
     >
       <ArrowUp className="size-3.5" />
     </button>
@@ -253,13 +253,13 @@ interface InsightsDockProps {
   panel: React.ReactNode;
 }
 
-/** Width/shape/elevation of the dock card across its states: chat panel
- *  full-screen, chat panel open, composer focused (or holding draft text),
- *  and collapsed pill. Activity is signalled by deepening shadow. */
+/** Width of the dock card across its states: chat panel open, composer
+ *  focused (or holding draft text), and collapsed bar. The card itself
+ *  carries the single floating-overlay shadow. */
 function dockCardShapeClass(open: boolean, composerExpanded: boolean): string {
-  if (open) return "max-w-3xl rounded-2xl shadow-2xl";
-  if (composerExpanded) return "max-w-2xl rounded-2xl shadow-xl";
-  return "max-w-md rounded-full shadow-md hover:shadow-lg";
+  if (open) return "max-w-3xl";
+  if (composerExpanded) return "max-w-2xl";
+  return "max-w-md";
 }
 
 /**
@@ -425,7 +425,7 @@ function InsightsDock({
       />
       <div
         className={cn(
-          "border-border bg-card text-card-foreground pointer-events-auto w-full border",
+          "border-border bg-card text-card-foreground pointer-events-auto w-full border shadow-md",
           "transition-all duration-300 ease-out",
           dockCardShapeClass(open, composerExpanded),
           // Pairs with the sidebar resume button for the dismiss/resume genie
@@ -471,8 +471,8 @@ function InsightsDock({
                   expanded composer, so opening the chat reads as the input
                   surface growing into the conversation rather than an
                   unrelated white panel appearing. */}
-              <div className="bg-muted/40 rounded-2xl p-2">
-                <div className="border-border bg-card h-[min(640px,70vh)] overflow-hidden rounded-xl border">
+              <div className="bg-muted/40 p-2">
+                <div className="border-border bg-card h-[min(640px,70vh)] overflow-hidden border">
                   {panel}
                 </div>
               </div>
@@ -500,7 +500,7 @@ function InsightsDock({
                   // Tint sits over the card's solid bg-card (rather than
                   // replacing it) so the tray reads as a subtle grey without
                   // page content bleeding through the translucency.
-                  "rounded-2xl transition-[padding,background-color] duration-300 ease-out",
+                  "transition-[padding,background-color] duration-300 ease-out",
                   composerExpanded ? "bg-muted/40 p-2" : "p-0",
                 )}
               >
@@ -545,7 +545,7 @@ function InsightsDock({
                                 type="button"
                                 tabIndex={composerExpanded ? 0 : -1}
                                 onClick={() => submit(suggestion.prompt)}
-                                className="border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors"
+                                className="border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-1.5 border px-2 py-1 text-xs transition-colors"
                               >
                                 <SuggestionIcon className="size-3 shrink-0" />
                                 {suggestion.title}
@@ -562,7 +562,7 @@ function InsightsDock({
                     submit(value);
                   }}
                   className={cn(
-                    "flex items-center gap-2.5 rounded-xl border px-4 py-2.5 transition-colors duration-300 ease-out",
+                    "flex items-center gap-2.5 border px-4 py-2.5 transition-colors duration-300 ease-out",
                     composerExpanded
                       ? "border-border bg-card"
                       : "border-transparent bg-transparent",
@@ -1006,6 +1006,9 @@ export function InsightsProvider({
       },
       theme: {
         colorScheme: theme === "dark" ? "dark" : "light",
+        // Square corners throughout the embedded chat, matching the
+        // dashboard's flat design language.
+        radius: "sharp",
         customCss:
           DOCK_PANEL_COMPOSER_CSS +
           CHAT_MARKDOWN_CSS +
@@ -1212,14 +1215,14 @@ export function InsightsProvider({
     <>
       {/* Notice when the Project Assistant failed to connect */}
       {assistantError && (
-        <div className="border-destructive/40 bg-destructive/10 text-destructive mx-4 mt-1 flex items-start gap-2 rounded-md border px-3 py-2 text-xs">
+        <div className="border-destructive/40 bg-destructive/10 text-destructive mx-4 mt-1 flex items-start gap-2 border px-3 py-2 text-xs">
           <Terminal className="mt-0.5 size-3.5 shrink-0" />
           <span>{assistantError}</span>
         </div>
       )}
 
       {assistantNeedsAdmin && (
-        <div className="border-border bg-muted/50 text-muted-foreground mx-4 mt-1 flex items-start gap-2 rounded-md border px-3 py-2 text-xs">
+        <div className="border-border bg-muted/50 text-muted-foreground mx-4 mt-1 flex items-start gap-2 border px-3 py-2 text-xs">
           <Terminal className="mt-0.5 size-3.5 shrink-0" />
           <span>
             Ask an admin to enable the Project Assistant for this project.
@@ -1229,7 +1232,7 @@ export function InsightsProvider({
 
       {/* Notice when no toolsets are configured */}
       {noToolsetsConfigured && (
-        <div className="border-border bg-muted/50 text-muted-foreground mx-4 mt-1 flex items-start gap-2 rounded-md border px-3 py-2 text-xs">
+        <div className="border-border bg-muted/50 text-muted-foreground mx-4 mt-1 flex items-start gap-2 border px-3 py-2 text-xs">
           <Terminal className="mt-0.5 size-3.5 shrink-0" />
           <span>
             AI tools are unavailable. Create an MCP server to enable the Project

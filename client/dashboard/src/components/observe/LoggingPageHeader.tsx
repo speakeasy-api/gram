@@ -1,4 +1,5 @@
 import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { PageEyebrow } from "@/components/page-eyebrow";
 import { Alert } from "@/components/ui/Alert";
 import { Icon } from "@/components/ui/Icon";
 import { useState } from "react";
@@ -41,17 +42,22 @@ export function LogDataRetentionBanner(): JSX.Element | null {
 export function LoggingPageHeader({
   title,
   description,
+  eyebrow,
 }: {
   title: string;
   description: string;
+  eyebrow?: string;
 }): JSX.Element {
   return (
-    <div className="flex min-w-0 flex-col gap-1">
-      <div className="flex items-center gap-1.5">
-        <h1 className="text-xl font-semibold">{title}</h1>
-        <LogDataRetentionTooltip />
-      </div>
-      <p className="text-muted-foreground text-sm">{description}</p>
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <PageEyebrow area={eyebrow} />
+      <h1 className="text-display-sm font-thin">{title}</h1>
+      <p className="text-muted-foreground text-sm">
+        {description}{" "}
+        <span className="inline-flex align-middle">
+          <LogDataRetentionTooltip />
+        </span>
+      </p>
     </div>
   );
 }

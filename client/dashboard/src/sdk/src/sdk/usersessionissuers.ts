@@ -6,10 +6,8 @@ import { userSessionIssuersCreate } from "../funcs/userSessionIssuersCreate.js";
 import { userSessionIssuersDelete } from "../funcs/userSessionIssuersDelete.js";
 import { userSessionIssuersGet } from "../funcs/userSessionIssuersGet.js";
 import { userSessionIssuersList } from "../funcs/userSessionIssuersList.js";
-import { userSessionIssuersMigrateLegacyGramRegistrations } from "../funcs/userSessionIssuersMigrateLegacyGramRegistrations.js";
 import { userSessionIssuersUpdate } from "../funcs/userSessionIssuersUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
-import { MigrateLegacyGramRegistrationsResult } from "../models/components/migratelegacygramregistrationsresult.js";
 import { UserSessionIssuer } from "../models/components/usersessionissuer.js";
 import {
   CreateUserSessionIssuerRequest,
@@ -28,10 +26,6 @@ import {
   ListUserSessionIssuersResponse,
   ListUserSessionIssuersSecurity,
 } from "../models/operations/listusersessionissuers.js";
-import {
-  MigrateLegacyGramRegistrationsRequest,
-  MigrateLegacyGramRegistrationsSecurity,
-} from "../models/operations/migratelegacygramregistrations.js";
 import {
   UpdateUserSessionIssuerRequest,
   UpdateUserSessionIssuerSecurity,
@@ -109,25 +103,6 @@ export class UserSessionIssuers extends ClientSDK {
     options?: RequestOptions,
   ): Promise<PageIterator<ListUserSessionIssuersResponse, { cursor: string }>> {
     return unwrapResultIterator(userSessionIssuersList(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * migrateLegacyGramRegistrations userSessionIssuers
-   *
-   * @remarks
-   * One-off migration: lift the legacy Redis dynamic-client registrations from a gram-type oauth_proxy_provider into user_session_clients on the given user_session_issuer, so migrated MCP clients skip re-registration and re-auth. Removed once the OAuth proxy is retired.
-   */
-  async migrateLegacyGramRegistrations(
-    request: MigrateLegacyGramRegistrationsRequest,
-    security?: MigrateLegacyGramRegistrationsSecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<MigrateLegacyGramRegistrationsResult> {
-    return unwrapAsync(userSessionIssuersMigrateLegacyGramRegistrations(
       this,
       request,
       security,

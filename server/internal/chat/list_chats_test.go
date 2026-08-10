@@ -143,9 +143,12 @@ func initSessionCtx(t *testing.T, ti *chatTestInstance) context.Context {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	authCtx.ProjectID = &ti.projectID
+	// chat:write satisfies chat:read by expansion, so this is a fully-privileged
+	// session for chat purposes. Tests that need to distinguish the two use
+	// grantOrgAdminWithChatRead / grantOrgAdminWithChatWrite / memberSessionCtx.
 	return authztest.WithAdminGrants(
 		contextvalues.SetAuthContext(ctx, authCtx),
-		authz.NewGrant(authz.ScopeChatRead, authz.WildcardResource),
+		authz.NewGrant(authz.ScopeChatWrite, authz.WildcardResource),
 	)
 }
 
@@ -161,6 +164,19 @@ func grantOrgAdminWithChatRead(t *testing.T, ctx context.Context) context.Contex
 	return authztest.WithExactGrants(t, ctx,
 		authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
 		authz.NewGrant(authz.ScopeChatRead, authz.WildcardResource),
+	)
+}
+
+// grantOrgAdminWithChatWrite mirrors grantOrgAdminWithChatRead but grants
+// chat:write, which satisfies chat:read by expansion — the role shape for
+// someone who may both review and manage other members' sessions.
+func grantOrgAdminWithChatWrite(t *testing.T, ctx context.Context) context.Context {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	return authztest.WithExactGrants(t, ctx,
+		authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+		authz.NewGrant(authz.ScopeChatWrite, authz.WildcardResource),
 	)
 }
 

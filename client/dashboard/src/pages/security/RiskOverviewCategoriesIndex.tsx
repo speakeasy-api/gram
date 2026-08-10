@@ -105,7 +105,7 @@ function RiskOverviewCategoriesIndexContent() {
             </span>
           </div>
         ) : (
-          <ul className="divide-border divide-y rounded-lg border">
+          <ul className="divide-border divide-y border">
             {categories.map((c, i) => {
               const meta = RULE_CATEGORY_META[c.category as RuleCategory];
               const label = meta?.label ?? c.category;

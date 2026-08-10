@@ -67,7 +67,7 @@ func TestRecordCompactedGenerationWritesNewGeneration(t *testing.T) {
 
 	require.NoError(t, core.RecordCompactedGeneration(ctx, projectID, threadID, assistantID, compacted))
 
-	maxGen, err := q.GetMaxGenerationForChat(ctx, chatID)
+	maxGen, err := q.GetMaxGenerationForChat(ctx, chatrepo.GetMaxGenerationForChatParams{ChatID: chatID, ProjectID: projectID})
 	require.NoError(t, err)
 	require.EqualValues(t, 2, maxGen, "compacted write must land in a fresh generation, not append to gen 1")
 

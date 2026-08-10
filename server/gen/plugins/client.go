@@ -253,6 +253,7 @@ func (c *Client) SetPluginAssignments(ctx context.Context, p *SetPluginAssignmen
 // DownloadPluginPackage calls the "downloadPluginPackage" endpoint of the
 // "plugins" service.
 // DownloadPluginPackage may return the following errors:
+//   - "failed_precondition" (type *goa.ServiceError): resource is not in a valid state for this operation
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid

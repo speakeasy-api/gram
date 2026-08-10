@@ -69,7 +69,7 @@ export function ShadowMCPDispositionPicker({
               key={opt.value}
               htmlFor={`shadow-mcp-disposition-${opt.value}`}
               className={cn(
-                "grid grid-cols-[auto_1fr] items-center gap-x-3 rounded-lg border p-3.5 transition-colors",
+                "grid grid-cols-[auto_1fr] items-center gap-x-3 border p-3.5 transition-colors",
                 disabled
                   ? "border-border cursor-not-allowed opacity-60"
                   : selected

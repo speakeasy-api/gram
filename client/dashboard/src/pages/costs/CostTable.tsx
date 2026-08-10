@@ -25,6 +25,7 @@ import {
   ESTIMATED_COST_TOOLTIP,
   isMeteredBilling,
 } from "@/components/estimated-cost-utils";
+import { TREND } from "@/components/chart/palette";
 import { displayName, formatWorkUnits, isAttributionDim } from "./taxonomy";
 
 // Average cost per chat session for a row; 0 when there are no sessions.
@@ -51,10 +52,11 @@ function rowTokensPerUnit(row: QueryRow): number | null {
 }
 
 // Bucket the cost into three bands by its position in the column's range:
-// lowest third → emerald, middle → neutral (default text), highest → rose.
+// lowest third → muted green, middle → neutral (default text), highest →
+// muted red — the shared TREND tokens.
 function costColor(t: number): string | undefined {
-  if (t >= 2 / 3) return "#e11d48"; // rose-600 — high cost
-  if (t <= 1 / 3) return "#059669"; // emerald-600 — low cost
+  if (t >= 2 / 3) return TREND.up; // high cost
+  if (t <= 1 / 3) return TREND.down; // low cost
   return undefined; // neutral
 }
 
@@ -116,10 +118,6 @@ function InfoTooltip({ text }: { text: string }): JSX.Element {
     </Tooltip>
   );
 }
-
-const GREEN = "#10b981";
-const RED = "#f43f5e";
-const GREY = "#94a3b8";
 
 // Why the Team-wide API Usage row exists, surfaced as an info tooltip on the
 // user breakdown's empty-identity bucket.
@@ -569,12 +567,12 @@ export function CostTable({
 
   return (
     <div
-      className="border-border divide-border grid gap-x-3 gap-y-0 divide-y overflow-x-auto rounded-lg border"
+      className="border-border divide-border grid gap-x-3 gap-y-0 divide-y overflow-x-auto border"
       style={{ gridTemplateColumns: COLUMNS }}
     >
       <div
         className={cn(
-          "text-muted-foreground grid items-center py-3.5 text-sm font-medium",
+          "text-eyebrow grid items-center py-3.5",
           SUBGRID_ROW_CLASS,
         )}
       >
@@ -598,9 +596,9 @@ export function CostTable({
           <LegendTooltip
             intro="over the selected range"
             items={[
-              { key: "Green", label: "trending down", color: GREEN },
-              { key: "Red", label: "trending up", color: RED },
-              { key: "Grey", label: "no clear trend", color: GREY },
+              { key: "Green", label: "trending down", color: TREND.down },
+              { key: "Red", label: "trending up", color: TREND.up },
+              { key: "Grey", label: "no clear trend", color: TREND.flat },
             ]}
           />
         </span>
@@ -684,7 +682,7 @@ export function CostTable({
               aria-label="Previous page"
               onClick={() => setPage((p) => p - 1)}
               disabled={safePage === 0}
-              className="hover:bg-muted inline-flex size-8 items-center justify-center rounded-md transition-colors disabled:pointer-events-none disabled:opacity-40"
+              className="hover:bg-muted inline-flex size-8 items-center justify-center transition-colors disabled:pointer-events-none disabled:opacity-40"
             >
               <ChevronLeft className="size-4" />
             </button>
@@ -693,7 +691,7 @@ export function CostTable({
               aria-label="Next page"
               onClick={() => setPage((p) => p + 1)}
               disabled={safePage >= totalPages - 1}
-              className="hover:bg-muted inline-flex size-8 items-center justify-center rounded-md transition-colors disabled:pointer-events-none disabled:opacity-40"
+              className="hover:bg-muted inline-flex size-8 items-center justify-center transition-colors disabled:pointer-events-none disabled:opacity-40"
             >
               <ChevronRight className="size-4" />
             </button>

@@ -1,8 +1,9 @@
 import { Link, useNavigate } from "react-router";
-import { MetricCard } from "@/components/chart/MetricCard";
+import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
 import { RankedBarList } from "@/components/chart/RankedBarList";
 import { Page } from "@/components/page-layout";
 import { Avatar, AvatarFallback } from "@/components/ui/Avatar";
+import { getIdentityTint } from "@/components/gradient-colors";
 import { DashboardCard } from "@/components/ui/DashboardCard";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useProject } from "@/contexts/Auth";
@@ -486,35 +487,38 @@ export function ProjectDashboard(): JSX.Element {
           {logsEnabled && (
             <>
               {/* Row 0: KPI Cards */}
-              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+              <MetricCardGroup>
                 {isOverviewPending ? (
-                  <Skeleton className="h-[100px] rounded-lg" />
+                  <Skeleton className="h-[100px] flex-1" />
                 ) : (
                   <MetricCard
                     title="Active Servers"
                     value={overview?.summary.activeServersCount ?? 0}
+                    tone="information"
                     icon="server"
                     isRefreshing={isOverviewRefreshing}
                     tooltip="Unique MCP servers used by project members that received at least one tool call in the selected period. Servers with no activity in the window are not counted."
                   />
                 )}
                 {isOverviewPending ? (
-                  <Skeleton className="h-[100px] rounded-lg" />
+                  <Skeleton className="h-[100px] flex-1" />
                 ) : (
                   <MetricCard
                     title="Tool Calls"
                     value={overview?.summary.totalToolCalls ?? 0}
+                    tone="information"
                     icon="wrench"
                     isRefreshing={isOverviewRefreshing}
                     tooltip="Total tool invocations recorded across all servers and sources in the selected period."
                   />
                 )}
                 {modePending || (!hasHookData && mcpUsersPending) ? (
-                  <Skeleton className="h-[100px] rounded-lg" />
+                  <Skeleton className="h-[100px] flex-1" />
                 ) : hasHookData ? (
                   <MetricCard
                     title="Total Spend"
                     value={totalSpend}
+                    tone="information"
                     format="currency"
                     icon="dollar-sign"
                     tooltip="Total LLM spend recorded for this project in the selected period. Matches the figure on the Costs page."
@@ -523,16 +527,18 @@ export function ProjectDashboard(): JSX.Element {
                   <MetricCard
                     title="End Users"
                     value={endUsersCount}
+                    tone="information"
                     icon="users"
                     tooltip="Distinct external end users that made MCP tool calls in the selected period."
                   />
                 )}
                 {modePending || isOverviewPending ? (
-                  <Skeleton className="h-[100px] rounded-lg" />
+                  <Skeleton className="h-[100px] flex-1" />
                 ) : hasHookData ? (
                   <MetricCard
                     title="Sessions"
                     value={totalSessions}
+                    tone="information"
                     icon="message-circle"
                     tooltip="Distinct agent sessions across project members in the selected period."
                   />
@@ -540,12 +546,17 @@ export function ProjectDashboard(): JSX.Element {
                   <MetricCard
                     title="Failed Tool Calls"
                     value={overview?.summary.failedToolCalls ?? 0}
+                    tone={
+                      (overview?.summary.failedToolCalls ?? 0) > 0
+                        ? "destructive"
+                        : "neutral"
+                    }
                     icon="circle-alert"
                     isRefreshing={isOverviewRefreshing}
                     tooltip="MCP tool calls that returned an error (HTTP 4xx/5xx) in the selected period."
                   />
                 )}
-              </div>
+              </MetricCardGroup>
 
               {/* Row 1: Top Activity */}
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -678,17 +689,15 @@ export function ProjectDashboard(): JSX.Element {
                         <EmptyState message="No session activity recorded" />
                       ) : (
                         <ul className="divide-border divide-y">
-                          {topUsersBySessions.map((user, i) => (
+                          {topUsersBySessions.map((user) => (
                             <li
                               key={user.userId}
                               className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
                             >
                               <Avatar className="size-8 shrink-0">
                                 <AvatarFallback
-                                  className={cn(
-                                    "text-xs font-medium",
-                                    avatarColor(i),
-                                  )}
+                                  className="text-xs font-medium"
+                                  style={getIdentityTint(user.initialsSource)}
                                 >
                                   {emailInitials(user.initialsSource)}
                                 </AvatarFallback>
@@ -818,7 +827,7 @@ function ExploreWithAIButton({ onClick }: { onClick: () => void }) {
       aria-label="Explore with AI"
       title="Explore with AI"
       className={cn(
-        "text-muted-foreground inline-flex items-center justify-center rounded-md p-1 transition-colors",
+        "text-muted-foreground inline-flex items-center justify-center p-1 transition-colors",
         INSIGHTS_AI_RAINBOW_CLASS,
       )}
     >
@@ -863,18 +872,6 @@ function SkeletonList() {
 
 function EmptyState({ message }: { message: string }) {
   return <p className="text-muted-foreground text-sm">{message}</p>;
-}
-
-const AVATAR_COLORS = [
-  "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
-  "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300",
-  "bg-teal-100 text-teal-700 dark:bg-teal-950 dark:text-teal-300",
-  "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
-  "bg-pink-100 text-pink-700 dark:bg-pink-950 dark:text-pink-300",
-] as const;
-
-function avatarColor(index: number): string {
-  return AVATAR_COLORS[index % AVATAR_COLORS.length]!;
 }
 
 // A row "has usage" when any measure is nonzero — used to detect whether the

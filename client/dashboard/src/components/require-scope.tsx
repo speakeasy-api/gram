@@ -309,7 +309,7 @@ function Unauthorized({
                 What access do I need?
               </CollapsibleTrigger>
               <CollapsibleContent className="pt-2">
-                <div className="bg-muted/25 rounded-lg border px-3 py-5">
+                <div className="bg-muted/25 border px-3 py-5">
                   <p className="text-muted-foreground text-center text-xs">
                     {scopes.length === 1 || !all
                       ? "Your account is missing a permission."
@@ -326,7 +326,7 @@ function Unauthorized({
                     {scopes.map((s) => (
                       <li
                         key={s}
-                        className="bg-background text-foreground rounded border px-1.5 py-0.5 font-mono text-xs"
+                        className="bg-background text-foreground border px-1.5 py-0.5 font-mono text-xs"
                       >
                         {s}
                       </li>
