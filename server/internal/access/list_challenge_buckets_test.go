@@ -110,15 +110,14 @@ func TestListChallengeBuckets_GroupsByDimensions(t *testing.T) {
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
-func TestListChallengeBuckets_DeduplicatesPubSubRedelivery(t *testing.T) {
+func TestListChallengeBuckets_DeduplicatesRepeatedChallengeIDs(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newChallengeTestService(t)
 	authCtx := challengeAuthContext(t, ctx)
 	challengeID := uuid.NewString()
 
-	// A subscriber can replay a message after an ambiguous acknowledgement.
-	// The stable event id keeps that transport replay from inflating counts.
+	// Repeated physical rows are collapsed by stable challenge ID in reads.
 	insertCHChallenge(t, ti, authCtx.ActiveOrganizationID, challengeID, "allow", "user:u1", "org:read")
 	insertCHChallenge(t, ti, authCtx.ActiveOrganizationID, challengeID, "allow", "user:u1", "org:read")
 

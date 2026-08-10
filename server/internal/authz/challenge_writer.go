@@ -24,6 +24,11 @@ type ChallengeCHWriter struct {
 	conn   clickhouse.Conn
 }
 
+const (
+	maxChallengeTraceIDBytes = 32
+	maxChallengeSpanIDBytes  = 16
+)
+
 func NewChallengeCHWriter(
 	logger *slog.Logger,
 	conn clickhouse.Conn,
@@ -56,6 +61,12 @@ func challengeRowFromMessage(message *authzv1.Challenge) (authzrepo.ChallengeRow
 	}
 	if _, err := uuid.Parse(message.GetId()); err != nil {
 		return authzrepo.ChallengeRow{}, fmt.Errorf("parse id: %w", err)
+	}
+	if len(message.GetTraceId()) > maxChallengeTraceIDBytes {
+		return authzrepo.ChallengeRow{}, fmt.Errorf("trace id exceeds %d bytes", maxChallengeTraceIDBytes)
+	}
+	if len(message.GetSpanId()) > maxChallengeSpanIDBytes {
+		return authzrepo.ChallengeRow{}, fmt.Errorf("span id exceeds %d bytes", maxChallengeSpanIDBytes)
 	}
 	timestamp, err := time.Parse(time.RFC3339Nano, message.GetTimestamp())
 	if err != nil {

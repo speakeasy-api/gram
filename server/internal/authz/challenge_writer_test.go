@@ -2,6 +2,7 @@ package authz
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,6 +26,8 @@ func TestChallengeRowFromMessage(t *testing.T) {
 	require.Equal(t, message.GetTimestamp(), row.Timestamp.Format(time.RFC3339Nano))
 	require.Equal(t, "org_test", row.OrganizationID)
 	require.Equal(t, "project_test", row.ProjectID)
+	require.Len(t, row.TraceID, maxChallengeTraceIDBytes)
+	require.Len(t, row.SpanID, maxChallengeSpanIDBytes)
 	require.Equal(t, "user:user_test", row.PrincipalURN)
 	require.Equal(t, authzrepo.OutcomeAllow, row.Outcome)
 	require.Equal(t, []string{"role:member"}, row.RoleSlugs)
@@ -84,7 +87,51 @@ func TestChallengeCHWriterAcknowledgesInvalidMessage(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestChallengeCHWriterRetriesInsertFailure(t *testing.T) {
+func TestChallengeCHWriterAcknowledgesOverlongTraceID(t *testing.T) {
+	t.Parallel()
+
+	conn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	writer := NewChallengeCHWriter(testenv.NewLogger(t), conn)
+	message := testChallengeMessage()
+	message.SetTraceId(strings.Repeat("a", maxChallengeTraceIDBytes+1))
+
+	err = writer.Handle(t.Context(), message, gcp.MessageMetadata{
+		ID:              "message-id",
+		Attributes:      nil,
+		DeliveryAttempt: nil,
+	})
+	require.NoError(t, err)
+
+	var count uint64
+	err = conn.QueryRow(t.Context(), `SELECT count() FROM authz_challenges WHERE id = ?`, message.GetId()).Scan(&count)
+	require.NoError(t, err)
+	require.Zero(t, count)
+}
+
+func TestChallengeCHWriterAcknowledgesOverlongSpanID(t *testing.T) {
+	t.Parallel()
+
+	conn, err := newClickhouseClient(t)
+	require.NoError(t, err)
+	writer := NewChallengeCHWriter(testenv.NewLogger(t), conn)
+	message := testChallengeMessage()
+	message.SetSpanId(strings.Repeat("a", maxChallengeSpanIDBytes+1))
+
+	err = writer.Handle(t.Context(), message, gcp.MessageMetadata{
+		ID:              "message-id",
+		Attributes:      nil,
+		DeliveryAttempt: nil,
+	})
+	require.NoError(t, err)
+
+	var count uint64
+	err = conn.QueryRow(t.Context(), `SELECT count() FROM authz_challenges WHERE id = ?`, message.GetId()).Scan(&count)
+	require.NoError(t, err)
+	require.Zero(t, count)
+}
+
+func TestChallengeCHWriterRetriesClickHouseFailure(t *testing.T) {
 	t.Parallel()
 
 	conn, err := newClickhouseClient(t)
@@ -106,6 +153,8 @@ func testChallengeMessage() *authzv1.Challenge {
 	timestamp := time.Now().UTC().Format(time.RFC3339Nano)
 	organizationID := "org_test"
 	projectID := "project_test"
+	traceID := strings.Repeat("a", maxChallengeTraceIDBytes)
+	spanID := strings.Repeat("b", maxChallengeSpanIDBytes)
 	principalURN := "user:user_test"
 	principalType := "user"
 	operation := "require"
@@ -123,6 +172,8 @@ func testChallengeMessage() *authzv1.Challenge {
 		Timestamp:           &timestamp,
 		OrganizationId:      &organizationID,
 		ProjectId:           &projectID,
+		TraceId:             &traceID,
+		SpanId:              &spanID,
 		PrincipalUrn:        &principalURN,
 		PrincipalType:       &principalType,
 		RoleSlugs:           []string{"role:member"},
