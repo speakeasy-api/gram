@@ -111,15 +111,17 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		if cerr != nil {
 			return cerr
 		}
+		// Only a user-controlled policy authors a stored preference. Managed
+		// policies leave it unset so remote_sessions.auto_refresh stays purely
+		// user-originated: the keepalive applies the policy at query time, so
+		// persisting a forced value would buy nothing and would overwrite the
+		// choice a subject made before the organization took over.
 		var autoRefresh *bool
 		if autoRefreshPolicy == autoRefreshUserControlled {
 			if _, posted := r.PostForm["auto_refresh"]; posted {
 				v := r.PostForm.Get("auto_refresh") == "on"
 				autoRefresh = &v
 			}
-		} else {
-			managed := autoRefreshPolicy == autoRefreshEnforced
-			autoRefresh = &managed
 		}
 		challengeURL, berr := s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
 			ID:                  challengeState.ID,

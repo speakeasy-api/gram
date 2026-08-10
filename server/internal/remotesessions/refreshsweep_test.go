@@ -289,6 +289,59 @@ func TestRefreshSweep_DisabledOrgSkipsOptedInSession(t *testing.T) {
 	require.True(t, claimed, "restoring the opt-in policy must honor the stored preference again")
 }
 
+// TestRefreshSweep_ClaimAndRecheckAgreeOnPolicy pins the claim sweep and the
+// authoritative pre-refresh re-check to the same eligibility rule. Both queries
+// spell out the organization-policy predicate separately, so a change applied to
+// only one of them would let the re-check disagree with the claim and silently
+// skip (or refresh) sessions. Every policy branch is exercised from both sides.
+func TestRefreshSweep_ClaimAndRecheckAgreeOnPolicy(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		slug string
+		// features is the organization policy: empty means refresh is disabled.
+		features []productfeatures.Feature
+		// autoRefresh is the subject's stored preference.
+		autoRefresh bool
+		wantDue     bool
+	}{
+		{slug: "agree-disabled-opted-in", features: nil, autoRefresh: true, wantDue: false},
+		{slug: "agree-user-opted-in", features: []productfeatures.Feature{productfeatures.FeatureRemoteSessionAutoRefresh}, autoRefresh: true, wantDue: true},
+		{slug: "agree-user-opted-out", features: []productfeatures.Feature{productfeatures.FeatureRemoteSessionAutoRefresh}, autoRefresh: false, wantDue: false},
+		{slug: "agree-required-opted-out", features: []productfeatures.Feature{productfeatures.FeatureRemoteSessionAutoRefreshEnforced}, autoRefresh: false, wantDue: true},
+	}
+
+	for _, tt := range cases {
+		ctx, ti := newTestService(t)
+		sessionID, org := seedSweepSession(t, ctx, ti, "sweep-"+tt.slug, true, tt.autoRefresh, 25*time.Hour, true)
+		for _, feature := range tt.features {
+			enableOrgAutoRefreshFeature(t, ctx, ti, org, feature)
+		}
+
+		q := repo.New(ti.conn)
+		window := newSweepWindow()
+
+		// The re-check runs first because claiming stamps the attempt clock.
+		_, recheckErr := q.GetDueRemoteSessionRefreshCandidate(ctx, window.candidateParams(sessionID, org))
+		if recheckErr != nil {
+			require.ErrorIs(t, recheckErr, pgx.ErrNoRows, tt.slug)
+		}
+		recheckDue := recheckErr == nil
+
+		rows, err := q.ClaimDueRemoteSessionRefreshCandidates(ctx, window.claimParams())
+		require.NoError(t, err, tt.slug)
+		claimDue := false
+		for _, row := range rows {
+			if row.ID == sessionID {
+				claimDue = true
+			}
+		}
+
+		require.Equal(t, tt.wantDue, recheckDue, "re-check eligibility for %s", tt.slug)
+		require.Equal(t, recheckDue, claimDue, "claim sweep and re-check must agree for %s", tt.slug)
+	}
+}
+
 func TestRefreshSweep_CandidateRejectsWrongOrganization(t *testing.T) {
 	t.Parallel()
 

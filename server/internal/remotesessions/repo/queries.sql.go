@@ -1099,7 +1099,9 @@ WHERE s.id = $1
   AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > $3::timestamptz)
   AND s.updated_at <= $4::timestamptz
   -- The organization's automatic-refresh policy applied to this session's own
-  -- preference, kept in sync with ClaimDueRemoteSessionRefreshCandidates.
+  -- preference. This predicate is spelled out again in
+  -- ClaimDueRemoteSessionRefreshCandidates; the two must agree, and
+  -- TestRefreshSweep_ClaimAndRecheckAgreeOnPolicy fails if they drift.
   AND (
     EXISTS (
       SELECT 1 FROM organization_features AS orgf
