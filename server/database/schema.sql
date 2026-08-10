@@ -4271,8 +4271,10 @@ CREATE TABLE IF NOT EXISTS assistant_mcp_oauth_clients (
       AND registration_started_at IS NOT NULL
     )
   ),
-  CONSTRAINT assistant_mcp_oauth_clients_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL,
-  CONSTRAINT assistant_mcp_oauth_clients_project_id_assistant_id_fkey FOREIGN KEY (project_id, assistant_id) REFERENCES assistants (project_id, id) ON DELETE SET NULL
+  -- Intentional exception to the usual SET NULL policy: tenant and owner IDs
+  -- are required, and retaining orphaned encrypted credentials is unsafe.
+  CONSTRAINT assistant_mcp_oauth_clients_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT assistant_mcp_oauth_clients_project_id_assistant_id_fkey FOREIGN KEY (project_id, assistant_id) REFERENCES assistants (project_id, id) ON DELETE CASCADE
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS assistant_mcp_oauth_clients_project_assistant_issuer_key
