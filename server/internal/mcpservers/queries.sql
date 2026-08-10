@@ -88,6 +88,37 @@ WHERE p.organization_id = @organization_id
   AND p.deleted IS FALSE
 ORDER BY m.created_at DESC;
 
+-- name: ListMCPServersByProjectIDLimited :many
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
+FROM mcp_servers
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+ORDER BY id ASC
+LIMIT @limit_value;
+
+-- name: ListMCPServersByLiveProjectForOrganizationLimited :many
+SELECT m.*
+FROM mcp_servers AS m
+JOIN projects AS p
+  ON p.id = m.project_id
+ AND p.organization_id = @organization_id
+ AND p.deleted IS FALSE
+WHERE m.project_id = @project_id
+  AND m.deleted IS FALSE
+ORDER BY m.id ASC
+LIMIT @limit_value;
+
+-- name: GetMCPServerByLiveProjectForOrganization :one
+SELECT m.*
+FROM mcp_servers AS m
+JOIN projects AS p
+  ON p.id = m.project_id
+ AND p.organization_id = @organization_id
+ AND p.deleted IS FALSE
+WHERE m.id = @id
+  AND m.project_id = @project_id
+  AND m.deleted IS FALSE;
+
 -- name: ListMCPServersForTelemetryByProjectID :many
 -- Includes soft-deleted servers so tool-usage telemetry can classify historical
 -- rows whose backing MCP server has since been deleted (or recreated). The
