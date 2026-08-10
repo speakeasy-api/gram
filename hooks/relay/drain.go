@@ -249,6 +249,13 @@ func readSpooledSkillSource(path string) (string, bool) {
 	if !filepath.IsAbs(path) {
 		return "", false
 	}
+	// Lstat + regular-file check keeps the drain from blocking on a FIFO and
+	// from following symlinks; a non-regular source drains content-less like
+	// any other mismatch.
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		return "", false
+	}
 	file, err := os.Open(path)
 	if err != nil {
 		return "", false

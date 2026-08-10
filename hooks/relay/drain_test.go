@@ -503,3 +503,18 @@ func TestReplayedSkillRejectsMismatchedLegacySource(t *testing.T) {
 
 	require.Nil(t, replayedSkill(entry), "content that no longer matches the recorded hash must not upload")
 }
+
+func TestReplayedSkillRejectsNonRegularLegacySource(t *testing.T) {
+	content := []byte("# original\n")
+	target := filepath.Join(t.TempDir(), "SKILL.md")
+	require.NoError(t, os.WriteFile(target, content, 0o600))
+	link := filepath.Join(t.TempDir(), "SKILL.md")
+	require.NoError(t, os.Symlink(target, link))
+	rawSHA256 := sha256Hex(content)
+	entry := spoolEntry{}
+	entry.Envelope.Data = &components.HookIngestData{Skill: &components.HookSkillData{
+		Name: "legacy", RawSha256: new(rawSHA256), SourcePath: new(link),
+	}}
+
+	require.Nil(t, replayedSkill(entry), "a source path that is not a regular file must drain content-less")
+}
