@@ -429,18 +429,18 @@ The `@/components/ui/link` wrapper sets `target="_blank"` when `external` is tru
 
 **First choice: a page template.** Do not hand-roll the `Page` frame. Pick the template that matches the page's shape from `@/components/page-templates` and fill in data — it owns the frame, breadcrumbs, scope gate, the single header, and the loading/empty/error branches (which is what stops the "three-branch header" duplication). Full recipes: `client/dashboard/src/components/page-templates/README.md`.
 
-| Page shape | Template |
-| --- | --- |
-| collection: search/filter + table or card grid + empty state | `ResourceListPage` |
-| one entity: hero + sections (rail wired via app sidebar) | `DetailPage` |
-| tabs that are *different resources* (not one entity's sections) | `TabbedPage` |
-| a single create/edit `<form>` | `FormPage` |
-| stacked titled config sections (or a prose column via `variant="content"`) | `SettingsPage` |
-| dashboard: stat row + summary/chart cards | `OverviewPage` |
-| fullbleed analytics/observe surface (sticky filters + big table/charts) | `WorkbenchPage` |
-| multi-step flow | `WizardPage` |
-| auth / standalone, outside the app shell | `CenteredPage` |
-| genuine bespoke app canvas (chat, playground, builder) | `FullBleedPage` (escape hatch) |
+| Page shape                                                                 | Template                       |
+| -------------------------------------------------------------------------- | ------------------------------ |
+| collection: search/filter + table or card grid + empty state               | `ResourceListPage`             |
+| one entity: hero + sections (rail wired via app sidebar)                   | `DetailPage`                   |
+| tabs that are _different resources_ (not one entity's sections)            | `TabbedPage`                   |
+| a single create/edit `<form>`                                              | `FormPage`                     |
+| stacked titled config sections (or a prose column via `variant="content"`) | `SettingsPage`                 |
+| dashboard: stat row + summary/chart cards                                  | `OverviewPage`                 |
+| fullbleed analytics/observe surface (sticky filters + big table/charts)    | `WorkbenchPage`                |
+| multi-step flow                                                            | `WizardPage`                   |
+| auth / standalone, outside the app shell                                   | `CenteredPage`                 |
+| genuine bespoke app canvas (chat, playground, builder)                     | `FullBleedPage` (escape hatch) |
 
 ```tsx
 import { ResourceListPage } from "@/components/page-templates";
@@ -454,7 +454,11 @@ export default function Environments(): JSX.Element {
       primaryAction={<NewButton />}
       isLoading={q.isPending}
       isEmpty={rows.length === 0}
-      empty={{ icon: "blocks", heading: "No environments yet", action: <NewButton /> }}
+      empty={{
+        icon: "blocks",
+        heading: "No environments yet",
+        action: <NewButton />,
+      }}
     >
       <Table columns={columns} data={rows} rowKey={(r) => r.id} />
     </ResourceListPage>
@@ -499,7 +503,13 @@ Checklist for the content below the title:
     isLoading={q.isPending}
     metrics={[
       { label: "Total rules", value: total, tone: "information" },
-      { label: "Violations", value: n, tone: n > 0 ? "destructive" : "neutral", delta: "+3", description: "last 7 days" },
+      {
+        label: "Violations",
+        value: n,
+        tone: n > 0 ? "destructive" : "neutral",
+        delta: "+3",
+        description: "last 7 days",
+      },
     ]}
   />
   ```
@@ -517,7 +527,7 @@ A page that renders its own `<h1>` instead of this pattern is a defect; if a cus
 
 The primitive shelf was consolidated; these imports are gone or moved. Reaching for a removed one is a defect:
 
-- **`MetricCard`** — one primitive only: `@/components/ui/MetricCard` (`label`/`value`/`tone`). The analytics tile that formats numbers/thresholds/deltas is **`StatTile`** (`@/components/chart/stat-tile`, `StatTile`/`StatTileGroup`) — *not* a second `MetricCard`.
+- **`MetricCard`** — one primitive only: `@/components/ui/MetricCard` (`label`/`value`/`tone`). The analytics tile that formats numbers/thresholds/deltas is **`StatTile`** (`@/components/chart/stat-tile`, `StatTile`/`StatTileGroup`) — _not_ a second `MetricCard`.
 - **Password inputs** — no `PrivateInput`; use `<Input type="password" reveal />` (the `reveal` prop adds the show/hide eye toggle).
 - **`DashboardCard`** — now `Card.Dashboard` (`title`/`action`/`tooltip` + children).
 - **`ToggleButton`** — imported from `@/components/ui/SegmentedControl` (re-homed); use `SegmentedControl` for a full option group.
