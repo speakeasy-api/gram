@@ -1,0 +1,36 @@
+server/internal/authz/challenge_logger_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 381
+.agents/recommended-skills.json
+  s_a6cc4a2c69d92d::t_85fabc2f848166 4-13
+CLAUDE.md
+  s_a6cc4a2c69d92d::t_db126c69dbab1c 130-132
+.agents/skills/clickhouse/SKILL.md
+  s_a6cc4a2c69d92d::t_d20065e6cd144d 3,6,8,10,12-14,17-18,21,23-28,30,32,34,37-42,44,46,48-50,52,54-56,58,62,65-68,70,72,74,82
+  s_a6cc4a2c69d92d::t_3f2c553330d078 76-78
+  s_a6cc4a2c69d92d::t_bf10547a4697a4 15-16,36,60,80
+  s_a6cc4a2c69d92d::t_47460125edf725 19,64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "08ad027c25dc3adca24f9bcec39f8ee2b096cdb5",
+  "prompts": {},
+  "sessions": {
+    "s_6cd0b3509a4ad1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fd754-8571-7ca3-9b80-f41a12ff308a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    },
+    "s_a6cc4a2c69d92d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019feb2a-323e-75e3-9ba5-f2b7583535ee",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}
