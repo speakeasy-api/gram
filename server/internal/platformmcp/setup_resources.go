@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -49,7 +50,8 @@ func registerSetupResources(server *mcp.Server, resources []SetupResource) {
 }
 
 func validSetupResource(resource SetupResource) bool {
-	return strings.HasPrefix(resource.URI, "gram://platform-mcp/setup/") && resource.Name != "" && resource.Title != "" && resource.Description != "" && resource.Text != "" && len(resource.Text) <= maxSetupResourceBytes && resource.URI == setupResourceURIFromURI(resource.URI)
+	parsed, err := url.Parse(resource.URI)
+	return err == nil && parsed.Scheme == "gram" && parsed.Host == "platform-mcp" && strings.HasPrefix(resource.URI, "gram://platform-mcp/setup/") && resource.Name != "" && resource.Title != "" && resource.Description != "" && resource.Text != "" && len(resource.Text) <= maxSetupResourceBytes && resource.URI == setupResourceURIFromURI(resource.URI)
 }
 
 func setupResourceURI(provider, intent string) string {

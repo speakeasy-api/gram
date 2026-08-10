@@ -65,6 +65,20 @@ func TestPlatformMCPLocalFixtureConfigFromCLI(t *testing.T) {
 			serverURL:   "https://localhost:8080/?fixture=1#fragment",
 			wantErr:     "requires an HTTPS server origin",
 		},
+		{
+			name:        "rejects hostless or bare-query origin",
+			environment: "local",
+			enabled:     true,
+			serverURL:   "https://:443",
+			wantErr:     "requires an HTTPS server origin",
+		},
+		{
+			name:        "rejects bare-query origin",
+			environment: "local",
+			enabled:     true,
+			serverURL:   "https://localhost:8080?",
+			wantErr:     "requires an HTTPS server origin",
+		},
 	}
 
 	for _, test := range tests {

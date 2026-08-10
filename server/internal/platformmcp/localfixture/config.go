@@ -32,8 +32,8 @@ type Config struct {
 }
 
 func NewConfig(origin *url.URL) (*Config, error) {
-	if origin == nil || origin.Scheme != "https" || origin.Host == "" || origin.User != nil || (origin.Path != "" && origin.Path != "/") || origin.RawQuery != "" || origin.Fragment != "" {
-		return nil, fmt.Errorf("local Platform MCP fixture requires an HTTPS origin without credentials, path, query, or fragment")
+	if err := ValidateOrigin(origin); err != nil {
+		return nil, err
 	}
 
 	registryID, err := uuid.Parse(registryIDString)
@@ -56,6 +56,15 @@ func NewConfig(origin *url.URL) (*Config, error) {
 		remoteURL:             originCopy.JoinPath("platform-mcp", "local-fixture", "mcp").String(),
 		remoteSessionIssuerID: issuerID,
 	}, nil
+}
+
+// ValidateOrigin verifies that origin is a canonical HTTPS origin suitable for
+// the local Platform MCP fixture.
+func ValidateOrigin(origin *url.URL) error {
+	if origin == nil || origin.Scheme != "https" || origin.Hostname() == "" || origin.User != nil || (origin.Path != "" && origin.Path != "/") || origin.RawQuery != "" || origin.ForceQuery || origin.Fragment != "" {
+		return fmt.Errorf("local Platform MCP fixture requires an HTTPS origin without credentials, path, query, or fragment")
+	}
+	return nil
 }
 
 func (c *Config) Origin() *url.URL {

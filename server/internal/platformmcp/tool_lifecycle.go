@@ -47,7 +47,7 @@ func registerSetupHandoffTool(server *mcp.Server, registrations *RegistrationSer
 			ProjectID:      issued.ProjectID.String(),
 			RegistrationID: issued.RegistrationID.String(),
 			ProviderKey:    issued.ProviderKey,
-			CatalogRef:     input.CatalogRef,
+			CatalogRef:     issued.CatalogReference,
 			SetupURL:       providerSetupStartPath,
 			Intent:         issued.Intent,
 			Handoff:        issued.Value,

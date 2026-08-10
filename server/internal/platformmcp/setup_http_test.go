@@ -94,6 +94,9 @@ func TestDashboardSetupHTTPMapsSetupErrors(t *testing.T) {
 		{name: "invalid handoff", err: ErrSetupHandoffInvalid, code: http.StatusForbidden},
 		{name: "registration disabled", err: ErrRegistrationUnavailable, code: http.StatusForbidden},
 		{name: "authorization denied", err: ErrForbidden, code: http.StatusForbidden},
+		{name: "operation rate limited", err: ErrOperationRateLimited, code: http.StatusTooManyRequests},
+		{name: "readiness rate limited", err: ErrReadinessRateLimited, code: http.StatusTooManyRequests},
+		{name: "operation budget unavailable", err: ErrOperationBudgetUnavailable, code: http.StatusServiceUnavailable},
 		{name: "adapter unavailable", err: ErrProviderAdapterUnavailable, code: http.StatusServiceUnavailable},
 		{name: "dependency unavailable", err: ErrUnavailable, code: http.StatusServiceUnavailable},
 	} {

@@ -645,6 +645,10 @@ SELECT
 WHERE EXISTS (
     SELECT 1
     FROM platform_mcp_catalog_registrations AS registration
+    JOIN projects AS project
+      ON project.id = registration.project_id
+     AND project.organization_id = registration.organization_id
+     AND project.deleted IS FALSE
     WHERE registration.id = $3
       AND registration.organization_id = $1
       AND registration.project_id = $2
@@ -1060,9 +1064,13 @@ JOIN platform_mcp_catalog_registrations AS registration
  AND registration.organization_id = handoff.organization_id
  AND registration.project_id = handoff.project_id
  AND registration.deleted IS FALSE
+JOIN projects AS project
+  ON project.id = registration.project_id
+ AND project.organization_id = registration.organization_id
+ AND project.deleted IS FALSE
 JOIN platform_mcp_connections AS connection
   ON connection.id = handoff.connection_id
- AND connection.organization_id = handoff.organization_id
+  AND connection.organization_id = handoff.organization_id
 WHERE handoff.organization_id = $1
   AND handoff.project_id = $2
   AND handoff.registration_id = $3

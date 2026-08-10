@@ -71,7 +71,7 @@ func TestReviewedRemoteSessionProviderVerticalSlice(t *testing.T) {
 	probePolicy := testProbeFixturePolicy(t, upstream)
 	manager := newChallengeManager(t, conn, testOAuthFixturePolicy(t, upstream))
 	remoteIssuerID := seedReviewedRemoteIssuer(t, ctx, conn, project.ID, upstream.URL)
-	adapter := remotesessionprovider.New(testenv.NewLogger(t), probePolicy, manager, remotesessionprovider.Descriptor{
+	adapter := remotesessionprovider.New(probePolicy, manager, remotesessionprovider.Descriptor{
 		ProviderKey:                "fixture",
 		RemoteSessionIssuerID:      remoteIssuerID,
 		StreamableHTTPURL:          upstream.URL + "/mcp",

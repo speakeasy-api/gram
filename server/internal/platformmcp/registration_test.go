@@ -73,7 +73,7 @@ func TestOperationReceiptFromRowPreservesRegistrationAssociation(t *testing.T) {
 	require.Equal(t, receiptStatusPending, receipt.Status)
 }
 
-func TestNewRegistrationStoreRequiresPositiveActiveRegistrationCap(t *testing.T) {
+func TestNewRegistrationStoreRequiresDatabase(t *testing.T) {
 	t.Parallel()
 
 	store, err := NewRegistrationStore(nil, RegistrationStoreConfig{ActiveRegistrationCap: 1})

@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -44,7 +45,7 @@ func TestOAuthHTTPPublishesSyntheticMetadataAndRegistersOnlyReviewedClient(t *te
 	})
 	require.NoError(t, err)
 	registrationRequest := httptest.NewRequest(http.MethodPost, "/"+fixtureOAuthPath+"/register", bytes.NewReader(body))
-	registrationRequest.Header.Set("Content-Type", "application/json")
+	registrationRequest.Header.Set("Content-Type", "application/json; charset=utf-8")
 	registrationResponse := httptest.NewRecorder()
 	handler.ServeHTTP(registrationResponse, registrationRequest)
 	require.Equal(t, http.StatusCreated, registrationResponse.Code)
@@ -73,14 +74,23 @@ func TestOAuthHTTPAuthorizationCodeRefreshAndRevocationFlow(t *testing.T) {
 	initial := exchangeFixtureCode(t, handler, config, clientID, code, verifier)
 	require.Equal(t, "Bearer", initial["token_type"])
 	require.Equal(t, "tools:read", initial["scope"])
-	accessToken, ok := initial["access_token"].(string)
-	require.True(t, ok)
 	refreshToken, ok := initial["refresh_token"].(string)
 	require.True(t, ok)
 
 	codeReplay := exchangeFixtureCodeResponse(t, handler, config, clientID, code, verifier)
 	require.Equal(t, http.StatusBadRequest, codeReplay.Code)
+	require.Equal(t, "no-store", codeReplay.Header().Get("Cache-Control"))
 	require.JSONEq(t, `{"error":"invalid_grant"}`, codeReplay.Body.String())
+
+	invalidRefresh := postForm(t, handler, "/"+fixtureOAuthPath+"/token", url.Values{
+		"grant_type":    {"refresh_token"},
+		"refresh_token": {refreshToken},
+		"client_id":     {"wrong-client"},
+		"resource":      {config.RemoteURL()},
+	})
+	require.Equal(t, http.StatusBadRequest, invalidRefresh.Code)
+	require.Equal(t, "no-store", invalidRefresh.Header().Get("Cache-Control"))
+	require.JSONEq(t, `{"error":"invalid_grant"}`, invalidRefresh.Body.String())
 
 	refresh := postForm(t, handler, "/"+fixtureOAuthPath+"/token", url.Values{
 		"grant_type":    {"refresh_token"},
@@ -91,6 +101,8 @@ func TestOAuthHTTPAuthorizationCodeRefreshAndRevocationFlow(t *testing.T) {
 	require.Equal(t, http.StatusOK, refresh.Code)
 	var rotated map[string]any
 	require.NoError(t, json.Unmarshal(refresh.Body.Bytes(), &rotated))
+	rotatedAccessToken, ok := rotated["access_token"].(string)
+	require.True(t, ok)
 	rotatedRefreshToken, ok := rotated["refresh_token"].(string)
 	require.True(t, ok)
 	require.NotEqual(t, refreshToken, rotatedRefreshToken)
@@ -102,6 +114,7 @@ func TestOAuthHTTPAuthorizationCodeRefreshAndRevocationFlow(t *testing.T) {
 		"resource":      {config.RemoteURL()},
 	})
 	require.Equal(t, http.StatusBadRequest, staleRefresh.Code)
+	require.Equal(t, "no-store", staleRefresh.Header().Get("Cache-Control"))
 	require.JSONEq(t, `{"error":"invalid_grant"}`, staleRefresh.Body.String())
 
 	revoke := postForm(t, handler, "/"+fixtureOAuthPath+"/revoke", url.Values{"token": {rotatedRefreshToken}})
@@ -115,12 +128,47 @@ func TestOAuthHTTPAuthorizationCodeRefreshAndRevocationFlow(t *testing.T) {
 		"resource":      {config.RemoteURL()},
 	})
 	require.Equal(t, http.StatusBadRequest, revokedRefresh.Code)
+	require.Equal(t, "no-store", revokedRefresh.Header().Get("Cache-Control"))
 	require.JSONEq(t, `{"error":"invalid_grant"}`, revokedRefresh.Body.String())
 
 	oauth.mu.Lock()
-	_, accessStillLive := oauth.accessTokens[accessToken]
+	_, accessStillLive := oauth.accessTokens[rotatedAccessToken]
 	oauth.mu.Unlock()
 	require.False(t, accessStillLive)
+}
+
+func TestOAuthHTTPExpiredAccessTokenPreservesLiveRefreshToken(t *testing.T) {
+	t.Parallel()
+
+	origin, err := url.Parse("https://localhost:8080")
+	require.NoError(t, err)
+	config, err := NewConfig(origin)
+	require.NoError(t, err)
+	oauth := NewOAuthHTTP(config)
+	handler := oauth.Handler()
+	clientID := registerFixtureClient(t, handler, config)
+	code := authorizeFixtureClient(t, handler, config, clientID, "expired-access-verifier")
+	tokens := exchangeFixtureCode(t, handler, config, clientID, code, "expired-access-verifier")
+	accessToken, ok := tokens["access_token"].(string)
+	require.True(t, ok)
+	refreshToken, ok := tokens["refresh_token"].(string)
+	require.True(t, ok)
+
+	oauth.mu.Lock()
+	issued := oauth.accessTokens[accessToken]
+	issued.accessExpiresAt = time.Now().Add(-time.Second)
+	oauth.accessTokens[accessToken] = issued
+	oauth.refreshTokens[refreshToken] = issued
+	oauth.mu.Unlock()
+
+	require.False(t, oauth.HasLiveAccessToken(accessToken))
+	refresh := postForm(t, handler, "/"+fixtureOAuthPath+"/token", url.Values{
+		"grant_type":    {"refresh_token"},
+		"refresh_token": {refreshToken},
+		"client_id":     {clientID},
+		"resource":      {config.RemoteURL()},
+	})
+	require.Equal(t, http.StatusOK, refresh.Code)
 }
 
 func TestOAuthHTTPRejectsInvalidAuthorizationAndVerifier(t *testing.T) {

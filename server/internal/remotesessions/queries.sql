@@ -56,7 +56,8 @@ RETURNING *;
 -- name: CreateLocalFixtureGlobalRemoteSessionIssuer :one
 -- The local Platform MCP fixture owns this fixed global issuer identity. The
 -- caller first holds LockRemoteSessionIssuerForClientBinding on the fixed ID and
--- validates an existing row, so this INSERT cannot overwrite incompatible state.
+-- validates an existing active row. A previously deleted fixture identity is
+-- resurrected so local setup remains recoverable after an administrator delete.
 INSERT INTO remote_session_issuers (
     id,
     project_id,
@@ -93,18 +94,26 @@ VALUES (
     FALSE,
     FALSE
 )
+ON CONFLICT (id) DO UPDATE
+SET
+    slug = EXCLUDED.slug,
+    issuer = EXCLUDED.issuer,
+    name = EXCLUDED.name,
+    authorization_endpoint = EXCLUDED.authorization_endpoint,
+    token_endpoint = EXCLUDED.token_endpoint,
+    registration_endpoint = EXCLUDED.registration_endpoint,
+    scopes_supported = EXCLUDED.scopes_supported,
+    grant_types_supported = EXCLUDED.grant_types_supported,
+    response_types_supported = EXCLUDED.response_types_supported,
+    token_endpoint_auth_methods_supported = EXCLUDED.token_endpoint_auth_methods_supported,
+    client_id_metadata_document_supported = FALSE,
+    oidc = FALSE,
+    passthrough = FALSE,
+    deleted_at = NULL,
+    updated_at = clock_timestamp()
+WHERE remote_session_issuers.project_id IS NULL
+  AND remote_session_issuers.organization_id IS NULL
 RETURNING *;
-
--- name: GetLocalFixtureGlobalRemoteSessionIssuer :one
--- The local Platform MCP fixture owns one exact global issuer identity. This
--- lookup intentionally excludes project and organization rows so a tenant-owned
--- issuer can never be mistaken for the reviewed fixture.
-SELECT *
-FROM remote_session_issuers
-WHERE slug = @slug
-  AND project_id IS NULL
-  AND organization_id IS NULL
-  AND deleted IS FALSE;
 
 -- name: GetRemoteSessionIssuerByID :one
 -- Project-scoped read of the project's own issuers, plus each inherited tier the

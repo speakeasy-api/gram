@@ -141,6 +141,25 @@ VALUES (
     FALSE,
     FALSE
 )
+ON CONFLICT (id) DO UPDATE
+SET
+    slug = EXCLUDED.slug,
+    issuer = EXCLUDED.issuer,
+    name = EXCLUDED.name,
+    authorization_endpoint = EXCLUDED.authorization_endpoint,
+    token_endpoint = EXCLUDED.token_endpoint,
+    registration_endpoint = EXCLUDED.registration_endpoint,
+    scopes_supported = EXCLUDED.scopes_supported,
+    grant_types_supported = EXCLUDED.grant_types_supported,
+    response_types_supported = EXCLUDED.response_types_supported,
+    token_endpoint_auth_methods_supported = EXCLUDED.token_endpoint_auth_methods_supported,
+    client_id_metadata_document_supported = FALSE,
+    oidc = FALSE,
+    passthrough = FALSE,
+    deleted_at = NULL,
+    updated_at = clock_timestamp()
+WHERE remote_session_issuers.project_id IS NULL
+  AND remote_session_issuers.organization_id IS NULL
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
 `
 
@@ -160,7 +179,8 @@ type CreateLocalFixtureGlobalRemoteSessionIssuerParams struct {
 
 // The local Platform MCP fixture owns this fixed global issuer identity. The
 // caller first holds LockRemoteSessionIssuerForClientBinding on the fixed ID and
-// validates an existing row, so this INSERT cannot overwrite incompatible state.
+// validates an existing active row. A previously deleted fixture identity is
+// resurrected so local setup remains recoverable after an administrator delete.
 func (q *Queries) CreateLocalFixtureGlobalRemoteSessionIssuer(ctx context.Context, arg CreateLocalFixtureGlobalRemoteSessionIssuerParams) (RemoteSessionIssuer, error) {
 	row := q.db.QueryRow(ctx, createLocalFixtureGlobalRemoteSessionIssuer,
 		arg.ID,
@@ -1022,52 +1042,6 @@ func (q *Queries) GetGlobalRemoteSessionIssuerWithClientCountsByID(ctx context.C
 		&i.RemoteSessionIssuer.Deleted,
 		&i.GlobalClientCount,
 		&i.TenantClientCount,
-	)
-	return i, err
-}
-
-const getLocalFixtureGlobalRemoteSessionIssuer = `-- name: GetLocalFixtureGlobalRemoteSessionIssuer :one
-SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
-FROM remote_session_issuers
-WHERE slug = $1
-  AND project_id IS NULL
-  AND organization_id IS NULL
-  AND deleted IS FALSE
-`
-
-// The local Platform MCP fixture owns one exact global issuer identity. This
-// lookup intentionally excludes project and organization rows so a tenant-owned
-// issuer can never be mistaken for the reviewed fixture.
-func (q *Queries) GetLocalFixtureGlobalRemoteSessionIssuer(ctx context.Context, slug string) (RemoteSessionIssuer, error) {
-	row := q.db.QueryRow(ctx, getLocalFixtureGlobalRemoteSessionIssuer, slug)
-	var i RemoteSessionIssuer
-	err := row.Scan(
-		&i.ID,
-		&i.ProjectID,
-		&i.OrganizationID,
-		&i.Slug,
-		&i.Issuer,
-		&i.AuthorizationEndpoint,
-		&i.TokenEndpoint,
-		&i.RegistrationEndpoint,
-		&i.JwksUri,
-		&i.ServiceDocumentation,
-		&i.OpPolicyUri,
-		&i.OpTosUri,
-		&i.ScopesSupported,
-		&i.GrantTypesSupported,
-		&i.ResponseTypesSupported,
-		&i.TokenEndpointAuthMethodsSupported,
-		&i.ClientIDMetadataDocumentSupported,
-		&i.Oidc,
-		&i.Passthrough,
-		&i.Name,
-		&i.LogoAssetID,
-		&i.ClientSetupDocumentationUrl,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
 	)
 	return i, err
 }

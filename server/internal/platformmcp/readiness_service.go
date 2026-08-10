@@ -15,14 +15,14 @@ var ErrReadinessRateLimited = errors.New("platform mcp readiness probe rate limi
 
 type ReadinessService struct {
 	store        *RegistrationStore
-	gate         CatalogRegistrationGateChecker
+	gate         Gate
 	adapters     *ProviderAdapters
 	forceLimiter Limiter
 	repairBudget OperationBudget
 	telemetry    LifecycleTelemetry
 }
 
-func NewReadinessService(store *RegistrationStore, gate CatalogRegistrationGateChecker, adapters *ProviderAdapters, forceLimiter Limiter, repairBudget OperationBudget) *ReadinessService {
+func NewReadinessService(store *RegistrationStore, gate Gate, adapters *ProviderAdapters, forceLimiter Limiter, repairBudget OperationBudget) *ReadinessService {
 	return &ReadinessService{
 		store:        store,
 		gate:         gate,
@@ -51,7 +51,7 @@ func (s *ReadinessService) GetReadiness(ctx context.Context, principal Principal
 	if err != nil {
 		return ResolvedProject{}, Readiness{}, false, fmt.Errorf("resolve platform mcp readiness project: %w", err)
 	}
-	enabled, err := s.gate.Enabled(ctx, principal.OrganizationID, project.Slug)
+	enabled, err := s.gate.Enabled(ctx, principal.OrganizationID)
 	if err != nil {
 		return ResolvedProject{}, Readiness{}, false, fmt.Errorf("check platform mcp readiness gate: %w", err)
 	}

@@ -34,6 +34,7 @@ func (s *MCPHTTP) Handler() http.Handler {
 		}
 		w.Header().Set("Cache-Control", "no-store")
 		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
 			http.Error(w, "streamable HTTP fixture only supports POST", http.StatusMethodNotAllowed)
 			return
 		}
@@ -115,11 +116,11 @@ func (s *MCPHTTP) hasSession(sessionID string) bool {
 }
 
 func bearerToken(header string) string {
-	scheme, token, ok := strings.Cut(header, " ")
-	if !ok || !strings.EqualFold(scheme, "Bearer") || token == "" {
+	parts := strings.Fields(header)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
 		return ""
 	}
-	return token
+	return parts[1]
 }
 
 func fixtureSessionID() (string, error) {

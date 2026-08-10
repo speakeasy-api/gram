@@ -138,7 +138,7 @@ func entryHasAllowedStreamableHTTPRemote(entry *types.ExternalMCPServerEntry, al
 		return false
 	}
 	for _, remote := range entry.Remotes {
-		if remote != nil && remote.URL == allowedRemoteURL && !hasUnresolvedRemoteTemplate(remote.URL) && strings.EqualFold(remote.TransportType, "streamable-http") {
+		if remote != nil && remote.URL == allowedRemoteURL && !hasUnresolvedRemoteTemplate(remote.URL) && strings.EqualFold(remote.TransportType, "streamable-http") && len(remote.Headers) == 0 {
 			return true
 		}
 	}

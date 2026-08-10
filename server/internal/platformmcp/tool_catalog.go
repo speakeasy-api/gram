@@ -57,7 +57,7 @@ func registerCatalogTools(server *mcp.Server, catalog Catalog, budget OperationB
 		}
 		candidates, err := catalog.Search(ctx, normalizeCatalogQuery(input.Query))
 		if err != nil {
-			return nil, SearchCatalogOutput{}, fmt.Errorf("search reviewed mcp catalog: %w", err)
+			return nil, SearchCatalogOutput{}, ErrCatalogUnavailable
 		}
 		providerKey := normalizeCatalogProviderKey(input.ProviderKey)
 		filtered := make([]CatalogCandidate, 0, len(candidates))
@@ -113,7 +113,7 @@ func registerCatalogTools(server *mcp.Server, catalog Catalog, budget OperationB
 			return nil, CatalogDetails{}, ErrCatalogRejected
 		}
 		if err != nil {
-			return nil, CatalogDetails{}, fmt.Errorf("inspect reviewed mcp catalog candidate: %w", err)
+			return nil, CatalogDetails{}, ErrCatalogUnavailable
 		}
 		return nil, details, nil
 	})

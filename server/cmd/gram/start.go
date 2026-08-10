@@ -1341,7 +1341,6 @@ func newStartCommand() *cli.Command {
 				}
 				registrationGate := platformmcp.NewCatalogRegistrationGate(platformGate, featureFlags, platformOrganizationSlugs)
 				fixtureAdapter := remotesessionprovider.New(
-					logger,
 					guardianPolicy,
 					remoteChallengeManager,
 					remotesessionprovider.Descriptor{
@@ -1375,7 +1374,7 @@ func newStartCommand() *cli.Command {
 				platformTelemetry := platformmcp.NewLifecycleTelemetry(logger, meterProvider)
 				readiness := platformmcp.NewReadinessService(
 					platformStore,
-					registrationGate,
+					platformGate,
 					adapters,
 					ratelimit.New(limitStore, platformmcp.ForcedReadinessProbeLimit, ratelimit.PerMinute(1), ratelimit.WithMetrics(meterProvider)),
 					platformBudgets.Repair,

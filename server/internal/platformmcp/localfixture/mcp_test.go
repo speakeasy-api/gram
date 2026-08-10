@@ -39,6 +39,13 @@ func TestMCPHTTPRequiresLiveBearerAndServesInitializeAndToolsList(t *testing.T) 
 	standaloneSSEResponse := httptest.NewRecorder()
 	handler.ServeHTTP(standaloneSSEResponse, standaloneSSE)
 	require.Equal(t, http.StatusMethodNotAllowed, standaloneSSEResponse.Code)
+	require.Equal(t, http.MethodPost, standaloneSSEResponse.Header().Get("Allow"))
+
+	whitespaceBearer := httptest.NewRequest(http.MethodPost, "/platform-mcp/local-fixture/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize"}`))
+	whitespaceBearer.Header.Set("Authorization", "  Bearer   "+accessToken+"  ")
+	whitespaceBearerResponse := httptest.NewRecorder()
+	handler.ServeHTTP(whitespaceBearerResponse, whitespaceBearer)
+	require.Equal(t, http.StatusOK, whitespaceBearerResponse.Code)
 
 	initialize := mcpRequest(t, handler, accessToken, "", 1, "initialize")
 	require.Equal(t, http.StatusOK, initialize.Code, initialize.Body.String())

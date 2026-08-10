@@ -103,6 +103,10 @@ func (s *RegistrationService) IssueSetupHandoff(ctx context.Context, principal P
 	if s == nil || s.catalog == nil || s.gate == nil || s.store == nil || !s.budgets.Handoff.valid() || input.ProjectSlug == "" || input.RegistrationID == "" || input.ProviderKey == "" || input.CatalogRef == "" {
 		return IssuedSetupHandoff{}, ErrRegistrationUnavailable
 	}
+	registrationID, err := uuid.Parse(input.RegistrationID)
+	if err != nil {
+		return IssuedSetupHandoff{}, ErrSetupHandoffInvalid
+	}
 	if err := s.budgets.Handoff.Allow(ctx, principal); err != nil {
 		return IssuedSetupHandoff{}, err
 	}
@@ -126,10 +130,6 @@ func (s *RegistrationService) IssueSetupHandoff(ctx context.Context, principal P
 	}
 	if err := s.requireEligibleTarget(ctx, principal.OrganizationID, project); err != nil {
 		return IssuedSetupHandoff{}, err
-	}
-	registrationID, err := uuid.Parse(input.RegistrationID)
-	if err != nil {
-		return IssuedSetupHandoff{}, ErrSetupHandoffInvalid
 	}
 	issued, err := s.store.IssueSetupHandoff(ctx, principal, SetupHandoffBinding{
 		ProjectID:        project.ID,

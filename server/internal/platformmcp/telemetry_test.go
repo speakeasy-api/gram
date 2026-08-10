@@ -20,6 +20,7 @@ func TestLifecycleTelemetryAcceptsOnlyBoundedDimensions(t *testing.T) {
 	for _, event := range []LifecycleEvent{
 		{Operation: "catalog", Phase: "search", Outcome: "succeeded"},
 		{Operation: "readiness", Phase: "forced_probe", Outcome: "", State: ReadinessReady},
+		{Operation: "readiness", Phase: "https://untrusted.example.test", Outcome: "succeeded"},
 		{Operation: "readiness", Phase: "forced_probe", Outcome: "succeeded", State: "https://untrusted.example.test"},
 	} {
 		require.False(t, validLifecycleEvent(event))

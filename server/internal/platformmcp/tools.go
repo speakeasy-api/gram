@@ -93,18 +93,20 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 	} else {
 		registerCatalogTools(server, catalog, registrations.budgets.Catalog, cursorCodec)
 	}
-	if registrations == nil || registrations.store == nil || !registrations.budgets.Registration.valid() || !registrations.budgets.Handoff.valid() {
+	if registrations == nil || registrations.store == nil || !registrations.budgets.Registration.valid() {
 		registerUnavailableCatalogRegistrationTool(server)
-		registerUnavailableSetupHandoffTool(server)
-		registerUnavailableReadinessTools(server)
 	} else {
 		registerCatalogRegistrationTool(server, registrations)
+	}
+	if registrations == nil || registrations.store == nil || !registrations.budgets.Handoff.valid() {
+		registerUnavailableSetupHandoffTool(server)
+	} else {
 		registerSetupHandoffTool(server, registrations)
-		if registrations.readiness == nil || !registrations.budgets.Repair.valid() {
-			registerUnavailableReadinessTools(server)
-		} else {
-			registerReadinessTools(server, registrations.readiness)
-		}
+	}
+	if registrations == nil || registrations.readiness == nil || !registrations.budgets.Repair.valid() {
+		registerUnavailableReadinessTools(server)
+	} else {
+		registerReadinessTools(server, registrations.readiness)
 	}
 	registerUnavailableTools(server)
 	return server

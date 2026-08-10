@@ -56,6 +56,7 @@ type SetupHandoff struct {
 	ProjectID            uuid.UUID
 	RegistrationID       uuid.UUID
 	ProviderKey          string
+	CatalogReference     string
 	Intent               string
 	ExpiresAt            time.Time
 	ConnectionID         uuid.UUID
@@ -172,7 +173,9 @@ func (s *RegistrationStore) IssueSetupHandoff(ctx context.Context, principal Pri
 	if err := tx.Commit(ctx); err != nil {
 		return IssuedSetupHandoff{}, fmt.Errorf("commit platform mcp setup handoff: %w", err)
 	}
-	return IssuedSetupHandoff{SetupHandoff: setupHandoffFromRow(row), Value: value}, nil
+	issued := setupHandoffFromRow(row)
+	issued.CatalogReference = registration.CatalogReference
+	return IssuedSetupHandoff{SetupHandoff: issued, Value: value}, nil
 }
 
 func (s *RegistrationStore) ConsumeSetupHandoff(ctx context.Context, principal Principal, binding SetupHandoffBinding, value string) (SetupHandoff, error) {

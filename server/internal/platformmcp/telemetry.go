@@ -91,10 +91,23 @@ func validLifecycleEvent(event LifecycleEvent) bool {
 	if event.Operation != "registration" && event.Operation != "provider_setup" && event.Operation != "readiness" {
 		return false
 	}
-	if event.Phase == "" || !validLifecycleOutcome(event.Outcome) {
+	if !validLifecyclePhase(event.Operation, event.Phase) || !validLifecycleOutcome(event.Outcome) {
 		return false
 	}
 	return event.State == "" || isReadinessState(event.State)
+}
+
+func validLifecyclePhase(operation, phase string) bool {
+	switch operation {
+	case "registration":
+		return phase == "complete"
+	case "provider_setup":
+		return phase == "handoff"
+	case "readiness":
+		return phase == "forced_probe"
+	default:
+		return false
+	}
 }
 
 func validLifecycleOutcome(outcome string) bool {

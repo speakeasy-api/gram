@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"mime"
 	"net/http"
 	"net/url"
 	"slices"
@@ -97,7 +98,8 @@ func (s *OAuthHTTP) handleMetadata(w http.ResponseWriter) {
 }
 
 func (s *OAuthHTTP) handleRegister(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("Content-Type") != "application/json" {
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || mediaType != "application/json" {
 		writeOAuthError(w, http.StatusUnsupportedMediaType, "invalid_client_metadata", "Content-Type must be application/json")
 		return
 	}
@@ -220,12 +222,22 @@ func (s *OAuthHTTP) exchangeRefreshToken(w http.ResponseWriter, form url.Values)
 	refreshToken := form.Get("refresh_token")
 	s.mu.Lock()
 	token, ok := s.refreshTokens[refreshToken]
+	if ok && token.refreshExpiresAt.Before(time.Now()) {
+		delete(s.refreshTokens, refreshToken)
+		delete(s.accessTokens, token.accessToken)
+		ok = false
+	}
+	if ok && (form.Get("client_id") != token.clientID || !requestedScopeIsAllowed(form) || form.Get("resource") != s.config.RemoteURL()) {
+		s.mu.Unlock()
+		writeInvalidGrant(w)
+		return
+	}
 	if ok {
 		delete(s.refreshTokens, refreshToken)
 		delete(s.accessTokens, token.accessToken)
 	}
 	s.mu.Unlock()
-	if !ok || token.refreshExpiresAt.Before(time.Now()) || form.Get("client_id") != token.clientID || !requestedScopeIsAllowed(form) || form.Get("resource") != s.config.RemoteURL() {
+	if !ok {
 		writeInvalidGrant(w)
 		return
 	}
@@ -277,7 +289,6 @@ func (s *OAuthHTTP) HasLiveAccessToken(token string) bool {
 	if !ok || !issued.accessExpiresAt.After(time.Now()) {
 		if ok {
 			delete(s.accessTokens, token)
-			delete(s.refreshTokens, issued.refreshToken)
 		}
 		return false
 	}

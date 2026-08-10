@@ -41,7 +41,7 @@ func TestPreflightSetupRunsConfiguratorBeforeClientLookup(t *testing.T) {
 		configured = true
 		return errors.New("configure fixture client")
 	})
-	adapter := New(nil, nil, &remotesessions.ChallengeManager{}, Descriptor{
+	adapter := New(nil, &remotesessions.ChallengeManager{}, Descriptor{
 		ProviderKey:                "fixture",
 		RemoteSessionIssuerID:      uuid.New(),
 		StreamableHTTPURL:          "https://provider.test/mcp",

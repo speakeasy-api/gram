@@ -27,8 +27,8 @@ func platformMCPLocalFixtureConfigFromCLI(environment string, enabled bool, rawS
 	if err != nil {
 		return nil, fmt.Errorf("parse server URL for %s: %w", platformMCPLocalFixtureFlag, err)
 	}
-	if origin.Scheme != "https" || origin.Host == "" || origin.User != nil || (origin.Path != "" && origin.Path != "/") || origin.RawQuery != "" || origin.Fragment != "" {
-		return nil, fmt.Errorf("%s requires an HTTPS server origin without credentials, path, query, or fragment", platformMCPLocalFixtureFlag)
+	if err := localfixture.ValidateOrigin(origin); err != nil {
+		return nil, fmt.Errorf("%s requires an HTTPS server origin without credentials, path, query, or fragment: %w", platformMCPLocalFixtureFlag, err)
 	}
 
 	origin.Path = strings.TrimSuffix(origin.Path, "/")

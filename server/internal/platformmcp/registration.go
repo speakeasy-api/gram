@@ -419,36 +419,6 @@ func (s *RegistrationStore) CompleteRegistration(ctx context.Context, principal 
 	}); err != nil {
 		return OperationReceipt{}, fmt.Errorf("lock platform mcp component quota: %w", err)
 	}
-	activeRegistrations, err := q.CountActiveRegisteredPlatformMCPCatalogRegistrations(ctx, platformrepo.CountActiveRegisteredPlatformMCPCatalogRegistrationsParams{
-		OrganizationID: principal.OrganizationID,
-		ProjectID:      project.ID,
-	})
-	if err != nil {
-		return OperationReceipt{}, fmt.Errorf("count active platform mcp registrations before completion: %w", err)
-	}
-	if activeRegistrations >= s.activeRegistrationCap {
-		if err := q.SoftDeletePendingPlatformMCPCatalogRegistration(ctx, platformrepo.SoftDeletePendingPlatformMCPCatalogRegistrationParams{
-			RegistrationID: storedReceipt.RegistrationID.UUID,
-			OrganizationID: principal.OrganizationID,
-			ProjectID:      project.ID,
-		}); err != nil {
-			return OperationReceipt{}, fmt.Errorf("soft delete capped platform mcp registration: %w", err)
-		}
-		deniedReceipt, err := q.CompletePlatformMCPOperationReceipt(ctx, platformrepo.CompletePlatformMCPOperationReceiptParams{
-			RegistrationID: uuid.NullUUID{},
-			Status:         receiptStatusSucceeded,
-			ResultCode:     optionalText(receiptResultActiveCap),
-			ID:             storedReceipt.ID,
-			OrganizationID: principal.OrganizationID,
-		})
-		if err != nil {
-			return OperationReceipt{}, fmt.Errorf("complete capped platform mcp receipt: %w", err)
-		}
-		if err := tx.Commit(ctx); err != nil {
-			return OperationReceipt{}, fmt.Errorf("commit capped platform mcp receipt: %w", err)
-		}
-		return operationReceiptFromRow(deniedReceipt, receipt.Replayed), ErrRegistrationCap
-	}
 	if err := q.LockPlatformMCPCatalogRegistration(ctx, platformrepo.LockPlatformMCPCatalogRegistrationParams{
 		OrganizationID:   principal.OrganizationID,
 		ProjectID:        project.ID.String(),
@@ -483,6 +453,36 @@ func (s *RegistrationStore) CompleteRegistration(ctx context.Context, principal 
 	}
 	if ownedRegistration.ID != registration.ID {
 		return OperationReceipt{}, ErrRegistrationInvalid
+	}
+	activeRegistrations, err := q.CountActiveRegisteredPlatformMCPCatalogRegistrations(ctx, platformrepo.CountActiveRegisteredPlatformMCPCatalogRegistrationsParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      project.ID,
+	})
+	if err != nil {
+		return OperationReceipt{}, fmt.Errorf("count active platform mcp registrations before completion: %w", err)
+	}
+	if activeRegistrations >= s.activeRegistrationCap && !registrationComponentsComplete(registration) {
+		if err := q.SoftDeletePendingPlatformMCPCatalogRegistration(ctx, platformrepo.SoftDeletePendingPlatformMCPCatalogRegistrationParams{
+			RegistrationID: storedReceipt.RegistrationID.UUID,
+			OrganizationID: principal.OrganizationID,
+			ProjectID:      project.ID,
+		}); err != nil {
+			return OperationReceipt{}, fmt.Errorf("soft delete capped platform mcp registration: %w", err)
+		}
+		deniedReceipt, err := q.CompletePlatformMCPOperationReceipt(ctx, platformrepo.CompletePlatformMCPOperationReceiptParams{
+			RegistrationID: uuid.NullUUID{},
+			Status:         receiptStatusSucceeded,
+			ResultCode:     optionalText(receiptResultActiveCap),
+			ID:             storedReceipt.ID,
+			OrganizationID: principal.OrganizationID,
+		})
+		if err != nil {
+			return OperationReceipt{}, fmt.Errorf("complete capped platform mcp receipt: %w", err)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return OperationReceipt{}, fmt.Errorf("commit capped platform mcp receipt: %w", err)
+		}
+		return operationReceiptFromRow(deniedReceipt, receipt.Replayed), ErrRegistrationCap
 	}
 
 	componentsCreated := false

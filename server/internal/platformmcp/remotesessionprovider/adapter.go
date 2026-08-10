@@ -8,7 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
+
 	"net/http"
 	"net/url"
 	"sync/atomic"
@@ -59,7 +59,6 @@ type ProviderClientConfigurator interface {
 }
 
 type Adapter struct {
-	logger       *slog.Logger
 	policy       *guardian.Policy
 	sessions     *remotesessions.ChallengeManager
 	descriptor   Descriptor
@@ -69,13 +68,12 @@ type Adapter struct {
 // New accepts an optional configurator so existing reviewed adapters retain
 // validate-only preflight behavior. Local fixture composition supplies the one
 // approved configurator; normal startup supplies none.
-func New(logger *slog.Logger, policy *guardian.Policy, sessions *remotesessions.ChallengeManager, descriptor Descriptor, configurator ...ProviderClientConfigurator) *Adapter {
+func New(policy *guardian.Policy, sessions *remotesessions.ChallengeManager, descriptor Descriptor, configurator ...ProviderClientConfigurator) *Adapter {
 	var configured ProviderClientConfigurator
 	if len(configurator) > 0 {
 		configured = configurator[0]
 	}
 	return &Adapter{
-		logger:       logger,
 		policy:       policy,
 		sessions:     sessions,
 		descriptor:   descriptor,

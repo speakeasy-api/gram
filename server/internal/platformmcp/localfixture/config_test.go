@@ -40,6 +40,8 @@ func TestNewConfigRejectsNonOriginURLs(t *testing.T) {
 		"https://localhost:8080/path",
 		"https://localhost:8080/?query=value",
 		"https://localhost:8080/#fragment",
+		"https://:443",
+		"https://localhost:8080?",
 	} {
 		t.Run(raw, func(t *testing.T) {
 			t.Parallel()

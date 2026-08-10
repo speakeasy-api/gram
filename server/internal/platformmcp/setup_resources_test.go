@@ -20,6 +20,7 @@ func TestSetupResourceValidation(t *testing.T) {
 	require.True(t, validSetupResource(valid))
 
 	for _, resource := range []SetupResource{
+		{URI: "gram://platform-mcp/setup/%zz/provider_setup", Name: valid.Name, Title: valid.Title, Description: valid.Description, Text: valid.Text},
 		{URI: "https://example.test/setup", Name: valid.Name, Title: valid.Title, Description: valid.Description, Text: valid.Text},
 		{URI: setupResourceURI("fixture", "provider_setup/extra"), Name: valid.Name, Title: valid.Title, Description: valid.Description, Text: valid.Text},
 		{URI: valid.URI, Name: valid.Name, Title: valid.Title, Description: valid.Description, Text: strings.Repeat("a", maxSetupResourceBytes+1)},

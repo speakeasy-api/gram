@@ -1,6 +1,7 @@
 package platformmcp
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -83,4 +84,11 @@ func TestReadinessToolOutputDoesNotExposeProviderAuthorizationIdentity(t *testin
 	require.Equal(t, ReadinessUnauthorized, output.State)
 	require.Equal(t, "fresh", output.Freshness)
 	require.NotEmpty(t, output.Actions)
+
+	encoded, err := json.Marshal(output)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "provider_authorization")
+	require.NotContains(t, string(encoded), "token")
+	require.NotContains(t, string(encoded), "handoff")
+	require.NotContains(t, string(encoded), "connection")
 }
