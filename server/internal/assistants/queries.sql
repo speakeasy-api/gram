@@ -1354,3 +1354,110 @@ WHERE assistant_thread_id = @assistant_thread_id
   AND project_id = @project_id
 ORDER BY created_at DESC
 LIMIT 1;
+
+-- name: GetAssistantMCPOAuthClient :one
+SELECT
+  client_id,
+  client_secret_encrypted,
+  (
+    client_id IS NOT NULL
+    AND client_secret_encrypted IS NOT NULL
+    AND redirect_uri = @redirect_uri
+    AND (client_secret_expires_at IS NULL OR client_secret_expires_at > @usable_after)
+  ) AS usable,
+  (
+    (
+      client_id IS NULL
+      AND registration_started_at < clock_timestamp() - @claim_lease::interval
+    )
+    OR
+    (
+      client_id IS NOT NULL
+      AND client_secret_expires_at IS NOT NULL
+      AND client_secret_expires_at <= @usable_after
+    )
+    OR redirect_uri <> @redirect_uri
+  ) AS claimable
+FROM assistant_mcp_oauth_clients
+WHERE project_id = @project_id
+  AND assistant_id = @assistant_id
+  AND oauth_server_issuer = @oauth_server_issuer
+  AND deleted IS FALSE;
+
+-- name: ClaimAssistantMCPOAuthClientRegistration :execrows
+INSERT INTO assistant_mcp_oauth_clients AS clients (
+  project_id,
+  assistant_id,
+  oauth_server_issuer,
+  redirect_uri,
+  registration_owner,
+  registration_started_at
+) VALUES (
+  @project_id,
+  @assistant_id,
+  @oauth_server_issuer,
+  @redirect_uri,
+  @registration_owner,
+  clock_timestamp()
+)
+ON CONFLICT (project_id, assistant_id, oauth_server_issuer) WHERE deleted IS FALSE
+DO UPDATE SET
+  client_id = NULL,
+  client_secret_encrypted = NULL,
+  client_secret_expires_at = NULL,
+  redirect_uri = EXCLUDED.redirect_uri,
+  registration_owner = EXCLUDED.registration_owner,
+  registration_started_at = EXCLUDED.registration_started_at,
+  updated_at = clock_timestamp()
+WHERE
+  (
+    clients.client_id IS NULL
+    AND clients.registration_started_at < clock_timestamp() - @claim_lease::interval
+  )
+  OR
+  (
+    clients.client_id IS NOT NULL
+    AND clients.client_secret_expires_at IS NOT NULL
+    AND clients.client_secret_expires_at <= @usable_after
+  )
+  OR clients.redirect_uri <> EXCLUDED.redirect_uri;
+
+-- name: CompleteAssistantMCPOAuthClientRegistration :execrows
+UPDATE assistant_mcp_oauth_clients
+SET
+  client_id = @client_id,
+  client_secret_encrypted = @client_secret_encrypted,
+  client_secret_expires_at = @client_secret_expires_at,
+  registration_owner = NULL,
+  registration_started_at = NULL,
+  updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND assistant_id = @assistant_id
+  AND oauth_server_issuer = @oauth_server_issuer
+  AND registration_owner = @registration_owner
+  AND client_id IS NULL
+  AND deleted IS FALSE;
+
+-- name: AbandonAssistantMCPOAuthClientRegistration :exec
+UPDATE assistant_mcp_oauth_clients
+SET
+  registration_started_at = to_timestamp(0),
+  updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND assistant_id = @assistant_id
+  AND oauth_server_issuer = @oauth_server_issuer
+  AND registration_owner = @registration_owner
+  AND client_id IS NULL
+  AND deleted IS FALSE;
+
+-- name: InvalidateAssistantMCPOAuthClient :exec
+UPDATE assistant_mcp_oauth_clients
+SET
+  client_secret_expires_at = to_timestamp(0),
+  updated_at = clock_timestamp()
+WHERE project_id = @project_id
+  AND assistant_id = @assistant_id
+  AND oauth_server_issuer = @oauth_server_issuer
+  AND client_id = @client_id
+  AND client_id IS NOT NULL
+  AND deleted IS FALSE;
