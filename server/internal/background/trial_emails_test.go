@@ -12,10 +12,21 @@ import (
 	"go.temporal.io/sdk/testsuite"
 )
 
+func trialLifecycleEmailRetryBudget() time.Duration {
+	policy := trialLifecycleEmailRetryPolicy()
+	budget := trialLifecycleEmailActivityTimeout * time.Duration(policy.MaximumAttempts)
+	retryDelay := policy.InitialInterval
+	for attempt := int32(1); attempt < policy.MaximumAttempts; attempt++ {
+		budget += retryDelay
+		retryDelay = min(time.Duration(float64(retryDelay)*policy.BackoffCoefficient), policy.MaximumInterval)
+	}
+	return budget
+}
+
 func TestTrialLifecycleEmailWorkflowRunTimeoutCoversRetryBudget(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, 30*time.Minute, trialLifecycleEmailWorkflowRunTimeout)
+	require.GreaterOrEqual(t, trialLifecycleEmailWorkflowRunTimeout, trialLifecycleEmailRetryBudget())
 }
 
 func TestTrialLifecycleEmailWorkflowDispatchesAdminAdded(t *testing.T) {

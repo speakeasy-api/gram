@@ -14,10 +14,23 @@ import (
 )
 
 const (
-	trialLifecycleEmailWorkflowIDPrefix   = "v1:trial-lifecycle-email"
-	trialLifecycleEmailActivityTimeout    = 5 * time.Minute
-	trialLifecycleEmailWorkflowRunTimeout = 30 * time.Minute
+	trialLifecycleEmailWorkflowIDPrefix              = "v1:trial-lifecycle-email"
+	trialLifecycleEmailActivityTimeout               = 5 * time.Minute
+	trialLifecycleEmailWorkflowRunTimeout            = 30 * time.Minute
+	trialLifecycleEmailRetryInitialInterval          = 5 * time.Second
+	trialLifecycleEmailRetryMaximumInterval          = time.Minute
+	trialLifecycleEmailRetryBackoffCoefficient       = 2.0
+	trialLifecycleEmailRetryMaximumAttempts    int32 = 5
 )
+
+func trialLifecycleEmailRetryPolicy() *temporal.RetryPolicy {
+	return &temporal.RetryPolicy{
+		InitialInterval:    trialLifecycleEmailRetryInitialInterval,
+		MaximumInterval:    trialLifecycleEmailRetryMaximumInterval,
+		BackoffCoefficient: trialLifecycleEmailRetryBackoffCoefficient,
+		MaximumAttempts:    trialLifecycleEmailRetryMaximumAttempts,
+	}
+}
 
 // TrialLifecycleEmailKind identifies the trial lifecycle change that starts a
 // Loops workflow.
@@ -102,12 +115,7 @@ func trialLifecycleEmailWorkflowID(input TrialLifecycleEmailInput) string {
 func TrialLifecycleEmailWorkflow(ctx workflow.Context, input TrialLifecycleEmailInput) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: trialLifecycleEmailActivityTimeout,
-		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:    5 * time.Second,
-			MaximumInterval:    time.Minute,
-			BackoffCoefficient: 2,
-			MaximumAttempts:    5,
-		},
+		RetryPolicy:         trialLifecycleEmailRetryPolicy(),
 	})
 
 	var a *Activities
