@@ -405,7 +405,9 @@ async fn spawn_thread(
         .with(tools::mcp_force_reconnect::McpForceReconnectTool::new(
             Arc::clone(host),
         ))
-        .with(tools::inspect_asset::InspectAssetTool::new(inbox_tx.clone()));
+        .with(tools::inspect_asset::InspectAssetTool::new(
+            inbox_tx.clone(),
+        ));
 
     let compose_source = agentkit_tool_compose::ComposeTool::wrap(mcp_catalog)
         .with_source(native_tools.merge(agentkit_tool_fs::registry()));

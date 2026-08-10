@@ -133,12 +133,7 @@ impl InspectAssetTool {
         if !url.starts_with("https://") && !url.starts_with("http://") {
             return Err(format!("url must be http(s), got {url:?}"));
         }
-        let resp = self
-            .http
-            .get(url)
-            .send()
-            .await
-            .map_err(|e| e.to_string())?;
+        let resp = self.http.get(url).send().await.map_err(|e| e.to_string())?;
         let status = resp.status();
         if !status.is_success() {
             return Err(format!("request returned {status}"));
@@ -172,8 +167,9 @@ fn attach_image(
         "data:{mime};base64,{}",
         base64::engine::general_purpose::STANDARD.encode(data)
     );
-    let text =
-        format!("Image fetched from {url} by the {TOOL_NAME} tool call {call_id}. It is attached below for inspection.");
+    let text = format!(
+        "Image fetched from {url} by the {TOOL_NAME} tool call {call_id}. It is attached below for inspection."
+    );
     let content = RunnerContent::Parts(vec![
         RunnerContentPart::Text { text },
         RunnerContentPart::ImageUrl {
@@ -216,9 +212,15 @@ mod tests {
             sniff_image_mime(b"\x89PNG\r\n\x1a\n0000"),
             Some("image/png")
         );
-        assert_eq!(sniff_image_mime(&[0xFF, 0xD8, 0xFF, 0xE0]), Some("image/jpeg"));
+        assert_eq!(
+            sniff_image_mime(&[0xFF, 0xD8, 0xFF, 0xE0]),
+            Some("image/jpeg")
+        );
         assert_eq!(sniff_image_mime(b"GIF89a0000"), Some("image/gif"));
-        assert_eq!(sniff_image_mime(b"RIFF\0\0\0\0WEBP0000"), Some("image/webp"));
+        assert_eq!(
+            sniff_image_mime(b"RIFF\0\0\0\0WEBP0000"),
+            Some("image/webp")
+        );
         assert_eq!(sniff_image_mime(b"<html><body>nope</body></html>"), None);
         assert_eq!(sniff_image_mime(b""), None);
     }
@@ -226,7 +228,14 @@ mod tests {
     #[test]
     fn attach_image_queues_text_and_data_uri_parts() {
         let (tx, mut rx) = mpsc::unbounded_channel();
-        attach_image(b"ABC", "image/png", "https://example.com/a.png", "call-1", &tx).unwrap();
+        attach_image(
+            b"ABC",
+            "image/png",
+            "https://example.com/a.png",
+            "call-1",
+            &tx,
+        )
+        .unwrap();
 
         let RunnerContent::Parts(parts) = rx.try_recv().unwrap() else {
             panic!("expected parts content");
