@@ -1,195 +1,222 @@
-{/* Canonical guidance lives in README.md next to this file — keep the two in
-    sync when a template's API changes. This page exists so the template layer
-    is discoverable from the Storybook gallery. */}
+{/* Written for backend engineers adding a dashboard page without frontend
+    context. Canonical API recipes live in README.md next to this file — keep
+    the two in sync when a template's API changes. */}
 
 import { Meta } from "@storybook/addon-docs/blocks";
 
-<Meta title="Design System/Page Templates" />
+<Meta title="Design System/Page Templates/Guide" />
 
-# Page templates — the paint-by-numbers layer
+# Adding a dashboard page (backend engineer's guide)
 
-Every dashboard page is one of a small number of shapes. Instead of hand-rolling
-the `Page` frame, breadcrumbs, scope gate, header, and loading/empty/error
-branches on each page (which is how they drifted apart), **pick the template
-that matches your page's shape and fill in the data.** The template owns the
-chrome; you own the content.
+You've shipped an API endpoint and need a dashboard page for it. You don't
+need to know the design system — that's the point of this layer. Every page in
+the dashboard is built from a **page template**: a component that owns the
+frame, breadcrumbs, permissions gate, page title, and the loading/empty/error
+branches. You pick the template matching your page's shape, hand it your data,
+and put your content inside it.
 
-> If you're building a page and reach past a template into raw `<Page>` /
-> `<h1>` / `border-dashed` markup, that's a signal the template is missing a
-> prop — add the prop, don't fork the layout.
+Think of a template like a scaffolded HTTP handler: routing, auth middleware,
+and error handling come from the framework; you write the body.
 
-Templates render the full app frame (breadcrumbs, scope gate, telemetry), so
-they are documented here rather than mounted live — see any migrated page in
-`src/pages/` for a running example, and
-`src/components/page-templates/README.md` for the canonical recipes.
+Live renderings of every template are under **Page Templates → Examples** in
+the sidebar.
 
-## Which template?
+> Never hand-build a page out of raw `<div>`s and `<h1>`s. If a template
+> doesn't have the knob you need, add the knob to the template — don't fork
+> the layout.
+
+## Step 1 — pick the template
 
 {/* HTML table — Storybook's MDX pipeline has no GFM, pipe tables render as
     plain text. */}
 
 <table>
   <thead>
-    <tr><th align="left">Your page is…</th><th align="left">Use</th></tr>
+    <tr><th align="left">Your page shows…</th><th align="left">Use</th><th align="left">Backend analogy</th></tr>
   </thead>
   <tbody>
-    <tr><td>a collection: search/filter + a table or card grid + empty state</td><td><code>ResourceListPage</code></td></tr>
-    <tr><td>one entity: a hero + sections (routed subpages, or a scroll)</td><td><code>DetailPage</code></td></tr>
-    <tr><td>tabs that are <em>different resources</em> (not one entity's sections)</td><td><code>TabbedPage</code></td></tr>
-    <tr><td>a single create/edit form</td><td><code>FormPage</code></td></tr>
-    <tr><td>stacked titled config sections (or a prose/tool column)</td><td><code>SettingsPage</code></td></tr>
-    <tr><td>a dashboard: a stat row + summary/chart cards</td><td><code>OverviewPage</code></td></tr>
-    <tr><td>a fullbleed analytics surface (sticky filter bar + big table/charts)</td><td><code>WorkbenchPage</code></td></tr>
-    <tr><td>a multi-step flow</td><td><code>WizardPage</code></td></tr>
-    <tr><td>auth / standalone, outside the app shell</td><td><code>CenteredPage</code></td></tr>
-    <tr><td>a genuine bespoke app canvas (chat, playground, builder)</td><td><code>FullBleedPage</code>*</td></tr>
+    <tr><td>a list of things: search/filter + table or card grid</td><td><code>ResourceListPage</code></td><td><code>LIST</code> endpoint</td></tr>
+    <tr><td>one thing: header + sections (Overview / Settings / Danger zone)</td><td><code>DetailPage</code></td><td><code>GET /:id</code></td></tr>
+    <tr><td>tabs that are <em>different resources</em>, not one entity's sections</td><td><code>TabbedPage</code></td><td>route group</td></tr>
+    <tr><td>a single create/edit form</td><td><code>FormPage</code></td><td><code>POST</code>/<code>PUT</code> form</td></tr>
+    <tr><td>stacked titled config sections</td><td><code>SettingsPage</code></td><td>config surface</td></tr>
+    <tr><td>a dashboard: stat row + chart cards</td><td><code>OverviewPage</code></td><td>metrics summary</td></tr>
+    <tr><td>a fullbleed analytics surface (sticky filters, big table)</td><td><code>WorkbenchPage</code></td><td>log explorer</td></tr>
+    <tr><td>a multi-step flow</td><td><code>WizardPage</code></td><td>state machine</td></tr>
+    <tr><td>auth / standalone, outside the app shell</td><td><code>CenteredPage</code></td><td>—</td></tr>
+    <tr><td>a genuinely bespoke canvas (chat, playground, builder)</td><td><code>FullBleedPage</code>*</td><td>—</td></tr>
   </tbody>
 </table>
 
-\* `FullBleedPage` is the **escape hatch**, not a content template. If your page
-doesn't fit one of the real templates, it's this — build custom inside it and
-get a design review. Don't bend `ResourceListPage` into a chat window.
+\* `FullBleedPage` is the escape hatch, not a template. If you think you need
+it, get a design review first.
 
-All imports come from the barrel:
+All imports come from one barrel:
 
 ```tsx
-import {
-  ResourceListPage,
-  DetailPage,
-  FormPage /* … */,
-} from "@/components/page-templates";
+import { ResourceListPage } from "@/components/page-templates";
 ```
 
-## Scope gating (important)
+## Step 2 — fetch your data
 
-Wrap the **data-owning** component in `RequireScope` (the view scope) and call
-data hooks inside it, so the query never fires for unauthorized users. The
-templates also accept a `scope` prop, but it only gates _rendering_ — a hook in
-the same component that renders the template runs before that gate. Gate
-write-only affordances (create/delete buttons, mutation tabs) with their own
-`level="component"` `RequireScope` for the write scope.
+The TypeScript SDK is generated from the Goa design, same as the Go client.
+Every endpoint gets a React hook in `@gram/client/react-query/<method>.js`.
+Calling the hook inside a component fetches the data and re-renders when it
+arrives — no manual request code:
 
 ```tsx
-export default function Environments(): JSX.Element {
+import { useListAPIKeys } from "@gram/client/react-query/listAPIKeys.js";
+
+const q = useListAPIKeys();
+// q.isPending — request in flight
+// q.data      — the response body once resolved
+// q.error     — the failure, if any
+```
+
+`client/dashboard/src/sdk/REACT_QUERY.md` documents the generated hooks.
+
+## Step 3 — permissions (read this one carefully)
+
+RBAC scopes are enforced server-side, but the page must also gate client-side
+so unauthorized users see "Access restricted" instead of a spray of 403s.
+
+The rule: **the component that calls a data hook must sit *inside* a
+`RequireScope` wrapper.** A hook runs the moment its component renders — a
+gate inside the same component is too late, the request has already fired.
+(This is the exact bug a security review caught across 13 pages of the
+template migration.)
+
+So every page is two components: a tiny outer one holding the gate, and an
+inner one that fetches and renders:
+
+```tsx
+export default function ApiKeysPage(): JSX.Element {
+  return (
+    <RequireScope scope="org:admin" level="page">
+      <ApiKeysInner /> {/* not mounted — so no request — unless allowed */}
+    </RequireScope>
+  );
+}
+```
+
+Write-only controls (create/delete buttons, mutating tabs) get their own
+`level="component"` gate for the *write* scope — a user with only the read
+scope must see the page but not the button.
+
+## Step 4 — the whole page, annotated
+
+```tsx
+import { ResourceListPage } from "@/components/page-templates";
+import { RequireScope } from "@/components/require-scope";
+import { Button } from "@/components/ui/Button";
+import { Column, Table } from "@/components/ui/Table";
+import { useListWidgets } from "@gram/client/react-query/listWidgets.js";
+
+// Outer component: the permission boundary (step 3).
+export default function Widgets(): JSX.Element {
   return (
     <RequireScope scope="project:read" level="page">
-      <EnvironmentsInner />
+      <WidgetsInner />
     </RequireScope>
   );
 }
 
-function EnvironmentsInner(): JSX.Element {
-  const q = useEnvironments(); // runs only after the page gate above passes
-  // …
+// Columns are data, not markup: key + header + how to render one cell.
+const columns: Column<Widget>[] = [
+  { key: "name", header: "Name", render: (w) => w.name },
+  { key: "created", header: "Created", render: (w) => w.createdAt },
+];
+
+function WidgetsInner(): JSX.Element {
+  const q = useListWidgets(); // safe: only mounts when the gate passes
+  const rows = q.data?.widgets ?? [];
+
+  const newButton = (
+    <RequireScope scope="project:write" level="component">
+      <Button>New widget</Button>
+    </RequireScope>
+  );
+
+  return (
+    <ResourceListPage
+      title="Widgets"
+      description="One line on what this page is for."
+      primaryAction={newButton}
+      isLoading={q.isPending} //  template renders a skeleton table
+      isEmpty={rows.length === 0} // template renders the empty state
+      empty={{ icon: "blocks", heading: "No widgets yet", action: newButton }}
+    >
+      <Table columns={columns} data={rows} rowKey={(r) => r.id} />
+    </ResourceListPage>
+  );
 }
 ```
 
-## ResourceListPage
+That's the entire page. Title styling, breadcrumbs, the loading skeleton, the
+empty state, spacing — all owned by the template. Wire the page into
+`src/routes.tsx` (copy an existing entry) and it appears in the nav.
 
-```tsx
-<ResourceListPage
-  scope={["mcp:read", "mcp:write"]} // page-level scope gate
-  title="MCP Servers"
-  description="Servers exposed to your agents."
-  primaryAction={<NewServerButton />} // header CTA
-  search={{ value: q, onChange: setQ, placeholder: "Search servers" }}
-  viewToggle={{ value: view, onChange: setView }} // grid ⇄ table
-  metrics={metrics} // optional stat-header row
-  isLoading={query.isPending}
-  isEmpty={rows.length === 0}
-  empty={{
-    icon: "server",
-    heading: "No servers yet",
-    action: <NewServerButton />,
-  }}
->
-  <Table columns={columns} data={rows} rowKey={(r) => r.id} />
-</ResourceListPage>
+## Step 5 — verify
+
+```bash
+pnpm -F dashboard type-check   # the compiler catches most mistakes
+pnpm -F dashboard dev          # click through it locally
 ```
 
-- `empty` is either `{ icon?, graphic?, heading, description?, action? }`
-  (renders the shared `InlineEmptyState`) or a custom node.
-- `filters` / `sort` are pass-throughs to `Page.Toolbar.Filters` / `.SortBy` —
-  use them only if the page already uses the shared filter kit
-  (`components/filters`).
-- `loadingFallback` defaults to a shaped `<SkeletonTable/>`.
-- `fullHeight` constrains the body so a long table scrolls independently
-  (see Shadow MCP).
+## Other templates, in one glance
 
-## DetailPage
-
-Model on the **mcp / plugins** pattern: a rail (wired via the app sidebar) plus
-sections. Pass `layout="routed"` (default) for one-section-at-a-time by URL
-path; `"scroll"` / `"hash-scroll"` stack every section.
+Same pattern — outer gate, inner data component, template around the content:
 
 ```tsx
 <DetailPage
-  breadcrumbSubstitutions={{ [slug]: entity?.name }}
+  breadcrumbSubstitutions={{ [slug]: entity?.name }} // id → human name in the crumb
   hero={<DetailHero>…</DetailHero>}
   activeSection={sectionFromPath(pathname)}
   sections={[
     { id: "overview", label: "Overview", href: overviewHref, content: <Overview /> },
     { id: "settings", label: "Settings", href: settingsHref, content: <Settings /> },
-    { id: "danger", label: "Danger zone", href: dangerHref, content: <DangerZone /> },
   ]}
-  loading={query.isPending}
-  notFound={query.isError ? { title: "Not found", backTo: listHref } : undefined}
+  loading={q.isPending}
+  notFound={q.isError ? { title: "Not found", backTo: listHref } : undefined}
 />
-```
 
-## The rest, at a glance
-
-```tsx
-<FormPage scope="prompt:write" title="New prompt" description="…">
-  <form onSubmit={onSubmit} className="flex flex-col gap-4">…</form>
+<FormPage title="New prompt" description="…">
+  <form onSubmit={onSubmit}>…</form>
 </FormPage>
 
-<SettingsPage scope="project:write" title="Project settings" description="…">
-  <SettingsSection>…</SettingsSection>        {/* re-exported from the barrel */}
+<SettingsPage title="Project settings" description="…">
+  <SettingsSection>…</SettingsSection>
   <DangerSettingsSection>…</DangerSettingsSection>
 </SettingsPage>
 
-<OverviewPage title="Risk Overview" timeRange={<TimeRangePicker … />}
-  metrics={metrics} metricsLoading={q.isPending}>
-  <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-    <ChartCard title="Top tools" loading={q.isPending} …>…</ChartCard>
-  </div>
+<OverviewPage title="Risk Overview" metrics={metrics} metricsLoading={q.isPending}>
+  <ChartCard title="Top tools" loading={q.isPending}>…</ChartCard>
 </OverviewPage>
-
-<WorkbenchPage scope="observe:read" tabs={<ObserveTabNav base="logs" />}>
-  <ToolLogsWorkbench />
-</WorkbenchPage>
-
-<TabbedPage title="Access" activeTab={tab} tabs={[
-  { value: "roles", label: "Roles", href: rolesHref },
-  { value: "members", label: "Members", href: membersHref },
-]}>
-  {tab === "roles" ? <RolesTab /> : <MembersTab />}
-</TabbedPage>
-
-<WizardPage steps={steps} currentStepId={stepId}>
-  <StepContainer icon={…} title={…} onContinue={next}>{stepBody}</StepContainer>
-</WizardPage>
 ```
 
-## Composite widgets (Layer 2)
+Full prop recipes for every template:
+`src/components/page-templates/README.md`.
 
-These are the drop-ins the templates use; reach for them directly too instead
-of hand-rolling:
+## Vocabulary, for reading frontend diffs
 
-- `InlineEmptyState` (`@/components/inline-empty-state`) — square dashed frame +
-  square icon tile. Never hand-roll a `border-dashed` + `rounded-full` blob.
-- `StatRow` (`@/components/stat-row`) — a `MetricCard` row with a loading swap.
-- `ChartCard` (`@/components/chart/ChartCard`) — titled panel with
-  loading/error, the shared card for overview/dashboard bodies.
-- `DetailBody` (`@/components/detail-body`) — the `max-w-[1270px]` detail width.
+- **Hook** (`useXxx`) — a function a component calls during render to get
+  state or data. Calling one is what triggers a fetch; that's why gate
+  placement matters (step 3).
+- **`children`** — the JSX you nest inside a component; the template renders
+  it in its body slot.
+- **Scope** — same RBAC scopes as the server (`project:read`, `org:admin`
+  …); `RequireScope` is the client-side check.
+- **`isPending` / `data` / `error`** — the three states of a generated query
+  hook. Templates take `isLoading` / `isEmpty` so you rarely branch by hand.
+- **Token classes** (`bg-card`, `text-muted-foreground`) — named colors from
+  the design system. Never hardcode Tailwind palette colors
+  (`bg-gray-100`); reviewers will bounce it.
 
-## Rules
+## House rules the reviewers will hold you to
 
-- One page title per page (the template renders it once).
-- Cards white (`bg-card`), page gutter gray, hairline borders, square corners,
-  no shadows on in-flow surfaces. Tokens only — never hardcoded Tailwind
-  colors.
-- US spelling in all user-visible copy.
-- If you need a shape no template covers, that's a design-system conversation —
-  don't invent a new page skeleton inline.
+- One page title per page — the template renders it; don't add an `<h1>`.
+- Empty states via the template's `empty` prop, loading via `isLoading` —
+  never a hand-rolled spinner or dashed box.
+- US spelling in user-visible copy.
+- If no template fits your page's shape, that's a design-system conversation
+  — don't invent a new skeleton inline.
