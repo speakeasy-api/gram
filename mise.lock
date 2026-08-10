@@ -333,7 +333,6 @@ checksum = "sha256:00075435e24d20f5d369c9aec1ee1c29ebb78b52de8ea9807013fc70187ea
 url = "https://github.com/pnpm/pnpm/releases/download/v11.19.0/pnpm-darwin-arm64.tar.gz"
 url_api = "https://api.github.com/repos/pnpm/pnpm/releases/assets/496485121"
 provenance = "github-attestations"
-provenance_verified = true
 
 [tools."github:pnpm/pnpm"."platforms.macos-x64"]
 checksum = "sha256:a78a90c08ee1d8914920ad59d0447194ac85b03f868fc4c0e143da8f49808e79"
