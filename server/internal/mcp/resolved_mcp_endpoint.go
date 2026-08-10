@@ -244,6 +244,16 @@ func (e *ResolvedMcpEndpoint) ValidateRef(ref EndpointRef) error {
 	if e.CustomDomainID != ref.CustomDomainID {
 		return errToolsetEndpointMismatch
 	}
+	// The route surface is part of the endpoint's identity: the same slug can
+	// resolve on both /mcp and /x/mcp, and the RFC 9207 `iss` on every
+	// authorization response is built from the resolved endpoint's RouteBase.
+	// Resuming a challenge on the other surface would emit an issuer that
+	// differs from the one the client recorded at mint time, which an
+	// iss-validating client rejects as a mix-up. Empty ref.RouteBase is
+	// treated as "mcp" for states minted before EndpointRef.RouteBase existed.
+	if e.RouteBase != conv.Default(ref.RouteBase, "mcp") {
+		return errToolsetEndpointMismatch
+	}
 	return nil
 }
 

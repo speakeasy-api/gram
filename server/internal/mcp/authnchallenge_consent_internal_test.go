@@ -119,13 +119,14 @@ func TestBuildClientRedirect_ClearsRedirectURIErrorOnSuccess(t *testing.T) {
 	require.Empty(t, u.Query().Get("error_description"))
 }
 
-// A client that sent no `state` must receive none, even if its registered
-// redirect_uri carries one.
-func TestBuildClientRedirect_ClearsRedirectURIStateWhenUnset(t *testing.T) {
+// `state` is exempt from response-owned clearing: a registered redirect_uri
+// that embeds one relies on receiving it back, and RFC 6749 §3.1.2 requires
+// the redirect URI's own query component to be retained.
+func TestBuildClientRedirect_PreservesRedirectURIStateWhenUnset(t *testing.T) {
 	t.Parallel()
 
 	got, err := buildClientRedirect(clientRedirectParams{
-		RedirectURI:      "http://localhost:3000/callback?state=STALE",
+		RedirectURI:      "http://localhost:3000/callback?state=route-token",
 		Issuer:           testRedirectIssuer,
 		Code:             "auth-code",
 		State:            "",
@@ -136,7 +137,27 @@ func TestBuildClientRedirect_ClearsRedirectURIStateWhenUnset(t *testing.T) {
 
 	u, err := url.Parse(got)
 	require.NoError(t, err)
-	require.Empty(t, u.Query().Get("state"))
+	require.Equal(t, "route-token", u.Query().Get("state"))
+}
+
+// When the client sent a request `state`, the response value replaces any
+// embedded one outright, leaving exactly one.
+func TestBuildClientRedirect_OverwritesRedirectURIStateWhenSet(t *testing.T) {
+	t.Parallel()
+
+	got, err := buildClientRedirect(clientRedirectParams{
+		RedirectURI:      "http://localhost:3000/callback?state=STALE",
+		Issuer:           testRedirectIssuer,
+		Code:             "auth-code",
+		State:            "client-state",
+		ErrorCode:        "",
+		ErrorDescription: "",
+	})
+	require.NoError(t, err)
+
+	u, err := url.Parse(got)
+	require.NoError(t, err)
+	require.Equal(t, []string{"client-state"}, u.Query()["state"], "exactly one state value must survive")
 }
 
 // An issuer that is empty, or relative because it was built off a missing

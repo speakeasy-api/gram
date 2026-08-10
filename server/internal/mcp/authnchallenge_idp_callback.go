@@ -100,24 +100,17 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 	// required" 400.
 	if idpErr := q.Get("error"); idpErr != "" {
 		errDescription := q.Get("error_description")
-		// access_denied is the user opting out at the IDP — a decline, not an
-		// errant config. Any other IDP error code (server_error, invalid_scope,
-		// ...) points at IDP/config trouble. Both are terminal; bucket them
-		// accordingly before bouncing the error back to the client.
-		if idpErr == "access_denied" {
-			s.metrics.RecordOAuthFlowDeclined(ctx, issuerID, mcpSlug, oauthFlowStageIDPCallback)
-			logger.InfoContext(ctx, "oauth flow declined at idp", attr.SlogOAuthError(idpErr), attr.SlogOAuthErrorDescription(errDescription))
-		} else {
-			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageIDPCallback)
-			logger.InfoContext(ctx, "oauth flow failed at idp callback", attr.SlogOAuthError(idpErr), attr.SlogOAuthErrorDescription(errDescription))
-		}
 		// First-party challenges have no MCP client to bounce the error back to
 		// (no RedirectURI), so surface it directly. Declines are forbidden;
 		// anything else is config/IDP trouble.
 		if challengeState.FirstParty {
 			if idpErr == "access_denied" {
+				s.metrics.RecordOAuthFlowDeclined(ctx, issuerID, mcpSlug, oauthFlowStageIDPCallback)
+				logger.InfoContext(ctx, "oauth flow declined at idp", attr.SlogOAuthError(idpErr), attr.SlogOAuthErrorDescription(errDescription))
 				return oops.E(oops.CodeForbidden, nil, "login was declined").LogError(ctx, logger)
 			}
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageIDPCallback)
+			logger.InfoContext(ctx, "oauth flow failed at idp callback", attr.SlogOAuthError(idpErr), attr.SlogOAuthErrorDescription(errDescription))
 			return oops.E(oops.CodeUnexpected, nil, "idp returned an error: %s", idpErr).LogError(ctx, logger)
 		}
 		issuer, err := endpoint.RootURL(baseURL)
@@ -134,8 +127,22 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) erro
 			ErrorDescription: errDescription,
 		})
 		if err != nil {
+			// Recorded as failed even for access_denied: the IDP error never
+			// reached the client, so this flow ended on a fault. Exactly one
+			// terminal outcome is counted per started flow either way.
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageIDPCallback)
 			return oops.E(oops.CodeUnexpected, err, "build client redirect").LogError(ctx, logger)
+		}
+		// access_denied is the user opting out at the IDP — a decline, not an
+		// errant config. Any other IDP error code (server_error, invalid_scope,
+		// ...) points at IDP/config trouble. Both are terminal; bucket them
+		// accordingly before bouncing the error back to the client.
+		if idpErr == "access_denied" {
+			s.metrics.RecordOAuthFlowDeclined(ctx, issuerID, mcpSlug, oauthFlowStageIDPCallback)
+			logger.InfoContext(ctx, "oauth flow declined at idp", attr.SlogOAuthError(idpErr), attr.SlogOAuthErrorDescription(errDescription))
+		} else {
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageIDPCallback)
+			logger.InfoContext(ctx, "oauth flow failed at idp callback", attr.SlogOAuthError(idpErr), attr.SlogOAuthErrorDescription(errDescription))
 		}
 		http.Redirect(w, r, clientRedirect, http.StatusFound)
 		return nil

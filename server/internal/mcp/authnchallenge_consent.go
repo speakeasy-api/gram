@@ -572,12 +572,16 @@ type clientRedirectParams struct {
 
 // responseOwnedParams are the query parameters an authorization response
 // defines. A registered redirect_uri may carry a query string of the client's
-// own, which is preserved, but any of these it contains is cleared before the
-// response is written: a client that reads `code` before `error` would
-// otherwise see a redirect_uri-supplied `code=…` on a decline as a grant, and
-// a redirect_uri-supplied `iss` could be chosen to pass the RFC 9207 §2.4
-// comparison the response is meant to fail.
-var responseOwnedParams = []string{"iss", "code", "error", "error_description", "state"}
+// own, which is preserved per RFC 6749 §3.1.2, but any of these it contains is
+// cleared before the response is written: a client that reads `code` before
+// `error` would otherwise see a redirect_uri-supplied `code=…` on a decline as
+// a grant, and a redirect_uri-supplied `iss` could be chosen to pass the RFC
+// 9207 §2.4 comparison the response is meant to fail. `state` is deliberately
+// exempt: it is client-owned round-trip data with no spoofing value, and a
+// registered redirect_uri that embeds one relies on receiving it back on every
+// response. When the client sent a request `state`, the response value
+// overwrites any embedded one below.
+var responseOwnedParams = []string{"iss", "code", "error", "error_description"}
 
 // buildClientRedirect produces the URL to redirect the MCP client to,
 // preserving any prior query string on RedirectURI and adding `iss` plus
