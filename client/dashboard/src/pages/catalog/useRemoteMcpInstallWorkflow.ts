@@ -290,7 +290,8 @@ async function installUnproxiedTarget(
     throw linkError instanceof Error ? linkError : new Error(String(linkError));
   }
 
-  await persistServerIconBestEffort(client, target, mcpServer.id, reqOpts);
+  // Fire-and-forget: a slow icon host must not hold up install completion.
+  void persistServerIconBestEffort(client, target, mcpServer.id, reqOpts);
 
   return { mcpServer, mcpEndpointUrl: undefined, authConfigured: false };
 }
@@ -613,7 +614,8 @@ export function useRemoteMcpInstallWorkflow({
         }
       }
 
-      await persistServerIconBestEffort(client, target, mcpServer.id, reqOpts);
+      // Fire-and-forget: a slow icon host must not hold up install completion.
+      void persistServerIconBestEffort(client, target, mcpServer.id, reqOpts);
 
       const authAutoConfig = await autoConfigureRemoteMcpAuth({
         client,

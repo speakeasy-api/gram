@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/gen/assets"
+	svc "github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -161,6 +162,39 @@ func TestService_FetchImageFromURL_SVGRejected(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnsupportedMedia, oopsErr.Code)
+}
+
+func TestService_FetchImageFromURL_ContentTooLarge(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAssetsService(t)
+
+	// Icon hosts often stream without a Content-Length, so the declared-length
+	// check cannot reject the download up front; the read-one-byte-past-the-cap
+	// guard after the limited copy has to catch it instead. Flushing before the
+	// body forces chunked encoding so no Content-Length is ever declared.
+	oversized := make([]byte, svc.MaxFileSizeImage+1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.WriteHeader(http.StatusOK)
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		_, _ = w.Write(oversized)
+	}))
+	t.Cleanup(srv.Close)
+
+	_, err := ti.service.FetchImageFromURL(ctx, &assets.FetchImageFromURLForm{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		URL:              srv.URL + "/icon.png",
+	})
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	require.Contains(t, oopsErr.Error(), "content exceeds size limit")
 }
 
 func TestService_FetchImageFromURL_UpstreamError(t *testing.T) {

@@ -612,7 +612,7 @@ JOIN organization_mcp_collections c ON c.id = rt.collection_id
 JOIN mcp_servers s ON s.id = rt.mcp_server_id
 JOIN projects p ON p.id = s.project_id
 LEFT JOIN mcp_metadata m ON m.mcp_server_id = s.id
-LEFT JOIN assets la ON la.id = m.logo_id AND la.deleted IS FALSE
+LEFT JOIN assets la ON la.id = m.logo_id AND la.kind = 'image' AND la.deleted IS FALSE
 LEFT JOIN LATERAL (
   SELECT e.slug, e.custom_domain_id, cd.domain AS custom_domain, e.created_at
   FROM mcp_endpoints e
@@ -701,7 +701,7 @@ SELECT t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.d
 JOIN organization_mcp_collection_server_attachments rt ON t.id = rt.toolset_id
 JOIN organization_mcp_collections c ON c.id = rt.collection_id
 LEFT JOIN mcp_metadata m ON m.toolset_id = t.id
-LEFT JOIN assets la ON la.id = m.logo_id AND la.deleted IS FALSE
+LEFT JOIN assets la ON la.id = m.logo_id AND la.kind = 'image' AND la.deleted IS FALSE
 WHERE
   rt.collection_id = $1
   AND c.organization_id = $2
