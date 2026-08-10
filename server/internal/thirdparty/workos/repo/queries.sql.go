@@ -284,20 +284,23 @@ func (q *Queries) GetDirectoryUserIDByWorkOSID(ctx context.Context, workosDirect
 }
 
 const getDirectoryUserSyncStateByWorkOSID = `-- name: GetDirectoryUserSyncStateByWorkOSID :one
-SELECT workos_updated_at, workos_last_event_id
+SELECT user_id, workos_updated_at, workos_last_event_id
 FROM directory_users
 WHERE workos_directory_user_id = $1
 `
 
 type GetDirectoryUserSyncStateByWorkOSIDRow struct {
+	UserID            pgtype.Text
 	WorkosUpdatedAt   pgtype.Timestamptz
 	WorkosLastEventID pgtype.Text
 }
 
+// Includes soft-deleted rows so snapshot reconciliation can read the cursor
+// and stored user linkage even after a deactivation soft-deleted the row.
 func (q *Queries) GetDirectoryUserSyncStateByWorkOSID(ctx context.Context, workosDirectoryUserID string) (GetDirectoryUserSyncStateByWorkOSIDRow, error) {
 	row := q.db.QueryRow(ctx, getDirectoryUserSyncStateByWorkOSID, workosDirectoryUserID)
 	var i GetDirectoryUserSyncStateByWorkOSIDRow
-	err := row.Scan(&i.WorkosUpdatedAt, &i.WorkosLastEventID)
+	err := row.Scan(&i.UserID, &i.WorkosUpdatedAt, &i.WorkosLastEventID)
 	return i, err
 }
 
