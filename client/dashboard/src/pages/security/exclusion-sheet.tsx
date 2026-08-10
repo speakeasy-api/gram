@@ -239,7 +239,8 @@ function ExclusionForm({
   const exact = exactCandidate(
     single,
     reveals.value,
-    hasScope(REVEAL_SCOPE, single?.chatId) && hasRevealableEvent(single?.matchRedacted),
+    hasScope(REVEAL_SCOPE, single?.chatId) &&
+      hasRevealableEvent(single?.matchRedacted),
   );
 
   // Ready-made rules for the selection. Always at least ["custom"], so an
