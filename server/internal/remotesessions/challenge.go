@@ -124,9 +124,8 @@ type RemoteLoginState struct {
 
 var _ cache.CacheableObject[RemoteLoginState] = (*RemoteLoginState)(nil)
 
-func (s RemoteLoginState) CacheKey() string              { return "remoteLogin:" + s.ID }
-func (s RemoteLoginState) AdditionalCacheKeys() []string { return []string{} }
-func (s RemoteLoginState) TTL() time.Duration            { return 10 * time.Minute }
+func (s RemoteLoginState) CacheKey() string   { return "remoteLogin:" + s.ID }
+func (s RemoteLoginState) TTL() time.Duration { return 10 * time.Minute }
 
 // ChallengeManager drives the per-remote OAuth authn-challenge leg.
 type ChallengeManager struct {
@@ -178,6 +177,7 @@ func NewChallengeManager(
 // without re-querying.
 type Client struct {
 	ID                    uuid.UUID
+	RemoteSessionIssuerID uuid.UUID
 	ExternalClientID      string
 	ClientSecretEncrypted *string
 	IssuerSlug            string
@@ -221,6 +221,7 @@ func (m *ChallengeManager) ListClients(
 	for _, r := range rows {
 		out = append(out, Client{
 			ID:                    r.ClientID,
+			RemoteSessionIssuerID: r.RemoteSessionIssuerID,
 			ExternalClientID:      r.ExternalClientID,
 			ClientSecretEncrypted: conv.FromPGText[string](r.ClientSecretEncrypted),
 			IssuerSlug:            r.IssuerSlug,
@@ -415,20 +416,13 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 	stateParam := stateID
 	if client.LegacyCallbackUrl {
 		// Upstream was registered against the legacy oauth_proxy_servers
-		// callback. Keep that exact redirect_uri so the upstream's
-		// strict-match check still passes, and wrap the state in a JSON
-		// envelope tagged remote_sessions=true so /oauth/callback can tell
-		// this response apart from a true proxy callback and forward to
-		// /mcp/remote_login_callback.
+		// callback, so keep that exact redirect_uri — the upstream's
+		// strict-match check still requires it. /oauth/callback forwards the
+		// response into the canonical remote-login callback. The state is the
+		// bare stateID, same as the non-legacy path: with the proxy gone,
+		// /oauth/callback serves only these forwards, so there is nothing to
+		// tell them apart from and no envelope is needed.
 		redirectURI = m.legacyCallbackURL()
-		envelope, eerr := json.Marshal(map[string]string{
-			"remote_sessions": "true",
-			"state_id":        stateID,
-		})
-		if eerr != nil {
-			return "", fmt.Errorf("marshal legacy state envelope: %w", eerr)
-		}
-		stateParam = string(envelope)
 	}
 
 	// Parse the upstream authorize URL before the cache write so a malformed
@@ -671,12 +665,27 @@ func (m *ChallengeManager) callbackURL(routeBase string) string {
 	return strings.TrimRight(m.serverURL.String(), "/") + "/" + routeBase + "/remote_login_callback"
 }
 
-// legacyCallbackURL is the oauth_proxy_servers-era redirect_uri. Used only
-// for clients flagged LegacyCallbackUrl whose upstream registration still
-// points at this path; /oauth/callback then forwards them into
-// /mcp/remote_login_callback by reading the JSON state envelope.
+// legacyCallbackURL is the oauth_proxy_servers-era redirect_uri. Used only for
+// clients flagged LegacyCallbackUrl whose upstream registration still points at
+// this path; HandleLegacyProxyCallback forwards them into
+// /mcp/remote_login_callback.
 func (m *ChallengeManager) legacyCallbackURL() string {
 	return strings.TrimRight(m.serverURL.String(), "/") + "/oauth/callback"
+}
+
+// HandleLegacyProxyCallback is the shim behind `GET /oauth/callback`, the
+// oauth_proxy_servers-era redirect_uri that clients flagged LegacyCallbackUrl
+// still send upstream. The proxy that once shared this path is gone, so every
+// response here is a remote-session callback: forward the query string (state,
+// code, error) unchanged to the canonical /mcp/remote_login_callback, where the
+// remote-session flow finishes the exchange.
+func (m *ChallengeManager) HandleLegacyProxyCallback(w http.ResponseWriter, r *http.Request) error {
+	target := strings.TrimRight(m.serverURL.String(), "/") + "/" + canonicalCallbackRouteBase + "/remote_login_callback"
+	if raw := r.URL.RawQuery; raw != "" {
+		target += "?" + raw
+	}
+	http.Redirect(w, r, target, http.StatusFound)
+	return nil
 }
 
 func (m *ChallengeManager) exchangeCode(

@@ -9,8 +9,8 @@ import { PlatformInstrumentationSheet } from "../platform-instrumentation-sheet"
 import { PLATFORM_LOGOS, INVERT_LOGO_IN_DARK } from "../platform-logos";
 import { platformStatusBadge } from "../platform-status-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
-import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { DeviceAgentSetup } from "@/pages/device-agent/device-agent-setup";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 
 interface InstrumentAgentsStepProps {
   onComplete: () => void;
@@ -27,6 +27,17 @@ export function InstrumentAgentsStep({
   >(() =>
     Object.fromEntries(AGENT_PLATFORMS.map((p) => [p.id, "not_started"])),
   );
+  // Controlled so the Cowork note can jump to Manual Setup and open that drawer.
+  const [activeTab, setActiveTab] = useState("device-agent");
+
+  // The device agent enforces required plugins/MCP config on-device — it has
+  // no reach into Claude.ai's org-level Cowork plugin settings, so Cowork
+  // always needs its own manual step regardless of which tab the user picks.
+  // This jumps them straight to that step from the Device Agent tab.
+  const openCoworkManualSetup = () => {
+    setActiveTab("manual");
+    setDrawerPlatformId("claude-cowork");
+  };
 
   const availablePlatforms = AGENT_PLATFORMS.filter(
     (p) => p.available !== false,
@@ -52,24 +63,39 @@ export function InstrumentAgentsStep({
       showBack
       onBack={onBack}
     >
-      <Tabs defaultValue="manual" className="gap-8">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-8">
         <TabsList className="grid h-auto w-full grid-cols-1 items-stretch gap-4 divide-x-0 border-0 bg-transparent p-0 sm:grid-cols-2">
+          <ChoiceTab
+            value="device-agent"
+            icon={<MonitorCog className="h-5 w-5" />}
+            title="Device Agent"
+            desc="Deploy one agent that enforces required plugins and MCP config across every coding assistant, centrally."
+          />
           <ChoiceTab
             value="manual"
             icon={<Wrench className="h-5 w-5" />}
             title="Manual Setup"
             desc="Set up Speakeasy hooks by hand for each AI coding assistant your team uses."
           />
-          <ChoiceTab
-            value="device-agent"
-            icon={<MonitorCog className="h-5 w-5" />}
-            title="Device Agent"
-            badge={<ReleaseStageBadge stage="preview" noTooltip />}
-            desc="Deploy one agent that enforces required plugins and MCP config across every coding assistant, centrally."
-          />
         </TabsList>
 
-        <TabsContent value="device-agent">
+        <TabsContent value="device-agent" className="space-y-4">
+          <Alert variant="info">
+            <AlertTitle>Claude Cowork still needs manual setup</AlertTitle>
+            <AlertDescription>
+              The device agent instruments coding assistants that run on a
+              developer's machine — Cowork runs in Claude.ai's own cloud
+              sandbox, so it isn't covered here.{" "}
+              <button
+                type="button"
+                onClick={openCoworkManualSetup}
+                className="text-foreground underline underline-offset-2"
+              >
+                Set it up manually
+              </button>{" "}
+              alongside your device agent rollout.
+            </AlertDescription>
+          </Alert>
           <DeviceAgentSetup />
         </TabsContent>
 
@@ -192,13 +218,11 @@ function ChoiceTab({
   value,
   icon,
   title,
-  badge,
   desc,
 }: {
   value: string;
   icon: ReactNode;
   title: string;
-  badge?: ReactNode;
   desc: ReactNode;
 }): JSX.Element {
   return (
@@ -212,10 +236,7 @@ function ChoiceTab({
     >
       <div className="flex w-full items-center gap-2">
         <span className="text-foreground">{icon}</span>
-        <span className="text-foreground font-mono text-[13px] font-medium tracking-[0.08em] uppercase">
-          {title}
-        </span>
-        {badge}
+        <span className="text-foreground text-base font-medium">{title}</span>
       </div>
       <span className="text-muted-foreground text-sm font-normal">{desc}</span>
     </TabsTrigger>

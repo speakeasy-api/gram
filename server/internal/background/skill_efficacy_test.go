@@ -581,6 +581,10 @@ func TestSkillEfficacySweepWorkflowContinuesAsNewPastAFullPage(t *testing.T) {
 	t.Parallel()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
+	// Ten full pages mean over a thousand sequential mock activities; the test
+	// env's default 3s stall detector trips on scheduler gaps under parallel
+	// test load.
+	env.SetTestTimeout(time.Minute)
 
 	full := make([]efficacy.PendingWorkProject, efficacy.MaxSweepProjectPage)
 	for i := range full {

@@ -172,7 +172,7 @@ func TestScanner_ThirdPartyURLProvenanceIsFlagged(t *testing.T) {
 	require.Equal(t, Rule, f.RuleID)
 	require.Equal(t, "https://evil.example/mcp", f.Match)
 	require.Equal(t, "call-1", f.McpLookupToolCallID)
-	require.Contains(t, f.Description, "mcp__db__delete")
+	require.NotContains(t, f.Description, "mcp__db__delete", "the description stays generic and must not name the tool")
 	require.Empty(t, validator.orgIDs, "a resolved verdict must not consult the signature validator")
 	require.Equal(t, []recordedResolution{{hookSource: "claude", resolution: ResolutionShadow}}, coverage.got)
 }
@@ -594,12 +594,13 @@ func TestFinding_UsesCanonicalRuleIDAndLeaksNoInternals(t *testing.T) {
 	f := s.finding(ToolCall{ID: "call-1", Name: "mcp__db__delete", Arguments: "", CreatedAt: time.Time{}}, "db")
 	require.Equal(t, Rule, f.RuleID)
 	require.NoError(t, scanners.ValidateRuleID(f.RuleID))
-	require.Contains(t, f.Description, "mcp__db__delete")
+	require.Equal(t, "Detected an unverified MCP tool call.", f.Description)
+	require.NotContains(t, f.Description, "mcp__db__delete", "the description must not name the tool")
 	require.NotContains(t, f.Description, "x-gram-toolset-id", "must not leak validator internals")
 
 	nameless := s.finding(ToolCall{ID: "call-2", Name: "", Arguments: "", CreatedAt: time.Time{}}, "db")
 	require.Equal(t, Rule, nameless.RuleID)
-	require.NotEmpty(t, nameless.Description)
+	require.Equal(t, f.Description, nameless.Description, "the description does not vary with the call")
 }
 
 func TestResolvedServerIdentity(t *testing.T) {

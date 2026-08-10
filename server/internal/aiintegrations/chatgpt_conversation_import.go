@@ -482,6 +482,7 @@ func (src *chatgptConversationSource) upsertConversationChat(ctx context.Context
 		if _, err := chatrepo.New(src.svc.db).LinkAIIntegrationConfigChat(ctx, chatrepo.LinkAIIntegrationConfigChatParams{
 			AiIntegrationConfigID: src.cfg.ID,
 			ChatID:                chatID,
+			ProjectID:             src.cfg.ProjectID,
 		}); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "link chatgpt compliance chat")
 		}

@@ -46,15 +46,25 @@ When plugins are published, all platform configs land in a single repo. The root
 │       ├── .cursor-plugin/plugin.json
 │       └── mcp.json
 │
-└── <plugin-slug>-codex/               # Codex plugin (one per plugin)
-    ├── .codex-plugin/plugin.json
-    ├── .mcp.json
-    └── plugin.json
+├── <plugin-slug>-codex/               # Codex plugin (one per plugin)
+│   ├── .codex-plugin/plugin.json
+│   └── .mcp.json
+│
+└── agent-plugins/<plugin-slug>/       # Portable Agent Plugins 1.0 package
+    ├── .cursor-plugin/plugin.json     # Native Cursor overlay
+    ├── .codex-plugin/plugin.json      # Native Codex overlay
+    ├── .mcp.json                      # Native Codex MCP config
+    ├── plugin.json
+    ├── mcp.json
+    └── skills/
 ```
 
 Cursor plugins are grouped under the `cursor-plugins/` subdirectory, declared via
 `metadata.pluginRoot` in the Cursor `marketplace.json`. Plugin `source` values are
 then resolved relative to that root (bare names, no `./` prefix).
+
+Compatible plugins are also published under `agent-plugins/` without changing the
+native Cursor or Codex marketplace entries.
 
 ## Marketplace manifests
 
@@ -238,15 +248,6 @@ Directory: `<plugin-slug>-codex/`
 
 Codex always uses `bearer_token_env_var` (a reference to an env var) rather than embedding the key directly.
 
-### `plugin.json` (marketplace metadata)
-
-```json
-{
-  "name": "<plugin-slug>-codex",
-  "description": "Plugin description"
-}
-```
-
 ## Observability plugin
 
 The observability plugin is included in every publish (once per org per platform) and ships **before** any MCP server plugins in the marketplace.
@@ -339,6 +340,6 @@ The auto-generated `README.md` contains:
 
 ## Single-plugin ZIP download
 
-`downloadPluginPackage` returns a ZIP containing only the files for one plugin on one platform. The ZIP structure mirrors the subdirectory in the published repo (e.g. for Claude, it contains `<plugin-slug>/.claude-plugin/plugin.json` and `<plugin-slug>/.mcp.json`).
+`downloadPluginPackage` returns a ZIP containing only the files for one plugin on one platform. Native ZIPs mirror their platform package layout. The `agent-plugin` platform returns a credential-free Agent Plugins 1.0 package rooted at `plugin.json`.
 
 `downloadObservabilityPlugin` returns the observability ZIP for a single platform (Claude or Cursor), minting a fresh hooks-scoped API key each time.

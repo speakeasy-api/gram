@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"net/url"
@@ -62,7 +63,8 @@ type PluginInfo struct {
 	Description string
 	Servers     []PluginServerInfo
 	// Skills are emitted into each platform plugin's skills/ directory.
-	Skills []PluginSkillInfo
+	Skills               []PluginSkillInfo
+	AgentPluginsV1Issues []string
 }
 
 // GenerateConfig holds org-level configuration for package generation.
@@ -361,7 +363,7 @@ func storedHooksConfigHash(stored []byte) string {
 // MCP plugins on the next run, even when a project's generated MCP output is
 // byte-identical — for generator changes that alter MCP behaviour in ways the
 // placeholder fingerprint pass can't observe.
-const mcpGeneratorVersion = "10"
+const mcpGeneratorVersion = "11"
 
 // platformMCPGeneratorVersion is independent from mcpGeneratorVersion so adding
 // or changing the first-party Platform MCP never triggers a fleet-wide customer
@@ -379,7 +381,7 @@ const platformMCPGeneratorVersion = "1"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "27"
+const hooksGeneratorVersion = "28"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -664,6 +666,16 @@ func generateMCPFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][]by
 		if err := generateOpenCodePlugin(files, p, cfg); err != nil {
 			return nil, fmt.Errorf("generate opencode plugin %s: %w", p.Slug, err)
 		}
+		agentFiles, err := compileAgentPlugin(p, cfg, agentPluginCredentialsPackage)
+		if err != nil {
+			if errors.Is(err, ErrAgentPluginsV1Incompatible) {
+				continue
+			}
+			return nil, fmt.Errorf("generate Agent Plugins package %s: %w", p.Slug, err)
+		}
+		for filePath, content := range agentFiles {
+			files[path.Join(agentPluginRoot, p.Slug, filePath)] = content
+		}
 	}
 	return files, nil
 }
@@ -893,6 +905,8 @@ func GenerateSinglePluginPackage(plugin PluginInfo, cfg GenerateConfig, platform
 		if err := generateCodexPluginFlat(files, plugin, cfg); err != nil {
 			return nil, fmt.Errorf("generate codex plugin: %w", err)
 		}
+	case "agent-plugin":
+		return compileAgentPlugin(plugin, cfg, agentPluginCredentialsKeyless)
 	// ponytail: no "opencode" case — the downloadPluginPackage enum is
 	// claude|cursor|codex, so a flat per-plugin opencode package is unreachable.
 	// OpenCode ships via downloadObservabilityPlugin only; add here if per-plugin

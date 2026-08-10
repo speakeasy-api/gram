@@ -17,6 +17,14 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 ORDER BY id ASC;
 
+-- name: ListProjectsByOrganizationLimited :many
+SELECT *
+FROM projects
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+ORDER BY id ASC
+LIMIT @limit_value;
+
 -- GetFirstProject returns any non-deleted project. Used by the hooks
 -- local-dev session-cache fallback to pick a target project without
 -- needing to know which org owns it. Local-dev only.

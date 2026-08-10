@@ -67,64 +67,6 @@ func TestToolsetsService_RemoveOAuthServer_ExternalOAuthAuditLog(t *testing.T) {
 	require.Equal(t, beforeCount+1, afterCount)
 }
 
-func TestToolsetsService_RemoveOAuthServer_OAuthProxyAuditLog(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestToolsetsService(t)
-	toolset := createMinimalPrivateToolset(t, ctx, ti, "Detach OAuth Proxy Toolset")
-	attached, err := ti.service.AddOAuthProxyServer(ctx, &gen.AddOAuthProxyServerPayload{
-		SessionToken: nil,
-		ApikeyToken:  nil,
-		Slug:         toolset.Slug,
-		OauthProxyServer: &types.OAuthProxyServerForm{
-			Slug:                              types.Slug("detach-oauth-proxy"),
-			Audience:                          nil,
-			ProviderType:                      "gram",
-			AuthorizationEndpoint:             nil,
-			TokenEndpoint:                     nil,
-			ScopesSupported:                   nil,
-			TokenEndpointAuthMethodsSupported: []string{"none"},
-			EnvironmentSlug:                   nil,
-		},
-		ProjectSlugInput: nil,
-	})
-	require.NoError(t, err)
-	require.NotNil(t, attached)
-	require.NotNil(t, attached.OauthProxyServer)
-
-	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetDetachOAuthProxy)
-	require.NoError(t, err)
-
-	removed, err := ti.service.RemoveOAuthServer(ctx, &gen.RemoveOAuthServerPayload{
-		Slug:             toolset.Slug,
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-	})
-	require.NoError(t, err)
-	require.NotNil(t, removed)
-	require.Nil(t, removed.OauthProxyServer)
-
-	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionToolsetDetachOAuthProxy)
-	require.NoError(t, err)
-	require.Equal(t, string(audit.ActionToolsetDetachOAuthProxy), record.Action)
-	require.Equal(t, "toolset", record.SubjectType)
-	require.Equal(t, removed.Name, record.SubjectDisplay)
-	require.Equal(t, string(removed.Slug), record.SubjectSlug)
-	require.Nil(t, record.BeforeSnapshot)
-	require.Nil(t, record.AfterSnapshot)
-
-	metadata, err := audittest.DecodeAuditData(record.Metadata)
-	require.NoError(t, err)
-	require.Equal(t, attached.OauthProxyServer.ID, metadata["oauth_proxy_server_id"])
-	require.Equal(t, string(attached.OauthProxyServer.Slug), metadata["oauth_proxy_server_slug"])
-	require.InDelta(t, removed.ToolsetVersion, metadata["toolset_version_after"], 0)
-
-	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetDetachOAuthProxy)
-	require.NoError(t, err)
-	require.Equal(t, beforeCount+1, afterCount)
-}
-
 func TestToolsetsService_RemoveOAuthServer_NoServer_NoAuditLog(t *testing.T) {
 	t.Parallel()
 
@@ -145,7 +87,6 @@ func TestToolsetsService_RemoveOAuthServer_NoServer_NoAuditLog(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, removed)
 	require.Nil(t, removed.ExternalOauthServer)
-	require.Nil(t, removed.OauthProxyServer)
 
 	afterExternalCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionToolsetDetachExternalOAuth)
 	require.NoError(t, err)

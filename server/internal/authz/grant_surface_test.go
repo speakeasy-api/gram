@@ -14,6 +14,11 @@ func TestValidateGrantSurface(t *testing.T) {
 		{Scope: string(ScopeProjectRead)},
 		{Scope: string(ScopeSkillWrite)},
 		{Scope: string(ScopeSkillBlockedRead)},
+		// Chat scopes are assignable only through custom roles, so the access
+		// surface has to own them or non-owner session access could never be
+		// granted at all.
+		{Scope: string(ScopeChatRead)},
+		{Scope: string(ScopeChatWrite)},
 	}))
 	require.NoError(t, ValidateGrantSurface(GrantSurfaceRiskPolicy, []*RoleGrant{
 		{Scope: string(ScopeRiskPolicyEvaluate)},

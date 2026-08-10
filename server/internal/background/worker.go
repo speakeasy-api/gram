@@ -426,6 +426,9 @@ func NewTemporalWorker(
 	// Pre-emptive remote session refresh activities
 	temporalWorker.RegisterActivity(activities.ClaimDueRemoteSessionRefreshCandidates)
 	temporalWorker.RegisterActivity(activities.RefreshRemoteSession)
+	// Trial expiry activities
+	temporalWorker.RegisterActivity(activities.ListExpiredTrials)
+	temporalWorker.RegisterActivity(activities.DemoteExpiredTrial)
 	// Skill efficacy activities — the database steps run on the main queue and
 	// only the judged publication goes to the dedicated worker.
 	temporalWorker.RegisterActivity(activities.skillEfficacyScorer.EnqueueSkillEfficacyPage)
@@ -536,6 +539,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(ChatAnalysisSweepWorkflow)
 	// Pre-emptive remote session refresh workflows
 	temporalWorker.RegisterWorkflow(RemoteSessionRefreshWorkflow)
+	// Trial expiry workflows
+	temporalWorker.RegisterWorkflow(DemoteExpiredTrialsWorkflow)
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add platform usage metrics schedule", attr.SlogError(err))
@@ -637,6 +642,12 @@ func NewTemporalWorker(
 	if err := AddRemoteSessionRefreshSchedule(context.Background(), env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add remote session refresh schedule", attr.SlogError(err))
+		}
+	}
+
+	if err := AddTrialDemotionSchedule(context.Background(), env); err != nil {
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.ErrorContext(context.Background(), "failed to add trial demotion schedule", attr.SlogError(err))
 		}
 	}
 

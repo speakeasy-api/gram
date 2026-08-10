@@ -45,17 +45,6 @@ type ChatMessage struct {
 	RiskAnalyzedAt    pgtype.Timestamptz
 }
 
-type ChatResolution struct {
-	ID              uuid.UUID
-	ProjectID       uuid.UUID
-	ChatID          uuid.UUID
-	UserGoal        string
-	Resolution      string
-	ResolutionNotes string
-	Score           int32
-	CreatedAt       pgtype.Timestamptz
-}
-
 type ChatUserFeedback struct {
 	ID                  uuid.UUID
 	ProjectID           uuid.UUID

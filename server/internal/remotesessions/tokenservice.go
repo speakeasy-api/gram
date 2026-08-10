@@ -4,12 +4,15 @@
 // MCP runtime has just authenticated via a Gram user-session JWT, find
 // the upstream access token to forward on the request.
 //
-// Two entry points exposed:
+// Three entry points exposed:
 //
 //   - ResolveAccessToken: per-client primitive. Given a
 //     remote_session_client id and a subject, returns the stored
 //     upstream access token (refreshing if necessary) or empty string
 //     if no usable token exists.
+//   - ResolveAuthorization: resolves one tenant-qualified reviewed issuer
+//     binding and returns its ephemeral access token plus safe identity
+//     metadata for callers that must record authorization freshness.
 //   - ResolveAccessTokens: the variant the MCP serving path calls.
 //     Resolves one upstream token per remote_session_issuer the subject
 //     has linked under the user_session_issuer, returning them as a
@@ -89,7 +92,22 @@ func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Valu
 // this toolset but the subject has no usable token." Callers (the MCP
 // runtime) surface this as a fresh auth challenge so the user can
 // re-link upstream.
-var ErrNoValidToken = errors.New("remotesessions: no valid token for subject")
+var (
+	ErrNoValidToken                 = errors.New("remotesessions: no valid token for subject")
+	ErrNoRemoteSessionClientBinding = errors.New("remotesessions: no client binding for remote issuer")
+	ErrInvalidAuthorizationRequest  = errors.New("remotesessions: invalid authorization request")
+)
+
+// ResolvedAuthorization is the ephemeral result of resolving one reviewed
+// remote-session issuer for a subject. AccessToken must remain in process and
+// must never be persisted or logged by callers.
+type ResolvedAuthorization struct {
+	AccessToken            string
+	RemoteSessionID        uuid.UUID
+	RemoteSessionUpdatedAt time.Time
+	RemoteSessionClientID  uuid.UUID
+	RemoteSessionIssuerID  uuid.UUID
+}
 
 // ResolveAccessToken returns the upstream access token stored for the
 // (client, subject) pair, refreshing via the upstream /token endpoint
@@ -155,6 +173,75 @@ func (m *ChallengeManager) ResolveAccessToken(
 		return "", nil
 	}
 	return tok, nil
+}
+
+// ResolveAuthorization resolves exactly one remote-session issuer binding for a
+// project user-session issuer. It selects the client through the tenant-scoped
+// attachment, then reuses ResolveAccessToken's refresh and revocation behavior.
+//
+// ErrNoRemoteSessionClientBinding means the reviewed issuer is not configured
+// for this user-session issuer. ErrNoValidToken means the binding exists but the
+// subject has no usable authorization.
+func (m *ChallengeManager) ResolveAuthorization(
+	ctx context.Context,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+	remoteSessionIssuerID uuid.UUID,
+	subject urn.SessionSubject,
+	resource string,
+) (ResolvedAuthorization, error) {
+	if projectID == uuid.Nil || organizationID == "" || userSessionIssuerID == uuid.Nil || remoteSessionIssuerID == uuid.Nil || subject.IsZero() {
+		return ResolvedAuthorization{}, ErrInvalidAuthorizationRequest
+	}
+
+	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID)
+	if err != nil {
+		return ResolvedAuthorization{}, fmt.Errorf("list remote_session_clients: %w", err)
+	}
+
+	var clientID uuid.UUID
+	for _, client := range clients {
+		if client.RemoteSessionIssuerID != remoteSessionIssuerID {
+			continue
+		}
+		if err := inv.Check("remotesessions.ResolveAuthorization",
+			"at most one remote_session_client per (user_session_issuer, remote_session_issuer)", clientID == uuid.Nil,
+		); err != nil {
+			return ResolvedAuthorization{}, fmt.Errorf("invariant: %w", err)
+		}
+		clientID = client.ClientID
+	}
+	if clientID == uuid.Nil {
+		return ResolvedAuthorization{}, ErrNoRemoteSessionClientBinding
+	}
+
+	token, err := m.ResolveAccessToken(ctx, clientID, subject, resource)
+	if err != nil {
+		return ResolvedAuthorization{}, fmt.Errorf("resolve remote-session access token: %w", err)
+	}
+	if token == "" {
+		return ResolvedAuthorization{}, ErrNoValidToken
+	}
+
+	session, err := remotesessions_repo.New(m.db).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            subject,
+		RemoteSessionClientID: clientID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ResolvedAuthorization{}, ErrNoValidToken
+	}
+	if err != nil {
+		return ResolvedAuthorization{}, fmt.Errorf("load resolved remote_session: %w", err)
+	}
+
+	return ResolvedAuthorization{
+		AccessToken:            token,
+		RemoteSessionID:        session.ID,
+		RemoteSessionUpdatedAt: session.UpdatedAt.Time,
+		RemoteSessionClientID:  clientID,
+		RemoteSessionIssuerID:  remoteSessionIssuerID,
+	}, nil
 }
 
 // ResolveAccessTokens is the variant the MCP serving path calls. It

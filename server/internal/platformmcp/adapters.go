@@ -13,6 +13,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/management/readmodel"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -276,22 +277,19 @@ func (r *PostgresReadinessRecorder) RecordReady(ctx context.Context, principal P
 }
 
 type PostgresReader struct {
-	store *platformrepo.Queries
+	reader *readmodel.Reader
 }
 
 func NewPostgresReader(db *pgxpool.Pool) *PostgresReader {
-	return &PostgresReader{store: platformrepo.New(db)}
+	return &PostgresReader{reader: readmodel.New(db)}
 }
 
 func (r *PostgresReader) ListProjects(ctx context.Context, principal Principal, input ListProjectsInput) (ListProjectsOutput, error) {
-	if r.store == nil {
+	if r.reader == nil {
 		return ListProjectsOutput{}, ErrUnavailable
 	}
 	limit := boundedLimit(input.Limit)
-	rows, err := r.store.ListPlatformMCPProjects(ctx, platformrepo.ListPlatformMCPProjectsParams{
-		OrganizationID: principal.OrganizationID,
-		LimitValue:     int32(limit + 1), // #nosec G115 -- boundedLimit caps the value at 100.
-	})
+	rows, err := r.reader.ListProjectsLimited(ctx, principal.OrganizationID, int32(limit+1)) // #nosec G115 -- boundedLimit caps the value at 100.
 	if err != nil {
 		return ListProjectsOutput{}, fmt.Errorf("list platform mcp projects: %w", err)
 	}
@@ -305,19 +303,23 @@ func (r *PostgresReader) ListProjects(ctx context.Context, principal Principal, 
 }
 
 func (r *PostgresReader) ListProjectMCPs(ctx context.Context, principal Principal, input ListProjectMCPsInput) (ListProjectMCPsOutput, error) {
-	if r.store == nil {
+	if r.reader == nil {
 		return ListProjectMCPsOutput{}, ErrUnavailable
 	}
 	projectID, err := uuid.Parse(input.ProjectID)
 	if err != nil {
 		return ListProjectMCPsOutput{}, fmt.Errorf("parse project id: %w", err)
 	}
+	project, err := r.reader.GetProject(ctx, projectID, principal.OrganizationID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ListProjectMCPsOutput{MCPs: []MCP{}, Truncated: false}, nil
+		}
+		return ListProjectMCPsOutput{}, fmt.Errorf("get project for platform mcp servers: %w", err)
+	}
+
 	limit := boundedLimit(input.Limit)
-	rows, err := r.store.ListPlatformMCPServers(ctx, platformrepo.ListPlatformMCPServersParams{
-		ProjectID:      projectID,
-		OrganizationID: principal.OrganizationID,
-		LimitValue:     int32(limit + 1), // #nosec G115 -- boundedLimit caps the value at 100.
-	})
+	rows, err := r.reader.ListMCPServersLimited(ctx, project.ID, principal.OrganizationID, int32(limit+1)) // #nosec G115 -- boundedLimit caps the value at 100.
 	if err != nil {
 		return ListProjectMCPsOutput{}, fmt.Errorf("list platform mcp servers: %w", err)
 	}
@@ -331,7 +333,7 @@ func (r *PostgresReader) ListProjectMCPs(ctx context.Context, principal Principa
 }
 
 func (r *PostgresReader) GetMCP(ctx context.Context, principal Principal, input GetMCPInput) (MCP, error) {
-	if r.store == nil {
+	if r.reader == nil {
 		return MCP{}, ErrUnavailable
 	}
 	projectID, err := uuid.Parse(input.ProjectID)
@@ -342,11 +344,13 @@ func (r *PostgresReader) GetMCP(ctx context.Context, principal Principal, input 
 	if err != nil {
 		return MCP{}, fmt.Errorf("parse mcp id: %w", err)
 	}
-	row, err := r.store.GetPlatformMCPServer(ctx, platformrepo.GetPlatformMCPServerParams{
-		McpServerID:    mcpID,
-		ProjectID:      projectID,
-		OrganizationID: principal.OrganizationID,
-	})
+	if _, err := r.reader.GetProject(ctx, projectID, principal.OrganizationID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return MCP{}, ErrForbidden
+		}
+		return MCP{}, fmt.Errorf("get project for platform mcp server: %w", err)
+	}
+	row, err := r.reader.GetMCPServer(ctx, mcpID, projectID, principal.OrganizationID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return MCP{}, ErrForbidden
