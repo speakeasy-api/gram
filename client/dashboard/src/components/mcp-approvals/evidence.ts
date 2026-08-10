@@ -10,7 +10,7 @@
  * never as an error and never as clean.
  */
 
-export const SUPPORTED_EVIDENCE_VERSION = 1;
+const SUPPORTED_EVIDENCE_VERSION = 1;
 
 export type EvidenceIdentity = {
   kind: "remote" | "package" | "unresolved";
@@ -50,7 +50,7 @@ export type EvidenceExposure = {
   inUse: boolean;
 };
 
-export type EvidenceCredential = {
+type EvidenceCredential = {
   name: string;
   required: boolean;
   description?: string;
