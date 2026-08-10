@@ -251,13 +251,20 @@ func readSpooledSkillSource(path string) (string, bool) {
 	}
 	// Lstat + regular-file check keeps the drain from blocking on a FIFO and
 	// from following symlinks; a non-regular source drains content-less like
-	// any other mismatch.
+	// any other mismatch. The SameFile comparison pins the opened descriptor
+	// to the inode Lstat classified, so a path swapped in between the two
+	// calls is rejected rather than read.
 	info, err := os.Lstat(path)
 	if err != nil || !info.Mode().IsRegular() {
 		return "", false
 	}
 	file, err := os.Open(path)
 	if err != nil {
+		return "", false
+	}
+	opened, err := file.Stat()
+	if err != nil || !os.SameFile(info, opened) {
+		_ = file.Close()
 		return "", false
 	}
 	content, readErr := io.ReadAll(io.LimitReader(file, maxSkillContentBytes+1))
