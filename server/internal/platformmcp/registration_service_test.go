@@ -180,7 +180,7 @@ func TestRegistrationServiceRejectsInvalidSetupHandoffInputs(t *testing.T) {
 		ProjectSlug: "project", RegistrationID: "not-a-uuid", ProviderKey: "provider", CatalogRef: "reviewed/mcp",
 	})
 	require.ErrorIs(t, err, ErrSetupHandoffInvalid)
-	require.Equal(t, 1, store.resolveCalls)
+	require.Zero(t, store.resolveCalls)
 }
 
 func TestRegistrationServiceStopsBeforePersistenceWhenBudgetDenies(t *testing.T) {

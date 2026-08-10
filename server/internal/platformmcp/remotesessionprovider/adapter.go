@@ -157,6 +157,7 @@ func (a *Adapter) BeginSetup(ctx context.Context, request platformmcp.ProviderSe
 		RouteBase:           "mcp",
 		FinalRedirectURI:    descriptor.ProviderSetupCompletionURL,
 		Resource:            descriptor.Resource,
+		AutoRefresh:         nil,
 	}, client)
 	if err != nil {
 		return platformmcp.ProviderSetupResult{}, fmt.Errorf("build reviewed provider authorization URL: %w", err)

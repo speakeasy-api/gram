@@ -157,12 +157,13 @@ func TestResolveAuthorization_ResolvesReviewedIssuerBinding(t *testing.T) {
 	subject := urn.NewUserSubject("resolve-authorization-subject")
 	accessEnc, err := enc.Encrypt([]byte("authorization-access-token"))
 	require.NoError(t, err)
-	session, err := repo.New(ti.conn).InsertRemoteSession(ctx, repo.InsertRemoteSessionParams{
+	session, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   userIssuerID,
 		RemoteSessionClientID: clientID,
 		AccessTokenEncrypted:  accessEnc,
 		AccessExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		Scopes:                []string{},
 	})
 	require.NoError(t, err)
 

@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	audittestrepo "github.com/speakeasy-api/gram/server/internal/audit/audittest/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -697,6 +698,7 @@ func seedRegistrationLifecycle(t *testing.T, ctx context.Context, conn *pgxpool.
 		OrganizationID: organizationID,
 	})
 	require.NoError(t, err)
+	seedRegistrationEligibleCohort(t, ctx, conn, projectRow.ID)
 
 	oauthClient, err := platformrepo.New(conn).CreatePlatformMCPOAuthClient(ctx, platformrepo.CreatePlatformMCPOAuthClientParams{
 		ClientID:              "client-" + uuid.NewString(),
@@ -729,4 +731,39 @@ func seedRegistrationLifecycle(t *testing.T, ctx context.Context, conn *pgxpool.
 			Name: projectRow.Name,
 			Slug: projectRow.Slug,
 		}
+}
+
+func seedRegistrationEligibleCohort(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) {
+	t.Helper()
+
+	issuer, err := usersessionsrepo.New(conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID:          projectID,
+		Slug:               "cohort-issuer-" + uuid.NewString()[:8],
+		AuthnChallengeMode: "interactive",
+		SessionDuration:    pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Valid: true},
+	})
+	require.NoError(t, err)
+	remote, err := remotemcprepo.New(conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
+		ID:            uuid.New(),
+		ProjectID:     projectID,
+		TransportType: "streamable-http",
+		Url:           "https://cohort.example.test/mcp",
+	})
+	require.NoError(t, err)
+	server, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                  uuid.New(),
+		ProjectID:           projectID,
+		Name:                conv.ToPGText("Registration cohort server"),
+		Slug:                conv.ToPGText("cohort-server-" + uuid.NewString()[:8]),
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
+		RemoteMcpServerID:   uuid.NullUUID{UUID: remote.ID, Valid: true},
+		Visibility:          "private",
+	})
+	require.NoError(t, err)
+	_, err = mcpendpointsrepo.New(conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID:   projectID,
+		McpServerID: server.ID,
+		Slug:        "cohort-endpoint-" + uuid.NewString()[:8],
+	})
+	require.NoError(t, err)
 }

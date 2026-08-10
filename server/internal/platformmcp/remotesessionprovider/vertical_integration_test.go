@@ -27,16 +27,20 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/remotesessionprovider"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 var verticalSliceInfra *testenv.Environment
@@ -288,6 +292,7 @@ func seedPlatformRegistration(t *testing.T, ctx context.Context, conn *pgxpool.P
 	require.NoError(t, err)
 	project, err := projectsrepo.New(conn).CreateProject(ctx, projectsrepo.CreateProjectParams{Name: "Platform MCP fixture project", Slug: "project-" + uuid.NewString()[:8], OrganizationID: organizationID})
 	require.NoError(t, err)
+	seedRegistrationEligibleCohort(t, ctx, conn, project.ID)
 	client, err := platformrepo.New(conn).CreatePlatformMCPOAuthClient(ctx, platformrepo.CreatePlatformMCPOAuthClientParams{
 		ClientID: "client-" + uuid.NewString(), ClientSecretHash: pgtype.Text{}, ClientName: "Platform MCP fixture client", RedirectUris: []string{"https://client.test/callback"}, ClientSecretExpiresAt: pgtype.Timestamptz{},
 	})
@@ -297,6 +302,41 @@ func seedPlatformRegistration(t *testing.T, ctx context.Context, conn *pgxpool.P
 	_, err = platformrepo.New(conn).CreatePlatformMCPConnection(ctx, platformrepo.CreatePlatformMCPConnectionParams{ID: connectionID, OrganizationID: organizationID, SubjectUrn: urn.NewUserSubject(userID).String(), OauthClientID: client.ID, ActiveGeneration: generation})
 	require.NoError(t, err)
 	return platformmcp.Principal{UserID: userID, OrganizationID: organizationID, ConnectionID: connectionID.String(), Generation: generation.String()}, platformmcp.ResolvedProject{ID: project.ID, Name: project.Name, Slug: project.Slug}
+}
+
+func seedRegistrationEligibleCohort(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) {
+	t.Helper()
+
+	issuer, err := usersessionsrepo.New(conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID:          projectID,
+		Slug:               "cohort-issuer-" + uuid.NewString()[:8],
+		AuthnChallengeMode: "interactive",
+		SessionDuration:    pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Valid: true},
+	})
+	require.NoError(t, err)
+	remote, err := remotemcprepo.New(conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
+		ID:            uuid.New(),
+		ProjectID:     projectID,
+		TransportType: "streamable-http",
+		Url:           "https://cohort.example.test/mcp",
+	})
+	require.NoError(t, err)
+	server, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                  uuid.New(),
+		ProjectID:           projectID,
+		Name:                conv.ToPGText("Registration cohort server"),
+		Slug:                conv.ToPGText("cohort-server-" + uuid.NewString()[:8]),
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
+		RemoteMcpServerID:   uuid.NullUUID{UUID: remote.ID, Valid: true},
+		Visibility:          "private",
+	})
+	require.NoError(t, err)
+	_, err = mcpendpointsrepo.New(conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID:   projectID,
+		McpServerID: server.ID,
+		Slug:        "cohort-endpoint-" + uuid.NewString()[:8],
+	})
+	require.NoError(t, err)
 }
 
 func registerReviewedMCP(t *testing.T, ctx context.Context, conn *pgxpool.Pool, store *platformmcp.RegistrationStore, principal platformmcp.Principal, project platformmcp.ResolvedProject, remoteURL string) platformrepo.PlatformMcpCatalogRegistration {
