@@ -371,6 +371,9 @@ FROM mcp_approval_requests r
 WHERE r.project_id = $1
   AND r.deleted IS FALSE
   AND ($2::text IS NULL OR r.status = $2::text)
+  -- Unreviewed rows are evidence dossiers nobody has asked about; they live
+  -- on server pages, not in the queue, unless a caller names the status.
+  AND ($2::text IS NOT NULL OR r.status <> 'unreviewed')
 ORDER BY r.updated_at DESC
 LIMIT $3::int
 `
@@ -729,7 +732,9 @@ INSERT INTO mcp_approval_requests (
 ON CONFLICT (project_id, target_kind, target_key) WHERE deleted IS FALSE DO UPDATE
 SET updated_at = clock_timestamp()
   , status = CASE
-      WHEN mcp_approval_requests.status = 'denied' THEN EXCLUDED.status
+      WHEN EXCLUDED.status = 'requested'
+        AND mcp_approval_requests.status IN ('denied', 'unreviewed')
+        THEN EXCLUDED.status
       ELSE mcp_approval_requests.status
     END
   -- A later promotion links its bypass request onto an existing review; a
@@ -754,10 +759,11 @@ type UpsertApprovalRequestParams struct {
 // review, so decisions accumulate as history against one target per project.
 // target_key is what deduplicates; target_raw stays as the requester wrote it.
 //
-// A re-request reopens a denied review: the denial stays in the decision
-// history, and the request returns to the queue. An approved or still-pending
-// request keeps its status — re-asking for an approved server changes
-// nothing, and an admin can re-decide at any time.
+// A real ask (incoming status 'requested') reopens a denied review and
+// upgrades an unreviewed evidence dossier: the history stays, and the request
+// joins the queue. An approved or still-pending request keeps its status —
+// re-asking changes nothing, and an admin can re-decide at any time. An
+// incoming dossier ('unreviewed') never downgrades an existing row.
 func (q *Queries) UpsertApprovalRequest(ctx context.Context, arg UpsertApprovalRequestParams) (McpApprovalRequest, error) {
 	row := q.db.QueryRow(ctx, upsertApprovalRequest,
 		arg.OrganizationID,

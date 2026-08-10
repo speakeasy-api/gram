@@ -107,6 +107,45 @@ func BuildGetRequestPayload(mcpApprovalGetRequestID string, mcpApprovalGetReques
 	return v, nil
 }
 
+// BuildEnsureServerReviewPayload builds the payload for the mcpApproval
+// ensureServerReview endpoint from CLI flags.
+func BuildEnsureServerReviewPayload(mcpApprovalEnsureServerReviewBody string, mcpApprovalEnsureServerReviewSessionToken string, mcpApprovalEnsureServerReviewApikeyToken string, mcpApprovalEnsureServerReviewProjectSlugInput string) (*mcpapproval.EnsureServerReviewPayload, error) {
+	var err error
+	var body EnsureServerReviewRequestBody
+	{
+		err = json.Unmarshal([]byte(mcpApprovalEnsureServerReviewBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"target\": \"abc123\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpApprovalEnsureServerReviewSessionToken != "" {
+			sessionToken = &mcpApprovalEnsureServerReviewSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpApprovalEnsureServerReviewApikeyToken != "" {
+			apikeyToken = &mcpApprovalEnsureServerReviewApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpApprovalEnsureServerReviewProjectSlugInput != "" {
+			projectSlugInput = &mcpApprovalEnsureServerReviewProjectSlugInput
+		}
+	}
+	v := &mcpapproval.EnsureServerReviewPayload{
+		Target: body.Target,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildCreateRequestPayload builds the payload for the mcpApproval
 // createRequest endpoint from CLI flags.
 func BuildCreateRequestPayload(mcpApprovalCreateRequestBody string, mcpApprovalCreateRequestSessionToken string, mcpApprovalCreateRequestApikeyToken string, mcpApprovalCreateRequestProjectSlugInput string) (*mcpapproval.CreateRequestPayload, error) {

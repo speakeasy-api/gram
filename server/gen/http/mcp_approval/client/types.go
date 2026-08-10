@@ -12,6 +12,13 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// EnsureServerReviewRequestBody is the type of the "mcpApproval" service
+// "ensureServerReview" endpoint HTTP request body.
+type EnsureServerReviewRequestBody struct {
+	// The server URL the dossier describes.
+	Target string `form:"target" json:"target" xml:"target"`
+}
+
 // CreateRequestRequestBody is the type of the "mcpApproval" service
 // "createRequest" endpoint HTTP request body.
 type CreateRequestRequestBody struct {
@@ -78,6 +85,36 @@ type GetRequestResponseBody struct {
 	Decisions []*ApprovalDecisionResponseBody `form:"decisions,omitempty" json:"decisions,omitempty" xml:"decisions,omitempty"`
 	// Every research-agent run for this request, newest first.
 	ResearchReports []*ResearchReportResponseBody `form:"research_reports,omitempty" json:"research_reports,omitempty" xml:"research_reports,omitempty"`
+}
+
+// EnsureServerReviewResponseBody is the type of the "mcpApproval" service
+// "ensureServerReview" endpoint HTTP response body.
+type EnsureServerReviewResponseBody struct {
+	// The approval request ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The namespace of the requested reference, such as server_url or
+	// stdio_command.
+	TargetKind *string `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
+	// The reference exactly as the requester named it.
+	TargetRaw *string `form:"target_raw,omitempty" json:"target_raw,omitempty" xml:"target_raw,omitempty"`
+	// The Shadow MCP inventory page slug for a server_url target — the same
+	// identifier the inventory derives from the canonical URL, so a request links
+	// to the server page it describes. Absent for stdio targets.
+	ServerSlug *string `form:"server_slug,omitempty" json:"server_slug,omitempty" xml:"server_slug,omitempty"`
+	// The resolved artifact identity. Absent when the server could not be
+	// identified, which must surface as unknown rather than as an absence of
+	// findings.
+	ArtifactRef *string `form:"artifact_ref,omitempty" json:"artifact_ref,omitempty" xml:"artifact_ref,omitempty"`
+	// Whether the reference names an exact version.
+	VersionPinned *bool `form:"version_pinned,omitempty" json:"version_pinned,omitempty" xml:"version_pinned,omitempty"`
+	// The request's current status.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// How many people have asked for this server.
+	RequesterCount *int `form:"requester_count,omitempty" json:"requester_count,omitempty" xml:"requester_count,omitempty"`
+	// When the request was first raised.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// When the request last changed.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // CreateRequestResponseBody is the type of the "mcpApproval" service
@@ -517,6 +554,196 @@ type GetRequestUnexpectedResponseBody struct {
 // GetRequestGatewayErrorResponseBody is the type of the "mcpApproval" service
 // "getRequest" endpoint HTTP response body for the "gateway_error" error.
 type GetRequestGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnsureServerReviewUnauthorizedResponseBody is the type of the "mcpApproval"
+// service "ensureServerReview" endpoint HTTP response body for the
+// "unauthorized" error.
+type EnsureServerReviewUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnsureServerReviewForbiddenResponseBody is the type of the "mcpApproval"
+// service "ensureServerReview" endpoint HTTP response body for the "forbidden"
+// error.
+type EnsureServerReviewForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnsureServerReviewBadRequestResponseBody is the type of the "mcpApproval"
+// service "ensureServerReview" endpoint HTTP response body for the
+// "bad_request" error.
+type EnsureServerReviewBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnsureServerReviewNotFoundResponseBody is the type of the "mcpApproval"
+// service "ensureServerReview" endpoint HTTP response body for the "not_found"
+// error.
+type EnsureServerReviewNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnsureServerReviewConflictResponseBody is the type of the "mcpApproval"
+// service "ensureServerReview" endpoint HTTP response body for the "conflict"
+// error.
+type EnsureServerReviewConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnsureServerReviewUnsupportedMediaResponseBody is the type of the
+// "mcpApproval" service "ensureServerReview" endpoint HTTP response body for
+// the "unsupported_media" error.
+type EnsureServerReviewUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnsureServerReviewInvalidResponseBody is the type of the "mcpApproval"
+// service "ensureServerReview" endpoint HTTP response body for the "invalid"
+// error.
+type EnsureServerReviewInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnsureServerReviewInvariantViolationResponseBody is the type of the
+// "mcpApproval" service "ensureServerReview" endpoint HTTP response body for
+// the "invariant_violation" error.
+type EnsureServerReviewInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnsureServerReviewUnexpectedResponseBody is the type of the "mcpApproval"
+// service "ensureServerReview" endpoint HTTP response body for the
+// "unexpected" error.
+type EnsureServerReviewUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// EnsureServerReviewGatewayErrorResponseBody is the type of the "mcpApproval"
+// service "ensureServerReview" endpoint HTTP response body for the
+// "gateway_error" error.
+type EnsureServerReviewGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1179,6 +1406,15 @@ type ResearchReportResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 }
 
+// NewEnsureServerReviewRequestBody builds the HTTP request body from the
+// payload of the "ensureServerReview" endpoint of the "mcpApproval" service.
+func NewEnsureServerReviewRequestBody(p *mcpapproval.EnsureServerReviewPayload) *EnsureServerReviewRequestBody {
+	body := &EnsureServerReviewRequestBody{
+		Target: p.Target,
+	}
+	return body
+}
+
 // NewCreateRequestRequestBody builds the HTTP request body from the payload of
 // the "createRequest" endpoint of the "mcpApproval" service.
 func NewCreateRequestRequestBody(p *mcpapproval.CreateRequestPayload) *CreateRequestRequestBody {
@@ -1560,6 +1796,175 @@ func NewGetRequestUnexpected(body *GetRequestUnexpectedResponseBody) *goa.Servic
 // NewGetRequestGatewayError builds a mcpApproval service getRequest endpoint
 // gateway_error error.
 func NewGetRequestGatewayError(body *GetRequestGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnsureServerReviewApprovalRequestSummaryOK builds a "mcpApproval" service
+// "ensureServerReview" endpoint result from a HTTP "OK" response.
+func NewEnsureServerReviewApprovalRequestSummaryOK(body *EnsureServerReviewResponseBody) *mcpapproval.ApprovalRequestSummary {
+	v := &mcpapproval.ApprovalRequestSummary{
+		ID:             *body.ID,
+		TargetKind:     *body.TargetKind,
+		TargetRaw:      *body.TargetRaw,
+		ServerSlug:     body.ServerSlug,
+		ArtifactRef:    body.ArtifactRef,
+		VersionPinned:  *body.VersionPinned,
+		Status:         *body.Status,
+		RequesterCount: *body.RequesterCount,
+		CreatedAt:      *body.CreatedAt,
+		UpdatedAt:      *body.UpdatedAt,
+	}
+
+	return v
+}
+
+// NewEnsureServerReviewUnauthorized builds a mcpApproval service
+// ensureServerReview endpoint unauthorized error.
+func NewEnsureServerReviewUnauthorized(body *EnsureServerReviewUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnsureServerReviewForbidden builds a mcpApproval service
+// ensureServerReview endpoint forbidden error.
+func NewEnsureServerReviewForbidden(body *EnsureServerReviewForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnsureServerReviewBadRequest builds a mcpApproval service
+// ensureServerReview endpoint bad_request error.
+func NewEnsureServerReviewBadRequest(body *EnsureServerReviewBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnsureServerReviewNotFound builds a mcpApproval service
+// ensureServerReview endpoint not_found error.
+func NewEnsureServerReviewNotFound(body *EnsureServerReviewNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnsureServerReviewConflict builds a mcpApproval service
+// ensureServerReview endpoint conflict error.
+func NewEnsureServerReviewConflict(body *EnsureServerReviewConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnsureServerReviewUnsupportedMedia builds a mcpApproval service
+// ensureServerReview endpoint unsupported_media error.
+func NewEnsureServerReviewUnsupportedMedia(body *EnsureServerReviewUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnsureServerReviewInvalid builds a mcpApproval service ensureServerReview
+// endpoint invalid error.
+func NewEnsureServerReviewInvalid(body *EnsureServerReviewInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnsureServerReviewInvariantViolation builds a mcpApproval service
+// ensureServerReview endpoint invariant_violation error.
+func NewEnsureServerReviewInvariantViolation(body *EnsureServerReviewInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnsureServerReviewUnexpected builds a mcpApproval service
+// ensureServerReview endpoint unexpected error.
+func NewEnsureServerReviewUnexpected(body *EnsureServerReviewUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewEnsureServerReviewGatewayError builds a mcpApproval service
+// ensureServerReview endpoint gateway_error error.
+func NewEnsureServerReviewGatewayError(body *EnsureServerReviewGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2146,6 +2551,42 @@ func ValidateGetRequestResponseBody(body *GetRequestResponseBody) (err error) {
 	return
 }
 
+// ValidateEnsureServerReviewResponseBody runs the validations defined on
+// EnsureServerReviewResponseBody
+func ValidateEnsureServerReviewResponseBody(body *EnsureServerReviewResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.TargetKind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("target_kind", "body"))
+	}
+	if body.TargetRaw == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("target_raw", "body"))
+	}
+	if body.VersionPinned == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("version_pinned", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.RequesterCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("requester_count", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
 // ValidateCreateRequestResponseBody runs the validations defined on
 // CreateRequestResponseBody
 func ValidateCreateRequestResponseBody(body *CreateRequestResponseBody) (err error) {
@@ -2698,6 +3139,246 @@ func ValidateGetRequestUnexpectedResponseBody(body *GetRequestUnexpectedResponse
 // ValidateGetRequestGatewayErrorResponseBody runs the validations defined on
 // getRequest_gateway_error_response_body
 func ValidateGetRequestGatewayErrorResponseBody(body *GetRequestGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnsureServerReviewUnauthorizedResponseBody runs the validations
+// defined on ensureServerReview_unauthorized_response_body
+func ValidateEnsureServerReviewUnauthorizedResponseBody(body *EnsureServerReviewUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnsureServerReviewForbiddenResponseBody runs the validations defined
+// on ensureServerReview_forbidden_response_body
+func ValidateEnsureServerReviewForbiddenResponseBody(body *EnsureServerReviewForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnsureServerReviewBadRequestResponseBody runs the validations
+// defined on ensureServerReview_bad_request_response_body
+func ValidateEnsureServerReviewBadRequestResponseBody(body *EnsureServerReviewBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnsureServerReviewNotFoundResponseBody runs the validations defined
+// on ensureServerReview_not_found_response_body
+func ValidateEnsureServerReviewNotFoundResponseBody(body *EnsureServerReviewNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnsureServerReviewConflictResponseBody runs the validations defined
+// on ensureServerReview_conflict_response_body
+func ValidateEnsureServerReviewConflictResponseBody(body *EnsureServerReviewConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnsureServerReviewUnsupportedMediaResponseBody runs the validations
+// defined on ensureServerReview_unsupported_media_response_body
+func ValidateEnsureServerReviewUnsupportedMediaResponseBody(body *EnsureServerReviewUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnsureServerReviewInvalidResponseBody runs the validations defined
+// on ensureServerReview_invalid_response_body
+func ValidateEnsureServerReviewInvalidResponseBody(body *EnsureServerReviewInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnsureServerReviewInvariantViolationResponseBody runs the
+// validations defined on ensureServerReview_invariant_violation_response_body
+func ValidateEnsureServerReviewInvariantViolationResponseBody(body *EnsureServerReviewInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnsureServerReviewUnexpectedResponseBody runs the validations
+// defined on ensureServerReview_unexpected_response_body
+func ValidateEnsureServerReviewUnexpectedResponseBody(body *EnsureServerReviewUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateEnsureServerReviewGatewayErrorResponseBody runs the validations
+// defined on ensureServerReview_gateway_error_response_body
+func ValidateEnsureServerReviewGatewayErrorResponseBody(body *EnsureServerReviewGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

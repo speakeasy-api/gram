@@ -123,7 +123,7 @@ func UsageCommands() []string {
 		"integrations (get|list)",
 		"keys (create-key|list-keys|revoke-key|verify-key)",
 		"litellm (create-instance|list-instances|rotate-instance-key|revoke-instance|ingest|traces)",
-		"mcp-approval (list-requests|get-request|create-request|promote|record-decision)",
+		"mcp-approval (list-requests|get-request|ensure-server-review|create-request|promote|record-decision)",
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|check-mcp-endpoint-slug-availability|delete-mcp-endpoint)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|list-mcp-servers-for-org|update-mcp-server|list-tool-filters|set-tool-metadata-batch|add-tool-metadata-batch|list-tool-metadata|set-tool-metadata|delete-tool-metadata|delete-mcp-server)",
@@ -1234,6 +1234,12 @@ func ParseEndpoint(
 		mcpApprovalGetRequestSessionTokenFlag     = mcpApprovalGetRequestFlags.String("session-token", "", "")
 		mcpApprovalGetRequestApikeyTokenFlag      = mcpApprovalGetRequestFlags.String("apikey-token", "", "")
 		mcpApprovalGetRequestProjectSlugInputFlag = mcpApprovalGetRequestFlags.String("project-slug-input", "", "")
+
+		mcpApprovalEnsureServerReviewFlags                = flag.NewFlagSet("ensure-server-review", flag.ExitOnError)
+		mcpApprovalEnsureServerReviewBodyFlag             = mcpApprovalEnsureServerReviewFlags.String("body", "REQUIRED", "")
+		mcpApprovalEnsureServerReviewSessionTokenFlag     = mcpApprovalEnsureServerReviewFlags.String("session-token", "", "")
+		mcpApprovalEnsureServerReviewApikeyTokenFlag      = mcpApprovalEnsureServerReviewFlags.String("apikey-token", "", "")
+		mcpApprovalEnsureServerReviewProjectSlugInputFlag = mcpApprovalEnsureServerReviewFlags.String("project-slug-input", "", "")
 
 		mcpApprovalCreateRequestFlags                = flag.NewFlagSet("create-request", flag.ExitOnError)
 		mcpApprovalCreateRequestBodyFlag             = mcpApprovalCreateRequestFlags.String("body", "REQUIRED", "")
@@ -3502,6 +3508,7 @@ func ParseEndpoint(
 	mcpApprovalFlags.Usage = mcpApprovalUsage
 	mcpApprovalListRequestsFlags.Usage = mcpApprovalListRequestsUsage
 	mcpApprovalGetRequestFlags.Usage = mcpApprovalGetRequestUsage
+	mcpApprovalEnsureServerReviewFlags.Usage = mcpApprovalEnsureServerReviewUsage
 	mcpApprovalCreateRequestFlags.Usage = mcpApprovalCreateRequestUsage
 	mcpApprovalPromoteFlags.Usage = mcpApprovalPromoteUsage
 	mcpApprovalRecordDecisionFlags.Usage = mcpApprovalRecordDecisionUsage
@@ -4793,6 +4800,9 @@ func ParseEndpoint(
 
 			case "get-request":
 				epf = mcpApprovalGetRequestFlags
+
+			case "ensure-server-review":
+				epf = mcpApprovalEnsureServerReviewFlags
 
 			case "create-request":
 				epf = mcpApprovalCreateRequestFlags
@@ -6712,6 +6722,9 @@ func ParseEndpoint(
 			case "get-request":
 				endpoint = c.GetRequest()
 				data, err = mcpapprovalc.BuildGetRequestPayload(*mcpApprovalGetRequestIDFlag, *mcpApprovalGetRequestSessionTokenFlag, *mcpApprovalGetRequestApikeyTokenFlag, *mcpApprovalGetRequestProjectSlugInputFlag)
+			case "ensure-server-review":
+				endpoint = c.EnsureServerReview()
+				data, err = mcpapprovalc.BuildEnsureServerReviewPayload(*mcpApprovalEnsureServerReviewBodyFlag, *mcpApprovalEnsureServerReviewSessionTokenFlag, *mcpApprovalEnsureServerReviewApikeyTokenFlag, *mcpApprovalEnsureServerReviewProjectSlugInputFlag)
 			case "create-request":
 				endpoint = c.CreateRequest()
 				data, err = mcpapprovalc.BuildCreateRequestPayload(*mcpApprovalCreateRequestBodyFlag, *mcpApprovalCreateRequestSessionTokenFlag, *mcpApprovalCreateRequestApikeyTokenFlag, *mcpApprovalCreateRequestProjectSlugInputFlag)
@@ -12613,6 +12626,7 @@ func mcpApprovalUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list-requests: List MCP approval requests for a project.`)
 	fmt.Fprintln(os.Stderr, `    get-request: Fetch one MCP approval request with its evidence and decision history.`)
+	fmt.Fprintln(os.Stderr, `    ensure-server-review: Resolve the evidence dossier for a server URL, opening one when none exists. Gathers evidence without recording any ask or decision, so a server can be inspected before — or without — anyone requesting it.`)
 	fmt.Fprintln(os.Stderr, `    create-request: Ask for an MCP server to be reviewed. Repeat asks for the same server attach to the existing review rather than opening a second one.`)
 	fmt.Fprintln(os.Stderr, `    promote: Promote a risk-policy bypass request into an approval request, carrying its requester and justification into the review queue.`)
 	fmt.Fprintln(os.Stderr, `    record-decision: Approve or deny an MCP approval request, recording the rationale and who it applies to.`)
@@ -12670,6 +12684,30 @@ func mcpApprovalGetRequestUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-approval get-request --id \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpApprovalEnsureServerReviewUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-approval ensure-server-review", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Resolve the evidence dossier for a server URL, opening one when none exists. Gathers evidence without recording any ask or decision, so a server can be inspected before — or without — anyone requesting it.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-approval ensure-server-review --body '{\n      \"target\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func mcpApprovalCreateRequestUsage() {

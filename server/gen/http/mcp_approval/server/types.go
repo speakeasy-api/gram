@@ -12,6 +12,13 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// EnsureServerReviewRequestBody is the type of the "mcpApproval" service
+// "ensureServerReview" endpoint HTTP request body.
+type EnsureServerReviewRequestBody struct {
+	// The server URL the dossier describes.
+	Target *string `form:"target,omitempty" json:"target,omitempty" xml:"target,omitempty"`
+}
+
 // CreateRequestRequestBody is the type of the "mcpApproval" service
 // "createRequest" endpoint HTTP request body.
 type CreateRequestRequestBody struct {
@@ -78,6 +85,36 @@ type GetRequestResponseBody struct {
 	Decisions []*ApprovalDecisionResponseBody `form:"decisions" json:"decisions" xml:"decisions"`
 	// Every research-agent run for this request, newest first.
 	ResearchReports []*ResearchReportResponseBody `form:"research_reports" json:"research_reports" xml:"research_reports"`
+}
+
+// EnsureServerReviewResponseBody is the type of the "mcpApproval" service
+// "ensureServerReview" endpoint HTTP response body.
+type EnsureServerReviewResponseBody struct {
+	// The approval request ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The namespace of the requested reference, such as server_url or
+	// stdio_command.
+	TargetKind string `form:"target_kind" json:"target_kind" xml:"target_kind"`
+	// The reference exactly as the requester named it.
+	TargetRaw string `form:"target_raw" json:"target_raw" xml:"target_raw"`
+	// The Shadow MCP inventory page slug for a server_url target — the same
+	// identifier the inventory derives from the canonical URL, so a request links
+	// to the server page it describes. Absent for stdio targets.
+	ServerSlug *string `form:"server_slug,omitempty" json:"server_slug,omitempty" xml:"server_slug,omitempty"`
+	// The resolved artifact identity. Absent when the server could not be
+	// identified, which must surface as unknown rather than as an absence of
+	// findings.
+	ArtifactRef *string `form:"artifact_ref,omitempty" json:"artifact_ref,omitempty" xml:"artifact_ref,omitempty"`
+	// Whether the reference names an exact version.
+	VersionPinned bool `form:"version_pinned" json:"version_pinned" xml:"version_pinned"`
+	// The request's current status.
+	Status string `form:"status" json:"status" xml:"status"`
+	// How many people have asked for this server.
+	RequesterCount int `form:"requester_count" json:"requester_count" xml:"requester_count"`
+	// When the request was first raised.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the request last changed.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // CreateRequestResponseBody is the type of the "mcpApproval" service
@@ -517,6 +554,196 @@ type GetRequestUnexpectedResponseBody struct {
 // GetRequestGatewayErrorResponseBody is the type of the "mcpApproval" service
 // "getRequest" endpoint HTTP response body for the "gateway_error" error.
 type GetRequestGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnsureServerReviewUnauthorizedResponseBody is the type of the "mcpApproval"
+// service "ensureServerReview" endpoint HTTP response body for the
+// "unauthorized" error.
+type EnsureServerReviewUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnsureServerReviewForbiddenResponseBody is the type of the "mcpApproval"
+// service "ensureServerReview" endpoint HTTP response body for the "forbidden"
+// error.
+type EnsureServerReviewForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnsureServerReviewBadRequestResponseBody is the type of the "mcpApproval"
+// service "ensureServerReview" endpoint HTTP response body for the
+// "bad_request" error.
+type EnsureServerReviewBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnsureServerReviewNotFoundResponseBody is the type of the "mcpApproval"
+// service "ensureServerReview" endpoint HTTP response body for the "not_found"
+// error.
+type EnsureServerReviewNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnsureServerReviewConflictResponseBody is the type of the "mcpApproval"
+// service "ensureServerReview" endpoint HTTP response body for the "conflict"
+// error.
+type EnsureServerReviewConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnsureServerReviewUnsupportedMediaResponseBody is the type of the
+// "mcpApproval" service "ensureServerReview" endpoint HTTP response body for
+// the "unsupported_media" error.
+type EnsureServerReviewUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnsureServerReviewInvalidResponseBody is the type of the "mcpApproval"
+// service "ensureServerReview" endpoint HTTP response body for the "invalid"
+// error.
+type EnsureServerReviewInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnsureServerReviewInvariantViolationResponseBody is the type of the
+// "mcpApproval" service "ensureServerReview" endpoint HTTP response body for
+// the "invariant_violation" error.
+type EnsureServerReviewInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnsureServerReviewUnexpectedResponseBody is the type of the "mcpApproval"
+// service "ensureServerReview" endpoint HTTP response body for the
+// "unexpected" error.
+type EnsureServerReviewUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// EnsureServerReviewGatewayErrorResponseBody is the type of the "mcpApproval"
+// service "ensureServerReview" endpoint HTTP response body for the
+// "gateway_error" error.
+type EnsureServerReviewGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1250,6 +1477,24 @@ func NewGetRequestResponseBody(res *mcpapproval.ApprovalRequestDetail) *GetReque
 	return body
 }
 
+// NewEnsureServerReviewResponseBody builds the HTTP response body from the
+// result of the "ensureServerReview" endpoint of the "mcpApproval" service.
+func NewEnsureServerReviewResponseBody(res *mcpapproval.ApprovalRequestSummary) *EnsureServerReviewResponseBody {
+	body := &EnsureServerReviewResponseBody{
+		ID:             res.ID,
+		TargetKind:     res.TargetKind,
+		TargetRaw:      res.TargetRaw,
+		ServerSlug:     res.ServerSlug,
+		ArtifactRef:    res.ArtifactRef,
+		VersionPinned:  res.VersionPinned,
+		Status:         res.Status,
+		RequesterCount: res.RequesterCount,
+		CreatedAt:      res.CreatedAt,
+		UpdatedAt:      res.UpdatedAt,
+	}
+	return body
+}
+
 // NewCreateRequestResponseBody builds the HTTP response body from the result
 // of the "createRequest" endpoint of the "mcpApproval" service.
 func NewCreateRequestResponseBody(res *mcpapproval.ApprovalRequestSummary) *CreateRequestResponseBody {
@@ -1578,6 +1823,153 @@ func NewGetRequestUnexpectedResponseBody(res *goa.ServiceError) *GetRequestUnexp
 // result of the "getRequest" endpoint of the "mcpApproval" service.
 func NewGetRequestGatewayErrorResponseBody(res *goa.ServiceError) *GetRequestGatewayErrorResponseBody {
 	body := &GetRequestGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnsureServerReviewUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "ensureServerReview" endpoint of the "mcpApproval"
+// service.
+func NewEnsureServerReviewUnauthorizedResponseBody(res *goa.ServiceError) *EnsureServerReviewUnauthorizedResponseBody {
+	body := &EnsureServerReviewUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnsureServerReviewForbiddenResponseBody builds the HTTP response body
+// from the result of the "ensureServerReview" endpoint of the "mcpApproval"
+// service.
+func NewEnsureServerReviewForbiddenResponseBody(res *goa.ServiceError) *EnsureServerReviewForbiddenResponseBody {
+	body := &EnsureServerReviewForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnsureServerReviewBadRequestResponseBody builds the HTTP response body
+// from the result of the "ensureServerReview" endpoint of the "mcpApproval"
+// service.
+func NewEnsureServerReviewBadRequestResponseBody(res *goa.ServiceError) *EnsureServerReviewBadRequestResponseBody {
+	body := &EnsureServerReviewBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnsureServerReviewNotFoundResponseBody builds the HTTP response body from
+// the result of the "ensureServerReview" endpoint of the "mcpApproval" service.
+func NewEnsureServerReviewNotFoundResponseBody(res *goa.ServiceError) *EnsureServerReviewNotFoundResponseBody {
+	body := &EnsureServerReviewNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnsureServerReviewConflictResponseBody builds the HTTP response body from
+// the result of the "ensureServerReview" endpoint of the "mcpApproval" service.
+func NewEnsureServerReviewConflictResponseBody(res *goa.ServiceError) *EnsureServerReviewConflictResponseBody {
+	body := &EnsureServerReviewConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnsureServerReviewUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "ensureServerReview" endpoint of the
+// "mcpApproval" service.
+func NewEnsureServerReviewUnsupportedMediaResponseBody(res *goa.ServiceError) *EnsureServerReviewUnsupportedMediaResponseBody {
+	body := &EnsureServerReviewUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnsureServerReviewInvalidResponseBody builds the HTTP response body from
+// the result of the "ensureServerReview" endpoint of the "mcpApproval" service.
+func NewEnsureServerReviewInvalidResponseBody(res *goa.ServiceError) *EnsureServerReviewInvalidResponseBody {
+	body := &EnsureServerReviewInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnsureServerReviewInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "ensureServerReview" endpoint of the
+// "mcpApproval" service.
+func NewEnsureServerReviewInvariantViolationResponseBody(res *goa.ServiceError) *EnsureServerReviewInvariantViolationResponseBody {
+	body := &EnsureServerReviewInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnsureServerReviewUnexpectedResponseBody builds the HTTP response body
+// from the result of the "ensureServerReview" endpoint of the "mcpApproval"
+// service.
+func NewEnsureServerReviewUnexpectedResponseBody(res *goa.ServiceError) *EnsureServerReviewUnexpectedResponseBody {
+	body := &EnsureServerReviewUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewEnsureServerReviewGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "ensureServerReview" endpoint of the "mcpApproval"
+// service.
+func NewEnsureServerReviewGatewayErrorResponseBody(res *goa.ServiceError) *EnsureServerReviewGatewayErrorResponseBody {
+	body := &EnsureServerReviewGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2036,6 +2428,19 @@ func NewGetRequestPayload(id string, sessionToken *string, apikeyToken *string, 
 	return v
 }
 
+// NewEnsureServerReviewPayload builds a mcpApproval service ensureServerReview
+// endpoint payload.
+func NewEnsureServerReviewPayload(body *EnsureServerReviewRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpapproval.EnsureServerReviewPayload {
+	v := &mcpapproval.EnsureServerReviewPayload{
+		Target: *body.Target,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewCreateRequestPayload builds a mcpApproval service createRequest endpoint
 // payload.
 func NewCreateRequestPayload(body *CreateRequestRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpapproval.CreateRequestPayload {
@@ -2083,6 +2488,15 @@ func NewRecordDecisionPayload(body *RecordDecisionRequestBody, sessionToken *str
 	v.ProjectSlugInput = projectSlugInput
 
 	return v
+}
+
+// ValidateEnsureServerReviewRequestBody runs the validations defined on
+// EnsureServerReviewRequestBody
+func ValidateEnsureServerReviewRequestBody(body *EnsureServerReviewRequestBody) (err error) {
+	if body.Target == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("target", "body"))
+	}
+	return
 }
 
 // ValidateCreateRequestRequestBody runs the validations defined on

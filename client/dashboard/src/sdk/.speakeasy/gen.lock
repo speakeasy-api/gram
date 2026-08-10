@@ -233,6 +233,7 @@ trackedFiles:
   src/funcs/litellmRevokeInstance.ts: {}
   src/funcs/litellmRotateInstanceKey.ts: {}
   src/funcs/mcpApprovalCreateRequest.ts: {}
+  src/funcs/mcpApprovalEnsureServerReview.ts: {}
   src/funcs/mcpApprovalGetRequest.ts: {}
   src/funcs/mcpApprovalListRequests.ts: {}
   src/funcs/mcpApprovalPromote.ts: {}
@@ -720,6 +721,7 @@ trackedFiles:
   src/models/components/distributeskillrequestbody.ts: {}
   src/models/components/employeedataflowedge.ts: {}
   src/models/components/employeedataflownode.ts: {}
+  src/models/components/ensureserverreviewrequestbody.ts: {}
   src/models/components/environment.ts: {}
   src/models/components/environmententry.ts: {}
   src/models/components/environmententryinput.ts: {}
@@ -1484,6 +1486,7 @@ trackedFiles:
   src/models/operations/downloadpluginpackage.ts: {}
   src/models/operations/enablewebhooks.ts: {}
   src/models/operations/ensuremanagedassistant.ts: {}
+  src/models/operations/ensuremcpserverreview.ts: {}
   src/models/operations/enterdemo.ts: {}
   src/models/operations/evaluatepromptguardrail.ts: {}
   src/models/operations/evolvedeployment.ts: {}
@@ -2036,6 +2039,7 @@ trackedFiles:
   src/react-query/distributeSkill.ts: {}
   src/react-query/enableWebhooks.ts: {}
   src/react-query/ensureManagedAssistant.ts: {}
+  src/react-query/ensureMcpServerReview.ts: {}
   src/react-query/enterDemo.ts: {}
   src/react-query/evolveDeployment.ts: {}
   src/react-query/exportMcpMetadata.ts: {}
@@ -4272,6 +4276,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  ensureMcpServerReview:
+    speakeasy-default-ensure-mcp-server-review:
+      requestBody:
+        application/json: {"target": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-05-08T03:28:48.418Z", "id": "<id>", "requester_count": 214783, "status": "<value>", "target_kind": "<value>", "target_raw": "<value>", "updated_at": "2026-03-15T05:40:30.340Z", "version_pinned": true}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   enterDemo:
     speakeasy-default-enter-demo:
       responses:

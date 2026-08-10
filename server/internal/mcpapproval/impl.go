@@ -69,6 +69,11 @@ const (
 // statusRequested is the status a raised or reopened request carries.
 const statusRequested = "requested"
 
+// statusUnreviewed marks an evidence dossier nobody has asked about: opened
+// so a server can be inspected, it stays out of the decision queue and
+// upgrades in place to requested the moment someone actually asks.
+const statusUnreviewed = "unreviewed"
+
 // gatherTimeout is the overall backstop for evidence gathering at intake.
 // Each source inside the assembler carries its own tighter deadline, so one
 // unreachable registry costs its own budget and lands in the document's gaps
@@ -193,6 +198,12 @@ type admission struct {
 	targetRaw  string
 	targetKey  string
 
+	// status the row is admitted with: statusRequested for a real ask,
+	// statusUnreviewed for an evidence dossier opened without one. The upsert
+	// only ever upgrades unreviewed or denied rows toward requested, never
+	// the other way.
+	status string
+
 	// bypassRequestID links the promotion source, when there is one.
 	bypassRequestID uuid.NullUUID
 
@@ -244,7 +255,7 @@ func (s *Service) admit(ctx context.Context, projectID uuid.UUID, organizationID
 		TargetKey:                 adm.targetKey,
 		ArtifactRef:               conv.ToPGTextEmpty(resolved.ArtifactRef),
 		VersionPinned:             resolved.VersionPinned,
-		Status:                    statusRequested,
+		Status:                    adm.status,
 		RiskPolicyBypassRequestID: adm.bypassRequestID,
 	})
 	if err != nil {
@@ -301,6 +312,41 @@ func (s *Service) admit(ctx context.Context, projectID uuid.UUID, organizationID
 	return summaryView(fromGetRow(row)), nil
 }
 
+// EnsureServerReview resolves the evidence dossier for a server URL, opening
+// one when none exists. It records no ask and no decision: the row is written
+// as unreviewed, stays out of the queue, and upgrades in place when someone
+// actually requests the server. Reading evidence must never require deciding
+// first, so the server page calls this for any URL it shows.
+func (s *Service) EnsureServerReview(ctx context.Context, payload *gen.EnsureServerReviewPayload) (*gen.ApprovalRequestSummary, error) {
+	projectID, organizationID, err := s.project(ctx, authz.ScopeMCPApprovalRead)
+	if err != nil {
+		return nil, err
+	}
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	if authCtx == nil || authCtx.UserID == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	key, display, err := admittableServerURL(strings.TrimSpace(payload.Target))
+	if err != nil {
+		return nil, err
+	}
+
+	return s.admit(ctx, projectID, organizationID, admission{
+		targetKind:      targetKindServerURL,
+		targetRaw:       display,
+		targetKey:       key,
+		status:          statusUnreviewed,
+		bypassRequestID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		requesterID:     "",
+		requesterEmail:  nil,
+		note:            nil,
+		actor:           authCtx.UserID,
+		actorEmail:      authCtx.Email,
+	})
+}
+
 func (s *Service) CreateRequest(ctx context.Context, payload *gen.CreateRequestPayload) (*gen.ApprovalRequestSummary, error) {
 	projectID, authCtx, err := s.member(ctx)
 	if err != nil {
@@ -345,6 +391,7 @@ func (s *Service) CreateRequest(ctx context.Context, payload *gen.CreateRequestP
 		targetKind:      payload.TargetKind,
 		targetRaw:       raw,
 		targetKey:       key,
+		status:          statusRequested,
 		bypassRequestID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		requesterID:     authCtx.UserID,
 		requesterEmail:  authCtx.Email,
@@ -401,6 +448,7 @@ func (s *Service) Promote(ctx context.Context, payload *gen.PromotePayload) (*ge
 		targetKind:      targetKindServerURL,
 		targetRaw:       display,
 		targetKey:       key,
+		status:          statusRequested,
 		bypassRequestID: uuid.NullUUID{UUID: bypass.ID, Valid: true},
 		requesterID:     bypass.RequesterUserID,
 		requesterEmail:  conv.FromPGText[string](bypass.RequesterEmail),

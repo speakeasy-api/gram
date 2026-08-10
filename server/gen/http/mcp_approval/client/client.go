@@ -25,6 +25,10 @@ type Client struct {
 	// endpoint.
 	GetRequestDoer goahttp.Doer
 
+	// EnsureServerReview Doer is the HTTP client used to make requests to the
+	// ensureServerReview endpoint.
+	EnsureServerReviewDoer goahttp.Doer
+
 	// CreateRequest Doer is the HTTP client used to make requests to the
 	// createRequest endpoint.
 	CreateRequestDoer goahttp.Doer
@@ -57,16 +61,17 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListRequestsDoer:    doer,
-		GetRequestDoer:      doer,
-		CreateRequestDoer:   doer,
-		PromoteDoer:         doer,
-		RecordDecisionDoer:  doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		ListRequestsDoer:       doer,
+		GetRequestDoer:         doer,
+		EnsureServerReviewDoer: doer,
+		CreateRequestDoer:      doer,
+		PromoteDoer:            doer,
+		RecordDecisionDoer:     doer,
+		RestoreResponseBody:    restoreBody,
+		scheme:                 scheme,
+		host:                   host,
+		decoder:                dec,
+		encoder:                enc,
 	}
 }
 
@@ -113,6 +118,30 @@ func (c *Client) GetRequest() goa.Endpoint {
 		resp, err := c.GetRequestDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("mcpApproval", "getRequest", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// EnsureServerReview returns an endpoint that makes HTTP requests to the
+// mcpApproval service ensureServerReview server.
+func (c *Client) EnsureServerReview() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeEnsureServerReviewRequest(c.encoder)
+		decodeResponse = DecodeEnsureServerReviewResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildEnsureServerReviewRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.EnsureServerReviewDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("mcpApproval", "ensureServerReview", err)
 		}
 		return decodeResponse(resp)
 	}
