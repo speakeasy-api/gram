@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 
 	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
@@ -17,7 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/database"
 	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -51,7 +50,7 @@ const challengeOutboxTimeout = 10 * time.Second
 // enqueue is gated behind the ChallengeLoggingEnabled feature check — if the
 // feature is not enabled for the org (or the check fails), the call is a
 // no-op. Errors are logged at warn level and never bubble back to the caller.
-func (l challengeLogger) Log(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, isEnabled ChallengeLoggingEnabled) {
+func (l challengeLogger) Log(ctx context.Context, dbtx database.DBTX, logger *slog.Logger, isEnabled ChallengeLoggingEnabled) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return
@@ -199,16 +198,7 @@ func (l challengeLogger) Log(ctx context.Context, db *pgxpool.Pool, logger *slog
 	enqueueCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), challengeOutboxTimeout)
 	defer cancel()
 
-	tx, err := db.Begin(enqueueCtx)
-	if err != nil {
-		logger.WarnContext(enqueueCtx, "failed to begin authz challenge outbox transaction",
-			attr.SlogError(err),
-		)
-		return
-	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(enqueueCtx) })
-
-	if _, err := outbox.Publish(enqueueCtx, tx, authCtx.ActiveOrganizationID, outbox.Message{
+	if _, err := outbox.Publish(enqueueCtx, dbtx, authCtx.ActiveOrganizationID, outbox.Message{
 		Proto:      message,
 		PublicID:   challengeID,
 		Attributes: nil,
@@ -217,12 +207,6 @@ func (l challengeLogger) Log(ctx context.Context, db *pgxpool.Pool, logger *slog
 			attr.SlogError(err),
 		)
 		return
-	}
-
-	if err := tx.Commit(enqueueCtx); err != nil {
-		logger.WarnContext(enqueueCtx, "failed to commit authz challenge outbox transaction",
-			attr.SlogError(err),
-		)
 	}
 }
 
