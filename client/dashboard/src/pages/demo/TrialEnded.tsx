@@ -9,6 +9,8 @@ import { format } from "date-fns";
 
 const DATELESS_TITLE = "Your 14-day trial has ended.";
 
+// The gate an organization lands on once its enterprise trial has ended and the
+// sweep has demoted it.
 export default function TrialEnded(): JSX.Element {
   const client = useSdkClient();
   const { session } = useSessionData();
@@ -34,7 +36,7 @@ export default function TrialEnded(): JSX.Element {
 
   return (
     <AuthShell
-      page="Trial ended"
+      page="Talk to us"
       contentClassName="max-w-[560px]"
       // The card carries its own prefill footnote instead ("2E Book a demo").
       showTerms={false}

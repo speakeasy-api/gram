@@ -13,7 +13,6 @@ import {
 import { Skeleton } from "@/components/ui/Skeleton";
 import BookDemo from "@/pages/demo/BookDemo";
 import SwitchOrg from "@/pages/demo/SwitchOrg";
-import TrialEnded from "@/pages/demo/TrialEnded";
 import { getTrialLifecycleFromDates } from "@/lib/trial-status";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
@@ -52,12 +51,17 @@ const PREFERRED_PROJECT_KEY = "preferredProject";
 const SLUG_EXEMPT_PATHS = [
   "/switch-org",
   "/explore-demo",
+  "/talk-to-us",
   "/shadow-mcp/request",
   "/risk-policy-bypass/request",
   "/risk-policy-challenge/acknowledge",
   "/blocks",
   "/shared",
 ];
+
+// Paths the non-whitelisted gate lets through: the cold-signup gate's escape
+// hatch into the demo org, and the expired-trial gate's own route.
+const GATE_EXEMPT_PATHS = ["/explore-demo", "/talk-to-us"];
 
 export const AuthProvider = ({
   children,
@@ -117,22 +121,25 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   // Show book demo page if organization is not whitelisted
   // Check this before the no-org fallback so non-whitelisted orgs are blocked before reaching the normal app flow
   // /explore-demo stays reachable: it's the gate page's own escape hatch into
-  // the shared demo org (which is whitelisted). Exact match only — a prefix
-  // match would let deeper paths (e.g. /explore-demo/projects/x) through the
-  // gate.
+  // the shared demo org (which is whitelisted). /talk-to-us has to be reachable
+  // too or the redirect below loops. Exact match only — a prefix match would
+  // let deeper paths (e.g. /explore-demo/projects/x) through the gate.
+  const isGateExemptPath = GATE_EXEMPT_PATHS.some(
+    (p) => location.pathname === p || location.pathname === `${p}/`,
+  );
+
   if (
     session.activeOrganizationId &&
     !session.whitelisted &&
-    location.pathname !== "/explore-demo" &&
-    location.pathname !== "/explore-demo/"
+    !isGateExemptPath
   ) {
     if (session.organizations.length > 1) {
       return <SwitchOrg gate />;
     }
-    // An org demoted after its trial ran out gets told so; an org that never
-    // trialed (or is still mid-trial) falls through to the cold-signup gate.
+    // An org that never trialed (or is still mid-trial) falls through to the
+    // cold-signup gate.
     if (getTrialLifecycleFromDates(session.trial, new Date()) === "expired") {
-      return <TrialEnded />;
+      return <Navigate to="/talk-to-us" replace />;
     }
     return <BookDemo />;
   }

@@ -34,6 +34,7 @@ import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
 import ExploreDemo from "./pages/demo/ExploreDemo";
+import TrialEnded from "./pages/demo/TrialEnded";
 import SignUp from "./pages/login/SignUp";
 import { LogsRoot } from "./pages/logs/Logs";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
@@ -206,6 +207,15 @@ const ROUTE_STRUCTURE = {
     title: "Explore demo",
     url: "/explore-demo",
     component: ExploreDemo,
+    unauthenticated: true,
+  },
+  // Not actually unauthenticated — the flag registers the route outside the
+  // main app layout, which is what a full-page gate screen needs. The gate in
+  // AuthProvider redirects demoted trials here.
+  talkToUs: {
+    title: "Talk to us",
+    url: "/talk-to-us",
+    component: TrialEnded,
     unauthenticated: true,
   },
   signUp: {
