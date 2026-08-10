@@ -4,6 +4,7 @@ const config: StorybookConfig = {
   stories: [
     "../src/components/ui/**/*.mdx",
     "../src/components/ui/**/*.stories.@(ts|tsx)",
+    "../src/components/page-templates/**/*.mdx",
   ],
   addons: ["@storybook/addon-docs", "@storybook/addon-themes"],
   framework: {
