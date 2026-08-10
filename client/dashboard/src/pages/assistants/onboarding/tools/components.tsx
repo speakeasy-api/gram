@@ -51,7 +51,7 @@ function ToolCard({
   return (
     <div
       className={cn(
-        "border-border bg-card my-3 max-w-2xl border shadow-sm",
+        "border-border bg-card my-4 max-w-2xl border shadow-sm",
         tone === "success" && "border-emerald-300/40 bg-emerald-50/30",
         tone === "info" && "border-sky-300/40 bg-sky-50/30",
       )}
