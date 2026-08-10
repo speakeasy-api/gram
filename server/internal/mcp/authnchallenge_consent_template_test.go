@@ -123,8 +123,7 @@ func TestConsentTemplateShowsAutoRefreshAndServiceExpiry(t *testing.T) {
 			AutoRefreshChecked: true,
 		}},
 		ConsentEnabled:         true,
-		AutoRefreshVisible:     true,
-		AutoRefreshEditable:    true,
+		AutoRefreshPolicy:      autoRefreshUserControlled,
 		AutoRefreshOn:          true,
 		AutoRefreshHasSessions: true,
 	})
@@ -182,8 +181,7 @@ func TestConsentTemplateLocksAutoRefreshWhenOrganizationRequires(t *testing.T) {
 			AutoRefreshChecked: true,
 		}},
 		ConsentEnabled:         true,
-		AutoRefreshVisible:     true,
-		AutoRefreshEditable:    false,
+		AutoRefreshPolicy:      autoRefreshEnforced,
 		AutoRefreshOn:          true,
 		AutoRefreshHasSessions: true,
 	})
@@ -226,10 +224,9 @@ func TestConsentTemplateShowsAutoRefreshOffWhenOrganizationDisables(t *testing.T
 			RefreshExpiresIn:   "",
 			AutoRefreshChecked: false,
 		}},
-		ConsentEnabled:      true,
-		AutoRefreshVisible:  true,
-		AutoRefreshEditable: false,
-		AutoRefreshOn:       false,
+		ConsentEnabled:    true,
+		AutoRefreshPolicy: autoRefreshDisabled,
+		AutoRefreshOn:     false,
 	})
 	require.NoError(t, err)
 
@@ -261,7 +258,6 @@ func TestConsentTemplateOmitsAutoRefreshRowWithoutRemoteSessions(t *testing.T) {
 		ScriptURL:          "/mcp/consent-page-test.js",
 		RemoteSessionCards: nil,
 		ConsentEnabled:     true,
-		AutoRefreshVisible: false,
 	})
 	require.NoError(t, err)
 
@@ -296,10 +292,9 @@ func TestConsentTemplateOmitsExpiryTooltipWhenNoExpiryReported(t *testing.T) {
 			RefreshExpiresIn:   "",
 			AutoRefreshChecked: true,
 		}},
-		ConsentEnabled:      true,
-		AutoRefreshVisible:  true,
-		AutoRefreshEditable: true,
-		AutoRefreshOn:       true,
+		ConsentEnabled:    true,
+		AutoRefreshPolicy: autoRefreshUserControlled,
+		AutoRefreshOn:     true,
 	})
 	require.NoError(t, err)
 

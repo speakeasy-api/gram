@@ -111,17 +111,10 @@ type consentTemplateData struct {
 	// maximum, preselecting the maximum. Empty hides the picker (first-party
 	// pages, or a lookup failure — the mint then falls back to the maximum).
 	SessionDurationOptions []sessionDurationOption
-	// AutoRefreshVisible shows the page-level "Auto refresh" info row. True
-	// whenever this page has remote-session cards, so the subject always
-	// learns whether their connections will be renewed — including when the
-	// organization disabled refresh, where the row is the only signal that
-	// idle connections will lapse.
-	AutoRefreshVisible bool
-
-	// AutoRefreshEditable lets the subject change the value. False when the
-	// organization either disabled or requires refresh; the row then renders
-	// read-only as "Managed by your organization".
-	AutoRefreshEditable bool
+	// AutoRefreshPolicy controls how the row renders whenever
+	// RemoteSessionCards is non-empty: editable for user-controlled refresh,
+	// otherwise read-only with the organization's effective value.
+	AutoRefreshPolicy autoRefreshPolicy
 
 	// AutoRefreshOn is the row's current value: forced off when the
 	// organization disabled refresh, forced on when it requires refresh, and
@@ -192,6 +185,16 @@ const (
 	// is read-only and the keepalive ignores stored preferences.
 	autoRefreshEnforced
 )
+
+// IsUserControlled reports whether subjects may change auto refresh.
+func (p autoRefreshPolicy) IsUserControlled() bool {
+	return p == autoRefreshUserControlled
+}
+
+// IsEnforced reports whether the organization requires auto refresh.
+func (p autoRefreshPolicy) IsEnforced() bool {
+	return p == autoRefreshEnforced
+}
 
 // resolveAutoRefreshPolicy reports the organization's automatic-refresh policy.
 // Enforcement wins over the opt-in so an organization that turns on both still
@@ -342,11 +345,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		}
 		everyCardAutoRefreshes = everyCardAutoRefreshes && c.AutoRefreshChecked
 	}
-	// Auto refresh is only a meaningful concept once this page has services to
-	// connect; the policy alone does not put a row on an empty page.
-	autoRefreshVisible := len(cards) > 0
-	autoRefreshEditable := autoRefreshVisible && autoRefreshPolicy == autoRefreshUserControlled
-	autoRefreshOn := autoRefreshVisible && everyCardAutoRefreshes
+	autoRefreshOn := len(cards) > 0 && everyCardAutoRefreshes
 	consentEnabled := len(cards) == 0 || hasConnectedCard
 
 	// First-party pages mint no user session, so there is no length to pick.
@@ -378,8 +377,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		LoopbackRedirectWarning: loopbackRedirectWarning,
 		AutoClose:               shouldAutoCloseFirstParty(challengeState.FirstParty, cards),
 		SessionDurationOptions:  durationOptions,
-		AutoRefreshVisible:      autoRefreshVisible,
-		AutoRefreshEditable:     autoRefreshEditable,
+		AutoRefreshPolicy:       autoRefreshPolicy,
 		AutoRefreshOn:           autoRefreshOn,
 		AutoRefreshHasSessions:  autoRefreshHasSessions,
 	}

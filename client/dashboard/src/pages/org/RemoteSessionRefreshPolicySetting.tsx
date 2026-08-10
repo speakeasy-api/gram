@@ -19,7 +19,7 @@ const POLICY_OPTIONS = [
     value: RefreshPolicy.Disabled,
     label: "Disabled",
     description:
-      "Hide the setting from users and let inactive connections expire.",
+      "Show refresh as off and managed by your organization, and let inactive connections expire.",
   },
   {
     value: RefreshPolicy.UserControlled,
@@ -122,7 +122,7 @@ export function RemoteSessionRefreshPolicySetting(): JSX.Element {
                 <label
                   key={option.value}
                   className={cn(
-                    "border-border flex min-h-28 cursor-pointer flex-col border p-4 transition-colors",
+                    "border-border focus-within:border-ring focus-within:ring-ring/50 flex min-h-28 cursor-pointer flex-col border p-4 transition-[color,box-shadow] focus-within:ring-[3px]",
                     selected && "border-foreground",
                     (disabled || mutation.isPending) &&
                       "cursor-not-allowed opacity-60",

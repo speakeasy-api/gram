@@ -509,7 +509,7 @@
             </select>
           </dd>
           {{end}}
-          {{if .AutoRefreshVisible}}
+          {{if .RemoteSessionCards}}
           <dt>
             <span
               class="tooltip"
@@ -529,7 +529,7 @@
             </span>
           </dt>
           <dd>
-            {{if .AutoRefreshEditable}}
+            {{if .AutoRefreshPolicy.IsUserControlled}}
             <select
               name="auto_refresh"
               form="auto-refresh-form"
@@ -541,7 +541,7 @@
                 Off
               </option>
             </select>
-            {{else if .AutoRefreshOn}}
+            {{else if .AutoRefreshPolicy.IsEnforced}}
             <span class="auto-refresh-managed on" data-auto-refresh-managed>
               On · Managed by your organization
             </span>
@@ -554,7 +554,7 @@
           {{end}}
         </dl>
 
-        {{if .AutoRefreshEditable}}
+        {{if .AutoRefreshPolicy.IsUserControlled}}
         <form
           method="POST"
           action="/{{.MCPRouteBase}}/{{.MCPSlug}}/connect/remote-session"
@@ -590,23 +590,21 @@
             <input type="hidden" name="state" value="{{$.State}}" />
             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}" />
             <input type="hidden" name="client_id" value="{{.ClientID}}" />
-            {{if $.AutoRefreshVisible}}
             <input
               type="hidden"
               name="auto_refresh"
               value="{{if $.AutoRefreshOn}}on{{else}}off{{end}}"
               data-auto-refresh-input
             />
-            {{end}}
             <div class="meta">
               <div class="issuer">{{.IssuerSlug}}</div>
               {{if .Connected}}
               <div class="state connected">✓ Connected</div>
-              {{if $.AutoRefreshVisible}} {{if .AutoRefreshChecked}}
+              {{if .AutoRefreshChecked}}
               <div class="detail auto-refresh-on">✓ Auto refresh on</div>
               {{else}}
               <div class="detail">Auto refresh off</div>
-              {{end}} {{end}}
+              {{end}}
               {{else if .Expired}}
               <div class="state expired">⚠ Expired — reconnect</div>
               {{else}}

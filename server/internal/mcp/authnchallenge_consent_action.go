@@ -183,12 +183,15 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 	case "set_auto_refresh":
 		// Page-level "Auto refresh": persist the choice for every bound client.
 		// Clients without a stored session update zero rows; their preference
-		// rides the next connect instead. A managed policy writes the
-		// organization's own value instead of the posted one.
-		enabled := r.PostForm.Get("auto_refresh") == "on"
+		// rides the next connect instead. Managed policies ignore this action:
+		// their effective value comes from organization policy, while the stored
+		// user preference remains intact if the organization later restores
+		// user-controlled refresh.
 		if autoRefreshPolicy != autoRefreshUserControlled {
-			enabled = autoRefreshPolicy == autoRefreshEnforced
+			http.Redirect(w, r, backURL, http.StatusSeeOther)
+			return nil
 		}
+		enabled := r.PostForm.Get("auto_refresh") == "on"
 		for i := range clients {
 			if _, err := s.remoteChallengeMgr.SetRemoteSessionAutoRefresh(ctx, subject, endpoint.ProjectID, endpoint.UserSessionIssuerID, clients[i].ID, enabled); err != nil {
 				return oops.E(oops.CodeUnexpected, err, "set remote session auto refresh").LogError(ctx, logger)
