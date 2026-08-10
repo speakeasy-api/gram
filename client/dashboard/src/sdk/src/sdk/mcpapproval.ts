@@ -3,6 +3,7 @@
  */
 
 import { mcpApprovalCreateRequest } from "../funcs/mcpApprovalCreateRequest.js";
+import { mcpApprovalEnsureServerReview } from "../funcs/mcpApprovalEnsureServerReview.js";
 import { mcpApprovalGetRequest } from "../funcs/mcpApprovalGetRequest.js";
 import { mcpApprovalListRequests } from "../funcs/mcpApprovalListRequests.js";
 import { mcpApprovalPromote } from "../funcs/mcpApprovalPromote.js";
@@ -17,6 +18,10 @@ import {
   CreateMcpApprovalRequestRequest,
   CreateMcpApprovalRequestSecurity,
 } from "../models/operations/createmcpapprovalrequest.js";
+import {
+  EnsureMcpServerReviewRequest,
+  EnsureMcpServerReviewSecurity,
+} from "../models/operations/ensuremcpserverreview.js";
 import {
   GetMcpApprovalRequestRequest,
   GetMcpApprovalRequestSecurity,
@@ -52,6 +57,25 @@ export class McpApproval extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ApprovalRequestSummary> {
     return unwrapAsync(mcpApprovalCreateRequest(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * ensureServerReview mcpApproval
+   *
+   * @remarks
+   * Resolve the evidence dossier for a server URL, opening one when none exists. Gathers evidence without recording any ask or decision, so a server can be inspected before — or without — anyone requesting it.
+   */
+  async ensureServerReview(
+    request: EnsureMcpServerReviewRequest,
+    security?: EnsureMcpServerReviewSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ApprovalRequestSummary> {
+    return unwrapAsync(mcpApprovalEnsureServerReview(
       this,
       request,
       security,

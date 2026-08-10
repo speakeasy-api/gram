@@ -69,6 +69,32 @@ var _ = Service("mcpApproval", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetMcpApprovalRequest"}`)
 	})
 
+	Method("ensureServerReview", func() {
+		Description("Resolve the evidence dossier for a server URL, opening one when none exists. Gathers evidence without recording any ask or decision, so a server can be inspected before — or without — anyone requesting it.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+			Attribute("target", String, "The server URL the dossier describes.")
+			Required("target")
+		})
+
+		Result(ApprovalRequestSummary)
+
+		HTTP(func() {
+			POST("/rpc/mcpApproval.ensureServerReview")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "ensureMcpServerReview")
+		Meta("openapi:extension:x-speakeasy-name-override", "ensureServerReview")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "EnsureMcpServerReview"}`)
+	})
+
 	Method("createRequest", func() {
 		Description("Ask for an MCP server to be reviewed. Repeat asks for the same server attach to the existing review rather than opening a second one.")
 
