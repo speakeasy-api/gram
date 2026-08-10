@@ -264,7 +264,7 @@ func (s *Service) handleMCPAuthCallback(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	eventCreated, err := s.enqueueMCPAuthEvent(ctx, projectID, assistantID, threadID, flowID, payload)
+	eventCreated, err := s.enqueueMCPAuthEvent(ctx, projectID, assistantID, threadID, mcpAuthAttemptID(claims), payload)
 	if err != nil {
 		return err
 	}
@@ -278,6 +278,13 @@ func (s *Service) handleMCPAuthCallback(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.WriteString(w, "<!doctype html><title>Authentication complete</title><p>Authentication complete. You can close this window.</p>")
 	return nil
+}
+
+func mcpAuthAttemptID(claims *assistanttokens.MCPAuthFlowClaims) string {
+	if claims.ID != "" {
+		return claims.ID
+	}
+	return claims.FlowID
 }
 
 func (s *Service) enqueueMCPAuthEvent(ctx context.Context, projectID, assistantID, threadID uuid.UUID, flowID string, payload mcpAuthEventPayload) (bool, error) {
