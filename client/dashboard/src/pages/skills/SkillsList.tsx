@@ -17,7 +17,10 @@ import type {
 } from "@gram/client/models/operations/listskills.js";
 import { useSkillEfficacyInsights } from "@gram/client/react-query/skillEfficacyInsights.js";
 import { useSkillTags } from "@gram/client/react-query/skillTags.js";
-import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
+import {
+  invalidateAllRiskListPolicies,
+  useRiskListPolicies,
+} from "@gram/client/react-query/riskListPolicies.js";
 import {
   useSkills,
   useSkillsInfinite,
@@ -29,6 +32,7 @@ import { sortTableData } from "@/components/ui/Table/sorting";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { useRoutes } from "@/routes";
 import { useQueryState } from "nuqs";
+import { useQueryClient } from "@tanstack/react-query";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
 import { toast } from "sonner";
@@ -111,6 +115,7 @@ function noResultsMessage(active: boolean, incomplete: boolean): string {
 export default function SkillsList(): JSX.Element {
   const routes = useRoutes();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const filters = useFilterState(SKILL_FILTERS);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortDescriptor | null>(null);
@@ -487,6 +492,7 @@ export default function SkillsList(): JSX.Element {
           insightsQuery.refetch(),
           openSuggestions.query.refetch(),
           tagsQuery.refetch(),
+          invalidateAllRiskListPolicies(queryClient),
         ]);
       }}
       isRefreshing={
@@ -630,6 +636,23 @@ function SkillPromptInjectionPolicyCard(): JSX.Element | null {
   const policiesQuery = useRiskListPolicies(undefined, undefined, {
     throwOnError: false,
   });
+  if (policiesQuery.error && !policiesQuery.data) {
+    return (
+      <div className="space-y-2">
+        <ErrorAlert
+          title="Unable to load prompt injection policy"
+          error={policiesQuery.error}
+        />
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => void policiesQuery.refetch()}
+        >
+          Retry policy status
+        </Button>
+      </div>
+    );
+  }
   if (!policiesQuery.data) return null;
 
   const policy = policiesQuery.data.policies.find(

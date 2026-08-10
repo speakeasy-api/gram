@@ -42,6 +42,29 @@ func TestGetSkillReturnsPromptInjectionFindingsForCurrentVersion(t *testing.T) {
 		RuleID: "prompt_injection", Description: "Attempts to override trusted instructions.", Confidence: 0.98,
 	}}, got.PromptInjectionFindings)
 
+	_, err = riskrepo.New(ti.conn).BumpRiskPolicyVersion(ctx, riskrepo.BumpRiskPolicyVersionParams{
+		ID: policyID, ProjectID: ti.projectID,
+	})
+	require.NoError(t, err)
+	got, err = ti.service.Get(ctx, &gen.GetPayload{ID: created.Skill.ID})
+	require.NoError(t, err)
+	require.Empty(t, got.PromptInjectionFindings)
+
+	err = riskrepo.New(ti.conn).RecordSkillPromptInjectionScan(ctx, riskrepo.RecordSkillPromptInjectionScanParams{
+		SkillVersionID: uuid.NullUUID{UUID: firstVersionID, Valid: true},
+		ProjectID:      ti.projectID, Source: "prompt_injection", Found: true,
+		RuleID:      pgtype.Text{String: "prompt_injection", Valid: true},
+		Description: pgtype.Text{String: "Detected by the updated policy.", Valid: true},
+		Match:       pgtype.Text{String: "updated raw match", Valid: true},
+		Confidence:  pgtype.Float8{Float64: 0.99, Valid: true},
+	})
+	require.NoError(t, err)
+	got, err = ti.service.Get(ctx, &gen.GetPayload{ID: created.Skill.ID})
+	require.NoError(t, err)
+	require.Equal(t, []*gen.SkillPromptInjectionFinding{{
+		RuleID: "prompt_injection", Description: "Detected by the updated policy.", Confidence: 0.99,
+	}}, got.PromptInjectionFindings)
+
 	second, err := ti.service.AddVersion(ctx, &gen.AddVersionPayload{
 		ID:      created.Skill.ID,
 		Content: skillManifest("risky-skill", "Second version.", "safe replacement"),

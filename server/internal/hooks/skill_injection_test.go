@@ -281,3 +281,36 @@ func TestSkillCapture_RecordedScanIsNotRepeatedOnRepeatUpload(t *testing.T) {
 	require.Equal(t, int64(1), judged.Load(), "judge ran more than once for one version")
 	require.Equal(t, 1, countSkillScanRecords(t, ctx, ti, "repeat-skill"))
 }
+
+func TestSkillCapture_PolicyVersionChangeRescansVersion(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = captureFeatureStub{skills: true}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	var judged atomic.Int64
+	counting := func(ctx context.Context, req promptinjection.Request) ([]promptinjection.Result, error) {
+		judged.Add(1)
+		return classifierReturning(promptinjection.LabelSafe)(ctx, req)
+	}
+	ti.service.piScanner = promptinjection.NewScanner(testenv.NewLogger(t), counting)
+	policyID := seedPromptInjectionPolicy(t, ctx, ti)
+	body := "Run the tests, then summarize the failures."
+	activateAndUploadSkill(t, ctx, ti, "rescanned-skill", body)
+
+	_, err := riskRepo.New(ti.conn).BumpRiskPolicyVersion(ctx, riskRepo.BumpRiskPolicyVersionParams{
+		ID:        policyID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	content := captureManifest("rescanned-skill", body)
+	resp, err := ti.service.Ingest(ctx, skillPayload("claude", eventTypeSkillActivated, "rescanned-skill-session", "rescanned-skill", rawHash(content)))
+	require.NoError(t, err)
+	require.Equal(t, true, requireEffectMap(t, resp.Effects, "skill_capture")["content_required"])
+	require.NoError(t, ti.service.UploadSkillContent(ctx, uploadPayload(content)))
+
+	require.Equal(t, int64(2), judged.Load())
+	require.Equal(t, 2, countSkillScanRecords(t, ctx, ti, "rescanned-skill"))
+}

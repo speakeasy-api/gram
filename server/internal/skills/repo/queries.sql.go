@@ -4723,6 +4723,7 @@ JOIN risk_policies rp
   AND rp.project_id = s.project_id
   AND rp.enabled IS TRUE
   AND rp.deleted IS FALSE
+  AND rr.risk_policy_version = rp.version
 WHERE s.project_id = $1
   AND s.id = $2
   AND s.archived_at IS NULL

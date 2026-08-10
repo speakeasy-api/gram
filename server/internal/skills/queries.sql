@@ -1321,6 +1321,7 @@ JOIN risk_policies rp
   AND rp.project_id = s.project_id
   AND rp.enabled IS TRUE
   AND rp.deleted IS FALSE
+  AND rr.risk_policy_version = rp.version
 WHERE s.project_id = @project_id
   AND s.id = @skill_id
   AND s.archived_at IS NULL

@@ -4469,7 +4469,7 @@ WHERE p.project_id = $8
     WHERE sv.id = $1
       AND sk.project_id = p.project_id
   )
-ON CONFLICT (skill_version_id, risk_policy_id) WHERE skill_version_id IS NOT NULL
+ON CONFLICT (skill_version_id, risk_policy_id, risk_policy_version) WHERE skill_version_id IS NOT NULL
 DO UPDATE SET
   source = EXCLUDED.source,
   found = TRUE,
@@ -4665,6 +4665,7 @@ SELECT EXISTS (
       FROM risk_results rr
       WHERE rr.skill_version_id = $2
         AND rr.risk_policy_id = p.id
+        AND rr.risk_policy_version = p.version
     )
     -- Same anchor/project pin as RecordSkillPromptInjectionScan. Without it a
     -- foreign version id opens the gate and burns a judge call on content the
@@ -4685,8 +4686,8 @@ type SkillVersionNeedsPromptInjectionScanParams struct {
 }
 
 // True when some enabled prompt-injection policy has no recorded scan of this
-// skill version yet. Gates the judge call: content is immutable per version,
-// so a recorded scan is never worth repeating.
+// skill version under the current policy version yet. Gates the judge call:
+// content is immutable per version, but policy configuration can change.
 func (q *Queries) SkillVersionNeedsPromptInjectionScan(ctx context.Context, arg SkillVersionNeedsPromptInjectionScanParams) (bool, error) {
 	row := q.db.QueryRow(ctx, skillVersionNeedsPromptInjectionScan, arg.ProjectID, arg.SkillVersionID)
 	var exists bool

@@ -109,6 +109,7 @@ SELECT EXISTS (
       FROM risk_results rr
       WHERE rr.skill_version_id = sv.id
         AND rr.risk_policy_id = p.id
+        AND rr.risk_policy_version = p.version
     )
 )::boolean;
 

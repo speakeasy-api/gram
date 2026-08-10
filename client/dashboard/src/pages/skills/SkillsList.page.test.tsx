@@ -45,6 +45,9 @@ const testState = vi.hoisted(() => ({
   toastInfo: vi.fn(),
   adminAllowed: true,
   policyHookCalls: 0,
+  policyError: null as Error | null,
+  policyRefetch: vi.fn().mockResolvedValue(undefined),
+  invalidatePolicies: vi.fn().mockResolvedValue(undefined),
   policies: [] as Array<Record<string, unknown>>,
 }));
 
@@ -103,9 +106,16 @@ vi.mock("@/routes", () => ({
   }),
 }));
 vi.mock("@gram/client/react-query/riskListPolicies.js", () => ({
+  invalidateAllRiskListPolicies: testState.invalidatePolicies,
   useRiskListPolicies: () => {
     testState.policyHookCalls += 1;
-    return { data: { policies: testState.policies } };
+    return {
+      data: testState.policyError
+        ? undefined
+        : { policies: testState.policies },
+      error: testState.policyError,
+      refetch: testState.policyRefetch,
+    };
   },
 }));
 vi.mock("@gram/client/react-query/skills.js", () => ({
@@ -291,7 +301,9 @@ vi.mock("@/components/page-layout", () => {
     Filters,
     Count: Wrapper,
     Actions: Wrapper,
-    Refresh: () => null,
+    Refresh: ({ onRefresh }: { onRefresh: () => void }) => (
+      <button onClick={onRefresh}>Refresh</button>
+    ),
   });
   return {
     Page: Object.assign(Wrapper, {
@@ -457,6 +469,9 @@ beforeEach(() => {
   testState.toastInfo.mockReset();
   testState.adminAllowed = true;
   testState.policyHookCalls = 0;
+  testState.policyError = null;
+  testState.policyRefetch.mockReset().mockResolvedValue(undefined);
+  testState.invalidatePolicies.mockReset().mockResolvedValue(undefined);
   testState.policies = [];
   testState.invalidateSkills.mockReset().mockResolvedValue(undefined);
   testState.invalidateSkill.mockReset().mockResolvedValue(undefined);
@@ -501,6 +516,30 @@ describe("SkillsList pagination surfaces", () => {
 
     expect(screen.queryByText("Set up prompt injection scanning")).toBeNull();
     expect(testState.policyHookCalls).toBe(0);
+  });
+
+  it("shows a retry when prompt injection policy status fails to load", () => {
+    testState.policyError = new Error("policy request failed");
+
+    render(<SkillsList />);
+
+    expect(
+      screen.getByText("Unable to load prompt injection policy"),
+    ).toBeDefined();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Retry policy status" }),
+    );
+    expect(testState.policyRefetch).toHaveBeenCalledOnce();
+  });
+
+  it("refreshes prompt injection policy status with the skills page", () => {
+    render(<SkillsList />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+
+    expect(testState.invalidatePolicies).toHaveBeenCalledWith(
+      testState.queryClient,
+    );
   });
 
   it("shows only the compact skills table columns", () => {
