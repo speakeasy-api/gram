@@ -13,6 +13,10 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
  */
 export type UserSessionClient = {
   /**
+   * How many live user_sessions this client currently holds. Counted the same way the sessions listing's active filter counts: not revoked, and the refresh token has not expired.
+   */
+  activeSessionCount: number;
+  /**
    * The client_id. Minted by Gram for a DCR registration; for a CIMD client it is the metadata document URL and equals client_id_metadata_uri.
    */
   clientId: string;
@@ -51,6 +55,7 @@ export const UserSessionClient$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    active_session_count: z.int(),
     client_id: z.string(),
     client_id_issued_at: z.pipe(
       z.iso.datetime({ offset: true }),
@@ -75,6 +80,7 @@ export const UserSessionClient$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "active_session_count": "activeSessionCount",
       "client_id": "clientId",
       "client_id_issued_at": "clientIdIssuedAt",
       "client_id_metadata_uri": "clientIdMetadataUri",

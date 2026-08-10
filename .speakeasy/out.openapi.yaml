@@ -74037,6 +74037,9 @@ components:
         subject_display_name:
           type: string
           description: Resolved human-readable name of the subject, if known.
+        subject_photo_url:
+          type: string
+          description: Avatar URL for the subject when it resolves to a Gram user with one. Null for API key and anonymous subjects, and for users who have no photo.
         subject_type:
           type: string
           description: 'Subject kind: ''user'', ''apikey'', or ''anonymous''.'
@@ -74046,6 +74049,10 @@ components:
         updated_at:
           type: string
           format: date-time
+        user_session_client_id:
+          type: string
+          description: The user_session_client this session was issued through. Null for sessions with no bound client. Unlike client_name, this identifies the registration unambiguously, so it is what a per-client drill-down should match on.
+          format: uuid
         user_session_issuer_id:
           type: string
           description: The issuing user_session_issuer id.
@@ -74065,6 +74072,10 @@ components:
     UserSessionClient:
       type: object
       properties:
+        active_session_count:
+          type: integer
+          description: 'How many live user_sessions this client currently holds. Counted the same way the sessions listing''s active filter counts: not revoked, and the refresh token has not expired.'
+          format: int64
         client_id:
           type: string
           description: The client_id. Minted by Gram for a DCR registration; for a CIMD client it is the metadata document URL and equals client_id_metadata_uri.
@@ -74110,6 +74121,7 @@ components:
         - client_id_issued_at
         - created_at
         - updated_at
+        - active_session_count
     UserSessionConsent:
       type: object
       properties:

@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/Badge";
+import { getInitials } from "@/lib/initials";
 import { Page } from "@/components/page-layout";
 import { Icon } from "@/components/ui/Icon";
 import { type IconName } from "@/components/ui/Icon/names";
@@ -1834,15 +1835,6 @@ function getTotalTokens(metrics: TokenUsageTotals | null | undefined) {
   const totalTokens = metrics.totalTokens ?? 0;
   if (totalTokens > 0) return totalTokens;
   return (metrics.totalInputTokens ?? 0) + (metrics.totalOutputTokens ?? 0);
-}
-
-function getInitials(name: string) {
-  return name
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
 }
 
 async function fetchMatchingUserSummary(
