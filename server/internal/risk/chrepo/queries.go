@@ -52,6 +52,15 @@ type RiskFindingRow struct {
 	MessageCreatedAt time.Time `ch:"message_created_at"`
 	AssistantID      string    `ch:"assistant_id"`
 
+	// ChatSource is the canonical product surface (codex, cursor, claude-code,
+	// ...) of the scanned message; Team is the resolved user's WorkOS directory
+	// department; UserEmail is the resolved internal user's email. All resolved
+	// from Postgres at ingest alongside the ids above (so Watchdog reads never
+	// need a Postgres lookup) and empty when unresolved.
+	ChatSource string `ch:"chat_source"`
+	Team       string `ch:"team"`
+	UserEmail  string `ch:"user_email"`
+
 	// Category is the canonical risk category for (source, rule_id), computed
 	// via internal/risk/categories at ingest. Empty for dead-letter sentinels.
 	Category string `ch:"category"`
@@ -143,6 +152,9 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			"false_positive_at",
 			"message_created_at",
 			"assistant_id",
+			"chat_source",
+			"team",
+			"user_email",
 			"surface",
 			"field",
 			"path",
@@ -209,6 +221,9 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			chNullable(row.FalsePositiveAt),
 			row.MessageCreatedAt,
 			row.AssistantID,
+			row.ChatSource,
+			row.Team,
+			row.UserEmail,
 			row.Surface,
 			row.Field,
 			row.Path,

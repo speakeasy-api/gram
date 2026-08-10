@@ -34991,6 +34991,121 @@ paths:
             x-speakeasy-name-override: rules
             x-speakeasy-react-hook:
                 name: RiskRuleBreakdown
+    /rpc/risk.getSignals:
+        get:
+            description: Get clustered risk signals — findings grouped by rule and ranked by severity score — plus window-level KPI stats and the exposure breakdown by category. Powers the Watchdog page. Served from the ClickHouse findings store.
+            operationId: getRiskSignals
+            parameters:
+                - allowEmptyValue: true
+                  description: Inclusive start of the signals window. Defaults to the start of the 7-day calendar window ending at to.
+                  in: query
+                  name: from
+                  schema:
+                    description: Inclusive start of the signals window. Defaults to the start of the 7-day calendar window ending at to.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Exclusive end of the signals window. Defaults to now.
+                  in: query
+                  name: to
+                  schema:
+                    description: Exclusive end of the signals window. Defaults to now.
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RiskSignalsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getRiskSignals risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.signals
+            x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: RiskSignals
     /rpc/risk.getUserBreakdown:
         get:
             description: Per-user breakdowns of findings by category and by rule_id within a time window. Powers the user drill-down on /risk-overview.
@@ -66424,6 +66539,24 @@ components:
                 - enabled
                 - created_at
                 - updated_at
+        RiskExposureSlice:
+            type: object
+            properties:
+                category:
+                    type: string
+                    description: Canonical risk category key.
+                findings:
+                    type: integer
+                    description: Deduplicated finding count for this category in the window.
+                    format: int64
+                share:
+                    type: number
+                    description: Fraction of the window's findings in this category (0-1).
+                    format: double
+            required:
+                - category
+                - findings
+                - share
         RiskIDRequestBody:
             type: object
             properties:
@@ -67113,6 +67246,183 @@ components:
                 - last_seq
                 - has_more_before
                 - has_more_after
+        RiskSignal:
+            type: object
+            properties:
+                apps:
+                    type: array
+                    items:
+                        type: string
+                    description: Source apps (chat surfaces) the findings were observed in. Empty until app attribution is recorded on findings.
+                category:
+                    type: string
+                    description: Canonical risk category of the rule (secrets, pii, ...).
+                description:
+                    type: string
+                    description: Representative finding description for this rule. Empty when findings carry no description.
+                detection_sources:
+                    type: array
+                    items:
+                        type: string
+                    description: Detector sources that produced findings in this signal (gitleaks, presidio, prompt_injection, ...).
+                findings:
+                    type: integer
+                    description: Deduplicated finding count in the window.
+                    format: int64
+                first_seen:
+                    type: string
+                    description: Event time of the earliest finding in the window.
+                    format: date-time
+                key:
+                    type: string
+                    description: Stable client identity for the signal. Currently 'rule:<rule_id>'.
+                last_seen:
+                    type: string
+                    description: Event time of the latest finding in the window.
+                    format: date-time
+                previous_findings:
+                    type: integer
+                    description: Finding count in the equal-length window immediately before from.
+                    format: int64
+                risk_score:
+                    type: number
+                    description: Heuristic severity score on the 0.1-10 scale used across risk surfaces.
+                    format: double
+                rule_id:
+                    type: string
+                    description: Rule identifier the signal clusters on (e.g. 'secret.aws_access_token', 'pii.email_address').
+                severity:
+                    type: string
+                    description: Severity rating derived from the risk score.
+                    enum:
+                        - low
+                        - medium
+                        - high
+                        - critical
+                sparkline:
+                    type: array
+                    items:
+                        type: integer
+                        format: int64
+                    description: Deduplicated finding counts per equal-width time bucket across the window, oldest bucket first. Powers the per-signal trend sparkline.
+                teams:
+                    type: integer
+                    description: Distinct teams with at least one finding in the window. Zero until team attribution is recorded on findings.
+                    format: int64
+                top_users:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskSignalTopUser'
+                    description: Top users by finding count within the signal.
+                users:
+                    type: integer
+                    description: Distinct users with at least one finding in the window.
+                    format: int64
+            description: 'One clustered risk signal: all live findings for a single rule in the window, with a heuristic severity score and trend/spread stats.'
+            required:
+                - key
+                - rule_id
+                - category
+                - description
+                - detection_sources
+                - apps
+                - severity
+                - risk_score
+                - findings
+                - previous_findings
+                - users
+                - teams
+                - first_seen
+                - last_seen
+                - top_users
+                - sparkline
+        RiskSignalTopUser:
+            type: object
+            properties:
+                email:
+                    type: string
+                    description: User email, or Unknown user when unavailable.
+                external_user_id:
+                    type: string
+                    description: External user identifier as recorded on chats, when known. Empty when the finding cannot be attributed to an external user.
+                findings:
+                    type: integer
+                    description: Finding count for this user within the signal and window.
+                    format: int64
+                team:
+                    type: string
+                    description: WorkOS directory department of the user when known; empty otherwise.
+            required:
+                - email
+                - external_user_id
+                - team
+                - findings
+        RiskSignalsResult:
+            type: object
+            properties:
+                critical_signals:
+                    type: integer
+                    description: Signals rated critical in the window.
+                    format: int64
+                exposure:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskExposureSlice'
+                    description: Finding counts by category, largest first.
+                findings_24h:
+                    type: integer
+                    description: Deduplicated findings in the 24 hours ending at to.
+                    format: int64
+                from:
+                    type: string
+                    description: Inclusive start of the signals window.
+                    format: date-time
+                open_signals:
+                    type: integer
+                    description: Signals with at least one live finding in the window.
+                    format: int64
+                org_risk_score:
+                    type: number
+                    description: Heuristic organization risk score on the 0.1-10 scale, blended from the top signal scores and finding volume. Zero when the window has no findings.
+                    format: double
+                previous_findings_24h:
+                    type: integer
+                    description: Deduplicated findings in the 24 hours before that.
+                    format: int64
+                previous_org_risk_score:
+                    type: number
+                    description: Organization risk score computed the same way over the equal-length window immediately before from.
+                    format: double
+                previous_users_exposed:
+                    type: integer
+                    description: Distinct users with at least one finding in the equal-length window immediately before from.
+                    format: int64
+                signals:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskSignal'
+                    description: Signals ranked by risk score, highest first.
+                to:
+                    type: string
+                    description: Exclusive end of the signals window.
+                    format: date-time
+                users_exposed:
+                    type: integer
+                    description: Distinct users with at least one finding in the window.
+                    format: int64
+            required:
+                - from
+                - to
+                - org_risk_score
+                - previous_org_risk_score
+                - findings_24h
+                - previous_findings_24h
+                - open_signals
+                - critical_signals
+                - users_exposed
+                - previous_users_exposed
+                - exposure
+                - signals
         RiskSpan:
             type: object
             properties:
