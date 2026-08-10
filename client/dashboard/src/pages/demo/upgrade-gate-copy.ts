@@ -6,10 +6,10 @@ import {
 import { format } from "date-fns";
 
 const SHARED_BODY =
-  "Book 30 minutes and we'll find the plan that fits your organization.";
+  "Book 30 minutes with us and we'll find the plan that fits your organization.";
 
 export type GateCopy = {
-  /** Colour of the status dot. Static — the pulse is for live sessions. */
+  /** Color of the status dot. Static — the pulse is for live sessions. */
   dotClassName: string;
   status: string;
   body: string;

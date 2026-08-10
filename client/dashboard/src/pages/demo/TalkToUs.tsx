@@ -88,8 +88,8 @@ function UpgradeGate({
       <DemoBookingFlow
         eventLabel="Upgrade Trial — 30 min"
         intro={
-          <div className="grid w-full grid-cols-1 items-start gap-10 md:grid-cols-2">
-            <div className="flex flex-col gap-2.5">
+          <div className="grid w-full grid-cols-1 items-start gap-4 md:grid-cols-[2fr_2.25fr]">
+            <div className="flex flex-col gap-2">
               <span className="auth-mono flex items-center gap-2.5 text-[12px] text-[var(--muted)]">
                 <i
                   aria-hidden="true"
@@ -97,12 +97,12 @@ function UpgradeGate({
                 />
                 {copy.status}
               </span>
-              <h1 className="text-[40px] leading-[1.05] font-thin tracking-[-0.035em] [font-family:var(--f-display)]">
+              <h1 className="text-[40px] leading-[1.05] font-thin tracking-tight [font-family:var(--f-display)]">
                 Book a call to upgrade.
               </h1>
             </div>
-            <div className="flex flex-col gap-2 md:border-l md:border-[var(--edge-soft)] md:pl-10">
-              <p className="text-[14px] tracking-[0.0025em] text-[var(--muted-strong)]">
+            <div className="flex flex-col gap-2 md:border-l md:border-[var(--edge-soft)] md:pl-6">
+              <p className="text-[14px] text-[var(--muted-strong)]">
                 {copy.body}
               </p>
               <p className="auth-mono-text text-[12px] text-[var(--muted)]">
