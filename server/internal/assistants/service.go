@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,8 +21,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assets/blobio"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -395,6 +399,7 @@ type ServiceCore struct {
 	contextWindow     *openrouter.ContextWindowResolver
 	wakeCanceller     WakeCanceller
 	chatWriter        *chat.ChatMessageWriter
+	assetStorage      assets.BlobStore
 	dashboardIngestor DashboardIngestor
 	featureFlags      feature.Provider
 	turnClassified    metric.Int64Counter
@@ -440,6 +445,7 @@ func NewServiceCore(
 		contextWindow:     contextWindow,
 		wakeCanceller:     nil,
 		chatWriter:        nil,
+		assetStorage:      nil,
 		dashboardIngestor: nil,
 		featureFlags:      nil,
 		turnClassified:    turnClassified,
@@ -465,6 +471,14 @@ func (s *ServiceCore) SetDashboardIngestor(i DashboardIngestor) {
 // site. Self-heal is skipped if the writer was never set.
 func (s *ServiceCore) SetChatMessageWriter(w *chat.ChatMessageWriter) {
 	s.chatWriter = w
+}
+
+// SetAssetStorage wires the blob store history replay uses to fetch
+// structured message content that overflowed content_raw. Set after
+// construction to match the existing post-construction injection pattern;
+// without it, oversized messages replay their plain-text projection.
+func (s *ServiceCore) SetAssetStorage(storage assets.BlobStore) {
+	s.assetStorage = storage
 }
 
 // SetFeatureProvider wires PostHog flag evaluation. Set after construction
@@ -3443,13 +3457,15 @@ func (s *ServiceCore) loadChatHistory(ctx context.Context, chatID uuid.UUID, pro
 		return nil, fmt.Errorf("list assistant chat messages: %w", err)
 	}
 
+	spilled := s.prefetchHistoryContentAssets(ctx, messages)
+
 	history := make([]runtimeMessage, 0, len(messages))
-	for _, message := range messages {
+	for i, message := range messages {
 		switch message.Role {
 		case "user":
 			history = append(history, runtimeMessage{
 				Role:       "user",
-				Content:    message.Content,
+				Content:    s.loadHistoryMessageContent(ctx, message, spilled[i]),
 				ToolCalls:  nil,
 				ToolCallID: "",
 			})
@@ -3460,7 +3476,7 @@ func (s *ServiceCore) loadChatHistory(ctx context.Context, chatID uuid.UUID, pro
 			}
 			history = append(history, runtimeMessage{
 				Role:       "assistant",
-				Content:    message.Content,
+				Content:    s.loadHistoryMessageContent(ctx, message, spilled[i]),
 				ToolCalls:  toolCalls,
 				ToolCallID: "",
 			})
@@ -3470,7 +3486,7 @@ func (s *ServiceCore) loadChatHistory(ctx context.Context, chatID uuid.UUID, pro
 			}
 			history = append(history, runtimeMessage{
 				Role:       "tool",
-				Content:    message.Content,
+				Content:    s.loadHistoryMessageContent(ctx, message, spilled[i]),
 				ToolCalls:  nil,
 				ToolCallID: message.ToolCallID.String,
 			})
@@ -3488,6 +3504,71 @@ func (s *ServiceCore) loadChatHistory(ctx context.Context, chatID uuid.UUID, pro
 		}
 	}
 	return history, nil
+}
+
+// historyAssetReadConcurrency bounds the parallel blob reads issued while
+// prefetching spilled history content on a cold bootstrap.
+const historyAssetReadConcurrency = 8
+
+// prefetchHistoryContentAssets concurrently reads the content assets for rows
+// whose structured content overflowed content_raw, keyed by row index, so a
+// long thread's cold bootstrap does not pay one serial blob round trip per
+// spilled row. Failed reads are logged and left absent; those rows degrade to
+// the text projection.
+func (s *ServiceCore) prefetchHistoryContentAssets(ctx context.Context, messages []chatrepo.ChatMessage) map[int][]byte {
+	if s.assetStorage == nil {
+		return nil
+	}
+	var mu sync.Mutex
+	spilled := make(map[int][]byte)
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.SetLimit(historyAssetReadConcurrency)
+	for i, message := range messages {
+		if len(message.ContentRaw) != 0 || !message.ContentAssetUrl.Valid || message.ContentAssetUrl.String == "" {
+			continue
+		}
+		eg.Go(func() error {
+			data, err := blobio.ReadAllString(egCtx, s.assetStorage, message.ContentAssetUrl.String, chat.MaxAssetReadSize)
+			if err != nil {
+				s.logger.WarnContext(egCtx, "read chat message content asset; using text projection",
+					attr.SlogError(err), attr.SlogChatID(message.ChatID.String()))
+				return nil
+			}
+			mu.Lock()
+			spilled[i] = []byte(data)
+			mu.Unlock()
+			return nil
+		})
+	}
+	// Workers never return errors; failures degrade to the text projection.
+	_ = eg.Wait()
+	return spilled
+}
+
+// loadHistoryMessageContent resolves the replayed content for one chat row,
+// preferring the structured JSON captured at store time (content_raw inline,
+// then the prefetched content asset) over the plain-text projection column.
+// The text column remains the fallback whenever structured content is absent,
+// unreadable, or not replayable (see replayableParts), so text-only history
+// replays exactly as before.
+func (s *ServiceCore) loadHistoryMessageContent(ctx context.Context, row chatrepo.ChatMessage, assetRaw []byte) runtimeContent {
+	raw := row.ContentRaw
+	if len(raw) == 0 {
+		raw = assetRaw
+	}
+	if len(raw) == 0 {
+		return runtimeTextContent(row.Content)
+	}
+	var content runtimeContent
+	if err := json.Unmarshal(raw, &content); err != nil {
+		s.logger.WarnContext(ctx, "decode structured chat message content; using text projection",
+			attr.SlogError(err), attr.SlogChatID(row.ChatID.String()))
+		return runtimeTextContent(row.Content)
+	}
+	if !content.replayableParts() {
+		return runtimeTextContent(row.Content)
+	}
+	return content
 }
 
 // decodePersistedToolCalls unmarshals the JSONB stored by the chat capture
