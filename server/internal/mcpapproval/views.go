@@ -81,6 +81,15 @@ func fromGetRow(row repo.GetApprovalRequestRow) requestFields {
 	}
 }
 
+func fromTargetRow(row repo.GetApprovalRequestByTargetRow) requestFields {
+	return requestFields{
+		ID: row.ID, TargetKind: row.TargetKind, TargetRaw: row.TargetRaw, TargetKey: row.TargetKey,
+		ArtifactRef: row.ArtifactRef, VersionPinned: row.VersionPinned,
+		Status: row.Status, RequesterCount: row.RequesterCount,
+		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+	}
+}
+
 func decisionView(decision repo.McpApprovalDecision) *gen.ApprovalDecision {
 	return &gen.ApprovalDecision{
 		ID:                   decision.ID.String(),

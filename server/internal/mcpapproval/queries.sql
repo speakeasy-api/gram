@@ -36,6 +36,26 @@ WHERE r.id = @id
   AND r.project_id = @project_id
   AND r.deleted IS FALSE;
 
+-- name: GetApprovalRequestByTarget :one
+-- Resolves the review tracking a target within the caller's project, so the
+-- read-side ensure path can return an existing dossier without re-admitting
+-- it — a page view must not re-run evidence gathering or audit a create that
+-- did not happen.
+SELECT
+  r.*
+  , (
+      SELECT count(*)
+      FROM mcp_approval_request_requesters req
+      WHERE req.mcp_approval_request_id = r.id
+        AND req.project_id = r.project_id
+        AND req.deleted IS FALSE
+    ) AS requester_count
+FROM mcp_approval_requests r
+WHERE r.project_id = @project_id
+  AND r.target_kind = @target_kind
+  AND r.target_key = @target_key
+  AND r.deleted IS FALSE;
+
 -- name: ListApprovalRequestsByTargetKeys :many
 -- Resolves the approval request tracking each of a set of canonical server
 -- URLs, so the Shadow MCP inventory can join approval state onto its rows.
@@ -179,7 +199,10 @@ SET updated_at = clock_timestamp()
   -- A later promotion links its bypass request onto an existing review; a
   -- proactive re-request never clears an existing link.
   , risk_policy_bypass_request_id = COALESCE(EXCLUDED.risk_policy_bypass_request_id, mcp_approval_requests.risk_policy_bypass_request_id)
-RETURNING *;
+-- inserted distinguishes a fresh row from a reused one (xmax is zero only for
+-- rows this statement inserted), so the caller can avoid auditing a create
+-- when concurrent dossier opens or a gather retry landed on an existing row.
+RETURNING *, (xmax = 0) AS inserted;
 
 -- name: UpsertApprovalRequestRequester :one
 -- One row per person per request: ten people wanting the same server is one

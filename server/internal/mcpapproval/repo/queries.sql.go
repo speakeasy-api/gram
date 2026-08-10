@@ -242,6 +242,80 @@ func (q *Queries) GetApprovalRequest(ctx context.Context, arg GetApprovalRequest
 	return i, err
 }
 
+const getApprovalRequestByTarget = `-- name: GetApprovalRequestByTarget :one
+SELECT
+  r.id, r.organization_id, r.project_id, r.target_kind, r.target_raw, r.target_key, r.artifact_ref, r.version_pinned, r.risk_policy_bypass_request_id, r.status, r.current_evidence, r.evidence_version, r.evidence_collected_at, r.created_at, r.updated_at, r.deleted_at, r.deleted
+  , (
+      SELECT count(*)
+      FROM mcp_approval_request_requesters req
+      WHERE req.mcp_approval_request_id = r.id
+        AND req.project_id = r.project_id
+        AND req.deleted IS FALSE
+    ) AS requester_count
+FROM mcp_approval_requests r
+WHERE r.project_id = $1
+  AND r.target_kind = $2
+  AND r.target_key = $3
+  AND r.deleted IS FALSE
+`
+
+type GetApprovalRequestByTargetParams struct {
+	ProjectID  uuid.UUID
+	TargetKind string
+	TargetKey  string
+}
+
+type GetApprovalRequestByTargetRow struct {
+	ID                        uuid.UUID
+	OrganizationID            string
+	ProjectID                 uuid.UUID
+	TargetKind                string
+	TargetRaw                 string
+	TargetKey                 string
+	ArtifactRef               pgtype.Text
+	VersionPinned             bool
+	RiskPolicyBypassRequestID uuid.NullUUID
+	Status                    string
+	CurrentEvidence           []byte
+	EvidenceVersion           int32
+	EvidenceCollectedAt       pgtype.Timestamptz
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
+	DeletedAt                 pgtype.Timestamptz
+	Deleted                   bool
+	RequesterCount            int64
+}
+
+// Resolves the review tracking a target within the caller's project, so the
+// read-side ensure path can return an existing dossier without re-admitting
+// it — a page view must not re-run evidence gathering or audit a create that
+// did not happen.
+func (q *Queries) GetApprovalRequestByTarget(ctx context.Context, arg GetApprovalRequestByTargetParams) (GetApprovalRequestByTargetRow, error) {
+	row := q.db.QueryRow(ctx, getApprovalRequestByTarget, arg.ProjectID, arg.TargetKind, arg.TargetKey)
+	var i GetApprovalRequestByTargetRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.TargetKind,
+		&i.TargetRaw,
+		&i.TargetKey,
+		&i.ArtifactRef,
+		&i.VersionPinned,
+		&i.RiskPolicyBypassRequestID,
+		&i.Status,
+		&i.CurrentEvidence,
+		&i.EvidenceVersion,
+		&i.EvidenceCollectedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+		&i.RequesterCount,
+	)
+	return i, err
+}
+
 const getApprovalRequestForDecision = `-- name: GetApprovalRequestForDecision :one
 SELECT id, organization_id, target_kind, target_raw, target_key, status, current_evidence, evidence_version, risk_policy_bypass_request_id
 FROM mcp_approval_requests
@@ -825,7 +899,7 @@ SET updated_at = clock_timestamp()
   -- A later promotion links its bypass request onto an existing review; a
   -- proactive re-request never clears an existing link.
   , risk_policy_bypass_request_id = COALESCE(EXCLUDED.risk_policy_bypass_request_id, mcp_approval_requests.risk_policy_bypass_request_id)
-RETURNING id, organization_id, project_id, target_kind, target_raw, target_key, artifact_ref, version_pinned, risk_policy_bypass_request_id, status, current_evidence, evidence_version, evidence_collected_at, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, target_kind, target_raw, target_key, artifact_ref, version_pinned, risk_policy_bypass_request_id, status, current_evidence, evidence_version, evidence_collected_at, created_at, updated_at, deleted_at, deleted, (xmax = 0) AS inserted
 `
 
 type UpsertApprovalRequestParams struct {
@@ -840,6 +914,27 @@ type UpsertApprovalRequestParams struct {
 	RiskPolicyBypassRequestID uuid.NullUUID
 }
 
+type UpsertApprovalRequestRow struct {
+	ID                        uuid.UUID
+	OrganizationID            string
+	ProjectID                 uuid.UUID
+	TargetKind                string
+	TargetRaw                 string
+	TargetKey                 string
+	ArtifactRef               pgtype.Text
+	VersionPinned             bool
+	RiskPolicyBypassRequestID uuid.NullUUID
+	Status                    string
+	CurrentEvidence           []byte
+	EvidenceVersion           int32
+	EvidenceCollectedAt       pgtype.Timestamptz
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
+	DeletedAt                 pgtype.Timestamptz
+	Deleted                   bool
+	Inserted                  bool
+}
+
 // Re-requesting a server reuses the same row rather than starting a second
 // review, so decisions accumulate as history against one target per project.
 // target_key is what deduplicates; target_raw stays as the requester wrote it.
@@ -849,7 +944,10 @@ type UpsertApprovalRequestParams struct {
 // joins the queue. An approved or still-pending request keeps its status —
 // re-asking changes nothing, and an admin can re-decide at any time. An
 // incoming dossier ('unreviewed') never downgrades an existing row.
-func (q *Queries) UpsertApprovalRequest(ctx context.Context, arg UpsertApprovalRequestParams) (McpApprovalRequest, error) {
+// inserted distinguishes a fresh row from a reused one (xmax is zero only for
+// rows this statement inserted), so the caller can avoid auditing a create
+// when concurrent dossier opens or a gather retry landed on an existing row.
+func (q *Queries) UpsertApprovalRequest(ctx context.Context, arg UpsertApprovalRequestParams) (UpsertApprovalRequestRow, error) {
 	row := q.db.QueryRow(ctx, upsertApprovalRequest,
 		arg.OrganizationID,
 		arg.ProjectID,
@@ -861,7 +959,7 @@ func (q *Queries) UpsertApprovalRequest(ctx context.Context, arg UpsertApprovalR
 		arg.Status,
 		arg.RiskPolicyBypassRequestID,
 	)
-	var i McpApprovalRequest
+	var i UpsertApprovalRequestRow
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
@@ -880,6 +978,7 @@ func (q *Queries) UpsertApprovalRequest(ctx context.Context, arg UpsertApprovalR
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+		&i.Inserted,
 	)
 	return i, err
 }

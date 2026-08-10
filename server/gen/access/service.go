@@ -546,8 +546,9 @@ type Selector struct {
 	ServerURL *string
 }
 
-// The MCP approval request tracking a server. Decisions recorded on it are
-// what allow or block the server.
+// The MCP approval request tracking review status for a server. Status records
+// the review outcome, which may cover only selected principals; the server's
+// access field reports enforcement state.
 type ShadowMCPInventoryApprovalRequest struct {
 	ID     string
 	Status string
