@@ -91,7 +91,7 @@ function SharedSkillDocument({ skill }: { skill: SharedSkill2 }): JSX.Element {
   return (
     <article className="space-y-8">
       <header className="space-y-3">
-        <h1 className="text-3xl font-semibold">{skill.displayName}</h1>
+        <h1 className="font-display text-3xl font-thin">{skill.displayName}</h1>
         {skill.summary && (
           <Text muted className="max-w-2xl">
             {skill.summary}

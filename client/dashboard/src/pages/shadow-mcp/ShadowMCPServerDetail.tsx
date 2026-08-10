@@ -5,6 +5,7 @@ import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import { MetricCard } from "@/components/ui/MetricCard";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
@@ -107,10 +108,6 @@ function UserSources({
   );
 }
 
-function userCountLabel(count: number) {
-  return `${count} ${count === 1 ? "user" : "users"}`;
-}
-
 function actionModeForServer(
   server: ShadowMCPInventoryServer,
   disposition: ShadowMCPPolicyDisposition | null,
@@ -163,24 +160,11 @@ function ServerStatus({
   );
 }
 
-function DetailStat({
-  emphasized = false,
-  label,
-  value,
-}: {
-  emphasized?: boolean;
-  label: string;
-  value: string;
-}) {
+function MetaItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0">
-      <Text muted small>
-        {label}
-      </Text>
-      <Text
-        variant={emphasized ? "body" : "small"}
-        className="mt-1 truncate font-medium"
-      >
+    <div className="flex items-baseline gap-2">
+      <span className="text-eyebrow">{label}</span>
+      <Text variant="small" className="font-medium">
         {value}
       </Text>
     </div>
@@ -197,46 +181,63 @@ function ServerSummary({
   server: ShadowMCPInventoryServer;
 }) {
   return (
-    <div className="border-border overflow-hidden rounded-md border">
-      <div className="bg-muted/20 grid gap-4 p-4 md:grid-cols-4">
+    <div className="space-y-4">
+      <MetricCard.Group>
+        <MetricCard
+          size="sm"
+          label="Requests"
+          value={server.requestCount}
+          tone={server.requestCount > 0 ? "destructive" : "neutral"}
+          description={
+            server.requestCount === 1 ? "pending request" : "pending requests"
+          }
+        />
+        <MetricCard
+          size="sm"
+          tone="information"
+          label="Users"
+          value={server.userCount}
+          description={
+            server.userCount === 1 ? "observed user" : "observed users"
+          }
+        />
+        <MetricCard
+          size="sm"
+          tone="information"
+          label="Observed use"
+          value={server.observedUseCount}
+          description={server.observedUseCount === 1 ? "call" : "calls"}
+        />
+        <MetricCard
+          size="sm"
+          tone="information"
+          label="Allowed policies"
+          value={server.allowedPolicyIds.length}
+          description={
+            server.allowedPolicyIds.length === 1 ? "policy" : "policies"
+          }
+        />
+      </MetricCard.Group>
+      <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
         <ServerStatus
           disposition={disposition}
           policyState={policyState}
           server={server}
         />
-        <DetailStat
-          emphasized
-          label="Requests"
-          value={`${server.requestCount} ${server.requestCount === 1 ? "request" : "requests"}`}
-        />
-        <DetailStat
-          emphasized
-          label="Users"
-          value={userCountLabel(server.userCount)}
-        />
-        <DetailStat
-          emphasized
-          label="Allowed policies"
-          value={`${server.allowedPolicyIds.length} ${server.allowedPolicyIds.length === 1 ? "policy" : "policies"}`}
-        />
-      </div>
-      <div className="border-border grid gap-4 border-t p-4 md:grid-cols-4">
-        <DetailStat
-          label="Observed use"
-          value={usageCountLabel(server.observedUseCount)}
-        />
-        <DetailStat
-          label="Last called"
-          value={formatShortDate(server.lastCalled)}
-        />
-        <DetailStat
-          label="Last seen"
-          value={formatShortDate(server.lastSeen)}
-        />
-        <DetailStat
-          label="First seen"
-          value={formatShortDate(server.firstSeen)}
-        />
+        <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
+          <MetaItem
+            label="Last called"
+            value={formatShortDate(server.lastCalled)}
+          />
+          <MetaItem
+            label="Last seen"
+            value={formatShortDate(server.lastSeen)}
+          />
+          <MetaItem
+            label="First seen"
+            value={formatShortDate(server.firstSeen)}
+          />
+        </div>
       </div>
     </div>
   );
@@ -288,7 +289,7 @@ function TopUsersTable({
 
   if (users.length === 0) {
     return (
-      <div className="bg-muted/20 flex min-h-32 flex-col items-center justify-center rounded-md border border-dashed px-6 py-8 text-center">
+      <div className="bg-muted/20 flex min-h-32 flex-col items-center justify-center border border-dashed px-6 py-8 text-center">
         <Text variant="body" className="font-medium">
           No user activity
         </Text>

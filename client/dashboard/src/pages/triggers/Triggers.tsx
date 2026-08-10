@@ -135,7 +135,7 @@ function WebhookUrlPill({ url }: { url: string }) {
 
 function TriggersEmptyState({ onCreate }: { onCreate: () => void }) {
   return (
-    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
+    <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16">
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
         <Icon name="zap" className="text-muted-foreground h-6 w-6" />
       </div>
@@ -302,8 +302,8 @@ function ConfigField({
               onClick={() => toggle(opt)}
               className={
                 selected.includes(opt)
-                  ? "border-primary bg-primary/5 rounded-md border px-3 py-1 text-sm"
-                  : "border-border hover:border-muted-foreground/30 rounded-md border px-3 py-1 text-sm"
+                  ? "border-primary bg-primary/5 border px-3 py-1 text-sm"
+                  : "border-border hover:border-muted-foreground/30 border px-3 py-1 text-sm"
               }
             >
               {opt}
@@ -642,7 +642,7 @@ function TriggerDialog({
             )}
 
             {missingEnvVars.length > 0 && selectedEnvironment && (
-              <div className="border-warning-default bg-warning-softest rounded-md border p-3">
+              <div className="border-warning-default bg-warning-softest border p-3">
                 <Text variant="body" className="mb-1 font-medium">
                   Missing environment variables
                 </Text>
@@ -664,7 +664,7 @@ function TriggerDialog({
                       key={req.name}
                       className="flex items-center gap-2 text-sm"
                     >
-                      <code className="bg-muted rounded px-1.5 py-0.5 text-xs">
+                      <code className="bg-muted px-1.5 py-0.5 text-xs">
                         {req.name}
                       </code>
                       {req.description && (

@@ -1,7 +1,7 @@
 import { RequireScope } from "@/components/require-scope";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Button as UiButton } from "@/components/ui/Button";
-import { DotCard } from "@/components/ui/DotCard";
+import { Card } from "@/components/ui/Card";
 import { DotRow } from "@/components/ui/DotRow";
 import { DotTable } from "@/components/ui/DotTable";
 import { SearchBar } from "@/components/ui/SearchBar";
@@ -140,7 +140,7 @@ export function PluginSkillsSection({
       />
     );
   } else if (!isMembershipLoaded) {
-    listContent = <Skeleton className="h-24 w-full rounded-xl" />;
+    listContent = <Skeleton className="h-24 w-full" />;
   } else if (distributions.length === 0) {
     listContent = (
       <SectionEmptyState
@@ -263,7 +263,7 @@ function PluginSkillCard({
   const navigate = useNavigate();
 
   return (
-    <DotCard
+    <Card.Entity
       className="cursor-pointer"
       onClick={() => {
         void navigate(routes.skills.detail.href(distribution.skillId));
@@ -313,7 +313,7 @@ function PluginSkillCard({
           </UiButton>
         </RequireScope>
       </div>
-    </DotCard>
+    </Card.Entity>
   );
 }
 

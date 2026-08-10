@@ -13,6 +13,7 @@ vi.mock("@/components/chart/ChartCard", () => ({
 
 vi.mock("@/components/chart/MetricCard", () => ({
   MetricCard: () => null,
+  MetricCardGroup: () => null,
 }));
 
 vi.mock("@/components/insights-dock", () => ({

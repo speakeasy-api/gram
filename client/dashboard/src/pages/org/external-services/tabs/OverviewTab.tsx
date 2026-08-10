@@ -139,7 +139,7 @@ function VerifyResult({
   result: VerifyCredentialResult;
 }): JSX.Element {
   return (
-    <div className="border-border flex flex-col gap-1 rounded-md border p-4">
+    <div className="border-border flex flex-col gap-1 border p-4">
       <Text small className="font-medium">
         {result.verified ? "Verified" : "Not verified"}
       </Text>

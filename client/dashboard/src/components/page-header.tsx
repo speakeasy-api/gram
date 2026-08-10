@@ -78,6 +78,7 @@ const breadcrumbSubstitutions = {
   "ai-integrations": "AI Integrations",
   "api-keys": "API Keys",
   "mdm-integrations": "MDM Integrations",
+  rbac: "RBAC Override",
   jamf: "Jamf Pro",
   slack: "Assistants",
 };
@@ -100,7 +101,7 @@ function BreadcrumbCrumb({
     return (
       <span
         aria-hidden="true"
-        className="bg-muted inline-block h-3.5 w-20 animate-pulse rounded align-middle"
+        className="bg-muted inline-block h-3.5 w-20 animate-pulse align-middle"
       />
     );
   }

@@ -21,11 +21,10 @@ type Client struct {
 	RevokeInstanceEndpoint    goa.Endpoint
 	IngestEndpoint            goa.Endpoint
 	TracesEndpoint            goa.Endpoint
-	MetricsEndpoint           goa.Endpoint
 }
 
 // NewClient initializes a "litellm" service client given the endpoints.
-func NewClient(createInstance, listInstances, rotateInstanceKey, revokeInstance, ingest, traces, metrics goa.Endpoint) *Client {
+func NewClient(createInstance, listInstances, rotateInstanceKey, revokeInstance, ingest, traces goa.Endpoint) *Client {
 	return &Client{
 		CreateInstanceEndpoint:    createInstance,
 		ListInstancesEndpoint:     listInstances,
@@ -33,7 +32,6 @@ func NewClient(createInstance, listInstances, rotateInstanceKey, revokeInstance,
 		RevokeInstanceEndpoint:    revokeInstance,
 		IngestEndpoint:            ingest,
 		TracesEndpoint:            traces,
-		MetricsEndpoint:           metrics,
 	}
 }
 
@@ -160,24 +158,5 @@ func (c *Client) Ingest(ctx context.Context, p *IngestPayload) (res *LitellmInge
 //   - error: internal error
 func (c *Client) Traces(ctx context.Context, p *TracesPayload) (err error) {
 	_, err = c.TracesEndpoint(ctx, p)
-	return
-}
-
-// Metrics calls the "metrics" endpoint of the "litellm" service.
-// Metrics may return the following errors:
-//   - "request_too_large" (type *goa.ServiceError): request exceeds maximum allowed size
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) Metrics(ctx context.Context, p *MetricsPayload) (err error) {
-	_, err = c.MetricsEndpoint(ctx, p)
 	return
 }

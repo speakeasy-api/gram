@@ -13,6 +13,54 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const countActiveUserSessionsByClientIDs = `-- name: CountActiveUserSessionsByClientIDs :many
+SELECT s.user_session_client_id AS user_session_client_id, COUNT(*)::int AS active_count
+FROM user_sessions AS s
+WHERE s.user_session_client_id = ANY($1::uuid[])
+  AND s.deleted IS FALSE
+  AND s.refresh_expires_at > now()
+GROUP BY s.user_session_client_id
+`
+
+type CountActiveUserSessionsByClientIDsRow struct {
+	UserSessionClientID uuid.NullUUID
+	ActiveCount         int32
+}
+
+// Active-session tallies for a set of clients, so the clients listing can show
+// how many live sessions each registration holds without a round trip per row.
+// "Active" is defined exactly as the 'active' branch of
+// ListUserSessionsByProjectID defines it: not revoked, and keyed off
+// refresh_expires_at (the authorization deadline) rather than expires_at (the
+// ~1h access-token lifetime), so a live connection that has not refreshed
+// recently still counts.
+//
+// Project scoping is intentionally NOT applied: callers pass ids they already
+// resolved through a project-scoped client query, and re-joining issuers here
+// would only repeat that check.
+//
+// Clients with no active sessions are absent from the result rather than
+// returning zero; callers treat a missing id as zero.
+func (q *Queries) CountActiveUserSessionsByClientIDs(ctx context.Context, userSessionClientIds []uuid.UUID) ([]CountActiveUserSessionsByClientIDsRow, error) {
+	rows, err := q.db.Query(ctx, countActiveUserSessionsByClientIDs, userSessionClientIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountActiveUserSessionsByClientIDsRow
+	for rows.Next() {
+		var i CountActiveUserSessionsByClientIDsRow
+		if err := rows.Scan(&i.UserSessionClientID, &i.ActiveCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createUserSession = `-- name: CreateUserSession :one
 INSERT INTO user_sessions (
     project_id,
@@ -815,8 +863,9 @@ type ListUserSessionClientsByProjectIDParams struct {
 	LimitValue          int32
 }
 
-// Operator visibility into all DCR-issued clients in the project, with optional
-// filter by user_session_issuer_id. Joins through issuers for project scoping.
+// Operator visibility into every client registered against an issuer in the
+// project -- DCR-registered and CIMD-resolved alike -- with optional filter by
+// user_session_issuer_id. Joins through issuers for project scoping.
 func (q *Queries) ListUserSessionClientsByProjectID(ctx context.Context, arg ListUserSessionClientsByProjectIDParams) ([]UserSessionClient, error) {
 	rows, err := q.db.Query(ctx, listUserSessionClientsByProjectID,
 		arg.ProjectID,
@@ -1123,8 +1172,10 @@ SELECT s.id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, 
        s.created_at, s.updated_at, s.deleted_at, s.deleted,
        iss.slug AS issuer_slug,
        c.client_name AS client_name,
+       c.client_id_metadata_uri AS client_id_metadata_uri,
        u.display_name AS user_display_name,
        u.email AS user_email,
+       u.photo_url AS user_photo_url,
        k.name AS api_key_name
 FROM user_sessions AS s
 JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
@@ -1139,8 +1190,8 @@ LEFT JOIN api_keys AS k
            END
 WHERE iss.project_id = $1
   AND iss.deleted IS FALSE
-  -- "active"/"expired" are keyed off refresh_expires_at (the session/refresh
-  -- lifetime), NOT expires_at (the ~1h access-token lifetime). An active MCP
+  -- "active"/"expired" are keyed off refresh_expires_at (the authorization
+  -- deadline), NOT expires_at (the ~1h access-token lifetime). An active MCP
   -- connection only refreshes its access token on demand, so a live session
   -- routinely has a past expires_at while its refresh token is still valid;
   -- keying "active" off expires_at would drop those sessions and make the
@@ -1187,8 +1238,10 @@ type ListUserSessionsByProjectIDRow struct {
 	Deleted             bool
 	IssuerSlug          string
 	ClientName          pgtype.Text
+	ClientIDMetadataUri pgtype.Text
 	UserDisplayName     pgtype.Text
 	UserEmail           pgtype.Text
+	UserPhotoUrl        pgtype.Text
 	ApiKeyName          pgtype.Text
 }
 
@@ -1226,8 +1279,10 @@ func (q *Queries) ListUserSessionsByProjectID(ctx context.Context, arg ListUserS
 			&i.Deleted,
 			&i.IssuerSlug,
 			&i.ClientName,
+			&i.ClientIDMetadataUri,
 			&i.UserDisplayName,
 			&i.UserEmail,
+			&i.UserPhotoUrl,
 			&i.ApiKeyName,
 		); err != nil {
 			return nil, err

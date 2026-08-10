@@ -27,7 +27,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -44,10 +43,6 @@ type authorizer interface {
 	Authorize(context.Context, string, *security.APIKeyScheme) (context.Context, error)
 }
 
-type featureChecker interface {
-	IsFeatureEnabled(context.Context, string, productfeatures.Feature) (bool, error)
-}
-
 type Service struct {
 	tracer    trace.Tracer
 	logger    *slog.Logger
@@ -61,7 +56,6 @@ type Service struct {
 	telemetry telemetryrepo.CHTX
 	instances *InstanceResolver
 	authz     *authz.Engine
-	features  featureChecker
 	audit     *audit.Logger
 	keyPrefix string
 }
@@ -71,7 +65,7 @@ var (
 	_ gen.Auther  = (*Service)(nil)
 )
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, telemetryDB telemetryrepo.CHTX, sessionsManager *sessions.Manager, authzEngine *authz.Engine, hookIngester HookIngester, calls *callcache.Cache, traces *TraceProcessor, metrics *MetricProcessor, health *HealthProcessor, instances *InstanceResolver, features featureChecker, auditLogger *audit.Logger, environment string) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, telemetryDB telemetryrepo.CHTX, sessionsManager *sessions.Manager, authzEngine *authz.Engine, hookIngester HookIngester, calls *callcache.Cache, traces *TraceProcessor, metrics *MetricProcessor, health *HealthProcessor, instances *InstanceResolver, auditLogger *audit.Logger, environment string) *Service {
 	return &Service{
 		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/litellm"),
 		logger:    logger.With(attr.SlogComponent("litellm")),
@@ -85,7 +79,6 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		telemetry: telemetryDB,
 		instances: instances,
 		authz:     authzEngine,
-		features:  features,
 		audit:     auditLogger,
 		keyPrefix: auth.APIKeyPrefix(environment),
 	}
@@ -97,7 +90,6 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints.Use(middleware.TraceMethods(service.tracer))
 	server := srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
 	server.Traces = service.traceHTTPHandler()
-	server.Metrics = service.metricHTTPHandler()
 	srv.Mount(mux, server)
 }
 

@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -60,6 +61,7 @@ type Service struct {
 	features *productfeatures.Client
 	audit    *audit.Logger
 	signaler ManualSuggestionSignaler
+	siteURL  *url.URL
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -74,6 +76,7 @@ func NewService(
 	features *productfeatures.Client,
 	auditLogger *audit.Logger,
 	signaler ManualSuggestionSignaler,
+	siteURL *url.URL,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("skills"))
 
@@ -86,6 +89,7 @@ func NewService(
 		features: features,
 		audit:    auditLogger,
 		signaler: signaler,
+		siteURL:  siteURL,
 	}
 }
 
@@ -97,6 +101,11 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		mux,
 		srv.New(endpoints, mux, skillsRequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
+	// Public share pages, served outside Goa like the MCP install pages so
+	// they resolve on custom domains (which point at this server, not at the
+	// dashboard host).
+	o11y.AttachHandler(mux, http.MethodGet, "/shared/skills/{token}", oops.ErrHandle(service.logger, service.ServeSharedSkillPage).ServeHTTP)
+	o11y.AttachHandler(mux, http.MethodGet, "/shared/skills/{token}/SKILL.md", oops.ErrHandle(service.logger, service.ServeSharedSkillMarkdown).ServeHTTP)
 }
 
 func skillsRequestDecoder(r *http.Request) goahttp.Decoder {

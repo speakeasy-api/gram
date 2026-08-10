@@ -414,8 +414,8 @@ function SkillDetailSections({
           <DangerSettingsSection.Title>Danger zone</DangerSettingsSection.Title>
         </DangerSettingsSection.Header>
         <DangerSettingsSection.Panel>
-          <DangerSettingsSection.Body className="flex flex-wrap items-center justify-between gap-4">
-            <div className="space-y-1">
+          <DangerSettingsSection.Body className="flex flex-wrap items-center justify-between gap-2">
+            <div className="space-y-1 m-0">
               <Text className="text-sm font-semibold">Archive this skill</Text>
               <Text small muted className="max-w-xl">
                 Archiving removes the skill from this project's catalog and
@@ -428,7 +428,7 @@ function SkillDetailSections({
               level="component"
             >
               <Button
-                variant="destructive-secondary"
+                variant="destructive-primary"
                 onClick={() =>
                   setArchiveTarget({
                     id: skill.id,
@@ -528,7 +528,7 @@ function VersionHistory({
           role="group"
           tabIndex={-1}
           aria-label={versionAnchorLabel(version, currentVersion)}
-          className="focus-visible:ring-ring rounded-md focus-visible:ring-2 focus-visible:outline-none"
+          className="focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none"
         >
           {direction && version.specValid && (
             <RequireScope
@@ -552,8 +552,8 @@ function VersionHistory({
   });
 
   return (
-    <SettingsSection.Panel>
-      <SettingsSection.Body>
+    <>
+      <div className="space-y-4">
         {comparable && (
           <Text small muted>
             Select one version to compare it with current, or select any two
@@ -591,14 +591,14 @@ function VersionHistory({
           </Button>
         )}
         <VersionDiff versions={diffVersions} />
-      </SettingsSection.Body>
+      </div>
       <RestoreSkillVersionDialog
         skillId={skillId}
         version={restoreTarget?.version ?? null}
         direction={restoreTarget?.direction ?? null}
         onClose={() => setRestoreTarget(null)}
       />
-    </SettingsSection.Panel>
+    </>
   );
 }
 
@@ -624,9 +624,9 @@ function SkillDetailLoading(): JSX.Element {
           aria-label="Loading skill"
           className="mx-auto w-full max-w-[1270px] flex-1 space-y-10 px-8 py-8"
         >
-          <Skeleton className="h-36 w-full rounded-xl" />
-          <Skeleton className="h-80 w-full rounded-xl" />
-          <Skeleton className="h-48 w-full rounded-xl" />
+          <Skeleton className="h-36 w-full" />
+          <Skeleton className="h-80 w-full" />
+          <Skeleton className="h-48 w-full" />
         </div>
       </Page.Body>
     </Page>
@@ -639,7 +639,7 @@ function ValidationErrors({
   errors: SkillVersion["validationErrors"];
 }): JSX.Element {
   return (
-    <div className="border-destructive/40 bg-destructive/5 rounded-lg border p-4">
+    <div className="border-destructive/40 bg-destructive/5 border p-4">
       <Text variant="subheading" className="text-destructive mb-2">
         Current version has validation issues
       </Text>
@@ -778,7 +778,7 @@ function versionColumns({
 
 function LoadMoreError({ onRetry }: { onRetry: () => void }): JSX.Element {
   return (
-    <div className="border-destructive/40 bg-destructive/5 flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
+    <div className="border-destructive/40 bg-destructive/5 flex flex-wrap items-center justify-between gap-3 border p-3">
       <Text small className="text-destructive">
         Unable to load more versions.
       </Text>

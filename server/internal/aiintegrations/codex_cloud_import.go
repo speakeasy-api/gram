@@ -558,6 +558,7 @@ func (src *codexCloudSource) upsertSessionChat(ctx context.Context, sessionID st
 		if _, err := chatrepo.New(src.svc.db).LinkAIIntegrationConfigChat(ctx, chatrepo.LinkAIIntegrationConfigChatParams{
 			AiIntegrationConfigID: src.cfg.ID,
 			ChatID:                chatID,
+			ProjectID:             src.cfg.ProjectID,
 		}); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "link codex cloud chat")
 		}

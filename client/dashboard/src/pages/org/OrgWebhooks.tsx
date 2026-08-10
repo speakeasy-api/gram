@@ -1,3 +1,4 @@
+import { PageEyebrow } from "@/components/page-eyebrow";
 import { Page } from "@/components/page-layout";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { RequireScope } from "@/components/require-scope";
@@ -47,14 +48,19 @@ function OrgWebhooksInner() {
 
   return (
     <>
-      <Stack direction="horizontal" align="center" gap={2} className="mb-4">
-        <Heading variant="h3">Webhooks</Heading>
-        <ReleaseStageBadge stage="beta" />
-      </Stack>
-      <Text muted small className="mb-6">
-        Configure webhook delivery for various platform events.
-      </Text>
-      <div className="border-border bg-card rounded-lg border p-4">
+      <div className="mb-6">
+        <PageEyebrow className="mb-2" />
+        <Stack direction="horizontal" align="center" gap={2}>
+          <Heading variant="h4" className="text-display-sm font-thin">
+            Webhooks
+          </Heading>
+          <ReleaseStageBadge stage="beta" />
+        </Stack>
+        <Text muted small className="mt-1">
+          Configure webhook delivery for various platform events.
+        </Text>
+      </div>
+      <div className="border-border bg-card border p-4">
         <Stack gap={4}>
           <Stack direction="horizontal" justify="space-between" align="center">
             <Stack gap={1}>
@@ -125,7 +131,9 @@ function WebhookConfigPortal() {
 
   return (
     <>
-      <Heading variant="h4">Webhook Configuration</Heading>
+      <Heading variant="h4" className="mt-8 mb-4 text-display-xs font-thin">
+        Webhook Configuration
+      </Heading>
       <AppPortal
         url={portalURL}
         darkMode={theme}

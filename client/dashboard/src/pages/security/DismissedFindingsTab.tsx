@@ -132,7 +132,7 @@ export function DismissedFindingsTab(): JSX.Element {
 
   if (resultsQuery.isError) {
     return (
-      <div className="bg-background flex h-[360px] w-full flex-col items-center justify-center gap-4 rounded-xl border">
+      <div className="bg-background flex h-[360px] w-full flex-col items-center justify-center gap-4 border">
         <div className="space-y-1 text-center">
           <Text className="font-medium">Couldn't load dismissed findings</Text>
           <Text small muted>
@@ -169,7 +169,7 @@ export function DismissedFindingsTab(): JSX.Element {
 
 function DismissedEmptyState() {
   return (
-    <div className="bg-background flex h-[360px] w-full flex-col items-center justify-center gap-4 rounded-xl border">
+    <div className="bg-background flex h-[360px] w-full flex-col items-center justify-center gap-4 border">
       <div className="space-y-1 text-center">
         <Text className="font-medium">No dismissed findings yet</Text>
         <Text small muted>

@@ -194,11 +194,11 @@ func (p *HealthProcessor) Record(ctx context.Context, signal healthSignal, versi
 	if update.otelObservedAt.After(current.otelObservedAt) {
 		current.otelObservedAt = update.otelObservedAt
 	}
-	if update.errorObservedAt.After(current.errorObservedAt) {
+	if update.errorKind != healthErrorNone && !update.errorObservedAt.Before(current.errorObservedAt) {
 		current.errorObservedAt = update.errorObservedAt
 		current.errorKind = update.errorKind
 	}
-	if update.reportedVersionAt.After(current.reportedVersionAt) {
+	if update.reportedVersion != "" && !update.reportedVersionAt.Before(current.reportedVersionAt) {
 		current.reportedVersionAt = update.reportedVersionAt
 		current.reportedVersion = update.reportedVersion
 	}

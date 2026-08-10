@@ -334,7 +334,10 @@ function MCPOverview() {
 
   const builtInSection = (
     <Page.Section>
-      <Page.Section.Title>Built-in MCP Servers</Page.Section.Title>
+      {/* Section heading, not a second page title: no eyebrow, smaller serif. */}
+      <Page.Section.Title area="" className="text-display-xs">
+        Built-in MCP Servers
+      </Page.Section.Title>
       <Page.Section.Description>
         Pre-configured MCP servers provided by the platform for your project.
         Connect from Claude Desktop, Cursor, or any MCP client.

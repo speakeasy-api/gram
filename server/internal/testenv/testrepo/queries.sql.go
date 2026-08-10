@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const corruptDeviceIntegrationCredentialsFixture = `-- name: CorruptDeviceIntegrationCredentialsFixture :exec
@@ -342,6 +343,34 @@ func (q *Queries) GetOutboxRelayState(ctx context.Context, outboxID int64) (GetO
 	return i, err
 }
 
+const getPrincipalGrantEffectFixture = `-- name: GetPrincipalGrantEffectFixture :one
+SELECT effect
+FROM principal_grants
+WHERE organization_id = $1
+  AND principal_urn = $2
+  AND scope = $3
+  AND selectors = $4
+`
+
+type GetPrincipalGrantEffectFixtureParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Selectors      []byte
+}
+
+func (q *Queries) GetPrincipalGrantEffectFixture(ctx context.Context, arg GetPrincipalGrantEffectFixtureParams) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, getPrincipalGrantEffectFixture,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+	)
+	var effect pgtype.Text
+	err := row.Scan(&effect)
+	return effect, err
+}
+
 const getPublishOutboxDeadLetter = `-- name: GetPublishOutboxDeadLetter :one
 SELECT id, public_id, organization_id, topic, message, attributes,
        attempts, last_error, enqueued_at, created_at
@@ -575,6 +604,29 @@ func (q *Queries) InsertDeviceAgentSyncFixture(ctx context.Context, arg InsertDe
 	return err
 }
 
+const insertLegacyDenyPrincipalGrantFixture = `-- name: InsertLegacyDenyPrincipalGrantFixture :exec
+INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
+VALUES ($1, $2, $3, 'deny', $4)
+`
+
+type InsertLegacyDenyPrincipalGrantFixtureParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Selectors      []byte
+}
+
+// Test-only fixture for exercising allow-only writes against legacy rows.
+func (q *Queries) InsertLegacyDenyPrincipalGrantFixture(ctx context.Context, arg InsertLegacyDenyPrincipalGrantFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertLegacyDenyPrincipalGrantFixture,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+	)
+	return err
+}
+
 const insertMdmDeviceFixture = `-- name: InsertMdmDeviceFixture :exec
 INSERT INTO mdm_devices (device_integration_config_id, organization_id, external_id, user_email, user_id, serial_number, missing_since)
 VALUES ($1, $2, $3, NULLIF($4::text, ''), $5::text, NULLIF($6::text, ''), $7::timestamptz)
@@ -620,38 +672,6 @@ type InsertPluginAssignmentFixtureParams struct {
 // create.
 func (q *Queries) InsertPluginAssignmentFixture(ctx context.Context, arg InsertPluginAssignmentFixtureParams) error {
 	_, err := q.db.Exec(ctx, insertPluginAssignmentFixture, arg.PluginID, arg.OrganizationID, arg.PrincipalUrn)
-	return err
-}
-
-const insertTrialFixture = `-- name: InsertTrialFixture :exec
-INSERT INTO trials (organization_id, tier, created_at, ends_at, converted_at, demoted_at)
-VALUES (
-    $1,
-    'enterprise',
-    $2,
-    $3,
-    $4::timestamptz,
-    $5::timestamptz
-)
-`
-
-type InsertTrialFixtureParams struct {
-	OrganizationID string
-	CreatedAt      pgtype.Timestamptz
-	EndsAt         pgtype.Timestamptz
-	ConvertedAt    pgtype.Timestamptz
-	DemotedAt      pgtype.Timestamptz
-}
-
-// Test-only fixture for exercising active trial lifecycle states.
-func (q *Queries) InsertTrialFixture(ctx context.Context, arg InsertTrialFixtureParams) error {
-	_, err := q.db.Exec(ctx, insertTrialFixture,
-		arg.OrganizationID,
-		arg.CreatedAt,
-		arg.EndsAt,
-		arg.ConvertedAt,
-		arg.DemotedAt,
-	)
 	return err
 }
 

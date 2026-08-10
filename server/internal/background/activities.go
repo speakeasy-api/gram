@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
@@ -155,6 +156,8 @@ type Activities struct {
 	skillEfficacyScorer             *activities.SkillEfficacyScorer
 	skillSuggestionAnalyzer         *activities.SkillSuggestionAnalyzer
 	chatAnalysisScorer              *activities.ChatAnalysisScorer
+	remoteSessionRefresh            *activities.RemoteSessionRefresh
+	demoteExpiredTrials             *activities.DemoteExpiredTrials
 }
 
 func NewActivities(
@@ -251,6 +254,19 @@ func NewActivities(
 		panic(fmt.Errorf("new chat analysis judges: %w", err))
 	}
 
+	// The scheduled refresh shares the remotesessions single-flight primitive,
+	// which needs the Redis lock cache; workers wired without one (e.g.
+	// deployment-processing test workers) get a nil activity and the wrapper
+	// fails loudly if the sweep is ever scheduled there.
+	var remoteSessionRefresh *activities.RemoteSessionRefresh
+	if cacheAdapter != nil {
+		remoteSessionRefresh = activities.NewRemoteSessionRefresh(
+			logger,
+			db,
+			remotesessions.NewRefreshService(logger, db, encryption, guardianPolicy, cacheAdapter),
+		)
+	}
+
 	var skillSuggestionAnalyzer *activities.SkillSuggestionAnalyzer
 	if db != nil && telemetryRepo != nil && chatClient != nil && temporalEnv != nil && judgeRateLimiter != nil {
 		engine, err := suggest.NewEngine(suggest.DefaultConfig(), logger, db, telemetryRepo, chatrepo.New(db), chatClient, judgeRateLimiter)
@@ -327,6 +343,7 @@ func NewActivities(
 		publishOutbox:                   publish_outbox.New(logger, tracerProvider, meterProvider, db, publishers.Outbox),
 		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
 		listSpendRuleOrgs:               spend_rules.NewListOrgs(logger, db),
+		demoteExpiredTrials:             activities.NewDemoteExpiredTrials(logger, db, openrouterProvisioner, auditLogger),
 		evaluateOrgSpendRules:           spend_rules.NewEvaluateOrg(logger, tracerProvider, db, spendRulesCH, cacheAdapter, features),
 		// The judge draws on the same per-(org, model) bucket and the same
 		// completion client as every other platform judge, so efficacy scoring
@@ -340,6 +357,7 @@ func NewActivities(
 			&TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
 		),
 		skillSuggestionAnalyzer: skillSuggestionAnalyzer,
+		remoteSessionRefresh:    remoteSessionRefresh,
 		// The judges draw on the same per-(org, model) bucket and the same
 		// completion client as every other platform judge, so chat analysis
 		// cannot outspend the org's key behind their backs.
@@ -779,6 +797,46 @@ func (a *Activities) EvaluateOrgSpendRules(ctx context.Context, args spend_rules
 func (a *Activities) RefreshSpendRuleActor(ctx context.Context, args spend_rules.EvaluateActorArgs) error {
 	if err := a.evaluateOrgSpendRules.RefreshActor(ctx, args); err != nil {
 		return fmt.Errorf("refresh spend rule actor: %w", err)
+	}
+	return nil
+}
+
+func (a *Activities) ClaimDueRemoteSessionRefreshCandidates(
+	ctx context.Context,
+	input activities.ClaimDueRemoteSessionRefreshCandidatesInput,
+) ([]activities.RemoteSessionRefreshCandidate, error) {
+	if a.remoteSessionRefresh == nil {
+		return nil, fmt.Errorf("claim due remote session refresh candidates: refresh service not configured")
+	}
+	candidates, err := a.remoteSessionRefresh.ClaimDueCandidates(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("claim due remote session refresh candidates: %w", err)
+	}
+	return candidates, nil
+}
+
+func (a *Activities) RefreshRemoteSession(ctx context.Context, input activities.RefreshRemoteSessionInput) (activities.RefreshRemoteSessionResult, error) {
+	if a.remoteSessionRefresh == nil {
+		return activities.RefreshRemoteSessionResult{RateLimited: false}, fmt.Errorf("refresh remote session: refresh lock cache not configured")
+	}
+	result, err := a.remoteSessionRefresh.Do(ctx, input)
+	if err != nil {
+		return activities.RefreshRemoteSessionResult{RateLimited: false}, fmt.Errorf("refresh remote session: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) ListExpiredTrials(ctx context.Context) ([]string, error) {
+	orgs, err := a.demoteExpiredTrials.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list expired trials: %w", err)
+	}
+	return orgs, nil
+}
+
+func (a *Activities) DemoteExpiredTrial(ctx context.Context, args activities.DemoteExpiredTrialArgs) error {
+	if err := a.demoteExpiredTrials.Demote(ctx, args); err != nil {
+		return fmt.Errorf("demote expired trial: %w", err)
 	}
 	return nil
 }

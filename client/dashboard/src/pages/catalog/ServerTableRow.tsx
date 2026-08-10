@@ -60,11 +60,11 @@ export function ServerTableRow({
       {/* Selection */}
       <td className="w-10 px-3 py-3">
         {isSelected ? (
-          <div className="flex size-5 items-center justify-center rounded-full bg-[#1DA1F2]">
-            <Check className="size-3 text-white" strokeWidth={5} />
+          <div className="bg-foreground flex size-4 items-center justify-center">
+            <Check className="text-background size-3" strokeWidth={3} />
           </div>
         ) : (
-          <div className="border-muted-foreground/30 size-5 rounded-full border-2" />
+          <div className="border-border size-4 border" />
         )}
       </td>
 

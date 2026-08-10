@@ -36,15 +36,7 @@ func WithAdminGrants(ctx context.Context, additional ...authz.Grant) context.Con
 // grants to simulate RBAC active with no permissions.
 func WithExactGrants(t *testing.T, ctx context.Context, grants ...authz.Grant) context.Context {
 	t.Helper()
-
-	normalized := append([]authz.Grant(nil), grants...)
-	for i := range normalized {
-		if normalized[i].Effect == "" {
-			normalized[i].Effect = authz.PolicyEffectAllow
-		}
-	}
-
-	return authz.GrantsToContext(ctx, normalized)
+	return authz.GrantsToContext(ctx, grants)
 }
 
 func ChallengeLoggingAlwaysDisabled(context.Context, string) (bool, error) {

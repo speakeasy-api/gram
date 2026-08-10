@@ -31,10 +31,12 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
@@ -394,6 +396,7 @@ type ServiceCore struct {
 	wakeCanceller     WakeCanceller
 	chatWriter        *chat.ChatMessageWriter
 	dashboardIngestor DashboardIngestor
+	featureFlags      feature.Provider
 	turnClassified    metric.Int64Counter
 }
 
@@ -438,6 +441,7 @@ func NewServiceCore(
 		wakeCanceller:     nil,
 		chatWriter:        nil,
 		dashboardIngestor: nil,
+		featureFlags:      nil,
 		turnClassified:    turnClassified,
 	}
 }
@@ -461,6 +465,14 @@ func (s *ServiceCore) SetDashboardIngestor(i DashboardIngestor) {
 // site. Self-heal is skipped if the writer was never set.
 func (s *ServiceCore) SetChatMessageWriter(w *chat.ChatMessageWriter) {
 	s.chatWriter = w
+}
+
+// SetFeatureProvider wires PostHog flag evaluation. Set after construction
+// to match the existing post-construction injection pattern and avoid
+// churning every test call site. A nil provider leaves every flag-gated
+// grant off (fail closed).
+func (s *ServiceCore) SetFeatureProvider(p feature.Provider) {
+	s.featureFlags = p
 }
 
 // resolveAssistantContextWindow returns the smallest context_length the gram
@@ -1883,7 +1895,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 		ChatID:         chatID,
 		ProjectID:      assistant.ProjectID,
 		OrganizationID: assistant.OrganizationID,
-		UserID:         conv.ToPGTextEmpty(dashboardChatUserID(sourceKind, normalizedPayloadJSON)),
+		UserID:         conv.ToPGTextEmpty(assistantChatOwnerID(sourceKind, normalizedPayloadJSON, assistant.CreatedByUserID)),
 		Title:          conv.ToPGText(chat.DefaultChatTitle),
 	}); err != nil {
 		return EnqueueResult{}, fmt.Errorf("upsert assistant chat: %w", err)
@@ -1932,7 +1944,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 
 // dashboardChatUserID extracts the Gram user id from a dashboard turn payload
 // so UpsertAssistantChat can stamp it on the chats row. External-source turns
-// return empty — their chat rows are owner-less.
+// return empty — see assistantChatOwnerID for who owns those.
 func dashboardChatUserID(sourceKind string, normalizedPayloadJSON []byte) string {
 	if sourceKind != sourceKindDashboard {
 		return ""
@@ -1942,6 +1954,26 @@ func dashboardChatUserID(sourceKind string, normalizedPayloadJSON []byte) string
 		return ""
 	}
 	return dash.UserID
+}
+
+// assistantChatOwnerID picks the owner to stamp on an assistant's chat row: the
+// dashboard user who sent the turn, falling back to whoever created the
+// assistant.
+//
+// The fallback exists because externally-triggered turns (cron, Slack, warmup)
+// carry no user, which left those chats owner-less. Owner-less is not a neutral
+// state — chat access is decided by owner-matching first and an explicit
+// chat:read/chat:write grant otherwise, so a chat nobody owns is one nobody can
+// read, continue, rename or delete without a custom role. Attributing it to the
+// assistant's creator makes the session behave like one they started.
+//
+// Returns empty when the assistant has no creator either (older or
+// platform-managed assistants); the chat is then owner-less exactly as before.
+func assistantChatOwnerID(sourceKind string, normalizedPayloadJSON []byte, createdByUserID string) string {
+	if userID := dashboardChatUserID(sourceKind, normalizedPayloadJSON); userID != "" {
+		return userID
+	}
+	return createdByUserID
 }
 
 // CheckDashboardChatOwnership returns nil when callerUserID owns the chats row
@@ -2247,8 +2279,10 @@ func (s *ServiceCore) EnsureWarmupThread(ctx context.Context, assistantID uuid.U
 		ChatID:         chatID,
 		ProjectID:      assistant.ProjectID,
 		OrganizationID: assistant.OrganizationID,
-		UserID:         pgtype.Text{String: "", Valid: false},
-		Title:          conv.ToPGText(chat.DefaultChatTitle),
+		// Warmup turns have no user either, so the creator owns them for the
+		// same reason external-source turns do.
+		UserID: conv.ToPGTextEmpty(assistant.CreatedByUserID),
+		Title:  conv.ToPGText(chat.DefaultChatTitle),
 	}); err != nil {
 		return noop, fmt.Errorf("upsert warmup chat: %w", err)
 	}
@@ -2743,6 +2777,9 @@ func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assi
 	case mErr == nil:
 		if managed.ID == assistant.ID {
 			platformSlugs = append(platformSlugs, platformtools.ManagedAssistantPlatformToolsetSlug)
+			if s.platformMCPReadEnabled(ctx, assistant.ProjectID) {
+				platformSlugs = append(platformSlugs, platformtools.PlatformMCPReadToolsetSlug)
+			}
 		}
 	case errors.Is(mErr, pgx.ErrNoRows):
 		// Project has no managed assistant; managed-only tools stay ungranted.
@@ -2750,6 +2787,29 @@ func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assi
 		return nil, fmt.Errorf("resolve managed assistant: %w", mErr)
 	}
 	return platformSlugs, nil
+}
+
+// platformMCPReadEnabled reports whether the organization owning projectID is
+// cleared for the Platform MCP read toolset rollout. Evaluation mirrors the
+// Platform MCP organization gate: distinct ID is the org ID with the org-slug
+// PostHog group. Errors fail closed but never abort the turn — a flag-provider
+// outage must not take down bootstrap or reconcile, so the toolset is simply
+// withheld until evaluation recovers.
+func (s *ServiceCore) platformMCPReadEnabled(ctx context.Context, projectID uuid.UUID) bool {
+	if s.featureFlags == nil {
+		return false
+	}
+	project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, projectID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve organization for platform mcp read toolset", attr.SlogError(err))
+		return false
+	}
+	enabled, err := s.featureFlags.IsFlagEnabled(ctx, feature.FlagAssistantPlatformMCP, project.ID, feature.OrgProjectGroups(project.Slug, ""))
+	if err != nil {
+		s.logger.WarnContext(ctx, "evaluate assistant platform mcp flag", attr.SlogError(err))
+		return false
+	}
+	return enabled
 }
 
 // turnUserID returns the Gram user whose identity a turn should act under.

@@ -1,4 +1,4 @@
-import { DotCard } from "@/components/ui/DotCard";
+import { Card } from "@/components/ui/Card";
 import { Text } from "@/components/ui/Text";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
@@ -42,9 +42,9 @@ export function MCPServerCard({
   return (
     <Link
       to={routes.mcp.x.overview.href(mcpServerRouteParam(server))}
-      className="focus-visible:ring-ring block rounded-xl no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+      className="focus-visible:ring-ring block no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
     >
-      <DotCard
+      <Card.Entity
         icon={
           <SourceMcpIcon
             mcpServerId={server.id}
@@ -90,7 +90,7 @@ export function MCPServerCard({
             <ArrowRight className="h-3.5 w-3.5" />
           </div>
         </div>
-      </DotCard>
+      </Card.Entity>
     </Link>
   );
 }

@@ -180,18 +180,6 @@ INSERT INTO organization_metadata (
 INSERT INTO organization_user_relationships (organization_id, user_id)
 VALUES (@organization_id, sqlc.narg('user_id')::text);
 
--- name: InsertTrialFixture :exec
--- Test-only fixture for exercising active trial lifecycle states.
-INSERT INTO trials (organization_id, tier, created_at, ends_at, converted_at, demoted_at)
-VALUES (
-    @organization_id,
-    'enterprise',
-    @created_at,
-    @ends_at,
-    sqlc.narg('converted_at')::timestamptz,
-    sqlc.narg('demoted_at')::timestamptz
-);
-
 -- name: ForceSoftDeleteUserSessionIssuer :exec
 -- Test-only fixture for defensive paths that handle a dangling soft-delete FK.
 UPDATE user_session_issuers
@@ -286,6 +274,19 @@ WHERE s.device_integration_schedule_id = sch.id
 UPDATE device_integration_configs
 SET credentials_encrypted = 'not-a-valid-ciphertext'
 WHERE id = @id;
+
+-- name: InsertLegacyDenyPrincipalGrantFixture :exec
+-- Test-only fixture for exercising allow-only writes against legacy rows.
+INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
+VALUES (@organization_id, @principal_urn, @scope, 'deny', @selectors);
+
+-- name: GetPrincipalGrantEffectFixture :one
+SELECT effect
+FROM principal_grants
+WHERE organization_id = @organization_id
+  AND principal_urn = @principal_urn
+  AND scope = @scope
+  AND selectors = @selectors;
 
 -- name: InsertChatContentPartFixture :one
 -- Test-only fixture: seeds a minimal chat content part so tests can anchor a

@@ -59,7 +59,7 @@ export function PublicMcpWarningDialog({
                 Used by every public caller
               </p>
               <ul
-                className="border-border bg-muted/30 max-h-40 space-y-1 overflow-y-auto rounded border p-3"
+                className="border-border bg-muted/30 max-h-40 space-y-1 overflow-y-auto border p-3"
                 style={{ fontFamily: '"Diatype Mono", monospace' }}
               >
                 {variableNames.map((name) => (

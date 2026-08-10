@@ -137,11 +137,11 @@ function ToolRow({ tool }: { tool: Tool }) {
   if (annotations?.openWorldHint) annotationTags.push("Open-world");
 
   return (
-    <div className="border-border rounded-lg border p-3">
+    <div className="border-border border p-3">
       <div className="flex items-start gap-2">
         {method && methodColors && (
           <span
-            className={`mt-0.5 inline-flex shrink-0 items-center rounded px-1.5 py-0.5 font-mono text-[10px] font-bold ${methodColors}`}
+            className={`mt-0.5 inline-flex shrink-0 items-center px-1.5 py-0.5 font-mono text-[10px] font-bold ${methodColors}`}
           >
             {method}
           </span>
@@ -479,10 +479,7 @@ export function MCPTeamAccessTab({
                       // identifiers from the grant selectors so the user can
                       // at least see what they have access to.
                       sheetData.toolNames.map((name) => (
-                        <div
-                          key={name}
-                          className="border-border rounded-lg border p-3"
-                        >
+                        <div key={name} className="border-border border p-3">
                           <Text
                             variant="body"
                             className="font-mono text-sm font-medium"

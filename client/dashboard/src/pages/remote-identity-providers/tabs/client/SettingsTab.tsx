@@ -104,7 +104,7 @@ export function SettingsTab({
         </div>
       </div>
 
-      <div className="border-destructive/30 flex flex-col gap-2 rounded-md border p-4">
+      <div className="border-destructive/30 flex flex-col gap-2 border p-4">
         <Text className="font-medium">Danger Zone</Text>
         <Text small muted>
           Deleting this client is permanent and revokes all of its sessions.

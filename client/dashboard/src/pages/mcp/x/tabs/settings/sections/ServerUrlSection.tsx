@@ -38,7 +38,7 @@ import { useMcpEndpointSlugValidation } from "../../../useMcpEndpointSlugValidat
 import { SettingsInlineEmptyState } from "../SettingsInlineEmptyState";
 import { SettingsSection } from "../SettingsSection";
 
-const ADDRESS_INPUT_GROUP_CLASSNAME = "rounded-md";
+const ADDRESS_INPUT_GROUP_CLASSNAME = "";
 const ADDRESS_SLUG_INPUT_CLASSNAME = "font-mono pl-0! font-bold";
 const ADDRESS_RANDOM_SUFFIX_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 const ADDRESS_RANDOM_SUFFIX_LENGTH = 5;

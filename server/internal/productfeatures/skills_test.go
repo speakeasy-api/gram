@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -22,7 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-func TestProductFeaturesService_SkillsDefaultsOffAndEnables(t *testing.T) {
+func TestProductFeaturesService_SkillsAlwaysEnabled(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestProductFeaturesService(t)
@@ -30,7 +29,7 @@ func TestProductFeaturesService_SkillsDefaultsOffAndEnables(t *testing.T) {
 	seedOrganization(t, ctx, ti.conn, organizationID)
 	result, err := ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{SessionToken: nil})
 	require.NoError(t, err)
-	require.False(t, result.SkillsEnabled)
+	require.True(t, result.SkillsEnabled)
 
 	err = ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
 		FeatureName: string(productfeatures.FeatureSkills),
@@ -88,7 +87,7 @@ func TestProductFeaturesService_EnableSkillsPatchesExistingRBACGrants(t *testing
 
 	result, err := ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{SessionToken: nil})
 	require.NoError(t, err)
-	require.False(t, result.SkillsEnabled)
+	require.True(t, result.SkillsEnabled)
 }
 
 func TestProductFeatureEnableTx_RequiresExistingOrganization(t *testing.T) {
@@ -160,7 +159,6 @@ func upsertGrant(t *testing.T, ctx context.Context, q *accessrepo.Queries, organ
 		OrganizationID: organizationID,
 		PrincipalUrn:   principal,
 		Scope:          string(scope),
-		Effect:         pgtype.Text{String: string(authz.PolicyEffectAllow), Valid: true},
 		Selectors:      selector,
 	})
 	require.NoError(t, err)

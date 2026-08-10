@@ -1134,7 +1134,6 @@ func grantShadowMCPInventoryBypass(t *testing.T, ctx context.Context, ti *testIn
 			Scope:          authz.ScopeRiskPolicyBypass,
 			ResourceID:     policyID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: []urn.Principal{authz.AllUsersPrincipal()},
 		Selector:   selector,
 	}))
@@ -1149,7 +1148,6 @@ func grantShadowMCPInventoryPolicyAudience(t *testing.T, ctx context.Context, ti
 			Scope:          authz.ScopeRiskPolicyEvaluate,
 			ResourceID:     policyID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: principals,
 		Selector:   authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policyID),
 	}))
@@ -1167,9 +1165,6 @@ func shadowMCPInventoryBypassGrantPrincipals(t *testing.T, ctx context.Context, 
 
 	principals := make([]string, 0, len(grants))
 	for _, grant := range grants {
-		if grant.Effect != authz.PolicyEffectAllow {
-			continue
-		}
 		if grant.Selector[authz.SelectorKeyServerURL] != serverURL {
 			continue
 		}

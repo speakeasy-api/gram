@@ -1,4 +1,4 @@
-import { MetricCard } from "@/components/chart/MetricCard";
+import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
 import {
   formatDateRangeLabel,
   useDateRangeFilter,
@@ -209,6 +209,20 @@ function RiskOverviewCategoryDetailContent() {
     [resultsQuery],
   );
 
+  // overviewCategory.findings is the authoritative count for a
+  // category ranked in the overview's top 10. A category can be
+  // absent from that ranking for two different reasons that
+  // look identical from here — it has zero findings, or it
+  // simply isn't top-ranked — so falling back to totalCount
+  // unconditionally is wrong: totalCount comes from resultsQuery,
+  // which is filtered by ruleFilter when a rule is selected, so
+  // it would understate the category's true total. ruleBreakdownQuery
+  // is always category-scoped and never filtered by ruleFilter, so
+  // its server-computed total is the correct unranked fallback.
+  const findingsCount = overviewCategory
+    ? overviewCategory.findings
+    : (ruleBreakdownQuery.data?.total ?? totalCount);
+
   const controls = (
     <div className="flex items-center gap-2">
       <RevealAllToggle />
@@ -235,28 +249,15 @@ function RiskOverviewCategoryDetailContent() {
         <Page.Section.CTA>{controls}</Page.Section.CTA>
         <Page.Section.Body>
           <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+            <MetricCardGroup>
               <MetricCard
                 title="Findings"
-                // overviewCategory.findings is the authoritative count for a
-                // category ranked in the overview's top 10. A category can be
-                // absent from that ranking for two different reasons that
-                // look identical from here — it has zero findings, or it
-                // simply isn't top-ranked — so falling back to totalCount
-                // unconditionally is wrong: totalCount comes from resultsQuery,
-                // which is filtered by ruleFilter when a rule is selected, so
-                // it would understate the category's true total. ruleBreakdownQuery
-                // is always category-scoped and never filtered by ruleFilter, so
-                // its server-computed total is the correct unranked fallback.
-                value={
-                  overviewCategory
-                    ? overviewCategory.findings
-                    : (ruleBreakdownQuery.data?.total ?? totalCount)
-                }
+                value={findingsCount}
+                tone={findingsCount > 0 ? "destructive" : "neutral"}
                 format="compact"
                 icon="flag"
               />
-            </div>
+            </MetricCardGroup>
             <RuleBreakdown
               rules={ruleBreakdownQuery.data?.rules ?? []}
               isLoading={ruleBreakdownQuery.isLoading}
@@ -363,7 +364,7 @@ function ResultsTable({
     <div
       ref={scrollRef}
       onScroll={onScroll}
-      className="isolate max-h-[70vh] overflow-y-auto rounded-lg border"
+      className="isolate max-h-[70vh] overflow-y-auto border"
     >
       <table className="w-full table-fixed text-sm">
         <colgroup>
@@ -496,7 +497,7 @@ function RuleBreakdown({
 }) {
   if (isLoading && rules.length === 0) {
     return (
-      <div className="text-muted-foreground rounded-lg border p-4 text-sm">
+      <div className="text-muted-foreground border p-4 text-sm">
         Loading rule breakdown...
       </div>
     );
@@ -505,7 +506,7 @@ function RuleBreakdown({
   const max = rules[0]?.findings || 1;
 
   return (
-    <div className="space-y-3 rounded-lg border p-4">
+    <div className="space-y-3 border p-4">
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-medium">Findings by rule</h4>
         {activeRuleId && (
@@ -530,7 +531,7 @@ function RuleBreakdown({
                 type="button"
                 onClick={() => onSelectRule(isActive ? "" : rule.ruleId)}
                 aria-pressed={isActive}
-                className={`hover:bg-muted/40 -mx-2 flex w-full items-center gap-3 rounded px-2 py-1.5 transition-colors ${
+                className={`hover:bg-muted/40 -mx-2 flex w-full items-center gap-3 px-2 py-1.5 transition-colors ${
                   isActive ? "bg-muted" : ""
                 }`}
               >
@@ -591,7 +592,7 @@ function RuleIdFilter({
   );
 
   return (
-    <div className="border-border focus-within:border-ring inline-flex h-9 items-center gap-2 rounded-md border px-2">
+    <div className="border-border focus-within:border-ring inline-flex h-9 items-center gap-2 border px-2">
       <Icon name="search" className="text-muted-foreground size-4 shrink-0" />
       <input
         type="text"

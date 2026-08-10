@@ -25,7 +25,6 @@ package shadowmcpscan
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -360,15 +359,16 @@ func resolvedAccessEvidence(prov telemetryrepo.MCPProvenance, match string) shad
 	}
 }
 
+// finding builds a shadow_mcp finding. The description stays a fixed sentence
+// rather than naming the tool: the finding already carries the offending server
+// identity as its match and the recorded call id, so interpolating the tool
+// name would only spread the caller's tool inventory into a field rendered
+// wherever findings are listed.
 func (s *Scanner) finding(call ToolCall, match string) scanners.Finding {
-	description := "Detected an unverified MCP tool call."
-	if call.Name != "" {
-		description = fmt.Sprintf("Detected an unverified MCP tool call to %q.", call.Name)
-	}
 	return scanners.Finding{
 		Source:      Source,
 		RuleID:      scanners.GuardRuleID(Rule),
-		Description: description,
+		Description: "Detected an unverified MCP tool call.",
 		Match:       match,
 		StartPos:    0,
 		EndPos:      0,

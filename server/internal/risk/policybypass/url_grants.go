@@ -54,9 +54,6 @@ func ReconcilePolicyURLs(ctx context.Context, db riskrepo.DBTX, input ReconcileP
 	existing := make(map[string]struct{}, len(grants))
 	existingGrants := make(map[string][]authz.Grant, len(grants))
 	for _, grant := range grants {
-		if grant.Effect != authz.PolicyEffectAllow {
-			continue
-		}
 		serverURL := grant.Selector[authz.SelectorKeyServerURL]
 		if serverURL == "" {
 			continue
@@ -136,7 +133,6 @@ func revokePolicyURLGrants(
 				Scope:          scope,
 				ResourceID:     policyID,
 			},
-			Effect:     authz.PolicyEffectAllow,
 			Principals: []urn.Principal{principal},
 			Selector:   grant.Selector,
 		}); err != nil {
@@ -162,7 +158,6 @@ func ReplacePolicyURLAudience(
 			Scope:          scope,
 			ResourceID:     policyID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: principals,
 		Selector:   URLSelector(scope, policyID, canonicalURL),
 	}); err != nil {
@@ -186,7 +181,6 @@ func RevokePolicyURL(
 			Scope:          scope,
 			ResourceID:     policyID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: nil,
 		Selector:   URLSelector(scope, policyID, canonicalURL),
 	}); err != nil {

@@ -103,7 +103,7 @@ const DefaultResizeHandle = ({
         className={cn(
           // Centred on both axes; translating only X left the grip hanging
           // half a grip below the separator.
-          "absolute top-[50%] flex translate-x-[-50%] translate-y-[-50%] items-center justify-center rounded-md border bg-card text-body-muted shadow-sm shadow-zinc-400/5",
+          "absolute top-[50%] flex translate-x-[-50%] translate-y-[-50%] items-center justify-center border bg-card text-body-muted shadow-sm shadow-zinc-400/5",
           direction === "vertical" ? "cursor-ns-resize" : "cursor-ew-resize",
           isResizing && "text-foreground",
         )}

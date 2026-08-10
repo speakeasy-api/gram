@@ -137,8 +137,9 @@ WHERE cli.user_session_issuer_id = @user_session_issuer_id
   AND cli.deleted IS FALSE;
 
 -- name: ListUserSessionClientsByProjectID :many
--- Operator visibility into all DCR-issued clients in the project, with optional
--- filter by user_session_issuer_id. Joins through issuers for project scoping.
+-- Operator visibility into every client registered against an issuer in the
+-- project -- DCR-registered and CIMD-resolved alike -- with optional filter by
+-- user_session_issuer_id. Joins through issuers for project scoping.
 SELECT cli.*
 FROM user_session_clients AS cli
 JOIN user_session_issuers AS iss ON iss.id = cli.user_session_issuer_id
@@ -149,6 +150,28 @@ WHERE iss.project_id = @project_id
   AND (sqlc.narg('cursor')::uuid IS NULL OR cli.id < sqlc.narg('cursor')::uuid)
 ORDER BY cli.id DESC
 LIMIT sqlc.arg('limit_value');
+
+-- name: CountActiveUserSessionsByClientIDs :many
+-- Active-session tallies for a set of clients, so the clients listing can show
+-- how many live sessions each registration holds without a round trip per row.
+-- "Active" is defined exactly as the 'active' branch of
+-- ListUserSessionsByProjectID defines it: not revoked, and keyed off
+-- refresh_expires_at (the authorization deadline) rather than expires_at (the
+-- ~1h access-token lifetime), so a live connection that has not refreshed
+-- recently still counts.
+--
+-- Project scoping is intentionally NOT applied: callers pass ids they already
+-- resolved through a project-scoped client query, and re-joining issuers here
+-- would only repeat that check.
+--
+-- Clients with no active sessions are absent from the result rather than
+-- returning zero; callers treat a missing id as zero.
+SELECT s.user_session_client_id AS user_session_client_id, COUNT(*)::int AS active_count
+FROM user_sessions AS s
+WHERE s.user_session_client_id = ANY(@user_session_client_ids::uuid[])
+  AND s.deleted IS FALSE
+  AND s.refresh_expires_at > now()
+GROUP BY s.user_session_client_id;
 
 -- name: RevokeUserSessionClient :one
 UPDATE user_session_clients AS cli
@@ -300,8 +323,10 @@ SELECT s.id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, 
        s.created_at, s.updated_at, s.deleted_at, s.deleted,
        iss.slug AS issuer_slug,
        c.client_name AS client_name,
+       c.client_id_metadata_uri AS client_id_metadata_uri,
        u.display_name AS user_display_name,
        u.email AS user_email,
+       u.photo_url AS user_photo_url,
        k.name AS api_key_name
 FROM user_sessions AS s
 JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
@@ -316,8 +341,8 @@ LEFT JOIN api_keys AS k
            END
 WHERE iss.project_id = @project_id
   AND iss.deleted IS FALSE
-  -- "active"/"expired" are keyed off refresh_expires_at (the session/refresh
-  -- lifetime), NOT expires_at (the ~1h access-token lifetime). An active MCP
+  -- "active"/"expired" are keyed off refresh_expires_at (the authorization
+  -- deadline), NOT expires_at (the ~1h access-token lifetime). An active MCP
   -- connection only refreshes its access token on demand, so a live session
   -- routinely has a past expires_at while its refresh token is still valid;
   -- keying "active" off expires_at would drop those sessions and make the

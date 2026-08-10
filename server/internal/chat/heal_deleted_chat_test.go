@@ -71,11 +71,11 @@ func TestUpsertChat_HealsDeletedThreadBackedChat(t *testing.T) {
 	// Thread-backed deleted chat heals on the next write.
 	threadChatID := seedThreadBackedChat(t, ctx, ti)
 	require.NoError(t, tr.ForceSoftDeleteChat(ctx, threadChatID))
-	_, err := r.GetChat(ctx, threadChatID)
+	_, err := r.GetChat(ctx, repo.GetChatParams{ID: threadChatID, ProjectID: ti.projectID})
 	require.ErrorIs(t, err, pgx.ErrNoRows, "chat should be soft-deleted before the write")
 
 	upsert(threadChatID)
-	_, err = r.GetChat(ctx, threadChatID)
+	_, err = r.GetChat(ctx, repo.GetChatParams{ID: threadChatID, ProjectID: ti.projectID})
 	require.NoError(t, err, "thread-backed chat should self-heal (deleted_at cleared)")
 
 	// A plain chat with no thread stays deleted: a write must not resurrect a chat
@@ -84,6 +84,6 @@ func TestUpsertChat_HealsDeletedThreadBackedChat(t *testing.T) {
 	_, err = r.SoftDeleteChat(ctx, repo.SoftDeleteChatParams{ID: plainChatID, ProjectID: ti.projectID})
 	require.NoError(t, err)
 	upsert(plainChatID)
-	_, err = r.GetChat(ctx, plainChatID)
+	_, err = r.GetChat(ctx, repo.GetChatParams{ID: plainChatID, ProjectID: ti.projectID})
 	require.ErrorIs(t, err, pgx.ErrNoRows, "intentionally-deleted plain chat must stay deleted")
 }

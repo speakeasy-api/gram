@@ -255,7 +255,6 @@ func (s *Service) ApproveRiskPolicyBypassRequest(ctx context.Context, payload *g
 						Scope:          authz.ScopeRiskPolicyBypass,
 						ResourceID:     current.RiskPolicyID.String(),
 					},
-					Effect:     authz.PolicyEffectAllow,
 					Principals: principalsToRevoke,
 					Selector:   selector,
 				}); err != nil {
@@ -269,7 +268,6 @@ func (s *Service) ApproveRiskPolicyBypassRequest(ctx context.Context, payload *g
 				Scope:          authz.ScopeRiskPolicyBypass,
 				ResourceID:     current.RiskPolicyID.String(),
 			},
-			Effect:     authz.PolicyEffectAllow,
 			Principals: principals,
 			Selector:   selector,
 		}); err != nil {
@@ -423,7 +421,6 @@ func (s *Service) RevokeRiskPolicyBypassRequest(ctx context.Context, payload *ge
 				Scope:          authz.ScopeRiskPolicyBypass,
 				ResourceID:     current.RiskPolicyID.String(),
 			},
-			Effect:     authz.PolicyEffectAllow,
 			Principals: principals,
 			Selector:   selector,
 		}); err != nil {

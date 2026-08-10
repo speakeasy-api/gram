@@ -215,7 +215,7 @@ function ChallengeReview({
         </Text>
       </Stack>
 
-      <div className="border-border bg-muted/40 w-full rounded-md border p-3">
+      <div className="border-border bg-muted/40 w-full border p-3">
         <Text
           small
           className="text-foreground/90 whitespace-pre-wrap break-words font-mono"

@@ -92,12 +92,14 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     // Don't show the authenticated app skeleton on routes that always redirect
     // (root "/" and unauthenticated pages like /login). This avoids a jarring
     // skeleton flash for logged-out users before the redirect to /login fires.
+    // A minimal centered pending state (not a blank viewport) covers the
+    // seconds the session check can take before login paints.
     if (
       location.pathname === "/" ||
       UNAUTHENTICATED_PATHS.some((p) => location.pathname.startsWith(p)) ||
       location.pathname.endsWith("/setup")
     ) {
-      return null;
+      return <AuthPendingScreen />;
     }
     return <AppLoadingShell />;
   }
@@ -287,6 +289,18 @@ export const ProjectProvider = ({
     <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>
   );
 };
+
+/**
+ * Minimal centered pending state shown while the session check resolves on
+ * routes that always redirect (root "/", /login, setup). Mirrors the
+ * thin-serif treatment CliCallback uses; the copy stays a neutral "Loading…"
+ * because on /login itself no redirect is coming.
+ */
+const AuthPendingScreen = () => (
+  <div className="flex h-screen items-center justify-center">
+    <h1 className="text-display-sm font-thin">Loading…</h1>
+  </div>
+);
 
 /**
  * Lightweight shell that mirrors the real AppLayout structure,
