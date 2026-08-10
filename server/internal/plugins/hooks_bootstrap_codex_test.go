@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -15,12 +14,12 @@ import (
 // codexHookCommandProbe runs a generated Codex hook command the way Codex runs
 // it — the substituted plugin root baked into the command string, the same path
 // exported as PLUGIN_ROOT, and the whole line handed to a shell as one argument
-// — and returns stdout, stderr, and the exit code.
+// — and returns stdout, stderr, and the exit code. Only the Unix command is
+// exercised; Windows takes commandWindows, which this change leaves alone.
 func codexHookCommandProbe(t *testing.T, command, pluginRoot string) (string, string, int) {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("the Unix hook command is exercised on Unix; Windows uses commandWindows")
-	}
+	// Codex hands the line to $SHELL, so run it through one rather than
+	// splitting it here.
 	shell, err := exec.LookPath("bash")
 	require.NoError(t, err, "bash is required to exercise the Unix hook command")
 
