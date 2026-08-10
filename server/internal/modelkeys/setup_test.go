@@ -11,8 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
-	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -138,7 +136,7 @@ func newTestServiceWithRedisDB(t *testing.T, redisDB int) (context.Context, *tes
 		tracerProvider,
 		conn,
 		sessionManager,
-		authz.NewEngine(logger, conn, gcp.NewNoopPublisher[*authzv1.Challenge](), authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
+		authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
 		enc,
 		provisioner,
 		features,

@@ -16,8 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
-	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
-	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
@@ -158,7 +156,7 @@ func TestRuntimeMethods_MountedOnMux(t *testing.T) {
 		ti.serverURL,
 		ti.siteURL,
 		ti.cacheAdapter,
-		authz.NewEngine(ti.logger, ti.conn, gcp.NewNoopPublisher[*authzv1.Challenge](), nil, workos.NewStubClient()),
+		authz.NewEngine(ti.logger, ti.conn, nil, workos.NewStubClient()),
 		ti.audit,
 	)
 

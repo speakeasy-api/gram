@@ -11,8 +11,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
-	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -282,7 +280,7 @@ func TestServePublic_RBAC_ToolsList_FiltersToGrantedTools(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 	toolset := createPrivateMCPToolset(t, ctx, ti, "list-rbac-filter-"+uuid.NewString()[:8])
 
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, gcp.NewNoopPublisher[*authzv1.Challenge](), authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	// Grant mcp:connect only for "allowed_tool".
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
@@ -317,7 +315,7 @@ func TestServePublic_RBAC_ToolsList_ServerLevelGrantReturnsAll(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 	toolset := createPrivateMCPToolset(t, ctx, ti, "list-rbac-all-"+uuid.NewString()[:8])
 
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, gcp.NewNoopPublisher[*authzv1.Challenge](), authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	// Server-level grant (no tool dimension) — all tools allowed.
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
@@ -345,7 +343,7 @@ func TestServePublic_RBAC_ToolsList_NoGrantsDenied(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 	toolset := createPrivateMCPToolset(t, ctx, ti, "list-rbac-empty-"+uuid.NewString()[:8])
 
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, gcp.NewNoopPublisher[*authzv1.Challenge](), authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	// mcp:connect grant for a DIFFERENT toolset — should not match.
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
@@ -368,7 +366,7 @@ func TestServePublic_RBAC_ToolsList_MultipleToolGrants(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 	toolset := createPrivateMCPToolset(t, ctx, ti, "list-rbac-multi-"+uuid.NewString()[:8])
 
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, gcp.NewNoopPublisher[*authzv1.Challenge](), authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	// Grant access to tool_a and tool_c but not tool_b.
 	ctx = authztest.WithExactGrants(t, ctx,
@@ -411,7 +409,7 @@ func TestServePublic_RBAC_ToolsList_DispositionGrant_AllowsMatchingDisposition(t
 	ctx, ti := newTestMCPService(t)
 	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-disp-allow-"+uuid.NewString()[:8])
 
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, gcp.NewNoopPublisher[*authzv1.Challenge](), authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	// Grant mcp:connect scoped to read_only disposition only.
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
@@ -446,7 +444,7 @@ func TestServePublic_RBAC_ToolsList_DispositionGrant_ServerLevelAllowsAll(t *tes
 	ctx, ti := newTestMCPService(t)
 	toolset := createPrivateMCPToolset(t, ctx, ti, "rbac-disp-server-"+uuid.NewString()[:8])
 
-	authzEngine := authz.NewEngine(ti.logger, ti.conn, gcp.NewNoopPublisher[*authzv1.Challenge](), authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(ti.logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	// Server-level grant (no disposition key) — all dispositions allowed.
 	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{

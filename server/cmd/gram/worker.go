@@ -547,7 +547,6 @@ func newWorkerCommand() *cli.Command {
 			authzEngine := authz.NewEngine(
 				logger,
 				db,
-				publishers.AuthzChallenges,
 				challengeLoggingEnabled,
 				workos.NewStubClient(),
 				authz.EngineOpts{

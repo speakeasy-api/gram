@@ -14,7 +14,6 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
-	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -70,7 +69,6 @@ import (
 )
 
 type Publishers struct {
-	AuthzChallenges         gcp.Publisher[*authzv1.Challenge]
 	PresidioAnalysis        gcp.Publisher[*riskv1.PresidioAnalysis]
 	GitleaksAnalysis        gcp.Publisher[*riskv1.GitleaksAnalysis]
 	PromptInjectionAnalysis gcp.Publisher[*riskv1.PromptInjectionAnalysis]

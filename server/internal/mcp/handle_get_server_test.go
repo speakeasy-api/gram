@@ -11,8 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
-	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -32,7 +30,7 @@ func TestHandleGetServer_ContentNegotiation(t *testing.T) {
 		testInstance.serverURL,
 		testInstance.siteURL,
 		testInstance.cacheAdapter,
-		authz.NewEngine(testInstance.logger, testInstance.conn, gcp.NewNoopPublisher[*authzv1.Challenge](), nil, workos.NewStubClient()),
+		authz.NewEngine(testInstance.logger, testInstance.conn, nil, workos.NewStubClient()),
 		testInstance.audit,
 	)
 

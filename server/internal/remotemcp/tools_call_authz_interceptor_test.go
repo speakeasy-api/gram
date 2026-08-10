@@ -7,8 +7,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
-	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
-	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -37,7 +35,7 @@ var testServerIdentity = proxy.ServerIdentity{
 
 func newAuthzEngineForTest(t *testing.T) *authz.Engine {
 	t.Helper()
-	return authz.NewEngine(testenv.NewLogger(t), nil, gcp.NewNoopPublisher[*authzv1.Challenge](), authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	return authz.NewEngine(testenv.NewLogger(t), nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 }
 
 func authzAuthContext(t *testing.T) *contextvalues.AuthContext {

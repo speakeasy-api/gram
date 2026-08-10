@@ -6,8 +6,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
-	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -29,7 +27,7 @@ func TestPrepareContext_demoOrgGetsReadOnlyGrants(t *testing.T) {
 
 	ctx := demoTestCtx(t)
 	conn := newTestDB(t)
-	engine := NewEngine(testenv.NewLogger(t), conn, gcp.NewNoopPublisher[*authzv1.Challenge](), challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	ctx, err := engine.PrepareContext(ctx)
 	require.NoError(t, err)
@@ -63,7 +61,7 @@ func TestPrepareContext_demoOrgReadOnlyEvenForAdminOverride(t *testing.T) {
 	ctx = contextvalues.SetRBACScopeOverride(ctx, "project:write")
 
 	conn := newTestDB(t)
-	engine := NewEngine(testenv.NewLogger(t), conn, gcp.NewNoopPublisher[*authzv1.Challenge](), challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	ctx, err := engine.PrepareContext(ctx)
 	require.NoError(t, err)

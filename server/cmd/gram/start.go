@@ -744,7 +744,6 @@ func newStartCommand() *cli.Command {
 			authzEngine := authz.NewEngine(
 				logger,
 				db,
-				publishers.AuthzChallenges,
 				challengeLoggingEnabled,
 				roleClient,
 				authz.EngineOpts{

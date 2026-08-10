@@ -4,41 +4,20 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
-	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	authzrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
-
-func capturingChallengePublisher(t *testing.T) (*gcp.MockPublisher[*authzv1.Challenge], *[]*authzv1.Challenge) {
-	t.Helper()
-
-	published := make([]*authzv1.Challenge, 0, 1)
-	publisher := gcp.NewMockPublisher[*authzv1.Challenge]()
-	publisher.
-		On("Publish", mock.Anything, mock.Anything).
-		Run(func(args mock.Arguments) {
-			message, ok := args.Get(1).(*authzv1.Challenge)
-			require.True(t, ok)
-			published = append(published, message)
-		}).
-		Return(gcp.NewSuccessPublishResult()).
-		Once()
-	t.Cleanup(func() {
-		publisher.AssertExpectations(t)
-	})
-
-	return publisher, &published
-}
 
 func TestChallengeLogger_skipsWithoutAuthContext(t *testing.T) {
 	t.Parallel()
 
-	publisher := gcp.NewMockPublisher[*authzv1.Challenge]()
+	conn := newTestDB(t)
 	check := Check{Scope: ScopeProjectRead, ResourceID: "proj_1"}
 	challengeLogger{
 		Operation: authzrepo.OperationRequire,
@@ -46,9 +25,11 @@ func TestChallengeLogger_skipsWithoutAuthContext(t *testing.T) {
 		Reason:    authzrepo.ReasonGrantMatched,
 		Checks:    []Check{check},
 		Focus:     &check,
-	}.Log(t.Context(), publisher, testenv.NewLogger(t), staticChallengeLogging(true))
+	}.Log(t.Context(), conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
-	publisher.AssertNotCalled(t, "Publish", mock.Anything, mock.Anything)
+	count, err := testrepo.New(conn).CountPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	require.Zero(t, count)
 }
 
 func TestChallengeLogger_skipsWhenImpersonating(t *testing.T) {
@@ -61,7 +42,8 @@ func TestChallengeLogger_skipsWhenImpersonating(t *testing.T) {
 		AccountType:          "enterprise",
 	})
 	ctx = contextvalues.SetAdminOverrideInContext(ctx, orgID)
-	publisher := gcp.NewMockPublisher[*authzv1.Challenge]()
+	conn := newTestDB(t)
+	seedOrganization(t, ctx, conn, orgID)
 
 	check := Check{Scope: ScopeProjectRead, ResourceID: "proj_impersonated"}
 	challengeLogger{
@@ -70,9 +52,11 @@ func TestChallengeLogger_skipsWhenImpersonating(t *testing.T) {
 		Reason:    authzrepo.ReasonGrantMatched,
 		Checks:    []Check{check},
 		Focus:     &check,
-	}.Log(ctx, publisher, testenv.NewLogger(t), staticChallengeLogging(true))
+	}.Log(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
-	publisher.AssertNotCalled(t, "Publish", mock.Anything, mock.Anything)
+	count, err := testrepo.New(conn).CountPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	require.Zero(t, count)
 }
 
 func TestChallengeLogger_publishesUserPrincipal(t *testing.T) {
@@ -92,7 +76,8 @@ func TestChallengeLogger_publishesUserPrincipal(t *testing.T) {
 	ctx = GrantsToContext(ctx, []Grant{
 		{PrincipalUrn: "role:admin", Scope: ScopeProjectRead, Selector: NewSelector(ScopeProjectRead, WildcardResource)},
 	})
-	publisher, published := capturingChallengePublisher(t)
+	conn := newTestDB(t)
+	seedOrganization(t, ctx, conn, orgID)
 
 	check := Check{Scope: ScopeProjectRead, ResourceID: "proj_user"}
 	challengeLogger{
@@ -103,10 +88,15 @@ func TestChallengeLogger_publishesUserPrincipal(t *testing.T) {
 		Focus:               &check,
 		Matches:             []grantMatch{{Grant: Grant{PrincipalUrn: "role:admin", Scope: ScopeProjectRead, Selector: NewSelector(ScopeProjectRead, WildcardResource)}, ViaCheck: check}},
 		EvaluatedGrantCount: 1,
-	}.Log(ctx, publisher, testenv.NewLogger(t), staticChallengeLogging(true))
+	}.Log(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
-	require.Len(t, *published, 1)
-	message := (*published)[0]
+	rows, err := testrepo.New(conn).ListPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, string(proto.MessageName(&authzv1.Challenge{})), rows[0].Topic)
+	message := &authzv1.Challenge{}
+	require.NoError(t, proto.Unmarshal(rows[0].Message, message))
+	require.Equal(t, rows[0].PublicID.String(), message.GetId())
 	require.Equal(t, orgID, message.GetOrganizationId())
 	require.Equal(t, "user:user_principal", message.GetPrincipalUrn())
 	require.Equal(t, string(authzrepo.PrincipalTypeUser), message.GetPrincipalType())
@@ -134,7 +124,8 @@ func TestChallengeLogger_publishesAPIKeyPrincipal(t *testing.T) {
 		APIKeyID:             "key_abc",
 		AccountType:          "enterprise",
 	})
-	publisher, published := capturingChallengePublisher(t)
+	conn := newTestDB(t)
+	seedOrganization(t, ctx, conn, orgID)
 
 	check := Check{Scope: ScopeProjectRead, ResourceID: "proj_apikey"}
 	challengeLogger{
@@ -143,10 +134,13 @@ func TestChallengeLogger_publishesAPIKeyPrincipal(t *testing.T) {
 		Reason:    authzrepo.ReasonGrantMatched,
 		Checks:    []Check{check},
 		Focus:     &check,
-	}.Log(ctx, publisher, testenv.NewLogger(t), staticChallengeLogging(true))
+	}.Log(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
-	require.Len(t, *published, 1)
-	message := (*published)[0]
+	rows, err := testrepo.New(conn).ListPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	message := &authzv1.Challenge{}
+	require.NoError(t, proto.Unmarshal(rows[0].Message, message))
 	require.Equal(t, "api_key:key_abc", message.GetPrincipalUrn())
 	require.Equal(t, string(authzrepo.PrincipalTypeAPIKey), message.GetPrincipalType())
 	require.Equal(t, "key_abc", message.GetApiKeyId())
@@ -156,8 +150,9 @@ func TestChallengeLogger_publishesAPIKeyPrincipal(t *testing.T) {
 func TestChallengeLogger_publishesAssistantPrincipal(t *testing.T) {
 	t.Parallel()
 
+	orgID := "org_" + uuid.NewString()
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
-		ActiveOrganizationID: "org_" + uuid.NewString(),
+		ActiveOrganizationID: orgID,
 		UserID:               "user_assistant_owner",
 		AccountType:          "enterprise",
 	})
@@ -165,7 +160,8 @@ func TestChallengeLogger_publishesAssistantPrincipal(t *testing.T) {
 		AssistantID: uuid.New(),
 		ThreadID:    uuid.New(),
 	})
-	publisher, published := capturingChallengePublisher(t)
+	conn := newTestDB(t)
+	seedOrganization(t, ctx, conn, orgID)
 
 	check := Check{Scope: ScopeMCPConnect, ResourceID: "tool_assistant"}
 	challengeLogger{
@@ -174,10 +170,13 @@ func TestChallengeLogger_publishesAssistantPrincipal(t *testing.T) {
 		Reason:    authzrepo.ReasonGrantMatched,
 		Checks:    []Check{check},
 		Focus:     &check,
-	}.Log(ctx, publisher, testenv.NewLogger(t), staticChallengeLogging(true))
+	}.Log(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
-	require.Len(t, *published, 1)
-	message := (*published)[0]
+	rows, err := testrepo.New(conn).ListPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	message := &authzv1.Challenge{}
+	require.NoError(t, proto.Unmarshal(rows[0].Message, message))
 	require.Equal(t, "user:user_assistant_owner", message.GetPrincipalUrn())
 	require.Equal(t, string(authzrepo.PrincipalTypeAssistant), message.GetPrincipalType())
 }
@@ -186,13 +185,15 @@ func TestChallengeLogger_stampsRequestID(t *testing.T) {
 	t.Parallel()
 
 	reqID := "req_" + uuid.NewString()
+	orgID := "org_" + uuid.NewString()
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
-		ActiveOrganizationID: "org_" + uuid.NewString(),
+		ActiveOrganizationID: orgID,
 		UserID:               "user_with_request",
 		AccountType:          "enterprise",
 	})
 	ctx = contextvalues.SetRequestContext(ctx, &contextvalues.RequestContext{ReqID: reqID})
-	publisher, published := capturingChallengePublisher(t)
+	conn := newTestDB(t)
+	seedOrganization(t, ctx, conn, orgID)
 
 	check := Check{Scope: ScopeProjectRead, ResourceID: "proj_req"}
 	challengeLogger{
@@ -201,21 +202,27 @@ func TestChallengeLogger_stampsRequestID(t *testing.T) {
 		Reason:    authzrepo.ReasonNoGrants,
 		Checks:    []Check{check},
 		Focus:     &check,
-	}.Log(ctx, publisher, testenv.NewLogger(t), staticChallengeLogging(true))
+	}.Log(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
-	require.Len(t, *published, 1)
-	require.Equal(t, reqID, (*published)[0].GetRequestId())
+	rows, err := testrepo.New(conn).ListPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	message := &authzv1.Challenge{}
+	require.NoError(t, proto.Unmarshal(rows[0].Message, message))
+	require.Equal(t, reqID, message.GetRequestId())
 }
 
 func TestChallengeLogger_publishesNestedAndExpandedFields(t *testing.T) {
 	t.Parallel()
 
+	orgID := "org_" + uuid.NewString()
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
-		ActiveOrganizationID: "org_" + uuid.NewString(),
+		ActiveOrganizationID: orgID,
 		UserID:               "user_nested",
 		AccountType:          "enterprise",
 	})
-	publisher, published := capturingChallengePublisher(t)
+	conn := newTestDB(t)
+	seedOrganization(t, ctx, conn, orgID)
 	focus := Check{Scope: ScopeProjectRead, ResourceID: "proj_focus"}
 	checks := []Check{
 		focus,
@@ -236,10 +243,13 @@ func TestChallengeLogger_publishesNestedAndExpandedFields(t *testing.T) {
 		Focus:               &focus,
 		Matches:             matches,
 		EvaluatedGrantCount: 7,
-	}.Log(ctx, publisher, testenv.NewLogger(t), staticChallengeLogging(true))
+	}.Log(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
-	require.Len(t, *published, 1)
-	message := (*published)[0]
+	rows, err := testrepo.New(conn).ListPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	message := &authzv1.Challenge{}
+	require.NoError(t, proto.Unmarshal(rows[0].Message, message))
 	require.Contains(t, message.GetExpandedScopes(), string(ScopeRoot))
 	require.Contains(t, message.GetExpandedScopes(), string(ScopeProjectRead))
 	require.Contains(t, message.GetExpandedScopes(), string(ScopeProjectWrite))
@@ -258,12 +268,14 @@ func TestChallengeLogger_publishesNestedAndExpandedFields(t *testing.T) {
 func TestChallengeLogger_publishesFilterCounts(t *testing.T) {
 	t.Parallel()
 
+	orgID := "org_" + uuid.NewString()
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
-		ActiveOrganizationID: "org_" + uuid.NewString(),
+		ActiveOrganizationID: orgID,
 		UserID:               "user_filter_counts",
 		AccountType:          "enterprise",
 	})
-	publisher, published := capturingChallengePublisher(t)
+	conn := newTestDB(t)
+	seedOrganization(t, ctx, conn, orgID)
 	focus := Check{Scope: ScopeProjectRead, ResourceID: "proj_filter"}
 
 	challengeLogger{
@@ -274,10 +286,13 @@ func TestChallengeLogger_publishesFilterCounts(t *testing.T) {
 		Focus:                &focus,
 		FilterCandidateCount: 4,
 		FilterAllowedCount:   1,
-	}.Log(ctx, publisher, testenv.NewLogger(t), staticChallengeLogging(true))
+	}.Log(ctx, conn, testenv.NewLogger(t), staticChallengeLogging(true))
 
-	require.Len(t, *published, 1)
-	message := (*published)[0]
+	rows, err := testrepo.New(conn).ListPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	message := &authzv1.Challenge{}
+	require.NoError(t, proto.Unmarshal(rows[0].Message, message))
 	require.Equal(t, string(authzrepo.OperationFilter), message.GetOperation())
 	require.Equal(t, uint32(4), message.GetFilterCandidateCount())
 	require.Equal(t, uint32(1), message.GetFilterAllowedCount())

@@ -11,8 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
-	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	extcred "github.com/speakeasy-api/gram/server/gen/external_credentials"
 	gen "github.com/speakeasy-api/gram/server/gen/external_keys"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -104,7 +102,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	authCtx.ActiveOrganizationID = orgID
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	authzEngine := authz.NewEngine(logger, conn, gcp.NewNoopPublisher[*authzv1.Challenge](), authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	auditLogger := audit.NewLogger()
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 	svc := externalkeys.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger, features)

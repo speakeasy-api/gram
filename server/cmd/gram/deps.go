@@ -45,7 +45,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/speakeasy-api/gram/infra/gen"
-	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -995,23 +994,6 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 		Stop(ctx context.Context) error
 	}, 0, 1)
 
-	// Authz checks run on hot request paths. Bound Pub/Sub buffering so an
-	// outage fails logging quickly instead of blocking authorization or growing
-	// memory without limit.
-	authzPublishSettings := pubsub.DefaultPublishSettings
-	authzPublishSettings.Timeout = 10 * time.Second
-	authzPublishSettings.FlowControlSettings.MaxOutstandingMessages = 10_000
-	authzPublishSettings.FlowControlSettings.MaxOutstandingBytes = 128 * 1024 * 1024
-	authzPublishSettings.FlowControlSettings.LimitExceededBehavior = pubsub.FlowControlSignalError
-
-	authzChallenges, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &authzv1.Challenge{},
-		gcp.WithPubSubPublishSettings(&authzPublishSettings),
-	)
-	if err != nil {
-		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for authz challenges: %w", err)
-	}
-	pubs = append(pubs, labelledStop{label: "authzChallenges", pub: authzChallenges})
-
 	presidioAnalysis, err := gcp.PubSubPublisherForMessage(ctx, psbroker, &riskv1.PresidioAnalysis{})
 	if err != nil {
 		return nil, noopShutdown, fmt.Errorf("failed to create pubsub publisher for presidio analysis: %w", err)
@@ -1098,7 +1080,6 @@ func newPublishers(ctx context.Context, psbroker pubSubBroker) (*background.Publ
 	}
 
 	return &background.Publishers{
-		AuthzChallenges:         authzChallenges,
 		Outbox:                  outboxPublisher,
 		PresidioAnalysis:        presidioAnalysis,
 		GitleaksAnalysis:        gitleaksAnalysis,

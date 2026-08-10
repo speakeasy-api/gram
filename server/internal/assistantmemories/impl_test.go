@@ -10,8 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
-	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
-	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	gen "github.com/speakeasy-api/gram/server/gen/assistant_memories"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -65,7 +63,7 @@ func newTestHarness(t *testing.T) (*testHarness, context.Context) {
 
 	mem := &fakeMemory{listFn: nil, getFn: nil, deleteFn: nil}
 
-	authzEngine := authz.NewEngine(logger, nil, gcp.NewNoopPublisher[*authzv1.Challenge](), authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	svc := &Service{
 		tracer: tracerProvider.Tracer("test"),
@@ -136,7 +134,7 @@ func TestListAssistantMemories_RBACDenied(t *testing.T) {
 
 	h, ctx := newTestHarness(t)
 	logger := testenv.NewLogger(t)
-	h.svc.authz = authz.NewEngine(logger, nil, gcp.NewNoopPublisher[*authzv1.Challenge](), authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	h.svc.authz = authz.NewEngine(logger, nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	ctx = authztest.WithExactGrants(t, ctx)
 
 	_, err := h.svc.ListAssistantMemories(ctx, &gen.ListAssistantMemoriesPayload{
@@ -305,7 +303,7 @@ func TestGetAssistantMemory_RBACDenied(t *testing.T) {
 
 	h, ctx := newTestHarness(t)
 	logger := testenv.NewLogger(t)
-	h.svc.authz = authz.NewEngine(logger, nil, gcp.NewNoopPublisher[*authzv1.Challenge](), authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	h.svc.authz = authz.NewEngine(logger, nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	ctx = authztest.WithExactGrants(t, ctx)
 
 	_, err := h.svc.GetAssistantMemory(ctx, &gen.GetAssistantMemoryPayload{
@@ -376,7 +374,7 @@ func TestDeleteAssistantMemory_RBACDenied(t *testing.T) {
 
 	h, ctx := newTestHarness(t)
 	logger := testenv.NewLogger(t)
-	h.svc.authz = authz.NewEngine(logger, nil, gcp.NewNoopPublisher[*authzv1.Challenge](), authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	h.svc.authz = authz.NewEngine(logger, nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectRead, h.projectID.String()))
 

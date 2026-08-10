@@ -14,8 +14,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
-	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	gen "github.com/speakeasy-api/gram/server/gen/skills"
 	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -131,7 +129,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	authContext.ProjectSlug = &project.Slug
 	ctx = contextvalues.SetAuthContext(ctx, authContext)
 
-	authzEngine := authz.NewEngine(logger, conn, gcp.NewNoopPublisher[*authzv1.Challenge](), authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 	signaler := &captureSuggestionSignaler{signals: nil, err: nil}
 	siteURL, err := url.Parse("https://app.getgram.test")

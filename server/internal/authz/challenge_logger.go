@@ -8,15 +8,17 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 
 	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
-	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	authzrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -43,13 +45,13 @@ type challengeLogger struct {
 	FilterAllowedCount   uint32
 }
 
-const challengePublishAckTimeout = 10 * time.Second
+const challengeOutboxTimeout = 10 * time.Second
 
-// Log publishes the challenge for asynchronous ingestion into ClickHouse. The
-// publish is gated behind the ChallengeLoggingEnabled feature check — if the
+// Log enqueues the challenge for asynchronous ingestion into ClickHouse. The
+// enqueue is gated behind the ChallengeLoggingEnabled feature check — if the
 // feature is not enabled for the org (or the check fails), the call is a
 // no-op. Errors are logged at warn level and never bubble back to the caller.
-func (l challengeLogger) Log(ctx context.Context, publisher gcp.Publisher[*authzv1.Challenge], logger *slog.Logger, isEnabled ChallengeLoggingEnabled) {
+func (l challengeLogger) Log(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, isEnabled ChallengeLoggingEnabled) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return
@@ -149,7 +151,8 @@ func (l challengeLogger) Log(ctx context.Context, publisher gcp.Publisher[*authz
 		reqID = &v
 	}
 
-	id := uuid.NewString()
+	challengeID := uuid.New()
+	id := challengeID.String()
 	timestamp := time.Now().UTC().Format(time.RFC3339Nano)
 	principalTypeString := string(principalType)
 	operation := string(l.Operation)
@@ -190,19 +193,37 @@ func (l challengeLogger) Log(ctx context.Context, publisher gcp.Publisher[*authz
 		FilterAllowedCount:   &l.FilterAllowedCount,
 	}.Build()
 
-	// Request cancellation must not abort a log publish after the authorization
-	// decision has completed. The publisher has its own bounded timeout.
-	publishCtx := context.WithoutCancel(ctx)
-	result := publisher.Publish(publishCtx, message)
-	go func() {
-		ackCtx, cancel := context.WithTimeout(publishCtx, challengePublishAckTimeout)
-		defer cancel()
-		if _, err := result.Get(ackCtx); err != nil {
-			logger.WarnContext(ackCtx, "failed to publish authz challenge",
-				attr.SlogError(err),
-			)
-		}
-	}()
+	// Request cancellation must not abort the durable enqueue after the
+	// authorization decision has completed. Keep it bounded so challenge
+	// logging cannot hold up the request indefinitely during a database outage.
+	enqueueCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), challengeOutboxTimeout)
+	defer cancel()
+
+	tx, err := db.Begin(enqueueCtx)
+	if err != nil {
+		logger.WarnContext(enqueueCtx, "failed to begin authz challenge outbox transaction",
+			attr.SlogError(err),
+		)
+		return
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(enqueueCtx) })
+
+	if _, err := outbox.Publish(enqueueCtx, tx, authCtx.ActiveOrganizationID, outbox.Message{
+		Proto:      message,
+		PublicID:   challengeID,
+		Attributes: nil,
+	}); err != nil {
+		logger.WarnContext(enqueueCtx, "failed to enqueue authz challenge",
+			attr.SlogError(err),
+		)
+		return
+	}
+
+	if err := tx.Commit(enqueueCtx); err != nil {
+		logger.WarnContext(enqueueCtx, "failed to commit authz challenge outbox transaction",
+			attr.SlogError(err),
+		)
+	}
 }
 
 func marshalSelector(v Selector) string {

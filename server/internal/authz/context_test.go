@@ -7,8 +7,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
-	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -23,7 +21,7 @@ func TestPrepareContext_loadsUserGrants(t *testing.T) {
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	engine := NewEngine(testenv.NewLogger(t), conn, gcp.NewNoopPublisher[*authzv1.Challenge](), challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -46,7 +44,7 @@ func TestPrepareContext_rejectsInvalidUserPrincipal(t *testing.T) {
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	engine := NewEngine(testenv.NewLogger(t), conn, gcp.NewNoopPublisher[*authzv1.Challenge](), challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -65,7 +63,7 @@ func TestPrepareContext_skipsNonSessionAuth(t *testing.T) {
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	engine := NewEngine(testenv.NewLogger(t), conn, gcp.NewNoopPublisher[*authzv1.Challenge](), challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -85,7 +83,7 @@ func TestPrepareContext_sessionWithoutActiveOrganizationGetsNoGrants(t *testing.
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	engine := NewEngine(testenv.NewLogger(t), conn, gcp.NewNoopPublisher[*authzv1.Challenge](), challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -105,7 +103,7 @@ func TestPrepareContext_loadsAssistantPrincipalGrants(t *testing.T) {
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	engine := NewEngine(testenv.NewLogger(t), conn, gcp.NewNoopPublisher[*authzv1.Challenge](), challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -133,7 +131,7 @@ func TestShouldEnforce_assistantPrincipalOnEnterpriseOrgEnforces(t *testing.T) {
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	engine := NewEngine(testenv.NewLogger(t), conn, gcp.NewNoopPublisher[*authzv1.Challenge](), challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -156,7 +154,7 @@ func TestShouldEnforce_assistantPrincipalOnNonEnterpriseOrgEnforces(t *testing.T
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	engine := NewEngine(testenv.NewLogger(t), conn, gcp.NewNoopPublisher[*authzv1.Challenge](), challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -178,7 +176,7 @@ func TestPrepareContext_loadsGrantsForNonEnterpriseOrgs(t *testing.T) {
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	engine := NewEngine(testenv.NewLogger(t), conn, gcp.NewNoopPublisher[*authzv1.Challenge](), challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
