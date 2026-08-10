@@ -1286,6 +1286,12 @@ SELECT
   , ccp.project_id
   , COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::text AS user_id
   , COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::text AS external_user_id
+  -- The part's own source wins: the parent message may be absent or carry a
+  -- NULL source, and the content-part listing reports ccp.source for the same
+  -- part.
+  , COALESCE(ccp.source, cm.source, '')::text AS chat_source
+  , COALESCE(dir.department_name, '')::text AS team
+  , COALESCE(u.email, '')::text AS user_email
 FROM chat_content_parts ccp
 LEFT JOIN chat_messages cm
   ON cm.id = ccp.parent_chat_message_id
@@ -1293,6 +1299,22 @@ LEFT JOIN chat_messages cm
 LEFT JOIN chats c
   ON c.id = ccp.chat_id
   AND c.deleted IS FALSE
+LEFT JOIN users u
+  ON u.id = COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''))
+LEFT JOIN LATERAL (
+  SELECT d.attributes->>'department_name' AS department_name
+  FROM directory_users d
+  WHERE d.organization_id = c.organization_id
+    AND d.deleted IS FALSE
+    AND d.workos_deleted IS FALSE
+    AND (d.user_id = u.id OR LOWER(d.email) = LOWER(u.email))
+  -- NULLS LAST: an email-matched row leaves the equality NULL (d.user_id is
+  -- unset), and DESC would otherwise sort NULL above TRUE, letting a stale
+  -- email row shadow the linked profile. d.id makes equal-timestamp ties
+  -- deterministic.
+  ORDER BY (d.user_id = u.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
+  LIMIT 1
+) dir ON TRUE
 WHERE ccp.id = ANY($1::uuid[])
   AND ccp.project_id = ANY($2::uuid[])
   AND ccp.deleted IS FALSE
@@ -1320,6 +1342,9 @@ type GetChatContentPartAttributionRow struct {
 	ProjectID      uuid.NullUUID
 	UserID         string
 	ExternalUserID string
+	ChatSource     string
+	Team           string
+	UserEmail      string
 }
 
 // Resolves denormalized attribution for a content-part finding. The parent
@@ -1346,6 +1371,9 @@ func (q *Queries) GetChatContentPartAttribution(ctx context.Context, arg GetChat
 			&i.ProjectID,
 			&i.UserID,
 			&i.ExternalUserID,
+			&i.ChatSource,
+			&i.Team,
+			&i.UserEmail,
 		); err != nil {
 			return nil, err
 		}
@@ -1399,10 +1427,14 @@ const getChatMessageAttribution = `-- name: GetChatMessageAttribution :many
 SELECT
     cm.id
   , cm.chat_id
+  , cm.project_id
   , cm.created_at AS message_created_at
   , COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::text AS user_id
   , COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::text AS external_user_id
   , COALESCE(thread.assistant_id, '00000000-0000-0000-0000-000000000000'::uuid) AS assistant_id
+  , COALESCE(cm.source, '')::text AS chat_source
+  , COALESCE(dir.department_name, '')::text AS team
+  , COALESCE(u.email, '')::text AS user_email
 FROM chat_messages cm
 LEFT JOIN chats c
   ON c.id = cm.chat_id
@@ -1415,25 +1447,70 @@ LEFT JOIN LATERAL (
   ORDER BY at.created_at DESC
   LIMIT 1
 ) thread ON TRUE
+LEFT JOIN users u
+  ON u.id = COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''))
+LEFT JOIN LATERAL (
+  SELECT d.attributes->>'department_name' AS department_name
+  FROM directory_users d
+  WHERE d.organization_id = c.organization_id
+    AND d.deleted IS FALSE
+    AND d.workos_deleted IS FALSE
+    AND (d.user_id = u.id OR LOWER(d.email) = LOWER(u.email))
+  -- NULLS LAST: an email-matched row leaves the equality NULL (d.user_id is
+  -- unset), and DESC would otherwise sort NULL above TRUE, letting a stale
+  -- email row shadow the linked profile. d.id makes equal-timestamp ties
+  -- deterministic.
+  ORDER BY (d.user_id = u.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
+  LIMIT 1
+) dir ON TRUE
 WHERE cm.id = ANY($1::uuid[])
+  AND cm.project_id = ANY($2::uuid[])
+  -- Nothing in the schema ties a message's project_id to its chat's, so a
+  -- message pointing at a chat in another project is rejected outright rather
+  -- than attributed: the chat-level user ids, the assistant link, and the
+  -- directory lookup's organization all come from that chat.
+  AND EXISTS (
+    SELECT 1
+    FROM chats pc
+    WHERE pc.id = cm.chat_id
+      AND pc.project_id = cm.project_id
+  )
 `
+
+type GetChatMessageAttributionParams struct {
+	Ids        []uuid.UUID
+	ProjectIds []uuid.UUID
+}
 
 type GetChatMessageAttributionRow struct {
 	ID               uuid.UUID
 	ChatID           uuid.UUID
+	ProjectID        uuid.NullUUID
 	MessageCreatedAt pgtype.Timestamptz
 	UserID           string
 	ExternalUserID   string
 	AssistantID      uuid.UUID
+	ChatSource       string
+	Team             string
+	UserEmail        string
 }
 
 // Resolves the denormalized attribution (chat id, user ids, message event
-// time, assistant link) the ClickHouse finding writer stamps on risk_findings
-// rows at ingest. Message-level ids win over chat-level ids; both empty and
-// NULL collapse to ”. The assistant id is the chat's most recent live
-// assistant_threads link, or the nil UUID when the chat has no assistant.
-func (q *Queries) GetChatMessageAttribution(ctx context.Context, ids []uuid.UUID) ([]GetChatMessageAttributionRow, error) {
-	rows, err := q.db.Query(ctx, getChatMessageAttribution, ids)
+// time, assistant link, source surface, directory team) the ClickHouse finding
+// writer stamps on risk_findings rows at ingest. Message-level ids win over
+// chat-level ids; both empty and NULL collapse to ”. The assistant id is the
+// chat's most recent live assistant_threads link, or the nil UUID when the
+// chat has no assistant. The team is the resolved user's WorkOS directory
+// department, preferring an explicit user link over an email match (same
+// precedence as the spend-rules directory lookup) so a stale email row cannot
+// shadow the linked profile; empty when the org has no directory or the user
+// has no profile. A findings batch can span projects, so the scope is the
+// batch's set of project ids rather than a single id. project_id is still
+// returned because that set only proves the message belongs to SOME project
+// in the batch: the caller re-checks it against the individual finding's
+// project before stamping attribution.
+func (q *Queries) GetChatMessageAttribution(ctx context.Context, arg GetChatMessageAttributionParams) ([]GetChatMessageAttributionRow, error) {
+	rows, err := q.db.Query(ctx, getChatMessageAttribution, arg.Ids, arg.ProjectIds)
 	if err != nil {
 		return nil, err
 	}
@@ -1444,10 +1521,14 @@ func (q *Queries) GetChatMessageAttribution(ctx context.Context, ids []uuid.UUID
 		if err := rows.Scan(
 			&i.ID,
 			&i.ChatID,
+			&i.ProjectID,
 			&i.MessageCreatedAt,
 			&i.UserID,
 			&i.ExternalUserID,
 			&i.AssistantID,
+			&i.ChatSource,
+			&i.Team,
+			&i.UserEmail,
 		); err != nil {
 			return nil, err
 		}

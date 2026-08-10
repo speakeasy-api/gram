@@ -34,6 +34,7 @@ type Endpoints struct {
 	CompileExpr                    goa.Endpoint
 	GetRiskUserBreakdown           goa.Endpoint
 	GetRiskRuleBreakdown           goa.Endpoint
+	GetRiskSignals                 goa.Endpoint
 	GetRiskPolicyStatus            goa.Endpoint
 	CreateRiskPolicyBypassRequest  goa.Endpoint
 	AcknowledgeRiskPolicyChallenge goa.Endpoint
@@ -87,6 +88,7 @@ func NewEndpoints(s Service) *Endpoints {
 		CompileExpr:                    NewCompileExprEndpoint(s, a.APIKeyAuth),
 		GetRiskUserBreakdown:           NewGetRiskUserBreakdownEndpoint(s, a.APIKeyAuth),
 		GetRiskRuleBreakdown:           NewGetRiskRuleBreakdownEndpoint(s, a.APIKeyAuth),
+		GetRiskSignals:                 NewGetRiskSignalsEndpoint(s, a.APIKeyAuth),
 		GetRiskPolicyStatus:            NewGetRiskPolicyStatusEndpoint(s, a.APIKeyAuth),
 		CreateRiskPolicyBypassRequest:  NewCreateRiskPolicyBypassRequestEndpoint(s, a.APIKeyAuth),
 		AcknowledgeRiskPolicyChallenge: NewAcknowledgeRiskPolicyChallengeEndpoint(s, a.APIKeyAuth),
@@ -138,6 +140,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CompileExpr = m(e.CompileExpr)
 	e.GetRiskUserBreakdown = m(e.GetRiskUserBreakdown)
 	e.GetRiskRuleBreakdown = m(e.GetRiskRuleBreakdown)
+	e.GetRiskSignals = m(e.GetRiskSignals)
 	e.GetRiskPolicyStatus = m(e.GetRiskPolicyStatus)
 	e.CreateRiskPolicyBypassRequest = m(e.CreateRiskPolicyBypassRequest)
 	e.AcknowledgeRiskPolicyChallenge = m(e.AcknowledgeRiskPolicyChallenge)
@@ -1227,6 +1230,65 @@ func NewGetRiskRuleBreakdownEndpoint(s Service, authAPIKeyFn security.AuthAPIKey
 			return nil, err
 		}
 		return s.GetRiskRuleBreakdown(ctx, p)
+	}
+}
+
+// NewGetRiskSignalsEndpoint returns an endpoint function that calls the method
+// "getRiskSignals" of service "risk".
+func NewGetRiskSignalsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetRiskSignalsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetRiskSignals(ctx, p)
 	}
 }
 

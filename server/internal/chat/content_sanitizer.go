@@ -67,8 +67,8 @@ func dataURIPlaceholder(uri string) string {
 		data = ""
 	}
 	size := len(data)
-	if strings.HasSuffix(meta, ";base64") {
-		meta = strings.TrimSuffix(meta, ";base64")
+	if before, ok := strings.CutSuffix(meta, ";base64"); ok {
+		meta = before
 		size = size * 3 / 4
 	}
 	mime, _, _ := strings.Cut(meta, ";")

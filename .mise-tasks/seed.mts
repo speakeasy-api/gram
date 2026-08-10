@@ -1834,37 +1834,39 @@ const seededHistoryRiskChatIds: string[] = [];
 // assistant groups by, while `rule_id` drives the customer-facing category
 // label (secret.* -> Secrets, pii.* -> PII/Financial/Government IDs, ...). The
 // bare ids ("generic-api-key", "email") deliberately omit a category prefix so
-// they exercise the source-based classification fallback. match values mimic
-// the redacted form the scanner stores. Tuple: [source, ruleId, description,
-// match, confidence].
+// they exercise the source-based classification fallback. match values are
+// canonical, publicly documented fake secrets (AWS/Stripe docs examples,
+// TEST-NET IPs, 555-01xx phone numbers) stored as the Postgres "plaintext" so
+// the audited reveal path shows a realistic value instead of a placeholder.
+// Tuple: [source, ruleId, description, match, confidence].
 const RISK_FINDING_CATALOG: [string, string, string, string, number][] = [
   // Secrets (gitleaks)
   [
     "gitleaks",
     "secret.aws_access_key",
     "AWS access key",
-    "<redacted len=20 sha=8f3a2c1d>",
+    "AKIAIOSFODNN7EXAMPLE",
     0.99,
   ],
   [
     "gitleaks",
     "secret.github_pat",
     "GitHub personal access token",
-    "<redacted len=40 sha=3b9e7a02>",
+    "ghp_16C7e42F292c6912E7710c838347Ae178B4a",
     0.98,
   ],
   [
     "gitleaks",
     "secret.stripe_api_key",
     "Stripe secret key",
-    "<redacted len=32 sha=c41d77ee>",
+    "sk_test_4eC39HqLyjWDarjtT1zdp7dc",
     0.97,
   ],
   [
     "gitleaks",
     "generic-api-key",
     "Generic API key",
-    "<redacted len=36 sha=a0f2bb19>",
+    "9f8e7d6c-5b4a-4321-a1b2-c3d4e5f60718",
     0.85,
   ],
   // PII (presidio)
@@ -1872,60 +1874,30 @@ const RISK_FINDING_CATALOG: [string, string, string, string, number][] = [
     "presidio",
     "pii.email_address",
     "Email address",
-    "<redacted len=22 sha=5d2c9f81>",
+    "jane.doe@example.com",
     0.95,
   ],
-  [
-    "presidio",
-    "pii.phone_number",
-    "Phone number",
-    "<redacted len=12 sha=77ab10cc>",
-    0.9,
-  ],
-  [
-    "presidio",
-    "pii.ip_address",
-    "IP address",
-    "<redacted len=13 sha=12e4dd56>",
-    0.88,
-  ],
-  ["presidio", "email", "Email address", "<redacted len=24 sha=9c3a4b22>", 0.8],
+  ["presidio", "pii.phone_number", "Phone number", "+1 415 555 0132", 0.9],
+  ["presidio", "pii.ip_address", "IP address", "203.0.113.42", 0.88],
+  ["presidio", "email", "Email address", "sam.lee@example.org", 0.8],
   // Financial (presidio)
   [
     "presidio",
     "pii.credit_card",
     "Credit card number",
-    "<redacted len=16 sha=ee0918fa>",
+    "4242424242424242",
     0.96,
   ],
-  [
-    "presidio",
-    "pii.iban_code",
-    "IBAN code",
-    "<redacted len=22 sha=4471bc9d>",
-    0.93,
-  ],
+  ["presidio", "pii.iban_code", "IBAN code", "DE89370400440532013000", 0.93],
   // Government IDs (presidio)
-  [
-    "presidio",
-    "pii.us_ssn",
-    "US social security number",
-    "<redacted len=11 sha=2a6f0c34>",
-    0.94,
-  ],
-  [
-    "presidio",
-    "pii.us_passport",
-    "US passport number",
-    "<redacted len=9 sha=b8d3e012>",
-    0.9,
-  ],
+  ["presidio", "pii.us_ssn", "US social security number", "078-05-1120", 0.94],
+  ["presidio", "pii.us_passport", "US passport number", "912803456", 0.9],
   // Healthcare (presidio)
   [
     "presidio",
     "pii.medical_license",
     "Medical license number",
-    "<redacted len=10 sha=6f1c8aa7>",
+    "MD-1234567",
     0.89,
   ],
   // Prompt injection — match carries the full flagged event (the shape
@@ -2058,7 +2030,7 @@ async function seedRiskFindings(init: {
     SELECT
       '${projectId}', '${organizationId}', pol.id, 1,
       m.id, 'gitleaks', TRUE, 'secret.aws_access_key', 'AWS access key',
-      '<redacted len=20 sha=8f3a2c1d>', 0.99,
+      'AKIAIOSFODNN7EXAMPLE', 0.99,
       now() - ((g.i % 6) || ' days')::interval
     FROM (
       SELECT id FROM risk_policies
@@ -2092,7 +2064,7 @@ async function seedRiskFindings(init: {
       cm.id,
       (ARRAY['gitleaks','prompt_injection','presidio'])[1 + (abs(hashtext(cm.chat_id::text)) % 3)],
       TRUE, 'seed.history_risk', 'Seeded historical risk finding',
-      '<redacted len=20 sha=9c41d2ab>', 0.95, cm.created_at
+      'AKIAI44QH8DHBEXAMPLE', 0.95, cm.created_at
     FROM chat_messages cm
     CROSS JOIN (
       SELECT id FROM risk_policies
@@ -2176,20 +2148,114 @@ async function seedRiskFindings(init: {
   }
 }
 
+// Embeds each plain-text finding match into its anchor chat message's content
+// and stamps byte spans on risk_results — making seeded data honor the same
+// contract scanner-produced findings do, where the sensitive value really
+// exists in the original content. The ClickHouse reveal path reconstructs
+// plaintext by slicing the ORIGINAL Postgres content at surface/start_pos/
+// end_pos and verifying the length, so without this pass reveal 404s on all
+// seeded findings whenever risk-list-from-clickhouse is on. JSON event
+// matches (llm_judge / prompt_injection) are skipped: their match is the
+// whole flagged event, not a substring of content, and they have nothing to
+// reveal on this surface. Idempotent: a match already present in the content
+// is located rather than appended again, and spans are recomputed from the
+// current content on every run.
+async function embedRiskFindingMatches(init: {
+  projectId: string;
+}): Promise<void> {
+  const { projectId } = init;
+  const dbUser = process.env.DB_USER || "gram";
+  const dbName = process.env.DB_NAME || "gram";
+
+  const sql = `
+  DO $embed$
+  DECLARE
+    r RECORD;
+    pos INT;
+    base INT;
+  BEGIN
+    FOR r IN
+      SELECT rr.id, rr.chat_message_id, rr.match
+      FROM risk_results rr
+      WHERE rr.project_id = '${projectId}'
+        AND rr.found IS TRUE
+        AND rr.chat_message_id IS NOT NULL
+        AND COALESCE(rr.match, '') <> ''
+        AND rr.match NOT LIKE '{%'
+        AND rr.match NOT LIKE '<redacted%'
+      ORDER BY rr.id
+    LOOP
+      SELECT strpos(content, r.match) INTO pos
+      FROM chat_messages WHERE id = r.chat_message_id;
+      IF pos IS NULL THEN
+        CONTINUE;
+      END IF;
+      IF pos > 0 THEN
+        -- Already embedded (idempotent re-run): byte offset of the existing
+        -- occurrence.
+        SELECT octet_length(substring(content, 1, pos - 1)) INTO base
+        FROM chat_messages WHERE id = r.chat_message_id;
+      ELSE
+        -- Append after a separating space; the match then starts one byte
+        -- past the old content's end.
+        SELECT octet_length(content) + 1 INTO base
+        FROM chat_messages WHERE id = r.chat_message_id;
+        UPDATE chat_messages
+        SET content = content || ' ' || r.match
+        WHERE id = r.chat_message_id;
+      END IF;
+      UPDATE risk_results
+      SET start_pos = base, end_pos = base + octet_length(r.match)
+      WHERE id = r.id;
+    END LOOP;
+  END
+  $embed$;`;
+
+  try {
+    await $({
+      input: sql,
+    })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -f -`.quiet();
+    log.info(
+      "Embedded finding matches into chat message content and stamped reveal spans",
+    );
+  } catch (e) {
+    const err = e as { message?: string; stderr?: string; stdout?: string };
+    log.stepFailed(
+      `Failed to embed risk finding matches: ${err.message || err.stderr || err.stdout || JSON.stringify(e)}`,
+    );
+  }
+}
+
 // Mirrors the project's Postgres risk_results into the ClickHouse
 // risk_findings table the way the enriched FindingCHWriter would have written
 // them: denormalized chat/user attribution, category from the shared
-// classifier's rules, and the already-redacted match display string. This is
-// what the ClickHouse-backed Risk Overview read path (the
-// risk-overview-from-clickhouse flag) reads locally. Must run AFTER every
-// risk_results writer (seedRiskFindings, seedNonCorporateAccountFindings) so
-// the copy sees the final Postgres state.
+// classifier's rules, the already-redacted match display string, and the
+// reveal metadata (surface + spans + match length) stamped by
+// embedRiskFindingMatches so the ClickHouse reveal path can reconstruct the
+// plaintext from the original Postgres content. This is what the
+// ClickHouse-backed Risk Overview read path (the risk-overview-from-clickhouse
+// flag) reads locally. Must run AFTER every risk_results writer
+// (seedRiskFindings, seedNonCorporateAccountFindings) and after
+// embedRiskFindingMatches so the copy sees the final Postgres state.
 async function seedRiskFindingsClickHouse(init: {
   projectId: string;
 }): Promise<void> {
   const { projectId } = init;
   const dbUser = process.env.DB_USER || "gram";
   const dbName = process.env.DB_NAME || "gram";
+
+  // Seeded chats carry no product surface, which would leave the mirrored
+  // chat_source empty and the Watchdog's App grouping without data. Stamp a
+  // deterministic canonical surface per chat (hash of the chat id, so a chat
+  // never flip-flops between reruns) for messages that have none; messages
+  // seeded with a real source keep it.
+  const stampSourcesSQL = `
+    UPDATE chat_messages cm
+    SET source = (ARRAY['codex','cursor','claude-code','cowork'])[1 + abs(hashtext(cm.chat_id::text)) % 4]
+    FROM chats c
+    WHERE c.id = cm.chat_id
+      AND c.project_id = '${projectId}'
+      AND COALESCE(cm.source, '') = '';`;
 
   // The CASE mirrors internal/risk/categories Classify (the single source of
   // truth the CH writer stamps categories with): source-owned categories
@@ -2236,14 +2302,55 @@ async function seedRiskFindingsClickHouse(init: {
           WHEN rr.source = 'presidio' THEN 'pii'
           ELSE 'custom'
         END,
-        -- ClickHouse must never hold a plaintext match. Catalog matches are
-        -- already redacted display strings and pass through; anything else
-        -- (e.g. account_identity emails, stored verbatim in Postgres only)
-        -- collapses to a length-only placeholder, mirroring the writer.
+        -- ClickHouse must never hold a plaintext match, so derive the same
+        -- partial-mask display the FindingCHWriter (maskdisplay) produces:
+        -- judge/destructive sources carry no display, shadow MCP shows the
+        -- server identifier verbatim, emails show ***@domain, financial rules
+        -- show the last 4, and everything else gets the tiered general mask.
+        -- Legacy '<redacted ...>' placeholders pass through untouched.
         CASE
           WHEN COALESCE(rr.match, '') = '' THEN ''
           WHEN rr.match LIKE '<redacted%' THEN rr.match
-          ELSE '<redacted len=' || length(rr.match) || '>'
+          WHEN rr.source IN ('prompt_injection', 'llm_judge', 'destructive_tool', 'cli_destructive') THEN ''
+          WHEN rr.source = 'shadow_mcp' THEN rr.match
+          WHEN (rr.rule_id = 'pii.email_address' OR rr.source = 'account_identity')
+            AND rr.match LIKE '%@%' THEN '***@' || split_part(rr.match, '@', -1)
+          WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto')
+            THEN repeat('*', greatest(length(rr.match) - 4, 0)) || right(rr.match, 4)
+          WHEN length(rr.match) >= 8
+            THEN left(rr.match, 4) || repeat('*', length(rr.match) - 6) || right(rr.match, 2)
+          WHEN length(rr.match) >= 5
+            THEN left(rr.match, 2) || repeat('*', length(rr.match) - 3) || right(rr.match, 1)
+          ELSE left(rr.match, 1) || repeat('*', greatest(length(rr.match) - 2, 0)) || right(rr.match, 1)
+        END,
+        -- Reveal metadata: spans stamped by embedRiskFindingMatches index the
+        -- anchor message's content, so surface is 'content' exactly when a
+        -- span exists. Rows without spans (JSON judge events, unembeddable
+        -- matches) keep match_len 0 and are refused by reveal, matching the
+        -- writer's behavior for judge sources.
+        COALESCE(rr.start_pos, 0),
+        COALESCE(rr.end_pos, 0),
+        CASE WHEN COALESCE(rr.end_pos, 0) > COALESCE(rr.start_pos, 0) THEN rr.end_pos - rr.start_pos ELSE 0 END,
+        CASE WHEN COALESCE(rr.end_pos, 0) > COALESCE(rr.start_pos, 0) THEN 'content' ELSE '' END,
+        -- Source app of the anchor message (stamped deterministically above
+        -- when the seed left it empty), so Watchdog app grouping has data.
+        COALESCE(cm.source, ''),
+        -- Synthetic but deterministic team per user (hash of the resolved
+        -- external id): no WorkOS directory exists locally, and hashing keeps
+        -- each user in one stable team so distinct-team counts make sense.
+        CASE
+          WHEN COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, '')) IS NULL THEN ''
+          ELSE (ARRAY['Platform','Payments','Engineering','Sales','Support'])[
+            1 + abs(hashtext(COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, '')))) % 5
+          ]
+        END,
+        -- Displayable email per user: @-shaped external ids pass through,
+        -- opaque ids (ext-user-N) get an example.com address.
+        CASE
+          WHEN COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, '')) IS NULL THEN ''
+          WHEN COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, '')) LIKE '%@%'
+            THEN COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''))
+          ELSE COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, '')) || '@example.com'
         END,
         rr.excluded_at,
         rr.false_positive_at
@@ -2262,7 +2369,8 @@ async function seedRiskFindingsClickHouse(init: {
       id, created_at, organization_id, project_id, chat_message_id,
       risk_policy_id, risk_policy_version, rule_id, description, source,
       confidence, chat_id, user_id, external_user_id, category,
-      match_redacted, excluded_at, false_positive_at
+      match_redacted, start_pos, end_pos, match_len, surface, chat_source,
+      team, user_email, excluded_at, false_positive_at
     ) FORMAT CSV`;
 
   try {
@@ -2271,6 +2379,10 @@ async function seedRiskFindingsClickHouse(init: {
     await runClickHouseSQL(
       `DELETE FROM risk_findings WHERE project_id = '${projectId}';`,
     );
+
+    await $({
+      input: stampSourcesSQL,
+    })`docker compose exec -T gram-db psql -U ${dbUser} -d ${dbName} -v ON_ERROR_STOP=1 -f -`.quiet();
 
     const copied = await $({
       input: copySQL,
@@ -5363,6 +5475,11 @@ async function seed() {
       projectId: firstProject.id,
       organizationId: activeOrgID,
     });
+    // Embed each finding's match into its anchor message and stamp reveal
+    // spans, so the ClickHouse reveal path can reconstruct plaintext from
+    // Postgres content. Must run after every risk_results writer and before
+    // the ClickHouse mirror below.
+    await embedRiskFindingMatches({ projectId: firstProject.id });
     // Mirror the final risk_results state into ClickHouse risk_findings so
     // the ClickHouse-backed Risk Overview read path has matching data. Must
     // stay last among the risk seeders.
