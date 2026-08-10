@@ -123,17 +123,6 @@ function ServerStatus({
   );
 }
 
-function MetaItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-baseline gap-2">
-      <span className="text-eyebrow">{label}</span>
-      <Text variant="small" className="font-medium">
-        {value}
-      </Text>
-    </div>
-  );
-}
-
 function ServerSummary({
   disposition,
   policyState,
@@ -144,29 +133,11 @@ function ServerSummary({
   server: ShadowMCPInventoryServer;
 }) {
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
-        <ServerStatus
-          disposition={disposition}
-          policyState={policyState}
-          server={server}
-        />
-        <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
-          <MetaItem
-            label="Last called"
-            value={formatShortDate(server.lastCalled)}
-          />
-          <MetaItem
-            label="Last seen"
-            value={formatShortDate(server.lastSeen)}
-          />
-          <MetaItem
-            label="First seen"
-            value={formatShortDate(server.firstSeen)}
-          />
-        </div>
-      </div>
-    </div>
+    <ServerStatus
+      disposition={disposition}
+      policyState={policyState}
+      server={server}
+    />
   );
 }
 

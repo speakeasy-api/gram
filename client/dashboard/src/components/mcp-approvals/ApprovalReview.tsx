@@ -134,7 +134,7 @@ export function RefreshEvidenceButton({
         <RefreshCw className={refresh.isPending ? "animate-spin" : undefined} />
       </Button.LeftIcon>
       <Button.Text>
-        {refresh.isPending ? "Re-gathering" : "Refresh evidence"}
+        {refresh.isPending ? "Refreshing" : "Refresh Data"}
       </Button.Text>
     </Button>
   );
