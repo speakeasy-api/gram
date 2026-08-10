@@ -66,9 +66,8 @@ export function DecisionForm({
         />
         <div className="border-border flex items-center justify-between gap-3 border-t px-3 py-2">
           <p className="text-muted-foreground text-xs">
-            The requester is told this; the next reviewer starts from it. While
-            in preview, decisions are recorded but not yet enforced — approving
-            does not unblock the server.
+            Shared with the requester. In preview, decisions are recorded, not
+            enforced.
           </p>
           <div className="flex shrink-0 items-center gap-2">
             <Button

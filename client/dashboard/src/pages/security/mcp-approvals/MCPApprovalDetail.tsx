@@ -72,15 +72,15 @@ export default function MCPApprovalDetail(): JSX.Element {
               {!detail ? (
                 <SkeletonTable />
               ) : (
-                <div className="grid grid-cols-1 gap-8 lg:grid-cols-[2fr_1fr]">
-                  <div className="space-y-8">
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
+                  <div className="space-y-6">
                     <EvidencePanel
                       document={document}
                       collectedAt={detail.evidenceCollectedAt}
                     />
                     <ResearchReports reports={detail.researchReports} />
                   </div>
-                  <aside className="space-y-8">
+                  <aside className="space-y-5">
                     <RequestSummary
                       status={detail.request.status}
                       createdAt={detail.request.createdAt}
@@ -89,7 +89,7 @@ export default function MCPApprovalDetail(): JSX.Element {
                     <Requesters requesters={detail.requesters} />
                     <PriorDecisions decisions={detail.decisions} />
                     {detail.request.status === "requested" && (
-                      <section className="space-y-3">
+                      <section className="space-y-2">
                         <h3 className="text-eyebrow">Decide</h3>
                         <DecisionForm
                           requestId={detail.request.id}
@@ -168,9 +168,9 @@ function RequestSummary({
   versionPinned: boolean;
 }): JSX.Element {
   return (
-    <section className="space-y-3">
+    <section className="space-y-2">
       <h3 className="text-eyebrow">Request</h3>
-      <div className="border-border space-y-2 border p-4 text-sm">
+      <div className="border-border space-y-1.5 border p-3 text-xs">
         <div className="flex items-center justify-between">
           <span className="text-muted-foreground">Status</span>
           <StatusBadge status={status} />
@@ -181,8 +181,7 @@ function RequestSummary({
         </div>
         {!versionPinned && (
           <p className="text-muted-foreground border-border border-t pt-2 text-xs">
-            This reference does not pin a version — what runs may differ from
-            anything the evidence describes.
+            No pinned version — what runs may differ from the evidence.
           </p>
         )}
       </div>
@@ -196,7 +195,7 @@ function Requesters({
   requesters: ApprovalRequester[];
 }): JSX.Element {
   return (
-    <section className="space-y-3">
+    <section className="space-y-2">
       <h3 className="text-eyebrow">Who asked, and why</h3>
       {requesters.length === 0 ? (
         <p className="text-muted-foreground text-sm">
@@ -208,7 +207,7 @@ function Requesters({
           {requesters.map((requester) => (
             <li
               key={requester.userId}
-              className="border-border border p-3 text-sm"
+              className="border-border border p-2.5 text-xs"
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate font-medium">
@@ -238,7 +237,7 @@ function PriorDecisions({
   decisions: ApprovalDecision[];
 }): JSX.Element {
   return (
-    <section className="space-y-3">
+    <section className="space-y-2">
       <h3 className="text-eyebrow">Have we decided on this before?</h3>
       {decisions.length === 0 ? (
         <p className="text-muted-foreground text-sm">
@@ -247,7 +246,10 @@ function PriorDecisions({
       ) : (
         <ul className="space-y-3">
           {decisions.map((decision) => (
-            <li key={decision.id} className="border-border border p-3 text-sm">
+            <li
+              key={decision.id}
+              className="border-border border p-2.5 text-xs"
+            >
               <div className="flex items-center justify-between gap-2">
                 <StatusBadge status={decision.decision} />
                 <span className="text-muted-foreground shrink-0 text-xs">
@@ -263,10 +265,10 @@ function PriorDecisions({
                 </p>
               )}
               <p className="text-muted-foreground mt-1 text-xs">
-                Decided on evidence as it stood then
+                Decided on the evidence as it stood then
                 {decision.evidenceVersion !== undefined &&
                   ` (v${decision.evidenceVersion})`}
-                ; a later re-gather does not rewrite it.
+                .
               </p>
             </li>
           ))}
@@ -301,7 +303,7 @@ function ResearchReports({
   }
 
   return (
-    <section className="space-y-3">
+    <section className="space-y-2">
       <h3 className="text-eyebrow">Research reports</h3>
       <p className="text-muted-foreground text-xs">
         Gathered by an agent from public web sources, which may be inaccurate,
@@ -310,7 +312,7 @@ function ResearchReports({
       </p>
       <ul className="space-y-3">
         {reports.map((report) => (
-          <li key={report.id} className="border-border border p-3 text-sm">
+          <li key={report.id} className="border-border border p-2.5 text-xs">
             <div className="flex items-center justify-between gap-2">
               <span className="font-medium">
                 {reportStatusLabel(report.status)}

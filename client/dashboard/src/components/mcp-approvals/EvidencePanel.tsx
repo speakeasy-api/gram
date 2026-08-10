@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/Badge";
 import { Heading } from "@/components/ui/Heading";
 import { HumanizeDateTime } from "@/lib/dates";
+import { cn } from "@/lib/utils";
 import type {
   EvidenceAuthority,
   EvidenceCapability,
@@ -38,13 +39,13 @@ export function EvidencePanel({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {document.gaps.length > 0 && <GapsNotice gaps={document.gaps} />}
       {collectedAt && (
         <p className="text-muted-foreground text-xs">
-          Gathered <HumanizeDateTime date={collectedAt} />. Everything below is
-          declared by the server or its registry, or observed in this
-          organization's traffic — nothing is verified behavior.
+          Gathered <HumanizeDateTime date={collectedAt} />. Declared by the
+          server or its registry, or seen in this organization's traffic —
+          nothing is verified behavior.
         </p>
       )}
       <TrustSection identity={document.identity} pkg={document.package} />
@@ -77,11 +78,11 @@ function EvidenceGroup({
   children: React.ReactNode;
 }): JSX.Element {
   return (
-    <section className="space-y-3">
-      {/* The questions are the page's real structure, so they get the small
-          serif display treatment content subsections use, not a utility
-          eyebrow that recedes into the boxes below it. */}
-      <Heading variant="h3" className="text-display-xs font-thin">
+    <section className="space-y-1.5">
+      {/* The questions are the page's real structure, so they keep the serif
+          treatment content subsections use — sized down so a full gather fits
+          on one screen without zooming. */}
+      <Heading variant="h3" className="text-lg font-thin">
         {question}
       </Heading>
       {children}
@@ -100,7 +101,7 @@ function UnknownBlock({
   children: React.ReactNode;
 }): JSX.Element {
   return (
-    <div className="border-border text-muted-foreground border border-dashed px-3 py-2 text-sm">
+    <div className="border-border text-muted-foreground border border-dashed px-2.5 py-1.5 text-xs">
       {children}
     </div>
   );
@@ -108,7 +109,7 @@ function UnknownBlock({
 
 function GapsNotice({ gaps }: { gaps: string[] }): JSX.Element {
   return (
-    <div className="border-warning border px-3 py-2 text-sm">
+    <div className="border-warning border px-2.5 py-1.5 text-xs">
       {gaps.map((gap) => (
         <p key={gap}>{gapLabel(gap)} — treat as unknown, not clean.</p>
       ))}
@@ -118,20 +119,28 @@ function GapsNotice({ gaps }: { gaps: string[] }): JSX.Element {
 
 function FactList({
   facts,
+  bare = false,
 }: {
   facts: Array<{ label: string; value: React.ReactNode }>;
+  /** Drop the outer frame when the list nests inside an existing card. */
+  bare?: boolean;
 }): JSX.Element {
   return (
-    <dl className="border-border grid grid-cols-1 gap-x-8 gap-y-2 border p-4 sm:grid-cols-2">
+    <dl
+      className={cn(
+        "grid grid-cols-1 gap-x-6 gap-y-1 px-3 py-2 sm:grid-cols-2",
+        !bare && "border-border border",
+      )}
+    >
       {facts.map((fact) => (
         <div
           key={fact.label}
-          className="flex items-center justify-between gap-4"
+          className="flex items-center justify-between gap-3"
         >
-          <dt className="text-muted-foreground text-sm">{fact.label}</dt>
+          <dt className="text-muted-foreground text-xs">{fact.label}</dt>
           {/* Mono chip rather than Badge: Badge uppercases, and casing is
               meaningful in hosts, artifact refs, and package names. */}
-          <dd className="border-border max-w-full min-w-0 border px-1.5 py-0.5 text-right font-mono text-xs break-all">
+          <dd className="border-border max-w-full min-w-0 border px-1.5 py-px text-right font-mono text-xs break-all">
             {fact.value}
           </dd>
         </div>
@@ -261,10 +270,10 @@ function AuthoritySection({
       {authority.demandedSecrets.map((secret) => (
         <div
           key={secret.name}
-          className="border-warning border px-3 py-2 text-sm"
+          className="border-warning border px-2.5 py-1.5 text-xs"
         >
           Requires you to hand over a secret named{" "}
-          <span className="font-mono text-xs">{secret.name}</span>
+          <span className="font-mono">{secret.name}</span>
           {secret.description && (
             <span className="text-muted-foreground">
               {" "}
@@ -273,29 +282,31 @@ function AuthoritySection({
           )}
         </div>
       ))}
-      <FactList facts={facts} />
-      {authority.scopes.length > 0 && (
-        <div className="border-border border p-3 text-sm">
-          <p className="text-muted-foreground mb-2">
-            OAuth scopes it will ask to be granted — the one item here the
-            authorization server actually enforces:
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {authority.scopes.map((scope) => (
-              <span
-                key={scope}
-                className="border-border border px-1.5 py-0.5 font-mono text-xs"
-              >
-                {scope}
-              </span>
-            ))}
+      <div className="border-border border">
+        <FactList facts={facts} bare />
+        {authority.scopes.length > 0 && (
+          <div className="border-border border-t px-3 py-2">
+            <p className="text-muted-foreground mb-1.5 text-xs">
+              Scopes it will ask to be granted — the one item here the
+              authorization server actually enforces:
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {authority.scopes.map((scope) => (
+                <span
+                  key={scope}
+                  className="border-border border px-1.5 py-px font-mono text-xs"
+                >
+                  {scope}
+                </span>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
       {authority.unauthenticatedTools.length > 0 && (
-        <div className="border-warning border px-3 py-2 text-sm">
+        <div className="border-warning border px-2.5 py-1.5 text-xs">
           Answers without any credential:{" "}
-          <span className="font-mono text-xs">
+          <span className="font-mono">
             {authority.unauthenticatedTools.join(", ")}
           </span>
         </div>
@@ -327,9 +338,9 @@ function capabilitySourceNote(
   source: "server" | "registry" | undefined,
 ): string {
   if (source === "registry") {
-    return "The registry catalog's copy of the server's declarations — the server itself did not answer without credentials, so this is one step removed from the source. It may declare read-only and write anyway.";
+    return "The registry catalog's copy — the server itself did not answer without credentials. Declarations, not limits.";
   }
-  return "Declarations by the server about itself. It may declare read-only and write anyway — this shows what it asks for, not what it is limited to.";
+  return "The server's declarations about itself — what it asks for, not what it is limited to.";
 }
 
 function DeclaredCapabilitySection({
@@ -357,12 +368,12 @@ function DeclaredCapabilitySection({
         {capabilitySourceNote(source)}
       </p>
       {actingTools.length > 0 && (
-        <div className="border-warning border px-3 py-2 text-sm">
+        <div className="border-warning border px-2.5 py-1.5 text-xs">
           {actingTools.length === 1
             ? "One tool declares"
             : `${actingTools.length} tools declare`}{" "}
           acting on your behalf:{" "}
-          <span className="font-mono text-xs">
+          <span className="font-mono">
             {actingTools.map((tool) => tool.tool).join(", ")}
           </span>
         </div>
@@ -371,19 +382,19 @@ function DeclaredCapabilitySection({
         {capabilities.map((tool) => (
           <li
             key={tool.tool}
-            className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+            className="flex flex-wrap items-center justify-between gap-2 px-3 py-1 text-xs"
           >
-            <span className="font-mono text-xs">{tool.tool}</span>
+            <span className="font-mono">{tool.tool}</span>
             {tool.unannotated ? (
-              <span className="text-muted-foreground text-xs italic">
+              <span className="text-muted-foreground italic">
                 declares nothing — authority unknown
               </span>
             ) : (
-              <span className="flex flex-wrap justify-end gap-1.5">
+              <span className="flex flex-wrap justify-end gap-1">
                 {[...tool.declared, ...tool.schemaImplied].map((value) => (
                   <span
                     key={value}
-                    className="border-border text-muted-foreground border px-1.5 py-0.5 text-xs"
+                    className="border-border text-muted-foreground border px-1.5 py-px"
                   >
                     {capabilityLabel(value)}
                   </span>
@@ -440,9 +451,8 @@ function ProvenanceFacts({
   return (
     <>
       <p className="text-muted-foreground text-xs">
-        The registry catalog's claims about this entry, not ours. A visitor
-        count is a popularity proxy — a widely used server and one nobody has
-        touched are different decisions, but neither is evidence about behavior.
+        The registry catalog's claims, not ours — a visitor count is a
+        popularity proxy, not evidence about behavior.
       </p>
       <FactList facts={facts} />
     </>
@@ -466,7 +476,7 @@ function MaturitySection({
     if (!provenance.catalogued) {
       return (
         <EvidenceGroup question="Is it real and maintained?">
-          <div className="border-border border px-4 py-3 text-sm">
+          <div className="border-border border px-2.5 py-1.5 text-xs">
             No configured MCP registry catalogs this URL. The lookup ran cleanly
             — this is absence from the catalog, not a failed check.
           </div>
@@ -483,7 +493,7 @@ function MaturitySection({
   if (notPublished) {
     return (
       <EvidenceGroup question="Is it real and maintained?">
-        <div className="border-border border px-4 py-3 text-sm">
+        <div className="border-border border px-2.5 py-1.5 text-xs">
           The registry has no package named{" "}
           <code className="text-xs">{packageName ?? "this"}</code>. The lookup
           ran cleanly — this reference points at something its own registry does
@@ -537,7 +547,7 @@ function MaturitySection({
   return (
     <EvidenceGroup question="Is it real and maintained?">
       {pkg.deprecated && (
-        <div className="border-destructive text-foreground border px-4 py-3 text-sm">
+        <div className="border-destructive text-foreground border px-2.5 py-1.5 text-xs">
           <span className="font-medium">
             The registry marks the current version deprecated
           </span>
@@ -576,7 +586,7 @@ function ExposureSection({
   if (exposure.status === "unseen") {
     return (
       <EvidenceGroup question="Are we already exposed?">
-        <div className="border-border border px-4 py-3 text-sm">
+        <div className="border-border border px-2.5 py-1.5 text-xs">
           No one in this project has recorded traffic to this server. Denying it
           costs nobody an existing workflow.
         </div>
@@ -612,7 +622,7 @@ function ExposureSection({
   return (
     <EvidenceGroup question="Are we already exposed?">
       {exposure.inUse && (
-        <div className="border-warning border px-4 py-3 text-sm">
+        <div className="border-warning border px-2.5 py-1.5 text-xs">
           <span className="font-medium">
             This server is already in use in this project.
           </span>{" "}
