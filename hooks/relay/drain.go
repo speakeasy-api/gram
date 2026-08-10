@@ -2,6 +2,8 @@ package relay
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
 )
@@ -190,8 +193,43 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 }
 
 func replayedSkill(entry spoolEntry) *resolvedSkill {
-	if entry.Envelope.Data == nil || entry.Envelope.Data.Skill == nil || entry.Envelope.Data.Skill.RawSha256 == nil || entry.Envelope.Data.ToolCall == nil {
+	if entry.Envelope.Data == nil || entry.Envelope.Data.Skill == nil || entry.Envelope.Data.Skill.RawSha256 == nil {
 		return nil
+	}
+	skill := entry.Envelope.Data.Skill
+	if content, ok := spooledSkillOutput(entry); ok {
+		return &resolvedSkill{
+			content:      content,
+			rawSHA256:    *skill.RawSha256,
+			captureReady: true,
+			name:         skill.Name,
+		}
+	}
+	// Legacy v1 entries recorded where the manifest was read from instead of
+	// carrying its content in the tool output. Re-read that path, gated on the
+	// stored hash: matching content is byte-identical to what the server
+	// recorded at capture time, and anything else (edited, replaced) drains
+	// without a content upload like any other content-less entry.
+	if skill.SourcePath != nil {
+		content, ok := readSpooledSkillSource(*skill.SourcePath)
+		if ok {
+			digest := sha256.Sum256([]byte(content))
+			if hex.EncodeToString(digest[:]) == *skill.RawSha256 {
+				return &resolvedSkill{
+					content:      content,
+					rawSHA256:    *skill.RawSha256,
+					captureReady: true,
+					name:         skill.Name,
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func spooledSkillOutput(entry spoolEntry) (string, bool) {
+	if entry.Envelope.Data.ToolCall == nil {
+		return "", false
 	}
 	var content string
 	switch output := entry.Envelope.Data.ToolCall.Output.(type) {
@@ -199,17 +237,28 @@ func replayedSkill(entry spoolEntry) *resolvedSkill {
 		content = output
 	case json.RawMessage:
 		if json.Unmarshal(output, &content) != nil {
-			return nil
+			return "", false
 		}
 	default:
-		return nil
+		return "", false
 	}
-	return &resolvedSkill{
-		content:      content,
-		rawSHA256:    *entry.Envelope.Data.Skill.RawSha256,
-		captureReady: true,
-		name:         entry.Envelope.Data.Skill.Name,
+	return content, true
+}
+
+func readSpooledSkillSource(path string) (string, bool) {
+	if !filepath.IsAbs(path) {
+		return "", false
 	}
+	file, err := os.Open(path)
+	if err != nil {
+		return "", false
+	}
+	content, readErr := io.ReadAll(io.LimitReader(file, maxSkillContentBytes+1))
+	closeErr := file.Close()
+	if readErr != nil || closeErr != nil || len(content) > maxSkillContentBytes || !utf8.Valid(content) {
+		return "", false
+	}
+	return string(content), true
 }
 
 // decodeSpoolEntry unmarshals an entry, restoring every any-typed envelope

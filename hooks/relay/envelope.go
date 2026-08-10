@@ -140,7 +140,12 @@ func buildEnvelope(typed any, hostname string) components.IngestRequestBody {
 	case *agenthooks.ModelEvent:
 		applyModelResponse(data, base)
 	}
-	if activation := agenthooks.SkillActivationOf(typed); activation != nil && (base.Kind != agenthooks.KindToolPost || activation.Explicit) {
+	// The server records an activation for every event carrying data.skill, so
+	// an implicit (inferred) activation is attached only to the completed
+	// event: its tool output carries the manifest the content registry hashes,
+	// and marking the pre event too would double-count. Explicit Skill tool
+	// calls keep the provider's own event classification on both sides.
+	if activation := agenthooks.SkillActivationOf(typed); activation != nil && (activation.Explicit || base.Kind == agenthooks.KindToolPost) {
 		data.Skill = &components.HookSkillData{Name: activation.Name, Source: nil}
 		if activation.Explicit {
 			eventType = components.TypeSkillActivated
