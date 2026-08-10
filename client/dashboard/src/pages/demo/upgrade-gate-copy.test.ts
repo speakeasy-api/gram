@@ -1,5 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getGateCopy } from "./upgrade-gate-copy";
+
+// The status line formats in local time, so a noon-UTC end date renders as the
+// next day from UTC+12 onwards. Pin the zone or these assertions depend on
+// where the machine running them happens to be.
+const originalTZ = process.env.TZ;
+beforeAll(() => {
+  process.env.TZ = "UTC";
+});
+afterAll(() => {
+  process.env.TZ = originalTZ;
+});
 
 const NOW = new Date("2026-08-10T12:00:00.000Z");
 
