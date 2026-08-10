@@ -190,10 +190,6 @@ func (g *GKERuntimeBackend) Ensure(ctx context.Context, runtime assistantRuntime
 		return RuntimeBackendEnsureResult{}, err
 	}
 
-	if err := g.runner.health(ctx, g.endpoint(metadata), gkeRuntimeHealthTimeout, 500*time.Millisecond); err != nil {
-		return RuntimeBackendEnsureResult{}, err
-	}
-
 	payload, err := json.Marshal(metadata)
 	if err != nil {
 		return RuntimeBackendEnsureResult{}, fmt.Errorf("encode gke runtime metadata: %w", err)
@@ -202,11 +198,13 @@ func (g *GKERuntimeBackend) Ensure(ctx context.Context, runtime assistantRuntime
 }
 
 // ensureCurrentImageSandbox gets or creates the SandboxClaim, waits for its
-// sandbox, and recycles the claim (bounded by gkeImageDrainAttempts) while the
-// adopted pod runs a stale runtime image. A pre-existing claim is only
-// recycled when the runner has no turn in flight; a fresh claim's pod carries
-// no turns, so drift there always recycles. coldStart reports whether this
-// call created the claim that was ultimately kept.
+// sandbox, recycles the claim (bounded by gkeImageDrainAttempts) while the
+// adopted pod runs a stale runtime image, and waits for the kept pod's runner
+// to answer /healthz — so the owned-claim cleanup below covers a pod that
+// comes Ready but never turns healthy. A pre-existing claim is only recycled
+// when the runner has no turn in flight; a fresh claim's pod carries no
+// turns, so drift there always recycles. coldStart reports whether this call
+// created the claim that was ultimately kept.
 func (g *GKERuntimeBackend) ensureCurrentImageSandbox(ctx context.Context, runtime assistantRuntimeRecord) (metadata gkeRuntimeMetadata, coldStart bool, err error) {
 	name := g.claimName(runtime)
 	desired := g.desiredImageRef()
@@ -250,29 +248,30 @@ func (g *GKERuntimeBackend) ensureCurrentImageSandbox(ctx context.Context, runti
 				return gkeRuntimeMetadata{}, false, fmt.Errorf("create sandbox claim %s: %w", name, createErr)
 			}
 		}
+		coldStart = created
 
 		metadata, err = g.waitForSandbox(ctx, name)
 		if err != nil {
-			return gkeRuntimeMetadata{}, created, err
+			return gkeRuntimeMetadata{}, coldStart, err
 		}
 
 		// An empty image means the pod record was partial — recycling on
 		// missing data would churn healthy runtimes, so treat it as current.
 		if metadata.Image == "" || metadata.Image == desired {
-			return metadata, created, nil
+			break
 		}
-		if attempt >= gkeImageDrainAttempts {
+		if attempt > gkeImageDrainAttempts {
 			g.logger.WarnContext(ctx, "assistant gke runtime kept on stale image: drain attempts exhausted",
 				attr.SlogAssistantID(runtime.AssistantID.String()),
 				attr.SlogAssistantImageDesired(desired),
 				attr.SlogAssistantImageActual(metadata.Image),
 			)
-			return metadata, created, nil
+			break
 		}
 		if !created && g.runnerBusy(ctx, metadata) {
 			// Pre-existing claim with a turn in flight: don't tear it down
 			// mid-turn. A later admission with idle threads recycles it.
-			return metadata, created, nil
+			break
 		}
 
 		g.logger.InfoContext(ctx, "assistant gke runtime recycling: image upgrade",
@@ -281,10 +280,15 @@ func (g *GKERuntimeBackend) ensureCurrentImageSandbox(ctx context.Context, runti
 			attr.SlogAssistantImageActual(metadata.Image),
 		)
 		if delErr := g.claims().Delete(ctx, name, metav1.DeleteOptions{}); delErr != nil && !k8serrors.IsNotFound(delErr) {
-			return gkeRuntimeMetadata{}, created, fmt.Errorf("delete drifted sandbox claim %s: %w", name, delErr)
+			return gkeRuntimeMetadata{}, coldStart, fmt.Errorf("delete drifted sandbox claim %s: %w", name, delErr)
 		}
 		ownsClaim = false
 	}
+
+	if err = g.runner.health(ctx, g.endpoint(metadata), gkeRuntimeHealthTimeout, 500*time.Millisecond); err != nil {
+		return gkeRuntimeMetadata{}, coldStart, err
+	}
+	return metadata, coldStart, nil
 }
 
 // runnerBusy reports whether any thread on the runner has a turn in flight
@@ -545,9 +549,6 @@ func (g *GKERuntimeBackend) RecycleImage(ctx context.Context, runtime assistantR
 
 	fresh, _, err := g.ensureCurrentImageSandbox(ctx, runtime)
 	if err != nil {
-		return RuntimeBackendRecycleResult{}, err
-	}
-	if err := g.runner.health(ctx, g.endpoint(fresh), gkeRuntimeHealthTimeout, 500*time.Millisecond); err != nil {
 		return RuntimeBackendRecycleResult{}, err
 	}
 	payload, err := json.Marshal(fresh)

@@ -1896,9 +1896,9 @@ func TestServiceCoreRecycleActiveRuntimeImagesCountsBackendErrors(t *testing.T) 
 	require.JSONEq(t, `{"app_name":"gram-asst-flaky","machine_id":"m-1"}`, string(runtime.BackendMetadataJson))
 }
 
-// A non-reuse backend (GKE) has no in-place image swap: it rolls onto a new
-// image by terminating idle runtimes (warm-TTL expiry), so the in-place recycle
-// sweep is a no-op for it — it touches no rows and tears nothing down.
+// The deploy sweep covers GKE rows like any other backend: RecycleImage rolls
+// the claim onto the configured image and the returned pod identity is
+// persisted on the runtime row.
 func TestServiceCoreRecycleActiveRuntimeImagesSweepsGKERows(t *testing.T) {
 	t.Parallel()
 
