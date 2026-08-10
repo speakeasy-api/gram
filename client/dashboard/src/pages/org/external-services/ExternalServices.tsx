@@ -46,6 +46,19 @@ function verifiedMessage(principal: string | undefined): string {
 }
 
 export function ExternalServicesPage(): JSX.Element {
+  // Gate first so no protected request (product-feature read, credential list)
+  // fires for a visitor lacking the page scope.
+  return (
+    <RequireScope scope={["org:read", "org:admin"]} level="page">
+      <ExternalServicesGate />
+    </RequireScope>
+  );
+}
+
+// Product-feature (entitlement) gate, mounted only after the RBAC scope gate
+// passes. A gated-but-authorized org sees only the framed refusal, with no
+// header or toolbar.
+function ExternalServicesGate(): JSX.Element {
   const { data: features, isLoading: featuresLoading } = useProductFeatures(
     undefined,
     undefined,
@@ -59,8 +72,6 @@ export function ExternalServicesPage(): JSX.Element {
     !featuresLoading &&
     features?.customerManagedEncryptionKeysEnabled === false;
 
-  // The product-feature gate lives outside ResourceListPage's RBAC scope gate:
-  // a gated org sees only the framed refusal, with no header or toolbar.
   if (gated) {
     return (
       <Page>
@@ -76,11 +87,7 @@ export function ExternalServicesPage(): JSX.Element {
     );
   }
 
-  return (
-    <RequireScope scope={["org:read", "org:admin"]} level="page">
-      <ExternalServicesOverview />
-    </RequireScope>
-  );
+  return <ExternalServicesOverview />;
 }
 
 function ExternalServicesOverview(): JSX.Element {
