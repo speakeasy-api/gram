@@ -9,6 +9,10 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  ShadowMCPInventoryApprovalRequest,
+  ShadowMCPInventoryApprovalRequest$inboundSchema,
+} from "./shadowmcpinventoryapprovalrequest.js";
+import {
   ShadowMCPInventoryRequestSummary,
   ShadowMCPInventoryRequestSummary$inboundSchema,
 } from "./shadowmcpinventoryrequestsummary.js";
@@ -23,6 +27,10 @@ export type Access = ClosedEnum<typeof Access>;
 export type ShadowMCPInventoryServer = {
   access: Access;
   allowedPolicyIds: Array<string>;
+  /**
+   * The MCP approval request tracking a server. Decisions recorded on it are what allow or block the server.
+   */
+  approvalRequest?: ShadowMCPInventoryApprovalRequest | undefined;
   /**
    * Enabled blocking policies that block this server via a risk_policy:block grant (allow_all policies only).
    */
@@ -54,6 +62,9 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
   z.object({
     access: Access$inboundSchema,
     allowed_policy_ids: z.array(z.string()),
+    approval_request: z.optional(
+      ShadowMCPInventoryApprovalRequest$inboundSchema,
+    ),
     blocked_policy_ids: z.array(z.string()),
     canonical_server_url: z.string(),
     first_seen: z.pipe(
@@ -79,6 +90,7 @@ export const ShadowMCPInventoryServer$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "allowed_policy_ids": "allowedPolicyIds",
+      "approval_request": "approvalRequest",
       "blocked_policy_ids": "blockedPolicyIds",
       "canonical_server_url": "canonicalServerUrl",
       "first_seen": "firstSeen",
