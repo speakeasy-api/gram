@@ -77,6 +77,39 @@ func TestEnsureServerReview_RepeatResolveIsAPlainRead(t *testing.T) {
 	require.Equal(t, audits, auditsAfter, "repeat resolve must not audit a create")
 }
 
+// A resolve that lands on a dossier row that already exists but has no
+// evidence — a previous gather failed, or a concurrent first open won the
+// insert — retries the gather on the same row without auditing a second
+// create for it.
+func TestEnsureServerReview_ReusedRowRetriesGatherWithoutDuplicateAudit(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	target := "https://retry.example.com/mcp"
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{
+		targetKey: target,
+		status:    "unreviewed",
+		evidence:  "",
+		version:   0,
+	})
+
+	audits, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMCPApprovalRequestCreate)
+	require.NoError(t, err)
+
+	ensured, err := ti.service.EnsureServerReview(ctx, ensurePayload(target))
+	require.NoError(t, err)
+	require.Equal(t, requestID.String(), ensured.ID, "the existing row is reused")
+
+	row, err := ti.repo.GetApprovalRequest(ctx, repo.GetApprovalRequestParams{ID: requestID, ProjectID: ti.projectID})
+	require.NoError(t, err)
+	require.True(t, row.EvidenceCollectedAt.Valid, "the gather is retried on the reused row")
+
+	auditsAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMCPApprovalRequestCreate)
+	require.NoError(t, err)
+	require.Equal(t, audits, auditsAfter, "a reused row must not audit a create that did not happen")
+}
+
 func TestEnsureServerReview_StaysOutOfTheQueue(t *testing.T) {
 	t.Parallel()
 

@@ -1497,7 +1497,7 @@ func TestService_ResolveShadowMCPInventoryRequest_AllowAllApprovalUnblocksURL(t 
 	require.Equal(t, "https://other.example.com/mcp", blockGrants[0].Selector[authz.SelectorKeyServerURL])
 }
 
-func seedShadowMCPApprovalRequest(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID uuid.UUID, canonicalURL string, status string, requesterCount int) mcpapprovalrepo.McpApprovalRequest {
+func seedShadowMCPApprovalRequest(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID uuid.UUID, canonicalURL string, status string, requesterCount int) mcpapprovalrepo.UpsertApprovalRequestRow {
 	t.Helper()
 
 	queries := mcpapprovalrepo.New(ti.conn)

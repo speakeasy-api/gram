@@ -184,7 +184,10 @@ SET updated_at = clock_timestamp()
   -- A later promotion links its bypass request onto an existing review; a
   -- proactive re-request never clears an existing link.
   , risk_policy_bypass_request_id = COALESCE(EXCLUDED.risk_policy_bypass_request_id, mcp_approval_requests.risk_policy_bypass_request_id)
-RETURNING *;
+-- inserted distinguishes a fresh row from a reused one (xmax is zero only for
+-- rows this statement inserted), so the caller can avoid auditing a create
+-- when concurrent dossier opens or a gather retry landed on an existing row.
+RETURNING *, (xmax = 0) AS inserted;
 
 -- name: UpsertApprovalRequestRequester :one
 -- One row per person per request: ten people wanting the same server is one

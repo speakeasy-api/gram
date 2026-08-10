@@ -286,16 +286,23 @@ func (s *Service) admit(ctx context.Context, projectID uuid.UUID, organizationID
 		}
 	}
 
-	if err := s.audit.LogMCPApprovalRequestCreate(ctx, dbtx, audit.LogMCPApprovalRequestCreateEvent{
-		OrganizationID:   organizationID,
-		ProjectID:        projectID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, adm.actor),
-		ActorDisplayName: adm.actorEmail,
-		ActorSlug:        nil,
-		RequestURN:       urn.NewMCPApprovalRequest(request.ID),
-		TargetRaw:        adm.targetRaw,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error auditing approval request").LogError(ctx, s.logger)
+	// A real ask audits every time — a repeat ask is accumulating demand the
+	// feed should show. An unreviewed dossier audits only when the upsert
+	// actually inserted the row: concurrent first opens of the same server
+	// page, or a retry after a failed gather, land on an existing row and must
+	// not audit a create that did not happen.
+	if adm.status != statusUnreviewed || request.Inserted {
+		if err := s.audit.LogMCPApprovalRequestCreate(ctx, dbtx, audit.LogMCPApprovalRequestCreateEvent{
+			OrganizationID:   organizationID,
+			ProjectID:        projectID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, adm.actor),
+			ActorDisplayName: adm.actorEmail,
+			ActorSlug:        nil,
+			RequestURN:       urn.NewMCPApprovalRequest(request.ID),
+			TargetRaw:        adm.targetRaw,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error auditing approval request").LogError(ctx, s.logger)
+		}
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -338,7 +345,10 @@ func (s *Service) EnsureServerReview(ctx context.Context, payload *gen.EnsureSer
 	// repeat resolve must not re-run the evidence probes, touch the row, or
 	// audit a create that did not happen. A row whose gather previously
 	// failed (no evidence yet) falls through to admit so the gather is
-	// retried; concurrent first opens race harmlessly into the upsert.
+	// retried. Concurrent first opens can both miss this read and race into
+	// the upsert; admit audits a create only when the upsert actually
+	// inserted, so the loser refreshes the same dossier without a duplicate
+	// audit entry.
 	existing, err := repo.New(s.db).GetApprovalRequestByTarget(ctx, repo.GetApprovalRequestByTargetParams{
 		ProjectID:  projectID,
 		TargetKind: targetKindServerURL,
