@@ -2,6 +2,7 @@
 SELECT
   action,
   project_id,
+  subject_id,
   subject_type,
   subject_display_name,
   subject_slug,

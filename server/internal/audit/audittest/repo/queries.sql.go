@@ -41,6 +41,7 @@ const getLatestAuditLogByAction = `-- name: GetLatestAuditLogByAction :one
 SELECT
   action,
   project_id,
+  subject_id,
   subject_type,
   subject_display_name,
   subject_slug,
@@ -56,6 +57,7 @@ LIMIT 1
 type GetLatestAuditLogByActionRow struct {
 	Action             string
 	ProjectID          uuid.NullUUID
+	SubjectID          string
 	SubjectType        string
 	SubjectDisplayName pgtype.Text
 	SubjectSlug        pgtype.Text
@@ -70,6 +72,7 @@ func (q *Queries) GetLatestAuditLogByAction(ctx context.Context, action string) 
 	err := row.Scan(
 		&i.Action,
 		&i.ProjectID,
+		&i.SubjectID,
 		&i.SubjectType,
 		&i.SubjectDisplayName,
 		&i.SubjectSlug,

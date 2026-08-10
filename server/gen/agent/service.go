@@ -40,6 +40,22 @@ type Service interface {
 	// server does not recognize are preserved for forward compatibility; identity
 	// and credential keys are rejected.
 	UpdateConfiguration(context.Context, *UpdateConfigurationPayload) (res *DeviceAgentConfiguration, err error)
+	// Resolve display metadata (Gram chat id, generated title, last activity) for
+	// captured agent sessions the calling user owns. Used by the device agent's
+	// session picker to overlay server-generated titles on locally discovered
+	// transcripts; unknown or non-owned session ids are silently omitted, so the
+	// picker degrades gracefully. Requires a per-user key: the fleet-shared org
+	// install key is refused because session metadata is per-user data.
+	GetSessionMeta(context.Context, *GetSessionMetaPayload) (res *GetSessionMetaResult, err error)
+	// Record that a captured agent session was moved to another harness on a
+	// device (session portability). Carries no session content — only the session
+	// identity, the target harness, and device attribution — and lands as a
+	// chat_session:move audit event so organizations retain governance visibility
+	// over local-first moves. Accepts both the per-user key and the org install
+	// key (with a vouched email), mirroring getPlugins, because fleet devices must
+	// be able to report moves. Fire-and-forget from the agent's perspective: the
+	// daemon must never fail a move because this call failed.
+	ReportSessionMoved(context.Context, *ReportSessionMovedPayload) (err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -62,7 +78,7 @@ const ServiceName = "agent"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"getPlugins", "listSyncedUsers", "getConfiguration", "updateConfiguration"}
+var MethodNames = [6]string{"getPlugins", "listSyncedUsers", "getConfiguration", "updateConfiguration", "getSessionMeta", "reportSessionMoved"}
 
 type AgentMarketplace struct {
 	// Stable identifier for the marketplace, used as its key when the agent
@@ -82,6 +98,19 @@ type AgentPlugin struct {
 	// Name of the marketplace this plugin lives in. Always equals the `name` of
 	// one of the marketplaces in the same response.
 	MarketplaceName string
+}
+
+type AgentSessionMeta struct {
+	// The native harness session identifier this entry resolves, echoed from the
+	// request.
+	SessionID string
+	// Gram chat id for the captured session.
+	ChatID string
+	// Generated (or manually set) chat title. Absent when no title has been
+	// generated yet.
+	Title *string
+	// Last activity recorded for the captured session.
+	UpdatedAt string
 }
 
 // DeviceAgentConfiguration is the result type of the agent service
@@ -141,6 +170,25 @@ type GetPluginsResult struct {
 	Configuration *DeviceAgentConfiguration
 }
 
+// GetSessionMetaPayload is the payload type of the agent service
+// getSessionMeta method.
+type GetSessionMetaPayload struct {
+	ApikeyToken *string
+	// Native harness session identifiers (e.g. Claude Code session UUIDs, Codex
+	// rollout ids) to resolve. Gram derives its chat ids from these the same way
+	// hook ingest does.
+	SessionIds []string
+}
+
+// GetSessionMetaResult is the result type of the agent service getSessionMeta
+// method.
+type GetSessionMetaResult struct {
+	// Metadata for the requested sessions that exist and are owned by the calling
+	// user. Requested ids with no captured chat, another owner, or a
+	// personal-account classification are omitted.
+	Sessions []*AgentSessionMeta
+}
+
 // ListSyncedUsersPayload is the payload type of the agent service
 // listSyncedUsers method.
 type ListSyncedUsersPayload struct {
@@ -152,6 +200,30 @@ type ListSyncedUsersPayload struct {
 type ListSyncedUsersResult struct {
 	// Emails seen syncing the device agent, most recently active first.
 	Users []*SyncedAgentUser
+}
+
+// ReportSessionMovedPayload is the payload type of the agent service
+// reportSessionMoved method.
+type ReportSessionMovedPayload struct {
+	ApikeyToken *string
+	// Native harness session identifier of the moved session. Gram derives its
+	// chat id from this the same way hook ingest does; the move is recorded even
+	// if the session has not been captured yet.
+	SessionID string
+	// Harness the session was moved to (e.g. cursor, codex, claude-code).
+	TargetHarness string
+	// Harness the session originated in, as detected by the agent (e.g.
+	// claude-code, codex).
+	SourceSurface *string
+	// Email of the enrolled user. Authoritative when authenticating with an
+	// org-scoped agent install key (the MDM zero-touch path); ignored for a
+	// per-user key, whose owner is the enrolled user.
+	Email *string
+	// Hardware serial number of the machine the move happened on, when the agent
+	// can read it.
+	SerialNumber *string
+	// Hostname of the machine the move happened on, when the agent can read it.
+	Hostname *string
 }
 
 type SyncedAgentUser struct {

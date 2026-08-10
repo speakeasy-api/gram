@@ -4,16 +4,23 @@
 
 import { agentGetConfiguration } from "../funcs/agentGetConfiguration.js";
 import { agentGetPlugins } from "../funcs/agentGetPlugins.js";
+import { agentGetSessionMeta } from "../funcs/agentGetSessionMeta.js";
 import { agentListSyncedUsers } from "../funcs/agentListSyncedUsers.js";
+import { agentReportSessionMoved } from "../funcs/agentReportSessionMoved.js";
 import { agentUpdateConfiguration } from "../funcs/agentUpdateConfiguration.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { DeviceAgentConfiguration } from "../models/components/deviceagentconfiguration.js";
 import { GetPluginsResult } from "../models/components/getpluginsresult.js";
+import { GetSessionMetaResult } from "../models/components/getsessionmetaresult.js";
 import { ListSyncedUsersResult } from "../models/components/listsyncedusersresult.js";
 import {
   GetAgentPluginsRequest,
   GetAgentPluginsSecurity,
 } from "../models/operations/getagentplugins.js";
+import {
+  GetAgentSessionMetaRequest,
+  GetAgentSessionMetaSecurity,
+} from "../models/operations/getagentsessionmeta.js";
 import {
   GetDeviceAgentConfigurationRequest,
   GetDeviceAgentConfigurationSecurity,
@@ -22,6 +29,10 @@ import {
   ListSyncedAgentUsersRequest,
   ListSyncedAgentUsersSecurity,
 } from "../models/operations/listsyncedagentusers.js";
+import {
+  ReportAgentSessionMovedRequest,
+  ReportAgentSessionMovedSecurity,
+} from "../models/operations/reportagentsessionmoved.js";
 import {
   UpdateDeviceAgentConfigurationRequest,
   UpdateDeviceAgentConfigurationSecurity,
@@ -68,6 +79,25 @@ export class Agent extends ClientSDK {
   }
 
   /**
+   * getSessionMeta agent
+   *
+   * @remarks
+   * Resolve display metadata (Gram chat id, generated title, last activity) for captured agent sessions the calling user owns. Used by the device agent's session picker to overlay server-generated titles on locally discovered transcripts; unknown or non-owned session ids are silently omitted, so the picker degrades gracefully. Requires a per-user key: the fleet-shared org install key is refused because session metadata is per-user data.
+   */
+  async getSessionMeta(
+    request: GetAgentSessionMetaRequest,
+    security?: GetAgentSessionMetaSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<GetSessionMetaResult> {
+    return unwrapAsync(agentGetSessionMeta(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listSyncedUsers agent
    *
    * @remarks
@@ -79,6 +109,25 @@ export class Agent extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListSyncedUsersResult> {
     return unwrapAsync(agentListSyncedUsers(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * reportSessionMoved agent
+   *
+   * @remarks
+   * Record that a captured agent session was moved to another harness on a device (session portability). Carries no session content — only the session identity, the target harness, and device attribution — and lands as a chat_session:move audit event so organizations retain governance visibility over local-first moves. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report moves. Fire-and-forget from the agent's perspective: the daemon must never fail a move because this call failed.
+   */
+  async reportSessionMoved(
+    request: ReportAgentSessionMovedRequest,
+    security?: ReportAgentSessionMovedSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(agentReportSessionMoved(
       this,
       request,
       security,

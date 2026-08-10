@@ -19,15 +19,19 @@ type Client struct {
 	ListSyncedUsersEndpoint     goa.Endpoint
 	GetConfigurationEndpoint    goa.Endpoint
 	UpdateConfigurationEndpoint goa.Endpoint
+	GetSessionMetaEndpoint      goa.Endpoint
+	ReportSessionMovedEndpoint  goa.Endpoint
 }
 
 // NewClient initializes a "agent" service client given the endpoints.
-func NewClient(getPlugins, listSyncedUsers, getConfiguration, updateConfiguration goa.Endpoint) *Client {
+func NewClient(getPlugins, listSyncedUsers, getConfiguration, updateConfiguration, getSessionMeta, reportSessionMoved goa.Endpoint) *Client {
 	return &Client{
 		GetPluginsEndpoint:          getPlugins,
 		ListSyncedUsersEndpoint:     listSyncedUsers,
 		GetConfigurationEndpoint:    getConfiguration,
 		UpdateConfigurationEndpoint: updateConfiguration,
+		GetSessionMetaEndpoint:      getSessionMeta,
+		ReportSessionMovedEndpoint:  reportSessionMoved,
 	}
 }
 
@@ -119,4 +123,45 @@ func (c *Client) UpdateConfiguration(ctx context.Context, p *UpdateConfiguration
 		return
 	}
 	return ires.(*DeviceAgentConfiguration), nil
+}
+
+// GetSessionMeta calls the "getSessionMeta" endpoint of the "agent" service.
+// GetSessionMeta may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetSessionMeta(ctx context.Context, p *GetSessionMetaPayload) (res *GetSessionMetaResult, err error) {
+	var ires any
+	ires, err = c.GetSessionMetaEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GetSessionMetaResult), nil
+}
+
+// ReportSessionMoved calls the "reportSessionMoved" endpoint of the "agent"
+// service.
+// ReportSessionMoved may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ReportSessionMoved(ctx context.Context, p *ReportSessionMovedPayload) (err error) {
+	_, err = c.ReportSessionMovedEndpoint(ctx, p)
+	return
 }
