@@ -11,7 +11,7 @@ Skills are agent-facing reference docs in `.agents/skills/<name>/SKILL.md`, syml
 
 1. Baseline per the eval loop below, then author `.agents/skills/<name>/SKILL.md` — kebab-case, verb-first name (`writing-skills`, not `skill-creation`).
 2. Run `mise run skills:sync` — creates the symlinks in `.claude/skills/`, `.codex/skills/`, `.opencode/skills/`, `.cursor/skills/` and prunes stale ones. Never hand-create the links; you will miss a harness.
-3. Add a row to the skills table in `CLAUDE.md`.
+3. Do not add a manual skills table to `CLAUDE.md`; harnesses discover skills from the synced directories and each skill's frontmatter.
 4. Commit the skill and the symlinks together.
 
 ## Frontmatter
