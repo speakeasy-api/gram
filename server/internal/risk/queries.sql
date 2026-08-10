@@ -1685,10 +1685,15 @@ WHERE u.id = ANY(@ids::text[]);
 -- department, preferring an explicit user link over an email match (same
 -- precedence as the spend-rules directory lookup) so a stale email row cannot
 -- shadow the linked profile; empty when the org has no directory or the user
--- has no profile.
+-- has no profile. A findings batch can span projects, so the scope is the
+-- batch's set of project ids rather than a single id. project_id is still
+-- returned because that set only proves the message belongs to SOME project
+-- in the batch: the caller re-checks it against the individual finding's
+-- project before stamping attribution.
 SELECT
     cm.id
   , cm.chat_id
+  , cm.project_id
   , cm.created_at AS message_created_at
   , COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::text AS user_id
   , COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::text AS external_user_id
@@ -1717,10 +1722,15 @@ LEFT JOIN LATERAL (
     AND d.deleted IS FALSE
     AND d.workos_deleted IS FALSE
     AND (d.user_id = u.id OR LOWER(d.email) = LOWER(u.email))
-  ORDER BY (d.user_id = u.id) DESC, d.workos_updated_at DESC
+  -- NULLS LAST: an email-matched row leaves the equality NULL (d.user_id is
+  -- unset), and DESC would otherwise sort NULL above TRUE, letting a stale
+  -- email row shadow the linked profile. d.id makes equal-timestamp ties
+  -- deterministic.
+  ORDER BY (d.user_id = u.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
   LIMIT 1
 ) dir ON TRUE
-WHERE cm.id = ANY(@ids::uuid[]);
+WHERE cm.id = ANY(@ids::uuid[])
+  AND cm.project_id = ANY(@project_ids::uuid[]);
 
 -- name: GetChatContentPartAttribution :many
 -- Resolves denormalized attribution for a content-part finding. The parent
@@ -1736,7 +1746,10 @@ SELECT
   , ccp.project_id
   , COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::text AS user_id
   , COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::text AS external_user_id
-  , COALESCE(cm.source, '')::text AS chat_source
+  -- The part's own source wins: the parent message may be absent or carry a
+  -- NULL source, and the content-part listing reports ccp.source for the same
+  -- part.
+  , COALESCE(ccp.source, cm.source, '')::text AS chat_source
   , COALESCE(dir.department_name, '')::text AS team
   , COALESCE(u.email, '')::text AS user_email
 FROM chat_content_parts ccp
@@ -1757,7 +1770,11 @@ LEFT JOIN LATERAL (
     AND d.deleted IS FALSE
     AND d.workos_deleted IS FALSE
     AND (d.user_id = u.id OR LOWER(d.email) = LOWER(u.email))
-  ORDER BY (d.user_id = u.id) DESC, d.workos_updated_at DESC
+  -- NULLS LAST: an email-matched row leaves the equality NULL (d.user_id is
+  -- unset), and DESC would otherwise sort NULL above TRUE, letting a stale
+  -- email row shadow the linked profile. d.id makes equal-timestamp ties
+  -- deterministic.
+  ORDER BY (d.user_id = u.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
   LIMIT 1
 ) dir ON TRUE
 WHERE ccp.id = ANY(@ids::uuid[])

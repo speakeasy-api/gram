@@ -525,14 +525,17 @@ func TestFindingCHWriter_HandleBatch_ResolvesAttribution(t *testing.T) {
 
 	own := chFinding()
 	own.SetChatMessageId(msgOwn.String())
+	own.SetProjectId(authCtx.ProjectID.String())
 
 	fallback := chFinding()
 	fallback.SetChatMessageId(msgFallback.String())
+	fallback.SetProjectId(authCtx.ProjectID.String())
 
 	// Well-formed UUID that matches no chat message: enrichment resolves
 	// nothing, the finding still inserts with empty attribution.
 	unknown := chFinding()
 	unknown.SetChatMessageId(uuid.Must(uuid.NewV7()).String())
+	unknown.SetProjectId(authCtx.ProjectID.String())
 
 	require.NoError(t, w.HandleBatch(ctx, []*riskv1.Finding{own, fallback, unknown}, nil))
 
@@ -566,6 +569,24 @@ func TestFindingCHWriter_HandleBatch_ResolvesAttribution(t *testing.T) {
 	// Unresolved attribution: message_created_at falls back to the finding's
 	// own scan time.
 	require.True(t, unknownRow.CreatedAt.Equal(unknownRow.MessageCreatedAt))
+
+	// A finding claiming a message that belongs to another project must not
+	// inherit its chat or user ids. A findings batch can span projects, so
+	// this is enforced per finding rather than by scoping the query.
+	otherProject := chFinding()
+	otherProject.SetChatMessageId(msgOwn.String())
+	otherProject.SetProjectId(uuid.NewString())
+
+	ins2 := &fakeCHInserter{}
+	w2 := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), ins2, fp)
+	require.NoError(t, w2.HandleBatch(ctx, []*riskv1.Finding{otherProject}, nil))
+
+	crossRows := chRows(t, ins2)
+	require.Len(t, crossRows, 1)
+	require.Equal(t, msgOwn.String(), crossRows[0].ChatMessageID)
+	require.Empty(t, crossRows[0].ChatID)
+	require.Empty(t, crossRows[0].UserID)
+	require.Empty(t, crossRows[0].ExternalUserID)
 }
 
 func TestFindingCHWriter_HandleBatch_ResolvesContentPartAttribution(t *testing.T) {

@@ -56,28 +56,32 @@ const (
 // RiskSignalAggregate is one rule's clustered stats over the doubled window.
 // Cur fields cover [From, To); Prev fields cover [WideFrom, From). FirstSeen,
 // LastSeen, AvgConfidence, Apps, and TeamsCur describe the current window
-// only. Apps and TeamsCur stay empty/zero for rows written before the
-// chat_source and team attribution columns existed.
+// only; AvgConfidencePrev is the previous window's counterpart. Both averages
+// are zero (never NaN) when their window has no findings. Apps and TeamsCur
+// stay empty/zero for rows written before the chat_source and team
+// attribution columns existed.
 type RiskSignalAggregate struct {
-	RuleID        string
-	Category      string
-	Sources       []string
-	Description   string
-	Apps          []string
-	FindingsCur   uint64
-	FindingsPrev  uint64
-	UsersCur      uint64
-	UsersPrev     uint64
-	TeamsCur      uint64
-	FirstSeen     time.Time
-	LastSeen      time.Time
-	AvgConfidence float64
+	RuleID            string
+	Category          string
+	Sources           []string
+	Description       string
+	Apps              []string
+	FindingsCur       uint64
+	FindingsPrev      uint64
+	UsersCur          uint64
+	UsersPrev         uint64
+	TeamsCur          uint64
+	FirstSeen         time.Time
+	LastSeen          time.Time
+	AvgConfidence     float64
+	AvgConfidencePrev float64
 }
 
 // ListRiskSignalAggregates groups live findings by rule_id over the doubled
 // window, most current-window findings first. Rules with findings only in the
-// previous window are dropped (HAVING findings_cur > 0): a signal exists only
-// while it has live findings in the requested window.
+// previous window are included (findings_cur = 0, sorted after every
+// current-window rule) so the caller can fold them into the previous-window
+// org score; only rules with current findings become signals.
 //
 // Grouped scalar picks are aliased with a g_ prefix so ClickHouse cannot merge
 // the aggregate back into an outer query through a shadowed base column (the
@@ -96,10 +100,12 @@ func (q *Queries) ListRiskSignalAggregates(ctx context.Context, p RiskSignalWind
 		squirrel.Alias(squirrel.Expr("uniqExactIf(team, team != '' AND created_at >= ?)", p.From), "teams_cur"),
 		squirrel.Alias(squirrel.Expr("minIf(message_created_at, created_at >= ?)", p.From), "first_seen"),
 		squirrel.Alias(squirrel.Expr("maxIf(message_created_at, created_at >= ?)", p.From), "last_seen"),
-		squirrel.Alias(squirrel.Expr("avgIf(confidence, created_at >= ?)", p.From), "avg_confidence"),
+		// avgIf over an empty window is NaN; ifNotFinite pins it to zero so
+		// the scanned struct never carries a non-finite float.
+		squirrel.Alias(squirrel.Expr("ifNotFinite(avgIf(confidence, created_at >= ?), 0)", p.From), "avg_confidence"),
+		squirrel.Alias(squirrel.Expr("ifNotFinite(avgIf(confidence, created_at < ?), 0)", p.From), "avg_confidence_prev"),
 	).
 		GroupBy("rule_id").
-		Having("findings_cur > 0").
 		OrderBy("findings_cur DESC", "rule_id ASC").
 		Limit(limit).
 		ToSql()
@@ -130,6 +136,7 @@ func (q *Queries) ListRiskSignalAggregates(ctx context.Context, p RiskSignalWind
 			&row.FirstSeen,
 			&row.LastSeen,
 			&row.AvgConfidence,
+			&row.AvgConfidencePrev,
 		); err != nil {
 			return nil, fmt.Errorf("scan risk signal aggregates row: %w", err)
 		}

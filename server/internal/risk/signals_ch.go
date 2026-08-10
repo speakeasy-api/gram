@@ -77,7 +77,10 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 		From:           from,
 		To:             to,
 	}
-	bucketSeconds := max(int64(to.Sub(from).Seconds())/riskSignalSparkBuckets, 60)
+	// Ceiling division: rounding the width down would let an unaligned window
+	// straddle riskSignalSparkBuckets+2 buckets and silently drop findings
+	// from the final one past the length cap.
+	bucketSeconds := max((int64(to.Sub(from).Seconds())+riskSignalSparkBuckets-1)/riskSignalSparkBuckets, 60)
 
 	// The five reads are independent (they only share the resolved window), so
 	// fan them out: each rescans risk_findings through the dedup subquery, and
@@ -145,9 +148,34 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 
 	topUsersByRule := signalTopUsersByRule(userRows)
 
+	// Previous-window scores first: the aggregates include rules active only
+	// in the previous window (findings_cur = 0) purely as input to this
+	// comparison. Each previous-window score is the same formula minus the
+	// recency and growth bonuses, which describe the current window only.
+	prevScores := make([]float64, 0, len(aggregates))
+	for _, agg := range aggregates {
+		if agg.FindingsPrev > 0 {
+			prevScores = append(prevScores, signalScore(signalScoreInputs{
+				category:         agg.Category,
+				avgConfidence:    agg.AvgConfidencePrev,
+				findings:         agg.FindingsPrev,
+				users:            agg.UsersPrev,
+				lastSeen:         time.Time{},
+				windowEnd:        time.Time{},
+				previousFindings: 0,
+			}))
+		}
+	}
+
+	// Everything below — the signals list, current scores, and the exposure
+	// rollup — describes live signals only, so drop the previous-only rows
+	// here rather than guarding each consumer.
+	aggregates = slices.DeleteFunc(aggregates, func(agg chrepo.RiskSignalAggregate) bool {
+		return agg.FindingsCur == 0
+	})
+
 	signals := make([]*gen.RiskSignal, 0, len(aggregates))
 	scores := make([]float64, 0, len(aggregates))
-	prevScores := make([]float64, 0, len(aggregates))
 	for _, agg := range aggregates {
 		score := signalScore(signalScoreInputs{
 			category:         agg.Category,
@@ -159,21 +187,6 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 			previousFindings: agg.FindingsPrev,
 		})
 		scores = append(scores, score)
-
-		if agg.FindingsPrev > 0 {
-			// Previous-window score for the org-score comparison: same formula
-			// minus the recency and growth bonuses, which describe the current
-			// window only.
-			prevScores = append(prevScores, signalScore(signalScoreInputs{
-				category:         agg.Category,
-				avgConfidence:    agg.AvgConfidence,
-				findings:         agg.FindingsPrev,
-				users:            agg.UsersPrev,
-				lastSeen:         time.Time{},
-				windowEnd:        time.Time{},
-				previousFindings: 0,
-			}))
-		}
 
 		topUsers := topUsersByRule[agg.RuleID]
 		if topUsers == nil {
@@ -276,15 +289,22 @@ func signalSparklines(rows []chrepo.RiskSignalSeriesPoint, from, to time.Time, b
 // rule. Email precedence mirrors the overview's, but resolves entirely from
 // the denormalized ClickHouse columns: the ingest-stamped user_email, else an
 // @-containing external id, else "Unknown user". Raw groups that resolve to
-// the same display identity merge.
+// the same display email merge — the external id is not part of the merge key
+// (several raw id spellings of one person collapse into one row) but the
+// first-seen non-empty id is kept as the row's representative id. Rows with
+// no resolvable email keep their raw id as identity so distinct unknown users
+// stay separate.
 func signalTopUsersByRule(rows []chrepo.RiskSignalUserCount) map[string][]*gen.RiskSignalTopUser {
+	// Exactly one of email/rawID is set, so an email identity can never
+	// collide with a raw id spelling of another user.
 	type userKey struct {
-		externalUserID string
-		email          string
+		email string
+		rawID string
 	}
 	type userStats struct {
-		findings int64
-		team     string
+		findings       int64
+		team           string
+		externalUserID string
 	}
 	merged := make(map[string]map[userKey]userStats)
 	for _, row := range rows {
@@ -292,17 +312,20 @@ func signalTopUsersByRule(rows []chrepo.RiskSignalUserCount) map[string][]*gen.R
 		if email == "" && strings.Contains(row.ExternalUserID, "@") {
 			email = row.ExternalUserID
 		}
+		key := userKey{email: email, rawID: ""}
 		if email == "" {
-			email = "Unknown user"
+			key = userKey{email: "", rawID: cmp.Or(row.ExternalUserID, row.UserID)}
 		}
 		if merged[row.RuleID] == nil {
 			merged[row.RuleID] = make(map[userKey]userStats)
 		}
-		key := userKey{externalUserID: row.ExternalUserID, email: email}
 		stats := merged[row.RuleID][key]
 		stats.findings += safeCount(row.Findings)
 		if stats.team == "" {
 			stats.team = row.Team
+		}
+		if stats.externalUserID == "" {
+			stats.externalUserID = row.ExternalUserID
 		}
 		merged[row.RuleID][key] = stats
 	}
@@ -312,8 +335,8 @@ func signalTopUsersByRule(rows []chrepo.RiskSignalUserCount) map[string][]*gen.R
 		list := make([]*gen.RiskSignalTopUser, 0, len(users))
 		for key, stats := range users {
 			list = append(list, &gen.RiskSignalTopUser{
-				Email:          key.email,
-				ExternalUserID: key.externalUserID,
+				Email:          cmp.Or(key.email, "Unknown user"),
+				ExternalUserID: stats.externalUserID,
 				Team:           stats.team,
 				Findings:       stats.findings,
 			})
