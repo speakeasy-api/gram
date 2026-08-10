@@ -3562,7 +3562,7 @@ CREATE TABLE IF NOT EXISTS user_oauth_tokens (
   toolset_id uuid NOT NULL,  -- FK to toolsets
 
   -- OAuth 2.1 server issuer URL (from AS metadata, e.g., "https://accounts.google.com")
-  oauth_server_issuer TEXT NOT NULL CHECK (oauth_server_issuer <> '' AND CHAR_LENGTH(oauth_server_issuer) <= 500),
+  oauth_server_issuer TEXT NOT NULL,
 
   -- Token data (encrypted at rest via application layer)
   access_token_encrypted TEXT NOT NULL,
@@ -4232,6 +4232,37 @@ CREATE TABLE IF NOT EXISTS assistant_mcp_servers (
 
 CREATE INDEX IF NOT EXISTS assistant_mcp_servers_mcp_server_id_idx ON assistant_mcp_servers (mcp_server_id);
 CREATE INDEX IF NOT EXISTS assistant_mcp_servers_project_id_idx ON assistant_mcp_servers (project_id);
+
+-- Reusable dynamic client registrations for assistant-initiated MCP OAuth flows.
+-- OAuth issuer identity lets one client serve MCP resources that share an
+-- authorization server, even if its endpoint paths change.
+CREATE TABLE IF NOT EXISTS assistant_mcp_oauth_clients (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  assistant_id uuid NOT NULL,
+  oauth_server_issuer TEXT NOT NULL CHECK (oauth_server_issuer <> '' AND CHAR_LENGTH(oauth_server_issuer) <= 500),
+  client_id TEXT NOT NULL,
+  client_secret_encrypted TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT assistant_mcp_oauth_clients_pkey PRIMARY KEY (id),
+  CONSTRAINT assistant_mcp_oauth_clients_oauth_server_issuer_check CHECK (oauth_server_issuer <> '' AND CHAR_LENGTH(oauth_server_issuer) <= 500),
+  -- Client credentials are owned secrets. Hard-deleting their project or
+  -- assistant must remove them instead of retaining unusable orphaned secrets.
+  CONSTRAINT assistant_mcp_oauth_clients_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT assistant_mcp_oauth_clients_project_id_assistant_id_fkey FOREIGN KEY (project_id, assistant_id) REFERENCES assistants (project_id, id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS assistant_mcp_oauth_clients_project_assistant_issuer_key
+ON assistant_mcp_oauth_clients (project_id, assistant_id, oauth_server_issuer)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS assistant_mcp_oauth_clients_project_id_assistant_id_idx
+ON assistant_mcp_oauth_clients (project_id, assistant_id);
 
 -- Admin-authoritative per-tool annotation metadata for an MCP server, read by
 -- the runtime proxy to fill the disposition dimension of RBAC checks.
