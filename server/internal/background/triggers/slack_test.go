@@ -392,7 +392,7 @@ func TestSlackHandleWebhookMessageCarriesFileMetadata(t *testing.T) {
 	body := []byte(`{"type":"event_callback","team_id":"T1","event_id":"Ev1","event":{"type":"message","subtype":"file_share","channel":"C1","user":"U1","text":"see attached","ts":"1700000060.000100","files":[{"id":"F123","name":"report.pdf","title":"Q2 report","mimetype":"application/pdf","size":204800,"url_private_download":"https://files.slack.com/files-pri/T1-F123/download/report.pdf"}]}}`)
 	headers := signedSlackHeaders(t, body, "secret")
 
-	require.NoError(t, definition.AuthenticateWebhook(body, headers, map[string]string{
+	require.NoError(t, definition.AuthenticateWebhook(t.Context(), body, headers, map[string]string{
 		"SLACK_SIGNING_SECRET": "secret",
 	}, config))
 
