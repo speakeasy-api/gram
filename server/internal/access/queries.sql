@@ -538,7 +538,10 @@ WHERE our.organization_id = @organization_id
 ORDER BY users.email, users.id;
 
 -- name: ListActiveOrganizationAdmins :many
--- Returns active organization administrators and their Loops contact fields.
+-- Returns a best-effort notification audience of active organization
+-- administrators and their Loops contact fields. This is not an authorization
+-- decision or a delivery guarantee; callers use the admins available when the
+-- notification is sent.
 -- Resolve roles only through the internal user ID. WorkOS role assignments
 -- are not treated as internal authorization state until they are linked.
 SELECT DISTINCT
