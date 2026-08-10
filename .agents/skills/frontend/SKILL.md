@@ -429,32 +429,55 @@ The `@/components/ui/link` wrapper sets `target="_blank"` when `external` is tru
 
 **First choice: a page template.** Do not hand-roll the `Page` frame. Pick the template that matches the page's shape from `@/components/page-templates` and fill in data — it owns the frame, breadcrumbs, scope gate, the single header, and the loading/empty/error branches (which is what stops the "three-branch header" duplication). Full recipes: `client/dashboard/src/components/page-templates/README.md`.
 
-| Page shape | Template |
-| --- | --- |
-| collection: search/filter + table or card grid + empty state | `ResourceListPage` |
-| one entity: hero + sections (rail wired via app sidebar) | `DetailPage` |
-| tabs that are *different resources* (not one entity's sections) | `TabbedPage` |
-| a single create/edit `<form>` | `FormPage` |
-| stacked titled config sections (or a prose column via `variant="content"`) | `SettingsPage` |
-| dashboard: stat row + summary/chart cards | `OverviewPage` |
-| fullbleed analytics/observe surface (sticky filters + big table/charts) | `WorkbenchPage` |
-| multi-step flow | `WizardPage` |
-| auth / standalone, outside the app shell | `CenteredPage` |
-| genuine bespoke app canvas (chat, playground, builder) | `FullBleedPage` (escape hatch) |
+| Page shape                                                                 | Template                       |
+| -------------------------------------------------------------------------- | ------------------------------ |
+| collection: search/filter + table or card grid + empty state               | `ResourceListPage`             |
+| one entity: hero + sections (rail wired via app sidebar)                   | `DetailPage`                   |
+| tabs that are _different resources_ (not one entity's sections)            | `TabbedPage`                   |
+| a single create/edit `<form>`                                              | `FormPage`                     |
+| stacked titled config sections (or a prose column via `variant="content"`) | `SettingsPage`                 |
+| dashboard: stat row + summary/chart cards                                  | `OverviewPage`                 |
+| fullbleed analytics/observe surface (sticky filters + big table/charts)    | `WorkbenchPage`                |
+| multi-step flow                                                            | `WizardPage`                   |
+| auth / standalone, outside the app shell                                   | `CenteredPage`                 |
+| genuine bespoke app canvas (chat, playground, builder)                     | `FullBleedPage` (escape hatch) |
 
 ```tsx
 import { ResourceListPage } from "@/components/page-templates";
 
+// Gate the DATA-OWNING component from outside so its query never fires for
+// unauthorized users. A data hook called in the same component that renders the
+// template runs BEFORE the template's own `scope` gate — so wrap it here.
 export default function Environments(): JSX.Element {
   return (
+    <RequireScope scope="project:read" level="page">
+      <EnvironmentsInner />
+    </RequireScope>
+  );
+}
+
+function EnvironmentsInner(): JSX.Element {
+  const q = useEnvironments(); // runs only after the page gate above passes
+  const rows = q.data ?? [];
+  // Write affordances get their OWN component-level gate — the page scope is
+  // read, so an any-of page scope must never be what hides a write button.
+  const newButton = (
+    <RequireScope scope="project:write" level="component">
+      <Button>New environment</Button>
+    </RequireScope>
+  );
+  return (
     <ResourceListPage
-      scope={["project:read", "project:write"]} // wraps RequireScope + Page frame
       title="Environments"
       description="One-line purpose."
-      primaryAction={<NewButton />}
+      primaryAction={rows.length > 0 ? newButton : undefined}
       isLoading={q.isPending}
       isEmpty={rows.length === 0}
-      empty={{ icon: "blocks", heading: "No environments yet", action: <NewButton /> }}
+      empty={{
+        icon: "blocks",
+        heading: "No environments yet",
+        action: newButton,
+      }}
     >
       <Table columns={columns} data={rows} rowKey={(r) => r.id} />
     </ResourceListPage>
@@ -462,7 +485,7 @@ export default function Environments(): JSX.Element {
 }
 ```
 
-`scope` accepts a single scope string (`scope="org:admin"`) or an array (`scope={["project:read", "project:write"]}`, any-of by default); every template takes it and wraps `RequireScope` around the page.
+**Scope gating (important):** wrap the data-owning component in `RequireScope` (the view scope, e.g. `project:read`) and call data hooks inside it, so the query never fires for unauthorized users. The templates also accept a `scope` prop, but it only gates _rendering_ — a hook in the same component that renders the template runs before that gate, so prefer the outer wrapper for anything that fetches. Gate write-only affordances (create/delete buttons, mutation tabs) with their own `level="component"` `RequireScope` for the write scope; never rely on an any-of page scope to hide them.
 
 Only a page that fits **none** of the templates falls back to the raw skeleton (and it still must render the header exactly once — no bespoke `<h1>`):
 
@@ -499,7 +522,13 @@ Checklist for the content below the title:
     isLoading={q.isPending}
     metrics={[
       { label: "Total rules", value: total, tone: "information" },
-      { label: "Violations", value: n, tone: n > 0 ? "destructive" : "neutral", delta: "+3", description: "last 7 days" },
+      {
+        label: "Violations",
+        value: n,
+        tone: n > 0 ? "destructive" : "neutral",
+        delta: "+3",
+        description: "last 7 days",
+      },
     ]}
   />
   ```
@@ -507,7 +536,7 @@ Checklist for the content below the title:
 - Tables → design-system `Table` (headers come out as eyebrows for free); hand-rolled grids use `text-eyebrow` header labels.
 - List/filter controls → `Page.Toolbar` (see the `page-toolbar` skill), mono uppercase segments for mode switches.
 - Empty states → **`InlineEmptyState`** from `@/components/inline-empty-state` (`icon`/`graphic` + `heading` + `description` + `action`, `orientation="horizontal"` variant) for empty regions inside a page; `EmptyState` from `@/components/page-layout` for full-page voids. **Never hand-roll** the `border-dashed` + `rounded-full` icon-blob block — `InlineEmptyState` is the square-hairline-tile idiom and the templates' `empty` prop routes through it.
-- Chart/summary panels → `SummaryCard` from `@/components/summary-card` (titled panel with loading/empty states); the detail-column width wrapper is `DetailBody` from `@/components/detail-body` (never re-type `max-w-[1270px] px-8 py-8`).
+- Chart/summary panels → `ChartCard` from `@/components/chart/ChartCard` (titled panel with loading/error states); the detail-column width wrapper is `DetailBody` from `@/components/detail-body` (never re-type `max-w-[1270px] px-8 py-8`).
 - Loading → content-shaped skeletons (`SkeletonTable`, geometry-matched rows), never a lone spinner or a premature empty state.
 - Cards white (`bg-card`), page gutter gray, hairline borders, no shadows/gradients/washes, square corners — per the styling rules below.
 
@@ -517,7 +546,7 @@ A page that renders its own `<h1>` instead of this pattern is a defect; if a cus
 
 The primitive shelf was consolidated; these imports are gone or moved. Reaching for a removed one is a defect:
 
-- **`MetricCard`** — one primitive only: `@/components/ui/MetricCard` (`label`/`value`/`tone`). The analytics tile that formats numbers/thresholds/deltas is **`StatTile`** (`@/components/chart/stat-tile`, `StatTile`/`StatTileGroup`) — *not* a second `MetricCard`.
+- **`MetricCard`** — one primitive only: `@/components/ui/MetricCard` (`label`/`value`/`tone`). The analytics tile that formats numbers/thresholds/deltas is **`StatTile`** (`@/components/chart/stat-tile`, `StatTile`/`StatTileGroup`) — _not_ a second `MetricCard`.
 - **Password inputs** — no `PrivateInput`; use `<Input type="password" reveal />` (the `reveal` prop adds the show/hide eye toggle).
 - **`DashboardCard`** — now `Card.Dashboard` (`title`/`action`/`tooltip` + children).
 - **`ToggleButton`** — imported from `@/components/ui/SegmentedControl` (re-homed); use `SegmentedControl` for a full option group.

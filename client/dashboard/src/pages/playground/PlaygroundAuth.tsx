@@ -274,6 +274,7 @@ export function PlaygroundAuth({
             <Input
               type="password"
               reveal
+              autoComplete="off"
               id={`auth-${envVar.id}`}
               value={displayValue}
               onChange={(newValue) => {

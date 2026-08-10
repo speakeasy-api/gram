@@ -51,6 +51,7 @@ export function WizardPage({
               <li key={step.id}>
                 <button
                   type="button"
+                  aria-current={active ? "step" : undefined}
                   disabled={!done || onStepSelect == null}
                   onClick={() => onStepSelect?.(step.id)}
                   className={cn(

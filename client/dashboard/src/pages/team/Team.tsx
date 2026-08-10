@@ -217,7 +217,11 @@ function MemberRowContextMenu({
 }
 
 export default function Team(): JSX.Element {
-  return <TeamInner />;
+  return (
+    <RequireScope scope="org:admin" level="page">
+      <TeamInner />
+    </RequireScope>
+  );
 }
 
 function TeamInner() {
@@ -868,7 +872,6 @@ function TeamInner() {
   return (
     <>
       <ResourceListPage
-        scope="org:admin"
         title="Team Members"
         description={`Manage who has access to ${organization.name}`}
         primaryAction={inviteButton}

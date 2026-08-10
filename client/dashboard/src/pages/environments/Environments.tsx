@@ -24,7 +24,11 @@ export function EnvironmentsRoot(): JSX.Element {
 }
 
 export default function Environments(): JSX.Element {
-  return <EnvironmentsInner />;
+  return (
+    <RequireScope scope={["project:read", "project:write"]} level="page">
+      <EnvironmentsInner />
+    </RequireScope>
+  );
 }
 
 function EnvironmentsInner() {
@@ -82,7 +86,6 @@ function EnvironmentsInner() {
   return (
     <>
       <ResourceListPage
-        scope={["project:read", "project:write"]}
         title="Environments"
         description="Create re-usable environment configurations and share amongst multiple MCP servers and Assistants. Commonly used to securely store sensitive secrets used to access various sources."
         primaryAction={

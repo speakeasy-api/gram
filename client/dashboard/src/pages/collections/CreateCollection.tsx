@@ -1,4 +1,5 @@
 import { FormPage } from "@/components/page-templates";
+import { RequireScope } from "@/components/require-scope";
 import { Textarea } from "@/components/moon/textarea";
 import { Badge } from "@/components/ui/Badge";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -41,7 +42,11 @@ type ServerOption = {
 };
 
 export default function CreateCollection(): JSX.Element {
-  return <CreateCollectionForm />;
+  return (
+    <RequireScope scope="org:admin" level="page">
+      <CreateCollectionForm />
+    </RequireScope>
+  );
 }
 
 function CreateCollectionForm() {
@@ -199,7 +204,6 @@ function CreateCollectionForm() {
 
   return (
     <FormPage
-      scope="org:admin"
       title="Create Collection"
       description="Create a curated collection of MCP servers that can be installed together"
     >

@@ -121,7 +121,7 @@ sections. Pass `layout="routed"` (default) for one-section-at-a-time by URL path
 <OverviewPage title="Risk Overview" timeRange={<TimeRangePicker … />}
   metrics={metrics} metricsLoading={q.isPending}>
   <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-    <SummaryCard title="Top tools" isLoading={q.isPending}>…</SummaryCard>
+    <ChartCard title="Top tools" loading={q.isPending} …>…</ChartCard>
   </div>
 </OverviewPage>
 
@@ -149,7 +149,8 @@ hand-rolling:
 - `InlineEmptyState` (`@/components/inline-empty-state`) — square dashed frame +
   square icon tile. Never hand-roll a `border-dashed` + `rounded-full` blob.
 - `StatRow` (`@/components/stat-row`) — a `MetricCard` row with a loading swap.
-- `SummaryCard` (`@/components/summary-card`) — titled panel with loading/empty.
+- `ChartCard` (`@/components/chart/ChartCard`) — titled panel with loading/error,
+  the shared card for overview/dashboard bodies.
 - `DetailBody` (`@/components/detail-body`) — the `max-w-[1270px]` detail width.
 
 ## Rules

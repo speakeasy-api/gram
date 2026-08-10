@@ -62,7 +62,11 @@ import {
 } from "@/components/ui/Select";
 
 export default function OrgDomains(): JSX.Element {
-  return <OrgDomainsInner />;
+  return (
+    <RequireScope scope={["org:read", "org:admin"]} level="page">
+      <OrgDomainsInner />
+    </RequireScope>
+  );
 }
 
 function validateIPEntry(entry: string): string {
@@ -739,7 +743,6 @@ function OrgDomainsInner() {
 
   return (
     <SettingsPage
-      scope={["org:read", "org:admin"]}
       title="Custom Domain"
       description="Connect a custom domain to serve your MCP servers from your own branded URL instead of the default platform domain."
     >

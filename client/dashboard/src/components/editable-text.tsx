@@ -23,11 +23,20 @@ function Editable({
 
   return (
     <div
-      className={cn("group relative cursor-pointer", className)}
+      role="button"
+      tabIndex={disabled ? -1 : 0}
+      aria-disabled={disabled}
+      className={cn("group relative", !disabled && "cursor-pointer", className)}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={() => {
         void (!disabled && onClick?.());
+      }}
+      onKeyDown={(event) => {
+        if (!disabled && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
+          onClick?.();
+        }
       }}
     >
       <div
