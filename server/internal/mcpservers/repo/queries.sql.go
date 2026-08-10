@@ -515,6 +515,57 @@ func (q *Queries) ListMCPServersByProjectID(ctx context.Context, arg ListMCPServ
 	return items, nil
 }
 
+const listMCPServersByProjectIDLimited = `-- name: ListMCPServersByProjectIDLimited :many
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
+FROM mcp_servers
+WHERE project_id = $1
+  AND deleted IS FALSE
+ORDER BY id ASC
+LIMIT $2
+`
+
+type ListMCPServersByProjectIDLimitedParams struct {
+	ProjectID  uuid.UUID
+	LimitValue int32
+}
+
+func (q *Queries) ListMCPServersByProjectIDLimited(ctx context.Context, arg ListMCPServersByProjectIDLimitedParams) ([]McpServer, error) {
+	rows, err := q.db.Query(ctx, listMCPServersByProjectIDLimited, arg.ProjectID, arg.LimitValue)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpServer
+	for rows.Next() {
+		var i McpServer
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Slug,
+			&i.EnvironmentID,
+			&i.UserSessionIssuerID,
+			&i.RemoteMcpServerID,
+			&i.TunneledMcpServerID,
+			&i.ToolsetID,
+			&i.UnproxiedMcpServerID,
+			&i.ToolVariationsGroupID,
+			&i.Visibility,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMCPServersForTelemetryByProjectID = `-- name: ListMCPServersForTelemetryByProjectID :many
 SELECT id, name, slug, remote_mcp_server_id, tunneled_mcp_server_id
 FROM mcp_servers
