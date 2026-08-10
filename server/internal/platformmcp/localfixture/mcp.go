@@ -8,20 +8,25 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 )
 
-const fixtureMCPSessionHeader = "Mcp-Session-Id"
+const (
+	fixtureMCPSessionHeader   = "Mcp-Session-Id"
+	fixtureMCPSessionLifetime = 15 * time.Minute
+	maxFixtureMCPSessions     = 128
+)
 
 type MCPHTTP struct {
 	oauth    *OAuthHTTP
-	sessions map[string]struct{}
+	sessions map[string]time.Time
 	mu       sync.Mutex
 }
 
 func NewMCPHTTP(oauth *OAuthHTTP) *MCPHTTP {
 	return &MCPHTTP{
 		oauth:    oauth,
-		sessions: make(map[string]struct{}),
+		sessions: make(map[string]time.Time),
 		mu:       sync.Mutex{},
 	}
 }
@@ -33,14 +38,18 @@ func (s *MCPHTTP) Handler() http.Handler {
 			return
 		}
 		w.Header().Set("Cache-Control", "no-store")
-		if r.Method != http.MethodPost {
-			w.Header().Set("Allow", http.MethodPost)
-			http.Error(w, "streamable HTTP fixture only supports POST", http.StatusMethodNotAllowed)
+		if r.Method != http.MethodPost && r.Method != http.MethodDelete {
+			w.Header().Set("Allow", http.MethodPost+", "+http.MethodDelete)
+			http.Error(w, "streamable HTTP fixture only supports POST and DELETE", http.StatusMethodNotAllowed)
 			return
 		}
 		if r.Header.Get("Authorization") == "" || !s.oauth.HasLiveAccessToken(bearerToken(r.Header.Get("Authorization"))) {
 			w.Header().Set("WWW-Authenticate", `Bearer resource_metadata="`+s.oauth.config.OAuthAuthorizationServerMetadataURL()+`"`)
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			return
+		}
+		if r.Method == http.MethodDelete {
+			s.handleDelete(w, r)
 			return
 		}
 		s.handlePost(w, r)
@@ -80,9 +89,7 @@ func (s *MCPHTTP) handlePost(w http.ResponseWriter, r *http.Request) {
 			writeFixtureMCPError(w, request.ID, -32603, "could not create session")
 			return
 		}
-		s.mu.Lock()
-		s.sessions[sessionID] = struct{}{}
-		s.mu.Unlock()
+		s.createSession(sessionID)
 		w.Header().Set(fixtureMCPSessionHeader, sessionID)
 		writeFixtureMCPResult(w, request.ID, map[string]any{
 			"protocolVersion": "2025-03-26",
@@ -105,14 +112,64 @@ func (s *MCPHTTP) handlePost(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *MCPHTTP) handleDelete(w http.ResponseWriter, r *http.Request) {
+	sessionID := r.Header.Get(fixtureMCPSessionHeader)
+	if !s.deleteSession(sessionID) {
+		http.Error(w, "unknown session", http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *MCPHTTP) createSession(sessionID string) {
+	now := time.Now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.pruneSessions(now)
+	if len(s.sessions) >= maxFixtureMCPSessions {
+		var oldest string
+		var oldestAt time.Time
+		for id, createdAt := range s.sessions {
+			if oldest == "" || createdAt.Before(oldestAt) {
+				oldest, oldestAt = id, createdAt
+			}
+		}
+		delete(s.sessions, oldest)
+	}
+	s.sessions[sessionID] = now
+}
+
+func (s *MCPHTTP) deleteSession(sessionID string) bool {
+	if sessionID == "" {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.pruneSessions(time.Now())
+	if _, ok := s.sessions[sessionID]; !ok {
+		return false
+	}
+	delete(s.sessions, sessionID)
+	return true
+}
+
 func (s *MCPHTTP) hasSession(sessionID string) bool {
 	if sessionID == "" {
 		return false
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.pruneSessions(time.Now())
 	_, ok := s.sessions[sessionID]
 	return ok
+}
+
+func (s *MCPHTTP) pruneSessions(now time.Time) {
+	for sessionID, createdAt := range s.sessions {
+		if !createdAt.Add(fixtureMCPSessionLifetime).After(now) {
+			delete(s.sessions, sessionID)
+		}
+	}
 }
 
 func bearerToken(header string) string {

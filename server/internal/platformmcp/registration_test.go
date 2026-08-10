@@ -81,6 +81,25 @@ func TestNewRegistrationStoreRequiresDatabase(t *testing.T) {
 	require.Nil(t, store)
 }
 
+func TestPlatformMCPEndpointSlugStaysWithinDatabaseCharacterLimit(t *testing.T) {
+	t.Parallel()
+
+	slug := platformMCPEndpointSlug("🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀🚀", "0123456789abcdef")
+
+	require.Len(t, []rune(slug), maxMCPEndpointSlugLength)
+	require.Contains(t, slug, "-platform-mcp-endpoint-0123456789abcdef")
+}
+
+func TestValidRegistrationRemoteURL(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, validRegistrationRemoteURL("https://provider.test/mcp?tenant=reviewed"))
+	require.False(t, validRegistrationRemoteURL("http://provider.test/mcp"))
+	require.False(t, validRegistrationRemoteURL("https://user:password@provider.test/mcp"))
+	require.False(t, validRegistrationRemoteURL("https://provider.test/mcp#fragment"))
+	require.False(t, validRegistrationRemoteURL("https://provider.test/{tenant}/mcp"))
+}
+
 func TestNewRegistrationComponentSuffixIsCollisionResistant(t *testing.T) {
 	t.Parallel()
 

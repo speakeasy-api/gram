@@ -20,9 +20,20 @@ func TestEntryHasAllowedStreamableHTTPRemote(t *testing.T) {
 	}
 
 	require.True(t, entryHasAllowedStreamableHTTPRemote(entry, "https://example.test/mcp"))
+	require.False(t, entryHasAllowedStreamableHTTPRemote(entry, "http://example.test/mcp"))
+	require.False(t, entryHasAllowedStreamableHTTPRemote(entry, "https://user:password@example.test/mcp"))
 	require.False(t, entryHasAllowedStreamableHTTPRemote(entry, "https://example.test/sse"))
 	require.False(t, entryHasAllowedStreamableHTTPRemote(entry, "https://other.test/mcp"))
 	require.False(t, entryHasAllowedStreamableHTTPRemote(entry, "https://example.test/{region}/mcp"))
+}
+
+func TestHTTPSURLRejectsUnsafeURLs(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, isHTTPSURL("https://example.test/mcp"))
+	require.False(t, isHTTPSURL("http://example.test/mcp"))
+	require.False(t, isHTTPSURL("https://user:password@example.test/mcp"))
+	require.False(t, isHTTPSURL("javascript:alert(1)"))
 }
 
 func TestHasUnresolvedRemoteTemplate(t *testing.T) {

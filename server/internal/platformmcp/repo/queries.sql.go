@@ -1004,8 +1004,12 @@ JOIN platform_mcp_catalog_registrations AS registration
  AND registration.organization_id = readiness.organization_id
  AND registration.project_id = readiness.project_id
  AND registration.deleted IS FALSE
-JOIN platform_mcp_connections AS connection
-  ON connection.id = readiness.connection_id
+ JOIN projects AS project
+   ON project.id = readiness.project_id
+  AND project.organization_id = readiness.organization_id
+  AND project.deleted IS FALSE
+ JOIN platform_mcp_connections AS connection
+   ON connection.id = readiness.connection_id
  AND connection.organization_id = readiness.organization_id
 WHERE readiness.organization_id = $1
   AND readiness.project_id = $2
@@ -1438,12 +1442,16 @@ func (q *Queries) GetPlatformMCPOperationReceipt(ctx context.Context, arg GetPla
 const getPlatformMCPReadiness = `-- name: GetPlatformMCPReadiness :one
 SELECT readiness.id, readiness.organization_id, readiness.project_id, readiness.registration_id, readiness.connection_id, readiness.connection_generation, readiness.provider_authorization_fingerprint, readiness.state, readiness.evidence_code, readiness.checked_at, readiness.expires_at, readiness.created_at, readiness.updated_at
 FROM platform_mcp_readiness AS readiness
-JOIN platform_mcp_catalog_registrations AS registration
-  ON registration.id = readiness.registration_id
- AND registration.organization_id = readiness.organization_id
- AND registration.project_id = readiness.project_id
- AND registration.deleted IS FALSE
-WHERE readiness.organization_id = $1
+ JOIN platform_mcp_catalog_registrations AS registration
+   ON registration.id = readiness.registration_id
+  AND registration.organization_id = readiness.organization_id
+  AND registration.project_id = readiness.project_id
+  AND registration.deleted IS FALSE
+ JOIN projects AS project
+   ON project.id = readiness.project_id
+  AND project.organization_id = readiness.organization_id
+  AND project.deleted IS FALSE
+ WHERE readiness.organization_id = $1
   AND readiness.project_id = $2
   AND readiness.registration_id = $3
   AND readiness.connection_id = $4
@@ -2658,11 +2666,15 @@ SELECT
     $10
 WHERE EXISTS (
     SELECT 1
-    FROM platform_mcp_catalog_registrations AS registration
-    WHERE registration.id = $3
-      AND registration.organization_id = $1
-      AND registration.project_id = $2
-      AND registration.deleted IS FALSE
+     FROM platform_mcp_catalog_registrations AS registration
+     JOIN projects AS project
+       ON project.id = registration.project_id
+      AND project.organization_id = registration.organization_id
+      AND project.deleted IS FALSE
+     WHERE registration.id = $3
+       AND registration.organization_id = $1
+       AND registration.project_id = $2
+       AND registration.deleted IS FALSE
 )
 ON CONFLICT (registration_id, connection_id, connection_generation, provider_authorization_fingerprint)
 DO UPDATE SET

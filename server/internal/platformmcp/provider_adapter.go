@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"context"
 	"errors"
+	"net/url"
 	"time"
 
 	"github.com/google/uuid"
@@ -107,7 +108,8 @@ func validateProviderSetupPreflightRequest(request ProviderSetupRequest) error {
 }
 
 func validateProviderSetupResult(result ProviderSetupResult) error {
-	if result.AuthorizationURL == "" {
+	parsed, err := url.Parse(result.AuthorizationURL)
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.Fragment != "" {
 		return ErrSetupHandoffInvalid
 	}
 	return nil

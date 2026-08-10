@@ -44,6 +44,10 @@ func (s *ReadinessService) GetReadiness(ctx context.Context, principal Principal
 	if s == nil || s.store == nil || s.gate == nil || s.adapters == nil || !s.repairBudget.valid() || projectSlug == "" || registrationID == "" {
 		return ResolvedProject{}, Readiness{}, false, ErrUnavailable
 	}
+	parsedRegistrationID, err := uuid.Parse(registrationID)
+	if err != nil {
+		return ResolvedProject{}, Readiness{}, false, ErrReadinessInvalid
+	}
 	if err := s.repairBudget.Allow(ctx, principal); err != nil {
 		return ResolvedProject{}, Readiness{}, false, err
 	}
@@ -58,11 +62,6 @@ func (s *ReadinessService) GetReadiness(ctx context.Context, principal Principal
 	if !enabled {
 		return ResolvedProject{}, Readiness{}, false, ErrRegistrationUnavailable
 	}
-	parsedRegistrationID, err := uuid.Parse(registrationID)
-	if err != nil {
-		return ResolvedProject{}, Readiness{}, false, ErrReadinessInvalid
-	}
-
 	if !force {
 		readiness, found, err := s.store.GetProviderReadiness(ctx, principal, project.ID, parsedRegistrationID)
 		return project, readiness, found, err

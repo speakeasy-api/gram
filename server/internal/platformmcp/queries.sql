@@ -818,12 +818,16 @@ WHERE stale.organization_id = @organization_id
 -- name: GetPlatformMCPReadiness :one
 SELECT readiness.*
 FROM platform_mcp_readiness AS readiness
-JOIN platform_mcp_catalog_registrations AS registration
-  ON registration.id = readiness.registration_id
- AND registration.organization_id = readiness.organization_id
- AND registration.project_id = readiness.project_id
- AND registration.deleted IS FALSE
-WHERE readiness.organization_id = @organization_id
+ JOIN platform_mcp_catalog_registrations AS registration
+   ON registration.id = readiness.registration_id
+  AND registration.organization_id = readiness.organization_id
+  AND registration.project_id = readiness.project_id
+  AND registration.deleted IS FALSE
+ JOIN projects AS project
+   ON project.id = readiness.project_id
+  AND project.organization_id = readiness.organization_id
+  AND project.deleted IS FALSE
+ WHERE readiness.organization_id = @organization_id
   AND readiness.project_id = @project_id
   AND readiness.registration_id = @registration_id
   AND readiness.connection_id = @connection_id
@@ -838,8 +842,12 @@ JOIN platform_mcp_catalog_registrations AS registration
  AND registration.organization_id = readiness.organization_id
  AND registration.project_id = readiness.project_id
  AND registration.deleted IS FALSE
-JOIN platform_mcp_connections AS connection
-  ON connection.id = readiness.connection_id
+ JOIN projects AS project
+   ON project.id = readiness.project_id
+  AND project.organization_id = readiness.organization_id
+  AND project.deleted IS FALSE
+ JOIN platform_mcp_connections AS connection
+   ON connection.id = readiness.connection_id
  AND connection.organization_id = readiness.organization_id
 WHERE readiness.organization_id = @organization_id
   AND readiness.project_id = @project_id
@@ -878,11 +886,15 @@ SELECT
     @expires_at
 WHERE EXISTS (
     SELECT 1
-    FROM platform_mcp_catalog_registrations AS registration
-    WHERE registration.id = @registration_id
-      AND registration.organization_id = @organization_id
-      AND registration.project_id = @project_id
-      AND registration.deleted IS FALSE
+     FROM platform_mcp_catalog_registrations AS registration
+     JOIN projects AS project
+       ON project.id = registration.project_id
+      AND project.organization_id = registration.organization_id
+      AND project.deleted IS FALSE
+     WHERE registration.id = @registration_id
+       AND registration.organization_id = @organization_id
+       AND registration.project_id = @project_id
+       AND registration.deleted IS FALSE
 )
 ON CONFLICT (registration_id, connection_id, connection_generation, provider_authorization_fingerprint)
 DO UPDATE SET

@@ -276,6 +276,16 @@ func (s *OAuthHTTP) issueTokens(w http.ResponseWriter, clientID string) {
 	})
 }
 
+func (s *OAuthHTTP) HasRegisteredClient(clientID string) bool {
+	if s == nil || clientID == "" {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok := s.clients[clientID]
+	return ok
+}
+
 // HasLiveAccessToken reports whether token is an unrevoked fixture access token.
 // It is intentionally the only token-store operation exposed to the fixture MCP
 // handler; token values never leave the localfixture package or reach logs.

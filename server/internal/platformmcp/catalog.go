@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 
@@ -61,7 +62,7 @@ type RegistryCatalog struct {
 func NewRegistryCatalog(client *externalmcp.RegistryClient, descriptors []CatalogDescriptor) *RegistryCatalog {
 	byKey := make(map[string]CatalogDescriptor, len(descriptors))
 	for _, descriptor := range descriptors {
-		if descriptor.ProviderKey == "" || descriptor.Registry.ID == uuid.Nil || descriptor.Registry.URL == "" || descriptor.CanonicalRef == "" || descriptor.AllowedRemoteURL == "" || hasUnresolvedRemoteTemplate(descriptor.AllowedRemoteURL) || descriptor.SetupIntent == "" {
+		if descriptor.ProviderKey == "" || descriptor.Registry.ID == uuid.Nil || !isHTTPSURL(descriptor.Registry.URL) || descriptor.CanonicalRef == "" || !isHTTPSURL(descriptor.AllowedRemoteURL) || hasUnresolvedRemoteTemplate(descriptor.AllowedRemoteURL) || descriptor.SetupIntent == "" {
 			continue
 		}
 		byKey[descriptor.ProviderKey] = descriptor
@@ -134,15 +135,20 @@ func (c *RegistryCatalog) Inspect(ctx context.Context, providerKey, catalogRef s
 }
 
 func entryHasAllowedStreamableHTTPRemote(entry *types.ExternalMCPServerEntry, allowedRemoteURL string) bool {
-	if hasUnresolvedRemoteTemplate(allowedRemoteURL) {
+	if !isHTTPSURL(allowedRemoteURL) || hasUnresolvedRemoteTemplate(allowedRemoteURL) {
 		return false
 	}
 	for _, remote := range entry.Remotes {
-		if remote != nil && remote.URL == allowedRemoteURL && !hasUnresolvedRemoteTemplate(remote.URL) && strings.EqualFold(remote.TransportType, "streamable-http") && len(remote.Headers) == 0 {
+		if remote != nil && remote.URL == allowedRemoteURL && isHTTPSURL(remote.URL) && !hasUnresolvedRemoteTemplate(remote.URL) && strings.EqualFold(remote.TransportType, "streamable-http") && len(remote.Headers) == 0 {
 			return true
 		}
 	}
 	return false
+}
+
+func isHTTPSURL(rawURL string) bool {
+	parsed, err := url.Parse(rawURL)
+	return err == nil && parsed.Scheme == "https" && parsed.Host != "" && parsed.User == nil
 }
 
 func hasUnresolvedRemoteTemplate(rawURL string) bool {

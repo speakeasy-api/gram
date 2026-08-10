@@ -39,10 +39,10 @@ func TestMCPHTTPRequiresLiveBearerAndServesInitializeAndToolsList(t *testing.T) 
 	standaloneSSEResponse := httptest.NewRecorder()
 	handler.ServeHTTP(standaloneSSEResponse, standaloneSSE)
 	require.Equal(t, http.StatusMethodNotAllowed, standaloneSSEResponse.Code)
-	require.Equal(t, http.MethodPost, standaloneSSEResponse.Header().Get("Allow"))
+	require.Equal(t, http.MethodPost+", "+http.MethodDelete, standaloneSSEResponse.Header().Get("Allow"))
 
 	whitespaceBearer := httptest.NewRequest(http.MethodPost, "/platform-mcp/local-fixture/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize"}`))
-	whitespaceBearer.Header.Set("Authorization", "  Bearer   "+accessToken+"  ")
+	whitespaceBearer.Header.Set("Authorization", "  bearer   "+accessToken+"  ")
 	whitespaceBearerResponse := httptest.NewRecorder()
 	handler.ServeHTTP(whitespaceBearerResponse, whitespaceBearer)
 	require.Equal(t, http.StatusOK, whitespaceBearerResponse.Code)
@@ -82,6 +82,16 @@ func TestMCPHTTPRequiresLiveBearerAndServesInitializeAndToolsList(t *testing.T) 
 	require.NoError(t, json.Unmarshal(toolsList.Body.Bytes(), &listResponse))
 	require.Len(t, listResponse.Result.Tools, 1)
 	require.Equal(t, fixtureToolName, listResponse.Result.Tools[0].Name)
+
+	deleteRequest := httptest.NewRequest(http.MethodDelete, "/platform-mcp/local-fixture/mcp", nil)
+	deleteRequest.Header.Set("Authorization", "Bearer "+accessToken)
+	deleteRequest.Header.Set(fixtureMCPSessionHeader, sessionID)
+	deleteResponse := httptest.NewRecorder()
+	handler.ServeHTTP(deleteResponse, deleteRequest)
+	require.Equal(t, http.StatusNoContent, deleteResponse.Code)
+
+	deletedSession := mcpRequest(t, handler, accessToken, sessionID, 3, "tools/list")
+	require.Equal(t, http.StatusBadRequest, deletedSession.Code)
 }
 
 func TestMCPHTTPRejectsRevokedBearer(t *testing.T) {

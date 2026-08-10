@@ -1134,6 +1134,18 @@ WHERE c.id = @id
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE;
 
+-- name: RotateLocalFixtureOrganizationRemoteSessionClient :one
+UPDATE remote_session_clients
+SET
+    client_id = @client_id,
+    client_id_issued_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND remote_session_issuer_id = @remote_session_issuer_id
+  AND deleted IS FALSE
+RETURNING *;
+
 -- name: UpdateOrganizationRemoteSessionClient :one
 -- Patch a client's fields. The handler encrypts a rotated client_secret before
 -- passing it as client_secret_encrypted; an omitted narg keeps the existing

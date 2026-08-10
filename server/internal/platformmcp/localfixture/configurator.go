@@ -26,6 +26,7 @@ import (
 
 type ClientConfigurator struct {
 	config *Config
+	oauth  *OAuthHTTP
 	db     *pgxpool.Pool
 	policy *guardian.Policy
 	mu     sync.Mutex
@@ -33,9 +34,10 @@ type ClientConfigurator struct {
 
 var _ remotesessionprovider.ProviderClientConfigurator = (*ClientConfigurator)(nil)
 
-func NewClientConfigurator(config *Config, db *pgxpool.Pool, policy *guardian.Policy) *ClientConfigurator {
+func NewClientConfigurator(config *Config, oauth *OAuthHTTP, db *pgxpool.Pool, policy *guardian.Policy) *ClientConfigurator {
 	return &ClientConfigurator{
 		config: config,
+		oauth:  oauth,
 		db:     db,
 		policy: policy,
 		mu:     sync.Mutex{},
@@ -43,7 +45,7 @@ func NewClientConfigurator(config *Config, db *pgxpool.Pool, policy *guardian.Po
 }
 
 func (c *ClientConfigurator) ConfigureProviderClient(ctx context.Context, request platformmcp.ProviderSetupRequest, descriptor remotesessionprovider.Descriptor) error {
-	if c == nil || c.config == nil || c.db == nil || c.policy == nil || !c.matchesDescriptor(descriptor) {
+	if c == nil || c.config == nil || c.oauth == nil || c.db == nil || c.policy == nil || !c.matchesDescriptor(descriptor) {
 		return platformmcp.ErrProviderAdapterUnavailable
 	}
 
@@ -65,6 +67,16 @@ func (c *ClientConfigurator) ConfigureProviderClient(ctx context.Context, reques
 	case err == nil:
 		if !validFixtureClient(client) {
 			return fmt.Errorf("%w: local fixture client is incompatible", platformmcp.ErrProviderAdapterUnavailable)
+		}
+		if !c.oauthClientRegistered(client.ClientID) {
+			registration, err := c.registerClient(ctx)
+			if err != nil {
+				return err
+			}
+			client, err = c.rotateClient(ctx, client, registration.clientID)
+			if err != nil {
+				return err
+			}
 		}
 		return c.attachClient(ctx, request, client.ID, issuer.ID)
 	case !errors.Is(err, pgx.ErrNoRows):
@@ -209,6 +221,26 @@ func (c *ClientConfigurator) registerClient(ctx context.Context) (dcrRegistratio
 		return dcrRegistration{}, fmt.Errorf("local fixture registration response is incompatible")
 	}
 	return dcrRegistration{clientID: registration.ClientID}, nil
+}
+
+func (c *ClientConfigurator) oauthClientRegistered(clientID string) bool {
+	return c.oauth.HasRegisteredClient(clientID)
+}
+
+func (c *ClientConfigurator) rotateClient(ctx context.Context, client remotesessionsrepo.RemoteSessionClient, clientID string) (remotesessionsrepo.RemoteSessionClient, error) {
+	if client.ID == uuid.Nil || client.OrganizationID.String == "" || client.RemoteSessionIssuerID == uuid.Nil || clientID == "" {
+		return remotesessionsrepo.RemoteSessionClient{}, platformmcp.ErrProviderAdapterUnavailable
+	}
+	updated, err := remotesessionsrepo.New(c.db).RotateLocalFixtureOrganizationRemoteSessionClient(ctx, remotesessionsrepo.RotateLocalFixtureOrganizationRemoteSessionClientParams{
+		ClientID:              clientID,
+		ID:                    client.ID,
+		OrganizationID:        client.OrganizationID,
+		RemoteSessionIssuerID: client.RemoteSessionIssuerID,
+	})
+	if err != nil {
+		return remotesessionsrepo.RemoteSessionClient{}, fmt.Errorf("rotate local fixture client: %w", err)
+	}
+	return updated, nil
 }
 
 func (c *ClientConfigurator) createOrReuseClient(ctx context.Context, request platformmcp.ProviderSetupRequest, issuerID uuid.UUID, clientID string) error {

@@ -3355,6 +3355,56 @@ func (q *Queries) RevokeRemoteSessionAfterInvalidGrant(ctx context.Context, arg 
 	return i, err
 }
 
+const rotateLocalFixtureOrganizationRemoteSessionClient = `-- name: RotateLocalFixtureOrganizationRemoteSessionClient :one
+UPDATE remote_session_clients
+SET
+    client_id = $1,
+    client_id_issued_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND organization_id = $3
+  AND remote_session_issuer_id = $4
+  AND deleted IS FALSE
+RETURNING id, project_id, organization_id, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, scope, audience, client_id_metadata_uri, legacy_callback_url, created_at, updated_at, deleted_at, deleted
+`
+
+type RotateLocalFixtureOrganizationRemoteSessionClientParams struct {
+	ClientID              string
+	ID                    uuid.UUID
+	OrganizationID        pgtype.Text
+	RemoteSessionIssuerID uuid.UUID
+}
+
+func (q *Queries) RotateLocalFixtureOrganizationRemoteSessionClient(ctx context.Context, arg RotateLocalFixtureOrganizationRemoteSessionClientParams) (RemoteSessionClient, error) {
+	row := q.db.QueryRow(ctx, rotateLocalFixtureOrganizationRemoteSessionClient,
+		arg.ClientID,
+		arg.ID,
+		arg.OrganizationID,
+		arg.RemoteSessionIssuerID,
+	)
+	var i RemoteSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.RemoteSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.TokenEndpointAuthMethod,
+		&i.Scope,
+		&i.Audience,
+		&i.ClientIDMetadataUri,
+		&i.LegacyCallbackUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const setOrganizationRemoteSessionIssuerProject = `-- name: SetOrganizationRemoteSessionIssuerProject :one
 UPDATE remote_session_issuers
 SET project_id = $1::uuid,

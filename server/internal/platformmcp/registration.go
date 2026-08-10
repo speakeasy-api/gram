@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/google/uuid"
@@ -35,6 +36,7 @@ const (
 	registrationStatusRegistered = "registered"
 	receiptLifetime              = 24 * time.Hour
 	platformMCPIssuerLifetime    = 14 * 24 * time.Hour
+	maxMCPEndpointSlugLength     = 128
 )
 
 var (
@@ -283,6 +285,16 @@ func (s *RegistrationStore) ConvergeRegistration(ctx context.Context, principal 
 	}); err != nil {
 		return OperationReceipt{}, fmt.Errorf("lock platform mcp catalog registration: %w", err)
 	}
+	eligible, err := q.IsPlatformMCPCatalogRegistrationTargetEligible(ctx, platformrepo.IsPlatformMCPCatalogRegistrationTargetEligibleParams{
+		ProjectID:      project.ID,
+		OrganizationID: principal.OrganizationID,
+	})
+	if err != nil {
+		return OperationReceipt{}, fmt.Errorf("recheck platform mcp registration target eligibility: %w", err)
+	}
+	if !eligible {
+		return OperationReceipt{}, ErrTargetIneligible
+	}
 
 	registration, err := q.GetActivePlatformMCPCatalogRegistration(ctx, platformrepo.GetActivePlatformMCPCatalogRegistrationParams{
 		OrganizationID:   principal.OrganizationID,
@@ -363,7 +375,7 @@ func (s *RegistrationStore) CompleteRegistration(ctx context.Context, principal 
 	if s == nil || s.db == nil {
 		return OperationReceipt{}, ErrUnavailable
 	}
-	if err := validateCatalogRegistrationRequest(principal, project, request); err != nil || receipt.ID == uuid.Nil || !receipt.RegistrationID.Valid || remoteURL == "" {
+	if err := validateCatalogRegistrationRequest(principal, project, request); err != nil || receipt.ID == uuid.Nil || !receipt.RegistrationID.Valid || !validRegistrationRemoteURL(remoteURL) {
 		return OperationReceipt{}, ErrRegistrationInvalid
 	}
 	connectionID, generation, err := principalConnection(principal)
@@ -427,6 +439,16 @@ func (s *RegistrationStore) CompleteRegistration(ctx context.Context, principal 
 		CatalogReference: request.CatalogReference,
 	}); err != nil {
 		return OperationReceipt{}, fmt.Errorf("lock platform mcp component registration: %w", err)
+	}
+	eligible, err := q.IsPlatformMCPCatalogRegistrationTargetEligible(ctx, platformrepo.IsPlatformMCPCatalogRegistrationTargetEligibleParams{
+		ProjectID:      project.ID,
+		OrganizationID: principal.OrganizationID,
+	})
+	if err != nil {
+		return OperationReceipt{}, fmt.Errorf("recheck platform mcp registration target eligibility: %w", err)
+	}
+	if !eligible {
+		return OperationReceipt{}, ErrTargetIneligible
 	}
 	registration, err := q.GetActivePlatformMCPCatalogRegistration(ctx, platformrepo.GetActivePlatformMCPCatalogRegistrationParams{
 		OrganizationID:   principal.OrganizationID,
@@ -599,7 +621,7 @@ func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Cont
 	endpoint, err := mcpendpointsrepo.New(tx).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:   project.ID,
 		McpServerID: server.ID,
-		Slug:        organization.Slug + "-platform-mcp-endpoint-" + suffix,
+		Slug:        platformMCPEndpointSlug(organization.Slug, suffix),
 	})
 	if err != nil {
 		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("create platform mcp endpoint: %w", err)
@@ -622,6 +644,17 @@ func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Cont
 		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("update platform mcp registration components: %w", err)
 	}
 	return updatedRegistration, nil
+}
+
+func validRegistrationRemoteURL(rawURL string) bool {
+	parsed, err := url.Parse(rawURL)
+	return err == nil && parsed.Scheme == "https" && parsed.Host != "" && parsed.User == nil && parsed.Fragment == "" && !hasUnresolvedRemoteTemplate(rawURL)
+}
+
+func platformMCPEndpointSlug(organizationSlug, suffix string) string {
+	suffixRunes := []rune("-platform-mcp-endpoint-" + suffix)
+	organizationRunes := []rune(organizationSlug)
+	return string(organizationRunes[:min(len(organizationRunes), maxMCPEndpointSlugLength-len(suffixRunes))]) + string(suffixRunes)
 }
 
 func newRegistrationComponentSuffix() (string, error) {

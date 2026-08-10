@@ -55,6 +55,12 @@ func (s *DashboardSetupService) StartDashboardSetup(ctx context.Context, userID,
 		Generation:     row.ConnectionGeneration.String(),
 		ClientID:       "",
 	}
+	if err := s.authorizer.RequireLiveOrgAdmin(ctx, principal); err != nil {
+		if isAuthorizationDenied(err) {
+			return ProviderSetupResult{}, ErrForbidden
+		}
+		return ProviderSetupResult{}, fmt.Errorf("authorize platform mcp dashboard setup: %w: %w", ErrUnavailable, err)
+	}
 	if err := s.setupBudget.Allow(ctx, principal); err != nil {
 		return ProviderSetupResult{}, err
 	}
@@ -72,13 +78,6 @@ func (s *DashboardSetupService) StartDashboardSetup(ctx context.Context, userID,
 	if !eligible {
 		return ProviderSetupResult{}, ErrTargetIneligible
 	}
-	if err := s.authorizer.RequireLiveOrgAdmin(ctx, principal); err != nil {
-		if isAuthorizationDenied(err) {
-			return ProviderSetupResult{}, ErrForbidden
-		}
-		return ProviderSetupResult{}, fmt.Errorf("authorize platform mcp dashboard setup: %w: %w", ErrUnavailable, err)
-	}
-
 	return s.store.BeginProviderSetup(ctx, principal, SetupHandoffBinding{
 		ProjectID:        row.ProjectID,
 		RegistrationID:   row.RegistrationID,

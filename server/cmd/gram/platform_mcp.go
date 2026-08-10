@@ -109,7 +109,7 @@ func configurePlatformMCP(ctx context.Context, config platformMCPConfig) error {
 				Resource:                   fixtureConfig.RemoteURL(),
 				TestOnlyAllowedCIDRBlocks:  nil,
 			},
-			localfixture.NewClientConfigurator(fixtureConfig, config.DB, config.GuardianPolicy),
+			localfixture.NewClientConfigurator(fixtureConfig, fixtureOAuth, config.DB, config.GuardianPolicy),
 		)
 		adapters := platformmcp.NewProviderAdapters([]platformmcp.ProviderAdapter{fixtureAdapter})
 		limitStore := ratelimit.NewRedisStore(config.Redis)
