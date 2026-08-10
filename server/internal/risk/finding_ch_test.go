@@ -806,6 +806,67 @@ func TestFindingCHWriter_HandleBatch_RejectsPartWhoseChatIsInAnotherProject(t *t
 	require.Empty(t, rows)
 }
 
+// A message whose chat lives in another project must not resolve attribution
+// even when the message's own project_id matches the finding's: the chat-level
+// user ids, the assistant link, and the directory lookup's organization all
+// come from that chat, so the attribution query rejects the mismatched anchor
+// outright rather than attributing it.
+func TestFindingCHWriter_HandleBatch_RejectsMessageWhoseChatIsInAnotherProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug := "other-msg-attr-" + uuid.New().String()[:8]
+	otherProject, err := projectsRepo.New(ti.conn).CreateProject(ctx, projectsRepo.CreateProjectParams{
+		Name:           slug,
+		Slug:           slug,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+
+	queries := riskrepo.New(ti.conn)
+	// The chat lives in the other project while the message claims the
+	// caller's project.
+	foreignChatID, err := queries.CreateChatForTest(t.Context(), riskrepo.CreateChatForTestParams{
+		ProjectID:      otherProject.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGText("foreign-project-user"),
+		ExternalUserID: conv.ToPGText("foreign-project-user@example.com"),
+	})
+	require.NoError(t, err)
+
+	msgID, err := queries.CreateChatMessageForTest(t.Context(), riskrepo.CreateChatMessageForTestParams{
+		ChatID:         foreignChatID,
+		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		Content:        "hello",
+		UserID:         conv.ToPGTextEmpty(""),
+		ExternalUserID: conv.ToPGTextEmpty(""),
+	})
+	require.NoError(t, err)
+
+	ins := &fakeCHInserter{}
+	fp, err := risk.ParsePepperKeyRing(keyRingJSON(t, testPepperVersion, map[string][]byte{testPepperVersion: testPepperKey}))
+	require.NoError(t, err)
+	w := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), ins, fp)
+
+	f := chFinding()
+	f.SetChatMessageId(msgID.String())
+	f.SetProjectId(authCtx.ProjectID.String())
+
+	require.NoError(t, w.HandleBatch(ctx, []*riskv1.Finding{f}, nil))
+
+	rows := chRows(t, ins)
+	require.Len(t, rows, 1)
+	require.Equal(t, msgID.String(), rows[0].ChatMessageID)
+	require.Empty(t, rows[0].ChatID)
+	require.Empty(t, rows[0].UserID)
+	require.Empty(t, rows[0].ExternalUserID)
+	require.Empty(t, rows[0].AssistantID)
+}
+
 // chMessagesInsertedPoint returns the single data point for the CH
 // messages-inserted counter, failing the test if it is missing.
 func chMessagesInsertedPoint(t *testing.T, reader *sdkmetric.ManualReader) metricdata.DataPoint[int64] {

@@ -112,7 +112,11 @@ type SourceRow struct {
 // message event time, and the chat's most recent live assistant_threads link —
 // everything collapsing to ” (and message_created_at to the finding's own
 // created_at, matching the ClickHouse column DEFAULT) when the message or chat
-// is gone.
+// is gone. The message's chat must sit in the finding's own project — the
+// live query's chat/project guard, checked here against the finding's project
+// (not the message's own denormalized project_id, which historical rows may
+// lack) so a message pointing at a foreign-project chat is rejected outright
+// rather than attributed.
 //
 // Content-part-anchored rows mirror GetChatContentPartAttribution: the part
 // resolves its chat and, parent-message-first, its user ids. The guards are
@@ -141,6 +145,11 @@ SELECT r.id, r.created_at, r.organization_id, r.project_id, r.risk_policy_id,
 FROM risk_results r
 LEFT JOIN chat_messages cm
   ON cm.id = r.chat_message_id
+  AND EXISTS (
+    SELECT 1 FROM chats mc
+    WHERE mc.id = cm.chat_id
+      AND mc.project_id = r.project_id
+  )
 LEFT JOIN chat_content_parts ccp
   ON ccp.id = r.chat_content_part_id
   AND ccp.deleted IS FALSE
