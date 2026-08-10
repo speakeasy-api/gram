@@ -2,8 +2,6 @@ package access
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpapprovalrepo "github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -463,17 +462,7 @@ func shadowMCPInventoryLimit(limit int) (int, error) {
 }
 
 func shadowMCPInventoryServerSlug(canonicalURL string) string {
-	hash := sha256.Sum256([]byte(canonicalURL))
-	hashSuffix := hex.EncodeToString(hash[:])[:8]
-
-	label := strings.TrimPrefix(canonicalURL, "https://")
-	label = strings.TrimPrefix(label, "http://")
-	prefix := conv.URLToSlug(label)
-	if prefix == "" {
-		prefix = "server"
-	}
-
-	return prefix + "-" + hashSuffix
+	return shadowmcp.ServerSlug(canonicalURL)
 }
 
 func shadowMCPInventorySlugHash(serverSlug string) string {
@@ -865,6 +854,7 @@ func buildShadowMCPInventoryURLState(rowState shadowMCPInventoryRowState) *gen.S
 		Access:           rowState.Access,
 		RequestCount:     rowState.RequestCount,
 		LatestRequest:    rowState.LatestRequest,
+		ApprovalRequest:  rowState.ApprovalRequest,
 		AllowedPolicyIds: rowState.AllowedPolicyIDs,
 		BlockedPolicyIds: rowState.BlockedPolicyIDs,
 	}
@@ -887,12 +877,14 @@ type shadowMCPInventoryPolicyState struct {
 	allowedPolicyIDs  map[string][]string
 	blockedPolicyIDs  map[string][]string
 	requestsByURL     map[string]shadowMCPInventoryRequestState
+	approvalsByURL    map[string]*gen.ShadowMCPInventoryApprovalRequest
 }
 
 type shadowMCPInventoryRowState struct {
 	Access           string
 	RequestCount     int
 	LatestRequest    *gen.ShadowMCPInventoryRequestSummary
+	ApprovalRequest  *gen.ShadowMCPInventoryApprovalRequest
 	AllowedPolicyIDs []string
 	BlockedPolicyIDs []string
 }
@@ -910,6 +902,7 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 		allowedPolicyIDs:  map[string][]string{},
 		blockedPolicyIDs:  map[string][]string{},
 		requestsByURL:     map[string]shadowMCPInventoryRequestState{},
+		approvalsByURL:    map[string]*gen.ShadowMCPInventoryApprovalRequest{},
 	}
 	if len(canonicalURLs) == 0 {
 		return state, nil
@@ -923,6 +916,25 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 	}
 	if len(canonicalURLSet) == 0 {
 		return state, nil
+	}
+
+	// Approval requests track servers independently of which policies exist,
+	// so they join onto every row, not just policy-covered ones. target_key
+	// for a server_url request is the same canonical URL the inventory keys
+	// on.
+	approvalRows, err := mcpapprovalrepo.New(s.db).ListApprovalRequestsByTargetKeys(ctx, mcpapprovalrepo.ListApprovalRequestsByTargetKeysParams{
+		ProjectID:  projectID,
+		TargetKeys: slices.Sorted(maps.Keys(canonicalURLSet)),
+	})
+	if err != nil {
+		return state, fmt.Errorf("listing approval requests for shadow mcp inventory: %w", err)
+	}
+	for _, row := range approvalRows {
+		state.approvalsByURL[row.TargetKey] = &gen.ShadowMCPInventoryApprovalRequest{
+			ID:             row.ID.String(),
+			Status:         row.Status,
+			RequesterCount: int(row.RequesterCount),
+		}
 	}
 
 	repo := riskrepo.New(s.db)
@@ -1055,6 +1067,7 @@ func (s shadowMCPInventoryPolicyState) forURL(canonicalURL string) shadowMCPInve
 		Access:           access,
 		RequestCount:     requestState.Count,
 		LatestRequest:    requestState.Latest,
+		ApprovalRequest:  s.approvalsByURL[canonicalURL],
 		AllowedPolicyIDs: allowedPolicyIDs,
 		BlockedPolicyIDs: s.blockedPolicyIDs[canonicalURL],
 	}
@@ -1102,6 +1115,7 @@ func buildShadowMCPInventoryServer(row telemetryrepo.ShadowMCPInventoryURLRow, u
 		Access:             rowState.Access,
 		RequestCount:       rowState.RequestCount,
 		LatestRequest:      rowState.LatestRequest,
+		ApprovalRequest:    rowState.ApprovalRequest,
 		AllowedPolicyIds:   rowState.AllowedPolicyIDs,
 		BlockedPolicyIds:   rowState.BlockedPolicyIDs,
 	}

@@ -247,20 +247,21 @@ type ListShadowMCPInventoryResponseBody struct {
 // GetShadowMCPInventoryServerResponseBody is the type of the "access" service
 // "getShadowMCPInventoryServer" endpoint HTTP response body.
 type GetShadowMCPInventoryServerResponseBody struct {
-	CanonicalServerURL string                                        `form:"canonical_server_url" json:"canonical_server_url" xml:"canonical_server_url"`
-	ServerSlug         string                                        `form:"server_slug" json:"server_slug" xml:"server_slug"`
-	URLHost            string                                        `form:"url_host" json:"url_host" xml:"url_host"`
-	ServerName         *string                                       `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
-	FirstSeen          string                                        `form:"first_seen" json:"first_seen" xml:"first_seen"`
-	LastSeen           string                                        `form:"last_seen" json:"last_seen" xml:"last_seen"`
-	LastCalled         *string                                       `form:"last_called,omitempty" json:"last_called,omitempty" xml:"last_called,omitempty"`
-	ObservedUseCount   int                                           `form:"observed_use_count" json:"observed_use_count" xml:"observed_use_count"`
-	UserCount          int                                           `form:"user_count" json:"user_count" xml:"user_count"`
-	TopUsers           []string                                      `form:"top_users" json:"top_users" xml:"top_users"`
-	Access             string                                        `form:"access" json:"access" xml:"access"`
-	RequestCount       int                                           `form:"request_count" json:"request_count" xml:"request_count"`
-	LatestRequest      *ShadowMCPInventoryRequestSummaryResponseBody `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
-	AllowedPolicyIds   []string                                      `form:"allowed_policy_ids" json:"allowed_policy_ids" xml:"allowed_policy_ids"`
+	CanonicalServerURL string                                         `form:"canonical_server_url" json:"canonical_server_url" xml:"canonical_server_url"`
+	ServerSlug         string                                         `form:"server_slug" json:"server_slug" xml:"server_slug"`
+	URLHost            string                                         `form:"url_host" json:"url_host" xml:"url_host"`
+	ServerName         *string                                        `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
+	FirstSeen          string                                         `form:"first_seen" json:"first_seen" xml:"first_seen"`
+	LastSeen           string                                         `form:"last_seen" json:"last_seen" xml:"last_seen"`
+	LastCalled         *string                                        `form:"last_called,omitempty" json:"last_called,omitempty" xml:"last_called,omitempty"`
+	ObservedUseCount   int                                            `form:"observed_use_count" json:"observed_use_count" xml:"observed_use_count"`
+	UserCount          int                                            `form:"user_count" json:"user_count" xml:"user_count"`
+	TopUsers           []string                                       `form:"top_users" json:"top_users" xml:"top_users"`
+	Access             string                                         `form:"access" json:"access" xml:"access"`
+	RequestCount       int                                            `form:"request_count" json:"request_count" xml:"request_count"`
+	LatestRequest      *ShadowMCPInventoryRequestSummaryResponseBody  `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
+	ApprovalRequest    *ShadowMCPInventoryApprovalRequestResponseBody `form:"approval_request,omitempty" json:"approval_request,omitempty" xml:"approval_request,omitempty"`
+	AllowedPolicyIds   []string                                       `form:"allowed_policy_ids" json:"allowed_policy_ids" xml:"allowed_policy_ids"`
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string `form:"blocked_policy_ids" json:"blocked_policy_ids" xml:"blocked_policy_ids"`
@@ -277,10 +278,11 @@ type ListShadowMCPInventoryUsersResponseBody struct {
 // UpsertShadowMCPInventoryPolicyBypassResponseBody is the type of the "access"
 // service "upsertShadowMCPInventoryPolicyBypass" endpoint HTTP response body.
 type UpsertShadowMCPInventoryPolicyBypassResponseBody struct {
-	Access           string                                        `form:"access" json:"access" xml:"access"`
-	RequestCount     int                                           `form:"request_count" json:"request_count" xml:"request_count"`
-	LatestRequest    *ShadowMCPInventoryRequestSummaryResponseBody `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
-	AllowedPolicyIds []string                                      `form:"allowed_policy_ids" json:"allowed_policy_ids" xml:"allowed_policy_ids"`
+	Access           string                                         `form:"access" json:"access" xml:"access"`
+	RequestCount     int                                            `form:"request_count" json:"request_count" xml:"request_count"`
+	LatestRequest    *ShadowMCPInventoryRequestSummaryResponseBody  `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
+	ApprovalRequest  *ShadowMCPInventoryApprovalRequestResponseBody `form:"approval_request,omitempty" json:"approval_request,omitempty" xml:"approval_request,omitempty"`
+	AllowedPolicyIds []string                                       `form:"allowed_policy_ids" json:"allowed_policy_ids" xml:"allowed_policy_ids"`
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string `form:"blocked_policy_ids" json:"blocked_policy_ids" xml:"blocked_policy_ids"`
@@ -289,10 +291,11 @@ type UpsertShadowMCPInventoryPolicyBypassResponseBody struct {
 // DeleteShadowMCPInventoryPolicyBypassResponseBody is the type of the "access"
 // service "deleteShadowMCPInventoryPolicyBypass" endpoint HTTP response body.
 type DeleteShadowMCPInventoryPolicyBypassResponseBody struct {
-	Access           string                                        `form:"access" json:"access" xml:"access"`
-	RequestCount     int                                           `form:"request_count" json:"request_count" xml:"request_count"`
-	LatestRequest    *ShadowMCPInventoryRequestSummaryResponseBody `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
-	AllowedPolicyIds []string                                      `form:"allowed_policy_ids" json:"allowed_policy_ids" xml:"allowed_policy_ids"`
+	Access           string                                         `form:"access" json:"access" xml:"access"`
+	RequestCount     int                                            `form:"request_count" json:"request_count" xml:"request_count"`
+	LatestRequest    *ShadowMCPInventoryRequestSummaryResponseBody  `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
+	ApprovalRequest  *ShadowMCPInventoryApprovalRequestResponseBody `form:"approval_request,omitempty" json:"approval_request,omitempty" xml:"approval_request,omitempty"`
+	AllowedPolicyIds []string                                       `form:"allowed_policy_ids" json:"allowed_policy_ids" xml:"allowed_policy_ids"`
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string `form:"blocked_policy_ids" json:"blocked_policy_ids" xml:"blocked_policy_ids"`
@@ -301,10 +304,11 @@ type DeleteShadowMCPInventoryPolicyBypassResponseBody struct {
 // BlockShadowMCPInventoryServerResponseBody is the type of the "access"
 // service "blockShadowMCPInventoryServer" endpoint HTTP response body.
 type BlockShadowMCPInventoryServerResponseBody struct {
-	Access           string                                        `form:"access" json:"access" xml:"access"`
-	RequestCount     int                                           `form:"request_count" json:"request_count" xml:"request_count"`
-	LatestRequest    *ShadowMCPInventoryRequestSummaryResponseBody `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
-	AllowedPolicyIds []string                                      `form:"allowed_policy_ids" json:"allowed_policy_ids" xml:"allowed_policy_ids"`
+	Access           string                                         `form:"access" json:"access" xml:"access"`
+	RequestCount     int                                            `form:"request_count" json:"request_count" xml:"request_count"`
+	LatestRequest    *ShadowMCPInventoryRequestSummaryResponseBody  `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
+	ApprovalRequest  *ShadowMCPInventoryApprovalRequestResponseBody `form:"approval_request,omitempty" json:"approval_request,omitempty" xml:"approval_request,omitempty"`
+	AllowedPolicyIds []string                                       `form:"allowed_policy_ids" json:"allowed_policy_ids" xml:"allowed_policy_ids"`
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string `form:"blocked_policy_ids" json:"blocked_policy_ids" xml:"blocked_policy_ids"`
@@ -313,10 +317,11 @@ type BlockShadowMCPInventoryServerResponseBody struct {
 // UnblockShadowMCPInventoryServerResponseBody is the type of the "access"
 // service "unblockShadowMCPInventoryServer" endpoint HTTP response body.
 type UnblockShadowMCPInventoryServerResponseBody struct {
-	Access           string                                        `form:"access" json:"access" xml:"access"`
-	RequestCount     int                                           `form:"request_count" json:"request_count" xml:"request_count"`
-	LatestRequest    *ShadowMCPInventoryRequestSummaryResponseBody `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
-	AllowedPolicyIds []string                                      `form:"allowed_policy_ids" json:"allowed_policy_ids" xml:"allowed_policy_ids"`
+	Access           string                                         `form:"access" json:"access" xml:"access"`
+	RequestCount     int                                            `form:"request_count" json:"request_count" xml:"request_count"`
+	LatestRequest    *ShadowMCPInventoryRequestSummaryResponseBody  `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
+	ApprovalRequest  *ShadowMCPInventoryApprovalRequestResponseBody `form:"approval_request,omitempty" json:"approval_request,omitempty" xml:"approval_request,omitempty"`
+	AllowedPolicyIds []string                                       `form:"allowed_policy_ids" json:"allowed_policy_ids" xml:"allowed_policy_ids"`
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string `form:"blocked_policy_ids" json:"blocked_policy_ids" xml:"blocked_policy_ids"`
@@ -325,10 +330,11 @@ type UnblockShadowMCPInventoryServerResponseBody struct {
 // ResolveShadowMCPInventoryRequestResponseBody is the type of the "access"
 // service "resolveShadowMCPInventoryRequest" endpoint HTTP response body.
 type ResolveShadowMCPInventoryRequestResponseBody struct {
-	Access           string                                        `form:"access" json:"access" xml:"access"`
-	RequestCount     int                                           `form:"request_count" json:"request_count" xml:"request_count"`
-	LatestRequest    *ShadowMCPInventoryRequestSummaryResponseBody `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
-	AllowedPolicyIds []string                                      `form:"allowed_policy_ids" json:"allowed_policy_ids" xml:"allowed_policy_ids"`
+	Access           string                                         `form:"access" json:"access" xml:"access"`
+	RequestCount     int                                            `form:"request_count" json:"request_count" xml:"request_count"`
+	LatestRequest    *ShadowMCPInventoryRequestSummaryResponseBody  `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
+	ApprovalRequest  *ShadowMCPInventoryApprovalRequestResponseBody `form:"approval_request,omitempty" json:"approval_request,omitempty" xml:"approval_request,omitempty"`
+	AllowedPolicyIds []string                                       `form:"allowed_policy_ids" json:"allowed_policy_ids" xml:"allowed_policy_ids"`
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string `form:"blocked_policy_ids" json:"blocked_policy_ids" xml:"blocked_policy_ids"`
@@ -4528,20 +4534,21 @@ type ListRoleGrantResponseBody struct {
 // ShadowMCPInventoryServerResponseBody is used to define fields on response
 // body types.
 type ShadowMCPInventoryServerResponseBody struct {
-	CanonicalServerURL string                                        `form:"canonical_server_url" json:"canonical_server_url" xml:"canonical_server_url"`
-	ServerSlug         string                                        `form:"server_slug" json:"server_slug" xml:"server_slug"`
-	URLHost            string                                        `form:"url_host" json:"url_host" xml:"url_host"`
-	ServerName         *string                                       `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
-	FirstSeen          string                                        `form:"first_seen" json:"first_seen" xml:"first_seen"`
-	LastSeen           string                                        `form:"last_seen" json:"last_seen" xml:"last_seen"`
-	LastCalled         *string                                       `form:"last_called,omitempty" json:"last_called,omitempty" xml:"last_called,omitempty"`
-	ObservedUseCount   int                                           `form:"observed_use_count" json:"observed_use_count" xml:"observed_use_count"`
-	UserCount          int                                           `form:"user_count" json:"user_count" xml:"user_count"`
-	TopUsers           []string                                      `form:"top_users" json:"top_users" xml:"top_users"`
-	Access             string                                        `form:"access" json:"access" xml:"access"`
-	RequestCount       int                                           `form:"request_count" json:"request_count" xml:"request_count"`
-	LatestRequest      *ShadowMCPInventoryRequestSummaryResponseBody `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
-	AllowedPolicyIds   []string                                      `form:"allowed_policy_ids" json:"allowed_policy_ids" xml:"allowed_policy_ids"`
+	CanonicalServerURL string                                         `form:"canonical_server_url" json:"canonical_server_url" xml:"canonical_server_url"`
+	ServerSlug         string                                         `form:"server_slug" json:"server_slug" xml:"server_slug"`
+	URLHost            string                                         `form:"url_host" json:"url_host" xml:"url_host"`
+	ServerName         *string                                        `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
+	FirstSeen          string                                         `form:"first_seen" json:"first_seen" xml:"first_seen"`
+	LastSeen           string                                         `form:"last_seen" json:"last_seen" xml:"last_seen"`
+	LastCalled         *string                                        `form:"last_called,omitempty" json:"last_called,omitempty" xml:"last_called,omitempty"`
+	ObservedUseCount   int                                            `form:"observed_use_count" json:"observed_use_count" xml:"observed_use_count"`
+	UserCount          int                                            `form:"user_count" json:"user_count" xml:"user_count"`
+	TopUsers           []string                                       `form:"top_users" json:"top_users" xml:"top_users"`
+	Access             string                                         `form:"access" json:"access" xml:"access"`
+	RequestCount       int                                            `form:"request_count" json:"request_count" xml:"request_count"`
+	LatestRequest      *ShadowMCPInventoryRequestSummaryResponseBody  `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
+	ApprovalRequest    *ShadowMCPInventoryApprovalRequestResponseBody `form:"approval_request,omitempty" json:"approval_request,omitempty" xml:"approval_request,omitempty"`
+	AllowedPolicyIds   []string                                       `form:"allowed_policy_ids" json:"allowed_policy_ids" xml:"allowed_policy_ids"`
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string `form:"blocked_policy_ids" json:"blocked_policy_ids" xml:"blocked_policy_ids"`
@@ -4555,6 +4562,15 @@ type ShadowMCPInventoryRequestSummaryResponseBody struct {
 	RequesterUserID string `form:"requester_user_id" json:"requester_user_id" xml:"requester_user_id"`
 	RequesterEmail  string `form:"requester_email" json:"requester_email" xml:"requester_email"`
 	RequestedAt     string `form:"requested_at" json:"requested_at" xml:"requested_at"`
+}
+
+// ShadowMCPInventoryApprovalRequestResponseBody is used to define fields on
+// response body types.
+type ShadowMCPInventoryApprovalRequestResponseBody struct {
+	ID     string `form:"id" json:"id" xml:"id"`
+	Status string `form:"status" json:"status" xml:"status"`
+	// How many distinct people have asked for this server.
+	RequesterCount int `form:"requester_count" json:"requester_count" xml:"requester_count"`
 }
 
 // ShadowMCPInventoryUserResponseBody is used to define fields on response body
@@ -4952,6 +4968,9 @@ func NewGetShadowMCPInventoryServerResponseBody(res *access.ShadowMCPInventorySe
 	if res.LatestRequest != nil {
 		body.LatestRequest = marshalAccessShadowMCPInventoryRequestSummaryToShadowMCPInventoryRequestSummaryResponseBody(res.LatestRequest)
 	}
+	if res.ApprovalRequest != nil {
+		body.ApprovalRequest = marshalAccessShadowMCPInventoryApprovalRequestToShadowMCPInventoryApprovalRequestResponseBody(res.ApprovalRequest)
+	}
 	if res.AllowedPolicyIds != nil {
 		body.AllowedPolicyIds = make([]string, len(res.AllowedPolicyIds))
 		for i, val := range res.AllowedPolicyIds {
@@ -5004,6 +5023,9 @@ func NewUpsertShadowMCPInventoryPolicyBypassResponseBody(res *access.ShadowMCPIn
 	if res.LatestRequest != nil {
 		body.LatestRequest = marshalAccessShadowMCPInventoryRequestSummaryToShadowMCPInventoryRequestSummaryResponseBody(res.LatestRequest)
 	}
+	if res.ApprovalRequest != nil {
+		body.ApprovalRequest = marshalAccessShadowMCPInventoryApprovalRequestToShadowMCPInventoryApprovalRequestResponseBody(res.ApprovalRequest)
+	}
 	if res.AllowedPolicyIds != nil {
 		body.AllowedPolicyIds = make([]string, len(res.AllowedPolicyIds))
 		for i, val := range res.AllowedPolicyIds {
@@ -5033,6 +5055,9 @@ func NewDeleteShadowMCPInventoryPolicyBypassResponseBody(res *access.ShadowMCPIn
 	}
 	if res.LatestRequest != nil {
 		body.LatestRequest = marshalAccessShadowMCPInventoryRequestSummaryToShadowMCPInventoryRequestSummaryResponseBody(res.LatestRequest)
+	}
+	if res.ApprovalRequest != nil {
+		body.ApprovalRequest = marshalAccessShadowMCPInventoryApprovalRequestToShadowMCPInventoryApprovalRequestResponseBody(res.ApprovalRequest)
 	}
 	if res.AllowedPolicyIds != nil {
 		body.AllowedPolicyIds = make([]string, len(res.AllowedPolicyIds))
@@ -5064,6 +5089,9 @@ func NewBlockShadowMCPInventoryServerResponseBody(res *access.ShadowMCPInventory
 	if res.LatestRequest != nil {
 		body.LatestRequest = marshalAccessShadowMCPInventoryRequestSummaryToShadowMCPInventoryRequestSummaryResponseBody(res.LatestRequest)
 	}
+	if res.ApprovalRequest != nil {
+		body.ApprovalRequest = marshalAccessShadowMCPInventoryApprovalRequestToShadowMCPInventoryApprovalRequestResponseBody(res.ApprovalRequest)
+	}
 	if res.AllowedPolicyIds != nil {
 		body.AllowedPolicyIds = make([]string, len(res.AllowedPolicyIds))
 		for i, val := range res.AllowedPolicyIds {
@@ -5094,6 +5122,9 @@ func NewUnblockShadowMCPInventoryServerResponseBody(res *access.ShadowMCPInvento
 	if res.LatestRequest != nil {
 		body.LatestRequest = marshalAccessShadowMCPInventoryRequestSummaryToShadowMCPInventoryRequestSummaryResponseBody(res.LatestRequest)
 	}
+	if res.ApprovalRequest != nil {
+		body.ApprovalRequest = marshalAccessShadowMCPInventoryApprovalRequestToShadowMCPInventoryApprovalRequestResponseBody(res.ApprovalRequest)
+	}
 	if res.AllowedPolicyIds != nil {
 		body.AllowedPolicyIds = make([]string, len(res.AllowedPolicyIds))
 		for i, val := range res.AllowedPolicyIds {
@@ -5123,6 +5154,9 @@ func NewResolveShadowMCPInventoryRequestResponseBody(res *access.ShadowMCPInvent
 	}
 	if res.LatestRequest != nil {
 		body.LatestRequest = marshalAccessShadowMCPInventoryRequestSummaryToShadowMCPInventoryRequestSummaryResponseBody(res.LatestRequest)
+	}
+	if res.ApprovalRequest != nil {
+		body.ApprovalRequest = marshalAccessShadowMCPInventoryApprovalRequestToShadowMCPInventoryApprovalRequestResponseBody(res.ApprovalRequest)
 	}
 	if res.AllowedPolicyIds != nil {
 		body.AllowedPolicyIds = make([]string, len(res.AllowedPolicyIds))

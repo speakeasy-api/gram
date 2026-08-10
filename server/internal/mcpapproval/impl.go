@@ -50,20 +50,20 @@ const defaultPageLimit = 50
 // maxPageLimit caps a caller-supplied page size.
 const maxPageLimit = 200
 
-// decisionApproved and decisionDenied are the only decisions accepted.
-// Validated here rather than with a database CHECK, per the schema
-// conventions, so the set can change without a migration.
-const (
-	decisionApproved = "approved"
-	decisionDenied   = "denied"
-)
-
 // targetKindServerURL and targetKindStdioCommand are the reference namespaces
 // a request may name. Validated here rather than with a database CHECK, per
 // the schema conventions.
 const (
 	targetKindServerURL    = "server_url"
 	targetKindStdioCommand = "stdio_command"
+)
+
+// decisionApproved and decisionDenied are the only decisions accepted.
+// Validated here rather than with a database CHECK, per the schema
+// conventions, so the set can change without a migration.
+const (
+	decisionApproved = "approved"
+	decisionDenied   = "denied"
 )
 
 // statusRequested is the status a raised or reopened request carries.
