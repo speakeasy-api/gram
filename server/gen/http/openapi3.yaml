@@ -53907,6 +53907,9 @@ components:
                     type: integer
                     description: How many people have asked for this server.
                     format: int64
+                server_slug:
+                    type: string
+                    description: The Shadow MCP inventory page slug for a server_url target — the same identifier the inventory derives from the canonical URL, so a request links to the server page it describes. Absent for stdio targets.
                 status:
                     type: string
                     description: The request's current status.
@@ -69189,6 +69192,27 @@ components:
                     type: string
                     description: The user_session_issuer id to link, or null to unlink.
                     format: uuid
+        ShadowMCPInventoryApprovalRequest:
+            type: object
+            properties:
+                id:
+                    type: string
+                    format: uuid
+                requester_count:
+                    type: integer
+                    description: How many distinct people have asked for this server.
+                    format: int64
+                status:
+                    type: string
+                    enum:
+                        - requested
+                        - approved
+                        - denied
+            description: The MCP approval request tracking a server. Decisions recorded on it are what allow or block the server.
+            required:
+                - id
+                - status
+                - requester_count
         ShadowMCPInventoryPolicyBypassForm:
             type: object
             properties:
@@ -69242,6 +69266,8 @@ components:
                     type: array
                     items:
                         type: string
+                approval_request:
+                    $ref: '#/components/schemas/ShadowMCPInventoryApprovalRequest'
                 blocked_policy_ids:
                     type: array
                     items:
@@ -69301,6 +69327,8 @@ components:
                     type: array
                     items:
                         type: string
+                approval_request:
+                    $ref: '#/components/schemas/ShadowMCPInventoryApprovalRequest'
                 blocked_policy_ids:
                     type: array
                     items:

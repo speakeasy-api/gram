@@ -13,6 +13,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_approval"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
 // timeFormat is how timestamps cross the API boundary.
@@ -24,10 +25,19 @@ const timeFormat = time.RFC3339
 // absent rather than as an empty string. The two must not be conflated: one
 // means we could not place the server, the other would read as a blank field.
 func summaryView(request requestFields) *gen.ApprovalRequestSummary {
+	// The slug is derived from the same canonical URL the inventory pages
+	// key on, so a server_url request always links to its server page.
+	var serverSlug *string
+	if request.TargetKind == targetKindServerURL && request.TargetKey != "" {
+		slug := shadowmcp.ServerSlug(request.TargetKey)
+		serverSlug = &slug
+	}
+
 	return &gen.ApprovalRequestSummary{
 		ID:             request.ID.String(),
 		TargetKind:     request.TargetKind,
 		TargetRaw:      request.TargetRaw,
+		ServerSlug:     serverSlug,
 		ArtifactRef:    fromPGText(request.ArtifactRef),
 		VersionPinned:  request.VersionPinned,
 		Status:         request.Status,
@@ -44,6 +54,7 @@ type requestFields struct {
 	ID             uuid.UUID
 	TargetKind     string
 	TargetRaw      string
+	TargetKey      string
 	ArtifactRef    pgtype.Text
 	VersionPinned  bool
 	Status         string
@@ -54,7 +65,7 @@ type requestFields struct {
 
 func fromListRow(row repo.ListApprovalRequestsRow) requestFields {
 	return requestFields{
-		ID: row.ID, TargetKind: row.TargetKind, TargetRaw: row.TargetRaw,
+		ID: row.ID, TargetKind: row.TargetKind, TargetRaw: row.TargetRaw, TargetKey: row.TargetKey,
 		ArtifactRef: row.ArtifactRef, VersionPinned: row.VersionPinned,
 		Status: row.Status, RequesterCount: row.RequesterCount,
 		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
@@ -63,7 +74,7 @@ func fromListRow(row repo.ListApprovalRequestsRow) requestFields {
 
 func fromGetRow(row repo.GetApprovalRequestRow) requestFields {
 	return requestFields{
-		ID: row.ID, TargetKind: row.TargetKind, TargetRaw: row.TargetRaw,
+		ID: row.ID, TargetKind: row.TargetKind, TargetRaw: row.TargetRaw, TargetKey: row.TargetKey,
 		ArtifactRef: row.ArtifactRef, VersionPinned: row.VersionPinned,
 		Status: row.Status, RequesterCount: row.RequesterCount,
 		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,

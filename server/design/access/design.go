@@ -862,6 +862,19 @@ var UpdateShadowMCPInventoryServerNameForm = Type("UpdateShadowMCPInventoryServe
 	Attribute("name", String, func() { MaxLength(255) })
 })
 
+var ShadowMCPInventoryApprovalRequestModel = Type("ShadowMCPInventoryApprovalRequest", func() {
+	Description("The MCP approval request tracking a server. Decisions recorded on it are what allow or block the server.")
+	Required("id", "status", "requester_count")
+
+	Attribute("id", String, func() {
+		Format(FormatUUID)
+	})
+	Attribute("status", String, func() {
+		Enum("requested", "approved", "denied")
+	})
+	Attribute("requester_count", Int, "How many distinct people have asked for this server.")
+})
+
 var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
 	Required("canonical_server_url", "server_slug", "url_host", "first_seen", "last_seen", "observed_use_count", "user_count", "top_users", "access", "request_count", "allowed_policy_ids", "blocked_policy_ids")
 
@@ -886,6 +899,7 @@ var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
 	})
 	Attribute("request_count", Int)
 	Attribute("latest_request", ShadowMCPInventoryRequestSummaryModel)
+	Attribute("approval_request", ShadowMCPInventoryApprovalRequestModel)
 	Attribute("allowed_policy_ids", ArrayOf(String))
 	Attribute("blocked_policy_ids", ArrayOf(String), "Enabled blocking policies that block this server via a risk_policy:block grant (allow_all policies only).")
 })
@@ -927,6 +941,7 @@ var ShadowMCPInventoryURLStateModel = Type("ShadowMCPInventoryURLState", func() 
 	Attribute("access", String)
 	Attribute("request_count", Int)
 	Attribute("latest_request", ShadowMCPInventoryRequestSummaryModel)
+	Attribute("approval_request", ShadowMCPInventoryApprovalRequestModel)
 	Attribute("allowed_policy_ids", ArrayOf(String))
 	Attribute("blocked_policy_ids", ArrayOf(String), "Enabled blocking policies that block this server via a risk_policy:block grant (allow_all policies only).")
 })

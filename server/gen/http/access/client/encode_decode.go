@@ -5460,6 +5460,9 @@ func unmarshalShadowMCPInventoryServerResponseBodyToAccessShadowMCPInventoryServ
 	if v.LatestRequest != nil {
 		res.LatestRequest = unmarshalShadowMCPInventoryRequestSummaryResponseBodyToAccessShadowMCPInventoryRequestSummary(v.LatestRequest)
 	}
+	if v.ApprovalRequest != nil {
+		res.ApprovalRequest = unmarshalShadowMCPInventoryApprovalRequestResponseBodyToAccessShadowMCPInventoryApprovalRequest(v.ApprovalRequest)
+	}
 	res.AllowedPolicyIds = make([]string, len(v.AllowedPolicyIds))
 	for i, val := range v.AllowedPolicyIds {
 		res.AllowedPolicyIds[i] = val
@@ -5485,6 +5488,22 @@ func unmarshalShadowMCPInventoryRequestSummaryResponseBodyToAccessShadowMCPInven
 		RequesterUserID: *v.RequesterUserID,
 		RequesterEmail:  *v.RequesterEmail,
 		RequestedAt:     *v.RequestedAt,
+	}
+
+	return res
+}
+
+// unmarshalShadowMCPInventoryApprovalRequestResponseBodyToAccessShadowMCPInventoryApprovalRequest
+// builds a value of type *access.ShadowMCPInventoryApprovalRequest from a
+// value of type *ShadowMCPInventoryApprovalRequestResponseBody.
+func unmarshalShadowMCPInventoryApprovalRequestResponseBodyToAccessShadowMCPInventoryApprovalRequest(v *ShadowMCPInventoryApprovalRequestResponseBody) *access.ShadowMCPInventoryApprovalRequest {
+	if v == nil {
+		return nil
+	}
+	res := &access.ShadowMCPInventoryApprovalRequest{
+		ID:             *v.ID,
+		Status:         *v.Status,
+		RequesterCount: *v.RequesterCount,
 	}
 
 	return res

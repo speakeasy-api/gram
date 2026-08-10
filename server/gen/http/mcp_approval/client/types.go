@@ -649,6 +649,10 @@ type ApprovalRequestSummaryResponseBody struct {
 	TargetKind *string `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
 	// The reference exactly as the requester named it.
 	TargetRaw *string `form:"target_raw,omitempty" json:"target_raw,omitempty" xml:"target_raw,omitempty"`
+	// The Shadow MCP inventory page slug for a server_url target — the same
+	// identifier the inventory derives from the canonical URL, so a request links
+	// to the server page it describes. Absent for stdio targets.
+	ServerSlug *string `form:"server_slug,omitempty" json:"server_slug,omitempty" xml:"server_slug,omitempty"`
 	// The resolved artifact identity. Absent when the server could not be
 	// identified, which must surface as unknown rather than as an absence of
 	// findings.
