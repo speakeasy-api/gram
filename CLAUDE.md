@@ -148,6 +148,7 @@ Activate a skill when your task falls within its scope.
 | `datadog`                         | Investigating errors, performance, incidents, or telemetry via Datadog          |
 | `datadog-insights`                | Running the full Gram production health digest and posting it to Slack          |
 | `spec`                            | Interviewing user in-depth to produce a detailed spec before building           |
+| `tracing-data-paths`              | Scanning/detecting/flagging content the system already stores; verdict columns  |
 | `page-toolbar`                    | Dashboard list page search, filters, sort, or view controls                     |
 | `gram-playwright-cli`             | Browser automation, dashboard inspection, screenshots, and page interaction     |
 | `pr`                              | Creating a Pull Request for current changes                                     |
