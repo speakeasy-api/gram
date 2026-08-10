@@ -34,7 +34,7 @@ import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
 import ExploreDemo from "./pages/demo/ExploreDemo";
-import TrialEnded from "./pages/demo/TrialEnded";
+import TalkToUs from "./pages/demo/TalkToUs";
 import SignUp from "./pages/login/SignUp";
 import { LogsRoot } from "./pages/logs/Logs";
 import { BuiltInMCPDetailPage } from "./pages/mcp/BuiltInMCPDetailPage";
@@ -215,7 +215,7 @@ const ROUTE_STRUCTURE = {
   talkToUs: {
     title: "Talk to us",
     url: "/talk-to-us",
-    component: TrialEnded,
+    component: TalkToUs,
     unauthenticated: true,
   },
   signUp: {
