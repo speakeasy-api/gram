@@ -142,9 +142,8 @@ export function DemoBookingFlow({
               theme: "light",
               name,
               email,
-              // Prefill key must match the booking question's identifier on the
-              // Cal event (see CAL_DEMO_LINK).
-              company: companyName,
+              // Must match the booking question's identifier on the Cal event.
+              "Company-Name": companyName,
             }}
             style={{ width: "100%", height: "100%", overflow: "auto" }}
           />
