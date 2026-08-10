@@ -264,11 +264,18 @@ function EnsureServerReview({
   const project = useProject();
   const queryClient = useQueryClient();
   const ensure = useEnsureMcpServerReviewMutation();
-  const ensureRef = useRef(false);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  // Keyed by server and project (and retry attempt), not a bare boolean, so
+  // navigating from one unreviewed server to another gathers for the new one
+  // instead of being swallowed by the first mount's guard.
+  const startedRunRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (ensureRef.current) return;
-    ensureRef.current = true;
+    const runKey = `${project.slug}:${canonicalServerUrl}:${attempt}`;
+    if (startedRunRef.current === runKey) return;
+    startedRunRef.current = runKey;
+    setFailed(false);
     void (async () => {
       try {
         await ensure.mutateAsync({
@@ -278,7 +285,7 @@ function EnsureServerReview({
           },
         });
       } catch {
-        toast.error("Evidence could not be gathered for this server");
+        setFailed(true);
         return;
       }
       await Promise.all([
@@ -286,7 +293,28 @@ function EnsureServerReview({
         invalidateAllShadowMCPInventory(queryClient),
       ]);
     })();
-  }, [canonicalServerUrl, ensure, project.slug, queryClient]);
+  }, [attempt, canonicalServerUrl, ensure, project.slug, queryClient]);
+
+  if (failed) {
+    return (
+      <div className="bg-muted/20 flex min-h-24 flex-col items-center justify-center border border-dashed px-6 py-8 text-center">
+        <Text variant="body" className="font-medium">
+          Evidence could not be gathered
+        </Text>
+        <Text muted small className="mt-1 max-w-md">
+          Collecting this server's evidence failed. It may be a temporary
+          problem — try again.
+        </Text>
+        <Button
+          className="mt-3"
+          variant="secondary"
+          onClick={() => setAttempt((current) => current + 1)}
+        >
+          <Button.Text>Retry</Button.Text>
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-muted/20 flex min-h-24 flex-col items-center justify-center border border-dashed px-6 py-8 text-center">
@@ -483,6 +511,9 @@ export default function ShadowMCPServerDetail(): JSX.Element {
       canonicalServerUrl: server.canonicalServerUrl,
       displayName: serverDisplayName,
       approvalRequestId: server.approvalRequest?.id,
+      // A pending legacy bypass request rides along so the sheet promotes it
+      // into the review and the decision drains it too.
+      pendingBypassRequestId: server.latestRequest?.id,
     });
   };
 

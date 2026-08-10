@@ -22,6 +22,7 @@ import type { Role } from "@gram/client/models/components/role.js";
 import { useCreateMcpApprovalRequestMutation } from "@gram/client/react-query/createMcpApprovalRequest.js";
 import { invalidateGetMcpApprovalRequest } from "@gram/client/react-query/getMcpApprovalRequest.js";
 import { invalidateAllListMcpApprovalRequests } from "@gram/client/react-query/listMcpApprovalRequests.js";
+import { usePromoteMcpApprovalRequestMutation } from "@gram/client/react-query/promoteMcpApprovalRequest.js";
 import { useRecordMcpApprovalDecisionMutation } from "@gram/client/react-query/recordMcpApprovalDecision.js";
 import { invalidateAllShadowMCPInventory } from "@gram/client/react-query/shadowMCPInventory.js";
 import { invalidateAllShadowMCPInventoryServer } from "@gram/client/react-query/shadowMCPInventoryServer.js";
@@ -34,12 +35,15 @@ import { toast } from "sonner";
  * identity everything keys on), a name to address it by, and — when a review
  * already exists — the request the decision attaches to. Without a request id
  * the sheet opens one first, so proactive decisions travel the same road as
- * requested ones.
+ * requested ones. A pending legacy bypass request is promoted into the review
+ * first, so the original ask (requester and justification) attaches to it and
+ * resolves with the decision instead of staying pending forever.
  */
 export type DecideAccessTarget = {
   canonicalServerUrl: string;
   displayName: string;
   approvalRequestId?: string;
+  pendingBypassRequestId?: string;
 };
 
 export type AccessDecision = "approved" | "denied";
@@ -110,11 +114,18 @@ export function DecideAccessSheet({
   const project = useProject();
   const queryClient = useQueryClient();
   const createRequest = useCreateMcpApprovalRequestMutation();
+  const promoteRequest = usePromoteMcpApprovalRequestMutation();
   const decide = useRecordMcpApprovalDecisionMutation();
   const [decision, setDecision] = useState<AccessDecision>("approved");
   const [audience, setAudience] = useState<string[]>([]);
   const [rationale, setRationale] = useState(RATIONALE_PREFILL.approved);
   const [rationaleEdited, setRationaleEdited] = useState(false);
+  // The request a previous submit already opened or promoted, so a retry
+  // after a failed decision lands on the same review instead of opening
+  // another.
+  const [openedRequestId, setOpenedRequestId] = useState<string | undefined>(
+    undefined,
+  );
 
   useEffect(() => {
     if (!open) {
@@ -122,6 +133,7 @@ export function DecideAccessSheet({
       setAudience([]);
       setRationale(RATIONALE_PREFILL.approved);
       setRationaleEdited(false);
+      setOpenedRequestId(undefined);
     }
   }, [open]);
 
@@ -131,7 +143,8 @@ export function DecideAccessSheet({
   // approving clears the block for everyone — so the audience picker only
   // appears when a block-by-default policy can scope who passes.
   const audienceSelectable = disposition !== "allow_all";
-  const isSubmitting = createRequest.isPending || decide.isPending;
+  const isSubmitting =
+    createRequest.isPending || promoteRequest.isPending || decide.isPending;
   const rationaleMissing = rationale.trim().length === 0;
 
   const selectDecision = (next: AccessDecision) => {
@@ -143,9 +156,22 @@ export function DecideAccessSheet({
 
   const submit = async () => {
     const trimmedRationale = rationale.trim();
-    let requestId = target.approvalRequestId;
+    let requestId = target.approvalRequestId ?? openedRequestId;
     try {
-      if (!requestId) {
+      if (target.pendingBypassRequestId && !openedRequestId) {
+        // A pending legacy ask exists: promote it so its requester and
+        // justification attach to the review and the ask itself resolves
+        // with this decision.
+        const summary = await promoteRequest.mutateAsync({
+          request: {
+            gramProject: project.slug,
+            promoteRequestBody: {
+              riskPolicyBypassRequestId: target.pendingBypassRequestId,
+            },
+          },
+        });
+        requestId = summary.id;
+      } else if (!requestId) {
         const summary = await createRequest.mutateAsync({
           request: {
             gramProject: project.slug,
@@ -158,6 +184,12 @@ export function DecideAccessSheet({
         });
         requestId = summary.id;
       }
+    } catch {
+      toast.error("Opening the access request failed — nothing was changed");
+      return;
+    }
+    setOpenedRequestId(requestId);
+    try {
       await decide.mutateAsync({
         request: {
           gramProject: project.slug,
@@ -173,7 +205,22 @@ export function DecideAccessSheet({
         },
       });
     } catch {
-      toast.error("Recording the decision failed — nothing was changed");
+      // The request row exists (and now sits in the queue); only the
+      // decision failed. Saying "nothing changed" here would be a lie.
+      toast.error(
+        target.approvalRequestId
+          ? "Recording the decision failed — the request is unchanged"
+          : "The access request was opened, but recording the decision failed — retry to decide it",
+      );
+      if (!target.approvalRequestId || target.pendingBypassRequestId) {
+        // This submit changed request state before failing; refresh the
+        // affected views so the pending request is visible.
+        await Promise.all([
+          invalidateAllShadowMCPInventory(queryClient),
+          invalidateAllShadowMCPInventoryServer(queryClient),
+          invalidateAllListMcpApprovalRequests(queryClient),
+        ]);
+      }
       return;
     }
     await Promise.all([

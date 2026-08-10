@@ -62,19 +62,12 @@ WHERE r.project_id = @project_id
 -- Every server_url review in a project, for resolving a server page slug to
 -- the request tracking it. A server known only through a request has no
 -- telemetry inventory row, so this is the page's fallback identity source.
+-- The slug is a hash derived from target_key, so it cannot be matched in SQL;
+-- the scan is bounded by project and carries only the columns the fallback
+-- reads, with no per-row aggregates.
 SELECT
-  r.id
-  , r.target_key
-  , r.status
-  , r.created_at
+  r.target_key
   , r.updated_at
-  , (
-      SELECT count(*)
-      FROM mcp_approval_request_requesters req
-      WHERE req.mcp_approval_request_id = r.id
-        AND req.project_id = r.project_id
-        AND req.deleted IS FALSE
-    ) AS requester_count
 FROM mcp_approval_requests r
 WHERE r.project_id = @project_id
   AND r.target_kind = 'server_url'
@@ -246,7 +239,7 @@ WHERE id = @id
 -- Locking read used inside the decision transaction. Serialises concurrent
 -- decisions on the same request, so the request's status always matches the
 -- newest decision rather than whichever transaction happened to commit last.
-SELECT id, organization_id, target_kind, target_raw, target_key, status, current_evidence, evidence_version
+SELECT id, organization_id, target_kind, target_raw, target_key, status, current_evidence, evidence_version, risk_policy_bypass_request_id
 FROM mcp_approval_requests
 WHERE id = @id
   AND project_id = @project_id

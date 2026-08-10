@@ -11,6 +11,7 @@ import { DecideAccessSheet } from "./DecideAccessSheet";
 
 const mocks = vi.hoisted(() => ({
   createMutateAsync: vi.fn(),
+  promoteMutateAsync: vi.fn(),
   decideMutateAsync: vi.fn(),
   invalidateInventory: vi.fn(),
   invalidateInventoryServer: vi.fn(),
@@ -32,6 +33,13 @@ vi.mock("@gram/client/react-query/createMcpApprovalRequest.js", () => ({
   useCreateMcpApprovalRequestMutation: () => ({
     isPending: false,
     mutateAsync: mocks.createMutateAsync,
+  }),
+}));
+
+vi.mock("@gram/client/react-query/promoteMcpApprovalRequest.js", () => ({
+  usePromoteMcpApprovalRequestMutation: () => ({
+    isPending: false,
+    mutateAsync: mocks.promoteMutateAsync,
   }),
 }));
 
@@ -93,6 +101,7 @@ function renderSheet(
 describe("DecideAccessSheet", () => {
   beforeEach(() => {
     mocks.createMutateAsync.mockResolvedValue({ id: "created-request-id" });
+    mocks.promoteMutateAsync.mockResolvedValue({ id: "promoted-request-id" });
     mocks.decideMutateAsync.mockResolvedValue({});
   });
 
@@ -148,6 +157,36 @@ describe("DecideAccessSheet", () => {
         request: expect.objectContaining({
           recordDecisionRequestBody: expect.objectContaining({
             id: "created-request-id",
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("promotes a pending legacy request into the review before deciding", async () => {
+    renderSheet({
+      target: { ...target, pendingBypassRequestId: "legacy-bypass-id" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve Server" }));
+
+    await waitFor(() => {
+      expect(mocks.decideMutateAsync).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.createMutateAsync).not.toHaveBeenCalled();
+    expect(mocks.promoteMutateAsync).toHaveBeenCalledWith({
+      request: {
+        gramProject: "test-project",
+        promoteRequestBody: {
+          riskPolicyBypassRequestId: "legacy-bypass-id",
+        },
+      },
+    });
+    expect(mocks.decideMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          recordDecisionRequestBody: expect.objectContaining({
+            id: "promoted-request-id",
           }),
         }),
       }),

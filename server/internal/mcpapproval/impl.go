@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -724,7 +725,7 @@ func (s *Service) requestDetail(ctx context.Context, projectID uuid.UUID, reques
 }
 
 func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisionPayload) (*gen.ApprovalDecision, error) {
-	projectID, _, err := s.project(ctx, authz.ScopeMCPApprovalDecide)
+	projectID, organizationID, err := s.project(ctx, authz.ScopeMCPApprovalDecide)
 	if err != nil {
 		return nil, err
 	}
@@ -759,6 +760,39 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid research report id")
 		}
 		citedReportID = uuid.NullUUID{UUID: reportID, Valid: true}
+	}
+
+	granted := payload.GrantedPrincipalUrns
+	if payload.Decision == decisionDenied {
+		// A denial grants nobody anything, whatever the caller sent.
+		granted = nil
+	}
+	if payload.Decision == decisionApproved && len(granted) == 0 {
+		// An approval that names no principals covers everyone. The resolved
+		// all-users principal is stored rather than an empty set, so the
+		// decision row says who was actually given access instead of leaving
+		// a blank the reader must know the default for.
+		granted = []string{authz.AllUsersPrincipal().String()}
+	}
+	if granted == nil {
+		granted = []string{}
+	}
+
+	// Parsed and validated before the transaction: a bad principal is the
+	// caller's error and must cost no transaction — and since these URNs
+	// become enforcement grants below, a principal that does not resolve in
+	// the caller's organization would record an audience the grants can never
+	// enforce, so it is rejected rather than stored.
+	grantedPrincipals := make([]urn.Principal, 0, len(granted))
+	for _, principalURN := range granted {
+		principal, err := urn.ParsePrincipal(principalURN)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid granted principal urn")
+		}
+		if err := authz.ValidatePrincipal(ctx, s.db, organizationID, principal); err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "granted principal does not resolve in this organization")
+		}
+		grantedPrincipals = append(grantedPrincipals, principal)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -798,35 +832,6 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "error reading research report").LogError(ctx, s.logger)
 		}
-	}
-
-	granted := payload.GrantedPrincipalUrns
-	if payload.Decision == decisionDenied {
-		// A denial grants nobody anything, whatever the caller sent.
-		granted = nil
-	}
-	if payload.Decision == decisionApproved && len(granted) == 0 {
-		// An approval that names no principals covers everyone. The resolved
-		// all-users principal is stored rather than an empty set, so the
-		// decision row says who was actually given access instead of leaving
-		// a blank the reader must know the default for.
-		granted = []string{authz.AllUsersPrincipal().String()}
-	}
-	if granted == nil {
-		granted = []string{}
-	}
-
-	// Parsed before the transaction: a malformed principal URN is the
-	// caller's error and must cost no transaction — and since these URNs
-	// become enforcement grants below, they can no longer be stored
-	// unvalidated.
-	grantedPrincipals := make([]urn.Principal, 0, len(granted))
-	for _, principalURN := range granted {
-		principal, err := urn.ParsePrincipal(principalURN)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid granted principal urn")
-		}
-		grantedPrincipals = append(grantedPrincipals, principal)
 	}
 
 	// The evidence is frozen as it stood on the request, and its version is
@@ -871,6 +876,24 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 		Status:    statusFor[payload.Decision],
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating approval request status").LogError(ctx, s.logger)
+	}
+
+	// A promoted request carries the legacy bypass request it grew out of.
+	// The decision resolves that ask too — in the same transaction — so a
+	// promoted request cannot stay pending in the legacy queue (and on the
+	// inventory's request counters) after its review is decided.
+	if request.RiskPolicyBypassRequestID.Valid {
+		if _, err := riskrepo.New(dbtx).UpdateRiskPolicyBypassRequestStatus(ctx, riskrepo.UpdateRiskPolicyBypassRequestStatusParams{
+			Status:               statusFor[payload.Decision],
+			DecidedBy:            conv.ToPGText(authCtx.UserID),
+			GrantedPrincipalUrns: granted,
+			ID:                   request.RiskPolicyBypassRequestID.UUID,
+			ProjectID:            projectID,
+		}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			// A since-deleted bypass request has nothing left to resolve; the
+			// decision on the review itself still stands.
+			return nil, oops.E(oops.CodeUnexpected, err, "error resolving promoted bypass request").LogError(ctx, s.logger)
+		}
 	}
 
 	// The decision enforces in the same transaction it records: the grant

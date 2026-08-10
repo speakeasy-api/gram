@@ -104,7 +104,7 @@ func TestRecordDecision_ApprovalGrantsNamedPrincipals(t *testing.T) {
 	serverURL := "https://mcp.example.com/scoped"
 	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: serverURL, status: "requested", evidence: "", version: 0})
 
-	principal := urn.NewPrincipal(urn.PrincipalTypeUser, "user-blast-radius").String()
+	principal := seedMemberPrincipal(t, ctx, ti, "user-blast-radius")
 	payload := decisionPayload(requestID.String(), "approved")
 	payload.GrantedPrincipalUrns = []string{principal}
 
@@ -169,12 +169,61 @@ func TestRecordDecision_NarrowApprovalRejectedUnderAllowAllOnly(t *testing.T) {
 	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: serverURL, status: "requested", evidence: "", version: 0})
 
 	payload := decisionPayload(requestID.String(), "approved")
-	payload.GrantedPrincipalUrns = []string{urn.NewPrincipal(urn.PrincipalTypeUser, "someone").String()}
+	payload.GrantedPrincipalUrns = []string{seedMemberPrincipal(t, ctx, ti, "someone")}
 
 	_, err := ti.service.RecordDecision(ctx, payload)
 	requireOopsCode(t, err, oops.CodeBadRequest)
 
 	// Nothing was written: the decision and the grant change fail together.
+	require.Empty(t, decisionsFor(t, ctx, ti, ti.projectID, requestID))
+	require.Equal(t, "requested", requestStatus(t, ctx, ti, ti.projectID, requestID))
+}
+
+// Deciding a promoted request resolves the legacy bypass request it grew out
+// of, in the same transaction: the original ask must not stay pending in the
+// legacy queue (and on the inventory's request counters) after its review is
+// decided.
+func TestRecordDecision_ResolvesPromotedBypassRequest(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	serverURL := "https://mcp.example.com/promoted-drain"
+	bypassID := seedBypassRequest(t, ctx, ti, ti.projectID, serverURL, "blocked-user", "hit the block")
+
+	promoted, err := ti.service.Promote(ctx, promotePayload(bypassID.String()))
+	require.NoError(t, err)
+
+	_, err = ti.service.RecordDecision(ctx, decisionPayload(promoted.ID, "approved"))
+	require.NoError(t, err)
+
+	bypass, err := riskrepo.New(ti.conn).GetRiskPolicyBypassRequest(ctx, riskrepo.GetRiskPolicyBypassRequestParams{
+		ID:        bypassID,
+		ProjectID: ti.projectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "approved", bypass.Status)
+	require.True(t, bypass.DecidedBy.Valid)
+}
+
+// A principal that does not resolve in the organization is rejected before
+// anything is written: a decision must never record an audience its grants
+// cannot enforce.
+func TestRecordDecision_UnresolvablePrincipalRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	seedShadowMCPPolicy(t, ctx, ti, "block_all")
+	serverURL := "https://mcp.example.com/unresolvable"
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: serverURL, status: "requested", evidence: "", version: 0})
+
+	payload := decisionPayload(requestID.String(), "approved")
+	payload.GrantedPrincipalUrns = []string{urn.NewPrincipal(urn.PrincipalTypeUser, "user-not-a-member").String()}
+
+	_, err := ti.service.RecordDecision(ctx, payload)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+
 	require.Empty(t, decisionsFor(t, ctx, ti, ti.projectID, requestID))
 	require.Equal(t, "requested", requestStatus(t, ctx, ti, ti.projectID, requestID))
 }
@@ -192,7 +241,7 @@ func TestRecordDecision_NarrowApprovalComposesAcrossDispositions(t *testing.T) {
 	serverURL := "https://mcp.example.com/composed"
 	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: serverURL, status: "requested", evidence: "", version: 0})
 
-	principal := urn.NewPrincipal(urn.PrincipalTypeUser, "narrow-user").String()
+	principal := seedMemberPrincipal(t, ctx, ti, "narrow-user")
 	payload := decisionPayload(requestID.String(), "approved")
 	payload.GrantedPrincipalUrns = []string{principal}
 

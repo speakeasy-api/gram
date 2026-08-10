@@ -37,6 +37,8 @@ import (
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 var infra *testenv.Environment
@@ -185,6 +187,30 @@ func withProject(t *testing.T, ctx context.Context, ti *testInstance, projectID 
 	}
 
 	return authztest.WithExactGrants(t, scoped, exact...)
+}
+
+// seedMemberPrincipal makes userID an active member of the test organization
+// and returns its principal URN. Decisions reject granted principals that do
+// not resolve in the organization, so tests naming one must seed it first.
+func seedMemberPrincipal(t *testing.T, ctx context.Context, ti *testInstance, userID string) string {
+	t.Helper()
+
+	_, err := usersrepo.New(ti.conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID:          userID,
+		Email:       userID + "@example.test",
+		DisplayName: userID,
+		PhotoUrl:    conv.PtrToPGText(nil),
+		Admin:       false,
+	})
+	require.NoError(t, err)
+
+	_, err = orgrepo.New(ti.conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: ti.organizationID,
+		UserID:         conv.ToPGText(userID),
+	})
+	require.NoError(t, err)
+
+	return urn.NewPrincipal(urn.PrincipalTypeUser, userID).String()
 }
 
 // seededRequest describes an approval request to plant.

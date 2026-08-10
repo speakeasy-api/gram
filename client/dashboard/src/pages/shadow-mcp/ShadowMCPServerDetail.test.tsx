@@ -24,9 +24,7 @@ const mocks = vi.hoisted(() => ({
   useShadowMCPInventoryUsers: vi.fn(),
   useUpdateShadowMCPInventoryServerNameMutation: vi.fn(),
   invalidateShadowMCPInventory: vi.fn(),
-  createApprovalRequest: vi.fn(),
   ensureServerReview: vi.fn(),
-  invalidateApprovalRequestList: vi.fn(),
   invalidateShadowMCPInventoryServer: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
@@ -180,22 +178,11 @@ vi.mock("@gram/client/react-query/shadowMCPInventory.js", () => ({
   invalidateAllShadowMCPInventory: mocks.invalidateShadowMCPInventory,
 }));
 
-vi.mock("@gram/client/react-query/createMcpApprovalRequest.js", () => ({
-  useCreateMcpApprovalRequestMutation: () => ({
-    isPending: false,
-    mutateAsync: mocks.createApprovalRequest,
-  }),
-}));
-
 vi.mock("@gram/client/react-query/ensureMcpServerReview.js", () => ({
   useEnsureMcpServerReviewMutation: () => ({
     isPending: false,
     mutateAsync: mocks.ensureServerReview,
   }),
-}));
-
-vi.mock("@gram/client/react-query/listMcpApprovalRequests.js", () => ({
-  invalidateAllListMcpApprovalRequests: mocks.invalidateApprovalRequestList,
 }));
 
 vi.mock(

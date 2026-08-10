@@ -27,16 +27,17 @@ func TestRecordDecision_Approve(t *testing.T) {
 
 	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
 
+	principal := seedMemberPrincipal(t, ctx, ti, "user-platform-lead")
 	payload := decisionPayload(requestID.String(), "approved")
 	payload.Rationale = "read-only tools, pinned version, vendor we already use"
-	payload.GrantedPrincipalUrns = []string{"role:platform"}
+	payload.GrantedPrincipalUrns = []string{principal}
 
 	decision, err := ti.service.RecordDecision(ctx, payload)
 	require.NoError(t, err)
 	require.Equal(t, "approved", decision.Decision)
 	require.NotEmpty(t, decision.DecidedBy)
 	require.NotNil(t, decision.Rationale)
-	require.Equal(t, []string{"role:platform"}, decision.GrantedPrincipalUrns)
+	require.Equal(t, []string{principal}, decision.GrantedPrincipalUrns)
 
 	require.Equal(t, "approved", requestStatus(t, ctx, ti, ti.projectID, requestID))
 }

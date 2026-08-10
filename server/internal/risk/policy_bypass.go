@@ -137,6 +137,26 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 	// feature (a forbidden intake error is that signal, not a failure).
 	if s.approvalIntake != nil && target.Kind == PolicyBypassTargetKindShadowMCPServer {
 		if serverURL := target.Dimensions[authz.SelectorKeyServerURL]; serverURL != "" {
+			// The legacy path below re-derives these bindings inside its
+			// transaction, but a successful admission returns before reaching
+			// it. Re-check them here: the token's project must belong to the
+			// caller's organization before its id is trusted as a write
+			// target, and a token whose project or policy has since been
+			// deleted must fail like any other stale link instead of opening
+			// an approval request for it.
+			if _, err := projectsrepo.New(s.db).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{
+				ID:             projectID,
+				OrganizationID: claims.OrganizationID,
+			}); err != nil {
+				return nil, oops.E(oops.CodeNotFound, err, "project not found").LogError(ctx, s.logger)
+			}
+			if _, err := repo.New(s.db).GetRiskPolicy(ctx, repo.GetRiskPolicyParams{
+				ID:        policyID,
+				ProjectID: projectID,
+			}); err != nil {
+				return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").LogError(ctx, s.logger)
+			}
+
 			admittedID, admittedStatus, err := s.approvalIntake.AdmitBlockedServer(
 				ctx,
 				claims.OrganizationID,

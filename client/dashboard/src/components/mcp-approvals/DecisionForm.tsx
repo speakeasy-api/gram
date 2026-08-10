@@ -77,8 +77,9 @@ export function DecisionForm({
         />
         <div className="border-border flex items-center justify-between gap-3 border-t px-3 py-2">
           <p className="text-muted-foreground text-xs">
-            Shared with the requester. The decision is enforced across every
-            blocking policy in this project.
+            Shared with the requester. This is the decision of record — a
+            command-line server has no URL for blocking policies to enforce
+            against automatically.
           </p>
           <div className="flex shrink-0 items-center gap-2">
             <Button

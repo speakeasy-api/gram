@@ -358,10 +358,13 @@ export function ResourceResults({
   onNavigate,
   query,
 }: GroupProps & { query: string }): JSX.Element {
-  const { hasAnyScope } = useRBAC();
+  const { hasAnyScope, hasScope } = useRBAC();
   // Risk resources are org:admin-gated on their own pages; mirror that here so
   // non-admins never fire the (forbidden) list calls.
   const isAdmin = hasAnyScope(["org:admin"]);
+  // Approval requests are readable by mcp_approval:read holders (the queue
+  // page gates on it), so reviewers without org:admin still see them here.
+  const canReadApprovals = hasScope("mcp_approval:read");
   // Detection rules are high-cardinality (dozens of built-ins), so they'd flood
   // the default view and fetch on open. Make them search-only: render (and
   // fetch) the group only once the user types, letting cmdk filter the results.
@@ -397,10 +400,12 @@ export function ResourceResults({
               <DetectionRulesGroup onNavigate={onNavigate} />
             </LazyGroup>
           )}
-          <LazyGroup>
-            <ApprovalRequestsGroup onNavigate={onNavigate} />
-          </LazyGroup>
         </>
+      )}
+      {canReadApprovals && (
+        <LazyGroup>
+          <ApprovalRequestsGroup onNavigate={onNavigate} />
+        </LazyGroup>
       )}
     </>
   );

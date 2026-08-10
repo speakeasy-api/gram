@@ -230,8 +230,13 @@ func (s *Service) shadowMCPServerFromApprovalRequest(ctx context.Context, organi
 			URLHost:            inventoryURL.URLHost,
 			ServerName:         "",
 			ServerNameOverride: "",
-			FirstSeen:          request.CreatedAt.Time,
-			LastSeen:           request.UpdatedAt.Time,
+			// This branch is reached only when telemetry has never observed
+			// the server, so it has no first/last seen: the zero times render
+			// as the established never-observed sentinel rather than passing
+			// the request's own timeline off as observations. The request
+			// timeline lives on the approval request itself.
+			FirstSeen:          time.Time{},
+			LastSeen:           time.Time{},
 			LastCalledUnixNano: 0,
 			UpdatedAt:          request.UpdatedAt.Time,
 		}

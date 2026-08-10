@@ -243,7 +243,7 @@ func (q *Queries) GetApprovalRequest(ctx context.Context, arg GetApprovalRequest
 }
 
 const getApprovalRequestForDecision = `-- name: GetApprovalRequestForDecision :one
-SELECT id, organization_id, target_kind, target_raw, target_key, status, current_evidence, evidence_version
+SELECT id, organization_id, target_kind, target_raw, target_key, status, current_evidence, evidence_version, risk_policy_bypass_request_id
 FROM mcp_approval_requests
 WHERE id = $1
   AND project_id = $2
@@ -257,14 +257,15 @@ type GetApprovalRequestForDecisionParams struct {
 }
 
 type GetApprovalRequestForDecisionRow struct {
-	ID              uuid.UUID
-	OrganizationID  string
-	TargetKind      string
-	TargetRaw       string
-	TargetKey       string
-	Status          string
-	CurrentEvidence []byte
-	EvidenceVersion int32
+	ID                        uuid.UUID
+	OrganizationID            string
+	TargetKind                string
+	TargetRaw                 string
+	TargetKey                 string
+	Status                    string
+	CurrentEvidence           []byte
+	EvidenceVersion           int32
+	RiskPolicyBypassRequestID uuid.NullUUID
 }
 
 // Locking read used inside the decision transaction. Serialises concurrent
@@ -282,6 +283,7 @@ func (q *Queries) GetApprovalRequestForDecision(ctx context.Context, arg GetAppr
 		&i.Status,
 		&i.CurrentEvidence,
 		&i.EvidenceVersion,
+		&i.RiskPolicyBypassRequestID,
 	)
 	return i, err
 }
@@ -663,18 +665,8 @@ func (q *Queries) ListResearchReportsForApprovalRequest(ctx context.Context, arg
 
 const listServerURLApprovalRequests = `-- name: ListServerURLApprovalRequests :many
 SELECT
-  r.id
-  , r.target_key
-  , r.status
-  , r.created_at
+  r.target_key
   , r.updated_at
-  , (
-      SELECT count(*)
-      FROM mcp_approval_request_requesters req
-      WHERE req.mcp_approval_request_id = r.id
-        AND req.project_id = r.project_id
-        AND req.deleted IS FALSE
-    ) AS requester_count
 FROM mcp_approval_requests r
 WHERE r.project_id = $1
   AND r.target_kind = 'server_url'
@@ -682,17 +674,16 @@ WHERE r.project_id = $1
 `
 
 type ListServerURLApprovalRequestsRow struct {
-	ID             uuid.UUID
-	TargetKey      string
-	Status         string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	RequesterCount int64
+	TargetKey string
+	UpdatedAt pgtype.Timestamptz
 }
 
 // Every server_url review in a project, for resolving a server page slug to
 // the request tracking it. A server known only through a request has no
 // telemetry inventory row, so this is the page's fallback identity source.
+// The slug is a hash derived from target_key, so it cannot be matched in SQL;
+// the scan is bounded by project and carries only the columns the fallback
+// reads, with no per-row aggregates.
 func (q *Queries) ListServerURLApprovalRequests(ctx context.Context, projectID uuid.UUID) ([]ListServerURLApprovalRequestsRow, error) {
 	rows, err := q.db.Query(ctx, listServerURLApprovalRequests, projectID)
 	if err != nil {
@@ -702,14 +693,7 @@ func (q *Queries) ListServerURLApprovalRequests(ctx context.Context, projectID u
 	var items []ListServerURLApprovalRequestsRow
 	for rows.Next() {
 		var i ListServerURLApprovalRequestsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.TargetKey,
-			&i.Status,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.RequesterCount,
-		); err != nil {
+		if err := rows.Scan(&i.TargetKey, &i.UpdatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

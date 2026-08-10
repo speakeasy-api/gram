@@ -209,6 +209,9 @@ export function ShadowMCPInventoryTable({
       displayName:
         server.serverName || server.urlHost || server.canonicalServerUrl,
       approvalRequestId: server.approvalRequest?.id,
+      // A pending legacy bypass request rides along so the sheet promotes it
+      // into the review and the decision drains it too.
+      pendingBypassRequestId: server.latestRequest?.id,
     });
   };
 
