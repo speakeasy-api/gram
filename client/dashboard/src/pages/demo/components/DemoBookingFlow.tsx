@@ -56,12 +56,27 @@ function useCalBranding() {
   }, []);
 }
 
+// Sits above the card on the cold-signup gate. The expired-trial gate passes
+// its own header instead.
+const DEFAULT_INTRO = (
+  <div className="text-center">
+    <p className="text-[16px] tracking-[0.0025em]">
+      Looks like your company is new to Speakeasy.
+    </p>
+    <p className="mt-1.5 text-[14px] tracking-[0.0025em] text-[var(--muted-strong)]">
+      Book time with our team to activate your account and get started.
+    </p>
+  </div>
+);
+
 export function DemoBookingFlow({
-  title = "Looks like your company is new to Speakeasy.",
-  subtitle = "Book time with our team to activate your account and get started.",
+  intro = DEFAULT_INTRO,
+  eventLabel = "AI transformation — 30 min",
 }: {
-  title?: string;
-  subtitle?: string;
+  /** Rendered above the booking card. Pass `null` to omit it entirely. */
+  intro?: React.ReactNode;
+  /** Names the meeting in the card header, which the embed itself hides. */
+  eventLabel?: string;
 } = {}): JSX.Element {
   const { session } = useSessionData();
   const telemetry = useTelemetry();
@@ -105,20 +120,13 @@ export function DemoBookingFlow({
 
   return (
     <div className="flex w-full flex-col items-center gap-6">
-      <div className="text-center">
-        <p className="text-[16px] tracking-[0.0025em]">{title}</p>
-        <p className="mt-1.5 text-[14px] tracking-[0.0025em] text-[var(--muted-strong)]">
-          {subtitle}
-        </p>
-      </div>
+      {intro}
 
       <div className="w-full overflow-hidden border border-[var(--edge)] bg-[var(--card)]">
         {/* The embed runs with `hideEventTypeDetails`, so this header is what
             names the meeting — as in the design frame. */}
         <div className="flex h-11 items-center justify-between border-b border-[var(--edge-soft)] px-[18px]">
-          <span className="auth-mono text-[12px]">
-            AI transformation — 30 min
-          </span>
+          <span className="auth-mono text-[12px]">{eventLabel}</span>
           <span className="auth-mono-text text-[12px] text-[var(--muted)]">
             Google Meet
           </span>

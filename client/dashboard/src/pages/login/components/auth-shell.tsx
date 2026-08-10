@@ -78,6 +78,7 @@ export function AuthShell({
   headerAction,
   contentClassName,
   showTerms = true,
+  singleColumn = false,
   children,
 }: {
   page: string;
@@ -86,6 +87,11 @@ export function AuthShell({
   /** Overrides the right-pane column width (default max-w-[380px]). */
   contentClassName?: string;
   showTerms?: boolean;
+  /**
+   * Drops the session showcase and the brand lockup for one centered column.
+   * For pages that carry their own headline and need the full width.
+   */
+  singleColumn?: boolean;
   children: React.ReactNode;
 }): JSX.Element {
   return (
@@ -107,24 +113,31 @@ export function AuthShell({
         </span>
       </header>
 
-      <div className="grid flex-1 xl:grid-cols-2">
-        <AgentSessionShowcase />
+      <div
+        className={cn(
+          "flex-1",
+          singleColumn ? "flex flex-col" : "grid xl:grid-cols-2",
+        )}
+      >
+        {!singleColumn && <AgentSessionShowcase />}
 
         {/* The deep bottom padding only exists to clear the absolutely
             positioned terms footer; without it that space is dead. */}
         <section
           className={cn(
-            "relative flex flex-col items-center justify-center border-[var(--edge-soft)] bg-[var(--card)] px-8 pt-16 xl:border-l",
-            showTerms ? "pb-28" : "pb-12",
+            "relative flex flex-1 flex-col items-center justify-center border-[var(--edge-soft)] bg-[var(--card)] px-8",
+            singleColumn ? "pt-14" : "pt-16 xl:border-l",
+            showTerms ? "pb-28" : singleColumn ? "pb-10" : "pb-12",
           )}
         >
           <div
             className={cn(
-              "flex w-full max-w-[380px] flex-col items-center gap-6",
+              "flex w-full flex-col items-center gap-6",
+              singleColumn ? "max-w-[900px]" : "max-w-[380px]",
               contentClassName,
             )}
           >
-            <BrandLockup />
+            {!singleColumn && <BrandLockup />}
             {children}
           </div>
           {showTerms && (
