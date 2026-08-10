@@ -172,9 +172,9 @@ function applyOptimisticRiskExclusion(
   const medium = chat.mediumRiskFindingsCount ?? 0;
   const high = chat.highRiskFindingsCount ?? 0;
   const bands = { low, medium, high } as const;
-  const active = (
-    ["high", "medium", "low"] as const
-  ).filter((band) => bands[band] > 0);
+  const active = (["high", "medium", "low"] as const).filter(
+    (band) => bands[band] > 0,
+  );
 
   let nextLow = low;
   let nextMedium = medium;
