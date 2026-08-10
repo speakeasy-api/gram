@@ -4,7 +4,6 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { MetricCard } from "@/components/ui/MetricCard";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
@@ -145,24 +144,6 @@ function ServerSummary({
 }) {
   return (
     <div className="space-y-4">
-      <MetricCard.Group>
-        <MetricCard
-          size="sm"
-          tone="information"
-          label="Users"
-          value={server.userCount}
-          description={
-            server.userCount === 1 ? "observed user" : "observed users"
-          }
-        />
-        <MetricCard
-          size="sm"
-          tone="information"
-          label="Observed use"
-          value={server.observedUseCount}
-          description={server.observedUseCount === 1 ? "call" : "calls"}
-        />
-      </MetricCard.Group>
       <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
         <ServerStatus
           disposition={disposition}
@@ -556,8 +537,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                         </Text>
                         <Text muted small className="mt-1 max-w-md">
                           No one has asked for this server and no decision has
-                          been recorded. Decide Access opens a review and
-                          gathers its evidence.
+                          been recorded.
                         </Text>
                       </div>
                     )}

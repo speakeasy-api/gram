@@ -24,6 +24,8 @@ const mocks = vi.hoisted(() => ({
   useShadowMCPInventoryUsers: vi.fn(),
   useUpdateShadowMCPInventoryServerNameMutation: vi.fn(),
   invalidateShadowMCPInventory: vi.fn(),
+  createApprovalRequest: vi.fn(),
+  invalidateApprovalRequestList: vi.fn(),
   invalidateShadowMCPInventoryServer: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
@@ -175,6 +177,17 @@ vi.mock("@gram/client/react-query/shadowMCPInventoryUsers.js", () => ({
 
 vi.mock("@gram/client/react-query/shadowMCPInventory.js", () => ({
   invalidateAllShadowMCPInventory: mocks.invalidateShadowMCPInventory,
+}));
+
+vi.mock("@gram/client/react-query/createMcpApprovalRequest.js", () => ({
+  useCreateMcpApprovalRequestMutation: () => ({
+    isPending: false,
+    mutateAsync: mocks.createApprovalRequest,
+  }),
+}));
+
+vi.mock("@gram/client/react-query/listMcpApprovalRequests.js", () => ({
+  invalidateAllListMcpApprovalRequests: mocks.invalidateApprovalRequestList,
 }));
 
 vi.mock(
@@ -437,8 +450,6 @@ describe("ShadowMCPServerDetail", () => {
     expect(screen.getByRole("heading", { name: "GitHub MCP" })).toBeTruthy();
     expect(screen.getByText("https://github.example.com/mcp")).toBeTruthy();
     expect(screen.getByText("Allowed")).toBeTruthy();
-    expect(screen.getByText("calls")).toBeTruthy();
-    expect(screen.getByText("observed users")).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: "User" })).toBeTruthy();
     expect(screen.getByText("alex@example.com")).toBeTruthy();
     expect(screen.getByText("15 calls")).toBeTruthy();
