@@ -71,14 +71,14 @@ function UpgradeGate({
           <button
             type="button"
             onClick={() => void handleLogout()}
-            className="auth-mono text-[13px] leading-none text-[var(--muted)] transition-colors hover:text-black"
+            className="auth-mono text-[13px] leading-none text-(--muted) transition-colors hover:text-black"
           >
             Log out
           </button>
         ) : (
           <Link
             to="/"
-            className="auth-mono text-[13px] leading-none text-[var(--muted)] transition-colors hover:text-black"
+            className="auth-mono text-[13px] leading-none text-(--muted) transition-colors hover:text-black"
           >
             Back to dashboard
           </Link>
@@ -90,22 +90,20 @@ function UpgradeGate({
         intro={
           <div className="grid w-full grid-cols-1 items-start gap-4 md:grid-cols-[2fr_2.25fr]">
             <div className="flex flex-col gap-2">
-              <span className="auth-mono flex items-center gap-2.5 text-[12px] text-[var(--muted)]">
+              <span className="auth-mono flex items-center gap-2.5 text-xs text-(--muted)">
                 <i
                   aria-hidden="true"
                   className={`size-[7px] rounded-full ${copy.dotClassName}`}
                 />
                 {copy.status}
               </span>
-              <h1 className="text-[40px] leading-[1.05] font-thin tracking-tight [font-family:var(--f-display)]">
+              <h1 className="text-[40px] leading-[1.05] font-thin tracking-tight font-(family-name:--f-display)">
                 Book a call to upgrade.
               </h1>
             </div>
-            <div className="flex flex-col gap-2 md:border-l md:border-[var(--edge-soft)] md:pl-6">
-              <p className="text-[14px] text-[var(--muted-strong)]">
-                {copy.body}
-              </p>
-              <p className="auth-mono-text text-[12px] text-[var(--muted)]">
+            <div className="flex flex-col gap-2 md:border-l md:border-(--edge-soft) md:pl-6">
+              <p className="text-sm text-(--muted-strong)">{copy.body}</p>
+              <p className="auth-mono-text text-xs text-(--muted)">
                 {copy.detail}
               </p>
             </div>
@@ -115,14 +113,14 @@ function UpgradeGate({
       <div className="flex items-center justify-center gap-4">
         <Link
           to="/explore-demo"
-          className="auth-mono text-[12px] text-[var(--muted)] underline underline-offset-4 transition-colors hover:text-black"
+          className="auth-mono text-xs text-(--muted) underline underline-offset-4 transition-colors hover:text-black"
         >
           Explore demo
         </Link>
-        <span aria-hidden="true" className="h-3 w-px bg-[var(--edge)]" />
+        <span aria-hidden="true" className="h-3 w-px bg-(--edge)" />
         <a
           href={`mailto:${SALES_EMAIL}`}
-          className="auth-mono text-[12px] text-[var(--muted)] underline underline-offset-4 transition-colors hover:text-black"
+          className="auth-mono text-xs text-(--muted) underline underline-offset-4 transition-colors hover:text-black"
         >
           Email {SALES_EMAIL} →
         </a>

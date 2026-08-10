@@ -13,10 +13,10 @@ import { Link } from "react-router";
 // The marketing site's /talk-to-us cannot.
 const SALES_PATH = "/talk-to-us";
 
-const BLACK_PROGRESS_CLASS = "bg-[var(--color-base-black)]";
-const DEEP_GREEN_PROGRESS_CLASS = "bg-[var(--color-brand-c)]";
-const ORANGE_PROGRESS_CLASS = "bg-[var(--color-brand-ruby)]";
-const RED_PROGRESS_CLASS = "bg-[var(--color-brand-swift)]";
+const BLACK_PROGRESS_CLASS = "bg-(--color-base-black)";
+const DEEP_GREEN_PROGRESS_CLASS = "bg-(--color-brand-c)";
+const ORANGE_PROGRESS_CLASS = "bg-(--color-brand-ruby)";
+const RED_PROGRESS_CLASS = "bg-(--color-brand-swift)";
 
 function getTrialProgressColorClass(
   dayNumber: number,

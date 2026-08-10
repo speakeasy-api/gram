@@ -41,31 +41,31 @@ function OrgRow({
       className={cn(
         "flex w-full items-center gap-3 border px-3.5 py-3 text-left transition-colors",
         current
-          ? "cursor-default border-[var(--edge)] bg-[var(--surface)]"
+          ? "cursor-default border-(--edge) bg-(--surface)"
           : selected
-            ? "border-[var(--cta)] bg-[hsl(0,0%,97%)]"
-            : "border-[var(--edge)] bg-[var(--card)] hover:border-[hsl(0,0%,60%)]",
+            ? "border-(--cta) bg-[hsl(0,0%,97%)]"
+            : "border-(--edge) bg-(--card) hover:border-[hsl(0,0%,60%)]",
       )}
     >
       <span
         className={cn(
-          "auth-mono-text flex h-7 w-7 flex-none items-center justify-center text-[12px]",
+          "auth-mono-text flex h-7 w-7 flex-none items-center justify-center text-xs",
           current || selected
-            ? "bg-[var(--cta)] text-white"
-            : "bg-[var(--edge-soft)] text-[var(--muted-strong)]",
+            ? "bg-(--cta) text-white"
+            : "bg-(--edge-soft) text-(--muted-strong)",
         )}
       >
         {displayName.charAt(0).toUpperCase()}
       </span>
       <span className="flex flex-1 flex-col gap-px">
         <span className="text-[15px]">{displayName}</span>
-        <span className="auth-mono-text text-[11px] text-[var(--muted)]">
+        <span className="auth-mono-text text-[11px] text-(--muted)">
           {org.slug} · {projectCount}{" "}
           {projectCount === 1 ? "project" : "projects"}
         </span>
       </span>
       {current && (
-        <span className="auth-mono rounded-full bg-[var(--moss)] px-2.5 py-[3px] text-[10px] text-white">
+        <span className="auth-mono rounded-full bg-(--moss) px-2.5 py-[3px] text-[10px] text-white">
           Current
         </span>
       )}
@@ -124,7 +124,7 @@ export default function SwitchOrg({
         <button
           type="button"
           onClick={() => void handleLogout()}
-          className="auth-mono text-[13px] leading-none text-[var(--muted)] transition-colors hover:text-black"
+          className="auth-mono text-[13px] leading-none text-(--muted) transition-colors hover:text-black"
         >
           Log out
         </button>
@@ -136,7 +136,7 @@ export default function SwitchOrg({
             ? `${currentOrgName} doesn't have platform access.`
             : "Switch organization."}
         </p>
-        <p className="mt-1.5 text-[14px] tracking-[0.0025em] text-[var(--muted-strong)]">
+        <p className="mt-1.5 text-sm tracking-[0.0025em] text-(--muted-strong)">
           {gate
             ? "Switch to another organization to continue, or contact your admin."
             : "Select which organization you'd like to work in."}
@@ -144,11 +144,11 @@ export default function SwitchOrg({
       </div>
 
       {gate && (
-        <div className="flex w-full items-center gap-2.5 border border-[var(--ember)] bg-[hsl(23,96%,97%)] px-3.5 py-2.5">
-          <span className="auth-mono flex-none rounded-full bg-[var(--ember)] px-2.5 py-[3px] text-[10px] text-black">
+        <div className="flex w-full items-center gap-2.5 border border-(--ember) bg-[hsl(23,96%,97%)] px-3.5 py-2.5">
+          <span className="auth-mono flex-none rounded-full bg-(--ember) px-2.5 py-[3px] text-[10px] text-black">
             No access
           </span>
-          <span className="auth-mono-text text-[12px] text-[var(--muted-strong)]">
+          <span className="auth-mono-text text-xs text-(--muted-strong)">
             {currentOrg?.slug ?? "this organization"} · MCP platform not enabled
           </span>
         </div>

@@ -63,7 +63,7 @@ const DEFAULT_INTRO = (
     <p className="text-[16px] tracking-[0.0025em]">
       Looks like your company is new to Speakeasy.
     </p>
-    <p className="mt-1.5 text-[14px] tracking-[0.0025em] text-[var(--muted-strong)]">
+    <p className="mt-1.5 text-sm tracking-[0.0025em] text-(--muted-strong)">
       Book time with our team to activate your account and get started.
     </p>
   </div>
@@ -122,12 +122,12 @@ export function DemoBookingFlow({
     <div className="flex w-full flex-col items-center gap-6">
       {intro}
 
-      <div className="w-full overflow-hidden border border-[var(--edge)] bg-[var(--card)]">
+      <div className="w-full overflow-hidden border border-(--edge) bg-(--card)">
         {/* The embed runs with `hideEventTypeDetails`, so this header is what
             names the meeting — as in the design frame. */}
-        <div className="flex h-11 items-center justify-between border-b border-[var(--edge-soft)] px-[18px]">
-          <span className="auth-mono text-[12px]">{eventLabel}</span>
-          <span className="auth-mono-text text-[12px] text-[var(--muted)]">
+        <div className="flex h-11 items-center justify-between border-b border-(--edge-soft) px-[18px]">
+          <span className="auth-mono text-xs">{eventLabel}</span>
+          <span className="auth-mono-text text-xs text-(--muted)">
             Google Meet
           </span>
         </div>
@@ -152,7 +152,7 @@ export function DemoBookingFlow({
       </div>
 
       {prefill && (
-        <p className="auth-mono-text text-center text-[11px] tracking-[0.02em] text-[var(--muted)]">
+        <p className="auth-mono-text text-center text-[11px] tracking-[0.02em] text-(--muted)">
           Details prefilled from your account: {prefill}
         </p>
       )}

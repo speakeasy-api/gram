@@ -29,7 +29,7 @@ export function getGateCopy(
 
   if (getTrialLifecycleFromDates(trial, now) === "expired") {
     return {
-      dotClassName: "bg-[var(--vermilion)]",
+      dotClassName: "bg-(--vermilion)",
       // Belt and braces: "expired" already implies a parseable end date, so the
       // dateless form is unreachable unless that changes.
       status: isValidDate(endsAt)
@@ -43,7 +43,7 @@ export function getGateCopy(
 
   const remainingDays = getTrialStatusFromDates(trial, now)?.remainingDays;
   return {
-    dotClassName: "bg-[var(--moss)]",
+    dotClassName: "bg-(--moss)",
     status:
       remainingDays === undefined
         ? "Trial in progress"

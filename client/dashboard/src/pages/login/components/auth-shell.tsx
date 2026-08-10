@@ -95,12 +95,12 @@ export function AuthShell({
   children: React.ReactNode;
 }): JSX.Element {
   return (
-    <main className="auth-brand flex min-h-screen flex-col bg-[var(--surface)] text-black">
+    <main className="auth-brand flex min-h-screen flex-col bg-(--surface) text-black">
       <style>{BRAND_STYLES}</style>
 
       <BrandGradientLine className="h-[4px]" />
 
-      <header className="flex h-16 flex-none items-center justify-between border-b border-[var(--edge)] bg-[var(--card)] px-6 md:px-10">
+      <header className="flex h-16 flex-none items-center justify-between border-b border-(--edge) bg-(--card) px-6 md:px-10">
         <span className="auth-mono flex items-center gap-3 text-[13px]">
           <img src={speakeasyIcon} alt="" className="h-[22px] w-[22px]" />
           Speakeasy AI Control Plane
@@ -108,12 +108,12 @@ export function AuthShell({
         {/* leading-none on both sides so the label and the action sit on the
             same optical line — a button inherits its own line box otherwise. */}
         <span className="flex items-center gap-4">
-          <span className="auth-mono text-[13px] leading-none text-[var(--muted)]">
+          <span className="auth-mono text-[13px] leading-none text-(--muted)">
             {page}
           </span>
           {headerAction && (
             <>
-              <span aria-hidden="true" className="h-3 w-px bg-[var(--edge)]" />
+              <span aria-hidden="true" className="h-3 w-px bg-(--edge)" />
               {headerAction}
             </>
           )}
@@ -132,7 +132,7 @@ export function AuthShell({
             positioned terms footer; without it that space is dead. */}
         <section
           className={cn(
-            "relative flex flex-1 flex-col items-center justify-center border-[var(--edge-soft)] bg-[var(--card)] px-8",
+            "relative flex flex-1 flex-col items-center justify-center border-(--edge-soft) bg-(--card) px-8",
             singleColumn ? "pt-14" : "pt-16 xl:border-l",
             showTerms ? "pb-28" : singleColumn ? "pb-10" : "pb-12",
           )}
@@ -149,8 +149,8 @@ export function AuthShell({
           </div>
           {showTerms && (
             <TermsFooter
-              className="absolute right-12 bottom-7 left-12 text-[var(--muted-strong)]"
-              linkClassName="text-[var(--muted-strong)] hover:text-black"
+              className="absolute right-12 bottom-7 left-12 text-(--muted-strong)"
+              linkClassName="text-(--muted-strong) hover:text-black"
             />
           )}
         </section>

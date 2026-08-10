@@ -163,10 +163,10 @@ describe("TrialStatusCard", () => {
 
   it("changes the brand color as the trial progresses", () => {
     const colorByDay = [
-      [1, "bg-[var(--color-base-black)]"],
-      [5, "bg-[var(--color-brand-c)]"],
-      [9, "bg-[var(--color-brand-ruby)]"],
-      [13, "bg-[var(--color-brand-swift)]"],
+      [1, "bg-(--color-base-black)"],
+      [5, "bg-(--color-brand-c)"],
+      [9, "bg-(--color-brand-ruby)"],
+      [13, "bg-(--color-brand-swift)"],
     ] as const;
 
     for (const [day, colorClass] of colorByDay) {
