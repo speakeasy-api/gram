@@ -142,7 +142,10 @@ function FactList({
           <dt className="text-muted-foreground text-xs">{fact.label}</dt>
           {/* Mono chip rather than Badge: Badge uppercases, and casing is
               meaningful in hosts, artifact refs, and package names. */}
-          <dd className="border-border max-w-full min-w-0 border px-1.5 py-px text-right font-mono text-xs break-all">
+          {/* break-words, not break-all: prose values and dates wrap at
+              spaces; only genuinely unbreakable strings (artifact refs,
+              package names) split mid-token. */}
+          <dd className="border-border max-w-full min-w-0 border px-1.5 py-px text-right font-mono text-xs break-words">
             {fact.value}
           </dd>
         </div>
