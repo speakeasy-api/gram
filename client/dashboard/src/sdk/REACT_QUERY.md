@@ -110,10 +110,10 @@ Query.
 [use-mutation]: https://tanstack.com/query/v5/docs/framework/react/reference/useMutation
 
 ```tsx
-import { useBlockShadowMCPInventoryServerMutation } from "@gram/client/react-query/accessBlockShadowMCPInventoryServer.js";
+import { useCreateRoleMutation } from "@gram/client/react-query/accessCreateRole.js";
 
 export function Example() {
-  const { mutate, status } = useBlockShadowMCPInventoryServerMutation();
+  const { mutate, status } = useCreateRoleMutation();
 
   return (
     <form
@@ -123,10 +123,14 @@ export function Example() {
         // Read form data here...
 
         mutate({
-          blockShadowMCPInventoryServerRequestBody: {
-            policyId: "446d5683-43ea-4800-8767-001f86921785",
-            projectId: "944297fa-368e-419d-9a2b-8879726d9d0b",
-            serverUrl: "https://numb-mortise.name/",
+          createRoleForm: {
+            description: "swerve hm receptor how",
+            grants: [
+              {
+                scope: "environment:write",
+              },
+            ],
+            name: "<value>",
           },
         });
       }}
@@ -144,10 +148,10 @@ Since the underlying SDK handles request timeouts and retries, there are a few
 more options provided by the mutation hooks to control these behaviors.
 
 ```tsx
-import { useBlockShadowMCPInventoryServerMutation } from "@gram/client/react-query/accessBlockShadowMCPInventoryServer.js";
+import { useCreateRoleMutation } from "@gram/client/react-query/accessCreateRole.js";
 
 export function ExampleWithOptions() {
-  const { mutate, status } = useBlockShadowMCPInventoryServerMutation({
+  const { mutate, status } = useCreateRoleMutation({
     // TanStack Query options:
     networkMode: "online",
     gcTime: 5 * 60 * 1000, // 5 minutes

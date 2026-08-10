@@ -95,7 +95,7 @@ func UsageCommands() []string {
 	return []string{
 		"external receive-work-os-webhook",
 		"about openapi",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|upsert-shadow-mcp-inventory-policy-bypass|delete-shadow-mcp-inventory-policy-bypass|block-shadow-mcp-inventory-server|unblock-shadow-mcp-inventory-server|resolve-shadow-mcp-inventory-request|request-access|list-challenges|list-challenge-buckets|resolve-challenge)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|resolve-shadow-mcp-inventory-request|request-access|list-challenges|list-challenge-buckets|resolve-challenge)",
 		"admin (login|callback|logout|get-project|update-organization|get-organization|list-organization-members|list-organization-projects|list-organizations)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration)",
 		"ai-integrations (get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
@@ -261,25 +261,6 @@ func ParseEndpoint(
 		accessListShadowMCPInventoryUsersLimitFlag        = accessListShadowMCPInventoryUsersFlags.String("limit", "50", "")
 		accessListShadowMCPInventoryUsersCursorFlag       = accessListShadowMCPInventoryUsersFlags.String("cursor", "", "")
 		accessListShadowMCPInventoryUsersSessionTokenFlag = accessListShadowMCPInventoryUsersFlags.String("session-token", "", "")
-
-		accessUpsertShadowMCPInventoryPolicyBypassFlags            = flag.NewFlagSet("upsert-shadow-mcp-inventory-policy-bypass", flag.ExitOnError)
-		accessUpsertShadowMCPInventoryPolicyBypassBodyFlag         = accessUpsertShadowMCPInventoryPolicyBypassFlags.String("body", "REQUIRED", "")
-		accessUpsertShadowMCPInventoryPolicyBypassSessionTokenFlag = accessUpsertShadowMCPInventoryPolicyBypassFlags.String("session-token", "", "")
-
-		accessDeleteShadowMCPInventoryPolicyBypassFlags            = flag.NewFlagSet("delete-shadow-mcp-inventory-policy-bypass", flag.ExitOnError)
-		accessDeleteShadowMCPInventoryPolicyBypassProjectIDFlag    = accessDeleteShadowMCPInventoryPolicyBypassFlags.String("project-id", "REQUIRED", "")
-		accessDeleteShadowMCPInventoryPolicyBypassServerURLFlag    = accessDeleteShadowMCPInventoryPolicyBypassFlags.String("server-url", "REQUIRED", "")
-		accessDeleteShadowMCPInventoryPolicyBypassSessionTokenFlag = accessDeleteShadowMCPInventoryPolicyBypassFlags.String("session-token", "", "")
-
-		accessBlockShadowMCPInventoryServerFlags            = flag.NewFlagSet("block-shadow-mcp-inventory-server", flag.ExitOnError)
-		accessBlockShadowMCPInventoryServerBodyFlag         = accessBlockShadowMCPInventoryServerFlags.String("body", "REQUIRED", "")
-		accessBlockShadowMCPInventoryServerSessionTokenFlag = accessBlockShadowMCPInventoryServerFlags.String("session-token", "", "")
-
-		accessUnblockShadowMCPInventoryServerFlags            = flag.NewFlagSet("unblock-shadow-mcp-inventory-server", flag.ExitOnError)
-		accessUnblockShadowMCPInventoryServerProjectIDFlag    = accessUnblockShadowMCPInventoryServerFlags.String("project-id", "REQUIRED", "")
-		accessUnblockShadowMCPInventoryServerServerURLFlag    = accessUnblockShadowMCPInventoryServerFlags.String("server-url", "REQUIRED", "")
-		accessUnblockShadowMCPInventoryServerPolicyIDFlag     = accessUnblockShadowMCPInventoryServerFlags.String("policy-id", "REQUIRED", "")
-		accessUnblockShadowMCPInventoryServerSessionTokenFlag = accessUnblockShadowMCPInventoryServerFlags.String("session-token", "", "")
 
 		accessResolveShadowMCPInventoryRequestFlags            = flag.NewFlagSet("resolve-shadow-mcp-inventory-request", flag.ExitOnError)
 		accessResolveShadowMCPInventoryRequestBodyFlag         = accessResolveShadowMCPInventoryRequestFlags.String("body", "REQUIRED", "")
@@ -3275,10 +3256,6 @@ func ParseEndpoint(
 	accessGetShadowMCPInventoryServerFlags.Usage = accessGetShadowMCPInventoryServerUsage
 	accessUpdateShadowMCPInventoryServerNameFlags.Usage = accessUpdateShadowMCPInventoryServerNameUsage
 	accessListShadowMCPInventoryUsersFlags.Usage = accessListShadowMCPInventoryUsersUsage
-	accessUpsertShadowMCPInventoryPolicyBypassFlags.Usage = accessUpsertShadowMCPInventoryPolicyBypassUsage
-	accessDeleteShadowMCPInventoryPolicyBypassFlags.Usage = accessDeleteShadowMCPInventoryPolicyBypassUsage
-	accessBlockShadowMCPInventoryServerFlags.Usage = accessBlockShadowMCPInventoryServerUsage
-	accessUnblockShadowMCPInventoryServerFlags.Usage = accessUnblockShadowMCPInventoryServerUsage
 	accessResolveShadowMCPInventoryRequestFlags.Usage = accessResolveShadowMCPInventoryRequestUsage
 	accessRequestAccessFlags.Usage = accessRequestAccessUsage
 	accessListChallengesFlags.Usage = accessListChallengesUsage
@@ -4157,18 +4134,6 @@ func ParseEndpoint(
 
 			case "list-shadow-mcp-inventory-users":
 				epf = accessListShadowMCPInventoryUsersFlags
-
-			case "upsert-shadow-mcp-inventory-policy-bypass":
-				epf = accessUpsertShadowMCPInventoryPolicyBypassFlags
-
-			case "delete-shadow-mcp-inventory-policy-bypass":
-				epf = accessDeleteShadowMCPInventoryPolicyBypassFlags
-
-			case "block-shadow-mcp-inventory-server":
-				epf = accessBlockShadowMCPInventoryServerFlags
-
-			case "unblock-shadow-mcp-inventory-server":
-				epf = accessUnblockShadowMCPInventoryServerFlags
 
 			case "resolve-shadow-mcp-inventory-request":
 				epf = accessResolveShadowMCPInventoryRequestFlags
@@ -6067,18 +6032,6 @@ func ParseEndpoint(
 			case "list-shadow-mcp-inventory-users":
 				endpoint = c.ListShadowMCPInventoryUsers()
 				data, err = accessc.BuildListShadowMCPInventoryUsersPayload(*accessListShadowMCPInventoryUsersProjectIDFlag, *accessListShadowMCPInventoryUsersServerURLFlag, *accessListShadowMCPInventoryUsersLimitFlag, *accessListShadowMCPInventoryUsersCursorFlag, *accessListShadowMCPInventoryUsersSessionTokenFlag)
-			case "upsert-shadow-mcp-inventory-policy-bypass":
-				endpoint = c.UpsertShadowMCPInventoryPolicyBypass()
-				data, err = accessc.BuildUpsertShadowMCPInventoryPolicyBypassPayload(*accessUpsertShadowMCPInventoryPolicyBypassBodyFlag, *accessUpsertShadowMCPInventoryPolicyBypassSessionTokenFlag)
-			case "delete-shadow-mcp-inventory-policy-bypass":
-				endpoint = c.DeleteShadowMCPInventoryPolicyBypass()
-				data, err = accessc.BuildDeleteShadowMCPInventoryPolicyBypassPayload(*accessDeleteShadowMCPInventoryPolicyBypassProjectIDFlag, *accessDeleteShadowMCPInventoryPolicyBypassServerURLFlag, *accessDeleteShadowMCPInventoryPolicyBypassSessionTokenFlag)
-			case "block-shadow-mcp-inventory-server":
-				endpoint = c.BlockShadowMCPInventoryServer()
-				data, err = accessc.BuildBlockShadowMCPInventoryServerPayload(*accessBlockShadowMCPInventoryServerBodyFlag, *accessBlockShadowMCPInventoryServerSessionTokenFlag)
-			case "unblock-shadow-mcp-inventory-server":
-				endpoint = c.UnblockShadowMCPInventoryServer()
-				data, err = accessc.BuildUnblockShadowMCPInventoryServerPayload(*accessUnblockShadowMCPInventoryServerProjectIDFlag, *accessUnblockShadowMCPInventoryServerServerURLFlag, *accessUnblockShadowMCPInventoryServerPolicyIDFlag, *accessUnblockShadowMCPInventoryServerSessionTokenFlag)
 			case "resolve-shadow-mcp-inventory-request":
 				endpoint = c.ResolveShadowMCPInventoryRequest()
 				data, err = accessc.BuildResolveShadowMCPInventoryRequestPayload(*accessResolveShadowMCPInventoryRequestBodyFlag, *accessResolveShadowMCPInventoryRequestSessionTokenFlag)
@@ -7991,10 +7944,6 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    get-shadow-mcp-inventory-server: Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state.`)
 	fmt.Fprintln(os.Stderr, `    update-shadow-mcp-inventory-server-name: Update or clear the administrator-defined display name for one project-scoped Shadow MCP inventory server URL.`)
 	fmt.Fprintln(os.Stderr, `    list-shadow-mcp-inventory-users: List users with observed telemetry usage for one project-scoped Shadow MCP server URL.`)
-	fmt.Fprintln(os.Stderr, `    upsert-shadow-mcp-inventory-policy-bypass: Create or modify a Shadow MCP URL allow decision for selected blocking policies.`)
-	fmt.Fprintln(os.Stderr, `    delete-shadow-mcp-inventory-policy-bypass: Remove a Shadow MCP URL allow decision.`)
-	fmt.Fprintln(os.Stderr, `    block-shadow-mcp-inventory-server: Block a Shadow MCP server URL under an allow-by-default (allow_all) blocking policy by adding a risk_policy:block grant.`)
-	fmt.Fprintln(os.Stderr, `    unblock-shadow-mcp-inventory-server: Unblock a Shadow MCP server URL under an allow-by-default (allow_all) blocking policy by removing its risk_policy:block grant.`)
 	fmt.Fprintln(os.Stderr, `    resolve-shadow-mcp-inventory-request: Review the latest pending Shadow MCP URL request and resolve all pending requests for that URL.`)
 	fmt.Fprintln(os.Stderr, `    request-access: Request access to a scope by sending an email notification to organization administrators.`)
 	fmt.Fprintln(os.Stderr, `    list-challenges: List authz challenge events from ClickHouse, enriched with resolution state from PostgreSQL.`)
@@ -8284,92 +8233,6 @@ func accessListShadowMCPInventoryUsersUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-shadow-mcp-inventory-users --project-id \"550e8400-e29b-41d4-a716-446655440000\" --server-url \"https://example.com/foo\" --limit 2 --cursor \"abc123\" --session-token \"abc123\"")
-}
-
-func accessUpsertShadowMCPInventoryPolicyBypassUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access upsert-shadow-mcp-inventory-policy-bypass", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Create or modify a Shadow MCP URL allow decision for selected blocking policies.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access upsert-shadow-mcp-inventory-policy-bypass --body '{\n      \"policy_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }' --session-token \"abc123\"")
-}
-
-func accessDeleteShadowMCPInventoryPolicyBypassUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access delete-shadow-mcp-inventory-policy-bypass", os.Args[0])
-	fmt.Fprint(os.Stderr, " -project-id STRING")
-	fmt.Fprint(os.Stderr, " -server-url STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Remove a Shadow MCP URL allow decision.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -server-url STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access delete-shadow-mcp-inventory-policy-bypass --project-id \"550e8400-e29b-41d4-a716-446655440000\" --server-url \"https://example.com/foo\" --session-token \"abc123\"")
-}
-
-func accessBlockShadowMCPInventoryServerUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access block-shadow-mcp-inventory-server", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Block a Shadow MCP server URL under an allow-by-default (allow_all) blocking policy by adding a risk_policy:block grant.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access block-shadow-mcp-inventory-server --body '{\n      \"policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }' --session-token \"abc123\"")
-}
-
-func accessUnblockShadowMCPInventoryServerUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] access unblock-shadow-mcp-inventory-server", os.Args[0])
-	fmt.Fprint(os.Stderr, " -project-id STRING")
-	fmt.Fprint(os.Stderr, " -server-url STRING")
-	fmt.Fprint(os.Stderr, " -policy-id STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Unblock a Shadow MCP server URL under an allow-by-default (allow_all) blocking policy by removing its risk_policy:block grant.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -server-url STRING: `)
-	fmt.Fprintln(os.Stderr, `    -policy-id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access unblock-shadow-mcp-inventory-server --project-id \"550e8400-e29b-41d4-a716-446655440000\" --server-url \"https://example.com/foo\" --policy-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
 }
 
 func accessResolveShadowMCPInventoryRequestUsage() {
