@@ -404,6 +404,45 @@ func hooksBootstrapCommand(root, provider string, timeoutSeconds int, async bool
 	return command
 }
 
+// codexHooksBootstrapCommand renders the Unix hook command for Codex, which
+// needs more than the plain `bash <root>/hooks/bootstrap.sh` the other
+// providers use.
+//
+// Codex keeps every installed plugin under
+// <codex home>/plugins/cache/<marketplace>/<plugin>/<version> and substitutes
+// that directory for ${PLUGIN_ROOT} when it loads the plugin's hooks.json.
+// When a republished version appears it reinstalls into a sibling version
+// directory and deletes the previous one, so a hook command resolved before
+// that swap names a script that no longer exists — and `bash <missing file>`
+// exits 127, which Codex surfaces as a bare "hook exited with code 127" on
+// SessionStart and UserPromptSubmit for as long as it holds the stale plugin
+// list.
+//
+// So the command resolves the bootstrapper when the hook fires instead of
+// trusting the baked path: the substituted root first, then the most recently
+// written sibling version directory. Only when neither exists does it fail,
+// and then with a message naming the root it looked under and the org's
+// install-failure exit code rather than bash's opaque 127.
+func codexHooksBootstrapCommand(timeoutSeconds int, async bool, failOpen bool) string {
+	args := fmt.Sprintf("agenthooks run --provider=codex --timeout=%ds", timeoutSeconds)
+	if async {
+		args += " --async"
+	}
+	// The script is single-quoted for `bash -c`, so it must not contain a
+	// single quote. Codex replaces ${PLUGIN_ROOT} textually before any shell
+	// sees the command; the surrounding double quotes leave the shell's own
+	// expansion of the same name as a fallback, since Codex also exports it to
+	// the hook process.
+	script := fmt.Sprintf(
+		`r="%s"; s="$r/hooks/bootstrap.sh"; `+
+			`[ -f "$s" ] || s=$(ls -t "${r%%/*}"/*/hooks/bootstrap.sh 2>/dev/null | head -n 1); `+
+			`[ -n "$s" ] && [ -f "$s" ] || { printf "speakeasy-hooks: no hook payload under %%s; the Codex plugin cache moved or the plugin is not fully installed\n" "$r" >&2; exit %d; }; `+
+			`exec bash "$s" "--config=${s%%/hooks/bootstrap.sh}/speakeasy.json" %s`,
+		codexPluginRootPlaceholder, conv.Ternary(failOpen, 0, 1), args,
+	)
+	return "bash -c '" + script + "'"
+}
+
 func hooksPowerShellCommand(root, provider string, timeoutSeconds int, async bool) string {
 	command := fmt.Sprintf(`powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%s\hooks\bootstrap.ps1" --config="%s\speakeasy.json" agenthooks run --provider=%s --timeout=%ds`, root, root, provider, timeoutSeconds)
 	if async {

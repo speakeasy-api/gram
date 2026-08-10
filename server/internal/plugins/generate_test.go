@@ -1171,20 +1171,22 @@ func TestGenerateCodexObservabilityPluginHooksJSONIncludesBootstrapCommands(t *t
 		case "SessionEnd":
 			timeoutSeconds = 3
 		}
-		expectedSuffix := fmt.Sprintf(` --config="${PLUGIN_ROOT}/speakeasy.json" agenthooks run --provider=codex --timeout=%ds`, timeoutSeconds)
 		expectedWindowsSuffix := fmt.Sprintf(` --config="${PLUGIN_ROOT}\speakeasy.json" agenthooks run --provider=codex --timeout=%ds`, timeoutSeconds)
 		if async {
-			expectedSuffix += " --async"
 			expectedWindowsSuffix += " --async"
 		}
-		require.Equal(t, `bash "${PLUGIN_ROOT}/hooks/bootstrap.sh"`+expectedSuffix, groups[0].Hooks[0].Command)
+		require.Equal(t, codexHooksBootstrapCommand(timeoutSeconds, async, cfg.InstallFailOpen), groups[0].Hooks[0].Command)
+		require.Contains(t, groups[0].Hooks[0].Command, fmt.Sprintf(`agenthooks run --provider=codex --timeout=%ds`, timeoutSeconds))
+		require.Contains(t, groups[0].Hooks[0].Command, `r="${PLUGIN_ROOT}"`, "Codex must still see the plugin-root placeholder it substitutes")
 		require.Equal(t, `powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "${PLUGIN_ROOT}\hooks\bootstrap.ps1"`+expectedWindowsSuffix, groups[0].Hooks[0].CommandWindows)
 		if event == "SessionEnd" {
 			require.Equal(t, 3, groups[0].Hooks[0].Timeout)
 		} else {
 			require.Zero(t, groups[0].Hooks[0].Timeout)
 		}
-		require.Equal(t, async, strings.HasSuffix(groups[0].Hooks[0].Command, " --async"))
+		// The Unix command wraps the script in `bash -c '...'`, so --async is
+		// the last thing inside the quotes rather than the last thing on the line.
+		require.Equal(t, async, strings.HasSuffix(groups[0].Hooks[0].Command, " --async'"))
 		require.Equal(t, async, strings.HasSuffix(groups[0].Hooks[0].CommandWindows, " --async"))
 	}
 }
@@ -1195,7 +1197,7 @@ func TestComputeCodexHookApprovalsIncludesSingleSessionStartCommand(t *testing.T
 	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
 	plugin := CodexObservabilitySlug(cfg)
 
-	approvals, err := computeCodexHookApprovals(marketplace, plugin)
+	approvals, err := computeCodexHookApprovals(marketplace, plugin, false)
 	require.NoError(t, err)
 
 	sessionStartPrefix := plugin + "@" + marketplace + ":hooks/hooks.json:session_start:0:"
@@ -1216,7 +1218,7 @@ func TestComputeCodexHookApprovalsIncludesSessionEndTrustState(t *testing.T) {
 	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
 	plugin := CodexObservabilitySlug(cfg)
 
-	approvals, err := computeCodexHookApprovals(marketplace, plugin)
+	approvals, err := computeCodexHookApprovals(marketplace, plugin, false)
 	require.NoError(t, err)
 
 	prefix := plugin + "@" + marketplace + ":hooks/hooks.json:session_end:0:"
@@ -1229,6 +1231,65 @@ func TestComputeCodexHookApprovalsIncludesSessionEndTrustState(t *testing.T) {
 	require.Len(t, sessionEndApprovals, 1)
 	require.Equal(t, prefix+"0", sessionEndApprovals[0].StateKey)
 	require.NotEmpty(t, sessionEndApprovals[0].TrustedHash)
+}
+
+// Codex hashes the bytes of its own serde_json serialization, which leaves <, >
+// and & unescaped. Go's json.Marshal escapes them, so a command containing any
+// of the three would hash to a value no Codex install computes and every hook
+// would be discarded as modified — silently, with no output at all.
+func TestComputeCodexHookHashDoesNotEscapeShellRedirections(t *testing.T) {
+	t.Parallel()
+	const command = `bash -c 'a 2>/dev/null && b >&2'`
+
+	hash, err := computeCodexHookHash("SessionStart", command)
+	require.NoError(t, err)
+
+	canonical := fmt.Sprintf(
+		`{"event_name":"session_start","hooks":[{"async":false,"command":%s,"timeout":600,"type":"command"}],"matcher":""}`,
+		mustJSONStringUnescaped(t, command),
+	)
+	require.Equal(t, fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(canonical))), hash)
+	require.NotContains(t, canonical, `\u003e`)
+}
+
+// The trust identity is an external contract: Codex only runs a hook whose
+// trusted_hash in config.toml equals the hash it recomputes from hooks.json, and
+// nothing re-approves an install whose hash drifted. These digests were verified
+// against codex-cli 0.147.0 by installing the generated plugin and confirming
+// every event reached the relay without --dangerously-bypass-hook-trust. Any
+// change to the hook commands or to the hashed identity must be re-verified the
+// same way before these expectations are updated.
+func TestComputeCodexHookApprovalsMatchHashesCodexAccepts(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{OrgName: "Acme Inc", ServerURL: "https://app.example.com"}
+	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
+	plugin := CodexObservabilitySlug(cfg)
+
+	approvals, err := computeCodexHookApprovals(marketplace, plugin, false)
+	require.NoError(t, err)
+
+	want := map[string]string{
+		"session_start":      "sha256:19c34f914c5882709cce1901108a2f82b8024433973c27f8a1ba75c62d514149",
+		"session_end":        "sha256:dea4cb3edab10c5b6bdc89b7772df256dcb2d92777d355664ee6761de20320e8",
+		"pre_tool_use":       "sha256:dbb01b969610436bcbc96d73cc8f90e223e35234a1d9c44ed8b2ad011bdeb5f2",
+		"permission_request": "sha256:2800fc87de1574da6e68dbeab3b57dce3a3b445dffb133d5d58183247522a32e",
+		"post_tool_use":      "sha256:87e6e659e77a925687a052b1656b67fc05b1bd55ca86f83d13b292f45d8b188e",
+		"user_prompt_submit": "sha256:52076c4b0617f19ff57bf11fde82722c14f144eb6a456d90483051a30921d87d",
+		"stop":               "sha256:ca39493a4c5bd1bd9ec5f9880fd49b36bc2a402c8e58af2e6a9cb2eda4517e3e",
+	}
+	got := make(map[string]string, len(approvals))
+	for _, approval := range approvals {
+		event := strings.TrimSuffix(strings.TrimPrefix(approval.StateKey, plugin+"@"+marketplace+":hooks/hooks.json:"), ":0:0")
+		got[event] = approval.TrustedHash
+	}
+	require.Equal(t, want, got)
+}
+
+func mustJSONStringUnescaped(t *testing.T, s string) string {
+	t.Helper()
+	encoded, err := marshalUnescapedJSON(s)
+	require.NoError(t, err)
+	return string(encoded)
 }
 
 // runCodexInstallScript executes the generated install script under an
@@ -1698,7 +1759,7 @@ func TestGenerateCodexInstallScriptRefreshesStaleTrustedHashes(t *testing.T) {
 	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
 	plugin := CodexObservabilitySlug(cfg)
 
-	approvals, err := computeCodexHookApprovals(marketplace, plugin)
+	approvals, err := computeCodexHookApprovals(marketplace, plugin, false)
 	require.NoError(t, err)
 	require.NotEmpty(t, approvals)
 	target := approvals[0]
@@ -1879,7 +1940,7 @@ func TestGenerateCodexInstallScriptIsIdempotent(t *testing.T) {
 	marketplace := conv.ToSlug(cfg.OrgName) + "-speakeasy"
 	plugin := CodexObservabilitySlug(cfg)
 
-	approvals, err := computeCodexHookApprovals(marketplace, plugin)
+	approvals, err := computeCodexHookApprovals(marketplace, plugin, false)
 	require.NoError(t, err)
 	require.NotEmpty(t, approvals)
 
