@@ -165,6 +165,9 @@ export function ApprovalQueue(): JSX.Element {
         data={requests}
         rowKey={(row) => row.id}
         onRowClick={(row) => {
+          // Server URLs always land on the server page — the one surface for
+          // an MCP's data and its review. Only stdio commands, which have no
+          // server page, review in place.
           if (row.serverSlug) {
             void navigate(routes.shadowMCP.detail.href(row.serverSlug));
             return;
