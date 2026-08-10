@@ -69287,6 +69287,7 @@ components:
                 status:
                     type: string
                     enum:
+                        - unreviewed
                         - requested
                         - approved
                         - denied

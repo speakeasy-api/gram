@@ -12173,8 +12173,8 @@ func ValidateShadowMCPInventoryApprovalRequestResponseBody(body *ShadowMCPInvent
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	if body.Status != nil {
-		if !(*body.Status == "requested" || *body.Status == "approved" || *body.Status == "denied") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"requested", "approved", "denied"}))
+		if !(*body.Status == "unreviewed" || *body.Status == "requested" || *body.Status == "approved" || *body.Status == "denied") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"unreviewed", "requested", "approved", "denied"}))
 		}
 	}
 	return

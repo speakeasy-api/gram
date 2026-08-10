@@ -39,6 +39,7 @@ import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
+import { useEnsureMcpServerReviewMutation } from "@gram/client/react-query/ensureMcpServerReview.js";
 import { invalidateAllShadowMCPInventory } from "@gram/client/react-query/shadowMCPInventory.js";
 import {
   invalidateAllShadowMCPInventoryServer,
@@ -47,7 +48,7 @@ import {
 import { useUpdateShadowMCPInventoryServerNameMutation } from "@gram/client/react-query/updateShadowMCPInventoryServerName.js";
 import { useShadowMCPInventoryUsers } from "@gram/client/react-query/shadowMCPInventoryUsers.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 
@@ -274,6 +275,58 @@ function DetailActionButtons({
           {pendingReview ? "Review Request" : "Decide Access"}
         </Button.Text>
       </Button>
+    </div>
+  );
+}
+
+/**
+ * Resolves the server's evidence dossier the moment the page needs it: the
+ * ensure call opens one (gathering evidence) when none exists and returns
+ * the existing review otherwise. Evidence is a property of the server, so
+ * reading it never requires asking for access or deciding anything first.
+ */
+function EnsureServerReview({
+  canonicalServerUrl,
+}: {
+  canonicalServerUrl: string;
+}) {
+  const project = useProject();
+  const queryClient = useQueryClient();
+  const ensure = useEnsureMcpServerReviewMutation();
+  const ensureRef = useRef(false);
+
+  useEffect(() => {
+    if (ensureRef.current) return;
+    ensureRef.current = true;
+    void (async () => {
+      try {
+        await ensure.mutateAsync({
+          request: {
+            gramProject: project.slug,
+            ensureServerReviewRequestBody: { target: canonicalServerUrl },
+          },
+        });
+      } catch {
+        toast.error("Evidence could not be gathered for this server");
+        return;
+      }
+      await Promise.all([
+        invalidateAllShadowMCPInventoryServer(queryClient),
+        invalidateAllShadowMCPInventory(queryClient),
+      ]);
+    })();
+  }, [canonicalServerUrl, ensure, project.slug, queryClient]);
+
+  return (
+    <div className="bg-muted/20 flex min-h-24 flex-col items-center justify-center border border-dashed px-6 py-8 text-center">
+      <Text variant="body" className="font-medium">
+        Gathering evidence
+      </Text>
+      <Text muted small className="mt-1 max-w-md">
+        Collecting what this server declares about itself — its identity,
+        capabilities, and package health. This takes a few seconds on first
+        visit.
+      </Text>
     </div>
   );
 }
@@ -531,15 +584,9 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                     {server.approvalRequest ? (
                       <ApprovalReview requestId={server.approvalRequest.id} />
                     ) : (
-                      <div className="bg-muted/20 flex min-h-24 flex-col items-center justify-center border border-dashed px-6 py-8 text-center">
-                        <Text variant="body" className="font-medium">
-                          No review yet
-                        </Text>
-                        <Text muted small className="mt-1 max-w-md">
-                          No one has asked for this server and no decision has
-                          been recorded.
-                        </Text>
-                      </div>
+                      <EnsureServerReview
+                        canonicalServerUrl={server.canonicalServerUrl}
+                      />
                     )}
                   </section>
                   <section className="min-h-0 space-y-3">

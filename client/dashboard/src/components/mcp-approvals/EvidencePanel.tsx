@@ -728,6 +728,8 @@ export function StatusBadge({ status }: { status: string }): JSX.Element {
       return <Badge variant="destructive">Denied</Badge>;
     case "requested":
       return <Badge variant="information">Awaiting decision</Badge>;
+    case "unreviewed":
+      return <Badge variant="neutral">Not reviewed</Badge>;
     default:
       return <Badge variant="neutral">{status}</Badge>;
   }

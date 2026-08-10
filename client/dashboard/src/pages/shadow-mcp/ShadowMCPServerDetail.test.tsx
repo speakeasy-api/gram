@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   useUpdateShadowMCPInventoryServerNameMutation: vi.fn(),
   invalidateShadowMCPInventory: vi.fn(),
   createApprovalRequest: vi.fn(),
+  ensureServerReview: vi.fn(),
   invalidateApprovalRequestList: vi.fn(),
   invalidateShadowMCPInventoryServer: vi.fn(),
   toastError: vi.fn(),
@@ -186,6 +187,13 @@ vi.mock("@gram/client/react-query/createMcpApprovalRequest.js", () => ({
   }),
 }));
 
+vi.mock("@gram/client/react-query/ensureMcpServerReview.js", () => ({
+  useEnsureMcpServerReviewMutation: () => ({
+    isPending: false,
+    mutateAsync: mocks.ensureServerReview,
+  }),
+}));
+
 vi.mock("@gram/client/react-query/listMcpApprovalRequests.js", () => ({
   invalidateAllListMcpApprovalRequests: mocks.invalidateApprovalRequestList,
 }));
@@ -336,6 +344,11 @@ function inventoryServer(
     access: "allowed",
     allowedPolicyIds: ["policy-1"],
     blockedPolicyIds: [],
+    approvalRequest: {
+      id: "request-default",
+      requesterCount: 0,
+      status: "unreviewed",
+    },
     canonicalServerUrl: "https://github.example.com/mcp",
     firstSeen: new Date("2026-01-01T10:00:00Z"),
     lastCalled: new Date("2026-01-04T10:00:00Z"),
@@ -766,7 +779,7 @@ describe("ShadowMCPServerDetail", () => {
     expect(sheet.getAttribute("data-disposition")).toBe("block_all");
   });
 
-  it("decides access proactively when no approval request exists", () => {
+  it("decides access proactively on a server with only a dossier", () => {
     renderDetailPage();
 
     expect(screen.queryByRole("button", { name: "Review Request" })).toBeNull();
@@ -779,13 +792,29 @@ describe("ShadowMCPServerDetail", () => {
       "https://github.example.com/mcp",
     );
     expect(sheet.getAttribute("data-display-name")).toBe("GitHub MCP");
-    expect(sheet.getAttribute("data-approval-request-id")).toBeNull();
+    // The decision lands on the dossier the page already resolved.
+    expect(sheet.getAttribute("data-approval-request-id")).toBe(
+      "request-default",
+    );
   });
 
   it("renders the access review only when an approval request exists", () => {
+    mocks.useShadowMCPInventoryServer.mockReturnValue({
+      data: inventoryServer({ approvalRequest: undefined }),
+      error: null,
+      isLoading: false,
+    });
     renderDetailPage();
 
-    expect(screen.getByText("No review yet")).toBeTruthy();
+    expect(screen.getByText("Gathering evidence")).toBeTruthy();
+    expect(mocks.ensureServerReview).toHaveBeenCalledWith({
+      request: {
+        gramProject: "demo",
+        ensureServerReviewRequestBody: {
+          target: "https://github.example.com/mcp",
+        },
+      },
+    });
     expect(screen.queryByTestId("approval-review")).toBeNull();
 
     cleanup();
@@ -802,12 +831,17 @@ describe("ShadowMCPServerDetail", () => {
     });
     renderDetailPage();
 
-    expect(screen.queryByText("No review yet")).toBeNull();
+    expect(screen.queryByText("Gathering evidence")).toBeNull();
     const review = screen.getByTestId("approval-review");
     expect(review.getAttribute("data-request-id")).toBe("request-2");
   });
 
-  it("renders the refresh evidence control only when an approval request exists", () => {
+  it("renders the refresh evidence control only when a review exists", () => {
+    mocks.useShadowMCPInventoryServer.mockReturnValue({
+      data: inventoryServer({ approvalRequest: undefined }),
+      error: null,
+      isLoading: false,
+    });
     renderDetailPage();
 
     expect(screen.queryByTestId("refresh-evidence-button")).toBeNull();

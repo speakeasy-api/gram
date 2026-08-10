@@ -753,7 +753,7 @@ var ShadowMCPInventoryApprovalRequestModel = Type("ShadowMCPInventoryApprovalReq
 		Format(FormatUUID)
 	})
 	Attribute("status", String, func() {
-		Enum("requested", "approved", "denied")
+		Enum("unreviewed", "requested", "approved", "denied")
 	})
 	Attribute("requester_count", Int, "How many distinct people have asked for this server.")
 })
