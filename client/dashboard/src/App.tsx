@@ -5,12 +5,13 @@ import { NuqsAdapter } from "nuqs/adapters/react-router/v8";
 import { Toaster } from "@/components/ui/Sonner";
 import { ConfigProvider } from "@/components/ui/context/ConfigContext";
 import { TooltipProvider } from "@/components/ui/Tooltip";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BrowserRouter,
   Route,
   Routes,
   useLocation,
+  useNavigate,
   useSearchParams,
 } from "react-router";
 import { AppLayout, LoginCheck, OrgLayout } from "./components/app-layout.tsx";
@@ -20,7 +21,7 @@ import {
   recordVisit,
   RECENTS_LABEL_OVERRIDE_EVENT,
 } from "./components/command-palette/recentlyVisited";
-import { useUser } from "./contexts/Auth";
+import { useIsPlatformAdmin, useUser } from "./contexts/Auth";
 import { useProjectNavRoutes } from "./hooks/useProjectNavRoutes";
 import { useRBAC } from "./hooks/useRBAC";
 import { AuthProvider, ProjectProvider } from "./contexts/AuthProvider.tsx";
@@ -30,7 +31,6 @@ import { CommandPaletteProvider } from "./contexts/CommandPaletteProvider";
 import { useSlugs } from "./contexts/Sdk.tsx";
 import { SdkProvider } from "./contexts/SdkProvider.tsx";
 import { TelemetryProvider } from "./contexts/TelemetryProvider.tsx";
-import { PlatformAdminToolbar } from "./components/platform-admin-toolbar";
 import { usePageTitle } from "./hooks/use-page-title";
 import { PREFERRED_THEME_STORAGE_KEY } from "./lib/local-storage-keys";
 import CliCallback from "./pages/cli/CliCallback";
@@ -145,7 +145,6 @@ function AppContent() {
     <AuthProvider>
       <ProjectProvider>
         <RouteProvider />
-        <PlatformAdminToolbar />
       </ProjectProvider>
     </AuthProvider>
   );
@@ -165,6 +164,39 @@ const RouteProvider = () => {
 
   // Update document title based on active route
   usePageTitle(routes, orgRoutes);
+
+  // Ctrl+Shift+D toggles between the Platform Admin pages and wherever the
+  // user was working — carried over from the retired floating Developer
+  // Toolkit, which used the same chord to unhide itself. First press remembers
+  // the current page and jumps to the Platform Admin overview; pressing it
+  // again from any Platform Admin page returns to the remembered page. Same
+  // audience rule as the pages: platform admins, or anyone in dev.
+  const isPlatformAdmin = useIsPlatformAdmin();
+  const goToPlatformAdmin = orgRoutes.platformAdminOverview.goTo;
+  const navigate = useNavigate();
+  const platformAdminReturnPath = useRef<string | null>(null);
+  useEffect(() => {
+    if (!(import.meta.env.DEV || isPlatformAdmin)) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey && e.shiftKey && e.key === "D")) return;
+      e.preventDefault();
+      // Segment match rather than substring so an org slug that merely
+      // contains "platform-admin" text can't confuse the toggle.
+      const onPlatformAdminPage = location.pathname
+        .split("/")
+        .includes("platform-admin");
+      if (onPlatformAdminPage) {
+        const returnPath = platformAdminReturnPath.current;
+        platformAdminReturnPath.current = null;
+        if (returnPath) void navigate(returnPath);
+      } else {
+        platformAdminReturnPath.current = location.pathname + location.search;
+        goToPlatformAdmin();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isPlatformAdmin, goToPlatformAdmin, location, navigate]);
 
   // Record the visited page for the command palette's "Recently Visited"
   // section. Stored client-side (localStorage), scoped per workspace.
