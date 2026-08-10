@@ -473,7 +473,11 @@ function EnvironmentsInner(): JSX.Element {
       primaryAction={rows.length > 0 ? newButton : undefined}
       isLoading={q.isPending}
       isEmpty={rows.length === 0}
-      empty={{ icon: "blocks", heading: "No environments yet", action: newButton }}
+      empty={{
+        icon: "blocks",
+        heading: "No environments yet",
+        action: newButton,
+      }}
     >
       <Table columns={columns} data={rows} rowKey={(r) => r.id} />
     </ResourceListPage>
@@ -481,7 +485,7 @@ function EnvironmentsInner(): JSX.Element {
 }
 ```
 
-**Scope gating (important):** wrap the data-owning component in `RequireScope` (the view scope, e.g. `project:read`) and call data hooks inside it, so the query never fires for unauthorized users. The templates also accept a `scope` prop, but it only gates *rendering* — a hook in the same component that renders the template runs before that gate, so prefer the outer wrapper for anything that fetches. Gate write-only affordances (create/delete buttons, mutation tabs) with their own `level="component"` `RequireScope` for the write scope; never rely on an any-of page scope to hide them.
+**Scope gating (important):** wrap the data-owning component in `RequireScope` (the view scope, e.g. `project:read`) and call data hooks inside it, so the query never fires for unauthorized users. The templates also accept a `scope` prop, but it only gates _rendering_ — a hook in the same component that renders the template runs before that gate, so prefer the outer wrapper for anything that fetches. Gate write-only affordances (create/delete buttons, mutation tabs) with their own `level="component"` `RequireScope` for the write scope; never rely on an any-of page scope to hide them.
 
 Only a page that fits **none** of the templates falls back to the raw skeleton (and it still must render the header exactly once — no bespoke `<h1>`):
 
