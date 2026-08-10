@@ -494,20 +494,18 @@ WHERE id = @assistant_id
 RETURNING id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at;
 
 -- name: DeleteAssistant :exec
-WITH deleted_assistant AS (
-  UPDATE assistants target
-  SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-  WHERE target.id = @assistant_id
-    AND target.project_id = @project_id
-    AND target.deleted IS FALSE
-  RETURNING target.id, target.project_id
-)
-UPDATE assistant_mcp_oauth_clients clients
+UPDATE assistants
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-FROM deleted_assistant assistant
-WHERE clients.assistant_id = assistant.id
-  AND clients.project_id = assistant.project_id
-  AND clients.deleted IS FALSE;
+WHERE id = @assistant_id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
+-- name: RetireAssistantMCPOAuthClients :exec
+UPDATE assistant_mcp_oauth_clients
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE assistant_id = @assistant_id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
 
 -- name: RevokeSkillDistributionsByAssistant :many
 -- Returns pre-revocation state and skill identity for per-edge audit events.
@@ -1387,11 +1385,18 @@ SELECT
     )
     OR (client_id IS NOT NULL AND redirect_uri <> @redirect_uri)
   ) AS claimable
-FROM assistant_mcp_oauth_clients
-WHERE project_id = @project_id
-  AND assistant_id = @assistant_id
-  AND oauth_server_issuer = @oauth_server_issuer
-  AND deleted IS FALSE;
+FROM assistant_mcp_oauth_clients clients
+WHERE clients.project_id = @project_id
+  AND clients.assistant_id = @assistant_id
+  AND clients.oauth_server_issuer = @oauth_server_issuer
+  AND EXISTS (
+    SELECT 1
+    FROM assistants owner
+    WHERE owner.id = @assistant_id
+      AND owner.project_id = @project_id
+      AND owner.deleted IS FALSE
+  )
+  AND clients.deleted IS FALSE;
 
 -- name: ClaimAssistantMCPOAuthClientRegistration :execrows
 INSERT INTO assistant_mcp_oauth_clients AS clients (
@@ -1401,14 +1406,18 @@ INSERT INTO assistant_mcp_oauth_clients AS clients (
   redirect_uri,
   registration_owner,
   registration_started_at
-) VALUES (
+) SELECT
   @project_id,
   @assistant_id,
   @oauth_server_issuer,
   @redirect_uri,
   @registration_owner,
   clock_timestamp()
-)
+FROM assistants owner
+WHERE owner.id = @assistant_id
+  AND owner.project_id = @project_id
+  AND owner.deleted IS FALSE
+FOR UPDATE
 ON CONFLICT (project_id, assistant_id, oauth_server_issuer) WHERE deleted IS FALSE
 DO UPDATE SET
   client_id = NULL,
@@ -1435,7 +1444,7 @@ WHERE
   );
 
 -- name: CompleteAssistantMCPOAuthClientRegistration :execrows
-UPDATE assistant_mcp_oauth_clients
+UPDATE assistant_mcp_oauth_clients AS clients
 SET
   client_id = @client_id,
   client_secret_encrypted = @client_secret_encrypted,
@@ -1443,12 +1452,19 @@ SET
   registration_owner = NULL,
   registration_started_at = NULL,
   updated_at = clock_timestamp()
-WHERE project_id = @project_id
-  AND assistant_id = @assistant_id
-  AND oauth_server_issuer = @oauth_server_issuer
-  AND registration_owner = @registration_owner
-  AND client_id IS NULL
-  AND deleted IS FALSE;
+WHERE clients.project_id = @project_id
+  AND clients.assistant_id = @assistant_id
+  AND clients.oauth_server_issuer = @oauth_server_issuer
+  AND clients.registration_owner = @registration_owner
+  AND clients.client_id IS NULL
+  AND EXISTS (
+    SELECT 1
+    FROM assistants owner
+    WHERE owner.id = @assistant_id
+      AND owner.project_id = @project_id
+      AND owner.deleted IS FALSE
+  )
+  AND clients.deleted IS FALSE;
 
 -- name: AbandonAssistantMCPOAuthClientRegistration :exec
 UPDATE assistant_mcp_oauth_clients

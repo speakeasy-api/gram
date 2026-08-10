@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -100,11 +102,20 @@ func TestGetOrRegisterMCPAuthClientReusesRegistration(t *testing.T) {
 	require.Equal(t, "Gram Assistant "+assistantID.String(), request.ClientName)
 	require.Equal(t, []string{redirectURI}, request.RedirectURIs)
 
-	err = assistantrepo.New(conn).DeleteAssistant(t.Context(), assistantrepo.DeleteAssistantParams{
+	deleteTx, err := conn.Begin(t.Context())
+	require.NoError(t, err)
+	deleteQueries := assistantrepo.New(deleteTx)
+	err = deleteQueries.DeleteAssistant(t.Context(), assistantrepo.DeleteAssistantParams{
 		AssistantID: assistantID,
 		ProjectID:   projectID,
 	})
 	require.NoError(t, err)
+	err = deleteQueries.RetireAssistantMCPOAuthClients(t.Context(), assistantrepo.RetireAssistantMCPOAuthClientsParams{
+		AssistantID: assistantID,
+		ProjectID:   projectID,
+	})
+	require.NoError(t, err)
+	require.NoError(t, deleteTx.Commit(t.Context()))
 	var registrationDeleted bool
 	err = conn.QueryRow(t.Context(), `
 		SELECT deleted
@@ -240,4 +251,63 @@ func TestGetOrRegisterMCPAuthClientSerializesFirstRegistration(t *testing.T) {
 	first := <-results
 	second := <-results
 	require.Equal(t, first, second)
+}
+
+func TestAssistantDeletionSerializesWithOAuthRegistrationClaim(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_mcp_oauth_client_delete_race")
+	require.NoError(t, err)
+	projectID, assistantID, _, _ := insertAssistantFixture(t, conn)
+
+	deleteTx, err := conn.Begin(t.Context())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = deleteTx.Rollback(t.Context()) })
+	deleteQueries := assistantrepo.New(deleteTx)
+	require.NoError(t, deleteQueries.DeleteAssistant(t.Context(), assistantrepo.DeleteAssistantParams{
+		AssistantID: assistantID,
+		ProjectID:   projectID,
+	}))
+
+	type claimResult struct {
+		rows int64
+		err  error
+	}
+	claimDone := make(chan claimResult, 1)
+	go func() {
+		rows, claimErr := assistantrepo.New(conn).ClaimAssistantMCPOAuthClientRegistration(
+			t.Context(),
+			assistantrepo.ClaimAssistantMCPOAuthClientRegistrationParams{
+				ProjectID:         projectID,
+				AssistantID:       assistantID,
+				OauthServerIssuer: "https://auth.example.com",
+				RedirectUri:       "https://gram.example.com/oauth/callback",
+				RegistrationOwner: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+				ClaimLease: pgtype.Interval{
+					Microseconds: time.Minute.Microseconds(),
+					Days:         0,
+					Months:       0,
+					Valid:        true,
+				},
+				UsableAfter: pgtype.Timestamptz{
+					Time:             time.Now().Add(mcpAuthFlowTTL),
+					InfinityModifier: pgtype.Finite,
+					Valid:            true,
+				},
+			},
+		)
+		claimDone <- claimResult{rows: rows, err: claimErr}
+	}()
+
+	require.Never(t, func() bool { return len(claimDone) > 0 }, 250*time.Millisecond, 25*time.Millisecond,
+		"registration claim did not wait for assistant deletion")
+	require.NoError(t, deleteQueries.RetireAssistantMCPOAuthClients(
+		t.Context(),
+		assistantrepo.RetireAssistantMCPOAuthClientsParams{AssistantID: assistantID, ProjectID: projectID},
+	))
+	require.NoError(t, deleteTx.Commit(t.Context()))
+
+	result := <-claimDone
+	require.NoError(t, result.err)
+	require.Zero(t, result.rows)
 }

@@ -205,14 +205,18 @@ INSERT INTO assistant_mcp_oauth_clients AS clients (
   redirect_uri,
   registration_owner,
   registration_started_at
-) VALUES (
+) SELECT
   $1,
   $2,
   $3,
   $4,
   $5,
   clock_timestamp()
-)
+FROM assistants owner
+WHERE owner.id = $2
+  AND owner.project_id = $1
+  AND owner.deleted IS FALSE
+FOR UPDATE
 ON CONFLICT (project_id, assistant_id, oauth_server_issuer) WHERE deleted IS FALSE
 DO UPDATE SET
   client_id = NULL,
@@ -376,7 +380,7 @@ func (q *Queries) ClearAssistantToolsets(ctx context.Context, arg ClearAssistant
 }
 
 const completeAssistantMCPOAuthClientRegistration = `-- name: CompleteAssistantMCPOAuthClientRegistration :execrows
-UPDATE assistant_mcp_oauth_clients
+UPDATE assistant_mcp_oauth_clients AS clients
 SET
   client_id = $1,
   client_secret_encrypted = $2,
@@ -384,12 +388,19 @@ SET
   registration_owner = NULL,
   registration_started_at = NULL,
   updated_at = clock_timestamp()
-WHERE project_id = $4
-  AND assistant_id = $5
-  AND oauth_server_issuer = $6
-  AND registration_owner = $7
-  AND client_id IS NULL
-  AND deleted IS FALSE
+WHERE clients.project_id = $4
+  AND clients.assistant_id = $5
+  AND clients.oauth_server_issuer = $6
+  AND clients.registration_owner = $7
+  AND clients.client_id IS NULL
+  AND EXISTS (
+    SELECT 1
+    FROM assistants owner
+    WHERE owner.id = $5
+      AND owner.project_id = $4
+      AND owner.deleted IS FALSE
+  )
+  AND clients.deleted IS FALSE
 `
 
 type CompleteAssistantMCPOAuthClientRegistrationParams struct {
@@ -766,20 +777,11 @@ func (q *Queries) CreateProjectManagedAssistant(ctx context.Context, arg CreateP
 }
 
 const deleteAssistant = `-- name: DeleteAssistant :exec
-WITH deleted_assistant AS (
-  UPDATE assistants target
-  SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-  WHERE target.id = $1
-    AND target.project_id = $2
-    AND target.deleted IS FALSE
-  RETURNING target.id, target.project_id
-)
-UPDATE assistant_mcp_oauth_clients clients
+UPDATE assistants
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-FROM deleted_assistant assistant
-WHERE clients.assistant_id = assistant.id
-  AND clients.project_id = assistant.project_id
-  AND clients.deleted IS FALSE
+WHERE id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
 `
 
 type DeleteAssistantParams struct {
@@ -1062,11 +1064,18 @@ SELECT
     )
     OR (client_id IS NOT NULL AND redirect_uri <> $1)
   ) AS claimable
-FROM assistant_mcp_oauth_clients
-WHERE project_id = $4
-  AND assistant_id = $5
-  AND oauth_server_issuer = $6
-  AND deleted IS FALSE
+FROM assistant_mcp_oauth_clients clients
+WHERE clients.project_id = $4
+  AND clients.assistant_id = $5
+  AND clients.oauth_server_issuer = $6
+  AND EXISTS (
+    SELECT 1
+    FROM assistants owner
+    WHERE owner.id = $5
+      AND owner.project_id = $4
+      AND owner.deleted IS FALSE
+  )
+  AND clients.deleted IS FALSE
 `
 
 type GetAssistantMCPOAuthClientParams struct {
@@ -3339,6 +3348,24 @@ func (q *Queries) ResolveToolsetsForWrite(ctx context.Context, arg ResolveToolse
 		return nil, err
 	}
 	return items, nil
+}
+
+const retireAssistantMCPOAuthClients = `-- name: RetireAssistantMCPOAuthClients :exec
+UPDATE assistant_mcp_oauth_clients
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE assistant_id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+`
+
+type RetireAssistantMCPOAuthClientsParams struct {
+	AssistantID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) RetireAssistantMCPOAuthClients(ctx context.Context, arg RetireAssistantMCPOAuthClientsParams) error {
+	_, err := q.db.Exec(ctx, retireAssistantMCPOAuthClients, arg.AssistantID, arg.ProjectID)
+	return err
 }
 
 const revertExpireAssistantRuntimeToActive = `-- name: RevertExpireAssistantRuntimeToActive :exec
