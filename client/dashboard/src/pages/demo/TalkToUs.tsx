@@ -112,12 +112,19 @@ function UpgradeGate({
           </div>
         }
       />
-      <div className="text-center">
+      <div className="flex items-center justify-center gap-4">
+        <Link
+          to="/explore-demo"
+          className="auth-mono text-[12px] text-[var(--muted)] underline underline-offset-4 transition-colors hover:text-black"
+        >
+          Explore demo
+        </Link>
+        <span aria-hidden="true" className="h-3 w-px bg-[var(--edge)]" />
         <a
           href={`mailto:${SALES_EMAIL}`}
           className="auth-mono text-[12px] text-[var(--muted)] underline underline-offset-4 transition-colors hover:text-black"
         >
-          Or email {SALES_EMAIL} →
+          Email {SALES_EMAIL} →
         </a>
       </div>
     </AuthShell>
