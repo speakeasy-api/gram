@@ -81,6 +81,9 @@ func NewScanner(logger *slog.Logger, classifier Classifier) *Scanner {
 func (s *Scanner) Scan(ctx context.Context, text, orgID, projectID, userID string, msg judgemessage.Message) ([]scanners.Finding, error) {
 	findings, err := s.ScanStrict(ctx, text, orgID, projectID, userID, msg)
 	if err != nil {
+		if errors.Is(err, ErrNoVerdict) {
+			return nil, nil
+		}
 		s.logger.WarnContext(ctx, "pi judge scan failed; dropping prompt injection findings",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(orgID),

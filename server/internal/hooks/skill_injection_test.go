@@ -5,13 +5,17 @@ import (
 	"errors"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
+	"github.com/speakeasy-api/gram/server/internal/skills"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -50,7 +54,7 @@ func countSkillScanRecords(t *testing.T, ctx context.Context, ti *testInstance, 
 	return int(count)
 }
 
-func seedPromptInjectionPolicy(t *testing.T, ctx context.Context, ti *testInstance) {
+func seedPromptInjectionPolicy(t *testing.T, ctx context.Context, ti *testInstance) uuid.UUID {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -68,6 +72,7 @@ func seedPromptInjectionPolicy(t *testing.T, ctx context.Context, ti *testInstan
 		AutoName:       false,
 	})
 	require.NoError(t, err)
+	return policyID
 }
 
 // countSkillInjectionFindings counts prompt-injection findings attributed to a
@@ -188,12 +193,7 @@ func TestSkillCapture_FailOpenVerdictRecordsNothing(t *testing.T) {
 	require.Equal(t, 0, countSkillScanRecords(t, ctx, ti, "failopen-skill"))
 }
 
-// Endpoint contract, not an end-to-end retry: if a second upload of the same
-// content arrives, a version left unscanned by a failed judge is scanned then
-// rather than written off as clean. Nothing in production sends that second
-// upload today - ingest_hooks.go sets content_required only for a hash the
-// server has not seen - so an outage still loses the version in practice.
-func TestSkillCapture_UnscannedVersionIsScannedOnRepeatUpload(t *testing.T) {
+func TestSkillCapture_UnscannedVersionIsRequestedAndScannedAgain(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = captureFeatureStub{skills: true}
@@ -204,12 +204,59 @@ func TestSkillCapture_UnscannedVersionIsScannedOnRepeatUpload(t *testing.T) {
 	activateAndUploadSkill(t, ctx, ti, "retried-skill", body)
 	require.Equal(t, 0, countSkillScanRecords(t, ctx, ti, "retried-skill"))
 
-	// Same content, working judge. The version already exists, so a
-	// created-version gate would have skipped this scan forever.
+	// The next activation asks the relay to resend known content because the
+	// version still has no coverage record for the enabled policy.
 	ti.service.piScanner = promptinjection.NewScanner(testenv.NewLogger(t), classifierReturning(promptinjection.LabelInjection))
-	require.NoError(t, ti.service.UploadSkillContent(ctx, uploadPayload(captureManifest("retried-skill", body))))
+	content := captureManifest("retried-skill", body)
+	resp, err := ti.service.Ingest(ctx, skillPayload("claude", eventTypeSkillActivated, "retried-skill-session", "retried-skill", rawHash(content)))
+	require.NoError(t, err)
+	require.Equal(t, true, requireEffectMap(t, resp.Effects, "skill_capture")["content_required"])
+	require.NoError(t, ti.service.UploadSkillContent(ctx, uploadPayload(content)))
 
 	require.Equal(t, 1, countSkillInjectionFindings(t, ctx, ti, "retried-skill"))
+}
+
+func TestSkillCapture_FindingWinsScanRecordConflict(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	policyID := seedPromptInjectionPolicy(t, ctx, ti)
+	result, err := skills.CaptureSkillContent(ctx, ti.conn, *authCtx.ProjectID, captureManifest("monotonic-skill", "content"))
+	require.NoError(t, err)
+
+	record := func(found bool) {
+		err := riskRepo.New(ti.conn).RecordSkillPromptInjectionScan(ctx, riskRepo.RecordSkillPromptInjectionScanParams{
+			SkillVersionID: uuid.NullUUID{UUID: result.SkillVersionID, Valid: true},
+			ProjectID:      *authCtx.ProjectID,
+			Source:         "prompt_injection",
+			Found:          found,
+			RuleID:         pgtype.Text{String: "prompt_injection", Valid: found},
+			Description:    pgtype.Text{String: "injected", Valid: found},
+			Match:          pgtype.Text{String: "content", Valid: found},
+			Confidence:     pgtype.Float8{Float64: 1, Valid: found},
+		})
+		require.NoError(t, err)
+	}
+	record(false)
+	record(true)
+	record(false)
+
+	rows, err := testrepo.New(ti.conn).ListRiskResultsAll(ctx, testrepo.ListRiskResultsAllParams{
+		ProjectID: *authCtx.ProjectID, RiskPolicyID: policyID,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.True(t, rows[0].Found)
+	require.Equal(t, "injected", rows[0].Description.String)
+	topRules, err := riskRepo.New(ti.conn).ListRiskOverviewTopRules(ctx, riskRepo.ListRiskOverviewTopRulesParams{
+		ProjectID: *authCtx.ProjectID,
+		FromTime:  conv.ToPGTimestamptz(time.Now().Add(-time.Hour)),
+		ToTime:    conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
+		RowLimit:  10,
+	})
+	require.NoError(t, err)
+	require.Empty(t, topRules, "skill findings must not leak into chat risk aggregates")
 }
 
 // Endpoint contract: content is immutable per version, so a repeat upload must

@@ -694,6 +694,44 @@ func (q *Queries) RememberKnownSkillRawHash(ctx context.Context, arg RememberKno
 	return known, err
 }
 
+const skillRawHashNeedsPromptInjectionScan = `-- name: SkillRawHashNeedsPromptInjectionScan :one
+SELECT EXISTS (
+  SELECT 1
+  FROM skill_raw_hashes srh
+  JOIN skills s
+    ON s.project_id = srh.project_id
+    AND s.archived_at IS NULL
+  JOIN skill_versions sv
+    ON sv.skill_id = s.id
+    AND sv.canonical_sha256 = srh.canonical_sha256
+  JOIN risk_policies p
+    ON p.project_id = s.project_id
+    AND p.enabled IS TRUE
+    AND p.deleted IS FALSE
+    AND 'prompt_injection' = ANY (p.sources)
+  WHERE srh.project_id = $1
+    AND srh.raw_sha256 = $2
+    AND NOT EXISTS (
+      SELECT 1
+      FROM risk_results rr
+      WHERE rr.skill_version_id = sv.id
+        AND rr.risk_policy_id = p.id
+    )
+)::boolean
+`
+
+type SkillRawHashNeedsPromptInjectionScanParams struct {
+	ProjectID uuid.UUID
+	RawSha256 string
+}
+
+func (q *Queries) SkillRawHashNeedsPromptInjectionScan(ctx context.Context, arg SkillRawHashNeedsPromptInjectionScanParams) (bool, error) {
+	row := q.db.QueryRow(ctx, skillRawHashNeedsPromptInjectionScan, arg.ProjectID, arg.RawSha256)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const updateClaudeCodeSessionTimestamp = `-- name: UpdateClaudeCodeSessionTimestamp :exec
 UPDATE chats SET updated_at = NOW() WHERE id = $1 AND project_id = $2
 `

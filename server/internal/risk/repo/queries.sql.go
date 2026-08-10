@@ -2970,6 +2970,7 @@ categorized AS (
   FROM risk_results rr
   WHERE rr.project_id = $3::uuid
     AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+    AND rr.skill_version_id IS NULL
     AND rr.created_at >= $1
     AND rr.created_at < $2
 ),
@@ -3035,6 +3036,7 @@ SELECT
 FROM risk_results rr
 WHERE rr.project_id = $1
   AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+  AND rr.skill_version_id IS NULL
   AND rr.created_at >= $2
   AND rr.created_at < $3
 GROUP BY rr.rule_id, rr.source
@@ -3914,6 +3916,7 @@ WITH categorized AS (
   FROM risk_results rr
   WHERE rr.project_id = $2
     AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+    AND rr.skill_version_id IS NULL
     AND rr.created_at >= $3
     AND rr.created_at < $4
 )
@@ -4455,12 +4458,6 @@ WHERE p.project_id = $8
   AND p.enabled IS TRUE
   AND p.deleted IS FALSE
   AND 'prompt_injection' = ANY (p.sources)
-  AND NOT EXISTS (
-    SELECT 1
-    FROM risk_results rr
-    WHERE rr.skill_version_id = $1
-      AND rr.risk_policy_id = p.id
-  )
   -- Pin the anchor to the same project as the policy. The caller passes a
   -- version id it just captured under the authed project, so this is
   -- defence in depth: it keeps a foreign version id from being anchored
@@ -4472,7 +4469,16 @@ WHERE p.project_id = $8
     WHERE sv.id = $1
       AND sk.project_id = p.project_id
   )
-ON CONFLICT (skill_version_id, risk_policy_id) WHERE skill_version_id IS NOT NULL DO NOTHING
+ON CONFLICT (skill_version_id, risk_policy_id) WHERE skill_version_id IS NOT NULL
+DO UPDATE SET
+  source = EXCLUDED.source,
+  found = TRUE,
+  rule_id = EXCLUDED.rule_id,
+  description = EXCLUDED.description,
+  match = EXCLUDED.match,
+  confidence = EXCLUDED.confidence
+WHERE EXCLUDED.found IS TRUE
+  AND risk_results.found IS FALSE
 `
 
 type RecordSkillPromptInjectionScanParams struct {
@@ -4486,12 +4492,12 @@ type RecordSkillPromptInjectionScanParams struct {
 	ProjectID      uuid.UUID
 }
 
-// Records one row per enabled prompt-injection policy that has not yet scanned
-// this skill version, anchored on the version rather than a chat message.
+// Records one row per enabled prompt-injection policy, anchored on the version
+// rather than a chat message.
 // Called for any completed judgement: a found = FALSE row is the coverage
 // record, mirroring the empty result rows the chat batch path writes.
-// The NOT EXISTS gate is not atomic against a concurrent upload of the same
-// content, so ON CONFLICT defers the last word to the partial unique index.
+// Concurrent scans can race after the state check. A finding upgrades a clean
+// row, while a clean result can never erase a finding.
 func (q *Queries) RecordSkillPromptInjectionScan(ctx context.Context, arg RecordSkillPromptInjectionScanParams) error {
 	_, err := q.db.Exec(ctx, recordSkillPromptInjectionScan,
 		arg.SkillVersionID,

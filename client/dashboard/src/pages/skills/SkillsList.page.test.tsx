@@ -43,6 +43,9 @@ const testState = vi.hoisted(() => ({
   invalidateFeedback: vi.fn().mockResolvedValue(undefined),
   invalidateEfficacy: vi.fn().mockResolvedValue(undefined),
   toastInfo: vi.fn(),
+  adminAllowed: true,
+  policyHookCalls: 0,
+  policies: [] as Array<Record<string, unknown>>,
 }));
 
 vi.mock("@/components/filters", () => ({
@@ -73,7 +76,37 @@ vi.mock("@/routes", () => ({
       href: () => "/skills",
       detail: { href: (id: string) => `/skills/${id}` },
     },
+    policyCenter: {
+      new: {
+        Link: ({
+          children,
+          queryParams,
+        }: {
+          children: ReactNode;
+          queryParams: Record<string, string>;
+        }) => (
+          <a href={`/risk-policies/new?${new URLSearchParams(queryParams)}`}>
+            {children}
+          </a>
+        ),
+      },
+      detail: {
+        Link: ({
+          children,
+          params,
+        }: {
+          children: ReactNode;
+          params: string[];
+        }) => <a href={`/risk-policies/${params[0]}`}>{children}</a>,
+      },
+    },
   }),
+}));
+vi.mock("@gram/client/react-query/riskListPolicies.js", () => ({
+  useRiskListPolicies: () => {
+    testState.policyHookCalls += 1;
+    return { data: { policies: testState.policies } };
+  },
 }));
 vi.mock("@gram/client/react-query/skills.js", () => ({
   useSkills: (request: {
@@ -223,7 +256,8 @@ vi.mock("@gram/client/react-query/unknownSkillActivations.js", () => ({
   }),
 }));
 vi.mock("@/components/require-scope", () => ({
-  RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
+  RequireScope: ({ children, scope }: { children: ReactNode; scope: string }) =>
+    scope === "org:admin" && !testState.adminAllowed ? null : <>{children}</>,
 }));
 vi.mock("@/components/ui/Tooltip", () => ({
   Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -421,6 +455,9 @@ beforeEach(() => {
   testState.suggestionTotal = 0;
   testState.suggestionRequests = [];
   testState.toastInfo.mockReset();
+  testState.adminAllowed = true;
+  testState.policyHookCalls = 0;
+  testState.policies = [];
   testState.invalidateSkills.mockReset().mockResolvedValue(undefined);
   testState.invalidateSkill.mockReset().mockResolvedValue(undefined);
   testState.invalidateDistributions.mockReset().mockResolvedValue(undefined);
@@ -433,6 +470,39 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("SkillsList pagination surfaces", () => {
+  it("links admins to prompt injection policy setup", () => {
+    render(<SkillsList />);
+
+    const link = screen.getByRole("link", { name: "Set up scanning" });
+    expect(link.getAttribute("href")).toBe(
+      "/risk-policies/new?kind=standard&category=prompt_injection",
+    );
+  });
+
+  it("links admins to the enabled prompt injection policy", () => {
+    testState.policies = [
+      {
+        id: "policy_pi",
+        enabled: true,
+        sources: ["gitleaks", "prompt_injection"],
+      },
+    ];
+
+    render(<SkillsList />);
+
+    const link = screen.getByRole("link", { name: "View policy" });
+    expect(link.getAttribute("href")).toBe("/risk-policies/policy_pi");
+  });
+
+  it("does not load policy configuration for non-admin skill readers", () => {
+    testState.adminAllowed = false;
+
+    render(<SkillsList />);
+
+    expect(screen.queryByText("Set up prompt injection scanning")).toBeNull();
+    expect(testState.policyHookCalls).toBe(0);
+  });
+
   it("shows only the compact skills table columns", () => {
     render(<SkillsList />);
 
