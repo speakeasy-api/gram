@@ -4240,7 +4240,7 @@ CREATE TABLE IF NOT EXISTS assistant_mcp_oauth_clients (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
   assistant_id uuid NOT NULL,
-  oauth_server_issuer TEXT NOT NULL CHECK (oauth_server_issuer <> '' AND CHAR_LENGTH(oauth_server_issuer) <= 500),
+  oauth_server_issuer TEXT NOT NULL,
   client_id TEXT NOT NULL,
   client_secret_encrypted TEXT NOT NULL,
 
