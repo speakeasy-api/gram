@@ -2385,12 +2385,13 @@ func (t testRuntimeBackend) RecycleImage(ctx context.Context, record assistantRu
 	return t.recycleResult, nil
 }
 
-func (t testRuntimeBackend) RunTurn(_ context.Context, _ assistantRuntimeRecord, _ uuid.UUID, _ string, _ string, prompt string, mcpServers []runtimeMCPServer) error {
+func (t testRuntimeBackend) RunTurn(_ context.Context, _ assistantRuntimeRecord, turn runTurnRequest) error {
 	if t.runTurnMCPServers != nil {
-		captured := append([]runtimeMCPServer(nil), mcpServers...)
+		captured := append([]runtimeMCPServer(nil), turn.MCPServers...)
 		t.runTurnMCPServers.Store(&captured)
 	}
 	if t.runTurnPrompt != nil {
+		prompt := turn.Prompt
 		t.runTurnPrompt.Store(&prompt)
 	}
 	return t.runTurnErr

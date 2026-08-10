@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-
-	"github.com/google/uuid"
 )
 
 // runtimeRouter fans RuntimeBackend calls out to the backend named by each
@@ -82,14 +80,14 @@ func (r *runtimeRouter) RecycleImage(ctx context.Context, runtime assistantRunti
 	return result, nil
 }
 
-func (r *runtimeRouter) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey string, authToken string, prompt string, mcpServers []runtimeMCPServer) error {
+func (r *runtimeRouter) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, turn runTurnRequest) error {
 	b, err := r.route(runtime.Backend)
 	if err != nil {
 		return err
 	}
 	// Wrap with %w so the classifyTurnError sentinels the service matches on
 	// (ErrRuntimeUnhealthy, ErrCompletionFailed, ErrHistoryCorrupted) survive.
-	if err := b.RunTurn(ctx, runtime, threadID, idempotencyKey, authToken, prompt, mcpServers); err != nil {
+	if err := b.RunTurn(ctx, runtime, turn); err != nil {
 		return fmt.Errorf("run turn on %s runtime: %w", runtime.Backend, err)
 	}
 	return nil

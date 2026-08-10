@@ -400,9 +400,14 @@ async fn spawn_thread(
     let fs_resources = FileSystemToolResources::new()
         .with_policy(FileSystemToolPolicy::new().require_read_before_write(true));
 
-    let native_tools = ToolRegistry::new().with(tools::bun_run::bun_run).with(
-        tools::mcp_force_reconnect::McpForceReconnectTool::new(Arc::clone(host)),
-    );
+    let native_tools = ToolRegistry::new()
+        .with(tools::bun_run::bun_run)
+        .with(tools::mcp_force_reconnect::McpForceReconnectTool::new(
+            Arc::clone(host),
+        ))
+        .with(tools::inspect_asset::InspectAssetTool::new(
+            inbox_tx.clone(),
+        ));
 
     let compose_source = agentkit_tool_compose::ComposeTool::wrap(mcp_catalog)
         .with_source(native_tools.merge(agentkit_tool_fs::registry()));

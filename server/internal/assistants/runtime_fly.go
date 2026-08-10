@@ -832,7 +832,7 @@ func (f *FlyRuntimeBackend) tracedWaitHealth(ctx context.Context, target flyRunt
 	return f.waitForRuntimeHealth(ctx, target)
 }
 
-func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey string, authToken string, prompt string, mcpServers []runtimeMCPServer) error {
+func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, turn runTurnRequest) error {
 	if err := validateRuntimeBackend(f, runtime.Backend); err != nil {
 		return err
 	}
@@ -845,10 +845,10 @@ func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntim
 	}
 
 	reqBody, err := json.Marshal(runtimeTurnRequest{
-		Input:       prompt,
-		InputParts:  nil,
-		AuthToken:   authToken,
-		MCPServers:  mcpServers,
+		Input:       turn.Prompt,
+		InputParts:  turn.InputParts,
+		AuthToken:   turn.AuthToken,
+		MCPServers:  turn.MCPServers,
 		AssistantID: runtime.AssistantID.String(),
 		ProjectID:   runtime.ProjectID.String(),
 	})
@@ -861,10 +861,10 @@ func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntim
 	// uses to dispatch to the right per-thread tokio task.
 	if _, err := f.runtimeRequest(ctx, targetFromMetadata(metadata), runtimeHTTPRequest{
 		Method:         http.MethodPost,
-		Path:           "/threads/" + threadID.String() + "/turn",
+		Path:           "/threads/" + turn.ThreadID.String() + "/turn",
 		ContentType:    "application/json",
 		Body:           reqBody,
-		IdempotencyKey: idempotencyKey,
+		IdempotencyKey: turn.IdempotencyKey,
 		MaxTimeSeconds: 30 * 60,
 	}); err != nil {
 		return fmt.Errorf("%w: execute fly turn request: %w", classifyTurnError(err), err)

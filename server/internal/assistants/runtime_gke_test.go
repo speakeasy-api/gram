@@ -133,7 +133,14 @@ func TestGKERunTurnPostsToRunner(t *testing.T) {
 	})
 
 	backend := newTestGKEBackend(t, newGKEFakeDynamic(), doer, port)
-	err := backend.RunTurn(t.Context(), gkeRecord(t, backend, assistantID, host), threadID, "event-123", "jwt-token", "hello", nil)
+	err := backend.RunTurn(t.Context(), gkeRecord(t, backend, assistantID, host), runTurnRequest{
+		ThreadID:       threadID,
+		IdempotencyKey: "event-123",
+		AuthToken:      "jwt-token",
+		Prompt:         "hello",
+		InputParts:     nil,
+		MCPServers:     nil,
+	})
 	require.NoError(t, err)
 	require.Equal(t, "/threads/"+threadID.String()+"/turn", gotPath)
 	require.Equal(t, "event-123", gotIdem)
