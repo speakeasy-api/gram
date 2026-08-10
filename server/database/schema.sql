@@ -3562,7 +3562,7 @@ CREATE TABLE IF NOT EXISTS user_oauth_tokens (
   toolset_id uuid NOT NULL,  -- FK to toolsets
 
   -- OAuth 2.1 server issuer URL (from AS metadata, e.g., "https://accounts.google.com")
-  oauth_server_issuer TEXT NOT NULL,
+  oauth_server_issuer TEXT NOT NULL CHECK (oauth_server_issuer <> '' AND CHAR_LENGTH(oauth_server_issuer) <= 500),
 
   -- Token data (encrypted at rest via application layer)
   access_token_encrypted TEXT NOT NULL,
@@ -4241,8 +4241,12 @@ CREATE TABLE IF NOT EXISTS assistant_mcp_oauth_clients (
   project_id uuid NOT NULL,
   assistant_id uuid NOT NULL,
   oauth_server_issuer TEXT NOT NULL,
-  client_id TEXT NOT NULL,
-  client_secret_encrypted TEXT NOT NULL,
+  redirect_uri TEXT NOT NULL,
+  client_id TEXT,
+  client_secret_encrypted TEXT,
+  client_secret_expires_at timestamptz,
+  registration_owner uuid,
+  registration_started_at timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -4251,10 +4255,24 @@ CREATE TABLE IF NOT EXISTS assistant_mcp_oauth_clients (
 
   CONSTRAINT assistant_mcp_oauth_clients_pkey PRIMARY KEY (id),
   CONSTRAINT assistant_mcp_oauth_clients_oauth_server_issuer_check CHECK (oauth_server_issuer <> '' AND CHAR_LENGTH(oauth_server_issuer) <= 500),
-  -- Client credentials are owned secrets. Hard-deleting their project or
-  -- assistant must remove them instead of retaining unusable orphaned secrets.
-  CONSTRAINT assistant_mcp_oauth_clients_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
-  CONSTRAINT assistant_mcp_oauth_clients_project_id_assistant_id_fkey FOREIGN KEY (project_id, assistant_id) REFERENCES assistants (project_id, id) ON DELETE CASCADE
+  CONSTRAINT assistant_mcp_oauth_clients_registration_state_check CHECK (
+    (
+      client_id IS NOT NULL
+      AND client_secret_encrypted IS NOT NULL
+      AND registration_owner IS NULL
+      AND registration_started_at IS NULL
+    )
+    OR
+    (
+      client_id IS NULL
+      AND client_secret_encrypted IS NULL
+      AND client_secret_expires_at IS NULL
+      AND registration_owner IS NOT NULL
+      AND registration_started_at IS NOT NULL
+    )
+  ),
+  CONSTRAINT assistant_mcp_oauth_clients_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL,
+  CONSTRAINT assistant_mcp_oauth_clients_project_id_assistant_id_fkey FOREIGN KEY (project_id, assistant_id) REFERENCES assistants (project_id, id) ON DELETE SET NULL
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS assistant_mcp_oauth_clients_project_assistant_issuer_key
