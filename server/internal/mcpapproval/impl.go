@@ -714,8 +714,28 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 		// A denial grants nobody anything, whatever the caller sent.
 		granted = nil
 	}
+	if payload.Decision == decisionApproved && len(granted) == 0 {
+		// An approval that names no principals covers everyone. The resolved
+		// all-users principal is stored rather than an empty set, so the
+		// decision row says who was actually given access instead of leaving
+		// a blank the reader must know the default for.
+		granted = []string{authz.AllUsersPrincipal().String()}
+	}
 	if granted == nil {
 		granted = []string{}
+	}
+
+	// Parsed before the transaction: a malformed principal URN is the
+	// caller's error and must cost no transaction — and since these URNs
+	// become enforcement grants below, they can no longer be stored
+	// unvalidated.
+	grantedPrincipals := make([]urn.Principal, 0, len(granted))
+	for _, principalURN := range granted {
+		principal, err := urn.ParsePrincipal(principalURN)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid granted principal urn")
+		}
+		grantedPrincipals = append(grantedPrincipals, principal)
 	}
 
 	// The evidence is frozen as it stood on the request, and its version is
@@ -760,6 +780,25 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 		Status:    statusFor[payload.Decision],
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating approval request status").LogError(ctx, s.logger)
+	}
+
+	// The decision enforces in the same transaction it records: the grant
+	// writes and the decision row commit or roll back together, so enforced
+	// state can never disagree with the recorded history. target_key is the
+	// canonical inventory URL for server_url targets — the same key the
+	// shadow-MCP block rules and this org's traffic converge on. An stdio
+	// target has no URL to key a grant on; its decision records without
+	// enforcing.
+	if request.TargetKind == targetKindServerURL {
+		if err := reconcileDecisionGrants(ctx, dbtx, request.OrganizationID, projectID, request.TargetKey, payload.Decision == decisionApproved, grantedPrincipals); err != nil {
+			// An inexpressible blast radius surfaces as the caller's error
+			// with its explanation intact; everything else is unexpected.
+			var shareable *oops.ShareableError
+			if errors.As(err, &shareable) {
+				return nil, err
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "error enforcing decision").LogError(ctx, s.logger)
+		}
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {

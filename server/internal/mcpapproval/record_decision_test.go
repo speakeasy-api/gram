@@ -29,14 +29,14 @@ func TestRecordDecision_Approve(t *testing.T) {
 
 	payload := decisionPayload(requestID.String(), "approved")
 	payload.Rationale = "read-only tools, pinned version, vendor we already use"
-	payload.GrantedPrincipalUrns = []string{"urn:gram:team:platform"}
+	payload.GrantedPrincipalUrns = []string{"role:platform"}
 
 	decision, err := ti.service.RecordDecision(ctx, payload)
 	require.NoError(t, err)
 	require.Equal(t, "approved", decision.Decision)
 	require.NotEmpty(t, decision.DecidedBy)
 	require.NotNil(t, decision.Rationale)
-	require.Equal(t, []string{"urn:gram:team:platform"}, decision.GrantedPrincipalUrns)
+	require.Equal(t, []string{"role:platform"}, decision.GrantedPrincipalUrns)
 
 	require.Equal(t, "approved", requestStatus(t, ctx, ti, ti.projectID, requestID))
 }
@@ -51,7 +51,7 @@ func TestRecordDecision_DenyDropsGrants(t *testing.T) {
 
 	payload := decisionPayload(requestID.String(), "denied")
 	payload.Rationale = "demands a broad token and publishes no source"
-	payload.GrantedPrincipalUrns = []string{"urn:gram:team:platform", "urn:gram:user:someone"}
+	payload.GrantedPrincipalUrns = []string{"role:platform", "urn:gram:user:someone"}
 
 	decision, err := ti.service.RecordDecision(ctx, payload)
 	require.NoError(t, err)
