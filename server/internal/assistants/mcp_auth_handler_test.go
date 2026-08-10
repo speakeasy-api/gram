@@ -102,8 +102,7 @@ func TestGetOrRegisterMCPAuthClientReusesRegistration(t *testing.T) {
 	require.Equal(t, "Gram Assistant "+assistantID.String(), request.ClientName)
 	require.Equal(t, []string{redirectURI}, request.RedirectURIs)
 
-	deleteTx, err := conn.Begin(t.Context())
-	require.NoError(t, err)
+	deleteTx := testenv.BeginTx(t, t.Context(), conn)
 	deleteQueries := assistantrepo.New(deleteTx)
 	err = deleteQueries.DeleteAssistant(t.Context(), assistantrepo.DeleteAssistantParams{
 		AssistantID: assistantID,
@@ -116,12 +115,14 @@ func TestGetOrRegisterMCPAuthClientReusesRegistration(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NoError(t, deleteTx.Commit(t.Context()))
-	var registrationDeleted bool
-	err = conn.QueryRow(t.Context(), `
-		SELECT deleted
-		FROM assistant_mcp_oauth_clients
-		WHERE project_id = $1 AND assistant_id = $2
-	`, projectID, assistantID).Scan(&registrationDeleted)
+	registrationDeleted, err := assistantrepo.New(conn).GetAssistantMCPOAuthClientDeleted(
+		t.Context(),
+		assistantrepo.GetAssistantMCPOAuthClientDeletedParams{
+			ProjectID:         projectID,
+			AssistantID:       assistantID,
+			OauthServerIssuer: registrationServer.URL,
+		},
+	)
 	require.NoError(t, err)
 	require.True(t, registrationDeleted)
 }
@@ -260,9 +261,7 @@ func TestAssistantDeletionSerializesWithOAuthRegistrationClaim(t *testing.T) {
 	require.NoError(t, err)
 	projectID, assistantID, _, _ := insertAssistantFixture(t, conn)
 
-	deleteTx, err := conn.Begin(t.Context())
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = deleteTx.Rollback(t.Context()) })
+	deleteTx := testenv.BeginTx(t, t.Context(), conn)
 	deleteQueries := assistantrepo.New(deleteTx)
 	require.NoError(t, deleteQueries.DeleteAssistant(t.Context(), assistantrepo.DeleteAssistantParams{
 		AssistantID: assistantID,

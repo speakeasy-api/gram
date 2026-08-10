@@ -1113,6 +1113,28 @@ func (q *Queries) GetAssistantMCPOAuthClient(ctx context.Context, arg GetAssista
 	return i, err
 }
 
+const getAssistantMCPOAuthClientDeleted = `-- name: GetAssistantMCPOAuthClientDeleted :one
+SELECT deleted
+FROM assistant_mcp_oauth_clients
+WHERE project_id = $1
+  AND assistant_id = $2
+  AND oauth_server_issuer = $3
+`
+
+type GetAssistantMCPOAuthClientDeletedParams struct {
+	ProjectID         uuid.UUID
+	AssistantID       uuid.UUID
+	OauthServerIssuer string
+}
+
+// Test-only helper for verifying credential retirement on assistant deletion.
+func (q *Queries) GetAssistantMCPOAuthClientDeleted(ctx context.Context, arg GetAssistantMCPOAuthClientDeletedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, getAssistantMCPOAuthClientDeleted, arg.ProjectID, arg.AssistantID, arg.OauthServerIssuer)
+	var deleted bool
+	err := row.Scan(&deleted)
+	return deleted, err
+}
+
 const getAssistantRuntime = `-- name: GetAssistantRuntime :one
 SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, runtime_version, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
 WHERE id = $1

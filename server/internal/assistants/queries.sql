@@ -1489,3 +1489,11 @@ WHERE project_id = @project_id
   AND client_id = @client_id
   AND client_id IS NOT NULL
   AND deleted IS FALSE;
+
+-- name: GetAssistantMCPOAuthClientDeleted :one
+-- Test-only helper for verifying credential retirement on assistant deletion.
+SELECT deleted
+FROM assistant_mcp_oauth_clients
+WHERE project_id = @project_id
+  AND assistant_id = @assistant_id
+  AND oauth_server_issuer = @oauth_server_issuer;
