@@ -18,8 +18,10 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
+	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -225,6 +227,194 @@ func TestGKEEnsureWaitsForReadySandbox(t *testing.T) {
 	require.Equal(t, claimName, meta.ClaimName)
 	require.Equal(t, "sb-1", meta.SandboxName)
 	require.Equal(t, host, meta.PodIP)
+}
+
+// seedClaimedSandbox seeds a claim (with uid), its Ready sandbox, and a
+// Running runner pod labeled with the claim uid, exercising the same
+// controller-written fields the backend reads in production.
+func seedClaimedSandbox(t *testing.T, dyn dynamic.Interface, claimName, claimUID, sandboxName, podIP, image string) {
+	t.Helper()
+	seedUnstructured(t, dyn, gkeSandboxClaimGVR, &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": gkeSandboxClaimGVR.Group + "/" + gkeSandboxClaimGVR.Version,
+		"kind":       "SandboxClaim",
+		"metadata":   map[string]any{"name": claimName, "namespace": "gram-test", "uid": claimUID},
+		"status":     map[string]any{"sandbox": map[string]any{"Name": sandboxName}},
+	}})
+	seedUnstructured(t, dyn, gkeSandboxGVR, &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": gkeSandboxGVR.Group + "/" + gkeSandboxGVR.Version,
+		"kind":       "Sandbox",
+		"metadata":   map[string]any{"name": sandboxName, "namespace": "gram-test"},
+		"status": map[string]any{
+			"conditions": []any{map[string]any{"type": "Ready", "status": "True"}},
+		},
+	}})
+	seedUnstructured(t, dyn, gkePodGVR, &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "v1",
+		"kind":       "Pod",
+		"metadata": map[string]any{
+			"name":      sandboxName + "-pod",
+			"namespace": "gram-test",
+			"labels":    map[string]any{gkeClaimUIDLabel: claimUID},
+		},
+		"spec":   map[string]any{"containers": []any{map[string]any{"name": "runner", "image": image}}},
+		"status": map[string]any{"phase": "Running", "podIP": podIP},
+	}})
+}
+
+// adoptOnClaimCreate simulates the SandboxClaim controller in the fake
+// cluster: every claim create is stamped with the given uid and assigned the
+// given sandbox, mirroring warm-pool adoption. The matching sandbox and pod
+// must be seeded separately.
+func adoptOnClaimCreate(dyn *dynamicfake.FakeDynamicClient, claimUID, sandboxName string) {
+	dyn.PrependReactor("create", "sandboxclaims", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		obj, ok := action.(k8stesting.CreateAction).GetObject().(*unstructured.Unstructured)
+		if !ok {
+			return false, nil, nil
+		}
+		obj.SetUID(types.UID(claimUID))
+		_ = unstructured.SetNestedField(obj.Object, sandboxName, "status", "sandbox", "Name")
+		return false, nil, nil
+	})
+}
+
+func TestGKEEnsureRecyclesClaimOnStaleImage(t *testing.T) {
+	t.Parallel()
+
+	assistantID := uuid.New()
+	doer, host, port := testRunner(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/state" {
+			_ = json.NewEncoder(w).Encode(runnerStateResponse{
+				AssistantID:   assistantID.String(),
+				UptimeSeconds: 100,
+				Threads:       []runnerThreadState{{ThreadID: "t1", ChatID: "c1", IdleSeconds: 30}},
+			})
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	dyn := newGKEFakeDynamic()
+	backend := newTestGKEBackend(t, dyn, doer, port)
+	claimName := "gram-asst-" + assistantID.String()
+	seedClaimedSandbox(t, dyn, claimName, "claim-uid-1", "sb-stale", host, "registry.example.com/gram-assistant-runtime:old")
+
+	// The re-created claim adopts a warm pod already on the desired image.
+	adoptOnClaimCreate(dyn, "claim-uid-2", "sb-fresh")
+	seedClaimedSandbox(t, dyn, "unused-seed-claim", "claim-uid-2", "sb-fresh", host, backend.desiredImageRef())
+
+	result, err := backend.Ensure(t.Context(), assistantRuntimeRecord{
+		ID:                  uuid.New(),
+		AssistantThreadID:   uuid.Nil,
+		AssistantID:         assistantID,
+		ProjectID:           uuid.New(),
+		Backend:             runtimeBackendGKE,
+		BackendMetadataJSON: nil,
+		State:               runtimeStateStarting,
+		WarmUntil:           pgtype.Timestamptz{},
+	})
+	require.NoError(t, err)
+	require.True(t, result.ColdStart, "recycled claim is a fresh pod")
+	var meta gkeRuntimeMetadata
+	require.NoError(t, json.Unmarshal(result.BackendMetadataJSON, &meta))
+	require.Equal(t, "sb-fresh", meta.SandboxName)
+	require.Equal(t, backend.desiredImageRef(), meta.Image)
+}
+
+func TestGKEEnsureKeepsStaleImageClaimWhileTurnInFlight(t *testing.T) {
+	t.Parallel()
+
+	assistantID := uuid.New()
+	doer, host, port := testRunner(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/state" {
+			_ = json.NewEncoder(w).Encode(runnerStateResponse{
+				AssistantID:   assistantID.String(),
+				UptimeSeconds: 100,
+				Threads:       []runnerThreadState{{ThreadID: "t1", ChatID: "c1", IdleSeconds: 0}},
+			})
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	dyn := newGKEFakeDynamic()
+	backend := newTestGKEBackend(t, dyn, doer, port)
+	claimName := "gram-asst-" + assistantID.String()
+	seedClaimedSandbox(t, dyn, claimName, "claim-uid-1", "sb-stale", host, "registry.example.com/gram-assistant-runtime:old")
+
+	result, err := backend.Ensure(t.Context(), assistantRuntimeRecord{
+		ID:                  uuid.New(),
+		AssistantThreadID:   uuid.Nil,
+		AssistantID:         assistantID,
+		ProjectID:           uuid.New(),
+		Backend:             runtimeBackendGKE,
+		BackendMetadataJSON: nil,
+		State:               runtimeStateStarting,
+		WarmUntil:           pgtype.Timestamptz{},
+	})
+	require.NoError(t, err)
+	require.False(t, result.ColdStart)
+	var meta gkeRuntimeMetadata
+	require.NoError(t, json.Unmarshal(result.BackendMetadataJSON, &meta))
+	require.Equal(t, "sb-stale", meta.SandboxName, "busy runner is never recycled mid-turn")
+}
+
+func TestGKERecycleImageReplacesStaleClaim(t *testing.T) {
+	t.Parallel()
+
+	assistantID := uuid.New()
+	doer, host, port := testRunner(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/state" {
+			_ = json.NewEncoder(w).Encode(runnerStateResponse{
+				AssistantID:   assistantID.String(),
+				UptimeSeconds: 100,
+				Threads:       nil,
+			})
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	dyn := newGKEFakeDynamic()
+	backend := newTestGKEBackend(t, dyn, doer, port)
+	record := gkeRecord(t, backend, assistantID, host)
+	claimName := "gram-asst-" + assistantID.String()
+	seedClaimedSandbox(t, dyn, claimName, "claim-uid-1", "sb-stale", host, "registry.example.com/gram-assistant-runtime:old")
+
+	adoptOnClaimCreate(dyn, "claim-uid-2", "sb-fresh")
+	seedClaimedSandbox(t, dyn, "unused-seed-claim", "claim-uid-2", "sb-fresh", host, backend.desiredImageRef())
+
+	result, err := backend.RecycleImage(t.Context(), record)
+	require.NoError(t, err)
+	require.True(t, result.Recycled)
+	var meta gkeRuntimeMetadata
+	require.NoError(t, json.Unmarshal(result.BackendMetadataJSON, &meta))
+	require.Equal(t, "sb-fresh", meta.SandboxName)
+	require.Equal(t, backend.desiredImageRef(), meta.Image)
+}
+
+func TestGKERecycleImageSkipsCurrentImageAndMissingClaim(t *testing.T) {
+	t.Parallel()
+
+	assistantID := uuid.New()
+	doer, host, port := testRunner(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	dyn := newGKEFakeDynamic()
+	backend := newTestGKEBackend(t, dyn, doer, port)
+	record := gkeRecord(t, backend, assistantID, host)
+
+	// Missing claim: resource gone is a skip, not an error.
+	result, err := backend.RecycleImage(t.Context(), record)
+	require.NoError(t, err)
+	require.False(t, result.Recycled)
+
+	// Pod already on the configured image: nothing to roll.
+	claimName := "gram-asst-" + assistantID.String()
+	seedClaimedSandbox(t, dyn, claimName, "claim-uid-1", "sb-1", host, backend.desiredImageRef())
+	result, err = backend.RecycleImage(t.Context(), record)
+	require.NoError(t, err)
+	require.False(t, result.Recycled)
 }
 
 func TestGKEReapDeletesClaimIdempotently(t *testing.T) {

@@ -1899,36 +1899,39 @@ func TestServiceCoreRecycleActiveRuntimeImagesCountsBackendErrors(t *testing.T) 
 // A non-reuse backend (GKE) has no in-place image swap: it rolls onto a new
 // image by terminating idle runtimes (warm-TTL expiry), so the in-place recycle
 // sweep is a no-op for it — it touches no rows and tears nothing down.
-func TestServiceCoreRecycleActiveRuntimeImagesNoOpsForNonReuseBackend(t *testing.T) {
+func TestServiceCoreRecycleActiveRuntimeImagesSweepsGKERows(t *testing.T) {
 	t.Parallel()
 
-	conn, err := assistantsInfra.CloneTestDatabase(t, "recycle_runtime_images_gke_noop")
+	conn, err := assistantsInfra.CloneTestDatabase(t, "recycle_runtime_images_gke")
 	require.NoError(t, err)
 
-	projectID, assistantID, threadID := insertReapableProject(t, conn, "recycle-gke-noop")
+	projectID, assistantID, threadID := insertReapableProject(t, conn, "recycle-gke")
 	runtimeID := insertActiveV2RuntimeRow(t, conn, projectID, assistantID, threadID, runtimeBackendGKE, runtimeStateActive, `{"claim_name":"gram-asst-idle"}`)
 
+	recycledMetadata := []byte(`{"claim_name":"gram-asst-idle","pod_ip":"10.52.0.9","image":"registry.example.com/gram-assistant-runtime:new"}`)
 	stopCalls := &atomic.Int64{}
 	recycleCalls := &atomic.Int64{}
 	backend := testRuntimeBackend{
-		backend:      runtimeBackendGKE,
-		statusResult: RuntimeBackendStatus{Configured: true, IdleSeconds: nil},
-		stopCalls:    stopCalls,
-		recycleCalls: recycleCalls,
+		backend:       runtimeBackendGKE,
+		statusResult:  RuntimeBackendStatus{Configured: true, IdleSeconds: nil},
+		stopCalls:     stopCalls,
+		recycleCalls:  recycleCalls,
+		recycleResult: RuntimeBackendRecycleResult{Recycled: true, BackendMetadataJSON: recycledMetadata},
 	}
 	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger())
 
 	result, err := core.RecycleActiveRuntimeImages(t.Context(), RecycleAssistantRuntimeImagesParams{OnRowProcessed: nil})
 	require.NoError(t, err)
-	require.Equal(t, 0, result.Recycled)
+	require.Equal(t, 1, result.Recycled)
 	require.Equal(t, 0, result.Skipped)
 	require.Equal(t, 0, result.Errors)
-	require.EqualValues(t, 0, stopCalls.Load(), "the in-place sweep must not tear down GKE runtimes")
-	require.EqualValues(t, 0, recycleCalls.Load(), "GKE has no in-place recycle")
+	require.EqualValues(t, 1, recycleCalls.Load(), "the deploy sweep rolls GKE rows via RecycleImage")
+	require.EqualValues(t, 0, stopCalls.Load(), "recycling must not tear the runtime row down")
 
 	runtime, err := assistantsrepo.New(conn).GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{ID: runtimeID, ProjectID: projectID})
 	require.NoError(t, err)
-	require.Equal(t, runtimeStateActive, runtime.State, "GKE rows roll via terminate-on-idle, not the sweep")
+	require.Equal(t, runtimeStateActive, runtime.State)
+	require.JSONEq(t, string(recycledMetadata), string(runtime.BackendMetadataJson), "post-recycle pod identity is persisted")
 }
 
 func TestServiceCoreReapInactiveAssistantRuntimesCollectsOnlyInactive(t *testing.T) {
@@ -2364,12 +2367,6 @@ func (t testRuntimeBackend) Ensure(context.Context, assistantRuntimeRecord) (Run
 
 func (t testRuntimeBackend) ImageRef() string {
 	return t.imageRef
-}
-
-func (t testRuntimeBackend) ReusesIdleRuntimes() bool {
-	// Mirror production: GKE tears idle runtimes down (no warm reuse), every
-	// other backend preserves them for warm restart.
-	return t.backend != runtimeBackendGKE
 }
 
 func (t testRuntimeBackend) RecycleImage(ctx context.Context, record assistantRuntimeRecord) (RuntimeBackendRecycleResult, error) {
