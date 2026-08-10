@@ -33,7 +33,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
-	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 
 	"github.com/speakeasy-api/gram/server/internal/about"
 	"github.com/speakeasy-api/gram/server/internal/access"
@@ -92,7 +91,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/otelforwarding"
@@ -346,6 +344,12 @@ func newStartCommand() *cli.Command {
 			EnvVars: []string{"GRAM_SINGLE_PROCESS"},
 			Value:   false,
 		},
+		&cli.BoolFlag{
+			Name:    platformMCPLocalFixtureFlag,
+			Usage:   "Enable the synthetic local-only Platform MCP reviewed-provider fixture",
+			EnvVars: []string{"GRAM_PLATFORM_MCP_LOCAL_FIXTURE"},
+			Value:   false,
+		},
 		&cli.StringFlag{
 			Name:     "pylon-verification-secret",
 			Usage:    "The identity verification secret for pylon",
@@ -480,6 +484,11 @@ func newStartCommand() *cli.Command {
 				attr.SlogServiceEnv(serviceEnv),
 			)
 			slog.SetDefault(logger)
+
+			platformFixture, err := platformMCPLocalFixtureConfigFromCLI(serviceEnv, c.Bool(platformMCPLocalFixtureFlag), c.String("server-url"))
+			if err != nil {
+				return fmt.Errorf("invalid Platform MCP local fixture configuration: %w", err)
+			}
 
 			if serviceEnv == "local" {
 				scanners.EnableRuleIDFormatEnforcement()
@@ -838,7 +847,6 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env, sessionManager, identityResolver, guardianPolicy)
 			shadowMCPClient := shadowmcp.NewClient(logger, db, cache.NewRedisCacheAdapter(redisClient), serverURL)
 			triggerApp := newTriggersApp(logger, db, encryptionClient, temporalEnv, telemLogger, auditLogger, serverURL, siteURL, slackClient)
 
@@ -918,7 +926,6 @@ func newStartCommand() *cli.Command {
 				cache.NewRedisCacheAdapter(redisClient),
 				guardianPolicy,
 				functionsOrchestrator,
-				oauthService,
 				billingTracker,
 				billingRepo,
 				telemLogger,
@@ -1281,8 +1288,8 @@ func newStartCommand() *cli.Command {
 			mcpservers.Attach(mux, mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, toolDispositionCache, pluginsGitHub != nil, assetsService))
 			mcpendpoints.Attach(mux, mcpendpoints.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil))
 			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
-			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, auditLogger, serverURL, remoteSessionsCache, remotesessions.NewRefreshService(logger, db, encryptionClient, guardianPolicy, remoteSessionsCache))
-			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, guardianPolicy, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), remoteSessionsService))
+			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, auditLogger, serverURL, remotesessions.NewRefreshService(logger, db, encryptionClient, guardianPolicy, remoteSessionsCache))
+			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, guardianPolicy, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String()))
 			tokenexchange.Attach(mux, tokenexchange.NewService(logger, tracerProvider, db, sessionManager, authzEngine, c.String("environment")))
 			remotesessions.Attach(mux, remoteSessionsService)
 			remotemcp.Attach(mux, remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger))
@@ -1292,45 +1299,32 @@ func newStartCommand() *cli.Command {
 			triggers.Attach(mux, triggers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, triggerApp, auditLogger))
 			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, authzEngine, platformFeatureChecker, assistantPlatformExtras))
 			resources.Attach(mux, resources.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
-			oauth.Attach(mux, oauthService)
 			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, billingTracker, telemLogger, productFeatures, serverURL, authzEngine))
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, authzEngine, serverURL))
 			collections.Attach(mux, collections.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, serverURL))
-			platformOrganizationSlugs := platformmcp.NewPostgresOrganizationSlugResolver(db)
-			platformGate := platformmcp.NewOrganizationGate(productFeatures, featureFlags, platformOrganizationSlugs)
-			platformAuthorizer := platformmcp.NewLiveOrgAdminAuthorizer(db, authzEngine)
-			platformOAuth, err := platformmcp.NewOAuthHTTP(platformmcp.OAuthHTTPConfig{
-				BaseURL:       serverURL,
-				Environment:   c.String("environment"),
-				Cache:         cache.NewRedisCacheAdapter(redisClient),
-				Store:         platformmcp.NewPostgresOAuthStore(db),
-				Identity:      identityResolver,
-				Gate:          platformGate,
-				Authorizer:    platformAuthorizer,
-				Organizations: platformmcp.NewLiveOrganizationSelector(db, platformAuthorizer),
-				Signer:        sessiontokens.NewSigner(c.String(usersessions.JWTSigningKeyFlag)),
-				Encryption:    encryptionClient,
-			})
-			if err != nil {
-				return fmt.Errorf("create platform mcp oauth service: %w", err)
+			if err := configurePlatformMCP(ctx, platformMCPConfig{
+				Logger:                 logger,
+				MeterProvider:          meterProvider,
+				Mux:                    mux,
+				DB:                     db,
+				Redis:                  redisClient,
+				ServerURL:              serverURL,
+				Environment:            c.String("environment"),
+				JWTSigningKey:          c.String(usersessions.JWTSigningKeyFlag),
+				ProductFeatures:        productFeatures,
+				FeatureFlags:           featureFlags,
+				Authz:                  authzEngine,
+				Encryption:             encryptionClient,
+				Identity:               identityResolver,
+				Sessions:               sessionManager,
+				Registry:               mcpRegistryClient,
+				GuardianPolicy:         guardianPolicy,
+				RemoteChallengeManager: remoteChallengeManager,
+				LocalFixture:           platformFixture,
+			}); err != nil {
+				return err
 			}
-			platformAuthenticator, err := platformmcp.NewJWTAuthenticator(sessiontokens.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), db, encryptionClient, platformOAuth.Issuer(), platformOAuth.Audience())
-			if err != nil {
-				return fmt.Errorf("create platform mcp authenticator: %w", err)
-			}
-			platformRuntime := platformmcp.NewRuntime(
-				logger,
-				platformAuthenticator,
-				platformGate,
-				platformAuthorizer,
-				platformOAuth.ProtectedResourceURL(),
-				platformmcp.NewPostgresReader(db),
-				platformmcp.NewPostgresReadinessRecorder(db),
-			)
-
-			platformOAuth.Attach(mux)
-			o11y.AttachHandler(mux, "POST", platformmcp.Path, platformRuntime.Handler().ServeHTTP)
 			mcp.Attach(mux, mcpService, mcpMetadataService)
 			chat.Attach(mux, chatService)
 			variations.Attach(mux, variations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))

@@ -46,6 +46,10 @@ const (
 	// FlagPlatformMCPRollout gates the organization-targeted Platform MCP rollout.
 	// It is evaluated in addition to the durable Platform MCP product capability.
 	FlagPlatformMCPRollout Flag = "platform-mcp-rollout"
+	// FlagPlatformMCPCatalogRegistration independently gates Platform MCP catalog
+	// registration and provider-setup handoffs. It is evaluated after the main
+	// Platform MCP gate and is default-off during the mutation rollout.
+	FlagPlatformMCPCatalogRegistration Flag = "platform-mcp-catalog-registration"
 	// FlagAssistantPlatformMCP grants a project's managed (dashboard)
 	// assistant the Platform MCP read toolset — the "platform" platform
 	// toolset re-serving the Platform MCP read tools over the assistant

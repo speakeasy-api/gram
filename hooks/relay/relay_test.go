@@ -775,10 +775,12 @@ func TestNudgeEmittedOncePerSession(t *testing.T) {
 }
 
 // TestEnvelopeCodexSkillInference mirrors the bash senders' best-effort Codex
-// skill detection: a reader tool opening skills/<name>/SKILL.md and an
-// explicit $skill-name prompt mention (validated against the skill roots on
-// disk) both attach data.skill while the event keeps its true type on the
-// wire — a reclassified event would skip the server's tool/prompt policy scan.
+// skill detection: a reader tool opening skills/<name>/SKILL.md attaches
+// data.skill to the completed read (whose output carries the manifest the
+// content registry hashes), an explicit $skill-name prompt mention (validated
+// against the skill roots on disk) attaches it to the prompt event, and both
+// keep the event's true type on the wire — a reclassified event would skip
+// the server's tool/prompt policy scan.
 func TestEnvelopeCodexSkillInference(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	dir := t.TempDir()
@@ -830,11 +832,11 @@ func TestEnvelopeCodexSkillInference(t *testing.T) {
 
 	got := envelope(`{"hook_event_name":"PreToolUse","session_id":"sess-skill","tool_name":"Bash","tool_input":{"command":"sed -n 1,240p ` + repo + `/.agents/skills/repo-skill/SKILL.md"},"tool_use_id":"call_1"}`)
 	require.Equal(t, components.TypeToolRequested, got.Event.Type, "a detected skill read must keep its true event type")
-	require.Equal(t, "repo-skill", skillOf(got), "a SKILL.md path in a reader tool input must resolve the skill name")
+	require.Empty(t, skillOf(got), "the requested read has no content yet and must not count as the activation")
 
 	got = envelope(`{"hook_event_name":"PostToolUse","session_id":"sess-skill","tool_name":"Bash","tool_input":{"command":"sed -n 1,240p ` + repo + `/.agents/skills/repo-skill/SKILL.md"},"tool_response":{"output":"ok"},"tool_use_id":"call_1"}`)
-	require.Equal(t, components.TypeToolCompleted, got.Event.Type)
-	require.Empty(t, skillOf(got), "completions must not re-report the activation")
+	require.Equal(t, components.TypeToolCompleted, got.Event.Type, "a detected skill read must keep its true event type")
+	require.Equal(t, "repo-skill", skillOf(got), "the completed read reports the activation exactly once")
 
 	got = envelope(`{"hook_event_name":"PermissionRequest","session_id":"sess-skill","tool_name":"Bash","tool_input":{"command":"cat ` + repo + `/.agents/skills/repo-skill/SKILL.md"},"permission_type":"exec"}`)
 	require.Equal(t, components.TypeToolRequested, got.Event.Type)
@@ -862,8 +864,8 @@ func TestEnvelopeCodexSkillInference(t *testing.T) {
 	got = envelope(`{"hook_event_name":"UserPromptSubmit","session_id":"sess-skill","prompt":"use $sys-skill","cwd":"` + cwd + `"}`)
 	require.Equal(t, "sys-skill", skillOf(got), "bundled skills under a .system subdirectory must resolve by bare name")
 
-	got = envelope(`{"hook_event_name":"PreToolUse","session_id":"sess-skill","tool_name":"Bash","tool_input":{"command":"cat /opt/codex/skills/.system/imagegen/SKILL.md"},"tool_use_id":"call_3"}`)
-	require.Equal(t, components.TypeToolRequested, got.Event.Type)
+	got = envelope(`{"hook_event_name":"PostToolUse","session_id":"sess-skill","tool_name":"Bash","tool_input":{"command":"cat /opt/codex/skills/.system/imagegen/SKILL.md"},"tool_response":{"output":"ok"},"tool_use_id":"call_3"}`)
+	require.Equal(t, components.TypeToolCompleted, got.Event.Type)
 	require.Equal(t, "imagegen", skillOf(got), "reads of .system skill paths must infer the bare skill name")
 }
 
@@ -919,19 +921,19 @@ func TestEnvelopeCursorSkillInference(t *testing.T) {
 	}
 
 	workspacePath := filepath.Join(home, ".cursor", "skills", "workspace-skill", "SKILL.md")
-	got := envelope(payload("preToolUse", "Read", map[string]any{"file_path": workspacePath}))
-	require.Equal(t, components.TypeToolRequested, got.Event.Type)
+	got := envelope(payload("postToolUse", "Read", map[string]any{"file_path": workspacePath}))
+	require.Equal(t, components.TypeToolCompleted, got.Event.Type)
 	require.Equal(t, "workspace-skill", skillOf(got))
 
 	pluginRoot := filepath.Join(t.TempDir(), "arbitrary", "plugin")
 	pluginPath := filepath.Join(pluginRoot, "skills", "plugin-skill", "SKILL.md")
 	require.NoError(t, os.MkdirAll(filepath.Join(pluginRoot, ".cursor-plugin"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(pluginRoot, ".cursor-plugin", "plugin.json"), []byte(`{}`), 0o644))
-	got = envelope(payload("preToolUse", "Read", map[string]any{"file_path": pluginPath}))
-	require.Equal(t, components.TypeToolRequested, got.Event.Type)
+	got = envelope(payload("postToolUse", "Read", map[string]any{"file_path": pluginPath}))
+	require.Equal(t, components.TypeToolCompleted, got.Event.Type)
 	require.Equal(t, "plugin-skill", skillOf(got))
 
-	got = envelope(payload("preToolUse", "Read", map[string]any{"path": workspacePath}))
+	got = envelope(payload("postToolUse", "Read", map[string]any{"path": workspacePath}))
 	require.Equal(t, "workspace-skill", skillOf(got), "legacy Cursor payloads use path instead of file_path")
 
 	got = envelope(payload("beforeReadFile", "", workspacePath))
@@ -939,18 +941,18 @@ func TestEnvelopeCursorSkillInference(t *testing.T) {
 	require.Equal(t, "ReadFile", *got.Data.ToolCall.Name)
 	require.Empty(t, skillOf(got), "the duplicate beforeReadFile is normalized to ReadFile")
 
-	got = envelope(payload("postToolUse", "Read", map[string]any{"file_path": workspacePath}))
-	require.Equal(t, components.TypeToolCompleted, got.Event.Type)
-	require.Empty(t, skillOf(got), "completions must not re-report the activation")
+	got = envelope(payload("preToolUse", "Read", map[string]any{"file_path": workspacePath}))
+	require.Equal(t, components.TypeToolRequested, got.Event.Type)
+	require.Empty(t, skillOf(got), "the requested read has no content yet and must not count as the activation")
 
-	require.Empty(t, skillOf(envelope(payload("preToolUse", "Bash", map[string]any{"file_path": workspacePath}))))
-	require.Empty(t, skillOf(envelope(payload("preToolUse", "Read", map[string]any{"file_path": filepath.Join(filepath.Dir(workspacePath), "README.md")}))))
-	require.Empty(t, skillOf(envelope(payload("preToolUse", "Read", "{"))))
-	require.Empty(t, skillOf(envelope(payload("preToolUse", "Read", map[string]any{}))))
-	require.Empty(t, skillOf(envelope(payload("preToolUse", "Read", map[string]any{"file_path": "SKILL.md"}))))
-	require.Empty(t, skillOf(envelope(payload("preToolUse", "Read", map[string]any{"file_path": filepath.Join(t.TempDir(), "docs", "not-a-skill", "SKILL.md")}))))
-	require.Empty(t, skillOf(envelope(payload("preToolUse", "Read", map[string]any{"file_path": filepath.Join(t.TempDir(), "docs", "skills", "example", "SKILL.md")}))))
-	require.Empty(t, skillOf(envelope(payload("preToolUse", "Read", map[string]any{"file_path": filepath.Join(t.TempDir(), "plugin", "skills", "SKILL.md")}))))
+	require.Empty(t, skillOf(envelope(payload("postToolUse", "Bash", map[string]any{"file_path": workspacePath}))))
+	require.Empty(t, skillOf(envelope(payload("postToolUse", "Read", map[string]any{"file_path": filepath.Join(filepath.Dir(workspacePath), "README.md")}))))
+	require.Empty(t, skillOf(envelope(payload("postToolUse", "Read", "{"))))
+	require.Empty(t, skillOf(envelope(payload("postToolUse", "Read", map[string]any{}))))
+	require.Empty(t, skillOf(envelope(payload("postToolUse", "Read", map[string]any{"file_path": "SKILL.md"}))))
+	require.Empty(t, skillOf(envelope(payload("postToolUse", "Read", map[string]any{"file_path": filepath.Join(t.TempDir(), "docs", "not-a-skill", "SKILL.md")}))))
+	require.Equal(t, "example", skillOf(envelope(payload("postToolUse", "Read", map[string]any{"file_path": filepath.Join(t.TempDir(), "docs", "skills", "example", "SKILL.md")}))))
+	require.Empty(t, skillOf(envelope(payload("postToolUse", "Read", map[string]any{"file_path": filepath.Join(t.TempDir(), "plugin", "skills", "SKILL.md")}))))
 }
 
 // TestRedactCommandMasksSeparatedHeaderValue pins the tokenized-header shape:

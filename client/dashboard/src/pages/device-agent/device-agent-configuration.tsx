@@ -1,6 +1,6 @@
 import { RequireScope } from "@/components/require-scope";
 import { Heading } from "@/components/ui/Heading";
-import { DevBadge } from "@/components/dev-badge";
+import { InternalAdminBadge } from "@/components/internal-admin-badge";
 import { ErrorAlert } from "@/components/ui/Alert";
 import {
   Field,
@@ -398,7 +398,7 @@ function DeviceAgentConfigurationForm({
             <Field>
               <FieldLabel htmlFor="device-agent-update-channel">
                 Update channel
-                <DevBadge />
+                <InternalAdminBadge />
               </FieldLabel>
               <Input
                 id="device-agent-update-channel"
@@ -502,7 +502,7 @@ function DeviceAgentConfigurationForm({
           <Field>
             <FieldLabel htmlFor="device-agent-blocked-versions">
               Blocked versions
-              <DevBadge />
+              <InternalAdminBadge />
             </FieldLabel>
             <Input
               id="device-agent-blocked-versions"

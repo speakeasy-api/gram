@@ -188,7 +188,7 @@ func TestServiceCoreSkipsSelfHealAfterFirstRetry(t *testing.T) {
 	require.Equal(t, eventStatusFailed, event.Status, "second corruption must terminally fail and not be re-run")
 
 	// Only the seeded gen 0 should exist — no second self-heal generation was written.
-	gen, err := chatrepo.New(conn).GetMaxGenerationForChat(ctx, chatID)
+	gen, err := chatrepo.New(conn).GetMaxGenerationForChat(ctx, chatrepo.GetMaxGenerationForChatParams{ChatID: chatID, ProjectID: projectID})
 	require.NoError(t, err)
 	require.EqualValues(t, 0, gen, "self-heal must not run on retry attempts")
 }

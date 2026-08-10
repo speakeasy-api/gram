@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -49,11 +50,14 @@ func (s *Service) HandleTurnStream(w http.ResponseWriter, r *http.Request) error
 		return oops.E(oops.CodeBadRequest, parseErr, "invalid chat_id")
 	}
 	// Watching a chat streams its content, so it is authorized exactly like
-	// reading the transcript. Project equality alone is not enough: it would
-	// let an embedded chat-session token watch any other user's chat in the
-	// project. GetChat is not project-scoped, hence the explicit comparison.
-	chat, err := s.repo.GetChat(ctx, chatID)
-	if err != nil || chat.ProjectID != *authCtx.ProjectID {
+	// reading the transcript. Project scoping alone is not enough: it would let
+	// an embedded chat-session token watch any other user's chat in the
+	// project. This route keeps its own lookup rather than using
+	// loadAuthorizedChat so every failure reads as "not found" — it is reachable
+	// via CORS, and a distinct unauthorized response would be an existence
+	// oracle.
+	chat, err := s.repo.GetChat(ctx, repo.GetChatParams{ID: chatID, ProjectID: *authCtx.ProjectID})
+	if err != nil {
 		return oops.E(oops.CodeNotFound, err, "chat not found")
 	}
 	if err := s.authorizeChatRead(ctx, authCtx, chat); err != nil {

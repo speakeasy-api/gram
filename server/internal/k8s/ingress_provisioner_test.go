@@ -66,6 +66,18 @@ func TestIngressProvisioner_Setup_CreateNew(t *testing.T) {
 			Resource: nil,
 		},
 	})
+	pathTypePrefix := networkingv1.PathTypePrefix
+	require.Contains(t, ingress.Spec.Rules[0].HTTP.Paths, networkingv1.HTTPIngressPath{
+		Path:     "/shared/skills",
+		PathType: &pathTypePrefix,
+		Backend: networkingv1.IngressBackend{
+			Service: &networkingv1.IngressServiceBackend{
+				Name: "gram-server",
+				Port: networkingv1.ServiceBackendPort{Number: 80},
+			},
+			Resource: nil,
+		},
+	})
 }
 
 func TestIngressProvisioner_Setup_WithAllowlist_SetsAnnotation(t *testing.T) {

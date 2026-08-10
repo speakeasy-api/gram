@@ -682,6 +682,25 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 	}
 }
 
+// chatAccess selects which scope a non-owner needs to reach a chat. Reads and
+// mutations are deliberately separate scopes: a session reviewer holding
+// chat:read can open every transcript in the project, but deleting or otherwise
+// mutating someone else's session is destructive and needs chat:write. Owners
+// bypass both.
+type chatAccess int
+
+const (
+	chatAccessRead chatAccess = iota + 1
+	chatAccessWrite
+)
+
+func (a chatAccess) check(chatID string) authz.Check {
+	if a == chatAccessWrite {
+		return authz.ChatWriteCheck(chatID)
+	}
+	return authz.ChatReadCheck(chatID)
+}
+
 // authorizeChatRead decides whether the caller may read a chat's content.
 //
 // It is shared by every path that hands a transcript to a caller — LoadChat
@@ -689,11 +708,16 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 // this the same way. The turn stream originally checked only that the chat
 // belonged to the caller's project, which let an embedded chat-session token
 // watch any other user's chat in that project.
-//
-// Project scoping lives here rather than at the call sites so it cannot be
-// dropped by one of them: GetChat looks up by id alone, so without this a chat
-// in another org is readable by anyone who knows its id.
 func (s *Service) authorizeChatRead(ctx context.Context, authCtx *contextvalues.AuthContext, chat repo.GetChatRow) error {
+	return s.authorizeChatAccess(ctx, authCtx, chat, chatAccessRead)
+}
+
+// authorizeChatAccess is the shared gate behind every per-chat endpoint.
+//
+// Project scoping lives here as well as in the SQL so it cannot be dropped by
+// one call site, and so the turn stream (which keeps its own lookup) answers
+// the ownership question identically.
+func (s *Service) authorizeChatAccess(ctx context.Context, authCtx *contextvalues.AuthContext, chat repo.GetChatRow, access chatAccess) error {
 	// older chat_messages may not have project_id in the model, but it will
 	// always exist on the chat
 	if chat.ProjectID != *authCtx.ProjectID {
@@ -722,20 +746,60 @@ func (s *Service) authorizeChatRead(ctx context.Context, authCtx *contextvalues.
 		}
 	}
 
-	// Gate dashboard access on chat:read. The check is a no-op unless RBAC is
-	// enforced for the org (feature flag + session). Members can
-	// always read sessions they own, so bypass the scope check for the owner;
-	// reading anyone else's session requires an unrestricted chat:read grant,
-	// which only admins hold. The managed-assistant runtime is exempt — it
-	// consumes transcripts programmatically, not as a reviewer.
+	// Gate dashboard access on chat:read or chat:write. The check is a no-op
+	// unless RBAC is enforced for the request (see authz.Engine.ShouldEnforce —
+	// API-key and sessionless callers are exempt). Members can always reach
+	// sessions they own, so bypass the scope check for the owner; reaching
+	// anyone else's session requires an explicit grant, which no system role
+	// holds. The managed-assistant runtime is exempt — it consumes transcripts
+	// programmatically, not as a reviewer.
 	isOwner := authCtx.UserID != "" && chat.UserID.Valid && chat.UserID.String == authCtx.UserID
 	if !isAssistantCall && !isOwner {
-		if err := s.authz.Require(ctx, authz.ChatReadCheck(chat.ID.String())); err != nil {
+		if err := s.authz.Require(ctx, access.check(chat.ID.String())); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+// loadAuthorizedChat loads a chat by id and applies the shared access gate
+// before returning it. Every per-chat endpoint goes through here so the lookup
+// and the gate cannot be separated: handlers that fetched the row themselves
+// and re-derived a partial rule (project equality without the owner/chat:read
+// check) are exactly how setPinned, summarize, generateTitle, submitFeedback
+// and delete became reachable across users in the same project.
+//
+// access names the scope a non-owner needs: chatAccessRead for endpoints that
+// return session content, chatAccessWrite for those that mutate it.
+func (s *Service) loadAuthorizedChat(ctx context.Context, authCtx *contextvalues.AuthContext, chatID uuid.UUID, access chatAccess) (repo.GetChatRow, error) {
+	var none repo.GetChatRow
+
+	// A Speakeasy admin impersonating an org via the dev-tools override holds
+	// every scope (see authz.Engine), so RBAC cannot stop them — refuse before
+	// any session data is read. Covers the mutations too: an impersonating
+	// admin has no reason to pin, rename or delete a customer's sessions, and
+	// one rule for every endpoint avoids the per-endpoint bookkeeping that let
+	// the gate drift in the first place. The shared demo org is exempt: its
+	// transcripts are fabricated by seed/demo/ and exist to be read.
+	if _, impersonating := contextvalues.GetAdminOverrideFromContext(ctx); impersonating && authCtx.IsAdmin &&
+		authCtx.ActiveOrganizationID != constants.DemoOrganizationID {
+		return none, oops.E(oops.CodeForbidden, nil, "chat sessions cannot be accessed while impersonating an organization")
+	}
+
+	chat, err := s.repo.GetChat(ctx, repo.GetChatParams{ID: chatID, ProjectID: *authCtx.ProjectID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return none, oops.C(oops.CodeNotFound)
+	case err != nil:
+		return none, oops.E(oops.CodeUnexpected, err, "failed to load chat").LogError(ctx, s.logger)
+	}
+
+	if err := s.authorizeChatAccess(ctx, authCtx, chat, access); err != nil {
+		return none, err
+	}
+
+	return chat, nil
 }
 
 func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*gen.Chat, error) {
@@ -744,30 +808,13 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	// A Speakeasy admin impersonating an org via the dev-tools override holds
-	// every scope (see authz.Engine), so RBAC cannot stop them — block
-	// transcript access explicitly before any session data is read. The shared
-	// demo org is exempt: its transcripts are fabricated by seed/demo/ and
-	// exist to be read.
-	if _, impersonating := contextvalues.GetAdminOverrideFromContext(ctx); impersonating && authCtx.IsAdmin &&
-		authCtx.ActiveOrganizationID != constants.DemoOrganizationID {
-		return nil, oops.E(oops.CodeForbidden, nil, "chat sessions cannot be opened while impersonating an organization")
-	}
-
 	chatID, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid chat ID")
 	}
 
-	chat, err := s.repo.GetChat(ctx, chatID)
+	chat, err := s.loadAuthorizedChat(ctx, authCtx, chatID, chatAccessRead)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.C(oops.CodeNotFound)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").LogError(ctx, s.logger)
-	}
-
-	if err := s.authorizeChatRead(ctx, authCtx, chat); err != nil {
 		return nil, err
 	}
 
@@ -782,7 +829,10 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		}
 	}
 
-	maxGeneration, err := s.repo.GetMaxGenerationForChat(ctx, chat.ID)
+	maxGeneration, err := s.repo.GetMaxGenerationForChat(ctx, repo.GetMaxGenerationForChatParams{
+		ChatID:    chat.ID,
+		ProjectID: *authCtx.ProjectID,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat generation").LogError(ctx, s.logger)
 	}
@@ -1795,17 +1845,17 @@ func (s *Service) GenerateTitle(ctx context.Context, payload *gen.GenerateTitleP
 		return nil, oops.E(oops.CodeInvalid, err, "invalid chat ID")
 	}
 
-	// Load the chat to verify access
-	chat, err := s.repo.GetChat(ctx, chatID)
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.C(oops.CodeNotFound)
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").LogError(ctx, s.logger)
+	// This endpoint is both a reader and a writer: supplying a title renames the
+	// chat, omitting it just returns the current one. Gate on which it is, so
+	// reading a title needs only chat:read.
+	access := chatAccessRead
+	if payload.Title != nil {
+		access = chatAccessWrite
 	}
 
-	if chat.ProjectID != *authCtx.ProjectID {
-		return nil, oops.C(oops.CodeUnauthorized)
+	chat, err := s.loadAuthorizedChat(ctx, authCtx, chatID, access)
+	if err != nil {
+		return nil, err
 	}
 
 	// Write path: a manual rename. A non-empty title is pinned (auto-generation
@@ -1860,12 +1910,25 @@ func (s *Service) DeleteChat(ctx context.Context, payload *gen.DeleteChatPayload
 		return oops.E(oops.CodeBadRequest, err, "invalid chat id").LogError(ctx, s.logger)
 	}
 
+	// Gate before the delete, and before the live-thread probe below: without
+	// this, a member could delete any session in the project, and the conflict
+	// response told them whether an arbitrary chat id backed an assistant
+	// thread. A chat that is already gone (never existed, deleted by another
+	// tab, or a retry) stays a success — the caller's desired end state holds,
+	// and the dashboard's delete mutation relies on that idempotence.
+	if _, err := s.loadAuthorizedChat(ctx, authCtx, chatID, chatAccessWrite); err != nil {
+		var oopsErr *oops.ShareableError
+		if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeNotFound {
+			return nil
+		}
+		return err
+	}
+
 	// SoftDeleteChat deletes the chat unless it backs a live assistant thread, and
 	// reports the disposition in one statement (no racy re-query). A live-thread
 	// chat reloads its conversation every turn, so a soft-deleted backing chat
-	// would wedge the thread — refuse with a conflict. A no-op that isn't
-	// thread-backed (chat absent / already deleted / other project) is a success,
-	// matching the prior project-scoped behavior.
+	// would wedge the thread — refuse with a conflict. The remaining no-op case
+	// is a race with a concurrent delete, which stays a success.
 	res, err := s.repo.SoftDeleteChat(ctx, repo.SoftDeleteChatParams{
 		ID:        chatID,
 		ProjectID: *authCtx.ProjectID,
@@ -1891,27 +1954,8 @@ func (s *Service) SetPinned(ctx context.Context, payload *gen.SetPinnedPayload) 
 		return oops.E(oops.CodeBadRequest, err, "invalid chat id").LogError(ctx, s.logger)
 	}
 
-	// Load the chat to verify access before mutating it.
-	chat, err := s.repo.GetChat(ctx, chatID)
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return oops.C(oops.CodeNotFound)
-	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "failed to load chat").LogError(ctx, s.logger)
-	}
-
-	if chat.ProjectID != *authCtx.ProjectID {
-		return oops.C(oops.CodeUnauthorized)
-	}
-
-	// Off-dashboard callers must match the chat owner unless they're the
-	// managed-assistant runtime (see LoadChat).
-	if authCtx.SessionID == nil {
-		if _, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx); !isAssistantCall {
-			if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
-				return oops.C(oops.CodeUnauthorized)
-			}
-		}
+	if _, err := s.loadAuthorizedChat(ctx, authCtx, chatID, chatAccessWrite); err != nil {
+		return err
 	}
 
 	if err := s.repo.SetChatPinned(ctx, repo.SetChatPinnedParams{
@@ -1945,25 +1989,28 @@ func (s *Service) Summarize(ctx context.Context, payload *gen.SummarizePayload) 
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid chat id").LogError(ctx, s.logger)
 	}
 
-	chat, err := s.repo.GetChat(ctx, chatID)
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.C(oops.CodeNotFound)
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").LogError(ctx, s.logger)
+	// Summarizing is a read: it returns transcript content, and a reviewer needs
+	// it on sessions they do not own. Regenerating is not — it discards the
+	// stored summary and bills a fresh model call — so it takes the same
+	// read/write split as renaming in GenerateTitle.
+	access := chatAccessRead
+	if payload.Regenerate {
+		access = chatAccessWrite
 	}
 
-	if chat.ProjectID != *authCtx.ProjectID {
-		return nil, oops.C(oops.CodeUnauthorized)
+	chat, err := s.loadAuthorizedChat(ctx, authCtx, chatID, access)
+	if err != nil {
+		return nil, err
 	}
 
-	// Off-dashboard callers must match the chat owner unless they're the
-	// managed-assistant runtime (same rule as SetPinned / LoadChat).
-	if authCtx.SessionID == nil {
-		if _, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx); !isAssistantCall {
-			if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
-				return nil, oops.C(oops.CodeUnauthorized)
-			}
+	// A summary is transcript content, so a dashboard read of one is a session
+	// access in the same sense chat.load is — including the cached path below,
+	// which discloses just as much as a freshly generated summary. Logged
+	// before the early return so the audit trail cannot claim a reviewer never
+	// read a session whose contents they received.
+	if authCtx.SessionID != nil {
+		if err := s.logChatAccess(ctx, authCtx, chat); err != nil {
+			return nil, err
 		}
 	}
 
@@ -2127,17 +2174,8 @@ func (s *Service) SubmitFeedback(ctx context.Context, payload *gen.SubmitFeedbac
 		return nil, oops.E(oops.CodeInvalid, err, "invalid chat ID")
 	}
 
-	// Load the chat to verify access
-	chat, err := s.repo.GetChat(ctx, chatID)
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.C(oops.CodeNotFound)
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").LogError(ctx, s.logger)
-	}
-
-	if chat.ProjectID != *authCtx.ProjectID {
-		return nil, oops.C(oops.CodeUnauthorized)
+	if _, err := s.loadAuthorizedChat(ctx, authCtx, chatID, chatAccessWrite); err != nil {
+		return nil, err
 	}
 
 	// Validate feedback value
@@ -2220,7 +2258,7 @@ func (s *Service) loadMessageContentFields(ctx context.Context, chatID uuid.UUID
 		defer func() { _ = reader.Close() }()
 
 		// Limit read size to prevent memory issues
-		limitedReader := io.LimitReader(reader, maxAssetReadSize)
+		limitedReader := io.LimitReader(reader, MaxAssetReadSize)
 		data, err := io.ReadAll(limitedReader)
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to read message content from asset storage",
@@ -2238,7 +2276,7 @@ func (s *Service) loadMessageContentFields(ctx context.Context, chatID uuid.UUID
 }
 
 func (s *Service) loadContentPartContent(ctx context.Context, chatID uuid.UUID, contentPartID uuid.UUID, contentAssetURL string) string {
-	content, err := blobio.ReadAllString(ctx, s.assetStorage, contentAssetURL, maxAssetReadSize)
+	content, err := blobio.ReadAllString(ctx, s.assetStorage, contentAssetURL, MaxAssetReadSize)
 	if err != nil {
 		s.logger.WarnContext(ctx, "failed to read content part from asset storage",
 			attr.SlogError(err),
@@ -2353,9 +2391,10 @@ const (
 	// their content stored in the asset storage.
 	maxInlineContentSize = 128 * 1024 // 128 KiB
 
-	// maxAssetReadSize is the maximum size of message content that will be
-	// read from asset storage to prevent memory issues.
-	maxAssetReadSize = 20 * 1024 * 1024 // 20 MiB
+	// MaxAssetReadSize is the maximum size of message content that will be
+	// read from asset storage to prevent memory issues. Exported so history
+	// replay (assistants) bounds its reads of the same assets identically.
+	MaxAssetReadSize = 20 * 1024 * 1024 // 20 MiB
 
 	// defaultLoadChatLimit / maxLoadChatLimit bound the keyset page size for
 	// loadChat. Mirrors the Default/Maximum in the Goa design; clamped again here

@@ -255,7 +255,131 @@ func (q *Queries) CountTenantRemoteSessionClientsByIssuerID(ctx context.Context,
 	return count, err
 }
 
+const createLocalFixtureGlobalRemoteSessionIssuer = `-- name: CreateLocalFixtureGlobalRemoteSessionIssuer :one
+INSERT INTO remote_session_issuers (
+    id,
+    project_id,
+    organization_id,
+    slug,
+    issuer,
+    name,
+    authorization_endpoint,
+    token_endpoint,
+    registration_endpoint,
+    scopes_supported,
+    grant_types_supported,
+    response_types_supported,
+    token_endpoint_auth_methods_supported,
+    client_id_metadata_document_supported,
+    oidc,
+    passthrough
+)
+VALUES (
+    $1,
+    NULL,
+    NULL,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7,
+    $8,
+    $9,
+    $10,
+    $11,
+    FALSE,
+    FALSE,
+    FALSE
+)
+ON CONFLICT (id) DO UPDATE
+SET
+    slug = EXCLUDED.slug,
+    issuer = EXCLUDED.issuer,
+    name = EXCLUDED.name,
+    authorization_endpoint = EXCLUDED.authorization_endpoint,
+    token_endpoint = EXCLUDED.token_endpoint,
+    registration_endpoint = EXCLUDED.registration_endpoint,
+    scopes_supported = EXCLUDED.scopes_supported,
+    grant_types_supported = EXCLUDED.grant_types_supported,
+    response_types_supported = EXCLUDED.response_types_supported,
+    token_endpoint_auth_methods_supported = EXCLUDED.token_endpoint_auth_methods_supported,
+    client_id_metadata_document_supported = FALSE,
+    oidc = FALSE,
+    passthrough = FALSE,
+    deleted_at = NULL,
+    updated_at = clock_timestamp()
+WHERE remote_session_issuers.project_id IS NULL
+  AND remote_session_issuers.organization_id IS NULL
+RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateLocalFixtureGlobalRemoteSessionIssuerParams struct {
+	ID                                uuid.UUID
+	Slug                              string
+	Issuer                            string
+	Name                              pgtype.Text
+	AuthorizationEndpoint             pgtype.Text
+	TokenEndpoint                     pgtype.Text
+	RegistrationEndpoint              pgtype.Text
+	ScopesSupported                   []string
+	GrantTypesSupported               []string
+	ResponseTypesSupported            []string
+	TokenEndpointAuthMethodsSupported []string
+}
+
+// The local Platform MCP fixture owns this fixed global issuer identity. The
+// caller first holds LockRemoteSessionIssuerForClientBinding on the fixed ID and
+// validates an existing active row. A previously deleted fixture identity is
+// resurrected so local setup remains recoverable after an administrator delete.
+func (q *Queries) CreateLocalFixtureGlobalRemoteSessionIssuer(ctx context.Context, arg CreateLocalFixtureGlobalRemoteSessionIssuerParams) (RemoteSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, createLocalFixtureGlobalRemoteSessionIssuer,
+		arg.ID,
+		arg.Slug,
+		arg.Issuer,
+		arg.Name,
+		arg.AuthorizationEndpoint,
+		arg.TokenEndpoint,
+		arg.RegistrationEndpoint,
+		arg.ScopesSupported,
+		arg.GrantTypesSupported,
+		arg.ResponseTypesSupported,
+		arg.TokenEndpointAuthMethodsSupported,
+	)
+	var i RemoteSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Slug,
+		&i.Issuer,
+		&i.AuthorizationEndpoint,
+		&i.TokenEndpoint,
+		&i.RegistrationEndpoint,
+		&i.JwksUri,
+		&i.ServiceDocumentation,
+		&i.OpPolicyUri,
+		&i.OpTosUri,
+		&i.ScopesSupported,
+		&i.GrantTypesSupported,
+		&i.ResponseTypesSupported,
+		&i.TokenEndpointAuthMethodsSupported,
+		&i.ClientIDMetadataDocumentSupported,
+		&i.Oidc,
+		&i.Passthrough,
+		&i.Name,
+		&i.LogoAssetID,
+		&i.ClientSetupDocumentationUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const createRemoteSessionClient = `-- name: CreateRemoteSessionClient :one
+
 INSERT INTO remote_session_clients (
     project_id,
     organization_id,
@@ -299,6 +423,9 @@ type CreateRemoteSessionClientParams struct {
 	LegacyCallbackUrl       bool
 }
 
+// Remote session clients — credentials Gram uses when acting as an OAuth
+// client of a remote_session_issuer. client_secret_encrypted is stored
+// encrypted via the project encryption key.
 func (q *Queries) CreateRemoteSessionClient(ctx context.Context, arg CreateRemoteSessionClientParams) (RemoteSessionClient, error) {
 	row := q.db.QueryRow(ctx, createRemoteSessionClient,
 		arg.ProjectID,
@@ -799,6 +926,53 @@ func (q *Queries) DeleteRemoteSessionIssuer(ctx context.Context, arg DeleteRemot
 	return i, err
 }
 
+const deleteTenantRemoteSessionIssuer = `-- name: DeleteTenantRemoteSessionIssuer :one
+UPDATE remote_session_issuers
+SET deleted_at = clock_timestamp()
+WHERE id = $1
+  AND (project_id IS NOT NULL OR organization_id IS NOT NULL)
+  AND deleted IS FALSE
+RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
+`
+
+// Soft-delete any organization's issuer, unscoped by tenant. Platform-admin
+// migration only: it tombstones the emptied source after its clients have been
+// re-pointed. The org-scoped DeleteOrganizationRemoteSessionIssuer stays the
+// only delete a tenant-facing handler may call.
+func (q *Queries) DeleteTenantRemoteSessionIssuer(ctx context.Context, id uuid.UUID) (RemoteSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, deleteTenantRemoteSessionIssuer, id)
+	var i RemoteSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Slug,
+		&i.Issuer,
+		&i.AuthorizationEndpoint,
+		&i.TokenEndpoint,
+		&i.RegistrationEndpoint,
+		&i.JwksUri,
+		&i.ServiceDocumentation,
+		&i.OpPolicyUri,
+		&i.OpTosUri,
+		&i.ScopesSupported,
+		&i.GrantTypesSupported,
+		&i.ResponseTypesSupported,
+		&i.TokenEndpointAuthMethodsSupported,
+		&i.ClientIDMetadataDocumentSupported,
+		&i.Oidc,
+		&i.Passthrough,
+		&i.Name,
+		&i.LogoAssetID,
+		&i.ClientSetupDocumentationUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const deleteUserSessionIssuerAttachmentsForRemoteSessionClient = `-- name: DeleteUserSessionIssuerAttachmentsForRemoteSessionClient :exec
 DELETE FROM remote_session_client_user_session_issuers AS link
 USING remote_session_clients AS c
@@ -1152,43 +1326,43 @@ func (q *Queries) GetGlobalRemoteSessionIssuerWithClientCountsByID(ctx context.C
 	return i, err
 }
 
-const getOAuthProxyProviderForClone = `-- name: GetOAuthProxyProviderForClone :one
-
-SELECT id, project_id, provider_type, secrets, oauth_proxy_server_id
-FROM oauth_proxy_providers
-WHERE id = $1 AND project_id = $2 AND deleted IS FALSE
+const getLocalFixtureOrganizationRemoteSessionClient = `-- name: GetLocalFixtureOrganizationRemoteSessionClient :one
+SELECT id, project_id, organization_id, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, scope, audience, client_id_metadata_uri, legacy_callback_url, created_at, updated_at, deleted_at, deleted
+FROM remote_session_clients
+WHERE organization_id = $1
+  AND remote_session_issuer_id = $2
+  AND project_id IS NULL
+  AND deleted IS FALSE
 `
 
-type GetOAuthProxyProviderForCloneParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
+type GetLocalFixtureOrganizationRemoteSessionClientParams struct {
+	OrganizationID        pgtype.Text
+	RemoteSessionIssuerID uuid.UUID
 }
 
-type GetOAuthProxyProviderForCloneRow struct {
-	ID                 uuid.UUID
-	ProjectID          uuid.UUID
-	ProviderType       string
-	Secrets            []byte
-	OauthProxyServerID uuid.UUID
-}
-
-// Remote session clients — credentials Gram uses when acting as an OAuth
-// client of a remote_session_issuer. client_secret_encrypted is stored
-// encrypted via the project encryption key.
-// Read just the fields cloneOAuthProxyProvider needs: project scoping for
-// isolation, provider_type to refuse non-custom providers, the secrets
-// JSONB so the handler can extract client_id / client_secret server-side,
-// and oauth_proxy_server_id so the handler can find the MCP servers whose
-// legacy client registrations need migrating.
-func (q *Queries) GetOAuthProxyProviderForClone(ctx context.Context, arg GetOAuthProxyProviderForCloneParams) (GetOAuthProxyProviderForCloneRow, error) {
-	row := q.db.QueryRow(ctx, getOAuthProxyProviderForClone, arg.ID, arg.ProjectID)
-	var i GetOAuthProxyProviderForCloneRow
+// The local Platform MCP fixture owns at most one organization-scoped public
+// client for its global issuer. Project-owned and global clients are excluded.
+func (q *Queries) GetLocalFixtureOrganizationRemoteSessionClient(ctx context.Context, arg GetLocalFixtureOrganizationRemoteSessionClientParams) (RemoteSessionClient, error) {
+	row := q.db.QueryRow(ctx, getLocalFixtureOrganizationRemoteSessionClient, arg.OrganizationID, arg.RemoteSessionIssuerID)
+	var i RemoteSessionClient
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
-		&i.ProviderType,
-		&i.Secrets,
-		&i.OauthProxyServerID,
+		&i.OrganizationID,
+		&i.RemoteSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.TokenEndpointAuthMethod,
+		&i.Scope,
+		&i.Audience,
+		&i.ClientIDMetadataUri,
+		&i.LegacyCallbackUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
 	)
 	return i, err
 }
@@ -1428,6 +1602,22 @@ func (q *Queries) GetOrganizationRemoteSessionIssuerByIDForUpdate(ctx context.Co
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const getProjectOrganizationID = `-- name: GetProjectOrganizationID :one
+SELECT organization_id
+FROM projects
+WHERE id = $1 AND deleted IS FALSE
+`
+
+// The organization owning a project. Resolves the affected organization when a
+// legacy project-scoped issuer carries no organization_id of its own, so a
+// platform-admin migration of such a row can still name the tenant it touched.
+func (q *Queries) GetProjectOrganizationID(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getProjectOrganizationID, id)
+	var organization_id string
+	err := row.Scan(&organization_id)
+	return organization_id, err
 }
 
 const getRemoteSessionByID = `-- name: GetRemoteSessionByID :one
@@ -1853,6 +2043,114 @@ func (q *Queries) GetRemoteSessionIssuerBySlug(ctx context.Context, arg GetRemot
 	return i, err
 }
 
+const getTenantRemoteSessionIssuerByID = `-- name: GetTenantRemoteSessionIssuerByID :one
+
+SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
+FROM remote_session_issuers
+WHERE id = $1
+  AND (project_id IS NOT NULL OR organization_id IS NOT NULL)
+  AND deleted IS FALSE
+`
+
+// TENANT PARTITION (used by platform-admin issuer migration):
+//
+//	(project_id IS NOT NULL OR organization_id IS NOT NULL)
+//
+// Selects every issuer some organization owns, project-specific or
+// organization-level, across all tenants, and excludes the global partition
+// where both columns are NULL. The disjunction rather than a plain
+// `organization_id IS NOT NULL` is deliberate: project-specific issuers written
+// before organization_id existed on this table carry a NULL there, and those
+// legacy rows are exactly the duplicates convergence exists to clean up.
+// Any organization's issuer by id, unscoped by tenant. Only the platform-admin
+// migration surface may use this: every tenant-facing read must stay scoped to
+// the caller's own organization or project.
+func (q *Queries) GetTenantRemoteSessionIssuerByID(ctx context.Context, id uuid.UUID) (RemoteSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, getTenantRemoteSessionIssuerByID, id)
+	var i RemoteSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Slug,
+		&i.Issuer,
+		&i.AuthorizationEndpoint,
+		&i.TokenEndpoint,
+		&i.RegistrationEndpoint,
+		&i.JwksUri,
+		&i.ServiceDocumentation,
+		&i.OpPolicyUri,
+		&i.OpTosUri,
+		&i.ScopesSupported,
+		&i.GrantTypesSupported,
+		&i.ResponseTypesSupported,
+		&i.TokenEndpointAuthMethodsSupported,
+		&i.ClientIDMetadataDocumentSupported,
+		&i.Oidc,
+		&i.Passthrough,
+		&i.Name,
+		&i.LogoAssetID,
+		&i.ClientSetupDocumentationUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getTenantRemoteSessionIssuerByIDForUpdate = `-- name: GetTenantRemoteSessionIssuerByIDForUpdate :one
+SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
+FROM remote_session_issuers
+WHERE id = $1
+  AND (project_id IS NOT NULL OR organization_id IS NOT NULL)
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+// GetTenantRemoteSessionIssuerByID holding a row lock until the transaction
+// ends. The platform migration reads the source's scope and endpoint metadata to
+// decide whether the migration is legal, then acts on that decision later in the
+// same transaction; without the lock a concurrent moveIssuer (which rewrites
+// project_id) or updateIssuer (which rewrites the endpoints) could commit in
+// between and the migration would proceed against a scope or an authorization
+// server it never validated. Callers must already hold the advisory locks from
+// LockRemoteSessionIssuerForClientBinding, which order these row locks so two
+// concurrent migrations of the same pair cannot deadlock.
+func (q *Queries) GetTenantRemoteSessionIssuerByIDForUpdate(ctx context.Context, id uuid.UUID) (RemoteSessionIssuer, error) {
+	row := q.db.QueryRow(ctx, getTenantRemoteSessionIssuerByIDForUpdate, id)
+	var i RemoteSessionIssuer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.Slug,
+		&i.Issuer,
+		&i.AuthorizationEndpoint,
+		&i.TokenEndpoint,
+		&i.RegistrationEndpoint,
+		&i.JwksUri,
+		&i.ServiceDocumentation,
+		&i.OpPolicyUri,
+		&i.OpTosUri,
+		&i.ScopesSupported,
+		&i.GrantTypesSupported,
+		&i.ResponseTypesSupported,
+		&i.TokenEndpointAuthMethodsSupported,
+		&i.ClientIDMetadataDocumentSupported,
+		&i.Oidc,
+		&i.Passthrough,
+		&i.Name,
+		&i.LogoAssetID,
+		&i.ClientSetupDocumentationUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getUserSessionIssuerForProject = `-- name: GetUserSessionIssuerForProject :one
 SELECT id
 FROM user_session_issuers
@@ -2123,7 +2421,16 @@ type ListOrganizationMcpServerNamesForIssuerRow struct {
 }
 
 // Display names (and URL fallbacks) of MCP servers attached to any client of a
-// given issuer. Used to populate the issuer delete-confirmation dialog.
+// given issuer. Used to populate the issuer delete-confirmation dialog and the
+// migrate preflight.
+//
+// NOT org-scoped, despite the name: the only filter is the issuer id. Every
+// caller is safe today because the issuer it passes is tenant-scoped, so its
+// clients belong to one organization and the names returned are that
+// organization's own. Passing a PLATFORM issuer id here would return MCP server
+// names belonging to every organization on the platform in a single response.
+// That is why platform-admin issuer migration accepts only a tenant-scoped
+// source. Bound this query before relaxing that.
 func (q *Queries) ListOrganizationMcpServerNamesForIssuer(ctx context.Context, remoteSessionIssuerID uuid.UUID) ([]ListOrganizationMcpServerNamesForIssuerRow, error) {
 	rows, err := q.db.Query(ctx, listOrganizationMcpServerNamesForIssuer, remoteSessionIssuerID)
 	if err != nil {
@@ -2276,6 +2583,14 @@ type ListOrganizationRemoteSessionClientsByIssuerIDRow struct {
 // The arm is additive on purpose. Every row reachable before is still reachable
 // on the issuer arm regardless of whether organization_id was ever backfilled
 // on older client rows, so this cannot silently narrow a result or undercount.
+//
+// One operation retires the issuer arm rather than adding to it: migrating a
+// tenant client onto a platform issuer moves it under an issuer whose
+// organization_id is NULL, leaving c.organization_id as the sole path back to
+// the org for that row. Every tenant client writer populates that column, and
+// the historical rows that predate it were backfilled, so the fallback is not
+// load-bearing there. Any future writer that moves a client between tenancy
+// tiers depends on the same thing being true.
 // Global clients (project_id and organization_id both NULL) match neither arm
 // and stay correctly invisible to tenants; they are platform-admin owned.
 func (q *Queries) ListOrganizationRemoteSessionClientsByIssuerID(ctx context.Context, arg ListOrganizationRemoteSessionClientsByIssuerIDParams) ([]ListOrganizationRemoteSessionClientsByIssuerIDRow, error) {
@@ -3140,40 +3455,110 @@ func (q *Queries) ListRemoteSessionsByProjectID(ctx context.Context, arg ListRem
 	return items, nil
 }
 
-const listToolsetMCPEndpointsForOAuthProxyServer = `-- name: ListToolsetMCPEndpointsForOAuthProxyServer :many
-SELECT t.mcp_slug, cd.domain AS custom_domain
-FROM toolsets AS t
-LEFT JOIN custom_domains AS cd ON cd.id = t.custom_domain_id AND cd.deleted IS FALSE
-WHERE t.oauth_proxy_server_id = $1
-  AND t.project_id = $2
-  AND t.mcp_slug IS NOT NULL
-  AND t.deleted IS FALSE
+const listTenantRemoteSessionIssuersByIssuerURL = `-- name: ListTenantRemoteSessionIssuersByIssuerURL :many
+SELECT
+    i.id, i.project_id, i.organization_id, i.slug, i.issuer, i.authorization_endpoint, i.token_endpoint, i.registration_endpoint, i.jwks_uri, i.service_documentation, i.op_policy_uri, i.op_tos_uri, i.scopes_supported, i.grant_types_supported, i.response_types_supported, i.token_endpoint_auth_methods_supported, i.client_id_metadata_document_supported, i.oidc, i.passthrough, i.name, i.logo_asset_id, i.client_setup_documentation_url, i.created_at, i.updated_at, i.deleted_at, i.deleted,
+    COALESCE(i.organization_id, p.organization_id, '')::text AS owner_organization_id,
+    COALESCE(om.name, '')::text AS organization_name,
+    (
+        SELECT COUNT(*)
+        FROM remote_session_clients AS c
+        WHERE c.remote_session_issuer_id = i.id
+          AND c.deleted IS FALSE
+    )::bigint AS client_count
+FROM remote_session_issuers AS i
+LEFT JOIN projects AS p ON p.id = i.project_id
+LEFT JOIN organization_metadata AS om ON om.id = COALESCE(i.organization_id, p.organization_id)
+WHERE i.issuer = ANY($1::text[])
+  AND (i.project_id IS NOT NULL OR i.organization_id IS NOT NULL)
+  AND i.deleted IS FALSE
+  AND ($2::uuid IS NULL OR i.id < $2::uuid)
+ORDER BY i.id DESC
+LIMIT $3
 `
 
-type ListToolsetMCPEndpointsForOAuthProxyServerParams struct {
-	OauthProxyServerID uuid.NullUUID
-	ProjectID          uuid.UUID
+type ListTenantRemoteSessionIssuersByIssuerURLParams struct {
+	Issuers    []string
+	Cursor     uuid.NullUUID
+	LimitValue int32
 }
 
-type ListToolsetMCPEndpointsForOAuthProxyServerRow struct {
-	McpSlug      pgtype.Text
-	CustomDomain pgtype.Text
+type ListTenantRemoteSessionIssuersByIssuerURLRow struct {
+	RemoteSessionIssuer RemoteSessionIssuer
+	OwnerOrganizationID string
+	OrganizationName    string
+	ClientCount         int64
 }
 
-// Finds every MCP server attached to an oauth_proxy_server so the clone
-// handler can derive the public URLs legacy client registrations were keyed
-// under. A toolset with a custom domain is reachable on both the default
-// domain and the custom domain, so the handler scans both variants.
-func (q *Queries) ListToolsetMCPEndpointsForOAuthProxyServer(ctx context.Context, arg ListToolsetMCPEndpointsForOAuthProxyServerParams) ([]ListToolsetMCPEndpointsForOAuthProxyServerRow, error) {
-	rows, err := q.db.Query(ctx, listToolsetMCPEndpointsForOAuthProxyServer, arg.OauthProxyServerID, arg.ProjectID)
+// Tenant issuers that describe the same upstream authorization server as a
+// platform issuer, so a platform admin can see which organizations could
+// converge onto the shared catalog entry. Each row carries the owning
+// organization and the client count that would move.
+//
+// Matching is literal equality against a caller-supplied candidate set rather
+// than a normalizing expression, for the same reason as
+// ListRemoteSessionIssuersByIssuerURL: remote_session_issuers_issuer_idx is on
+// the raw column, so any expression around `issuer` makes it unusable. The
+// caller canonicalizes in Go and expands the result back into the closed set of
+// raw spellings via matchCandidates, keeping `= ANY` a series of index probes.
+//
+// The owning organization is taken from the issuer, falling back to its
+// project's. A project-scoped issuer written before organization_id existed on
+// this table carries NULL there, and those legacy duplicates are exactly what
+// convergence exists to clean up, so reporting them as belonging to nobody would
+// hide the owner of the rows most likely to be migrated.
+//
+// organization_metadata is joined LEFT and its name coalesced. There is no
+// organizations table, and the metadata row is populated by WorkOS sync, so an
+// inner join would silently drop candidates whose organization has not synced.
+// projects is joined LEFT for the same reason.
+//
+// Ordered by descending id with an id cursor, matching every other
+// platform-admin listing. ListRemoteSessionIssuersByIssuerURL orders by
+// created_at instead because it feeds a precedence resolution that needs
+// "oldest within a tier" to mean what it says; this listing only has to
+// enumerate, so it takes the paginable ordering rather than the chronological
+// one.
+func (q *Queries) ListTenantRemoteSessionIssuersByIssuerURL(ctx context.Context, arg ListTenantRemoteSessionIssuersByIssuerURLParams) ([]ListTenantRemoteSessionIssuersByIssuerURLRow, error) {
+	rows, err := q.db.Query(ctx, listTenantRemoteSessionIssuersByIssuerURL, arg.Issuers, arg.Cursor, arg.LimitValue)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListToolsetMCPEndpointsForOAuthProxyServerRow
+	var items []ListTenantRemoteSessionIssuersByIssuerURLRow
 	for rows.Next() {
-		var i ListToolsetMCPEndpointsForOAuthProxyServerRow
-		if err := rows.Scan(&i.McpSlug, &i.CustomDomain); err != nil {
+		var i ListTenantRemoteSessionIssuersByIssuerURLRow
+		if err := rows.Scan(
+			&i.RemoteSessionIssuer.ID,
+			&i.RemoteSessionIssuer.ProjectID,
+			&i.RemoteSessionIssuer.OrganizationID,
+			&i.RemoteSessionIssuer.Slug,
+			&i.RemoteSessionIssuer.Issuer,
+			&i.RemoteSessionIssuer.AuthorizationEndpoint,
+			&i.RemoteSessionIssuer.TokenEndpoint,
+			&i.RemoteSessionIssuer.RegistrationEndpoint,
+			&i.RemoteSessionIssuer.JwksUri,
+			&i.RemoteSessionIssuer.ServiceDocumentation,
+			&i.RemoteSessionIssuer.OpPolicyUri,
+			&i.RemoteSessionIssuer.OpTosUri,
+			&i.RemoteSessionIssuer.ScopesSupported,
+			&i.RemoteSessionIssuer.GrantTypesSupported,
+			&i.RemoteSessionIssuer.ResponseTypesSupported,
+			&i.RemoteSessionIssuer.TokenEndpointAuthMethodsSupported,
+			&i.RemoteSessionIssuer.ClientIDMetadataDocumentSupported,
+			&i.RemoteSessionIssuer.Oidc,
+			&i.RemoteSessionIssuer.Passthrough,
+			&i.RemoteSessionIssuer.Name,
+			&i.RemoteSessionIssuer.LogoAssetID,
+			&i.RemoteSessionIssuer.ClientSetupDocumentationUrl,
+			&i.RemoteSessionIssuer.CreatedAt,
+			&i.RemoteSessionIssuer.UpdatedAt,
+			&i.RemoteSessionIssuer.DeletedAt,
+			&i.RemoteSessionIssuer.Deleted,
+			&i.OwnerOrganizationID,
+			&i.OrganizationName,
+			&i.ClientCount,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -3202,54 +3587,6 @@ SELECT pg_advisory_xact_lock(hashtextextended(($1::uuid)::text, 0))
 func (q *Queries) LockRemoteSessionIssuerForClientBinding(ctx context.Context, remoteSessionIssuerID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, lockRemoteSessionIssuerForClientBinding, remoteSessionIssuerID)
 	return err
-}
-
-const migrateLegacyUserSessionClient = `-- name: MigrateLegacyUserSessionClient :execrows
-INSERT INTO user_session_clients (
-    project_id,
-    user_session_issuer_id,
-    client_id,
-    client_secret_hash,
-    client_name,
-    redirect_uris,
-    client_secret_expires_at
-)
-SELECT usi.project_id, usi.id, $1, $2, $3, $4::text[], NULL
-FROM user_session_issuers AS usi
-WHERE usi.id = $5
-  AND usi.project_id = $6
-  AND usi.deleted IS FALSE
-ON CONFLICT (user_session_issuer_id, client_id) WHERE deleted IS FALSE DO NOTHING
-`
-
-type MigrateLegacyUserSessionClientParams struct {
-	ClientID            string
-	ClientSecretHash    pgtype.Text
-	ClientName          string
-	RedirectUris        []string
-	UserSessionIssuerID uuid.UUID
-	ProjectID           uuid.UUID
-}
-
-// Lifts one legacy OAuth proxy client registration (Redis) into
-// user_session_clients, preserving the original client_id so already-known
-// MCP clients skip re-registration after cutover. The conflict target
-// matches the partial unique index on (user_session_issuer_id, client_id)
-// WHERE deleted IS FALSE, so re-running a clone neither duplicates nor
-// clobbers an existing active row.
-func (q *Queries) MigrateLegacyUserSessionClient(ctx context.Context, arg MigrateLegacyUserSessionClientParams) (int64, error) {
-	result, err := q.db.Exec(ctx, migrateLegacyUserSessionClient,
-		arg.ClientID,
-		arg.ClientSecretHash,
-		arg.ClientName,
-		arg.RedirectUris,
-		arg.UserSessionIssuerID,
-		arg.ProjectID,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
 }
 
 const revokeOrganizationRemoteSession = `-- name: RevokeOrganizationRemoteSession :one
@@ -3361,6 +3698,56 @@ func (q *Queries) RevokeRemoteSession(ctx context.Context, arg RevokeRemoteSessi
 		&i.Resource,
 		&i.AutoRefresh,
 		&i.LastRefreshAttemptAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const rotateLocalFixtureOrganizationRemoteSessionClient = `-- name: RotateLocalFixtureOrganizationRemoteSessionClient :one
+UPDATE remote_session_clients
+SET
+    client_id = $1,
+    client_id_issued_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND organization_id = $3
+  AND remote_session_issuer_id = $4
+  AND deleted IS FALSE
+RETURNING id, project_id, organization_id, remote_session_issuer_id, client_id, client_secret_encrypted, client_id_issued_at, client_secret_expires_at, token_endpoint_auth_method, scope, audience, client_id_metadata_uri, legacy_callback_url, created_at, updated_at, deleted_at, deleted
+`
+
+type RotateLocalFixtureOrganizationRemoteSessionClientParams struct {
+	ClientID              string
+	ID                    uuid.UUID
+	OrganizationID        pgtype.Text
+	RemoteSessionIssuerID uuid.UUID
+}
+
+func (q *Queries) RotateLocalFixtureOrganizationRemoteSessionClient(ctx context.Context, arg RotateLocalFixtureOrganizationRemoteSessionClientParams) (RemoteSessionClient, error) {
+	row := q.db.QueryRow(ctx, rotateLocalFixtureOrganizationRemoteSessionClient,
+		arg.ClientID,
+		arg.ID,
+		arg.OrganizationID,
+		arg.RemoteSessionIssuerID,
+	)
+	var i RemoteSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.RemoteSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.TokenEndpointAuthMethod,
+		&i.Scope,
+		&i.Audience,
+		&i.ClientIDMetadataUri,
+		&i.LegacyCallbackUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -4031,8 +4418,15 @@ type UpdateRemoteSessionClientsToRemoteSessionIssuerParams struct {
 //
 // Soft-deleted clients stay on the source issuer: they resolve nowhere, and
 // dragging tombstones onto the target would corrupt the returned migrated count.
-// Callers establish org ownership of both issuers and hold the advisory locks
-// from LockRemoteSessionIssuerForClientBinding. Returns the number of clients moved.
+// Callers establish ownership of both issuers and hold the advisory locks from
+// LockRemoteSessionIssuerForClientBinding. Returns the number of clients moved.
+//
+// Tenancy columns are left alone. When the target is a platform issuer this
+// retires the issuer arm of the ORG REACHABILITY predicate for the moved rows,
+// leaving the client's own organization_id as the sole path back to its
+// organization. Every writer that creates a tenant client populates that column,
+// so this is safe; it does mean a row that somehow lacked one would go
+// unreachable to its organization while its OAuth kept working.
 func (q *Queries) UpdateRemoteSessionClientsToRemoteSessionIssuer(ctx context.Context, arg UpdateRemoteSessionClientsToRemoteSessionIssuerParams) (int64, error) {
 	result, err := q.db.Exec(ctx, updateRemoteSessionClientsToRemoteSessionIssuer, arg.TargetIssuerID, arg.SourceIssuerID)
 	if err != nil {

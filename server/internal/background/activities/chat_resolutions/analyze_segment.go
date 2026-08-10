@@ -119,6 +119,7 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 			msgID := allMessages[absoluteIndex].ID
 			if err := txRepo.UpdateToolCallOutcome(ctx, repo.UpdateToolCallOutcomeParams{
 				ID:               msgID,
+				ProjectID:        args.ProjectID,
 				ToolOutcome:      conv.ToPGText(tc.Outcome),
 				ToolOutcomeNotes: conv.ToPGText(tc.Notes),
 			}); err != nil {
@@ -150,6 +151,7 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 	for i := args.StartIndex; i <= args.EndIndex && i < len(allMessages); i++ {
 		if err := txRepo.InsertChatResolutionMessage(ctx, repo.InsertChatResolutionMessageParams{
 			ChatResolutionID: resolutionID,
+			ProjectID:        args.ProjectID,
 			MessageID:        allMessages[i].ID,
 		}); err != nil {
 			return fmt.Errorf("failed to insert resolution message association: %w", err)
@@ -160,6 +162,7 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 	for _, fb := range applicableUserFeedback {
 		err := txRepo.AddUserFeedbackChatResolution(ctx, repo.AddUserFeedbackChatResolutionParams{
 			ID:               fb.ID,
+			ProjectID:        args.ProjectID,
 			ChatResolutionID: uuid.NullUUID{UUID: resolutionID, Valid: true},
 		})
 		if err != nil {
@@ -191,7 +194,7 @@ func (a *AnalyzeSegment) Do(ctx context.Context, args AnalyzeSegmentArgs) error 
 		attr.OrganizationIDKey:             args.OrgID,
 		attr.APIKeyIDKey:                   args.APIKeyID,
 	}
-	chatInfo, err := a.repo.GetChat(ctx, args.ChatID)
+	chatInfo, err := a.repo.GetChat(ctx, repo.GetChatParams{ID: args.ChatID, ProjectID: args.ProjectID})
 	if err == nil && chatInfo.CreatedAt.Valid {
 		resolutionTimeSecs := time.Since(chatInfo.CreatedAt.Time).Seconds()
 

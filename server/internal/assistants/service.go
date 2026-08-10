@@ -8,11 +8,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -21,9 +21,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assets/blobio"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -36,7 +38,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -1449,6 +1450,12 @@ func (s *ServiceCore) DeleteAssistant(ctx context.Context, projectID uuid.UUID, 
 	if err != nil {
 		return fmt.Errorf("delete assistant: %w", err)
 	}
+	if err := queries.RetireAssistantMCPOAuthClients(ctx, assistantrepo.RetireAssistantMCPOAuthClientsParams{
+		AssistantID: assistantID,
+		ProjectID:   projectID,
+	}); err != nil {
+		return fmt.Errorf("retire assistant mcp oauth clients: %w", err)
+	}
 	if err := s.revokeAssistantSkillDistributions(ctx, tx, projectID, assistantID, actor, actorDisplayName); err != nil {
 		return err
 	}
@@ -1913,7 +1920,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 		ChatID:         chatID,
 		ProjectID:      assistant.ProjectID,
 		OrganizationID: assistant.OrganizationID,
-		UserID:         conv.ToPGTextEmpty(dashboardChatUserID(sourceKind, normalizedPayloadJSON)),
+		UserID:         conv.ToPGTextEmpty(assistantChatOwnerID(sourceKind, normalizedPayloadJSON, assistant.CreatedByUserID)),
 		Title:          conv.ToPGText(chat.DefaultChatTitle),
 	}); err != nil {
 		return EnqueueResult{}, fmt.Errorf("upsert assistant chat: %w", err)
@@ -1962,7 +1969,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 
 // dashboardChatUserID extracts the Gram user id from a dashboard turn payload
 // so UpsertAssistantChat can stamp it on the chats row. External-source turns
-// return empty — their chat rows are owner-less.
+// return empty — see assistantChatOwnerID for who owns those.
 func dashboardChatUserID(sourceKind string, normalizedPayloadJSON []byte) string {
 	if sourceKind != sourceKindDashboard {
 		return ""
@@ -1972,6 +1979,26 @@ func dashboardChatUserID(sourceKind string, normalizedPayloadJSON []byte) string
 		return ""
 	}
 	return dash.UserID
+}
+
+// assistantChatOwnerID picks the owner to stamp on an assistant's chat row: the
+// dashboard user who sent the turn, falling back to whoever created the
+// assistant.
+//
+// The fallback exists because externally-triggered turns (cron, Slack, warmup)
+// carry no user, which left those chats owner-less. Owner-less is not a neutral
+// state — chat access is decided by owner-matching first and an explicit
+// chat:read/chat:write grant otherwise, so a chat nobody owns is one nobody can
+// read, continue, rename or delete without a custom role. Attributing it to the
+// assistant's creator makes the session behave like one they started.
+//
+// Returns empty when the assistant has no creator either (older or
+// platform-managed assistants); the chat is then owner-less exactly as before.
+func assistantChatOwnerID(sourceKind string, normalizedPayloadJSON []byte, createdByUserID string) string {
+	if userID := dashboardChatUserID(sourceKind, normalizedPayloadJSON); userID != "" {
+		return userID
+	}
+	return createdByUserID
 }
 
 // CheckDashboardChatOwnership returns nil when callerUserID owns the chats row
@@ -2277,8 +2304,10 @@ func (s *ServiceCore) EnsureWarmupThread(ctx context.Context, assistantID uuid.U
 		ChatID:         chatID,
 		ProjectID:      assistant.ProjectID,
 		OrganizationID: assistant.OrganizationID,
-		UserID:         pgtype.Text{String: "", Valid: false},
-		Title:          conv.ToPGText(chat.DefaultChatTitle),
+		// Warmup turns have no user either, so the creator owns them for the
+		// same reason external-source turns do.
+		UserID: conv.ToPGTextEmpty(assistant.CreatedByUserID),
+		Title:  conv.ToPGText(chat.DefaultChatTitle),
 	}); err != nil {
 		return noop, fmt.Errorf("upsert warmup chat: %w", err)
 	}
@@ -3439,13 +3468,15 @@ func (s *ServiceCore) loadChatHistory(ctx context.Context, chatID uuid.UUID, pro
 		return nil, fmt.Errorf("list assistant chat messages: %w", err)
 	}
 
+	spilled := s.prefetchHistoryContentAssets(ctx, messages)
+
 	history := make([]runtimeMessage, 0, len(messages))
-	for _, message := range messages {
+	for i, message := range messages {
 		switch message.Role {
 		case "user":
 			history = append(history, runtimeMessage{
 				Role:       "user",
-				Content:    s.loadHistoryMessageContent(ctx, message),
+				Content:    s.loadHistoryMessageContent(ctx, message, spilled[i]),
 				ToolCalls:  nil,
 				ToolCallID: "",
 			})
@@ -3456,7 +3487,7 @@ func (s *ServiceCore) loadChatHistory(ctx context.Context, chatID uuid.UUID, pro
 			}
 			history = append(history, runtimeMessage{
 				Role:       "assistant",
-				Content:    s.loadHistoryMessageContent(ctx, message),
+				Content:    s.loadHistoryMessageContent(ctx, message, spilled[i]),
 				ToolCalls:  toolCalls,
 				ToolCallID: "",
 			})
@@ -3466,7 +3497,7 @@ func (s *ServiceCore) loadChatHistory(ctx context.Context, chatID uuid.UUID, pro
 			}
 			history = append(history, runtimeMessage{
 				Role:       "tool",
-				Content:    s.loadHistoryMessageContent(ctx, message),
+				Content:    s.loadHistoryMessageContent(ctx, message, spilled[i]),
 				ToolCalls:  nil,
 				ToolCallID: message.ToolCallID.String,
 			})
@@ -3486,26 +3517,55 @@ func (s *ServiceCore) loadChatHistory(ctx context.Context, chatID uuid.UUID, pro
 	return history, nil
 }
 
-// historyAssetReadLimit mirrors chat's maxAssetReadSize bound on content
-// fetched back from asset storage.
-const historyAssetReadLimit = 20 * 1024 * 1024 // 20 MiB
+// historyAssetReadConcurrency bounds the parallel blob reads issued while
+// prefetching spilled history content on a cold bootstrap.
+const historyAssetReadConcurrency = 8
+
+// prefetchHistoryContentAssets concurrently reads the content assets for rows
+// whose structured content overflowed content_raw, keyed by row index, so a
+// long thread's cold bootstrap does not pay one serial blob round trip per
+// spilled row. Failed reads are logged and left absent; those rows degrade to
+// the text projection.
+func (s *ServiceCore) prefetchHistoryContentAssets(ctx context.Context, messages []chatrepo.ChatMessage) map[int][]byte {
+	if s.assetStorage == nil {
+		return nil
+	}
+	var mu sync.Mutex
+	spilled := make(map[int][]byte)
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.SetLimit(historyAssetReadConcurrency)
+	for i, message := range messages {
+		if len(message.ContentRaw) != 0 || !message.ContentAssetUrl.Valid || message.ContentAssetUrl.String == "" {
+			continue
+		}
+		eg.Go(func() error {
+			data, err := blobio.ReadAllString(egCtx, s.assetStorage, message.ContentAssetUrl.String, chat.MaxAssetReadSize)
+			if err != nil {
+				s.logger.WarnContext(egCtx, "read chat message content asset; using text projection",
+					attr.SlogError(err), attr.SlogChatID(message.ChatID.String()))
+				return nil
+			}
+			mu.Lock()
+			spilled[i] = []byte(data)
+			mu.Unlock()
+			return nil
+		})
+	}
+	// Workers never return errors; failures degrade to the text projection.
+	_ = eg.Wait()
+	return spilled
+}
 
 // loadHistoryMessageContent resolves the replayed content for one chat row,
 // preferring the structured JSON captured at store time (content_raw inline,
-// then the content asset) over the plain-text projection column. The text
-// column remains the fallback whenever structured content is absent,
-// unreadable, or carries part types the runner wire does not model, so
-// text-only history replays exactly as before.
-func (s *ServiceCore) loadHistoryMessageContent(ctx context.Context, row chatrepo.ChatMessage) runtimeContent {
+// then the prefetched content asset) over the plain-text projection column.
+// The text column remains the fallback whenever structured content is absent,
+// unreadable, or not replayable (see replayableParts), so text-only history
+// replays exactly as before.
+func (s *ServiceCore) loadHistoryMessageContent(ctx context.Context, row chatrepo.ChatMessage, assetRaw []byte) runtimeContent {
 	raw := row.ContentRaw
-	if len(raw) == 0 && row.ContentAssetUrl.Valid && row.ContentAssetUrl.String != "" && s.assetStorage != nil {
-		data, err := s.readHistoryContentAsset(ctx, row.ContentAssetUrl.String)
-		if err != nil {
-			s.logger.WarnContext(ctx, "read chat message content asset; using text projection",
-				attr.SlogError(err), attr.SlogChatID(row.ChatID.String()))
-		} else {
-			raw = data
-		}
+	if len(raw) == 0 {
+		raw = assetRaw
 	}
 	if len(raw) == 0 {
 		return runtimeTextContent(row.Content)
@@ -3516,27 +3576,10 @@ func (s *ServiceCore) loadHistoryMessageContent(ctx context.Context, row chatrep
 			attr.SlogError(err), attr.SlogChatID(row.ChatID.String()))
 		return runtimeTextContent(row.Content)
 	}
-	if !content.supportedParts() {
+	if !content.replayableParts() {
 		return runtimeTextContent(row.Content)
 	}
 	return content
-}
-
-func (s *ServiceCore) readHistoryContentAsset(ctx context.Context, rawURL string) ([]byte, error) {
-	assetURL, err := url.Parse(rawURL)
-	if err != nil {
-		return nil, fmt.Errorf("parse content asset url: %w", err)
-	}
-	reader, err := s.assetStorage.Read(ctx, assetURL)
-	if err != nil {
-		return nil, fmt.Errorf("open content asset: %w", err)
-	}
-	defer o11y.NoLogDefer(func() error { return reader.Close() })
-	data, err := io.ReadAll(io.LimitReader(reader, historyAssetReadLimit))
-	if err != nil {
-		return nil, fmt.Errorf("read content asset: %w", err)
-	}
-	return data, nil
 }
 
 // decodePersistedToolCalls unmarshals the JSONB stored by the chat capture

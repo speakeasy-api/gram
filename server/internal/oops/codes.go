@@ -10,6 +10,7 @@ const (
 	CodeBadRequest         Code = "bad_request"
 	CodeNotFound           Code = "not_found"
 	CodeConflict           Code = "conflict"
+	CodeFailedPrecondition Code = "failed_precondition"
 	CodeUnsupportedMedia   Code = "unsupported_media"
 	CodeMethodNotAllowed   Code = "method_not_allowed"
 	CodeRequestTooLarge    Code = "request_too_large"
@@ -44,6 +45,7 @@ var StatusCodes = map[Code]int{
 	CodeBadRequest:          http.StatusBadRequest,
 	CodeNotFound:            http.StatusNotFound,
 	CodeConflict:            http.StatusConflict,
+	CodeFailedPrecondition:  http.StatusPreconditionFailed,
 	CodeUnsupportedMedia:    http.StatusUnsupportedMediaType,
 	CodeMethodNotAllowed:    http.StatusMethodNotAllowed,
 	CodeRequestTooLarge:     http.StatusRequestEntityTooLarge,
@@ -75,6 +77,8 @@ func (c Code) UserMessage() string {
 		return "resource not found"
 	case CodeConflict:
 		return "resource already exists"
+	case CodeFailedPrecondition:
+		return "resource is not in a valid state for this operation"
 	case CodeUnsupportedMedia:
 		return "unsupported media type"
 	case CodeRequestTooLarge:
@@ -113,7 +117,7 @@ func (c Code) MCPCode() MCPCode {
 		return MCPCodeUnauthorized
 	case CodeForbidden, CodeInferenceDisabled:
 		return MCPCodeForbidden
-	case CodeBadRequest, CodeConflict, CodeUnsupportedMedia:
+	case CodeBadRequest, CodeConflict, CodeFailedPrecondition, CodeUnsupportedMedia:
 		return MCPCodeInvalidRequest
 	case CodeMethodNotAllowed:
 		return MCPCodeServerError

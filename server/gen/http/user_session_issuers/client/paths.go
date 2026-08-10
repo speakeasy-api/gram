@@ -31,8 +31,3 @@ func GetUserSessionIssuerUserSessionIssuersPath() string {
 func DeleteUserSessionIssuerUserSessionIssuersPath() string {
 	return "/rpc/userSessionIssuers.delete"
 }
-
-// MigrateLegacyGramRegistrationsUserSessionIssuersPath returns the URL path to the userSessionIssuers service migrateLegacyGramRegistrations HTTP endpoint.
-func MigrateLegacyGramRegistrationsUserSessionIssuersPath() string {
-	return "/rpc/userSessionIssuers.migrateLegacyGramRegistrations"
-}

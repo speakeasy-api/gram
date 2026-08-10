@@ -405,7 +405,11 @@ function SortableHeaderCell<T extends object>({
         aria-label={getSortButtonLabel(column, sort)}
         onClick={() => onSortChange(getNextSort(column, sort))}
       >
-        <span className="min-w-0 truncate">{column.header}</span>
+        {/* The header cell's eyebrow styling reaches the button through
+            inheritance except for text-transform, which the browser's form-
+            control styling drops -- so a sortable header would read in
+            sentence case beside its uppercase unsortable neighbours. */}
+        <span className="min-w-0 truncate uppercase">{column.header}</span>
         <Icon
           aria-hidden="true"
           className={cn(

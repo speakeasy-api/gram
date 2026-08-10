@@ -47,6 +47,10 @@ type GetUserSessionClientResponseBody struct {
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
 	CreatedAt             *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt             *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// How many live user_sessions this client currently holds. Counted the same
+	// way the sessions listing's active filter counts: not revoked, and the
+	// refresh token has not expired.
+	ActiveSessionCount *int `form:"active_session_count,omitempty" json:"active_session_count,omitempty" xml:"active_session_count,omitempty"`
 }
 
 // ListUserSessionClientsUnauthorizedResponseBody is the type of the
@@ -645,6 +649,10 @@ type UserSessionClientResponseBody struct {
 	ClientSecretExpiresAt *string `form:"client_secret_expires_at,omitempty" json:"client_secret_expires_at,omitempty" xml:"client_secret_expires_at,omitempty"`
 	CreatedAt             *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	UpdatedAt             *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// How many live user_sessions this client currently holds. Counted the same
+	// way the sessions listing's active filter counts: not revoked, and the
+	// refresh token has not expired.
+	ActiveSessionCount *int `form:"active_session_count,omitempty" json:"active_session_count,omitempty" xml:"active_session_count,omitempty"`
 }
 
 // NewListUserSessionClientsResultOK builds a "userSessionClients" service
@@ -828,6 +836,7 @@ func NewGetUserSessionClientUserSessionClientOK(body *GetUserSessionClientRespon
 		ClientSecretExpiresAt: body.ClientSecretExpiresAt,
 		CreatedAt:             *body.CreatedAt,
 		UpdatedAt:             *body.UpdatedAt,
+		ActiveSessionCount:    *body.ActiveSessionCount,
 	}
 	v.RedirectUris = make([]string, len(body.RedirectUris))
 	for i, val := range body.RedirectUris {
@@ -1179,6 +1188,9 @@ func ValidateGetUserSessionClientResponseBody(body *GetUserSessionClientResponse
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ActiveSessionCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("active_session_count", "body"))
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
@@ -1950,6 +1962,9 @@ func ValidateUserSessionClientResponseBody(body *UserSessionClientResponseBody) 
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ActiveSessionCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("active_session_count", "body"))
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))

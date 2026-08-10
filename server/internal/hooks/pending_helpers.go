@@ -160,21 +160,10 @@ func (s *Service) persistToolCallEvent(ctx context.Context, payload *gen.ClaudeP
 		return fmt.Errorf("invalid project ID in session metadata: %w", err)
 	}
 
-	// Build ToolInfo
-	toolInfo := telemetry.ToolInfo{
-		Name:           toolName,
-		OrganizationID: metadata.GramOrgID,
-		ProjectID:      projectID.String(),
-		ID:             "",
-		URN:            "",
-		DeploymentID:   "",
-		FunctionID:     nil,
-	}
-
 	if s.telemetryLogger != nil {
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
 			Timestamp:  time.Now(),
-			ToolInfo:   toolInfo,
+			ToolInfo:   telemetryToolInfo(metadata, projectID, toolName),
 			UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
 			Attributes: attrs,
 		})
@@ -294,6 +283,22 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 	}
 
 	return attrs
+}
+
+// telemetryToolInfo builds the ToolInfo shared by every telemetry.LogParams
+// write in this file. Name is the only field that varies by caller — tool
+// events pass the resolved tool name, conversation events pass "" since
+// there's no tool involved.
+func telemetryToolInfo(metadata *SessionMetadata, projectID uuid.UUID, toolName string) telemetry.ToolInfo {
+	return telemetry.ToolInfo{
+		Name:           toolName,
+		OrganizationID: metadata.GramOrgID,
+		ProjectID:      projectID.String(),
+		ID:             "",
+		URN:            "",
+		DeploymentID:   "",
+		FunctionID:     nil,
+	}
 }
 
 func applyHookHostnameAttr(attrs map[attr.Key]any, hostname *string) {

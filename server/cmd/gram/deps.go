@@ -77,6 +77,7 @@ import (
 	sv "github.com/speakeasy-api/gram/server/internal/thirdparty/svix"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tracking"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func noopShutdown(context.Context) error { return nil }
@@ -823,7 +824,7 @@ func newTriggersApp(
 				Timestamp: entry.Timestamp,
 				ToolInfo: telemetry.ToolInfo{
 					ID:             entry.Instance.ID.String(),
-					URN:            "urn:uuid:" + entry.Instance.ID.String(),
+					URN:            urn.NewTriggerInstance(entry.Instance.ID).String(),
 					Name:           "trigger:" + entry.Instance.DefinitionSlug,
 					ProjectID:      entry.Instance.ProjectID.String(),
 					DeploymentID:   "",

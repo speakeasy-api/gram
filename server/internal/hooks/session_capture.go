@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -21,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
 // ErrChatNotFound indicates the chat (conversation) does not exist.
@@ -421,6 +423,11 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 		return nil
 	}
 
+	// persistToolCallEvent mirrors this write into ClickHouse for tool calls;
+	// conversation events previously only landed in Postgres, so ClickHouse
+	// hook consumers (e.g. onboarding's "Confirm traffic" feed) never saw them.
+	s.logConversationTelemetry(ctx, payload, metadata, projectID)
+
 	msgParams := chatRepo.CreateChatMessageParams{
 		Replayed:         false,
 		CreatedAt:        conv.PtrToPGTimestamptz(nil),
@@ -466,6 +473,23 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 	}
 
 	return nil
+}
+
+// logConversationTelemetry writes a UserPromptSubmit/Stop conversation event
+// to ClickHouse, using the same attribute-building and event_source="hook"
+// shape as persistToolCallEvent. projectID is the value persistConversationEvent
+// already parsed, so this never re-parses it.
+func (s *Service) logConversationTelemetry(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata, projectID uuid.UUID) {
+	if s.telemetryLogger == nil {
+		return
+	}
+
+	s.telemetryLogger.Log(ctx, telemetry.LogParams{
+		Timestamp:  time.Now(),
+		ToolInfo:   telemetryToolInfo(metadata, projectID, ""),
+		UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
+		Attributes: s.buildTelemetryAttributesWithMetadata(ctx, payload, metadata),
+	})
 }
 
 // writeToolCallRequestToPG writes an assistant message with tool_calls to PostgreSQL.

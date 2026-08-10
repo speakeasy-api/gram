@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -111,6 +112,94 @@ func seedPrivateToolsetWithIssuer(
 	require.NoError(t, err)
 
 	return toolset, issuer, client
+}
+
+// fetchAdvertisedIssuer returns the `issuer` from the AS metadata document as
+// served, plus the RFC 9207 support flag.
+//
+// Clients compare the `iss` on an authorization response to this value with no
+// normalization of their own — no case folding, default-port elision,
+// trailing-slash or percent-encoding fixups — so the two must match byte for
+// byte. Tests assert against the served document rather than a recomputed
+// literal, which is what makes them fail when both sides are derived wrong in
+// the same way.
+func fetchAdvertisedIssuer(t *testing.T, ctx context.Context, ti *testInstance, mcpSlug string) (string, any) {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/mcp/"+mcpSlug, nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleGetAuthorizationServer(w, req))
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var meta map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &meta))
+
+	issuer, ok := meta["issuer"].(string)
+	require.True(t, ok, "metadata must carry a string issuer: %s", w.Body.String())
+	return issuer, meta["authorization_response_iss_parameter_supported"]
+}
+
+type consentPostOpts struct {
+	mcpSlug        string
+	issuerID       uuid.UUID
+	clientID       string
+	redirectURI    string
+	baseURL        string
+	customDomainID uuid.NullUUID
+	action         string
+}
+
+// postConsent seeds an approved-subject challenge and drives the consent POST,
+// returning the parsed client redirect. requestCtx is the context the POST is
+// served under; opts.baseURL is the mint-time origin snapshot, deliberately
+// independent of it so tests can exercise the cross-origin resume.
+func postConsent(t *testing.T, ctx context.Context, requestCtx context.Context, ti *testInstance, opts consentPostOpts) *url.URL {
+	t.Helper()
+
+	subject := urn.NewUserSubject("consent-user-" + uuid.NewString())
+	stateID := uuid.NewString()
+	csrfToken := "csrf-" + uuid.NewString()
+
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
+		ID:                  stateID,
+		UserSessionIssuerID: opts.issuerID,
+		Endpoint: mcp.EndpointRef{
+			McpSlug:        opts.mcpSlug,
+			CustomDomainID: opts.customDomainID,
+			BaseURL:        opts.baseURL,
+		},
+		ClientID:            opts.clientID,
+		RedirectURI:         opts.redirectURI,
+		State:               "client-state",
+		CodeChallenge:       "abc",
+		CodeChallengeMethod: "S256",
+		CSRFToken:           csrfToken,
+		Subject:             &subject,
+		CreatedAt:           time.Now(),
+	}))
+
+	form := url.Values{}
+	form.Set("state", stateID)
+	form.Set("csrf_token", csrfToken)
+	form.Set("action", opts.action)
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+opts.mcpSlug+"/connect", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", opts.mcpSlug)
+	req = req.WithContext(context.WithValue(requestCtx, chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleConsent(w, req))
+	require.Equal(t, http.StatusSeeOther, w.Code)
+
+	loc, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(t, err)
+	return loc
 }
 
 func TestHandleAuthorize_PrivateToolset_RedirectsToIDP(t *testing.T) {
@@ -461,6 +550,129 @@ func TestHandleConsentPost_PropagatesFlowIDIntoGrant(t *testing.T) {
 	require.Equal(t, flowID, grant.FlowID, "flow id must propagate into the grant")
 }
 
+// The flagship invariant: the code-carrying success response is what a client
+// validates on the critical path, and its `iss` must equal the advertised
+// issuer exactly.
+func TestHandleConsentPost_ApproveEmitsIssMatchingAdvertisedIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	mcpSlug := toolset.McpSlug.String
+
+	advertisedIssuer, supported := fetchAdvertisedIssuer(t, ctx, ti, mcpSlug)
+	require.Equal(t, true, supported)
+
+	loc := postConsent(t, ctx, ctx, ti, consentPostOpts{
+		mcpSlug:     mcpSlug,
+		issuerID:    toolset.UserSessionIssuerID.UUID,
+		clientID:    client.ClientID,
+		redirectURI: client.RedirectUris[0],
+		baseURL:     ti.serverURL.String(),
+		action:      "approve",
+	})
+
+	require.NotEmpty(t, loc.Query().Get("code"), "approve must still mint a code")
+	require.Equal(t, advertisedIssuer, loc.Query().Get("iss"))
+}
+
+// RFC 9207 §2 covers error responses too: a user declining consent still gets
+// a response the client must be able to attribute to this issuer.
+func TestHandleConsentPost_DenyEmitsIss(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	mcpSlug := toolset.McpSlug.String
+
+	advertisedIssuer, _ := fetchAdvertisedIssuer(t, ctx, ti, mcpSlug)
+
+	loc := postConsent(t, ctx, ctx, ti, consentPostOpts{
+		mcpSlug:     mcpSlug,
+		issuerID:    toolset.UserSessionIssuerID.UUID,
+		clientID:    client.ClientID,
+		redirectURI: client.RedirectUris[0],
+		baseURL:     ti.serverURL.String(),
+		action:      "deny",
+	})
+
+	require.Equal(t, "access_denied", loc.Query().Get("error"))
+	require.Equal(t, advertisedIssuer, loc.Query().Get("iss"))
+	require.Empty(t, loc.Query().Get("code"))
+}
+
+// A challenge minted under a custom domain can be resumed on the platform
+// origin: the remote-session return leg bounces through the server URL, so the
+// consent POST's own custom-domain context (here, absent) is not the origin the
+// client recorded. `iss` must come from the mint-time snapshot regardless.
+func TestHandleConsentPost_IssUsesMintOriginNotRequestOrigin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	mcpSlug := toolset.McpSlug.String
+
+	const mintOrigin = "https://mcp.customer.example"
+
+	// Deliberately no customdomains context on the request: this is the
+	// platform-origin re-entry shape.
+	loc := postConsent(t, ctx, ctx, ti, consentPostOpts{
+		mcpSlug:     mcpSlug,
+		issuerID:    toolset.UserSessionIssuerID.UUID,
+		clientID:    client.ClientID,
+		redirectURI: client.RedirectUris[0],
+		baseURL:     mintOrigin,
+		action:      "approve",
+	})
+
+	require.Equal(t, mintOrigin+"/mcp/"+mcpSlug, loc.Query().Get("iss"),
+		"iss must be rebuilt from the mint-time origin, not from the resuming request")
+	require.NotContains(t, loc.Query().Get("iss"), ti.serverURL.Host,
+		"falling back to the server default origin here silently breaks the client's comparison")
+}
+
+// A custom-domain flow that stays on the custom domain end to end: the
+// advertised issuer and the emitted iss must both be the custom-domain origin.
+func TestHandleConsentPost_CustomDomainIssMatchesAdvertisedIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, _ := newTestMCPServiceWithDevIDP(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug := "iss-cd-" + uuid.New().String()[:8]
+	toolset, issuer := createPrivateIssuerGatedToolset(t, ctx, ti, authCtx, slug)
+	toolset, domain := attachCustomDomainToToolset(t, ctx, ti, authCtx, toolset, "iss-cd.example.com")
+
+	clientID := "iss-custom-domain-client"
+	clientRedirectURI := "http://localhost:3000/callback"
+	insertUserSessionClient(t, ctx, ti.conn, issuer.ID, clientID)
+
+	domainCtx := customdomains.WithContext(ctx, &customdomains.Context{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         domain.Domain,
+		DomainID:       domain.ID,
+	})
+
+	advertisedIssuer, supported := fetchAdvertisedIssuer(t, domainCtx, ti, slug)
+	require.Equal(t, true, supported)
+	require.Contains(t, advertisedIssuer, domain.Domain, "sanity: the custom domain must drive the advertised issuer")
+
+	loc := postConsent(t, ctx, domainCtx, ti, consentPostOpts{
+		mcpSlug:        slug,
+		issuerID:       issuer.ID,
+		clientID:       clientID,
+		redirectURI:    clientRedirectURI,
+		baseURL:        "https://" + domain.Domain,
+		customDomainID: toolset.CustomDomainID,
+		action:         "approve",
+	})
+
+	require.Equal(t, advertisedIssuer, loc.Query().Get("iss"))
+}
+
 func TestHandleIDPCallback_ExchangesCodeAndRedirectsToConsent(t *testing.T) {
 	t.Parallel()
 
@@ -780,6 +992,55 @@ func TestHandleIDPCallback_IDPError_ForwardsToClient(t *testing.T) {
 	loc := w.Header().Get("Location")
 	require.Contains(t, loc, "error=access_denied", "should forward IDP error to client redirect")
 	require.Contains(t, loc, "localhost:3000/callback", "should redirect to client's redirect_uri")
+}
+
+// HandleIDPCallback is mounted at the global server URL and never has a
+// custom-domain context, so its forwarded-error response is the most exposed
+// of the four.
+func TestHandleIDPCallback_IDPErrorIssUsesMintOrigin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	mcpSlug := toolset.McpSlug.String
+
+	const mintOrigin = "https://idp-cb.customer.example"
+
+	stateID := uuid.NewString()
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
+		ID:                  stateID,
+		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		Endpoint: mcp.EndpointRef{
+			McpSlug:        mcpSlug,
+			CustomDomainID: toolset.CustomDomainID,
+			BaseURL:        mintOrigin,
+		},
+		ClientID:            client.ClientID,
+		RedirectURI:         client.RedirectUris[0],
+		State:               "client-state",
+		CodeChallenge:       "abc",
+		CodeChallengeMethod: "S256",
+		CSRFToken:           "csrf-token",
+		CreatedAt:           time.Now(),
+	}))
+
+	q := url.Values{
+		"state":             {stateID},
+		"error":             {"access_denied"},
+		"error_description": {"user cancelled"},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/mcp/idp_callback?"+q.Encode(), nil)
+	req = req.WithContext(ctx)
+
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleIDPCallback(w, req))
+	require.Equal(t, http.StatusFound, w.Code)
+
+	loc, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, "access_denied", loc.Query().Get("error"))
+	require.Equal(t, mintOrigin+"/mcp/"+mcpSlug, loc.Query().Get("iss"),
+		"the IDP callback has no custom-domain context and must use the mint-time snapshot")
 }
 
 func TestHandleIDPCallback_ExpiredState_ReturnsUnauthorized(t *testing.T) {

@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -64,7 +65,7 @@ type EnvironmentLoader interface {
 }
 
 type DeliveryLogger interface {
-	LogTriggerDelivery(triggerrepo.TriggerInstance, EventEnvelope, DeliveryStatus, string, error)
+	LogTriggerDelivery(context.Context, triggerrepo.TriggerInstance, EventEnvelope, DeliveryStatus, string, error)
 }
 
 type Dispatcher interface {
@@ -87,6 +88,7 @@ func NewTriggerDeliveryLogger(write func(context.Context, TriggerDeliveryLog)) D
 }
 
 func (l *triggerDeliveryLogger) LogTriggerDelivery(
+	ctx context.Context,
 	instance triggerrepo.TriggerInstance,
 	envelope EventEnvelope,
 	status DeliveryStatus,
@@ -122,8 +124,14 @@ func (l *triggerDeliveryLogger) LogTriggerDelivery(
 	if err != nil {
 		attributes[attr.ErrorMessageKey] = err.Error()
 	}
+	// telemetry.HTTPLogAttributes.RecordTraceContext is off-limits here (import
+	// cycle through platformtools), so stamp the trace context directly.
+	if spanCtx := trace.SpanContextFromContext(ctx); spanCtx.IsValid() {
+		attributes[attr.TraceIDKey] = spanCtx.TraceID().String()
+		attributes[attr.SpanIDKey] = spanCtx.SpanID().String()
+	}
 
-	l.write(context.Background(), TriggerDeliveryLog{
+	l.write(ctx, TriggerDeliveryLog{
 		Timestamp:  conv.Default(envelope.ReceivedAt, time.Now().UTC()),
 		Attributes: attributes,
 		Instance:   instance,
@@ -873,33 +881,33 @@ func boundAssistantKey(id string) string {
 func (a *App) ProcessEvent(ctx context.Context, instance triggerrepo.TriggerInstance, envelope EventEnvelope) (*Task, error) {
 	rawConfig, err := configJSONToMap(instance.ConfigJson)
 	if err != nil {
-		a.emitDeliveryLog(instance, envelope, DeliveryStatusFailed, "decode trigger config", err)
+		a.deliveryLogger.LogTriggerDelivery(ctx, instance, envelope, DeliveryStatusFailed, "decode trigger config", err)
 		return nil, fmt.Errorf("decode trigger config: %w", err)
 	}
 
 	_, config, err := a.validateInstance(ctx, instance.ProjectID, nullUUIDToUUID(instance.EnvironmentID), instance.DefinitionSlug, rawConfig)
 	if err != nil {
-		a.emitDeliveryLog(instance, envelope, DeliveryStatusFailed, "validate trigger instance", err)
+		a.deliveryLogger.LogTriggerDelivery(ctx, instance, envelope, DeliveryStatusFailed, "validate trigger instance", err)
 		return nil, fmt.Errorf("validate trigger instance: %w", err)
 	}
 
 	if instance.Status != StatusActive {
-		a.emitDeliveryLog(instance, envelope, DeliveryStatusSkipped, "trigger is paused", nil)
+		a.deliveryLogger.LogTriggerDelivery(ctx, instance, envelope, DeliveryStatusSkipped, "trigger is paused", nil)
 		return nil, nil
 	}
 
 	match, err := config.Filter(envelope.Event)
 	if err != nil {
-		a.emitDeliveryLog(instance, envelope, DeliveryStatusFailed, "evaluate filter", err)
+		a.deliveryLogger.LogTriggerDelivery(ctx, instance, envelope, DeliveryStatusFailed, "evaluate filter", err)
 		return nil, fmt.Errorf("evaluate filter: %w", err)
 	}
 	if !match {
-		a.emitDeliveryLog(instance, envelope, DeliveryStatusSkipped, "filter did not match", nil)
+		a.deliveryLogger.LogTriggerDelivery(ctx, instance, envelope, DeliveryStatusSkipped, "filter did not match", nil)
 		return nil, nil
 	}
 
 	if err := ValidateTargetKind(instance.TargetKind); err != nil {
-		a.emitDeliveryLog(instance, envelope, DeliveryStatusFailed, "trigger target is not supported", err)
+		a.deliveryLogger.LogTriggerDelivery(ctx, instance, envelope, DeliveryStatusFailed, "trigger target is not supported", err)
 		return nil, fmt.Errorf("validate trigger target kind: %w", err)
 	}
 
@@ -917,13 +925,13 @@ func (a *App) ProcessEvent(ctx context.Context, instance triggerrepo.TriggerInst
 	if envelope.Event != nil {
 		eventJSON, err := json.Marshal(envelope.Event)
 		if err != nil {
-			a.emitDeliveryLog(instance, envelope, DeliveryStatusFailed, "marshal event payload", err)
+			a.deliveryLogger.LogTriggerDelivery(ctx, instance, envelope, DeliveryStatusFailed, "marshal event payload", err)
 			return nil, fmt.Errorf("marshal event payload: %w", err)
 		}
 		task.EventJSON = eventJSON
 	}
 
-	a.emitDeliveryLog(instance, envelope, DeliveryStatusSent, "trigger event enqueued", nil)
+	a.deliveryLogger.LogTriggerDelivery(ctx, instance, envelope, DeliveryStatusSent, "trigger event enqueued", nil)
 	return task, nil
 }
 
@@ -1080,10 +1088,6 @@ func (a *App) loadEnvironmentMap(ctx context.Context, projectID uuid.UUID, envir
 		return map[string]string{}, nil
 	}
 	return envMap, nil
-}
-
-func (a *App) emitDeliveryLog(instance triggerrepo.TriggerInstance, envelope EventEnvelope, status DeliveryStatus, reason string, err error) {
-	a.deliveryLogger.LogTriggerDelivery(instance, envelope, status, reason, err)
 }
 
 func ValidateTargetKind(targetKind string) error {

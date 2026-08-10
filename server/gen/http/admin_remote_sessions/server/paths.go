@@ -66,3 +66,18 @@ func UpdateGlobalClientAdminRemoteSessionsPath() string {
 func DeleteGlobalClientAdminRemoteSessionsPath() string {
 	return "/rpc/adminRemoteSessions.deleteGlobalClient"
 }
+
+// ListGlobalIssuerConvergenceCandidatesAdminRemoteSessionsPath returns the URL path to the adminRemoteSessions service listGlobalIssuerConvergenceCandidates HTTP endpoint.
+func ListGlobalIssuerConvergenceCandidatesAdminRemoteSessionsPath() string {
+	return "/rpc/adminRemoteSessions.listGlobalIssuerConvergenceCandidates"
+}
+
+// GetGlobalIssuerMigratePreflightAdminRemoteSessionsPath returns the URL path to the adminRemoteSessions service getGlobalIssuerMigratePreflight HTTP endpoint.
+func GetGlobalIssuerMigratePreflightAdminRemoteSessionsPath() string {
+	return "/rpc/adminRemoteSessions.getGlobalIssuerMigratePreflight"
+}
+
+// MigrateToGlobalIssuerAdminRemoteSessionsPath returns the URL path to the adminRemoteSessions service migrateToGlobalIssuer HTTP endpoint.
+func MigrateToGlobalIssuerAdminRemoteSessionsPath() string {
+	return "/rpc/adminRemoteSessions.migrateToGlobalIssuer"
+}

@@ -35,6 +35,7 @@ import {
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useSession } from "@/contexts/Auth";
 import { resolveChatOwner } from "@/lib/chat-owner";
+import { BrandMeshLayers } from "@/components/brand-mesh";
 import { getIdentityTint } from "@/components/gradient-colors";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import {
@@ -72,7 +73,13 @@ export function ChatRoot(): ReactElement {
 export function ChatHome(): ReactElement {
   const routes = useRoutes();
   return (
-    <div className="relative flex h-full flex-col overflow-y-auto">
+    // Same brand-mesh surface as the project home assistant card, scaled to
+    // the page: neutral theme-following gradient with the rainbow edge and
+    // grain. Scrolling lives on an inner wrapper so the mesh (and the back
+    // affordance) stay pinned to the viewport instead of scrolling away with
+    // the content.
+    <div className="from-card to-background relative isolate flex h-full flex-col bg-gradient-to-br">
+      <BrandMeshLayers />
       <div className="absolute top-4 left-4 z-10">
         <Link
           to={routes.home.href()}
@@ -83,8 +90,10 @@ export function ChatHome(): ReactElement {
           <Home className="size-4" />
         </Link>
       </div>
-      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-6 pt-[clamp(10rem,26vh,16rem)] pb-16">
-        <ChatLanding autoFocusInput />
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto flex w-full max-w-3xl flex-col px-6 pt-[clamp(10rem,26vh,16rem)] pb-16">
+          <ChatLanding autoFocusInput />
+        </div>
       </div>
     </div>
   );
@@ -232,8 +241,9 @@ export function ChatLanding({
       <div className="flex flex-col gap-4">
         <h1
           className={cn(
-            "text-foreground font-display font-thin",
+            "font-display font-thin",
             compact ? "text-2xl" : "text-4xl",
+            "text-foreground",
           )}
         >
           {greetingLead}{" "}
@@ -252,7 +262,7 @@ export function ChatLanding({
               e.preventDefault();
               submit();
             }}
-            className="border-border bg-card focus-within:border-foreground/30 relative border px-4 py-3 transition-colors"
+            className="border-border bg-card focus-within:border-foreground relative border px-4 py-3 transition-colors"
           >
             <input
               value={value}
@@ -744,7 +754,7 @@ function RecentRow({
   // container (not a Link) so the pin button isn't nested inside an anchor; the
   // Link covers the icon + title, and the pin button is a sibling action.
   return (
-    <div className="group/row hover:bg-accent flex items-center gap-3 px-3 py-1.5 transition-colors">
+    <div className="group/row hover:border-foreground flex items-center gap-3 border border-transparent px-3 py-1.5 transition-colors">
       <Link
         to={routes.chat.conversation.href(chat.id)}
         className="flex min-w-0 flex-1 items-center gap-3"
@@ -843,7 +853,7 @@ function ChatHomeSuggestions({
               key={suggestion.title}
               type="button"
               onClick={(event) => launchChat(suggestion, event.currentTarget)}
-              className="border-border bg-card text-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-2 border px-3 py-2 text-sm transition-colors"
+              className="border-border bg-card text-foreground hover:border-foreground flex items-center gap-2 border px-3 py-2 text-sm transition-colors"
             >
               <SuggestionIcon className="size-4 shrink-0" />
               {suggestion.title}
