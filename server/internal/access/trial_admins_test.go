@@ -23,13 +23,15 @@ func TestListActiveOrganizationAdmins(t *testing.T) {
 	require.NotNil(t, authCtx)
 
 	const (
-		globalAdminUserID = "global-admin-user"
-		orgAdminUserID    = "org-admin-user"
-		memberUserID      = "member-user"
+		globalAdminUserID     = "global-admin-user"
+		orgAdminUserID        = "org-admin-user"
+		workosOnlyAdminUserID = "workos-only-admin-user"
+		memberUserID          = "member-user"
 	)
 
 	seedAdminQueryUser(t, ctx, ti, authCtx.ActiveOrganizationID, globalAdminUserID, "global-admin@example.test", "Global Admin", "workos-global-admin")
 	seedAdminQueryUser(t, ctx, ti, authCtx.ActiveOrganizationID, orgAdminUserID, "org-admin@example.test", "Organization Admin", "workos-org-admin")
+	seedAdminQueryUser(t, ctx, ti, authCtx.ActiveOrganizationID, workosOnlyAdminUserID, "workos-only-admin@example.test", "WorkOS Only Admin", "workos-only-admin")
 	seedAdminQueryUser(t, ctx, ti, authCtx.ActiveOrganizationID, memberUserID, "member@example.test", "Member", "workos-member")
 
 	now := time.Now().UTC()
@@ -66,6 +68,16 @@ func TestListActiveOrganizationAdmins(t *testing.T) {
 	_, err = queries.UpsertOrganizationRoleAssignment(ctx, accessrepo.UpsertOrganizationRoleAssignmentParams{
 		OrganizationID:     authCtx.ActiveOrganizationID,
 		WorkosUserID:       "workos-global-admin",
+		UserID:             conv.ToPGText(globalAdminUserID),
+		WorkosMembershipID: conv.ToPGTextEmpty(""),
+		WorkosUpdatedAt:    conv.ToPGTimestamptz(now),
+		WorkosLastEventID:  conv.ToPGTextEmpty(""),
+		WorkosRoleSlug:     "admin",
+	})
+	require.NoError(t, err)
+	_, err = queries.UpsertOrganizationRoleAssignment(ctx, accessrepo.UpsertOrganizationRoleAssignmentParams{
+		OrganizationID:     authCtx.ActiveOrganizationID,
+		WorkosUserID:       "workos-only-admin",
 		UserID:             conv.PtrToPGText(nil),
 		WorkosMembershipID: conv.ToPGTextEmpty(""),
 		WorkosUpdatedAt:    conv.ToPGTimestamptz(now),
@@ -101,6 +113,12 @@ func TestListActiveOrganizationAdmins(t *testing.T) {
 	_, err = queries.GetActiveOrganizationAdmin(ctx, accessrepo.GetActiveOrganizationAdminParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		UserID:         conv.ToPGText(memberUserID),
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	_, err = queries.GetActiveOrganizationAdmin(ctx, accessrepo.GetActiveOrganizationAdminParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         conv.ToPGText(workosOnlyAdminUserID),
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 }

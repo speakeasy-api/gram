@@ -539,8 +539,8 @@ ORDER BY users.email, users.id;
 
 -- name: ListActiveOrganizationAdmins :many
 -- Returns active organization administrators and their Loops contact fields.
--- Prefer the internal user ID when the assignment has been linked; fall back
--- to the WorkOS user ID for assignments that predate that backfill.
+-- Resolve roles only through the internal user ID. WorkOS role assignments
+-- are not treated as internal authorization state until they are linked.
 SELECT DISTINCT
   users.id,
   users.display_name,
@@ -550,10 +550,7 @@ JOIN users
   ON users.id = our.user_id
 JOIN organization_role_assignments AS ora
   ON ora.organization_id = our.organization_id
-  AND (
-    ora.user_id = users.id
-    OR (ora.user_id IS NULL AND ora.workos_user_id = users.workos_id)
-  )
+  AND ora.user_id = users.id
   AND ora.deleted_at IS NULL
 LEFT JOIN organization_roles
   ON ora.role_urn = 'role:organization:' || organization_roles.id::text
@@ -573,8 +570,8 @@ ORDER BY users.email, users.id;
 
 -- name: GetActiveOrganizationAdmin :one
 -- Returns one active organization administrator and their Loops contact fields.
--- Prefer the internal user ID when the assignment has been linked; fall back
--- to the WorkOS user ID for assignments that predate that backfill.
+-- Resolve roles only through the internal user ID. WorkOS role assignments
+-- are not treated as internal authorization state until they are linked.
 SELECT DISTINCT
   users.id,
   users.display_name,
@@ -584,10 +581,7 @@ JOIN users
   ON users.id = our.user_id
 JOIN organization_role_assignments AS ora
   ON ora.organization_id = our.organization_id
-  AND (
-    ora.user_id = users.id
-    OR (ora.user_id IS NULL AND ora.workos_user_id = users.workos_id)
-  )
+  AND ora.user_id = users.id
   AND ora.deleted_at IS NULL
 LEFT JOIN organization_roles
   ON ora.role_urn = 'role:organization:' || organization_roles.id::text
