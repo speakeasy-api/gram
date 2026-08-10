@@ -1209,6 +1209,7 @@ func marshalMcpapprovalApprovalRequestSummaryToApprovalRequestSummaryResponseBod
 		ID:             v.ID,
 		TargetKind:     v.TargetKind,
 		TargetRaw:      v.TargetRaw,
+		ServerSlug:     v.ServerSlug,
 		ArtifactRef:    v.ArtifactRef,
 		VersionPinned:  v.VersionPinned,
 		Status:         v.Status,

@@ -112,6 +112,10 @@ type ApprovalRequestSummary struct {
 	TargetKind string
 	// The reference exactly as the requester named it.
 	TargetRaw string
+	// The Shadow MCP inventory page slug for a server_url target — the same
+	// identifier the inventory derives from the canonical URL, so a request links
+	// to the server page it describes. Absent for stdio targets.
+	ServerSlug *string
 	// The resolved artifact identity. Absent when the server could not be
 	// identified, which must surface as unknown rather than as an absence of
 	// findings.

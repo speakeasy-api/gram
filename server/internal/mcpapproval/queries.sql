@@ -33,6 +33,28 @@ WHERE r.id = @id
   AND r.project_id = @project_id
   AND r.deleted IS FALSE;
 
+-- name: ListApprovalRequestsByTargetKeys :many
+-- Resolves the approval request tracking each of a set of canonical server
+-- URLs, so the Shadow MCP inventory can join approval state onto its rows.
+-- target_key is unique per (project, kind), so this returns at most one row
+-- per key.
+SELECT
+  r.id
+  , r.target_key
+  , r.status
+  , (
+      SELECT count(*)
+      FROM mcp_approval_request_requesters req
+      WHERE req.mcp_approval_request_id = r.id
+        AND req.project_id = r.project_id
+        AND req.deleted IS FALSE
+    ) AS requester_count
+FROM mcp_approval_requests r
+WHERE r.project_id = @project_id
+  AND r.target_kind = 'server_url'
+  AND r.target_key = ANY (@target_keys::text[])
+  AND r.deleted IS FALSE;
+
 -- name: ListRequestersForApprovalRequest :many
 SELECT *
 FROM mcp_approval_request_requesters

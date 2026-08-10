@@ -90,6 +90,10 @@ type CreateRequestResponseBody struct {
 	TargetKind string `form:"target_kind" json:"target_kind" xml:"target_kind"`
 	// The reference exactly as the requester named it.
 	TargetRaw string `form:"target_raw" json:"target_raw" xml:"target_raw"`
+	// The Shadow MCP inventory page slug for a server_url target — the same
+	// identifier the inventory derives from the canonical URL, so a request links
+	// to the server page it describes. Absent for stdio targets.
+	ServerSlug *string `form:"server_slug,omitempty" json:"server_slug,omitempty" xml:"server_slug,omitempty"`
 	// The resolved artifact identity. Absent when the server could not be
 	// identified, which must surface as unknown rather than as an absence of
 	// findings.
@@ -116,6 +120,10 @@ type PromoteResponseBody struct {
 	TargetKind string `form:"target_kind" json:"target_kind" xml:"target_kind"`
 	// The reference exactly as the requester named it.
 	TargetRaw string `form:"target_raw" json:"target_raw" xml:"target_raw"`
+	// The Shadow MCP inventory page slug for a server_url target — the same
+	// identifier the inventory derives from the canonical URL, so a request links
+	// to the server page it describes. Absent for stdio targets.
+	ServerSlug *string `form:"server_slug,omitempty" json:"server_slug,omitempty" xml:"server_slug,omitempty"`
 	// The resolved artifact identity. Absent when the server could not be
 	// identified, which must surface as unknown rather than as an absence of
 	// findings.
@@ -1085,6 +1093,10 @@ type ApprovalRequestSummaryResponseBody struct {
 	TargetKind string `form:"target_kind" json:"target_kind" xml:"target_kind"`
 	// The reference exactly as the requester named it.
 	TargetRaw string `form:"target_raw" json:"target_raw" xml:"target_raw"`
+	// The Shadow MCP inventory page slug for a server_url target — the same
+	// identifier the inventory derives from the canonical URL, so a request links
+	// to the server page it describes. Absent for stdio targets.
+	ServerSlug *string `form:"server_slug,omitempty" json:"server_slug,omitempty" xml:"server_slug,omitempty"`
 	// The resolved artifact identity. Absent when the server could not be
 	// identified, which must surface as unknown rather than as an absence of
 	// findings.
@@ -1245,6 +1257,7 @@ func NewCreateRequestResponseBody(res *mcpapproval.ApprovalRequestSummary) *Crea
 		ID:             res.ID,
 		TargetKind:     res.TargetKind,
 		TargetRaw:      res.TargetRaw,
+		ServerSlug:     res.ServerSlug,
 		ArtifactRef:    res.ArtifactRef,
 		VersionPinned:  res.VersionPinned,
 		Status:         res.Status,
@@ -1262,6 +1275,7 @@ func NewPromoteResponseBody(res *mcpapproval.ApprovalRequestSummary) *PromoteRes
 		ID:             res.ID,
 		TargetKind:     res.TargetKind,
 		TargetRaw:      res.TargetRaw,
+		ServerSlug:     res.ServerSlug,
 		ArtifactRef:    res.ArtifactRef,
 		VersionPinned:  res.VersionPinned,
 		Status:         res.Status,

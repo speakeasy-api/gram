@@ -163,6 +163,7 @@ var ApprovalRequestSummary = Type("ApprovalRequestSummary", func() {
 	Attribute("id", String, "The approval request ID.")
 	Attribute("target_kind", String, "The namespace of the requested reference, such as server_url or stdio_command.")
 	Attribute("target_raw", String, "The reference exactly as the requester named it.")
+	Attribute("server_slug", String, "The Shadow MCP inventory page slug for a server_url target — the same identifier the inventory derives from the canonical URL, so a request links to the server page it describes. Absent for stdio targets.")
 	Attribute("artifact_ref", String, "The resolved artifact identity. Absent when the server could not be identified, which must surface as unknown rather than as an absence of findings.")
 	Attribute("version_pinned", Boolean, "Whether the reference names an exact version.")
 	Attribute("status", String, "The request's current status.")
