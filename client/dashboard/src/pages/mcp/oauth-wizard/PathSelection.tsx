@@ -112,7 +112,7 @@ const OAuthDetectedCallout = ({
   }
 
   return (
-    <div className="border-border bg-muted/50 flex items-start justify-between gap-4 rounded-md border p-4">
+    <div className="border-border bg-muted/50 flex items-start justify-between gap-4 border p-4">
       <div>
         <Text small className="font-medium">
           OAuth detected from {name}
@@ -136,7 +136,7 @@ function PathOptionCard(props: {
     <button
       type="button"
       className={cn(
-        "border-border flex flex-col items-start gap-2 rounded-lg border p-6 text-left transition-colors",
+        "border-border flex flex-col items-start gap-2 border p-6 text-left transition-colors",
         "hover:border-primary hover:bg-muted/50",
       )}
       onClick={props.onClick}

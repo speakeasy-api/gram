@@ -20,7 +20,7 @@ export function SearchBar({
       direction="horizontal"
       gap={2}
       className={cn(
-        "border-border h-[42px] rounded-md border px-3",
+        "border-border h-[42px] border px-3",
         disabled && "cursor-not-allowed opacity-50",
         className,
       )}

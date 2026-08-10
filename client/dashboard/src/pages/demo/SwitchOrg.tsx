@@ -40,7 +40,7 @@ function OrgRow({
       disabled={current}
       onClick={onSelect}
       className={cn(
-        "flex w-full items-center gap-3 rounded-md border px-3.5 py-3 text-left transition-colors",
+        "flex w-full items-center gap-3 border px-3.5 py-3 text-left transition-colors",
         current
           ? "cursor-default border-[var(--edge)] bg-[var(--surface)]"
           : selected
@@ -50,7 +50,7 @@ function OrgRow({
     >
       <span
         className={cn(
-          "auth-mono-text flex h-7 w-7 flex-none items-center justify-center rounded-md text-[12px]",
+          "auth-mono-text flex h-7 w-7 flex-none items-center justify-center text-[12px]",
           current || selected
             ? "bg-[var(--cta)] text-white"
             : "bg-[var(--edge-soft)] text-[var(--muted-strong)]",
@@ -151,7 +151,7 @@ export default function SwitchOrg({
       </div>
 
       {gate && (
-        <div className="flex w-full items-center gap-2.5 rounded-md border border-[var(--ember)] bg-[hsl(23,96%,97%)] px-3.5 py-2.5">
+        <div className="flex w-full items-center gap-2.5 border border-[var(--ember)] bg-[hsl(23,96%,97%)] px-3.5 py-2.5">
           <span className="auth-mono flex-none rounded-full bg-[var(--ember)] px-2.5 py-[3px] text-[10px] text-black">
             No access
           </span>

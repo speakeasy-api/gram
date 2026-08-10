@@ -140,14 +140,14 @@ export const AGENT_PLATFORMS: AgentPlatform[] = [
   {
     id: "codex",
     name: "OpenAI Codex",
-    description: "OpenAI Codex CLI & desktop app",
+    description: "Codex CLI & Codex mode in the ChatGPT app",
     icon: "codex",
     connected: false,
     setupSteps: [
       {
         title: "Deploy the Speakeasy device agent via MDM",
         description:
-          "Codex is instrumented centrally by the Speakeasy device agent — this covers both the Codex CLI and the Codex desktop app. Roll the agent out through your MDM (Kandji, Jamf, Intune, ...) using the Fleet (MDM) path, then select Codex as a managed platform so its configuration is applied to every developer with no per-user setup.",
+          "Codex is instrumented centrally by the Speakeasy device agent — this covers the Codex CLI and Codex mode in the ChatGPT desktop app, which OpenAI merged the standalone Codex app into. Chat and Work modes in that same app are not covered here; they are captured through the OpenAI Compliance API integration instead. Roll the agent out through your MDM (Jamf, Iru (formerly Kandji), Intune, ...) using the Fleet (MDM) path, then select Codex as a managed platform so its configuration is applied to every developer with no per-user setup.",
         helpLink: {
           url: "{{GRAM_DEVICE_AGENT_URL}}",
           linkLabel: "device agent setup",

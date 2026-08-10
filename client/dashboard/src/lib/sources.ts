@@ -10,13 +10,15 @@ export type SourceType =
   | "function"
   | "externalmcp"
   | "remotemcp"
-  | "tunneledmcp";
+  | "tunneledmcp"
+  | "unproxiedmcp";
 export type UrnKind =
   | "http"
   | "function"
   | "externalmcp"
   | "remotemcp"
-  | "tunneledmcp";
+  | "tunneledmcp"
+  | "unproxiedmcp";
 
 const sourceTypeToUrn: Record<SourceType, UrnKind> = {
   openapi: "http",
@@ -24,6 +26,7 @@ const sourceTypeToUrn: Record<SourceType, UrnKind> = {
   externalmcp: "externalmcp",
   remotemcp: "remotemcp",
   tunneledmcp: "tunneledmcp",
+  unproxiedmcp: "unproxiedmcp",
 };
 
 const urnToSourceType: Record<UrnKind, SourceType> = {
@@ -32,6 +35,7 @@ const urnToSourceType: Record<UrnKind, SourceType> = {
   externalmcp: "externalmcp",
   remotemcp: "remotemcp",
   tunneledmcp: "tunneledmcp",
+  unproxiedmcp: "unproxiedmcp",
 };
 
 export function sourceTypeToUrnKind(type: SourceType): UrnKind {
@@ -48,6 +52,28 @@ export function attachmentToURNPrefix(type: SourceType, slug: string): string {
 
 export function formatRemoteMcpUrlForDisplay(url: string): string {
   return url.replace(/^https?:\/\//, "");
+}
+
+// validateMcpServerUrl mirrors server-side url.Parse: must be absolute,
+// http(s), with a non-empty host. Shared by every "add an MCP server by URL"
+// form (remote, unproxied) so client-side feedback stays in sync; the
+// backend re-validates regardless.
+export function validateMcpServerUrl(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return "URL is required";
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return "Enter a valid absolute URL (e.g. https://example.com/mcp)";
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return "URL must use http or https";
+  }
+  if (!parsed.hostname) {
+    return "URL must include a host";
+  }
+  return null;
 }
 
 // formatRemoteMcpDisplay is the canonical "what to render for this server"
@@ -103,35 +129,6 @@ export function remoteSessionScopeTier(entity: {
   return "platform";
 }
 
-const REMOTE_SESSION_TIER_RANK: Record<RemoteSessionScopeTier, number> = {
-  project: 0,
-  organization: 1,
-  platform: 2,
-};
-
-// resolveRemoteSessionIssuerByTierPrecedence picks the single entity a tenant
-// should resolve to when several tiers expose a matching candidate (same slug or
-// same upstream URL). Slugs are unique per project and, separately, across the
-// platform catalog, but the organization tier has no slug uniqueness constraint,
-// and any tier may point at the same URL, so callers must not rely on list order
-// (which is by creation time and says nothing about tier). Returns the
-// highest-priority candidate — project > organization > platform — or undefined
-// when the list is empty.
-export function resolveRemoteSessionIssuerByTierPrecedence<
-  T extends { projectId?: string | null; organizationId?: string | null },
->(candidates: T[]): T | undefined {
-  let best: T | undefined;
-  let bestRank = Number.POSITIVE_INFINITY;
-  for (const candidate of candidates) {
-    const rank = REMOTE_SESSION_TIER_RANK[remoteSessionScopeTier(candidate)];
-    if (rank < bestRank) {
-      best = candidate;
-      bestRank = rank;
-    }
-  }
-  return best;
-}
-
 // Derive a default display name from an Issuer URL's hostname. Unlike the slug
 // transform this keeps the hostname human-readable: dots are preserved rather
 // than hyphenated. (URL parsing lowercases the host either way.) Returns null
@@ -162,6 +159,15 @@ export function remoteMcpRouteParam(server: {
 
 export function tunneledMcpRouteParam(server: { id: string }): string {
   return server.id;
+}
+
+// unproxiedMcpRouteParam mirrors [remoteMcpRouteParam] for unproxied MCP
+// servers.
+export function unproxiedMcpRouteParam(server: {
+  id: string;
+  slug?: string | null | undefined;
+}): string {
+  return server.slug?.trim() || server.id;
 }
 
 // mcpServerRouteParam returns the value to embed in dashboard URLs for an
@@ -199,6 +205,18 @@ export function getRemoteMcpServerArgs(idOrSlug: string): {
 
 export function getTunneledMcpServerArgs(id: string): { id: string } {
   return { id };
+}
+
+// getUnproxiedMcpServerArgs mirrors [getRemoteMcpServerArgs] for
+// unproxied MCP servers.
+export function getUnproxiedMcpServerArgs(idOrSlug: string): {
+  id?: string;
+  slug?: string;
+} {
+  if (uuidRegex.test(idOrSlug)) {
+    return { id: idOrSlug };
+  }
+  return { slug: idOrSlug };
 }
 
 // getMcpServerArgs maps a route-param string into the request shape that

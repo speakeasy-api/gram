@@ -46,6 +46,7 @@ Output only the structured JSON object.`
 
 type CompletionClient interface {
 	GetObjectCompletion(context.Context, openrouter.ObjectCompletionRequest) (*openrouter.CompletionResponse, error)
+	openrouter.KeyResolver
 }
 
 type Decision string
@@ -176,7 +177,8 @@ func (g *modelGenerator) Generate(ctx context.Context, in GenerateInput) (Genera
 	if err != nil {
 		return Generation{}, err
 	}
-	switch result, err := g.limiter.Allow(ctx, openrouter.JudgeRateLimitKey(in.OrganizationID, g.config.Model)); {
+	bucket := openrouter.ResolveJudgeRateLimitKey(ctx, g.logger, g.completion, in.OrganizationID, in.ProjectID.String(), billing.ModelUsageSourceSkillSuggestions, g.config.Model)
+	switch result, err := g.limiter.Allow(ctx, bucket); {
 	case err != nil:
 		g.logger.WarnContext(ctx, "skill suggestion rate limiter unavailable, allowing call", attr.SlogError(err), attr.SlogOrganizationID(in.OrganizationID))
 	case !result.Allowed:

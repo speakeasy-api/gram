@@ -61,14 +61,6 @@ type Client struct {
 	// removeOAuthServer endpoint.
 	RemoveOAuthServerDoer goahttp.Doer
 
-	// AddOAuthProxyServer Doer is the HTTP client used to make requests to the
-	// addOAuthProxyServer endpoint.
-	AddOAuthProxyServerDoer goahttp.Doer
-
-	// UpdateOAuthProxyServer Doer is the HTTP client used to make requests to the
-	// updateOAuthProxyServer endpoint.
-	UpdateOAuthProxyServerDoer goahttp.Doer
-
 	// SetUserSessionIssuer Doer is the HTTP client used to make requests to the
 	// setUserSessionIssuer endpoint.
 	SetUserSessionIssuerDoer goahttp.Doer
@@ -108,8 +100,6 @@ func NewClient(
 		CloneToolsetDoer:             doer,
 		AddExternalOAuthServerDoer:   doer,
 		RemoveOAuthServerDoer:        doer,
-		AddOAuthProxyServerDoer:      doer,
-		UpdateOAuthProxyServerDoer:   doer,
 		SetUserSessionIssuerDoer:     doer,
 		SetToolVariationsGroupDoer:   doer,
 		RestoreResponseBody:          restoreBody,
@@ -379,54 +369,6 @@ func (c *Client) RemoveOAuthServer() goa.Endpoint {
 		resp, err := c.RemoveOAuthServerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("toolsets", "removeOAuthServer", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// AddOAuthProxyServer returns an endpoint that makes HTTP requests to the
-// toolsets service addOAuthProxyServer server.
-func (c *Client) AddOAuthProxyServer() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeAddOAuthProxyServerRequest(c.encoder)
-		decodeResponse = DecodeAddOAuthProxyServerResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildAddOAuthProxyServerRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.AddOAuthProxyServerDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("toolsets", "addOAuthProxyServer", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// UpdateOAuthProxyServer returns an endpoint that makes HTTP requests to the
-// toolsets service updateOAuthProxyServer server.
-func (c *Client) UpdateOAuthProxyServer() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeUpdateOAuthProxyServerRequest(c.encoder)
-		decodeResponse = DecodeUpdateOAuthProxyServerResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildUpdateOAuthProxyServerRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.UpdateOAuthProxyServerDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("toolsets", "updateOAuthProxyServer", err)
 		}
 		return decodeResponse(resp)
 	}

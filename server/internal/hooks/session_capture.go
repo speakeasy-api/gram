@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -21,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
 // ErrChatNotFound indicates the chat (conversation) does not exist.
@@ -86,19 +88,22 @@ func claudeSurfaceFromServiceName(name string) string {
 // claudeServiceNameSpecificity ranks how precisely a service name or adapter
 // slug identifies the product surface. "cowork" is unambiguous; the desktop
 // adapter slug narrows to CCD; "claude-code" is the OTEL name shared by the
-// CLI and CCD, so it is the least specific Claude value. Non-Claude values
-// rank zero.
+// CLI and CCD; the bare "claude" adapter slug the hooks binary sends for
+// Claude Code marks a Claude-family sender with no surface information at
+// all. Non-Claude values rank zero.
 func claudeServiceNameSpecificity(name string) int {
 	switch claudeSurfaceFromServiceName(name) {
 	case agentVariantCowork:
-		return 3
+		return 4
 	case surfaceClaudeCodeDesktop:
-		return 2
+		return 3
 	case agentVariantClaudeCode:
-		return 1
-	default:
-		return 0
+		return 2
 	}
+	if strings.ToLower(strings.TrimSpace(name)) == "claude" {
+		return 1
+	}
+	return 0
 }
 
 // preferClaudeServiceName merges a freshly reported service name (or adapter
@@ -106,18 +111,21 @@ func claudeServiceNameSpecificity(name string) int {
 // the Claude product surface more precisely. This is what lets the two signals
 // compose: the OTEL stream's "cowork" upgrades a cached desktop adapter slug,
 // while a cached "claude-code-desktop" survives OTEL batches that only report
-// the ambiguous "claude-code". Ties keep the fresh value. A non-empty incoming
-// value that identifies no Claude surface (Cursor, Codex, unknown adapters)
-// always wins: non-Claude senders keep their reported name instead of being
-// overwritten by a Claude value cached under the same session id.
+// the ambiguous "claude-code", and an OTEL-cached "claude-code" survives hook
+// events carrying only the bare "claude" adapter slug. Ties keep the fresh
+// value. A non-empty incoming value that identifies no Claude sender at all
+// (Cursor, Codex, unknown adapters) always wins: non-Claude senders keep their
+// reported name instead of being overwritten by a Claude value cached under
+// the same session id.
 func preferClaudeServiceName(incoming, cached string) string {
 	if incoming == "" {
 		return cached
 	}
-	if claudeSurfaceFromServiceName(incoming) == "" {
+	specificity := claudeServiceNameSpecificity(incoming)
+	if specificity == 0 {
 		return incoming
 	}
-	if claudeServiceNameSpecificity(cached) > claudeServiceNameSpecificity(incoming) {
+	if claudeServiceNameSpecificity(cached) > specificity {
 		return cached
 	}
 	return incoming
@@ -415,6 +423,11 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 		return nil
 	}
 
+	// persistToolCallEvent mirrors this write into ClickHouse for tool calls;
+	// conversation events previously only landed in Postgres, so ClickHouse
+	// hook consumers (e.g. onboarding's "Confirm traffic" feed) never saw them.
+	s.logConversationTelemetry(ctx, payload, metadata, projectID)
+
 	msgParams := chatRepo.CreateChatMessageParams{
 		Replayed:         false,
 		CreatedAt:        conv.PtrToPGTimestamptz(nil),
@@ -460,6 +473,23 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 	}
 
 	return nil
+}
+
+// logConversationTelemetry writes a UserPromptSubmit/Stop conversation event
+// to ClickHouse, using the same attribute-building and event_source="hook"
+// shape as persistToolCallEvent. projectID is the value persistConversationEvent
+// already parsed, so this never re-parses it.
+func (s *Service) logConversationTelemetry(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata, projectID uuid.UUID) {
+	if s.telemetryLogger == nil {
+		return
+	}
+
+	s.telemetryLogger.Log(ctx, telemetry.LogParams{
+		Timestamp:  time.Now(),
+		ToolInfo:   telemetryToolInfo(metadata, projectID, ""),
+		UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
+		Attributes: s.buildTelemetryAttributesWithMetadata(ctx, payload, metadata),
+	})
 }
 
 // writeToolCallRequestToPG writes an assistant message with tool_calls to PostgreSQL.

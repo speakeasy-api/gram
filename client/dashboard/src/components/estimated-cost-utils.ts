@@ -11,13 +11,13 @@
 //
 // We therefore label the measure conditionally: a scope we positively know is
 // metered is real "Cost"; anything else is "Est. cost" with a disclaimer.
-// Claude exposes no plan/billing signal in telemetry, so metered status can't be
-// inferred from a session — it comes from an out-of-band, admin-declared
-// billing_mode (ai_integration_configs / user_accounts). Until that signal
-// exists, no scope is known-metered and every surface shows the estimate. When
-// it lands, metered scopes render a plain, confident "Cost" with no asterisk.
+// Neither Claude nor Codex exposes a plan/billing signal in telemetry, so
+// metered status can't be inferred from a session — it comes from an
+// out-of-band, admin-declared billing_mode (ai_integration_configs /
+// user_accounts). Scopes with no declaration show the estimate; metered scopes
+// render a plain, confident "Cost" with no asterisk.
 export const ESTIMATED_COST_TOOLTIP =
-  "Estimated from token usage at standard API rates. Flat-fee plans (Claude Max/Pro/Team) include usage in the subscription, so real spend may be lower.";
+  "Estimated from token usage at standard API rates. Flat-fee plans (Claude Max/Pro/Team, ChatGPT plans covering Codex) include usage in the subscription, so real spend may be lower.";
 
 /**
  * Whether a scope is confidently billed per token. Only then is the cost figure

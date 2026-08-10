@@ -4,6 +4,7 @@ import (
 	"context"
 
 	genskills "github.com/speakeasy-api/gram/server/gen/skills"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
@@ -16,6 +17,8 @@ type SkillsService interface {
 	Get(context.Context, *genskills.GetPayload) (*genskills.GetSkillResult, error)
 	ListVersions(context.Context, *genskills.ListVersionsPayload) (*genskills.ListSkillVersionsResult, error)
 	ListDistributions(context.Context, *genskills.ListDistributionsPayload) (*genskills.ListSkillDistributionsResult, error)
+	Distribute(context.Context, *genskills.DistributePayload) (*types.SkillDistribution, error)
+	Undistribute(context.Context, *genskills.UndistributePayload) error
 }
 
 type SkillInsightsReader interface {

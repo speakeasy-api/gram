@@ -59,7 +59,8 @@ export const TumAdminSection = (): JSX.Element => {
 
   return (
     <Page.Section>
-      <Page.Section.Title>
+      {/* Secondary section below TumUsageSection: suppress the area eyebrow. */}
+      <Page.Section.Title area="">
         TUM Contract (PLATFORM ADMIN VIEW ONLY)
       </Page.Section.Title>
       <Page.Section.Description>
@@ -196,7 +197,10 @@ function ContractForm({
         <ErrorBoundary
           onError={(error) => handleError(toError(error), { silent: true })}
           fallbackRender={() => (
-            <Text muted small>
+            // Announced, because this replaces a skeleton long after the page
+            // has settled — with no live region a screen reader user is never
+            // told the estimate failed, or that a reload is the way back.
+            <Text muted small role="alert">
               The contract estimate couldn't load. Your contract terms above are
               unaffected —{" "}
               <button

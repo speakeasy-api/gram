@@ -108,7 +108,7 @@ export function DemoBookingFlow(): JSX.Element {
         </p>
       </div>
 
-      <div className="w-full overflow-hidden rounded-lg border border-[var(--edge)] bg-[var(--card)]">
+      <div className="w-full overflow-hidden border border-[var(--edge)] bg-[var(--card)]">
         {/* The embed runs with `hideEventTypeDetails`, so this header is what
             names the meeting — as in the design frame. */}
         <div className="flex h-11 items-center justify-between border-b border-[var(--edge-soft)] px-[18px]">

@@ -10,6 +10,7 @@ import {
   PlatformAdminInfoPanel,
   PlatformAdminOnboardingPanel,
 } from "./platform-admin-panel";
+import { InternalAdminBadge } from "@/components/internal-admin-badge";
 import { Switch } from "@/components/ui/Switch";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -574,14 +575,14 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
       }
     >
       <div className={`
-          w-96 max-w-[calc(100vw-2rem)] rounded-xl border shadow-2xl backdrop-blur-md transition-all
+          w-96 max-w-[calc(100vw-2rem)] border shadow-2xl backdrop-blur-md transition-all
           duration-200
           ${state.enabled ? "bg-background/98 border-foreground/15 dark:border-foreground/15 dark:bg-gray-950/98" : "border-border bg-white/98 dark:bg-gray-950/98"}
         `}>
         {/* Header row */}
         <div className={`
             flex w-full items-center gap-2.5 px-3.5 py-2.5
-            ${collapsed ? "rounded-xl" : "rounded-t-xl"}
+            ${collapsed ? "" : ""}
           `}>
           <button
             type="button"
@@ -596,9 +597,7 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
             className="flex flex-1 cursor-grab items-center gap-2.5 active:cursor-grabbing"
           >
             <GripVertical className="text-muted-foreground/40 h-3.5 w-3.5 shrink-0" />
-            <span className="rounded bg-amber-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-widest text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
-              DEV
-            </span>
+            <InternalAdminBadge />
             <span className="text-muted-foreground text-xs font-semibold">
               Developer Toolkit
             </span>
@@ -662,7 +661,7 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
                 <Shield className="h-3 w-3" />
                 RBAC
                 {state.enabled && (
-                  <span className="bg-muted text-muted-foreground rounded px-1 py-px font-mono text-[9px] tabular-nums">
+                  <span className="bg-muted text-muted-foreground px-1 py-px font-mono text-[9px] tabular-nums">
                     {activeCount}/{SCOPE_DEFS.length}
                   </span>
                 )}
@@ -691,7 +690,7 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
                 {/* Dev-only impersonation toggle: flips useIsPlatformAdmin
                     locally so non-admins can exercise admin-gated UI. */}
                 {import.meta.env.DEV && (
-                  <div className="border-border bg-card flex items-center justify-between rounded-lg border px-3 py-2.5">
+                  <div className="border-border bg-card flex items-center justify-between border px-3 py-2.5">
                     <div className="flex items-center gap-2">
                       <div
                         className={`h-1.5 w-1.5 rounded-full ${platformAdmin ? "animate-pulse bg-amber-500" : "bg-muted-foreground/30"}`}
@@ -724,7 +723,7 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
             {activeTab === "features" && (
               <div className="max-h-[440px] space-y-3 overflow-y-auto px-3 py-3">
                 <PlatformAdminFeaturesPanel />
-                <div className="border-border bg-card flex items-center justify-between rounded-lg border px-3 py-2.5">
+                <div className="border-border bg-card flex items-center justify-between border px-3 py-2.5">
                   <div className="flex items-center gap-2">
                     <div
                       className={`h-1.5 w-1.5 rounded-full ${orgMemoryEnabled ? "animate-pulse bg-emerald-500" : "bg-muted-foreground/30"}`}
@@ -812,11 +811,11 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
                           return (
                             <div key={def.scope}>
                               <div className={`
-                              flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 transition-colors
+                              flex cursor-pointer items-center gap-2 px-2 py-1.5 transition-colors
                               ${scopeState.enabled ? "hover:bg-black/[0.04] dark:hover:bg-white/[0.04]" : ""}
                             `} onClick={() => toggleScope(def.scope)}>
                                 <div className={`
-                                flex h-3.5 w-3.5 items-center justify-center rounded border-[1.5px] text-[9px] transition-all
+                                flex h-3.5 w-3.5 items-center justify-center border-[1.5px] text-[9px] transition-all
                                 ${scopeState.enabled ? "bg-foreground border-foreground text-background" : "border-muted-foreground/30 bg-transparent"}
                               `}>{scopeState.enabled && "✓"}</div>
                                 <div className="min-w-0 flex-1">
@@ -831,7 +830,7 @@ function PlatformAdminToolbarInner({ onHide }: { onHide: () => void }) {
                                       {def.label}
                                     </span>
                                     {isRestricted && scopeState.enabled && (
-                                      <span className="rounded bg-blue-100 px-1 py-px text-[9px] font-medium text-blue-600 dark:bg-blue-900/50 dark:text-blue-400">
+                                      <span className="bg-blue-100 px-1 py-px text-[9px] font-medium text-blue-600 dark:bg-blue-900/50 dark:text-blue-400">
                                         scoped
                                       </span>
                                     )}
@@ -943,7 +942,7 @@ function ResourceDropdown({
       <button
         ref={triggerRef}
         type="button"
-        className="border-border bg-background hover:bg-muted/50 flex w-full items-center justify-between rounded-md border px-2 py-1 text-left"
+        className="border-border bg-background hover:bg-muted/50 flex w-full items-center justify-between border px-2 py-1 text-left"
         onClick={(e) => {
           e.stopPropagation();
           setOpen(!open);
@@ -963,7 +962,7 @@ function ResourceDropdown({
           <div
             ref={panelRef}
             data-rbac-dev-toolbar-portal="true"
-            className="border-border bg-background fixed z-[999999] rounded-md border shadow-lg"
+            className="border-border bg-background fixed z-[999999] border shadow-lg"
             style={{
               top: triggerRect.bottom + 4,
               left: triggerRect.left,
@@ -980,7 +979,7 @@ function ResourceDropdown({
               }}
             >
               <div
-                className={`flex h-3 w-3 shrink-0 items-center justify-center rounded-sm border text-[8px] transition-all ${isAll ? "bg-foreground border-foreground text-background" : "border-muted-foreground/30"}`}
+                className={`flex h-3 w-3 shrink-0 items-center justify-center border text-[8px] transition-all ${isAll ? "bg-foreground border-foreground text-background" : "border-muted-foreground/30"}`}
               >
                 {isAll && "✓"}
               </div>
@@ -1014,7 +1013,7 @@ function ResourceDropdown({
                     onClick={() => toggleResource(r.id)}
                   >
                     <div
-                      className={`flex h-3 w-3 shrink-0 items-center justify-center rounded-sm border text-[8px] transition-all ${isChecked ? "bg-foreground border-foreground text-background" : "border-muted-foreground/30"}`}
+                      className={`flex h-3 w-3 shrink-0 items-center justify-center border text-[8px] transition-all ${isChecked ? "bg-foreground border-foreground text-background" : "border-muted-foreground/30"}`}
                     >
                       {isChecked && "✓"}
                     </div>

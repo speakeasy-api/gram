@@ -305,6 +305,19 @@ func (q *Queries) InsertTelemetryLogs(ctx context.Context, args []InsertTelemetr
 	return q.insertTelemetryLogsInto(ctx, "telemetry_logs", args)
 }
 
+// InsertTelemetryLogsSync writes the same rows as InsertTelemetryLogs but
+// commits them before returning (async_insert=0). It exists for the usage
+// importers, whose dedupe is a read-merge-write cycle: each page checks
+// telemetry_logs for fingerprints it is about to insert, so the previous
+// page's rows must be queryable by the time that check runs. Under the async
+// buffer they are not, and repeats spanning pages would slip through.
+func (q *Queries) InsertTelemetryLogsSync(ctx context.Context, args []InsertTelemetryLogParams) error {
+	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
+		"async_insert": 0,
+	}))
+	return q.insertTelemetryLogsInto(ctx, "telemetry_logs", args)
+}
+
 type UpsertShadowMCPInventoryURLParams struct {
 	GramProjectID      string
 	CanonicalServerURL string
@@ -386,6 +399,12 @@ type ShadowMCPInventoryUserRow struct {
 	UserEmail  string
 	LastCalled time.Time
 	CallCount  uint64
+	Sources    []ShadowMCPInventoryUserSourceRow
+}
+
+type ShadowMCPInventoryUserSourceRow struct {
+	Source    string
+	CallCount uint64
 }
 
 type shadowMCPInventoryTraceUsageRow struct {
@@ -394,6 +413,7 @@ type shadowMCPInventoryTraceUsageRow struct {
 	ServerName string    `ch:"server_name"`
 	UserKey    string    `ch:"user_key"`
 	UserEmail  string    `ch:"user_email"`
+	HookSource string    `ch:"hook_source"`
 	CalledAt   time.Time `ch:"called_at"`
 }
 
@@ -1075,6 +1095,7 @@ func (q *Queries) ListShadowMCPInventoryUsage(ctx context.Context, arg ListShado
 				UserEmail:  shadowMCPInventoryEmailValue(traceRow.UserEmail, traceRow.UserKey),
 				LastCalled: traceRow.CalledAt,
 				CallCount:  0,
+				Sources:    nil,
 			}
 			users[traceRow.UserKey] = user
 		}
@@ -1121,6 +1142,7 @@ func (q *Queries) ListShadowMCPInventoryUsers(ctx context.Context, arg ListShado
 	}
 
 	users := make(map[string]*ShadowMCPInventoryUserRow)
+	sourceCountsByUser := make(map[string]map[string]uint64)
 	for _, traceRow := range traceRows {
 		invURL, ok := shadowmcp.CanonicalizeInventoryURL(traceRow.ServerURL)
 		if !ok || invURL.CanonicalURL != arg.CanonicalServerURL || traceRow.UserKey == "" {
@@ -1133,16 +1155,35 @@ func (q *Queries) ListShadowMCPInventoryUsers(ctx context.Context, arg ListShado
 				UserEmail:  shadowMCPInventoryEmailValue(traceRow.UserEmail, traceRow.UserKey),
 				LastCalled: traceRow.CalledAt,
 				CallCount:  0,
+				Sources:    nil,
 			}
 			users[traceRow.UserKey] = user
+			sourceCountsByUser[traceRow.UserKey] = make(map[string]uint64)
 		}
 		if user.UserEmail == "" {
 			user.UserEmail = shadowMCPInventoryEmailValue(traceRow.UserEmail, traceRow.UserKey)
 		}
 		user.CallCount++
+		sourceCountsByUser[traceRow.UserKey][traceRow.HookSource]++
 		if traceRow.CalledAt.After(user.LastCalled) {
 			user.LastCalled = traceRow.CalledAt
 		}
+	}
+	for userKey, user := range users {
+		sourceCounts := sourceCountsByUser[userKey]
+		user.Sources = make([]ShadowMCPInventoryUserSourceRow, 0, len(sourceCounts))
+		for source, callCount := range sourceCounts {
+			user.Sources = append(user.Sources, ShadowMCPInventoryUserSourceRow{
+				Source:    source,
+				CallCount: callCount,
+			})
+		}
+		sort.Slice(user.Sources, func(i, j int) bool {
+			if user.Sources[i].CallCount != user.Sources[j].CallCount {
+				return user.Sources[i].CallCount > user.Sources[j].CallCount
+			}
+			return user.Sources[i].Source < user.Sources[j].Source
+		})
 	}
 
 	userRows := sortedShadowMCPInventoryUsers(users)
@@ -1163,6 +1204,7 @@ func (q *Queries) listShadowMCPInventoryTraceUsage(ctx context.Context, projectI
 		"max(tool_source) AS server_name",
 		"if(max(trace_summaries.user_email) != '', max(trace_summaries.user_email), max(trace_summaries.user_id)) AS user_key",
 		"max(trace_summaries.user_email) AS user_email",
+		"max(hook_source) AS hook_source",
 		"fromUnixTimestamp64Nano(max(start_time_unix_nano)) AS called_at",
 	).
 		From("trace_summaries").
@@ -1214,6 +1256,380 @@ func (q *Queries) listShadowMCPInventoryTraceUsage(ctx context.Context, projectI
 	}
 
 	return traceRows, nil
+}
+
+type GetUnproxiedMcpServerUsageTimeSeriesParams struct {
+	GramProjectID string
+	CanonicalURL  string
+	TimeStart     int64
+	TimeEnd       int64
+}
+
+type UnproxiedMcpServerUsageBucket struct {
+	BucketDate string `ch:"bucket_date"`
+	CallCount  uint64 `ch:"call_count"`
+}
+
+// GetUnproxiedMcpServerUsageTimeSeries buckets Shadow MCP's per-trace
+// (server_url, called_at) rows by day for a single canonicalized URL. Reuses
+// the same per-trace collapse as listShadowMCPInventoryTraceUsage (one row
+// per trace_id, matched by prefix so a query string or fragment on the
+// observed URL doesn't break the match) but groups the result by day instead
+// of collapsing to a min/max/count summary.
+func (q *Queries) GetUnproxiedMcpServerUsageTimeSeries(ctx context.Context, arg GetUnproxiedMcpServerUsageTimeSeriesParams) ([]UnproxiedMcpServerUsageBucket, error) {
+	innerSb := sq.Select(
+		"trace_id",
+		"max(mcp_server_url) AS server_url",
+		"toDate(fromUnixTimestamp64Nano(max(start_time_unix_nano))) AS bucket_date",
+	).
+		From("trace_summaries").
+		Where("gram_project_id = ?", arg.GramProjectID).
+		GroupBy("trace_id").
+		Having("max(start_time_unix_nano) >= ?", arg.TimeStart).
+		Having("max(start_time_unix_nano) <= ?", arg.TimeEnd)
+	innerSb = withTraceWindowScanBounds(innerSb, "start_time_unix_nano", arg.TimeStart, arg.TimeEnd)
+
+	sb := sq.Select(
+		"toString(bucket_date) AS bucket_date",
+		"count() AS call_count",
+	).
+		FromSelect(innerSb, "per_trace").
+		Where("server_url != ''").
+		Where(squirrel.Or{
+			squirrel.Expr("server_url = ?", arg.CanonicalURL),
+			squirrel.Expr("startsWith(server_url, ?)", arg.CanonicalURL+"?"),
+			squirrel.Expr("startsWith(server_url, ?)", arg.CanonicalURL+"#"),
+		}).
+		GroupBy("bucket_date").
+		OrderBy("bucket_date ASC")
+
+	query, queryArgs, err := sb.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("building unproxied mcp server usage time series query: %w", err)
+	}
+
+	rows, err := q.conn.Query(ctx, query, queryArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("querying unproxied mcp server usage time series: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	buckets := make([]UnproxiedMcpServerUsageBucket, 0)
+	for rows.Next() {
+		var bucket UnproxiedMcpServerUsageBucket
+		if err := rows.ScanStruct(&bucket); err != nil {
+			return nil, fmt.Errorf("scanning unproxied mcp server usage bucket: %w", err)
+		}
+		buckets = append(buckets, bucket)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating unproxied mcp server usage buckets: %w", err)
+	}
+
+	return buckets, nil
+}
+
+// ErrInvalidUnproxiedMcpServerUsageCursor marks a malformed cursor for the
+// unproxied MCP server tool/user/client usage breakdowns.
+var ErrInvalidUnproxiedMcpServerUsageCursor = errors.New("invalid unproxied mcp server usage cursor")
+
+type unproxiedMcpServerUsageCursor struct {
+	Offset int `json:"offset"`
+}
+
+// encodeUnproxiedMcpServerUsageCursor and decodeUnproxiedMcpServerUsageCursor
+// implement simple offset pagination (not keyset) for the tool/user/client
+// breakdowns below: each grouping is a small, bounded aggregate (at most one
+// row per tool/user/client seen in the window), so a plain LIMIT/OFFSET is
+// adequate and far simpler than replicating shadowMCPInventoryUserCursor's
+// tuple-comparison keyset approach. The cursor is still an opaque string to
+// callers, matching this file's other cursor-pagination conventions.
+func encodeUnproxiedMcpServerUsageCursor(offset int) (string, error) {
+	data, err := json.Marshal(unproxiedMcpServerUsageCursor{Offset: offset})
+	if err != nil {
+		return "", fmt.Errorf("encoding unproxied mcp server usage cursor: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(data), nil
+}
+
+func decodeUnproxiedMcpServerUsageCursor(cursor string) (int, error) {
+	if cursor == "" {
+		return 0, nil
+	}
+	data, err := base64.RawURLEncoding.DecodeString(cursor)
+	if err != nil {
+		return 0, fmt.Errorf("%w: decoding: %w", ErrInvalidUnproxiedMcpServerUsageCursor, err)
+	}
+	var payload unproxiedMcpServerUsageCursor
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return 0, fmt.Errorf("%w: parsing: %w", ErrInvalidUnproxiedMcpServerUsageCursor, err)
+	}
+	if payload.Offset < 0 {
+		return 0, fmt.Errorf("%w: offset must be non-negative", ErrInvalidUnproxiedMcpServerUsageCursor)
+	}
+	return payload.Offset, nil
+}
+
+func clampUnproxiedMcpServerUsageLimit(limit int) int {
+	switch {
+	case limit <= 0:
+		return 50
+	case limit > 500:
+		return 500
+	default:
+		return limit
+	}
+}
+
+// unproxiedMcpServerUsagePerTrace builds the shared per-trace collapse used by
+// every unproxied MCP server usage query: one row per trace_id within the
+// scan window, carrying whichever dimension columns the caller selects
+// alongside mcp_server_url (matched below) and has_error (for failure
+// counts). Mirrors GetUnproxiedMcpServerUsageTimeSeries's inner select.
+func unproxiedMcpServerUsagePerTrace(gramProjectID string, timeStart, timeEnd int64, extraCols ...string) squirrel.SelectBuilder {
+	cols := append([]string{
+		"trace_id",
+		"max(mcp_server_url) AS server_url",
+		"max(has_error) AS has_error",
+	}, extraCols...)
+	sb := sq.Select(cols...).
+		From("trace_summaries").
+		Where("gram_project_id = ?", gramProjectID).
+		GroupBy("trace_id").
+		Having("max(start_time_unix_nano) >= ?", timeStart).
+		Having("max(start_time_unix_nano) <= ?", timeEnd)
+	return withTraceWindowScanBounds(sb, "start_time_unix_nano", timeStart, timeEnd)
+}
+
+func unproxiedMcpServerUsageURLMatch(canonicalURL string) squirrel.Sqlizer {
+	return squirrel.Or{
+		squirrel.Expr("server_url = ?", canonicalURL),
+		squirrel.Expr("startsWith(server_url, ?)", canonicalURL+"?"),
+		squirrel.Expr("startsWith(server_url, ?)", canonicalURL+"#"),
+	}
+}
+
+type GetUnproxiedMcpServerToolUsageParams struct {
+	GramProjectID string
+	CanonicalURL  string
+	TimeStart     int64
+	TimeEnd       int64
+	Cursor        string
+	Limit         int
+}
+
+type UnproxiedMcpServerToolUsageRow struct {
+	ToolName     string `ch:"tool_name"`
+	CallCount    uint64 `ch:"call_count"`
+	FailureCount uint64 `ch:"failure_count"`
+}
+
+// GetUnproxiedMcpServerToolUsage groups the same per-trace collapse as
+// GetUnproxiedMcpServerUsageTimeSeries by tool_name instead of by day.
+func (q *Queries) GetUnproxiedMcpServerToolUsage(ctx context.Context, arg GetUnproxiedMcpServerToolUsageParams) (rows []UnproxiedMcpServerToolUsageRow, nextCursor string, err error) {
+	offset, err := decodeUnproxiedMcpServerUsageCursor(arg.Cursor)
+	if err != nil {
+		return nil, "", err
+	}
+	limit := clampUnproxiedMcpServerUsageLimit(arg.Limit)
+
+	innerSb := unproxiedMcpServerUsagePerTrace(arg.GramProjectID, arg.TimeStart, arg.TimeEnd, "max(tool_name) AS tool_name")
+
+	sb := sq.Select(
+		"tool_name",
+		"count() AS call_count",
+		"sum(has_error) AS failure_count",
+	).
+		FromSelect(innerSb, "per_trace").
+		Where("server_url != ''").
+		Where("tool_name != ''").
+		Where(unproxiedMcpServerUsageURLMatch(arg.CanonicalURL)).
+		GroupBy("tool_name").
+		OrderBy("call_count DESC", "tool_name ASC").
+		Limit(uint64(limit + 1)). //nolint:gosec // limit is clamped to 1..500 by clampUnproxiedMcpServerUsageLimit.
+		Offset(uint64(offset))    //nolint:gosec // offset comes from a decoded, non-negative cursor.
+
+	query, queryArgs, err := sb.ToSql()
+	if err != nil {
+		return nil, "", fmt.Errorf("building unproxied mcp server tool usage query: %w", err)
+	}
+
+	chRows, err := q.conn.Query(ctx, query, queryArgs...)
+	if err != nil {
+		return nil, "", fmt.Errorf("querying unproxied mcp server tool usage: %w", err)
+	}
+	defer func() { _ = chRows.Close() }()
+
+	out := make([]UnproxiedMcpServerToolUsageRow, 0, limit)
+	for chRows.Next() {
+		var row UnproxiedMcpServerToolUsageRow
+		if err := chRows.ScanStruct(&row); err != nil {
+			return nil, "", fmt.Errorf("scanning unproxied mcp server tool usage row: %w", err)
+		}
+		out = append(out, row)
+	}
+	if err := chRows.Err(); err != nil {
+		return nil, "", fmt.Errorf("iterating unproxied mcp server tool usage rows: %w", err)
+	}
+
+	if len(out) > limit {
+		out = out[:limit]
+		nextCursor, err = encodeUnproxiedMcpServerUsageCursor(offset + limit)
+		if err != nil {
+			return nil, "", err
+		}
+	}
+	return out, nextCursor, nil
+}
+
+type GetUnproxiedMcpServerUserUsageParams struct {
+	GramProjectID string
+	CanonicalURL  string
+	TimeStart     int64
+	TimeEnd       int64
+	Cursor        string
+	Limit         int
+}
+
+type UnproxiedMcpServerUserUsageRow struct {
+	UserEmail    string    `ch:"user_email"`
+	CallCount    uint64    `ch:"call_count"`
+	LastCalledAt time.Time `ch:"last_called_at"`
+}
+
+// GetUnproxiedMcpServerUserUsage groups the same per-trace collapse as
+// GetUnproxiedMcpServerUsageTimeSeries by user_email instead of by day. Traces
+// with no resolvable user_email are grouped under an empty string rather than
+// dropped, so hook-instrumented-but-unidentified activity is still visible as
+// a distinct row.
+func (q *Queries) GetUnproxiedMcpServerUserUsage(ctx context.Context, arg GetUnproxiedMcpServerUserUsageParams) (rows []UnproxiedMcpServerUserUsageRow, nextCursor string, err error) {
+	offset, err := decodeUnproxiedMcpServerUsageCursor(arg.Cursor)
+	if err != nil {
+		return nil, "", err
+	}
+	limit := clampUnproxiedMcpServerUsageLimit(arg.Limit)
+
+	innerSb := unproxiedMcpServerUsagePerTrace(arg.GramProjectID, arg.TimeStart, arg.TimeEnd,
+		"max(user_email) AS user_email",
+		"max(start_time_unix_nano) AS called_at_nano",
+	)
+
+	sb := sq.Select(
+		"user_email",
+		"count() AS call_count",
+		"fromUnixTimestamp64Nano(max(called_at_nano)) AS last_called_at",
+	).
+		FromSelect(innerSb, "per_trace").
+		Where("server_url != ''").
+		Where(unproxiedMcpServerUsageURLMatch(arg.CanonicalURL)).
+		GroupBy("user_email").
+		OrderBy("call_count DESC", "user_email ASC").
+		Limit(uint64(limit + 1)). //nolint:gosec // limit is clamped to 1..500 by clampUnproxiedMcpServerUsageLimit.
+		Offset(uint64(offset))    //nolint:gosec // offset comes from a decoded, non-negative cursor.
+
+	query, queryArgs, err := sb.ToSql()
+	if err != nil {
+		return nil, "", fmt.Errorf("building unproxied mcp server user usage query: %w", err)
+	}
+
+	chRows, err := q.conn.Query(ctx, query, queryArgs...)
+	if err != nil {
+		return nil, "", fmt.Errorf("querying unproxied mcp server user usage: %w", err)
+	}
+	defer func() { _ = chRows.Close() }()
+
+	out := make([]UnproxiedMcpServerUserUsageRow, 0, limit)
+	for chRows.Next() {
+		var row UnproxiedMcpServerUserUsageRow
+		if err := chRows.ScanStruct(&row); err != nil {
+			return nil, "", fmt.Errorf("scanning unproxied mcp server user usage row: %w", err)
+		}
+		out = append(out, row)
+	}
+	if err := chRows.Err(); err != nil {
+		return nil, "", fmt.Errorf("iterating unproxied mcp server user usage rows: %w", err)
+	}
+
+	if len(out) > limit {
+		out = out[:limit]
+		nextCursor, err = encodeUnproxiedMcpServerUsageCursor(offset + limit)
+		if err != nil {
+			return nil, "", err
+		}
+	}
+	return out, nextCursor, nil
+}
+
+type GetUnproxiedMcpServerClientUsageParams struct {
+	GramProjectID string
+	CanonicalURL  string
+	TimeStart     int64
+	TimeEnd       int64
+	Cursor        string
+	Limit         int
+}
+
+type UnproxiedMcpServerClientUsageRow struct {
+	Client    string `ch:"client"`
+	CallCount uint64 `ch:"call_count"`
+}
+
+// GetUnproxiedMcpServerClientUsage groups the same per-trace collapse as
+// GetUnproxiedMcpServerUsageTimeSeries by hook_source (the hook-reported
+// client/agent surface, e.g. claude-code, cursor, codex) instead of by day.
+func (q *Queries) GetUnproxiedMcpServerClientUsage(ctx context.Context, arg GetUnproxiedMcpServerClientUsageParams) (rows []UnproxiedMcpServerClientUsageRow, nextCursor string, err error) {
+	offset, err := decodeUnproxiedMcpServerUsageCursor(arg.Cursor)
+	if err != nil {
+		return nil, "", err
+	}
+	limit := clampUnproxiedMcpServerUsageLimit(arg.Limit)
+
+	innerSb := unproxiedMcpServerUsagePerTrace(arg.GramProjectID, arg.TimeStart, arg.TimeEnd, "max(hook_source) AS client")
+
+	sb := sq.Select(
+		"client",
+		"count() AS call_count",
+	).
+		FromSelect(innerSb, "per_trace").
+		Where("server_url != ''").
+		Where("client != ''").
+		Where(unproxiedMcpServerUsageURLMatch(arg.CanonicalURL)).
+		GroupBy("client").
+		OrderBy("call_count DESC", "client ASC").
+		Limit(uint64(limit + 1)). //nolint:gosec // limit is clamped to 1..500 by clampUnproxiedMcpServerUsageLimit.
+		Offset(uint64(offset))    //nolint:gosec // offset comes from a decoded, non-negative cursor.
+
+	query, queryArgs, err := sb.ToSql()
+	if err != nil {
+		return nil, "", fmt.Errorf("building unproxied mcp server client usage query: %w", err)
+	}
+
+	chRows, err := q.conn.Query(ctx, query, queryArgs...)
+	if err != nil {
+		return nil, "", fmt.Errorf("querying unproxied mcp server client usage: %w", err)
+	}
+	defer func() { _ = chRows.Close() }()
+
+	out := make([]UnproxiedMcpServerClientUsageRow, 0, limit)
+	for chRows.Next() {
+		var row UnproxiedMcpServerClientUsageRow
+		if err := chRows.ScanStruct(&row); err != nil {
+			return nil, "", fmt.Errorf("scanning unproxied mcp server client usage row: %w", err)
+		}
+		out = append(out, row)
+	}
+	if err := chRows.Err(); err != nil {
+		return nil, "", fmt.Errorf("iterating unproxied mcp server client usage rows: %w", err)
+	}
+
+	if len(out) > limit {
+		out = out[:limit]
+		nextCursor, err = encodeUnproxiedMcpServerUsageCursor(offset + limit)
+		if err != nil {
+			return nil, "", err
+		}
+	}
+	return out, nextCursor, nil
 }
 
 func shadowMCPInventoryCanonicalURLSet(canonicalServerURLs []string) map[string]bool {
@@ -1537,9 +1953,11 @@ func (q *Queries) ListToolTraces(ctx context.Context, arg ListToolTracesParams) 
 		havingParts = append(havingParts, "event_source = ?")
 		havingArgs = append(havingArgs, arg.EventSource)
 	} else {
-		// Exclude hooks logs by default when no event_source filter is specified
-		havingParts = append(havingParts, "event_source != ?")
-		havingArgs = append(havingArgs, "hook")
+		// Exclude hook logs and trigger delivery logs by default when no
+		// event_source filter is specified. Trigger delivery rows carry a
+		// tool_name (trigger:<slug>) and a trace id but are not tool calls.
+		havingParts = append(havingParts, "event_source NOT IN (?, ?)")
+		havingArgs = append(havingArgs, "hook", "trigger")
 	}
 
 	// Combine all HAVING conditions with explicit AND to ensure proper filtering

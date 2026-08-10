@@ -331,52 +331,6 @@ WHERE remote_session_issuer_id = @remote_session_issuer_id
 -- client of a remote_session_issuer. client_secret_encrypted is stored
 -- encrypted via the project encryption key.
 
--- name: GetOAuthProxyProviderForClone :one
--- Read just the fields cloneOAuthProxyProvider needs: project scoping for
--- isolation, provider_type to refuse non-custom providers, the secrets
--- JSONB so the handler can extract client_id / client_secret server-side,
--- and oauth_proxy_server_id so the handler can find the MCP servers whose
--- legacy client registrations need migrating.
-SELECT id, project_id, provider_type, secrets, oauth_proxy_server_id
-FROM oauth_proxy_providers
-WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
-
--- name: ListToolsetMCPEndpointsForOAuthProxyServer :many
--- Finds every MCP server attached to an oauth_proxy_server so the clone
--- handler can derive the public URLs legacy client registrations were keyed
--- under. A toolset with a custom domain is reachable on both the default
--- domain and the custom domain, so the handler scans both variants.
-SELECT t.mcp_slug, cd.domain AS custom_domain
-FROM toolsets AS t
-LEFT JOIN custom_domains AS cd ON cd.id = t.custom_domain_id AND cd.deleted IS FALSE
-WHERE t.oauth_proxy_server_id = @oauth_proxy_server_id
-  AND t.project_id = @project_id
-  AND t.mcp_slug IS NOT NULL
-  AND t.deleted IS FALSE;
-
--- name: MigrateLegacyUserSessionClient :execrows
--- Lifts one legacy OAuth proxy client registration (Redis) into
--- user_session_clients, preserving the original client_id so already-known
--- MCP clients skip re-registration after cutover. The conflict target
--- matches the partial unique index on (user_session_issuer_id, client_id)
--- WHERE deleted IS FALSE, so re-running a clone neither duplicates nor
--- clobbers an existing active row.
-INSERT INTO user_session_clients (
-    project_id,
-    user_session_issuer_id,
-    client_id,
-    client_secret_hash,
-    client_name,
-    redirect_uris,
-    client_secret_expires_at
-)
-SELECT usi.project_id, usi.id, @client_id, @client_secret_hash, @client_name, @redirect_uris::text[], NULL
-FROM user_session_issuers AS usi
-WHERE usi.id = @user_session_issuer_id
-  AND usi.project_id = @project_id
-  AND usi.deleted IS FALSE
-ON CONFLICT (user_session_issuer_id, client_id) WHERE deleted IS FALSE DO NOTHING;
-
 -- name: CreateRemoteSessionClient :one
 INSERT INTO remote_session_clients (
     project_id,
@@ -568,23 +522,6 @@ SELECT COUNT(*)
 FROM remote_sessions
 WHERE remote_session_client_id = @remote_session_client_id AND deleted IS FALSE;
 
--- name: InsertRemoteSession :one
-INSERT INTO remote_sessions (
-    subject_urn,
-    user_session_issuer_id,
-    remote_session_client_id,
-    access_token_encrypted,
-    access_expires_at
-)
-VALUES (
-    @subject_urn,
-    @user_session_issuer_id,
-    @remote_session_client_id,
-    @access_token_encrypted,
-    @access_expires_at
-)
-RETURNING *;
-
 -- name: UpsertRemoteSession :one
 -- Used by /mcp/remote_login_callback to materialise (or refresh) the
 -- remote_session for a (subject, client) pair. Conflict target matches the
@@ -599,8 +536,11 @@ INSERT INTO remote_sessions (
     access_token_encrypted,
     access_expires_at,
     refresh_token_encrypted,
+    authorization_expires_at,
     refresh_expires_at,
-    scopes
+    scopes,
+    resource,
+    auto_refresh
 )
 VALUES (
     @subject_urn,
@@ -609,16 +549,21 @@ VALUES (
     @access_token_encrypted,
     @access_expires_at,
     @refresh_token_encrypted,
+    @authorization_expires_at,
     @refresh_expires_at,
-    @scopes
+    @scopes,
+    @resource,
+    @auto_refresh
 )
 ON CONFLICT (subject_urn, remote_session_client_id) WHERE deleted IS FALSE
 DO UPDATE SET
     access_token_encrypted = EXCLUDED.access_token_encrypted,
     access_expires_at = EXCLUDED.access_expires_at,
     refresh_token_encrypted = EXCLUDED.refresh_token_encrypted,
+    authorization_expires_at = EXCLUDED.authorization_expires_at,
     refresh_expires_at = EXCLUDED.refresh_expires_at,
     scopes = EXCLUDED.scopes,
+    resource = EXCLUDED.resource,
     updated_at = clock_timestamp()
 RETURNING *;
 
@@ -631,6 +576,7 @@ SET
     access_token_encrypted = @access_token_encrypted,
     access_expires_at = @access_expires_at,
     refresh_token_encrypted = @refresh_token_encrypted,
+    authorization_expires_at = @authorization_expires_at,
     refresh_expires_at = @refresh_expires_at,
     scopes = @scopes,
     updated_at = clock_timestamp()
@@ -651,12 +597,18 @@ WHERE subject_urn = @subject_urn
   AND remote_session_client_id = @remote_session_client_id
   AND deleted IS FALSE;
 
--- name: RevokeRemoteSessionAfterInvalidGrant :one
--- A definitive upstream invalid_grant means this session can no longer renew.
+-- name: ClearRemoteSessionRefreshTokenAfterInvalidGrant :one
+-- A definitive upstream invalid_grant invalidates the refresh grant, not
+-- necessarily the current access token. Clear the dead grant so scheduled
+-- refresh does not retry it; a known-expired access token will then fail the
+-- lazy gate and prompt for re-authentication.
 -- Compare-and-swap against the snapshot used for the refresh so a delayed
--- failure cannot evict tokens that a concurrent refresh already rotated.
+-- failure cannot clear tokens that a concurrent refresh already rotated.
 UPDATE remote_sessions
-SET deleted_at = clock_timestamp()
+SET
+  refresh_token_encrypted = NULL,
+  refresh_expires_at = NULL,
+  updated_at = clock_timestamp()
 WHERE id = @id
   AND subject_urn = @subject_urn
   AND user_session_issuer_id = @user_session_issuer_id
@@ -675,39 +627,57 @@ RETURNING *;
 -- DISTINCT. A soft-deleted row is absent here entirely (truly disconnected).
 --
 -- The 'active' predicate mirrors validateAndRefresh in tokenservice.go: a
--- session is usable when its access token is unexpired, or it is a NULL-expiry
--- token with no refresh path (non-expiring, e.g. Slack non-rotating xoxp), or
--- it carries a refresh token that is not itself known-expired to renew with. A
--- NULL access_expires_at counts as usable on its own ONLY when there is no
--- refresh token: with a refresh token present the gate re-validates on an
--- hourly cadence, so usability defers to the refresh-token clause. A
--- refresh_expires_at of NULL is a non-expiring refresh token. A
+-- session is usable while the upstream authorization remains valid and its
+-- access token is unexpired, has no reported expiry, or can be renewed with a
+-- refresh token whose idle timeout is still valid. NULL deadlines mean only
+-- that the provider did not report that lifetime. A
 -- present-but-unusable row is 'expired' rather than dropped, so the consent UI
 -- can distinguish "reconnect this expired link" from "never connected" — and
 -- so the runtime gate (which rejects the same row as ErrNoValidToken) stops
 -- disagreeing with a green "Connected" badge.
 SELECT
-  remote_session_client_id,
+  s.remote_session_client_id,
+  s.auto_refresh,
+  s.access_expires_at,
+  s.authorization_expires_at,
+  s.refresh_expires_at,
+  (s.refresh_token_encrypted IS NOT NULL
+    AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
+    AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))::boolean AS can_refresh,
   (CASE
-    WHEN access_expires_at > now()
-      OR (access_expires_at IS NULL AND refresh_token_encrypted IS NULL)
-      OR (refresh_token_encrypted IS NOT NULL
-          AND (refresh_expires_at IS NULL OR refresh_expires_at > now())) THEN 'active'
+    WHEN (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
+      AND (
+        s.access_expires_at IS NULL
+        OR s.access_expires_at > now()
+        OR (s.refresh_token_encrypted IS NOT NULL
+            AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now()))
+      ) THEN 'active'
     ELSE 'expired'
   END)::text AS status
-FROM remote_sessions
-WHERE subject_urn = @subject_urn
-  AND user_session_issuer_id = @user_session_issuer_id
-  AND deleted IS FALSE;
+FROM remote_sessions AS s
+JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
+WHERE s.subject_urn = @subject_urn
+  AND s.user_session_issuer_id = @user_session_issuer_id
+  AND usi.project_id = @project_id
+  AND usi.deleted IS FALSE
+  AND s.deleted IS FALSE;
 
 -- name: SetRemoteSessionUpdatedAt :exec
 -- Sets updated_at on a remote session. Scoped through the owning
 -- remote_session_client's project so the write cannot cross tenant boundaries.
--- Currently used by tests to backdate updated_at and exercise the
--- application-layer refresh cadence in validateAndRefresh (NULL
--- access_expires_at with a refresh token) without waiting wall-clock time.
+-- Used by refresh-sweep tests to make a session due without waiting.
 UPDATE remote_sessions s
 SET updated_at = @updated_at
+FROM remote_session_clients c
+WHERE s.id = @id
+  AND s.remote_session_client_id = c.id
+  AND c.project_id = @project_id;
+
+-- name: SetRemoteSessionAccessExpiresAt :exec
+-- Test helper for exercising lazy refresh without waiting for a real token
+-- lifetime. Scoped through the owning remote_session_client's project.
+UPDATE remote_sessions s
+SET access_expires_at = @access_expires_at
 FROM remote_session_clients c
 WHERE s.id = @id
   AND s.remote_session_client_id = c.id
@@ -824,6 +794,125 @@ WHERE s.id = @id
   AND s.deleted IS FALSE
   AND c.deleted IS FALSE
 RETURNING s.*;
+
+-- name: SetRemoteSessionAutoRefresh :execrows
+-- Records the subject's consent-screen auto-refresh choice. Deliberately does
+-- NOT touch updated_at: that column doubles as the refresh CAS token-version
+-- signal and keepalive clock, and a preference toggle must not perturb either.
+-- Scoped through the endpoint's user_session_issuer project so the write
+-- cannot cross tenant boundaries. A client may be bound to several
+-- user_session_issuers; the issuer predicate pins the write to the binding the
+-- consent screen displayed (reads filter by issuer the same way).
+UPDATE remote_sessions AS s
+SET auto_refresh = @auto_refresh
+FROM user_session_issuers AS usi
+WHERE s.subject_urn = @subject_urn
+  AND s.remote_session_client_id = @remote_session_client_id
+  AND s.user_session_issuer_id = @user_session_issuer_id
+  AND usi.id = s.user_session_issuer_id
+  AND usi.project_id = @project_id
+  AND usi.deleted IS FALSE
+  AND s.deleted IS FALSE;
+
+-- name: SoftDeleteRemoteSessionBySubjectAndClient :execrows
+-- Consent-screen disconnect: soft-deletes the subject's own binding for one
+-- upstream client. Subject, client and issuer all derived server-side from
+-- the challenge state and the endpoint's bindings, never from the form;
+-- scoped through the issuer's project so the write cannot cross tenants.
+UPDATE remote_sessions AS s
+SET deleted_at = clock_timestamp()
+FROM user_session_issuers AS usi
+WHERE s.subject_urn = @subject_urn
+  AND s.remote_session_client_id = @remote_session_client_id
+  AND s.user_session_issuer_id = @user_session_issuer_id
+  AND usi.id = s.user_session_issuer_id
+  AND usi.project_id = @project_id
+  AND usi.deleted IS FALSE
+  AND s.deleted IS FALSE;
+
+-- Best-effort refresh-grant keepalive. Each hourly workflow chain drains
+-- cross-project batches. Claiming stamps an independent attempt clock before
+-- any network call, so failed sessions rotate out for 24 hours instead of
+-- pinning the oldest batch. The organization product feature is UI-only; the
+-- persisted per-session preference is the runtime opt-in.
+
+-- name: ClaimDueRemoteSessionRefreshCandidates :many
+WITH due AS (
+  SELECT s.id, s.updated_at, p.organization_id, i.token_endpoint
+  FROM remote_sessions AS s
+  JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND c.deleted IS FALSE
+  JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
+  JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id AND usi.deleted IS FALSE
+  JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
+  WHERE s.deleted IS FALSE
+    AND s.refresh_token_encrypted IS NOT NULL
+    AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > @now_ts::timestamptz)
+    AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > @now_ts::timestamptz)
+    AND s.updated_at <= @keepalive_cutoff::timestamptz
+    AND (
+      s.last_refresh_attempt_at IS NULL
+      OR s.last_refresh_attempt_at <= @attempt_cutoff::timestamptz
+    )
+    AND s.auto_refresh IS TRUE
+    AND EXISTS (
+      SELECT 1 FROM remote_session_client_user_session_issuers AS link
+      WHERE link.remote_session_client_id = c.id
+        AND link.user_session_issuer_id = s.user_session_issuer_id
+    )
+    AND EXISTS (
+      SELECT 1 FROM user_sessions AS gs
+      WHERE gs.project_id = usi.project_id
+        AND gs.user_session_issuer_id = s.user_session_issuer_id
+        AND gs.subject_urn = s.subject_urn
+        AND gs.deleted IS FALSE
+        AND gs.refresh_expires_at > @now_ts::timestamptz
+    )
+  ORDER BY s.updated_at, s.id
+  LIMIT @limit_value
+  FOR UPDATE OF s SKIP LOCKED
+),
+claimed AS (
+  UPDATE remote_sessions AS s
+  SET last_refresh_attempt_at = @now_ts::timestamptz
+  FROM due
+  WHERE s.id = due.id
+  RETURNING s.id, due.updated_at, due.organization_id, due.token_endpoint
+)
+SELECT id, organization_id, token_endpoint
+FROM claimed
+ORDER BY updated_at, id;
+
+-- name: GetDueRemoteSessionRefreshCandidate :one
+-- Authoritative re-check immediately before a scheduled refresh: the row was
+-- claimed earlier in the pass and may have been refreshed, revoked, or re-linked
+-- since. No row means "no longer due" — the activity records a skip.
+SELECT sqlc.embed(s)
+FROM remote_sessions AS s
+JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id AND c.deleted IS FALSE
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id AND i.deleted IS FALSE
+JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id AND usi.deleted IS FALSE
+JOIN projects AS p ON p.id = usi.project_id AND p.deleted IS FALSE
+WHERE s.id = @id
+  AND p.organization_id = @organization_id
+  AND s.deleted IS FALSE
+  AND s.refresh_token_encrypted IS NOT NULL
+  AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > @now_ts::timestamptz)
+  AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > @now_ts::timestamptz)
+  AND s.updated_at <= @keepalive_cutoff::timestamptz
+  AND s.auto_refresh IS TRUE
+  AND EXISTS (
+    SELECT 1 FROM remote_session_client_user_session_issuers AS link
+    WHERE link.remote_session_client_id = c.id
+      AND link.user_session_issuer_id = s.user_session_issuer_id
+  )
+  AND EXISTS (
+    SELECT 1 FROM user_sessions AS gs
+    WHERE gs.project_id = usi.project_id
+      AND gs.user_session_issuer_id = s.user_session_issuer_id
+      AND gs.subject_urn = s.subject_urn
+      AND gs.deleted IS FALSE
+      AND gs.refresh_expires_at > @now_ts::timestamptz
+  );
 
 -- Organization administrator surface (AIS-119) — cross-project visibility into
 -- remote_session_issuers, their clients, and sessions for an org. Every query is
@@ -1009,6 +1098,14 @@ RETURNING *;
 -- The arm is additive on purpose. Every row reachable before is still reachable
 -- on the issuer arm regardless of whether organization_id was ever backfilled
 -- on older client rows, so this cannot silently narrow a result or undercount.
+--
+-- One operation retires the issuer arm rather than adding to it: migrating a
+-- tenant client onto a platform issuer moves it under an issuer whose
+-- organization_id is NULL, leaving c.organization_id as the sole path back to
+-- the org for that row. Every tenant client writer populates that column, and
+-- the historical rows that predate it were backfilled, so the fallback is not
+-- load-bearing there. Any future writer that moves a client between tenancy
+-- tiers depends on the same thing being true.
 -- Global clients (project_id and organization_id both NULL) match neither arm
 -- and stay correctly invisible to tenants; they are platform-admin owned.
 SELECT
@@ -1125,7 +1222,16 @@ ORDER BY m.id DESC;
 
 -- name: ListOrganizationMcpServerNamesForIssuer :many
 -- Display names (and URL fallbacks) of MCP servers attached to any client of a
--- given issuer. Used to populate the issuer delete-confirmation dialog.
+-- given issuer. Used to populate the issuer delete-confirmation dialog and the
+-- migrate preflight.
+--
+-- NOT org-scoped, despite the name: the only filter is the issuer id. Every
+-- caller is safe today because the issuer it passes is tenant-scoped, so its
+-- clients belong to one organization and the names returned are that
+-- organization's own. Passing a PLATFORM issuer id here would return MCP server
+-- names belonging to every organization on the platform in a single response.
+-- That is why platform-admin issuer migration accepts only a tenant-scoped
+-- source. Bound this query before relaxing that.
 SELECT DISTINCT
     m.id,
     m.name,
@@ -1197,8 +1303,15 @@ WHERE source_client.remote_session_issuer_id = @source_issuer_id
 --
 -- Soft-deleted clients stay on the source issuer: they resolve nowhere, and
 -- dragging tombstones onto the target would corrupt the returned migrated count.
--- Callers establish org ownership of both issuers and hold the advisory locks
--- from LockRemoteSessionIssuerForClientBinding. Returns the number of clients moved.
+-- Callers establish ownership of both issuers and hold the advisory locks from
+-- LockRemoteSessionIssuerForClientBinding. Returns the number of clients moved.
+--
+-- Tenancy columns are left alone. When the target is a platform issuer this
+-- retires the issuer arm of the ORG REACHABILITY predicate for the moved rows,
+-- leaving the client's own organization_id as the sole path back to its
+-- organization. Every writer that creates a tenant client populates that column,
+-- so this is safe; it does mean a row that somehow lacked one would go
+-- unreachable to its organization while its OAuth kept working.
 UPDATE remote_session_clients
 SET remote_session_issuer_id = @target_issuer_id,
     updated_at = clock_timestamp()
@@ -1279,13 +1392,41 @@ WHERE s.id = @id
 -- NULL project_id and NULL organization_id.
 
 -- name: ListGlobalRemoteSessionIssuers :many
-SELECT *
-FROM remote_session_issuers
-WHERE project_id IS NULL
-  AND organization_id IS NULL
-  AND deleted IS FALSE
-  AND (sqlc.narg('cursor')::uuid IS NULL OR id < sqlc.narg('cursor')::uuid)
-ORDER BY id DESC
+-- Platform issuers for the platform-admin catalog, each with the two client
+-- counts that decide whether it can be deleted.
+--
+-- GLOBAL VS TENANT CLIENT COUNTS (mirrored by
+-- GetGlobalRemoteSessionIssuerWithClientCountsByID; change them together):
+--
+-- global_client_count covers the clients a platform admin owns and can remove
+-- themselves. tenant_client_count covers the clients organizations registered
+-- against the shared issuer, which a platform admin can neither see nor delete.
+-- The split matches the conflict DeleteGlobalIssuer raises, so the catalog can
+-- explain a blocked delete up front instead of only after the 409. A single
+-- total would report blockers without saying whose they are.
+SELECT
+    sqlc.embed(i),
+    (
+        SELECT COUNT(*)
+        FROM remote_session_clients AS c
+        WHERE c.remote_session_issuer_id = i.id
+          AND c.project_id IS NULL
+          AND c.organization_id IS NULL
+          AND c.deleted IS FALSE
+    )::bigint AS global_client_count,
+    (
+        SELECT COUNT(*)
+        FROM remote_session_clients AS c
+        WHERE c.remote_session_issuer_id = i.id
+          AND (c.project_id IS NOT NULL OR c.organization_id IS NOT NULL)
+          AND c.deleted IS FALSE
+    )::bigint AS tenant_client_count
+FROM remote_session_issuers AS i
+WHERE i.project_id IS NULL
+  AND i.organization_id IS NULL
+  AND i.deleted IS FALSE
+  AND (sqlc.narg('cursor')::uuid IS NULL OR i.id < sqlc.narg('cursor')::uuid)
+ORDER BY i.id DESC
 LIMIT sqlc.arg('limit_value');
 
 -- name: GetGlobalRemoteSessionIssuerByID :one
@@ -1295,6 +1436,36 @@ WHERE id = @id
   AND project_id IS NULL
   AND organization_id IS NULL
   AND deleted IS FALSE;
+
+-- name: GetGlobalRemoteSessionIssuerWithClientCountsByID :one
+-- A single platform issuer with the same two counts
+-- ListGlobalRemoteSessionIssuers returns; see the GLOBAL VS TENANT CLIENT
+-- COUNTS note there. Serves the platform-admin detail read, which needs the
+-- counts to describe a delete before it is attempted. The plain
+-- GetGlobalRemoteSessionIssuerByID stays for the update/delete pre-reads, which
+-- only establish that the id names a platform issuer.
+SELECT
+    sqlc.embed(i),
+    (
+        SELECT COUNT(*)
+        FROM remote_session_clients AS c
+        WHERE c.remote_session_issuer_id = i.id
+          AND c.project_id IS NULL
+          AND c.organization_id IS NULL
+          AND c.deleted IS FALSE
+    )::bigint AS global_client_count,
+    (
+        SELECT COUNT(*)
+        FROM remote_session_clients AS c
+        WHERE c.remote_session_issuer_id = i.id
+          AND (c.project_id IS NOT NULL OR c.organization_id IS NOT NULL)
+          AND c.deleted IS FALSE
+    )::bigint AS tenant_client_count
+FROM remote_session_issuers AS i
+WHERE i.id = @id
+  AND i.project_id IS NULL
+  AND i.organization_id IS NULL
+  AND i.deleted IS FALSE;
 
 -- name: GetGlobalRemoteSessionIssuerByIDForUpdate :one
 -- Locks the issuer row so DeleteGlobalIssuer's count-then-delete and
@@ -1412,3 +1583,111 @@ UPDATE remote_session_clients
 SET deleted_at = clock_timestamp()
 WHERE id = @id AND project_id IS NULL AND organization_id IS NULL AND deleted IS FALSE
 RETURNING *;
+
+-- TENANT PARTITION (used by platform-admin issuer migration):
+--
+--   (project_id IS NOT NULL OR organization_id IS NOT NULL)
+--
+-- Selects every issuer some organization owns, project-specific or
+-- organization-level, across all tenants, and excludes the global partition
+-- where both columns are NULL. The disjunction rather than a plain
+-- `organization_id IS NOT NULL` is deliberate: project-specific issuers written
+-- before organization_id existed on this table carry a NULL there, and those
+-- legacy rows are exactly the duplicates convergence exists to clean up.
+
+-- name: GetTenantRemoteSessionIssuerByID :one
+-- Any organization's issuer by id, unscoped by tenant. Only the platform-admin
+-- migration surface may use this: every tenant-facing read must stay scoped to
+-- the caller's own organization or project.
+SELECT *
+FROM remote_session_issuers
+WHERE id = @id
+  AND (project_id IS NOT NULL OR organization_id IS NOT NULL)
+  AND deleted IS FALSE;
+
+-- name: GetTenantRemoteSessionIssuerByIDForUpdate :one
+-- GetTenantRemoteSessionIssuerByID holding a row lock until the transaction
+-- ends. The platform migration reads the source's scope and endpoint metadata to
+-- decide whether the migration is legal, then acts on that decision later in the
+-- same transaction; without the lock a concurrent moveIssuer (which rewrites
+-- project_id) or updateIssuer (which rewrites the endpoints) could commit in
+-- between and the migration would proceed against a scope or an authorization
+-- server it never validated. Callers must already hold the advisory locks from
+-- LockRemoteSessionIssuerForClientBinding, which order these row locks so two
+-- concurrent migrations of the same pair cannot deadlock.
+SELECT *
+FROM remote_session_issuers
+WHERE id = @id
+  AND (project_id IS NOT NULL OR organization_id IS NOT NULL)
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: GetProjectOrganizationID :one
+-- The organization owning a project. Resolves the affected organization when a
+-- legacy project-scoped issuer carries no organization_id of its own, so a
+-- platform-admin migration of such a row can still name the tenant it touched.
+SELECT organization_id
+FROM projects
+WHERE id = @id AND deleted IS FALSE;
+
+-- name: DeleteTenantRemoteSessionIssuer :one
+-- Soft-delete any organization's issuer, unscoped by tenant. Platform-admin
+-- migration only: it tombstones the emptied source after its clients have been
+-- re-pointed. The org-scoped DeleteOrganizationRemoteSessionIssuer stays the
+-- only delete a tenant-facing handler may call.
+UPDATE remote_session_issuers
+SET deleted_at = clock_timestamp()
+WHERE id = @id
+  AND (project_id IS NOT NULL OR organization_id IS NOT NULL)
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: ListTenantRemoteSessionIssuersByIssuerURL :many
+-- Tenant issuers that describe the same upstream authorization server as a
+-- platform issuer, so a platform admin can see which organizations could
+-- converge onto the shared catalog entry. Each row carries the owning
+-- organization and the client count that would move.
+--
+-- Matching is literal equality against a caller-supplied candidate set rather
+-- than a normalizing expression, for the same reason as
+-- ListRemoteSessionIssuersByIssuerURL: remote_session_issuers_issuer_idx is on
+-- the raw column, so any expression around `issuer` makes it unusable. The
+-- caller canonicalizes in Go and expands the result back into the closed set of
+-- raw spellings via matchCandidates, keeping `= ANY` a series of index probes.
+--
+-- The owning organization is taken from the issuer, falling back to its
+-- project's. A project-scoped issuer written before organization_id existed on
+-- this table carries NULL there, and those legacy duplicates are exactly what
+-- convergence exists to clean up, so reporting them as belonging to nobody would
+-- hide the owner of the rows most likely to be migrated.
+--
+-- organization_metadata is joined LEFT and its name coalesced. There is no
+-- organizations table, and the metadata row is populated by WorkOS sync, so an
+-- inner join would silently drop candidates whose organization has not synced.
+-- projects is joined LEFT for the same reason.
+--
+-- Ordered by descending id with an id cursor, matching every other
+-- platform-admin listing. ListRemoteSessionIssuersByIssuerURL orders by
+-- created_at instead because it feeds a precedence resolution that needs
+-- "oldest within a tier" to mean what it says; this listing only has to
+-- enumerate, so it takes the paginable ordering rather than the chronological
+-- one.
+SELECT
+    sqlc.embed(i),
+    COALESCE(i.organization_id, p.organization_id, '')::text AS owner_organization_id,
+    COALESCE(om.name, '')::text AS organization_name,
+    (
+        SELECT COUNT(*)
+        FROM remote_session_clients AS c
+        WHERE c.remote_session_issuer_id = i.id
+          AND c.deleted IS FALSE
+    )::bigint AS client_count
+FROM remote_session_issuers AS i
+LEFT JOIN projects AS p ON p.id = i.project_id
+LEFT JOIN organization_metadata AS om ON om.id = COALESCE(i.organization_id, p.organization_id)
+WHERE i.issuer = ANY(@issuers::text[])
+  AND (i.project_id IS NOT NULL OR i.organization_id IS NOT NULL)
+  AND i.deleted IS FALSE
+  AND (sqlc.narg('cursor')::uuid IS NULL OR i.id < sqlc.narg('cursor')::uuid)
+ORDER BY i.id DESC
+LIMIT sqlc.arg('limit_value');

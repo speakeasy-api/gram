@@ -81,23 +81,46 @@ type OsKey = "macos" | "windows" | "linux";
 
 const OS_ORDER: OsKey[] = ["macos", "windows", "linux"];
 
+// A manifest-supplied version is rendered directly into a copy-paste
+// shell/PowerShell snippet. Quoting alone doesn't make that safe — double
+// quotes still expand $(...) — so validate shape instead of trying to escape
+// arbitrary content; same charset tag-internal.yml (device-agent) requires
+// when minting a release tag.
+const VERSION_PATTERN =
+  /^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$/;
+function safeVersion(version: string | null | undefined) {
+  return version && VERSION_PATTERN.test(version) ? version : null;
+}
+
 // {bash,ps}VersionAssign return the shell line that sets VERSION for the
 // download snippets. When we've resolved the latest release from the manifest
 // we inline it (a concrete, copy-and-run value); otherwise we fall back to a
 // self-resolving one-liner so the snippet still works before the fetch lands
 // or if it fails.
+//
+// The manifest value is fetched at runtime and pasted by the user into a
+// (often sudo-adjacent) shell, so only a strictly semver-shaped version is
+// ever inlined — anything else (e.g. a tampered manifest smuggling `$(...)`)
+// takes the fallback path instead of landing in the snippet.
+const INLINABLE_VERSION = /^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/;
+function inlinableVersion(version: string | null) {
+  return version !== null && INLINABLE_VERSION.test(version) ? version : null;
+}
 function bashVersionAssign(version: string | null) {
+  version = inlinableVersion(version);
   return version
-    ? `VERSION=${version}`
+    ? `VERSION="${version}"`
     : `VERSION=$(curl -s ${MANIFEST_URL} | jq -r '.latest.speakeasyd.version')`;
 }
 function psVersionAssign(version: string | null) {
+  version = inlinableVersion(version);
   return version
     ? `$VERSION = "${version}"`
     : `$VERSION = (Invoke-RestMethod ${MANIFEST_URL}).latest.speakeasyd.version`;
 }
 
-type OsSpec = {
+// Fields every platform tile/sheet header needs, regardless of install method.
+type BaseOsSpec = {
   label: string;
   tileDesc: string;
   logo: string;
@@ -109,6 +132,14 @@ type OsSpec = {
   // Monochrome-black logos (the Apple mark) vanish on a dark background — flip
   // them in dark mode. The colored Windows/Tux marks must NOT be inverted.
   invertLogoInDark?: boolean;
+};
+
+// Windows and Linux still ship as raw binaries registered via a manual
+// service-install script; only macOS moved to a signed, notarized .pkg.
+// Keeping this as its own type (instead of leaving these fields optional on
+// a single OsSpec) means macOS can't silently carry stale script fields that
+// nothing renders anymore.
+type ScriptOsSpec = BaseOsSpec & {
   lang: "bash" | "powershell";
   archNote?: React.ReactNode;
   download: (version: string | null) => string;
@@ -119,37 +150,22 @@ type OsSpec = {
   verify: string;
   // Manifest platform keys to surface as direct-download links for this OS.
   downloadKeys: string[];
+  // The OS ships a root-helper install package (.deb/.rpm on Linux) that gets
+  // its own setup step. See HelperPackageStep.
+  hasHelperPackage?: boolean;
 };
 
-const OS_CONFIG: Record<OsKey, OsSpec> = {
+const OS_CONFIG: {
+  macos: BaseOsSpec;
+  windows: ScriptOsSpec;
+  linux: ScriptOsSpec;
+} = {
   macos: {
     label: "macOS",
     tileDesc: "Apple Silicon or Intel",
     logo: "/icons/platforms/macos.svg",
     logoSize: "h-7 w-7",
     invertLogoInDark: true,
-    lang: "bash",
-    archNote: (
-      <>
-        Apple Silicon shown — swap <code>darwin_arm64</code> for{" "}
-        <code>darwin_amd64</code> on Intel.
-      </>
-    ),
-    download: (version) => `${bashVersionAssign(version)}
-BASE=${RELEASES_BASE}/v$VERSION
-curl -fSL -o speakeasyd "$BASE/speakeasyd_\${VERSION}_darwin_arm64"
-curl -fSL -o speakeasy  "$BASE/speakeasy_\${VERSION}_darwin_arm64"`,
-    chmodMove: `chmod +x speakeasyd speakeasy
-sudo mv speakeasyd speakeasy /usr/local/bin/`,
-    serviceNote: (
-      <>
-        Installs <code>speakeasyd</code> as a LaunchAgent so it runs on login.
-      </>
-    ),
-    serviceRegister: `speakeasyd -service install
-speakeasyd -service start`,
-    verify: `speakeasyd status`,
-    downloadKeys: ["darwin/arm64", "darwin/amd64"],
   },
   windows: {
     label: "Windows",
@@ -198,6 +214,7 @@ sudo mv speakeasyd speakeasy /usr/local/bin/`,
 speakeasyd -service start`,
     verify: `speakeasyd status`,
     downloadKeys: ["linux/amd64", "linux/arm64"],
+    hasHelperPackage: true,
   },
 };
 
@@ -245,7 +262,7 @@ function Table({
   children: React.ReactNode;
 }) {
   return (
-    <div className="overflow-hidden rounded-lg border">
+    <div className="overflow-hidden border">
       <table className="w-full text-sm">
         <thead className="bg-muted/50 text-muted-foreground">
           <tr>
@@ -263,9 +280,10 @@ function Table({
 }
 
 // BinaryDownloadButton renders one binary as a download-affordant button: a
-// download glyph, the role (Daemon vs CLI), and the monospace filename. The
-// `download` attribute makes the browser save the file rather than navigate to
-// it, and the sha256 rides along as the title for verification.
+// download glyph, the role (Daemon vs CLI vs the macOS Installer pkg), and
+// the monospace filename. The `download` attribute makes the browser save
+// the file rather than navigate to it. sha256 rides along as the title for
+// verification when known — the pkg isn't in releases.json, so it has none.
 function BinaryDownloadButton({
   href,
   sha256,
@@ -274,7 +292,7 @@ function BinaryDownloadButton({
   version,
 }: {
   href: string;
-  sha256: string;
+  sha256?: string;
   role: string;
   name: string;
   version: string;
@@ -283,7 +301,7 @@ function BinaryDownloadButton({
     <a
       href={href}
       download
-      title={`sha256: ${sha256}`}
+      title={sha256 ? `sha256: ${sha256}` : undefined}
       className="border-border bg-card hover:border-foreground/20 hover:bg-secondary/40 flex min-w-40 items-start gap-2 rounded-md border px-3 py-2 transition-colors"
     >
       <Download className="text-muted-foreground mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -302,8 +320,9 @@ function BinaryDownloadButton({
 
 // ManualDownload lists the direct binary links for the selected OS only (the
 // alternative to the curl/PowerShell download script). Degrades to a manifest
-// link if the fetch fails.
-function ManualDownload({ os }: { os: OsKey }) {
+// link if the fetch fails. Windows/Linux only — macOS installs from the pkg
+// (MacInstallStep), not the raw-binary manifest.
+function ManualDownload({ os }: { os: "windows" | "linux" }) {
   const { data, isLoading, isError } = useAgentReleases();
 
   if (isLoading) {
@@ -341,7 +360,7 @@ function ManualDownload({ os }: { os: OsKey }) {
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="overflow-hidden rounded-md border text-sm">
+      <div className="overflow-hidden border text-sm">
         {keys.map((key) => {
           const d = artifactFor(daemon, key);
           const c = artifactFor(cli, key);
@@ -394,11 +413,12 @@ function ManualDownload({ os }: { os: OsKey }) {
   );
 }
 
-// DownloadStep is the first setup step: two ways to get the binaries (script or
-// direct download), separated by an OR so it's clear they're alternatives.
-function DownloadStep({ os }: { os: OsKey }) {
+// DownloadStep is the first setup step on Windows/Linux: two ways to get the
+// binaries (script or direct download), separated by an OR so it's clear
+// they're alternatives. macOS uses MacInstallStep instead.
+function DownloadStep({ os }: { os: "windows" | "linux" }) {
   const { data } = useAgentReleases();
-  const version = data?.latest["speakeasyd"]?.version ?? null;
+  const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
   const cfg = OS_CONFIG[os];
 
   return (
@@ -426,7 +446,7 @@ function DownloadStep({ os }: { os: OsKey }) {
 // different roles.
 function BinaryLegend() {
   return (
-    <div className="border-border bg-card flex flex-col gap-2 rounded-md border p-3">
+    <div className="border-border bg-card flex flex-col gap-2 border p-3">
       <div className="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-1.5">
         <code className="text-foreground font-mono text-xs">speakeasyd</code>
         <span className="text-muted-foreground text-xs">
@@ -443,15 +463,94 @@ function BinaryLegend() {
   );
 }
 
+// HelperPackageStep is the Linux-only step for the speakeasy-helper root
+// helper. The daemon runs as the logged-in user and can't write the root-owned
+// managed config layer itself, so enforcement of "managed" tools needs the
+// helper installed as a systemd system service — which ships as a .deb/.rpm
+// (the Linux analog of the macOS .pkg). The packages are mirrored to the same
+// public bucket as the binaries but are deliberately NOT in the release
+// manifest (a root binary updates only via a package push, never the
+// user-context auto-updater), so the URLs are built from the resolved version
+// rather than read from manifest artifacts.
+function HelperPackageStep() {
+  const { data } = useAgentReleases();
+  const version = data?.latest["speakeasyd"]?.version ?? null;
+
+  // The package installs as root, so the snippet is hardened where the
+  // user-context download script isn't: ARCH is detected at run time (uname -m
+  // mapped to the release's amd64/arm64 naming) instead of hand-edited, and
+  // the sha256 is checked against the release's published checksums.txt with
+  // the install chained behind the check — a missing or tampered package never
+  // reaches the package manager.
+  const script = (fmt: "deb" | "rpm", install: string) =>
+    `${bashVersionAssign(version)}
+ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+BASE=${RELEASES_BASE}/v$VERSION
+PKG="speakeasy-helper_\${VERSION}_linux_\${ARCH}.${fmt}"
+curl -fSLO "$BASE/$PKG"
+curl -fsSL "$BASE/checksums.txt" | grep " $PKG$" | sha256sum -c - &&
+  ${install}`;
+
+  // Sits above each snippet, matching the archNote convention in DownloadStep.
+  const verifyNote = (
+    <StepNote>
+      Detects your architecture and verifies the package's <code>sha256</code>{" "}
+      against the release's <code>checksums.txt</code> before installing.
+    </StepNote>
+  );
+
+  return (
+    <div className="flex flex-col gap-6">
+      <Text muted>
+        The daemon runs as the logged-in user and can't write root-owned config,
+        so enforcing tools your org marks{" "}
+        <strong className="font-medium">managed</strong> needs the{" "}
+        <code>speakeasy-helper</code> package: it installs a privileged writer
+        as a systemd system service. Without it the agent still runs and
+        reports, but can't enforce the managed layer.
+      </Text>
+      <div className="flex flex-col gap-2">
+        <SubLabel>Debian / Ubuntu (.deb)</SubLabel>
+        {verifyNote}
+        <CodeBlock language="bash">
+          {script("deb", `sudo apt install "./$PKG"`)}
+        </CodeBlock>
+      </div>
+      <OrDivider />
+      <div className="flex flex-col gap-2">
+        <SubLabel>RHEL / Fedora (.rpm)</SubLabel>
+        {verifyNote}
+        <CodeBlock language="bash">
+          {script("rpm", `sudo rpm -i "$PKG"`)}
+        </CodeBlock>
+      </div>
+      <Text small muted>
+        Verify with <code>systemctl status com.speakeasy.helper</code>. The
+        helper is deliberately outside the agent's auto-update channel — it
+        updates only via a package push (apt/dnf upgrade or your config
+        management).
+      </Text>
+    </div>
+  );
+}
+
 // ManualIdentity is the personal/PoC identity path: sign in once with the CLI.
-function ManualIdentity() {
+function ManualIdentity({ os }: { os: OsKey }) {
+  // macOS: bare `speakeasy` is command-not-found (see MacVerifyStep for why
+  // the CLI isn't on PATH there). Windows/Linux keep the bare command: their
+  // raw binaries land in the shell's cwd/PATH per the download step above.
+  const command =
+    os === "macos"
+      ? `"$HOME/Library/Application Support/Speakeasy/bin/speakeasy" enroll`
+      : "speakeasy enroll";
+
   return (
     <div className="flex flex-col gap-4">
       <Text muted>
         On a device that isn't MDM-managed, set identity by signing in once
         after installing with no <code>managed.json</code> required.
       </Text>
-      <CodeBlock language="bash">{`speakeasy enroll`}</CodeBlock>
+      <CodeBlock language="bash">{command}</CodeBlock>
       <Text small muted>
         It opens a browser, you sign in, and the agent stores your email locally
         in <code>local.json</code>. If IT later pushes a{" "}
@@ -504,9 +603,51 @@ function GenerateInlineButton({
   );
 }
 
+// ConfigurationProfileNote surfaces the macOS-preferred alternative to the
+// script-dropped managed.json below: a native Configuration Profile (Custom
+// Settings payload) targeting the com.speakeasy.agent preference domain,
+// materialized by the OS at /Library/Managed Preferences/com.speakeasy.agent.plist.
+// Fields mirror managed.json's identity subset (no org_name/auto_update — MDM
+// tooling generally handles naming/update policy itself for profiles). Both
+// delivery methods work; if both are present, the profile wins per field.
+function ConfigurationProfileNote() {
+  return (
+    <div className="bg-secondary/30 border-border rounded-md border p-4">
+      <SubHeading>Configuration Profile (preferred on macOS)</SubHeading>
+      <Text small muted className="mt-1 mb-3">
+        Most macOS MDMs can deliver identity as a native Configuration Profile
+        instead of dropping a file — no script needed. Create a Custom Settings
+        payload for the preference domain <code>com.speakeasy.agent</code>; the
+        OS materializes it at{" "}
+        <code>/Library/Managed Preferences/com.speakeasy.agent.plist</code>.
+      </Text>
+      <CodeBlock language="xml">{`<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+"http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>v</key><integer>1</integer>
+  <key>email</key><string>jane.doe@example.com</string>
+  <key>org_token</key><string>spk_org_…</string>
+  <key>org_slug</key><string>example-corp</string>
+</dict>
+</plist>`}</CodeBlock>
+      <Text small muted className="mt-2">
+        Same fields as <code>managed.json</code> below, minus{" "}
+        <code>org_name</code>/<code>auto_update</code>. The script-dropped file
+        (below) still works on macOS too — use whichever your MDM supports more
+        easily.
+      </Text>
+    </div>
+  );
+}
+
 // FleetIdentity is the MDM identity path: deploy a managed.json so IT sets
-// identity centrally. Includes inline org_token generation/rotation.
-function FleetIdentity() {
+// identity centrally. Includes inline org_token generation/rotation. On
+// macOS, a native Configuration Profile is also available and preferred
+// over the script-dropped managed.json (see ConfigurationProfileNote) —
+// both work, and the profile wins per field if both are present.
+function FleetIdentity({ os }: { os: OsKey }) {
   const { name: orgName, slug: orgSlug } = useOrganization();
   const apiKeysHref = useOrgRoutes().apiKeys.href();
   const [rotateConfirmOpen, setRotateConfirmOpen] = useState(false);
@@ -586,10 +727,12 @@ function FleetIdentity() {
     <div className="flex flex-col gap-8">
       <Text muted>
         On an MDM-managed device the agent reads its identity from a{" "}
-        <code>managed.json</code> that IT deploys (Kandji, Jamf, Intune, ...)
-        with no per-user enrollment. IT owns this file; the agent only reads it,
-        and it wins over anything a user sets locally.
+        <code>managed.json</code> that IT deploys (Jamf, Iru (formerly Kandji),
+        Intune, ...) with no per-user enrollment. IT owns this file; the agent
+        only reads it, and it wins over anything a user sets locally.
       </Text>
+
+      {os === "macos" && <ConfigurationProfileNote />}
 
       <div>
         <SubHeading>File location</SubHeading>
@@ -620,7 +763,7 @@ function FleetIdentity() {
         <Text small muted className="mt-2">
           <code>org_slug</code> and <code>org_name</code> are pre-filled for
           this org. <code>email</code> is per-user; have your MDM substitute its
-          per-user email variable (Kandji / Jamf <code>$EMAIL</code>, or your
+          per-user email variable (Jamf / Iru <code>$EMAIL</code>, or your
           platform's equivalent) so one profile serves the whole fleet, or omit{" "}
           <code>email</code> and have each user run{" "}
           <code>speakeasy enroll</code>. Click{" "}
@@ -633,7 +776,6 @@ function FleetIdentity() {
         <div className="mt-4 flex flex-col gap-3">
           {generatedToken && (
             <Alert variant="warning">
-              <Icon name="triangle-alert" className="h-4 w-4" />
               <AlertTitle>
                 {autoCopied
                   ? "managed.json copied to your clipboard"
@@ -656,7 +798,6 @@ function FleetIdentity() {
 
           {isError && (
             <Alert variant="error">
-              <Icon name="triangle-alert" className="h-4 w-4" />
               <AlertTitle>Couldn't generate a token</AlertTitle>
               <AlertDescription>
                 Something went wrong creating the agent token. Try again, or
@@ -693,7 +834,6 @@ function FleetIdentity() {
             </Dialog.Description>
           </Dialog.Header>
           <Alert variant="error">
-            <Icon name="triangle-alert" className="h-4 w-4" />
             <AlertTitle>
               Your current MDM integration will stop working
             </AlertTitle>
@@ -735,9 +875,118 @@ const MANAGED_CONFIG_PATHS = [
   },
 ];
 
+// MacInstallStep is the first (and only pre-identity) setup step on macOS.
+// Unlike Windows/Linux there's no separate chmod/move or service-registration
+// step — the pkg's postinstall does both.
+function MacInstallStep() {
+  const { data, isError } = useAgentReleases();
+  const version = safeVersion(data?.latest?.["speakeasyd"]?.version);
+  // The pkg ships from the same bucket/version layout as the raw binaries
+  // (device-agent's release-pkg-macos job), but isn't itself listed in
+  // releases.json — it's the manual/MDM on-ramp, not something the
+  // auto-update client discovers — so its URL is built directly rather than
+  // read off the manifest the way ManualDownload reads speakeasyd/speakeasy.
+  const pkgUrl = version
+    ? `${RELEASES_BASE}/v${version}/speakeasy-agent_${version}.pkg`
+    : null;
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-2">
+        <SubLabel>Tooling breakdown</SubLabel>
+        <BinaryLegend />
+      </div>
+      <div className="flex flex-col gap-2">
+        <SubLabel>Run the download + install script</SubLabel>
+        <StepNote>
+          Deploying via Fleet MDM? Provision <code>managed.json</code> first
+          (see the identity step next) for a deterministic first start.
+          Personal/PoC enrolls via OAuth instead — nothing to provision first.
+        </StepNote>
+        <CodeBlock language="bash">{`${bashVersionAssign(version)}
+curl -fSL -o speakeasy-agent.pkg "${RELEASES_BASE}/v\${VERSION}/speakeasy-agent_\${VERSION}.pkg"
+sudo installer -pkg speakeasy-agent.pkg -target /`}</CodeBlock>
+      </div>
+      <OrDivider />
+      <div className="flex flex-col gap-2">
+        <SubLabel>Download the installer directly</SubLabel>
+        {pkgUrl ? (
+          <BinaryDownloadButton
+            href={pkgUrl}
+            role="Installer"
+            name="speakeasy-agent.pkg"
+            version={version ?? ""}
+          />
+        ) : (
+          <Text small muted>
+            {isError
+              ? "Couldn't load the latest release — use the download script above, or open the "
+              : "Loading the latest release… or use the download script above, or open the "}
+            <ExternalLink
+              href={MANIFEST_URL}
+              target="_blank"
+              iconSuffixName="external-link"
+            >
+              release manifest
+            </ExternalLink>{" "}
+            for the current version.
+          </Text>
+        )}
+      </div>
+      <div className="flex flex-col gap-2">
+        <SubLabel>Or push it as a fleet via MDM</SubLabel>
+        <Text small muted>
+          Get the pkg — the script or button above, or (if the automatic lookup
+          above is down) build the URL directly from the current version in the{" "}
+          <ExternalLink
+            href={MANIFEST_URL}
+            target="_blank"
+            iconSuffixName="external-link"
+          >
+            release manifest
+          </ExternalLink>
+          :{" "}
+          <code>.../v&lt;version&gt;/speakeasy-agent_&lt;version&gt;.pkg</code>.
+          Upload it to your MDM (Jamf, Iru (formerly Kandji), Intune, …) as a{" "}
+          <strong className="font-medium">Package</strong>, then scope a policy
+          to install it once per computer — no script needed. The pkg installs
+          the daemon, CLI, menu-bar UI, and privileged helper together, and its
+          postinstall step registers the per-user LaunchAgents itself.
+        </Text>
+        <Text small muted>
+          You won't need to redeploy this for every agent update — with{" "}
+          <code>auto_update: "automatic"</code>, it stays current on its own
+          after this first install.
+        </Text>
+      </div>
+    </div>
+  );
+}
+
+// The pkg deliberately doesn't add the CLI to PATH: it would collide with the
+// Speakeasy SDK generator's own `speakeasy` on a dev machine, and pointing
+// PATH at the pkg's staging copy would serve a stale binary after the first
+// auto-update. Reach it by its per-user seed path instead — every macOS CLI
+// invocation in this file does.
+function MacVerifyStep() {
+  return (
+    <div className="flex flex-col gap-2">
+      <StepNote>
+        Run these in the enrolled user's own login session, not as root.
+      </StepNote>
+      <CodeBlock language="bash">{`AGENT_CLI="$HOME/Library/Application Support/Speakeasy/bin/speakeasy"
+
+pkgutil --pkg-info com.speakeasy.agent.pkg
+launchctl print "gui/$(id -u)/com.speakeasy.daemon"
+"$AGENT_CLI" status`}</CodeBlock>
+    </div>
+  );
+}
+
 // IdentityStep is the final sheet step: pick how the agent learns who's on the
-// device (fleet MDM vs personal enrollment).
-function IdentityStep() {
+// device (fleet MDM vs personal enrollment). Takes os because ManualIdentity's
+// enroll command differs on macOS (see there).
+function IdentityStep({ os }: { os: OsKey }) {
   return (
     <div className="flex flex-col gap-6">
       <Text small muted>
@@ -745,7 +994,7 @@ function IdentityStep() {
         for an org; personal enrollment is handy for testing.
       </Text>
       <Tabs defaultValue="fleet" className="gap-6">
-        <TabsList className="grid h-auto w-full grid-cols-2 items-stretch gap-3 bg-transparent p-0">
+        <TabsList className="grid h-auto w-full grid-cols-2 items-stretch gap-3 divide-x-0 border-0 bg-transparent p-0">
           <SetupTab
             value="fleet"
             icon="building-2"
@@ -756,14 +1005,14 @@ function IdentityStep() {
             value="personal"
             icon="user"
             title="Personal / PoC"
-            desc="Sign in once with speakeasy enroll."
+            desc="Sign in once with the agent CLI."
           />
         </TabsList>
         <TabsContent value="fleet" className="pt-2">
-          <FleetIdentity />
+          <FleetIdentity os={os} />
         </TabsContent>
         <TabsContent value="personal" className="pt-2">
-          <ManualIdentity />
+          <ManualIdentity os={os} />
         </TabsContent>
       </Tabs>
     </div>
@@ -785,7 +1034,7 @@ function SetupTab({
   return (
     <TabsTrigger
       value={value}
-      className="border-border data-[state=active]:border-primary/40 h-auto flex-col items-start justify-start gap-1 rounded-md border p-4 text-left whitespace-normal"
+      className="border-border data-[state=active]:border-primary/40 h-auto flex-col items-start justify-start gap-1 border p-4 text-left whitespace-normal"
     >
       <div className="flex items-center gap-2">
         <Icon name={icon} className="h-4 w-4" />
@@ -798,9 +1047,19 @@ function SetupTab({
 
 type SetupStep = { title: string; body: React.ReactNode };
 
-// buildSteps assembles the ordered setup steps for an OS. Windows has no
-// chmod/move step, so the list length (and numbering) varies by OS.
+// buildSteps assembles the ordered setup steps for an OS. macOS installs from
+// a signed .pkg (one combined install step, no chmod/move or separate service
+// registration); Windows/Linux still ship raw binaries via a download script,
+// so the list length (and numbering) varies by OS.
 function buildSteps(os: OsKey): SetupStep[] {
+  if (os === "macos") {
+    return [
+      { title: "Download and install the agent", body: <MacInstallStep /> },
+      { title: "Verify it's running", body: <MacVerifyStep /> },
+      { title: "Set the user's identity", body: <IdentityStep os={os} /> },
+    ];
+  }
+
   const cfg = OS_CONFIG[os];
   const steps: SetupStep[] = [
     { title: "Download the binaries", body: <DownloadStep os={os} /> },
@@ -824,7 +1083,16 @@ function buildSteps(os: OsKey): SetupStep[] {
     title: "Verify it's running",
     body: <CodeBlock language={cfg.lang}>{cfg.verify}</CodeBlock>,
   });
-  steps.push({ title: "Set the user's identity", body: <IdentityStep /> });
+  if (cfg.hasHelperPackage) {
+    steps.push({
+      title: "Install the root helper package",
+      body: <HelperPackageStep />,
+    });
+  }
+  steps.push({
+    title: "Set the user's identity",
+    body: <IdentityStep os={os} />,
+  });
   return steps;
 }
 
@@ -879,7 +1147,7 @@ function DeviceAgentSetupSheet({
               type="button"
               onClick={() => goToDot(idx)}
               className={cn(
-                "h-1 rounded-full transition-all",
+                "h-1 transition-all",
                 idx === stepIdx
                   ? "bg-foreground w-6"
                   : idx < stepIdx
@@ -953,9 +1221,9 @@ function OsTile({ os, onClick }: { os: OsKey; onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="border-border bg-card hover:border-foreground/20 flex w-full items-center gap-4 rounded-lg border p-4 text-left transition-all"
+      className="border-border bg-card hover:border-foreground/20 flex w-full items-center gap-4 border p-4 text-left transition-all"
     >
-      <div className="bg-secondary flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-lg">
+      <div className="bg-secondary flex h-14 w-14 flex-shrink-0 items-center justify-center">
         <img
           src={cfg.logo}
           alt={`${cfg.label} logo`}
@@ -984,7 +1252,9 @@ export function DeviceAgentSetup(): React.JSX.Element {
 
   return (
     <Page.Section>
-      <Page.Section.Title>Install the agent</Page.Section.Title>
+      {/* The Device Agent page renders the area eyebrow with its own page
+          title above the tab strip, so suppress the section-level one. */}
+      <Page.Section.Title area="">Install the agent</Page.Section.Title>
       <Page.Section.Description>
         The Speakeasy device agent runs on-device and enforces your org's
         required AI-tool plugins and MCP configuration, then reports compliance
@@ -992,18 +1262,20 @@ export function DeviceAgentSetup(): React.JSX.Element {
       </Page.Section.Description>
       <Page.Section.Body>
         <div className="flex flex-col gap-4">
-          <Alert variant="info">
-            <Icon name="building-2" className="h-4 w-4" />
-            <AlertTitle>Rolling out to more than a few machines?</AlertTitle>
-            <AlertDescription>
-              We recommend deploying the agent through your MDM (Kandji, Jamf,
-              Intune, or similar). It installs the binaries and drops a{" "}
+          <div className="border-border bg-card border p-4">
+            <p className="text-eyebrow mb-2">Fleet rollout</p>
+            <Text small muted>
+              Rolling out to more than a few machines? We recommend deploying
+              the agent through your MDM (Jamf, Iru (formerly Kandji), Intune,
+              or similar). It installs the binaries and drops a{" "}
               <code>managed.json</code> so identity and enrollment are set
               centrally — no per-user setup. The{" "}
-              <strong className="font-medium">Fleet (MDM)</strong> path in each
-              platform's walkthrough covers it.
-            </AlertDescription>
-          </Alert>
+              <strong className="text-foreground font-medium">
+                Fleet (MDM)
+              </strong>{" "}
+              path in each platform's walkthrough covers it.
+            </Text>
+          </div>
           <Text small muted>
             Pick the platform you're installing on to walk through setup.
           </Text>

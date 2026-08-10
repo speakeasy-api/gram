@@ -127,7 +127,7 @@ function ModelCard({
   children: React.ReactNode;
 }): JSX.Element {
   return (
-    <div className="border-border rounded-lg border p-4">
+    <div className="border-border border p-4">
       <div className="mb-3">
         <div className="text-sm font-medium">{title}</div>
         <div className="text-muted-foreground text-xs">{subtitle}</div>

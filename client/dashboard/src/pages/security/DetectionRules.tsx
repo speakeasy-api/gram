@@ -13,7 +13,6 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { TextArea } from "@/components/ui/Textarea";
-import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { Icon } from "@/components/ui/Icon";
 import { type IconName } from "@/components/ui/Icon/names";
@@ -242,10 +241,8 @@ function CustomRulesSection({
   const meta = RULE_CATEGORY_META.custom;
   return (
     <div>
-      <Text variant="subheading" className="mb-3">
-        Custom
-      </Text>
-      <div className="border-border divide-border divide-y rounded-lg border">
+      <div className="text-eyebrow mb-3">Custom</div>
+      <div className="border-border divide-border divide-y border">
         <CategoryHeader
           icon={meta.icon as IconName}
           label={meta.label}
@@ -286,10 +283,8 @@ function BuiltinRulesSection({
 }) {
   return (
     <div>
-      <Text variant="subheading" className="mb-3">
-        Built-in
-      </Text>
-      <div className="border-border divide-border divide-y rounded-lg border">
+      <div className="text-eyebrow mb-3">Built-in</div>
+      <div className="border-border divide-border divide-y border">
         {BUILTIN_CATEGORY_ORDER.map((cat) => {
           const meta = RULE_CATEGORY_META[cat];
           const rules = BUILTIN_RULES_BY_CATEGORY[cat];
@@ -662,14 +657,14 @@ function RulePlayground({
       >
         <label
           htmlFor={`pg-mode-sample-${ruleId}`}
-          className="hover:bg-muted/40 flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-xs"
+          className="hover:bg-muted/40 flex cursor-pointer items-center gap-2 border px-3 py-1.5 text-xs"
         >
           <RadioGroupItem value="sample" id={`pg-mode-sample-${ruleId}`} />
           Paste sample
         </label>
         <label
           htmlFor={`pg-mode-chat-${ruleId}`}
-          className="hover:bg-muted/40 flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-xs"
+          className="hover:bg-muted/40 flex cursor-pointer items-center gap-2 border px-3 py-1.5 text-xs"
         >
           <RadioGroupItem value="chat" id={`pg-mode-chat-${ruleId}`} />
           Run on a chat
@@ -754,7 +749,7 @@ function MatchList({
   reason: string | null;
 }) {
   return (
-    <div className="border-border mt-3 rounded-lg border">
+    <div className="border-border mt-3 border">
       <div className="border-border bg-muted/40 flex items-center justify-between border-b px-3 py-2 text-xs font-medium">
         <span>
           {matches.length} match{matches.length === 1 ? "" : "es"}
@@ -776,7 +771,7 @@ function MatchList({
                   {getCategoryCodeForFinding(m.source, m.ruleId)}
                 </span>
               </div>
-              <pre className="bg-muted/50 overflow-x-auto rounded px-2 py-1 font-mono text-[11px]">
+              <pre className="bg-muted/50 overflow-x-auto px-2 py-1 font-mono text-[11px]">
                 {m.match}
               </pre>
               {m.description && (
@@ -1006,7 +1001,7 @@ function ChatPlayground({
       </div>
 
       {results.length > 0 && (
-        <div className="border-border divide-border max-h-[420px] divide-y overflow-y-auto rounded-lg border">
+        <div className="border-border divide-border max-h-[420px] divide-y overflow-y-auto border">
           {results.map((r) => (
             <ChatMessageRow key={r.messageId} item={r} />
           ))}
@@ -1040,7 +1035,7 @@ function ChatPickerColumn({
         <RadioGroup
           value={value ?? ""}
           onValueChange={onChange}
-          className="border-border divide-border max-h-48 divide-y overflow-y-auto rounded-md border"
+          className="border-border divide-border max-h-48 divide-y overflow-y-auto border"
         >
           {items.map((item) => (
             <label
@@ -1107,7 +1102,7 @@ function ChatMessageRow({ item }: { item: ChatMessageResult }) {
               Full message ({item.fullText.length} chars):
             </p>
           )}
-          <pre className="bg-muted/40 max-h-40 overflow-auto rounded px-2 py-1 font-mono text-[11px] whitespace-pre-wrap">
+          <pre className="bg-muted/40 max-h-40 overflow-auto px-2 py-1 font-mono text-[11px] whitespace-pre-wrap">
             {item.fullText || "(empty)"}
           </pre>
           {item.status === "error" && (
@@ -1384,14 +1379,14 @@ function CreateCustomRuleSheet({
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Rule ID</Label>
                 <div className="flex">
-                  <span className="border-input bg-muted text-muted-foreground inline-flex items-center rounded-l-md border border-r-0 px-3 font-mono text-xs">
+                  <span className="border-input bg-muted text-muted-foreground inline-flex items-center border border-r-0 px-3 font-mono text-xs">
                     {CUSTOM_RULE_ID_PREFIX}
                   </span>
                   <Input
                     value={idSuffix}
                     onChange={setIdSuffix}
                     placeholder="internal_token"
-                    className="rounded-l-none font-mono text-xs"
+                    className="font-mono text-xs"
                   />
                 </div>
                 {idError ? (

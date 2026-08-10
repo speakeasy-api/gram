@@ -2,7 +2,6 @@ import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
 import { Dialog } from "@/components/ui/Dialog";
-import { Heading } from "@/components/ui/Heading";
 import {
   Select,
   SelectContent,
@@ -70,27 +69,9 @@ import {
 } from "@/components/ui/ContextMenu";
 import { useOrgRoutes } from "@/routes";
 import { cn } from "@/lib/utils";
+import { getIdentityTint } from "@/components/gradient-colors";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import { ChangeRoleDialog } from "@/pages/access/ChangeRoleDialog";
-
-function getMemberColors(id: string) {
-  let hash = 2166136261;
-  for (let i = 0; i < id.length; i++) {
-    hash ^= id.charCodeAt(i);
-    hash +=
-      (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
-  }
-  hash = hash >>> 0;
-  const hue1 = hash % 360;
-  const hue2 = (hue1 + ((hash >> 8) % 360)) % 360;
-  const saturation = Math.max(65, (hash >> 16) % 100);
-  const angle = (hash >> 24) % 360;
-  return {
-    from: `hsl(${hue1}, ${saturation}%, 65%)`,
-    to: `hsl(${hue2}, ${saturation}%, 60%)`,
-    angle,
-  };
-}
 
 /**
  * Everything from TeamInner's scope that the member actions menu needs,
@@ -548,10 +529,8 @@ function TeamInner() {
             />
           ) : (
             <div
-              className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium text-white"
-              style={{
-                backgroundImage: `linear-gradient(${getMemberColors(member.id).angle}deg, ${getMemberColors(member.id).from}, ${getMemberColors(member.id).to})`,
-              }}
+              className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium"
+              style={getIdentityTint(member.id)}
             >
               {member.name
                 .split(" ")
@@ -602,7 +581,7 @@ function TeamInner() {
               <Link
                 key={roleId}
                 to={`${orgRoutes.access.roles.href()}?editRole=${roleId}`}
-                className="text-foreground hover:text-primary rounded-sm border px-1.5 py-0.5 text-xs no-underline transition-colors"
+                className="text-foreground hover:text-primary border px-1.5 py-0.5 text-xs no-underline transition-colors"
               >
                 {getRoleName(roleId)}
               </Link>
@@ -611,7 +590,7 @@ function TeamInner() {
               <SimpleTooltip
                 tooltip={overflow.map((id) => getRoleName(id)).join(", ")}
               >
-                <span className="text-muted-foreground cursor-pointer rounded-sm border px-1.5 py-0.5 text-xs">
+                <span className="text-muted-foreground cursor-pointer border px-1.5 py-0.5 text-xs">
                   +{overflow.length} more
                 </span>
               </SimpleTooltip>
@@ -650,7 +629,7 @@ function TeamInner() {
               <button
                 type="button"
                 className={cn(
-                  "text-muted-foreground hover:bg-accent hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-colors",
+                  "text-muted-foreground hover:bg-accent hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center transition-colors",
                 )}
               >
                 <Ellipsis className="h-4 w-4" />
@@ -715,10 +694,8 @@ function TeamInner() {
             className={isExpired ? "opacity-50" : ""}
           >
             <div
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
-              style={{
-                backgroundImage: `linear-gradient(${getMemberColors(invite.email).angle}deg, ${getMemberColors(invite.email).from}, ${getMemberColors(invite.email).to})`,
-              }}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium"
+              style={getIdentityTint(invite.email)}
             >
               {invite.email
                 .split("@")[0]
@@ -784,10 +761,8 @@ function TeamInner() {
               />
             ) : (
               <div
-                className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium text-white"
-                style={{
-                  backgroundImage: `linear-gradient(${getMemberColors(inviter.id).angle}deg, ${getMemberColors(inviter.id).from}, ${getMemberColors(inviter.id).to})`,
-                }}
+                className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium"
+                style={getIdentityTint(inviter.id)}
               >
                 {inviter.name
                   .split(" ")
@@ -889,7 +864,7 @@ function TeamInner() {
             className="mb-4"
           >
             <Stack direction="vertical" gap={1}>
-              <Heading variant="h4">Team Members</Heading>
+              <Page.Section.Title>Team Members</Page.Section.Title>
               <Text variant="body" className="text-muted-foreground">
                 Manage who has access to {organization.name}
               </Text>
@@ -1019,7 +994,7 @@ function TeamInner() {
         {invites.length > 0 && (
           <div>
             <Stack direction="vertical" gap={1} className="mb-4">
-              <Heading variant="h4">Pending Invites</Heading>
+              <h3 className="text-eyebrow">Pending Invites</h3>
               <Text variant="body" className="text-muted-foreground">
                 Invitations that haven't been accepted yet
               </Text>
@@ -1036,7 +1011,7 @@ function TeamInner() {
         {/* Identity signpost */}
         <div className="border-border border-t pt-8">
           {organization.scimEnabled ? (
-            <div className="border-border bg-muted/30 flex items-start gap-3 rounded-md border px-4 py-3">
+            <div className="border-border bg-muted/30 flex items-start gap-3 border px-4 py-3">
               <FolderSync className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
               <div className="min-w-0 flex-1">
                 <Text variant="body" className="text-sm font-medium">
@@ -1055,7 +1030,7 @@ function TeamInner() {
               </div>
             </div>
           ) : (
-            <div className="border-border bg-muted/30 flex items-start gap-3 rounded-md border px-4 py-3">
+            <div className="border-border bg-muted/30 flex items-start gap-3 border px-4 py-3">
               <Shield className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
               <div className="min-w-0 flex-1">
                 <Text variant="body" className="text-sm font-medium">

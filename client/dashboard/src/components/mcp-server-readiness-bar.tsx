@@ -32,7 +32,7 @@ export function McpServerReadinessBar({
   const remaining = checks.length - readyCount;
 
   return (
-    <div className="bg-card border-border dark:bg-neutral-950 flex flex-col rounded-lg border shadow-md">
+    <div className="bg-card border-border dark:bg-neutral-950 flex flex-col border shadow-md">
       <button
         type="button"
         onClick={() => setExpanded((prev) => !prev)}

@@ -57,6 +57,96 @@ func TestGeneratePluginWithCustomDomainURL(t *testing.T) {
 	require.Equal(t, "https://mcp.acme.com/mcp/my-slug", server.URL, "custom domain URL must be preserved verbatim in generated config")
 }
 
+func TestGeneratePluginPackagesIncludesPlatformMCPOnlyWhenEnabled(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:            "Acme Corp",
+		OrgEmail:           "admin@example.com",
+		ServerURL:          "https://app.getgram.ai///",
+		APIKey:             "gram_consumer_secret",
+		HooksAPIKey:        "gram_hooks_secret",
+		ProjectSlug:        "default",
+		PlatformMCPEnabled: true,
+	}
+
+	files, err := GeneratePluginPackages(fingerprintTestPlugins(), cfg)
+	require.NoError(t, err)
+
+	var meta claudePluginMeta
+	require.NoError(t, json.Unmarshal(files["platform-mcp/.claude-plugin/plugin.json"], &meta))
+	require.Equal(t, platformMCPPluginName, meta.Name)
+	require.Equal(t, "Gram Platform MCP", meta.DisplayName)
+	require.Nil(t, meta.UserConfig, "Platform MCP must not request tenant credentials")
+
+	var mcpConfig claudeMCPConfig
+	require.NoError(t, json.Unmarshal(files["platform-mcp/.mcp.json"], &mcpConfig))
+	require.Equal(t, map[string]claudeMCPServer{
+		platformMCPPluginName: {
+			Type: "http",
+			URL:  "https://app.getgram.ai/platform-mcp",
+		},
+	}, mcpConfig.MCPServers)
+
+	for path, content := range files {
+		if path == "platform-mcp/.mcp.json" || path == "platform-mcp/.claude-plugin/plugin.json" {
+			require.NotContains(t, string(content), cfg.APIKey)
+			require.NotContains(t, string(content), cfg.HooksAPIKey)
+			require.NotContains(t, string(content), cfg.ProjectSlug)
+		}
+		require.NotContains(t, path, "cursor-plugins/platform-mcp")
+		require.NotContains(t, path, "platform-mcp-codex")
+	}
+
+	var claude marketplaceManifest
+	require.NoError(t, json.Unmarshal(files[".claude-plugin/marketplace.json"], &claude))
+	require.Len(t, claude.Plugins, len(fingerprintTestPlugins())+2)
+	require.Equal(t, "acme-corp-observability", claude.Plugins[0].Name)
+	require.Equal(t, marketplaceEntry{
+		Name:        platformMCPPluginName,
+		DisplayName: "Gram Platform MCP",
+		Source:      "./platform-mcp",
+		Description: "Read-only organization administration through the Gram Platform MCP.",
+	}, claude.Plugins[1])
+
+	var cursor marketplaceManifest
+	require.NoError(t, json.Unmarshal(files[".cursor-plugin/marketplace.json"], &cursor))
+	require.NotContains(t, cursor.Plugins, marketplaceEntry{Name: platformMCPPluginName})
+
+	var codex codexMarketplaceManifest
+	require.NoError(t, json.Unmarshal(files[".agents/plugins/marketplace.json"], &codex))
+	for _, entry := range codex.Plugins {
+		require.NotEqual(t, platformMCPPluginName, entry.Name)
+	}
+
+	cfg.PlatformMCPEnabled = false
+	withoutPlatform, err := GeneratePluginPackages(fingerprintTestPlugins(), cfg)
+	require.NoError(t, err)
+	for path := range withoutPlatform {
+		require.NotContains(t, path, platformMCPPluginRoot)
+	}
+}
+
+func TestGeneratePluginPackagesRejectsInvalidPlatformMCPServerURL(t *testing.T) {
+	t.Parallel()
+
+	for _, serverURL := range []string{
+		"",
+		"localhost:8080",
+		"https:///missing-host",
+		"ftp://example.com",
+		"https://user:password@example.com",
+		"https://example.com?query=value",
+		"https://example.com#fragment",
+	} {
+		_, err := GeneratePluginPackages(fingerprintTestPlugins(), GenerateConfig{
+			OrgName:            "Acme Corp",
+			ServerURL:          serverURL,
+			PlatformMCPEnabled: true,
+		})
+		require.ErrorContains(t, err, "invalid Platform MCP server URL", serverURL)
+	}
+}
+
 func TestGeneratePluginPackagesProducesExpectedFiles(t *testing.T) {
 	t.Parallel()
 	plugins := []PluginInfo{
@@ -340,6 +430,92 @@ func TestGenerateClaudeMixedOAuthAndHTTPServers(t *testing.T) {
 	err = json.Unmarshal(files["test/.claude-plugin/plugin.json"], &pluginMeta)
 	require.NoError(t, err)
 	require.Contains(t, pluginMeta.UserConfig, "GRAM_API_KEY")
+}
+
+// TestGenerateUnproxiedServerNeverGetsGramCredential guards against
+// reintroducing the leak fixed alongside this test: an unproxied server's
+// MCPURL points straight at the vendor, so no format may attach a Gram
+// credential (static header, env-header, or bearer-token-env-var) to it —
+// checked across all four generated formats, and with cfg.APIKey both set
+// and unset, since the leak only reproduced with a baked key present.
+func TestGenerateUnproxiedServerNeverGetsGramCredential(t *testing.T) {
+	t.Parallel()
+
+	for _, cfg := range []GenerateConfig{
+		{OrgName: "Test Org", ServerURL: "https://app.getgram.ai", APIKey: "gram_live_leaked_key"},
+		{OrgName: "Test Org", ServerURL: "https://app.getgram.ai"},
+	} {
+		plugins := []PluginInfo{
+			{
+				Name: "Test",
+				Slug: "test",
+				Servers: []PluginServerInfo{
+					{DisplayName: "vendor-widget", MCPURL: "https://vendor.example.com/mcp", IsUnproxied: true},
+				},
+			},
+		}
+
+		files, err := GeneratePluginPackages(plugins, cfg)
+		require.NoError(t, err)
+
+		var claudeConfig claudeMCPConfig
+		require.NoError(t, json.Unmarshal(files["test/.mcp.json"], &claudeConfig))
+		claudeServer := claudeConfig.MCPServers["vendor-widget"]
+		require.Equal(t, "https://vendor.example.com/mcp", claudeServer.URL)
+		require.Empty(t, claudeServer.Headers, "Claude must not attach a Gram credential to an unproxied server")
+
+		var cursorConfig cursorMCPConfig
+		require.NoError(t, json.Unmarshal(files["cursor-plugins/test-cursor/mcp.json"], &cursorConfig))
+		cursorServer := cursorConfig.MCPServers["vendor-widget"]
+		require.Equal(t, "https://vendor.example.com/mcp", cursorServer.URL)
+		require.Empty(t, cursorServer.Headers, "Cursor must not attach a Gram credential to an unproxied server")
+
+		var codexConfig codexMCPConfig
+		require.NoError(t, json.Unmarshal(files["test-codex/.mcp.json"], &codexConfig))
+		codexServer := codexConfig.MCPServers["vendor-widget"]
+		require.Equal(t, "https://vendor.example.com/mcp", codexServer.URL)
+		require.Empty(t, codexServer.HTTPHeaders, "Codex must not attach a Gram credential to an unproxied server")
+		require.Empty(t, codexServer.BearerTokenEnvVar, "Codex must not set a bearer_token_env_var for an unproxied server")
+
+		var opencodeConfig opencodeMCPConfig
+		require.NoError(t, json.Unmarshal(files["opencode-plugins/test/test/mcp.json"], &opencodeConfig))
+		opencodeServer := opencodeConfig.MCP["vendor-widget"]
+		require.Equal(t, "https://vendor.example.com/mcp", opencodeServer.URL)
+		require.Empty(t, opencodeServer.Headers, "OpenCode must not attach a Gram credential to an unproxied server")
+
+		require.Equal(t, "ON_USE", codexAuthPolicy(plugins[0], cfg),
+			"an all-unproxied plugin needs no install-time secret prompt")
+	}
+}
+
+// TestGenerateClaudeUnproxiedDoesNotForcePrompt mirrors
+// TestGenerateClaudeMixedOAuthAndHTTPServers: a private HTTP server still
+// forces the GRAM_API_KEY prompt, but an unproxied server standing alone
+// must not — needsGramKeyPrompt has the same IsOAuth/IsPublic-only gap the
+// header-attachment branches had.
+func TestGenerateClaudeUnproxiedDoesNotForcePrompt(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{
+		{
+			Name: "Test",
+			Slug: "test",
+			Servers: []PluginServerInfo{
+				{DisplayName: "vendor-widget", MCPURL: "https://vendor.example.com/mcp", IsUnproxied: true},
+			},
+		},
+	}
+
+	files, err := GeneratePluginPackages(plugins, GenerateConfig{
+		OrgName:   "Test Org",
+		ServerURL: "https://app.getgram.ai",
+	})
+	require.NoError(t, err)
+
+	var pluginMeta claudePluginMeta
+	err = json.Unmarshal(files["test/.claude-plugin/plugin.json"], &pluginMeta)
+	require.NoError(t, err)
+	require.NotContains(t, pluginMeta.UserConfig, "GRAM_API_KEY",
+		"a plugin with only an unproxied server needs no Gram API key prompt")
 }
 
 func TestGenerateCodexMCPConfigUsesBearerTokenEnvVar(t *testing.T) {
@@ -771,8 +947,7 @@ func TestGenerateMarketplaceManifest(t *testing.T) {
 
 	require.Equal(t, "acme-speakeasy", cursorManifest.Name)
 	require.Len(t, cursorManifest.Plugins, 2)
-	require.NotNil(t, cursorManifest.Metadata)
-	require.Equal(t, "cursor-plugins", cursorManifest.Metadata.PluginRoot)
+	require.Equal(t, &marketplaceMetadata{PluginRoot: cursorPluginRoot}, cursorManifest.Metadata)
 	require.Equal(t, "a-cursor", cursorManifest.Plugins[0].Source)
 	require.Equal(t, "b-cursor", cursorManifest.Plugins[1].Source)
 }
@@ -1562,6 +1737,92 @@ func TestGenerateCodexInstallScriptProbesForCodexBinary(t *testing.T) {
 	require.Contains(t, calls, "plugin marketplace upgrade "+conv.ToSlug(cfg.OrgName)+"-speakeasy")
 }
 
+// The unified ChatGPT desktop app (Chat + Work + Codex modes) that OpenAI
+// merged the standalone Codex app into on 2026-07-09 ships the codex CLI at a
+// different bundle path. Without this probe the script silently degrades to
+// "codex executable not found" manual instructions on every machine that only
+// has the post-merge app — the common case now that the legacy app is frozen.
+// find_codex walks a candidate list in order when no codex is on PATH. Run
+// the script against two seeded candidates and observe which binary it
+// actually invokes, so this covers the lookup and its precedence rather than
+// the generated text.
+func TestGenerateCodexInstallScriptResolvesCodexByProbeOrder(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	home := t.TempDir()
+	callLog := filepath.Join(home, "codex-calls.log")
+	for marker, dir := range map[string]string{
+		// Candidate 1: the standalone package install.
+		"standalone-wins": filepath.Join(home, ".codex", "packages", "standalone", "current", "bin"),
+		// Candidate 2: ~/.local/bin, which must lose to the earlier match.
+		"local-bin-ran": filepath.Join(home, ".local", "bin"),
+	} {
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		stub := "#!/bin/sh\nprintf '" + marker + "\\n' >> \"" + callLog + "\"\n"
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "codex"), []byte(stub), 0o755))
+	}
+
+	execCodexInstallScript(t, script, home)
+
+	calls := string(requireFileBytes(t, callLog))
+	require.Contains(t, calls, "standalone-wins", "the first matching candidate must be the one invoked")
+	require.NotContains(t, calls, "local-bin-ran", "a later candidate must not run once an earlier one matches")
+}
+
+// The /Applications candidates cannot be executed here — a test cannot place
+// a bundle under the system Applications directory — so the candidate list is
+// read out of the generated script and asserted whole. That pins both which
+// paths are probed and the order they are tried in, and a failure prints the
+// actual list rather than an index comparison.
+//
+// ChatGPT.app leads the bundle pair because OpenAI merged the standalone
+// Codex app into the unified ChatGPT app, which is where the maintained codex
+// CLI now ships (verified by hand against 0.146, DNO-737); the frozen legacy
+// bundle stays as a fallback for machines that never migrated. Dropping the
+// unified entry silently returns install to "codex executable not found" on
+// any post-merge machine.
+func TestGenerateCodexInstallScriptProbesCandidatesInOrder(t *testing.T) {
+	t.Parallel()
+
+	cfg := GenerateConfig{OrgName: "Acme", ServerURL: "https://app.getgram.ai"}
+	script, err := GenerateCodexInstallScript("https://example.com/gram-marketplace", cfg)
+	require.NoError(t, err)
+
+	require.Equal(t, []string{
+		"${codex_home}/packages/standalone/current/bin/codex",
+		"${HOME}/.local/bin/codex",
+		"/usr/local/bin/codex",
+		"/Applications/ChatGPT.app/Contents/Resources/codex",
+		"/Applications/Codex.app/Contents/Resources/codex",
+	}, codexProbeCandidates(t, script))
+}
+
+// codexProbeCandidates reads find_codex's ordered candidate list out of the
+// generated script.
+func codexProbeCandidates(t *testing.T, script []byte) []string {
+	t.Helper()
+
+	const marker = "for candidate in"
+	start := strings.Index(string(script), marker)
+	require.Positive(t, start, "generated script must declare a candidate list")
+	body := string(script)[start+len(marker):]
+	end := strings.Index(body, "; do")
+	require.Positive(t, end, "candidate list must terminate with '; do'")
+
+	candidates := make([]string, 0, 8)
+	for field := range strings.FieldsSeq(body[:end]) {
+		field = strings.Trim(field, "\\\"")
+		if field != "" {
+			candidates = append(candidates, field)
+		}
+	}
+	return candidates
+}
+
 // Root-level dotted keys (features.hooks = true) implicitly define the
 // [features] table and make Codex reject the whole config with a duplicate-key
 // error when an explicit [features] table is also present — which is the
@@ -1860,6 +2121,23 @@ func TestMCPFingerprintsIsStableAcrossCalls(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, first, second, "same plugins + config must produce the same fingerprints")
+}
+
+func TestMCPFingerprintsIsolatesPlatformMCP(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{OrgName: "Acme Corp", ServerURL: "https://app.getgram.ai", ProjectSlug: "default"}
+
+	withoutPlatform, err := MCPFingerprints(fingerprintTestPlugins(), cfg)
+	require.NoError(t, err)
+
+	cfg.PlatformMCPEnabled = true
+	withPlatform, err := MCPFingerprints(fingerprintTestPlugins(), cfg)
+	require.NoError(t, err)
+
+	require.Equal(t, withoutPlatform["engineering-tools"], withPlatform["engineering-tools"], "Platform MCP must not churn customer plugin fingerprints")
+	require.NotEqual(t, withoutPlatform[mcpSharedFingerprintKey], withPlatform[mcpSharedFingerprintKey], "shared marketplace files list the Platform package and must change with it")
+	require.Contains(t, withPlatform, mcpPlatformFingerprintKey)
+	require.True(t, strings.HasPrefix(withPlatform[mcpPlatformFingerprintKey], "sha256:"))
 }
 
 func TestMCPFingerprintsIgnoresPerPublishFields(t *testing.T) {

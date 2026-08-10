@@ -1,4 +1,5 @@
 import { NavButton, NavGroupProvider } from "@/components/nav-menu";
+import { useNavArea } from "@/hooks/useNavArea";
 import { ScopeGatedNavGroup } from "@/components/scope-gated-nav-group";
 import {
   Sidebar,
@@ -15,6 +16,7 @@ import { InsightsDockResumeButton } from "./insights-dock-resume-button";
 import { BuiltInMcpSidebarNav } from "./built-in-mcp-sidebar-nav";
 import { McpDetailSidebarNav } from "./mcp-detail-sidebar-nav";
 import { McpServerXSidebarNav } from "./mcp-server-x-sidebar-nav";
+import { PluginDetailSidebarNav } from "./plugin-detail-sidebar-nav";
 import { SkillDetailSidebarNav } from "./skill-detail-sidebar-nav";
 import { OnboardingResumeButton } from "./onboarding-resume-button";
 import { SidebarFooterAction } from "./sidebar-footer-action";
@@ -40,6 +42,7 @@ import { RequireScope } from "./require-scope";
 import { FeatureRequestModal } from "./FeatureRequestModal";
 import { Button } from "./ui/Button";
 import { Text } from "@/components/ui/Text";
+import { TrialStatusCard } from "./trial-status-card";
 
 function ScopeGatedTopLevelItem({
   item,
@@ -88,49 +91,11 @@ export function AppSidebar({
   const isOrgMemoryEnabled = navAccess.has(routes.orgMemory.url);
   const isDeploymentsPageEnabled = navAccess.has(routes.deployments.url);
 
-  const connectActive = [
-    routes.sources,
-    routes.catalog,
-    routes.playground,
-    ...(isDeploymentsPageEnabled ? [routes.deployments] : []),
-  ].some((r) => r.active);
-
-  const distributeActive = [
-    routes.mcp,
-    routes.skills,
-    routes.plugins,
-    routes.environments,
-    ...(isAssistantsEnabled ? [routes.assistants] : []),
-  ].some((r) => r.active);
-
-  const observeActive = [
-    routes.employees,
-    routes.costs,
-    routes.insights,
-    routes.agentSessions,
-    ...(isOrgMemoryEnabled ? [routes.orgMemory] : []),
-    routes.logs,
-  ].some((r) => r.active);
-
-  const securityActive = [
-    routes.riskOverview,
-    routes.policyCenter,
-    routes.riskEvents,
-    routes.shadowMCP,
-    routes.approvalRequests,
-    routes.detectionRules,
-  ].some((r) => r.active);
-
-  let activeGroup: string | undefined;
-  if (observeActive) {
-    activeGroup = "Observe";
-  } else if (securityActive) {
-    activeGroup = "Secure";
-  } else if (connectActive) {
-    activeGroup = "Connect";
-  } else if (distributeActive) {
-    activeGroup = "Distribute";
-  }
+  // Shared with the page-title eyebrow (Page.Eyebrow) so the sidebar group
+  // highlight and the page header always agree on the area. "Organization"
+  // labels org-level pages in the header but is not a sidebar group.
+  const navArea = useNavArea();
+  const activeGroup = navArea === "Organization" ? undefined : navArea;
 
   // Find the specific active route title for the sliding highlight. Shared with
   // the command palette via useProjectNavRoutes so the two stay in sync.
@@ -152,7 +117,8 @@ export function AppSidebar({
     routes.mcp.details.active ||
     routes.mcp.x.active ||
     routes.mcp.builtIn.active ||
-    routes.skills.detail.active;
+    routes.skills.detail.active ||
+    routes.plugins.detail.active;
 
   let sidebarContent: React.ReactNode;
   if (rbacLoading) {
@@ -165,18 +131,12 @@ export function AppSidebar({
     sidebarContent = <BuiltInMcpSidebarNav />;
   } else if (routes.skills.detail.active) {
     sidebarContent = <SkillDetailSidebarNav />;
+  } else if (routes.plugins.detail.active) {
+    sidebarContent = <PluginDetailSidebarNav />;
   } else {
     sidebarContent = (
-      <NavGroupProvider
-        activeGroup={activeGroup}
-        defaultOpenGroups={
-          !activeGroup
-            ? ["Observe", "Secure", "Connect", "Distribute"]
-            : undefined
-        }
-        activeItem={activeItem}
-      >
-        <SidebarMenu className="gap-1 px-2 group-data-[collapsible=icon]:px-0">
+      <NavGroupProvider activeGroup={activeGroup} activeItem={activeItem}>
+        <SidebarMenu className="gap-0.5 px-2 group-data-[collapsible=icon]:px-0">
           {/* Home — top-level, no group */}
           <ScopeGatedTopLevelItem
             item={routes.home}
@@ -191,7 +151,7 @@ export function AppSidebar({
           />
 
           {/* Divider: sets Home + Chat apart from the grouped nav below */}
-          <li aria-hidden="true" className="my-3 px-1">
+          <li aria-hidden="true" className="my-2 px-1">
             <div className="border-border border-t" />
           </li>
 
@@ -301,6 +261,7 @@ export function AppSidebar({
       <SidebarFooter className="border-t">
         <FreeTierExceededNotification />
         <div className="mb-2 flex flex-col gap-1.5">
+          <TrialStatusCard />
           <OnboardingResumeButton />
           <InsightsDockResumeButton />
           <SidebarFooterAction
@@ -392,7 +353,7 @@ const PersistentNotification = ({
   );
 
   let classes =
-    "absolute bottom-2 left-1/2 h-[180px] w-[180px] -translate-x-1/2 rounded-lg p-4 border trans overflow-clip ";
+    "absolute bottom-2 left-1/2 h-[180px] w-[180px] -translate-x-1/2 p-4 border trans overflow-clip ";
   if (isMinimized) {
     classes +=
       "h-[12px] w-[12px] left-2 translate-x-0 cursor-pointer hover:scale-110";

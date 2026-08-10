@@ -327,6 +327,96 @@ func TestListChallengeBuckets_IsolatesByOrganization(t *testing.T) {
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
+// TestListChallengeBuckets_ExcludesUnattributedBuckets covers the rows written
+// by batch Filter/FindMatched calls: they carry no scope and no resource, so
+// there is nothing to render and nothing to grant against. They must not reach
+// the caller, and must not be counted in the total.
+func TestListChallengeBuckets_ExcludesUnattributedBuckets(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newChallengeTestService(t)
+	orgID := challengeAuthContext(t, ctx).ActiveOrganizationID
+
+	insertCHChallenge(t, ti, orgID, uuid.NewString(), "deny", "user:u1", "org:admin")
+	insertCHChallengeUnattributed(t, ti, orgID, uuid.NewString(), "allow", "user:u2")
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		result, err := ti.service.ListChallengeBuckets(ctx, &gen.ListChallengeBucketsPayload{
+			Outcome:      nil,
+			PrincipalUrn: nil,
+			Scope:        nil,
+			ProjectID:    nil,
+			Resolved:     nil,
+			Limit:        20,
+			Offset:       0,
+			ApikeyToken:  nil,
+			SessionToken: nil,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, result) {
+			return
+		}
+		if !assert.Len(c, result.Buckets, 1) {
+			return
+		}
+		assert.Equal(c, "org:admin", result.Buckets[0].Scope)
+		assert.Equal(c, 1, result.Total)
+	}, 10*time.Second, 100*time.Millisecond)
+}
+
+// TestListChallengeBuckets_UnattributedBucketsDoNotStarvePage reproduces the
+// reported bug: unattributed rows are written on the hottest paths (project and
+// toolset listing, MCP tools/list) so they are always the most recent buckets.
+// When they are paginated as if they were displayable they fill the whole page
+// and the caller is handed nothing to show, even though displayable buckets
+// exist behind them.
+func TestListChallengeBuckets_UnattributedBucketsDoNotStarvePage(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newChallengeTestService(t)
+	orgID := challengeAuthContext(t, ctx).ActiveOrganizationID
+
+	// Older: the buckets a user actually wants to see.
+	insertCHChallenge(t, ti, orgID, uuid.NewString(), "deny", "user:u1", "org:admin")
+	insertCHChallenge(t, ti, orgID, uuid.NewString(), "allow", "user:u1", "org:read")
+
+	// Newer: one unattributed bucket per principal, enough to fill a page.
+	for i := range 3 {
+		insertCHChallengeUnattributed(t, ti, orgID, uuid.NewString(), "allow", fmt.Sprintf("api_key:k%d", i))
+	}
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		result, err := ti.service.ListChallengeBuckets(ctx, &gen.ListChallengeBucketsPayload{
+			Outcome:      nil,
+			PrincipalUrn: nil,
+			Scope:        nil,
+			ProjectID:    nil,
+			Resolved:     nil,
+			Limit:        3,
+			Offset:       0,
+			ApikeyToken:  nil,
+			SessionToken: nil,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		if !assert.NotNil(c, result) {
+			return
+		}
+		if !assert.Len(c, result.Buckets, 2) {
+			return
+		}
+		for _, b := range result.Buckets {
+			assert.NotEmpty(c, b.Scope)
+			assert.NotNil(c, b.ResourceKind)
+			assert.NotNil(c, b.ResourceID)
+		}
+		assert.Equal(c, 2, result.Total)
+	}, 10*time.Second, 100*time.Millisecond)
+}
+
 func TestListChallengeBuckets_AllChallengeIdsReturned(t *testing.T) {
 	t.Parallel()
 

@@ -27,22 +27,47 @@ const (
 	codexComplianceCostsEventType = "COSTS"
 	codexCompliancePageLimit      = 100
 	codexUsageMetricsURN          = "codex:usage:metrics"
-	// chatgptUsageMetricsURN parks non-Codex COSTS events. The compliance
+	// chatgptUsageMetricsURN carries non-Codex COSTS events. The compliance
 	// feed mixes product surfaces (observed values: "codex", "ChatGPT",
 	// "Work"), and only true Codex rows may carry the codex:usage URN — the
 	// codex.cost.usd stream and the ClickHouse agent-usage predicates match
-	// on that prefix. Non-Codex rows are still ingested for retention under
-	// this URN, which nothing reads yet; codex.compliance.product keeps the
-	// exact surface for a later per-product split.
+	// on those prefixes. The summary MVs admit this URN too, so the product
+	// split must survive summarization: hook_source is the persisted
+	// dimension (chatgpt vs chatgpt-work below — the summaries have no
+	// codex.compliance.product column and outlive the raw-row TTL).
 	chatgptUsageMetricsURN = "chatgpt:usage:metrics"
 	codexHookSource        = "codex"
-	chatgptHookSource      = "chatgpt"
-	// codexComplianceProductCodex is the payload.product value marking Codex
-	// rows in COSTS events.
+	// chatgptHookSource tags ChatGPT chat rows and any unknown non-Codex
+	// surface; chatgptWorkHookSource tags Work rows. Splitting at the
+	// hook_source dimension keeps ChatGPT and Work separable in every
+	// summary read without a schema change.
+	chatgptHookSource     = "chatgpt"
+	chatgptWorkHookSource = "chatgpt-work"
+	// codexComplianceProductCodex / codexComplianceProductWork are the
+	// payload.product values marking Codex and Work rows in COSTS events.
 	codexComplianceProductCodex = "codex"
+	codexComplianceProductWork  = "work"
 	codexProviderOpenAI         = "openai"
 	codexCreditValueUSD         = 0.04
 )
+
+// codexCloudMeteredClients are the payload.client values whose Codex usage
+// executes in OpenAI's cloud and is therefore invisible to the OTEL stream —
+// the compliance feed is their only token source, so those rows are metered
+// here. Deliberately an allowlist: an unrecognized client defaults to
+// un-metered, because under-counting a new surface beats double counting a
+// device one. Every device client meters via OTEL and so must stay out of this
+// map: cli, exec, and — settled under DNO-737 — desktop_app, which is Codex
+// mode in the unified ChatGPT app and reports OTEL under the service name
+// codex-app-server. Adding a device client here would double count it.
+var codexCloudMeteredClients = map[string]bool{
+	"github": true,
+	"web":    true,
+}
+
+func codexCloudMeteredClient(client string) bool {
+	return codexCloudMeteredClients[strings.ToLower(strings.TrimSpace(client))]
+}
 
 type codexComplianceClient interface {
 	ListLogs(ctx context.Context, params codexapi.ListLogsParams) (*codexapi.LogsPage, error)
@@ -88,15 +113,18 @@ func (s *CodexCostImportService) SyncCodexCosts(ctx context.Context, cfg Config,
 		LogFiles:          0,
 		CostEvents:        0,
 		CostEventsWritten: 0,
+		CostEventsDeduped: 0,
 		WatermarkReached:  cfg.PollWatermarkAt,
 	}
 
 	source := &codexCostSource{
-		client:      codexapi.New(s.guardianPolicy, *cfg.ExternalOrganizationID, codexapi.WithAPIKey(cfg.APIKey)),
-		cfg:         cfg,
-		pageLimit:   codexCompliancePageLimit,
-		processPage: s.telemetryLogger.LogBulk,
-		progress:    progress,
+		client:    codexapi.New(s.guardianPolicy, *cfg.ExternalOrganizationID, codexapi.WithAPIKey(cfg.APIKey)),
+		cfg:       cfg,
+		pageLimit: codexCompliancePageLimit,
+		processPage: func(ctx context.Context, params []telemetry.LogParams) (int, int, error) {
+			return s.telemetryLogger.LogBulkDeduped(ctx, attr.CodexComplianceEventHashKey, params)
+		},
+		progress: progress,
 	}
 
 	runner := &timewindowpoller.Poller[[]codexapi.LogFile]{
@@ -126,11 +154,18 @@ func (s *CodexCostImportService) SyncCodexCosts(ctx context.Context, cfg Config,
 }
 
 type codexCostSource struct {
-	client      codexComplianceClient
-	cfg         Config
-	pageLimit   int
-	processPage func(ctx context.Context, payload []telemetry.LogParams) error
-	progress    *CodexCostSyncProgress
+	client    codexComplianceClient
+	cfg       Config
+	pageLimit int
+
+	// processPage writes a page's cost events and returns how many it wrote and
+	// how many it dropped as already ingested. Dropping is not incidental: the
+	// compliance feed repeats an event_id across log files and telemetry_logs
+	// has no uniqueness constraint, so an undeduped write counts a repeated
+	// event once per file it appears in.
+	processPage func(ctx context.Context, payload []telemetry.LogParams) (written int, dropped int, err error)
+
+	progress *CodexCostSyncProgress
 }
 
 func (src *codexCostSource) UpperBound(ctx context.Context, endTime time.Time) (time.Time, error) {
@@ -239,10 +274,13 @@ func (src *codexCostSource) ProcessPage(ctx context.Context, files []codexapi.Lo
 	if len(logParams) == 0 {
 		return nil
 	}
-	if err := src.processPage(ctx, logParams); err != nil {
+
+	written, dropped, err := src.processPage(ctx, logParams)
+	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "insert codex cost telemetry logs")
 	}
-	src.progress.CostEventsWritten += len(logParams)
+	src.progress.CostEventsDeduped += dropped
+	src.progress.CostEventsWritten += written
 	return nil
 }
 
@@ -308,6 +346,9 @@ func buildCodexCostEventLogParam(cfg Config, file codexapi.LogFile, event codexC
 		return telemetry.LogParams{}, false, oops.E(oops.CodeUnexpected, err, "parse codex compliance cost timestamp")
 	}
 	if timestamp.IsZero() {
+		timestamp = codexCostBucketTime(event.Payload)
+	}
+	if timestamp.IsZero() {
 		timestamp = file.EndTime
 	}
 	if timestamp.IsZero() {
@@ -321,13 +362,19 @@ func buildCodexCostEventLogParam(cfg Config, file codexapi.LogFile, event codexC
 	totalCostUSD, costUnit, billingSKUs := codexBillingSummary(event.Payload.Measures.Billing)
 
 	// Route rows by product surface so the codex metric only counts Codex:
-	// ChatGPT/Work (and any unknown surface) land under the parked chatgpt
-	// URN instead of polluting codex:usage aggregates.
+	// ChatGPT/Work (and any unknown surface) land under the chatgpt URN
+	// instead of polluting codex:usage aggregates. Work additionally gets its
+	// own hook_source so the ChatGPT/Work split survives summarization.
+	product := strings.TrimSpace(event.Payload.Product)
+	isCodex := strings.EqualFold(product, codexComplianceProductCodex)
 	urn := codexUsageMetricsURN
 	hookSource := codexHookSource
-	if !strings.EqualFold(strings.TrimSpace(event.Payload.Product), codexComplianceProductCodex) {
+	if !isCodex {
 		urn = chatgptUsageMetricsURN
 		hookSource = chatgptHookSource
+		if strings.EqualFold(product, codexComplianceProductWork) {
+			hookSource = chatgptWorkHookSource
+		}
 	}
 
 	attrs := map[attr.Key]any{
@@ -340,6 +387,17 @@ func buildCodexCostEventLogParam(cfg Config, file codexapi.LogFile, event codexC
 		attr.ProviderKey:              codexProviderOpenAI,
 		attr.GenAIProviderNameKey:     codexProviderOpenAI,
 		attr.AIIntegrationConfigIDKey: cfg.ID.String(),
+		attr.AccountTypeKey:           complianceAccountTypeTeam,
+	}
+	// The config's admin-declared billing mode is stamped on Codex rows only —
+	// the org-level tier of the billing-mode cascade, keyed here directly
+	// since compliance rows have no session. ChatGPT/Work rows stay unlabeled
+	// (estimate treatment): the single declaration cannot describe both
+	// surfaces, and Codex credits vs ChatGPT seats routinely bill differently,
+	// so labeling seat usage with a "metered" Codex declaration would render
+	// token-priced estimates as confident real cost downstream.
+	if isCodex {
+		addStringAttr(attrs, attr.BillingModeKey, cfg.BillingMode)
 	}
 	addStringAttr(attrs, attr.CodexComplianceEventIDKey, eventID)
 	addStringAttr(attrs, attr.CodexComplianceEventHashKey, generateCodexCostEventHash(eventID))
@@ -356,17 +414,44 @@ func buildCodexCostEventLogParam(cfg Config, file codexapi.LogFile, event codexC
 	if cfg.ExternalOrganizationID != nil {
 		addStringAttr(attrs, attr.ExternalOrgIDKey, *cfg.ExternalOrganizationID)
 	}
-	if usage.TextInputTokens > 0 {
-		attrs[attr.GenAIUsageInputTokensKey] = usage.TextInputTokens
+	// Codex token metering is surface-partitioned (DNO-736/DNO-751). Device
+	// surfaces (cli, exec) meter through the Codex OTEL stream — the token
+	// source of truth — so their compliance rows stay cost-only: gen_ai.usage
+	// counts here would double count for orgs that also export OTEL. Cloud
+	// surfaces OTEL never sees (GitHub code review, web tasks) have tokens
+	// ONLY in this feed, so their rows promote the counts to gen_ai.usage.*
+	// and meter (and bill TUM) from here. The raw codex.compliance.* copies
+	// (which nothing sums) ride on every Codex row regardless, so un-promoted
+	// surfaces stay inspectable. Parked non-Codex rows keep gen_ai.usage
+	// token counts because the compliance feed is ChatGPT/Work's only usage
+	// source.
+	if isCodex {
+		if usage.TextInputTokens > 0 {
+			attrs[attr.CodexComplianceInputTokensKey] = usage.TextInputTokens
+		}
+		if usage.TextCachedInputTokens > 0 {
+			attrs[attr.CodexComplianceCachedInputTokensKey] = usage.TextCachedInputTokens
+		}
+		if usage.TextOutputTokens > 0 {
+			attrs[attr.CodexComplianceOutputTokensKey] = usage.TextOutputTokens
+		}
+		if totalTokens > 0 {
+			attrs[attr.CodexComplianceTotalTokensKey] = totalTokens
+		}
 	}
-	if usage.TextCachedInputTokens > 0 {
-		attrs[attr.GenAIUsageCacheReadInputTokensKey] = usage.TextCachedInputTokens
-	}
-	if usage.TextOutputTokens > 0 {
-		attrs[attr.GenAIUsageOutputTokensKey] = usage.TextOutputTokens
-	}
-	if totalTokens > 0 {
-		attrs[attr.GenAIUsageTotalTokensKey] = totalTokens
+	if !isCodex || codexCloudMeteredClient(event.Payload.Client) {
+		if usage.TextInputTokens > 0 {
+			attrs[attr.GenAIUsageInputTokensKey] = usage.TextInputTokens
+		}
+		if usage.TextCachedInputTokens > 0 {
+			attrs[attr.GenAIUsageCacheReadInputTokensKey] = usage.TextCachedInputTokens
+		}
+		if usage.TextOutputTokens > 0 {
+			attrs[attr.GenAIUsageOutputTokensKey] = usage.TextOutputTokens
+		}
+		if totalTokens > 0 {
+			attrs[attr.GenAIUsageTotalTokensKey] = totalTokens
+		}
 	}
 	if totalCostUSD > 0 {
 		attrs[attr.GenAIUsageCostKey] = totalCostUSD
@@ -386,6 +471,27 @@ func buildCodexCostEventLogParam(cfg Config, file codexapi.LogFile, event codexC
 		UserInfo:   telemetry.UserInfoByEmail(userEmail),
 		Attributes: attrs,
 	}, true, nil
+}
+
+// codexCostBucketTime derives an event time from the COSTS payload's own
+// day/hour bucket, used when the event carries no timestamp of its own.
+//
+// It sits ahead of the log file's end time deliberately. The feed delivers the
+// same event_id in more than one file, and a file-derived time would stamp
+// those copies differently — putting the copy already ingested outside the
+// event-time window the dedupe lookup searches, so the repeat would be written
+// anyway. The day/hour bucket belongs to the event, so every delivery of it
+// lands on the same timestamp.
+func codexCostBucketTime(payload codexCostPayload) time.Time {
+	day := strings.TrimSpace(payload.Day)
+	if day == "" || payload.Hour < 0 || payload.Hour > 23 {
+		return time.Time{}
+	}
+	parsed, err := time.ParseInLocation(time.DateOnly, day, time.UTC)
+	if err != nil {
+		return time.Time{}
+	}
+	return parsed.Add(time.Duration(payload.Hour) * time.Hour)
 }
 
 func validateCodexLastEndTimeAdvanced(after, lastEndTime time.Time) error {

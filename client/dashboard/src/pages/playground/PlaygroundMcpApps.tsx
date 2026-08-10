@@ -1,4 +1,8 @@
 import { Text } from "@/components/ui/Text";
+import {
+  openSafeExternalUrl,
+  safeExternalHttpUrl,
+} from "@/lib/safe-external-url";
 import type { Toolset } from "@/lib/toolTypes";
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react";
 import { ToolFallback } from "@/elements";
@@ -417,7 +421,7 @@ function McpAppFrame({
 
   return (
     <div className="border-border border-t px-4 pb-4">
-      <div className="border-border bg-background overflow-hidden rounded-2xl border shadow-sm">
+      <div className="border-border bg-background overflow-hidden border shadow-sm">
         <iframe
           ref={iframeRef}
           allow={buildAllowAttribute(uiMeta)}
@@ -503,7 +507,13 @@ async function handleIframeRequest(init: {
         if (!url) {
           return err(message.id, -32602, "Missing URL");
         }
-        window.open(url, "_blank", "noopener,noreferrer");
+        const safeUrl = safeExternalHttpUrl(url);
+        if (!safeUrl) {
+          return err(message.id, -32602, "Unsupported URL");
+        }
+        if (!openSafeExternalUrl(safeUrl)) {
+          return err(message.id, -32000, "Failed to open URL");
+        }
         return ok(message.id, {});
       }
       case "resources/read":

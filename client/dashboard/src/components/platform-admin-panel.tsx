@@ -6,38 +6,32 @@ import {
   invalidateAllChatAnalysisSettings,
   useChatAnalysisSettings,
 } from "@gram/client/react-query/chatAnalysisSettings.js";
-import { useDisableRBACMutation } from "@gram/client/react-query/disableRBAC.js";
-import { useEnableRBACMutation } from "@gram/client/react-query/enableRBAC.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
-import { invalidateAllGrants } from "@gram/client/react-query/grants.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
-import { useRbacStatus } from "@gram/client/react-query/rbacStatus.js";
 import { useSendEnterpriseAdminOnboardingEmailMutation } from "@gram/client/react-query/sendEnterpriseAdminOnboardingEmail.js";
 import { useTriggerChatAnalysisMutation } from "@gram/client/react-query/triggerChatAnalysis.js";
 import { useUpsertBusinessMemoryAnalysisSettingsMutation } from "@gram/client/react-query/upsertBusinessMemoryAnalysisSettings.js";
 import { useUpsertChatAnalysisSettingsMutation } from "@gram/client/react-query/upsertChatAnalysisSettings.js";
 import { invalidateAllProductFeatures } from "@gram/client/react-query/productFeatures.js";
-import { invalidateAllRbacStatus } from "@gram/client/react-query/rbacStatus.js";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRightLeft,
   BarChart3,
-  BookOpen,
   Building2,
+  Cloud,
   FileSearch,
   FolderSync,
   Key,
   KeyRound,
   Loader2,
   Mail,
-  ShieldCheck,
-  Webhook,
+  RefreshCw,
 } from "lucide-react";
 import { ComponentType, ReactElement, useState } from "react";
 import { toast } from "sonner";
 
 // These panels surface the Platform Admin tooling (org info & override, product
-// features, RBAC, enterprise onboarding) inside the Developer Toolkit, one panel
+// features and enterprise onboarding) inside the Developer Toolkit, one panel
 // per toolkit tab. They replace the standalone OrgAdminSettings page; the layout
 // is compact so it fits the narrow platform-admin-toolbar panel. Every control
 // here hits a platform-admin guarded endpoint, so a non-platform-admin caller
@@ -45,11 +39,11 @@ import { toast } from "sonner";
 
 function StatusPill({ enabled }: { enabled: boolean }): ReactElement {
   return enabled ? (
-    <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-500">
+    <span className="border-border text-default-success inline-flex items-center border px-2 py-0.5 font-mono text-[10px] uppercase">
       Enabled
     </span>
   ) : (
-    <span className="bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium">
+    <span className="bg-muted text-muted-foreground inline-flex items-center px-2 py-0.5 font-mono text-[10px] uppercase">
       Disabled
     </span>
   );
@@ -73,7 +67,7 @@ function ActionButton({
       type="button"
       onClick={onClick}
       disabled={disabled || pending}
-      className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 ${
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 ${
         destructive
           ? "bg-red-500/10 text-red-600 hover:bg-red-500/20 dark:text-red-400"
           : "bg-foreground text-background hover:opacity-90"
@@ -97,7 +91,7 @@ function Section({
   children: React.ReactNode;
 }): ReactElement {
   return (
-    <div className="border-border bg-card rounded-lg border p-3">
+    <div className="border-border bg-card border p-3">
       <div className="mb-1 flex items-center gap-1.5">
         <Icon className="text-muted-foreground h-3.5 w-3.5" />
         <span className="text-foreground text-xs font-medium">{title}</span>
@@ -148,105 +142,6 @@ function FeatureToggle({
   );
 }
 
-function RBACManagementSection(): ReactElement {
-  const queryClient = useQueryClient();
-  const [confirmAction, setConfirmAction] = useState<
-    "enable" | "disable" | null
-  >(null);
-
-  const { data: status, isLoading, error } = useRbacStatus();
-
-  const enableMutation = useEnableRBACMutation({
-    onSuccess: () => {
-      void invalidateAllRbacStatus(queryClient);
-      void invalidateAllGrants(queryClient);
-      setConfirmAction(null);
-      toast.success("RBAC enabled");
-    },
-  });
-
-  const disableMutation = useDisableRBACMutation({
-    onSuccess: () => {
-      void invalidateAllRbacStatus(queryClient);
-      void invalidateAllGrants(queryClient);
-      setConfirmAction(null);
-      toast.success("RBAC disabled");
-    },
-  });
-
-  const toggleMutation =
-    confirmAction === "enable" ? enableMutation : disableMutation;
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center gap-2 py-1">
-        <Loader2 className="text-muted-foreground h-3.5 w-3.5 animate-spin" />
-        <span className="text-muted-foreground text-[11px]">Loading…</span>
-      </div>
-    );
-  }
-
-  if (error || !status) {
-    return (
-      <p className="text-destructive text-[11px]">
-        Failed to load RBAC status: {error?.message ?? "unknown error"}
-      </p>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <StatusPill enabled={status.rbacEnabled} />
-        {confirmAction === null && (
-          <ActionButton
-            onClick={() =>
-              setConfirmAction(status.rbacEnabled ? "disable" : "enable")
-            }
-            destructive={status.rbacEnabled}
-          >
-            {status.rbacEnabled ? "Disable RBAC" : "Enable RBAC"}
-          </ActionButton>
-        )}
-      </div>
-
-      {confirmAction !== null && (
-        // Inline confirmation instead of a modal: the platform-admin-toolbar collapses on
-        // outside clicks, which would tear down a portalled dialog mid-flow.
-        <div className="border-border bg-muted/40 rounded-md border p-2">
-          <p className="text-foreground mb-2 text-[11px] leading-snug">
-            {confirmAction === "enable"
-              ? "Seed default grants for system roles and enforce access control for this organization?"
-              : "Disable access control enforcement? All members will have unrestricted access."}
-          </p>
-          <div className="flex items-center gap-2">
-            <ActionButton
-              onClick={() => toggleMutation.mutate({})}
-              pending={toggleMutation.isPending}
-              destructive={confirmAction === "disable"}
-            >
-              {confirmAction === "enable" ? "Enable" : "Disable"}
-            </ActionButton>
-            <button
-              type="button"
-              onClick={() => setConfirmAction(null)}
-              className="text-muted-foreground hover:text-foreground text-[11px]"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {toggleMutation.error && (
-        <p className="text-destructive text-[11px]">
-          {toggleMutation.error.message}
-        </p>
-      )}
-    </div>
-  );
-}
-
 function ProductFeaturesSection(): ReactElement {
   const queryClient = useQueryClient();
   const { data: features, isLoading, error } = useProductFeatures();
@@ -262,12 +157,6 @@ function ProductFeaturesSection(): ReactElement {
       const enabled =
         mutationVariables.request.setProductFeatureRequestBody.enabled;
       toast.success(enabled ? "Feature enabled" : "Feature disabled");
-      if (
-        mutationVariables.request?.setProductFeatureRequestBody?.featureName ===
-        FeatureName.Skills
-      ) {
-        void invalidateAllGrants(queryClient);
-      }
     },
   });
 
@@ -299,27 +188,6 @@ function ProductFeaturesSection(): ReactElement {
 
   return (
     <div className="space-y-2">
-      <Section
-        icon={ShieldCheck}
-        title="RBAC"
-        description="Role-based access control enforcement. Ensure all members have roles assigned before enabling."
-      >
-        <RBACManagementSection />
-      </Section>
-
-      <FeatureToggle
-        label="Skills"
-        description="Enables the Skills page and provisions default Skills grants when RBAC is active."
-        icon={BookOpen}
-        featureName={FeatureName.Skills}
-        enabled={features.skillsEnabled}
-        isPending={isPending && pendingFeature === FeatureName.Skills}
-        onToggle={handleToggle}
-        error={
-          pendingFeature === FeatureName.Skills ? mutError?.message : undefined
-        }
-      />
-
       <FeatureToggle
         label="Authz Challenge Logging"
         description='Log every authorization decision (allow/deny) to ClickHouse. Powers auditing of "why did X have access to Y?"'
@@ -338,15 +206,18 @@ function ProductFeaturesSection(): ReactElement {
       />
 
       <FeatureToggle
-        label="Webhooks"
-        description="Unlocks the Webhooks page for this organization (Svix-backed event delivery). While disabled, members see the preview gate."
-        icon={Webhook}
-        featureName={FeatureName.Webhooks}
-        enabled={features.webhooks}
-        isPending={isPending && pendingFeature === FeatureName.Webhooks}
+        label="Customer-Managed Encryption Keys"
+        description="Unlocks encryption key management for an organization, enabling external service credential, external encryption key, and asymmetric signing functionality."
+        icon={Cloud}
+        featureName={FeatureName.CustomerManagedEncryptionKeys}
+        enabled={features.customerManagedEncryptionKeysEnabled}
+        isPending={
+          isPending &&
+          pendingFeature === FeatureName.CustomerManagedEncryptionKeys
+        }
         onToggle={handleToggle}
         error={
-          pendingFeature === FeatureName.Webhooks
+          pendingFeature === FeatureName.CustomerManagedEncryptionKeys
             ? mutError?.message
             : undefined
         }
@@ -362,6 +233,23 @@ function ProductFeaturesSection(): ReactElement {
         onToggle={handleToggle}
         error={
           pendingFeature === FeatureName.CustomModelKeys
+            ? mutError?.message
+            : undefined
+        }
+      />
+
+      <FeatureToggle
+        label="Automatic Remote Session Refresh"
+        description="Shows the Auto refresh opt-in on remote-session consent screens."
+        icon={RefreshCw}
+        featureName={FeatureName.RemoteSessionAutoRefresh}
+        enabled={features.remoteSessionAutoRefreshEnabled}
+        isPending={
+          isPending && pendingFeature === FeatureName.RemoteSessionAutoRefresh
+        }
+        onToggle={handleToggle}
+        error={
+          pendingFeature === FeatureName.RemoteSessionAutoRefresh
             ? mutError?.message
             : undefined
         }
@@ -732,7 +620,7 @@ function OnboardingSection(): ReactElement {
         {sendEmail.data?.setupLink && (
           <p className="text-muted-foreground pt-1 text-[11px] break-all">
             Setup link:{" "}
-            <code className="bg-muted rounded px-1 py-0.5 font-mono text-[10px]">
+            <code className="bg-muted px-1 py-0.5 font-mono text-[10px]">
               {sendEmail.data.setupLink}
             </code>
           </p>
@@ -789,7 +677,7 @@ function OrgOverrideSection(): ReactElement {
           </button>
           <button
             type="submit"
-            className="bg-foreground text-background inline-flex items-center rounded-md px-2.5 py-1 text-[11px] font-medium hover:opacity-90"
+            className="bg-foreground text-background inline-flex items-center px-2.5 py-1 text-[11px] font-medium hover:opacity-90"
           >
             Go to org
           </button>
@@ -818,7 +706,7 @@ function OrgInfoSection(): ReactElement {
 }
 
 // The panels below back the Platform Admin tabs in the Developer Toolkit, one
-// per tab: Info (org info + override), Features (RBAC + product features), and
+// per tab: Info (org info + override), Features (product features), and
 // Onboarding (enterprise admin email).
 
 export function PlatformAdminInfoPanel(): ReactElement {

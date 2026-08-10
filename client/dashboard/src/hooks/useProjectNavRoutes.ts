@@ -3,7 +3,6 @@ import { useProject } from "@/contexts/Auth";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { AppRoute, useRoutes } from "@/routes";
 import { useOrgMemoryDeveloperToggle } from "./useOrgMemoryDeveloperToggle";
 
@@ -40,17 +39,12 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   const assistantsFlag = useFeatureFlag(FEATURE_FLAGS.assistants);
   const deploymentsPageFlag = useFeatureFlag(FEATURE_FLAGS.deploymentsPage);
   const [isOrgMemoryEnabled] = useOrgMemoryDeveloperToggle();
-  const { data: productFeatures } = useProductFeatures(undefined, undefined, {
-    staleTime: 30_000,
-    throwOnError: false,
-  });
 
   // Assistants is opt-in: unavailable flags remain hidden.
   const isAssistantsEnabled = assistantsFlag.status === "enabled";
   // Deployments is opt-out: it remains visible unless PostHog explicitly
   // resolves the flag to disabled.
   const isDeploymentsPageEnabled = deploymentsPageFlag.status !== "disabled";
-  const isSkillsEnabled = productFeatures?.skillsEnabled === true;
 
   return useMemo<ProjectNavRoute[]>(() => {
     const read: Scope[] = ["project:read"];
@@ -79,8 +73,8 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
         : []),
       {
         route: routes.skills,
-        scope: isSkillsEnabled ? ["skill:read"] : read,
-        ...(isSkillsEnabled ? { resourceId: projectId } : {}),
+        scope: ["skill:read"],
+        resourceId: projectId,
       },
       { route: routes.plugins, scope: readWrite },
       { route: routes.environments, scope: readWrite },
@@ -105,6 +99,5 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     isAssistantsEnabled,
     isDeploymentsPageEnabled,
     isOrgMemoryEnabled,
-    isSkillsEnabled,
   ]);
 }

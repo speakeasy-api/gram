@@ -1,5 +1,154 @@
 # dashboard
 
+## 0.103.0
+
+### Minor Changes
+
+- e136806: MCP server detail pages gain a Clients and Sessions tab, which lists the clients registered against the server's session issuer alongside its active sessions, and takes over the user-sessions listing that previously sat under authentication settings. CIMD-resolved OAuth clients are now distinguished from DCR-registered ones in the dashboard.
+- 76592ef: Rework the toolset OAuth configuration UI now that the OAuth proxy provider system is removed. The "Configure OAuth" wizard keeps its structure, but its custom path now provisions a user session issuer (creating a remote_session_issuer + remote_session_client and linking the toolset) instead of an OAuth proxy server; the external-OAuth path is unchanged. The separate migrate-from-proxy modal and the Platform/Edit OAuth-proxy modals are removed.
+- f6df724: Add opencode to the managed tools list on the device agent fleet
+  configuration page, with the same off/user/managed enforcement layer
+  selection as the other supported tools.
+- d80c633: Restyle the dashboard to the new editorial design language: flat square
+  surfaces with hairline borders, serif display page titles with area
+  micro-labels, unified uppercase table headers, colorized metric tiles, a
+  restrained ink-and-brand chart palette with a dark-mode ramp, muted avatar
+  tints, and a styled not-found page for unmatched routes.
+- 46a645f: Platform admins can now consolidate an organization's remote identity provider onto the shared platform catalog entry for the same upstream. A new Convergence tab on a platform provider lists the organizations running their own provider for that upstream, along with how many clients would move and any metadata differences, and consolidating one re-points those clients without anyone having to sign in again. Providers whose issuer URL differs only by a trailing slash or an explicit default port now count as the same upstream, since those near-duplicates are the ones most worth folding together.
+
+### Patch Changes
+
+- 04679cd: Show Agent Plugins compatibility status and portable ZIP downloads on plugin list and detail pages.
+- 7b746d3: Fix AI Integrations poll-cadence labels to match actual sync intervals: Anthropic Compliance activity feed now reads "Every 5m" (was "Every 10m"), Claude Chat usage/cost metrics now read "Every 4h" (was "Hourly"), and Codex & ChatGPT cost metrics now read "Every 5m" (was "Hourly").
+- a9dd912: Clean up the floating "Bulk actions" toolbar on Risk Events and Risk
+  Overview category tables: removed the doubled border (the toolbar and its
+  "Bulk actions" trigger button each had their own), which read as a boxy
+  nested-border look, in favor of a single borderless pill with just a
+  shadow. Also insets the toolbar a few pixels from the table's header row
+  instead of sitting flush against its top edge.
+- b6e2941: Extend the brand-mesh surface treatment from the project home assistant
+  card to the full `/chat` landing page: the same neutral card-to-background
+  gradient with the brand rainbow breathing in from the top-right corner and
+  a film-grain wash. The decorative layers are now a shared `BrandMeshLayers`
+  component so the two surfaces can't drift apart, and the landing's scroll
+  container moved to an inner wrapper so the mesh and the back button stay
+  pinned while the content scrolls.
+- 0c1e8b6: Update the macOS setup walkthrough on the Device Agent page to install from
+  the signed `.pkg` instead of the retired curl-download-and-chmod script. The pkg installs the daemon, CLI, menu-bar UI, and privileged
+  helper together and registers its own LaunchAgents, so the walkthrough now
+  covers a manual `installer` run or a normal MDM Package push instead of a
+  separate download/chmod/service-register sequence. Windows and Linux are
+  unaffected — they still ship as raw binaries.
+
+  Also makes Device Agent the default choice (instead of Manual Setup) on the
+  "Instrument agent platforms" onboarding step, and drops its "Preview"
+  badge — it's out of preview.
+
+- 8a85b99: Relabel the amber badge that marks platform-admin-only UI from "Dev" to
+  "Internal Admin". The badge appears on the platform admin toolbar and on
+  admin-only fields of the device agent configuration page; "Dev" read as
+  "development build" rather than "visible to Speakeasy staff only", which
+  is what it actually means. Renamed the component to `InternalAdminBadge`
+  to match.
+- 0fad940: Stop the Policy Center table from printing the same thing twice per row. The "Categories / Prompt" column has been folded into the policy column as a second line that only appears when the policy name doesn't already convey it — so "Secrets Exposure Flagger" no longer sits next to "Secrets", and a prompt-based policy whose name is an excerpt of its guardrail shows the name alone. Policies whose name omits a category (or whose guardrail says more than its name) still show the detail, now with the freed-up width.
+- 6ff5ca0: Add user-opted-in automatic remote session token refresh and hide its organization settings until enabled.
+- 793abde: Public skill share links now use your custom domain when one is verified and activated. The share page (and a raw SKILL.md download) is served at `https://<your-domain>/shared/skills/<token>`, scoped so a domain can only ever serve skills belonging to its own organization, and the dashboard copies links with the custom domain automatically.
+- bb83418: Make clickable table rows keyboard-focusable and activatable with Enter or Space.
+
+## 0.102.0
+
+### Minor Changes
+
+- 546c449: Collect a work email on the sign-up page and hand it to the hosted AuthKit
+  screen. `auth.login` takes an optional `email`; when a login carries a company
+  name — the marker that it began on `/sign-up` — the server sets WorkOS's
+  `login_hint` so the email field arrives pre-filled, and `screen_hint=sign-up` so
+  the user lands on the sign-up screen rather than sign-in. The email is validated
+  before the login nonce is minted and is never stored. The call to action now
+  reads "Start Trial"; it previously named a single identity provider, which
+  misdescribed a hand-off that has always been generic.
+- 54755b5: Add a Device Agent configuration tab for organization administrators to choose
+  per-tool enforcement layers, release policy, and reconciliation cadence.
+- 13301b5: Add a self-serve path into the shared read-only demo organization. A new `auth.enterDemo` endpoint switches any authenticated session into the demo org (no membership required); request auth, grant resolution, and member/role listings gain demo carve-outs; the demo org always enforces a fixed read-only scope set with a verb-based write guard as backstop. The dashboard gains an `/explore-demo` entry route, an "explore a live demo org" link on the book-a-demo gate, and a demo banner whose exit switches back to the user's own organization without logging out.
+- 909b466: The External Services page is now organization-scoped: org admins register how Gram authenticates into their own cloud account, behind a new `customer_managed_encryption_keys` entitlement enforced on both `externalCredentials` and `externalKeys`. The platform-admin UI is removed, though its endpoints remain for HTTP-only management. Two new methods support verification: `externalCredentials.verifyGcpIam` probes that Gram can actually impersonate the named service account, and `externalCredentials.getGcpSetupInfo` reports the Gram service account a customer must grant `roles/iam.serviceAccountTokenCreator` to.
+- f95d50f: Platform admins can now curate the shared remote identity provider catalog from the dashboard, under a new Platform Admin section in the sidebar: list, create, edit, refresh discoverable metadata, and delete the providers that every organization inherits. The listing reports platform-owned and tenant-owned client counts separately, so a delete that will be refused says up front which blockers the admin can clear and which belong to an organization. `adminRemoteSessions.listGlobalIssuers` and `adminRemoteSessions.getGlobalIssuer` now return both counts alongside the issuer. Organizations can register a client against an inherited platform provider straight from their own provider list.
+- 546c449: Add a `/sign-up` page that collects the company name before handing off to the
+  identity provider. `auth.login` takes an optional `org_name` param; when set, the
+  server validates it and stashes a signup intent against the login nonce, then
+  creates the organization during the auth callback once the identity provider has
+  answered. The name never travels through a redirect param or the address bar, and
+  a failed signup returns to `/sign-up` rather than `/register`. Signup attempts and
+  the resulting org creation are captured as `onboarding_event` / `new_org_created`
+  with `created_via: "signup"` so the funnel can be measured end to end.
+- ca3e972: Show active trial status in the project and organization navigation, including the current trial day, remaining days, elapsed progress, and a link to Sales.
+
+### Patch Changes
+
+- 847a496: Adding Figma from the MCP catalog now connects your project directly to Figma's official server instead of routing through a proxy, so there's nothing to authorize or allowlist.
+- 0afb752: Import ChatGPT conversations from the OpenAI Compliance Logs Platform. A new `chatgpt_compliance` AI-integration provider polls workspace-scoped `CONVERSATION_MESSAGE` log files (the supported successor to the deprecated stateful conversations endpoint) and persists them as external chats and messages — the same tables and Agent Sessions surface the Anthropic compliance import feeds. The provider is separate from `codex_compliance` because the scopes differ: COSTS files are per API organization while conversation logs are per ChatGPT workspace, so the new config takes a workspace UUID. Includes the workspace-scoped compliance client, Temporal schedule wiring, and a "ChatGPT Conversations" integration card in org settings.
+- 7fd5e1a: Classify Codex account identity and billing mode (DNO-734). Codex sessions on
+  every capture path (legacy hooks, OTEL logs, ingest adapter) now stamp
+  account_type from email resolution — resolved work email is team, anything
+  else personal — and team sessions resolve the org-level billing mode declared
+  on the codex_compliance integration config (the session provider "openai" now
+  maps to that config, fixing the mapping bug that made the config's
+  billing_mode unreachable). Compliance COSTS import rows (codex and
+  ChatGPT/Work) carry account_type=team and the config's billing mode directly.
+  The estimated-cost tooltip copy mentions ChatGPT plans alongside Claude's.
+- 49e00bb: Import Codex cloud task transcripts as agent sessions (DNO-752). A new
+  codex_cloud_sessions schedule on the chatgpt_compliance integration polls the
+  workspace-scoped CODEX_LOG compliance feed and persists cloud web-task
+  prompts and responses as external chats + messages under the new codex-web
+  chat source, with prompt-derived titles and idempotent replays. Only
+  CODEX_WEB client events are imported (desktop-app events are counted and
+  skipped pending the unified-app verification), and the feed's per-turn token
+  counts are deliberately not persisted — cloud tokens meter through the
+  compliance COSTS promotion, so carrying them here would double count.
+  Enforcement over cloud runs remains impossible (post-hoc batch feed); this
+  provides visibility and post-hoc review only. Also fixes a latent
+  multi-schedule reset gap: a key or external-scope change on an integration
+  now resets every synced sibling schedule's watermark (previously only the
+  provider-named schedule reset, so a workspace/org change could leave a
+  sibling feed silently skipping the new scope's history).
+- c44a461: Extend spend-gate enforcement to Codex and Cursor at parity with Claude. Over-budget actors are now denied on the legacy provider endpoints (`hooks.codex`: PreToolUse, PermissionRequest, UserPromptSubmit; `hooks.cursor`: preToolUse, beforeMCPExecution, beforeSubmitPrompt) and on the unified `hooks.ingest` path for the codex and cursor adapters (case-insensitive match) — previously the ingest spend gate was Claude-only even though risk scanning already ran adapter-agnostically there. Cursor MCP calls are spend-gated exactly once (at beforeMCPExecution, mirroring the risk-scan dedup), tool-call spend denies mint a durable block page whose link rides the deny reason, idempotent redeliveries keep the deny without minting duplicate block rows, and the block page headline falls back to spend-rule framing instead of rendering an empty policy name. The gate keeps running before any risk-policy evaluation and failing open on infrastructure errors; opencode still passes through pending a product decision on its enforcement surface.
+- 230744c: Refresh the Codex setup copy for the unified ChatGPT desktop app (DNO-737).
+  The tile referred to a standalone "Codex desktop app" that OpenAI has since
+  merged into the ChatGPT app, and now states that Codex mode there is covered
+  while Chat and Work modes are not — those are captured through the OpenAI
+  Compliance API integration instead. The two OpenAI hook/plugin doc links were
+  redirecting and now point at their current destinations.
+- 547bb72: Reduce the Skills table to its most useful overview columns and rebalance their widths for easier scanning.
+- da7e758: Display enabled warning policies in the Shadow MCP inventory status card.
+- f926dc1: Add project-scoped LiteLLM integration provisioning, key rotation, revocation, and lifecycle metadata APIs.
+- 20662cc: The project sidebar now keeps nav groups collapsed by default: only the group containing the current page opens automatically, and a new chevron on each group header lets you pin other groups open without navigating. Vertical spacing between and within groups is tighter, so more of the nav fits on screen.
+- ff02538: Make the root TypeScript check pass and keep generated SDK warnings out of dashboard linting.
+- 817174d: Make RBAC always on, provision built-in roles and grants for new organizations,
+  and assign the first organization user the Admin role.
+- 9f35728: Make Skills table columns sortable from their headers while preserving recently updated as the default order.
+- ba561ad: Webhooks are now available to every organization, marked Beta. The Webhooks page
+  no longer shows a preview gate, and delivery is controlled solely by the
+  organization's own webhooks toggle.
+
+## 0.101.0
+
+### Minor Changes
+
+- 73b9590: Requests and approvals now understand allow-all shadow MCP policies. Approving a bypass request (from the approvals page or the inventory review flow) on an allow_all policy revokes the server URL's risk_policy:block grant — a project-wide unblock with no principal-scoped bypass grants. Revoking restores the block grant; denying leaves it untouched. The request status change is audited like every other bypass-request decision. The approval UIs skip the audience/policy pickers for these requests and explain that approval unblocks the server for everyone in the project.
+- bd3aac6: Shadow MCP inventory and status surfaces are now disposition-aware. Under an allow-all policy the inventory reports servers as allowed by default and blocked only when a block rule lists them, the policy status banner explains the allow-by-default posture, and the primary per-server action flips from managing allow rules to Block Server / Unblock Server — which add and remove the policy's risk_policy:block grants through dedicated inventory endpoints.
+
+## 0.100.0
+
+### Minor Changes
+
+- 944c4df: Shadow MCP policy creation now offers a default-disposition choice: Block all servers (allow exceptions) or Allow all servers (block exceptions). The server selector flips between picking allowed and blocked servers to match, and the disposition is shown read-only when editing since switching posture requires deleting and recreating the policy.
+- b131cea: Project assistant tool calls now render Claude-style: the assistant precedes each tool batch with a terse activity phrase ("Investigating failures in the last 30 days") which becomes the heading of a single collapsed tool group. Consecutive batches merge into one group whose heading advances (with shimmer) as the investigation progresses, groups never auto-expand, and the global thinking loader hides while a tool group is streaming. The dashboard output-channel guidance instructs the model to emit the phrase before every tool call.
+- 41626e6: Add a contract value estimator to the TUM Contract section of the billing page (platform admin only). It approximates what an enterprise account is worth under either commercial model — a committed platform fee with tiered overage, or uncommitted pay-as-you-go — off the org's observed tokens under management, and flags accounts whose overage has grown large enough relative to their base contract to warrant an expansion conversation.
+
+### Patch Changes
+
+- 6ca548f: Add the `chatgpt` and `chatgpt-work` sources to the product-surface taxonomy now that ChatGPT/Work compliance usage is admitted to the summaries. The compliance importer now routes Work rows to the `chatgpt-work` hook source (ChatGPT and unknown surfaces stay `chatgpt`) so the per-product split survives summarization — hook_source is a summary GROUP BY dimension while the raw `codex.compliance.product` attribute is not, and summaries outlive the raw-row TTL. Also: a `chatgpt` chat source alias, ChatGPT/ChatGPT Work labels and the OpenAI mark in the dashboard label/icon maps and onboarding live-tail, broadened "OpenAI Compliance Logs" settings copy, and local seed fixtures emitting compliance-shaped `chatgpt:usage:metrics` rows for both products.
+- dd9e519: Announce the contract estimator's load failure to screen readers. The message replaces a loading skeleton after the page has settled, so without a live region there was no indication the estimate had failed or that reloading was the way to recover.
+
 ## 0.99.0
 
 ### Minor Changes

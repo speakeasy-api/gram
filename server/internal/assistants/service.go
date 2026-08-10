@@ -31,10 +31,12 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
@@ -49,6 +51,7 @@ const (
 	StatusPaused = "paused"
 
 	sourceKindSlack     = bgtriggers.DefinitionSlugSlack
+	sourceKindMSTeams   = bgtriggers.DefinitionSlugMSTeams
 	sourceKindLinear    = bgtriggers.DefinitionSlugLinear
 	sourceKindGithub    = bgtriggers.DefinitionSlugGithub
 	sourceKindCron      = bgtriggers.DefinitionSlugCron
@@ -393,6 +396,7 @@ type ServiceCore struct {
 	wakeCanceller     WakeCanceller
 	chatWriter        *chat.ChatMessageWriter
 	dashboardIngestor DashboardIngestor
+	featureFlags      feature.Provider
 	turnClassified    metric.Int64Counter
 }
 
@@ -437,6 +441,7 @@ func NewServiceCore(
 		wakeCanceller:     nil,
 		chatWriter:        nil,
 		dashboardIngestor: nil,
+		featureFlags:      nil,
 		turnClassified:    turnClassified,
 	}
 }
@@ -460,6 +465,14 @@ func (s *ServiceCore) SetDashboardIngestor(i DashboardIngestor) {
 // site. Self-heal is skipped if the writer was never set.
 func (s *ServiceCore) SetChatMessageWriter(w *chat.ChatMessageWriter) {
 	s.chatWriter = w
+}
+
+// SetFeatureProvider wires PostHog flag evaluation. Set after construction
+// to match the existing post-construction injection pattern and avoid
+// churning every test call site. A nil provider leaves every flag-gated
+// grant off (fail closed).
+func (s *ServiceCore) SetFeatureProvider(p feature.Provider) {
+	s.featureFlags = p
 }
 
 // resolveAssistantContextWindow returns the smallest context_length the gram
@@ -1960,8 +1973,16 @@ func (s *ServiceCore) CheckDashboardChatOwnership(ctx context.Context, projectID
 }
 
 func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, []byte, error) {
+	sourcePayloadJSON := task.RawPayload
+	if !json.Valid(sourcePayloadJSON) {
+		wrapped, err := json.Marshal(map[string]string{"raw": string(task.RawPayload)})
+		if err != nil {
+			return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
+		}
+		sourcePayloadJSON = wrapped
+	}
 	switch task.DefinitionSlug {
-	case "slack":
+	case sourceKindSlack:
 		var event slackEventPayload
 		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
 			return "", nil, nil, nil, fmt.Errorf("decode slack trigger event: %w", err)
@@ -1978,14 +1999,22 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal slack source ref: %w", err)
 		}
-		sourcePayloadJSON := task.RawPayload
-		if !json.Valid(sourcePayloadJSON) {
-			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
-			if err != nil {
-				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
-			}
-		}
 		return sourceKindSlack, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
+	case sourceKindMSTeams:
+		var event msteamsEventPayload
+		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
+			return "", nil, nil, nil, fmt.Errorf("decode msteams trigger event: %w", err)
+		}
+		sourceRefJSON, err := json.Marshal(msteamsSourceRef{
+			TenantID:       event.TenantID,
+			ConversationID: event.ConversationID,
+			ServiceURL:     event.ServiceURL,
+			UserID:         event.UserID,
+		})
+		if err != nil {
+			return "", nil, nil, nil, fmt.Errorf("marshal msteams source ref: %w", err)
+		}
+		return sourceKindMSTeams, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	case sourceKindLinear:
 		var event linearEventPayload
 		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
@@ -1997,13 +2026,6 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		})
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal linear source ref: %w", err)
-		}
-		sourcePayloadJSON := task.RawPayload
-		if !json.Valid(sourcePayloadJSON) {
-			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
-			if err != nil {
-				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
-			}
 		}
 		return sourceKindLinear, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	case sourceKindGithub:
@@ -2019,13 +2041,6 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal github source ref: %w", err)
 		}
-		sourcePayloadJSON := task.RawPayload
-		if !json.Valid(sourcePayloadJSON) {
-			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
-			if err != nil {
-				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
-			}
-		}
 		return sourceKindGithub, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	case sourceKindCron:
 		var event cronEventPayload
@@ -2038,13 +2053,6 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		})
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal cron source ref: %w", err)
-		}
-		sourcePayloadJSON := task.RawPayload
-		if !json.Valid(sourcePayloadJSON) {
-			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
-			if err != nil {
-				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
-			}
 		}
 		return sourceKindCron, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	case sourceKindWake:
@@ -2059,13 +2067,6 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal wake source ref: %w", err)
 		}
-		sourcePayloadJSON := task.RawPayload
-		if !json.Valid(sourcePayloadJSON) {
-			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
-			if err != nil {
-				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
-			}
-		}
 		return sourceKindWake, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	case sourceKindDashboard:
 		var event dashboardEventPayload
@@ -2075,13 +2076,6 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		sourceRefJSON, err := json.Marshal(dashboardSourceRef{UserID: event.UserID})
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal dashboard source ref: %w", err)
-		}
-		sourcePayloadJSON := task.RawPayload
-		if !json.Valid(sourcePayloadJSON) {
-			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
-			if err != nil {
-				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
-			}
 		}
 		return sourceKindDashboard, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	default:
@@ -2761,6 +2755,9 @@ func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assi
 	case mErr == nil:
 		if managed.ID == assistant.ID {
 			platformSlugs = append(platformSlugs, platformtools.ManagedAssistantPlatformToolsetSlug)
+			if s.platformMCPReadEnabled(ctx, assistant.ProjectID) {
+				platformSlugs = append(platformSlugs, platformtools.PlatformMCPReadToolsetSlug)
+			}
 		}
 	case errors.Is(mErr, pgx.ErrNoRows):
 		// Project has no managed assistant; managed-only tools stay ungranted.
@@ -2768,6 +2765,29 @@ func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assi
 		return nil, fmt.Errorf("resolve managed assistant: %w", mErr)
 	}
 	return platformSlugs, nil
+}
+
+// platformMCPReadEnabled reports whether the organization owning projectID is
+// cleared for the Platform MCP read toolset rollout. Evaluation mirrors the
+// Platform MCP organization gate: distinct ID is the org ID with the org-slug
+// PostHog group. Errors fail closed but never abort the turn — a flag-provider
+// outage must not take down bootstrap or reconcile, so the toolset is simply
+// withheld until evaluation recovers.
+func (s *ServiceCore) platformMCPReadEnabled(ctx context.Context, projectID uuid.UUID) bool {
+	if s.featureFlags == nil {
+		return false
+	}
+	project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, projectID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve organization for platform mcp read toolset", attr.SlogError(err))
+		return false
+	}
+	enabled, err := s.featureFlags.IsFlagEnabled(ctx, feature.FlagAssistantPlatformMCP, project.ID, feature.OrgProjectGroups(project.Slug, ""))
+	if err != nil {
+		s.logger.WarnContext(ctx, "evaluate assistant platform mcp flag", attr.SlogError(err))
+		return false
+	}
+	return enabled
 }
 
 // turnUserID returns the Gram user whose identity a turn should act under.

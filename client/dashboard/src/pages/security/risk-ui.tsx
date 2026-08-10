@@ -120,35 +120,6 @@ export function SeverityBadge({
     </SimpleTooltip>
   );
 }
-
-// Numeric severity, rendered as a color-coded pill. Used in list/table columns
-// where the raw score is more useful than the qualitative label — the number
-// carries the exact value while the band color (shared with SeverityBadge) makes
-// severity scannable at a glance.
-export function SeverityScore({
-  score,
-  className,
-}: {
-  score: number | undefined;
-  className?: string;
-}): JSX.Element {
-  if (score == null) {
-    return <span className="text-muted-foreground text-sm">-</span>;
-  }
-  // Rate on the rounded value we actually display, so a score sitting just below
-  // a band boundary (e.g. 3.96 → shown as "4.0") never renders the number in a
-  // color that disagrees with the band its displayed value falls in.
-  const displayed = Math.round(score * 10) / 10;
-  const rating = scoreToRating(displayed);
-  return (
-    <SimpleTooltip tooltip={`${SEVERITY_RATING_LABEL[rating]} severity`}>
-      <Badge variant={SEVERITY_BADGE_VARIANT[rating]} className={className}>
-        <Badge.Text className="tabular-nums">{displayed.toFixed(1)}</Badge.Text>
-      </Badge>
-    </SimpleTooltip>
-  );
-}
-
 export function RevealAllProvider({
   children,
 }: {
@@ -193,7 +164,7 @@ export function RevealAllToggle({
         aria-label={revealAll ? "Hide all matches" : "Reveal all matches"}
         className={
           className ??
-          "border-border hover:bg-muted text-muted-foreground inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm transition-colors"
+          "border-border hover:bg-muted text-muted-foreground inline-flex h-9 items-center gap-2 border px-3 text-sm transition-colors"
         }
       >
         {revealAll ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
@@ -432,7 +403,7 @@ export function EventMatchDialog({
           </Dialog.Description>
         </Dialog.Header>
         {summary ? (
-          <div className="bg-muted/40 space-y-1 rounded-md border p-3">
+          <div className="bg-muted/40 space-y-1 border p-3">
             <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
               Why this was flagged
             </div>

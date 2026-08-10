@@ -120,7 +120,7 @@ export const TumUsageSection = (): JSX.Element => {
                 <button
                   type="button"
                   onClick={reset}
-                  className="border-border hover:bg-muted text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 rounded-md border px-2.5 py-2 text-sm transition-colors"
+                  className="border-border hover:bg-muted text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 border px-2.5 py-2 text-sm transition-colors"
                 >
                   <RotateCcw className="size-3.5" />
                   Reset

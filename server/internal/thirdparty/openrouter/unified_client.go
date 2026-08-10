@@ -75,6 +75,16 @@ func NewUnifiedClient(
 	}
 }
 
+// ResolveKey exposes key resolution so callers can scope rate-limit buckets to
+// the key a completion would spend.
+func (c *ChatClient) ResolveKey(ctx context.Context, orgID string, projectID string, slot billing.ModelUsageSource, keyType KeyType) (ResolvedKey, error) {
+	resolved, err := c.keyResolver.ResolveKey(ctx, orgID, projectID, slot, keyType.OrDefault())
+	if err != nil {
+		return ResolvedKey{}, fmt.Errorf("resolve OpenRouter key: %w", err)
+	}
+	return resolved, nil
+}
+
 type initializeRequestResult struct {
 	apiKey         string
 	customerKey    bool
@@ -330,7 +340,7 @@ func (c *ChatClient) requestCompletion(ctx context.Context, apiKey string, reqBo
 	}
 
 	if httpResp.StatusCode != http.StatusOK {
-		return OpenAIChatResponse{}, body, classifyHTTPError(ctx, httpResp.StatusCode, body)
+		return OpenAIChatResponse{}, body, classifyHTTPError(ctx, httpResp.StatusCode, httpResp.Header, body)
 	}
 
 	var chatResp OpenAIChatResponse
@@ -470,7 +480,7 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 	if httpResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(httpResp.Body)
 		o11y.NoLogDefer(func() error { return httpResp.Body.Close() })
-		return nil, classifyHTTPError(ctx, httpResp.StatusCode, body)
+		return nil, classifyHTTPError(ctx, httpResp.StatusCode, httpResp.Header, body)
 	}
 
 	// Wrap the response body with SSE parser that accumulates metadata

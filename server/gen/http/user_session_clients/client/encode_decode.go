@@ -751,6 +751,7 @@ func unmarshalUserSessionClientResponseBodyToTypesUserSessionClient(v *UserSessi
 		ID:                    *v.ID,
 		UserSessionIssuerID:   *v.UserSessionIssuerID,
 		ClientID:              *v.ClientID,
+		ClientIDMetadataURI:   v.ClientIDMetadataURI,
 		ClientName:            *v.ClientName,
 		ClientIDIssuedAt:      *v.ClientIDIssuedAt,
 		ClientSecretExpiresAt: v.ClientSecretExpiresAt,

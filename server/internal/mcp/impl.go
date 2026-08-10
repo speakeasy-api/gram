@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -63,7 +64,6 @@ import (
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/gram/server/internal/oauth"
 	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -72,12 +72,13 @@ import (
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
-	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
@@ -117,10 +118,14 @@ type Service struct {
 	cimdOrgFlagMu        sync.RWMutex
 	cimdOrgFlagLastKnown map[string]bool
 	// cimdResolver fetches + validates Client ID Metadata Documents for
-	// URL-shaped client_ids and owns the cimd.* telemetry.
-	cimdResolver           *cimd.Resolver
+	// URL-shaped client_ids and owns the cimd.fetch.* telemetry.
+	cimdResolver *cimd.Resolver
+	// cimdAdmissionMetrics records the per-issuer admission decisions made
+	// before the resolver runs, on their own cimd.admission.decisions
+	// instrument (a denial performs no fetch, so it has no place under
+	// cimd.fetch.attempts).
+	cimdAdmissionMetrics   *admission.Metrics
 	toolProxy              *gateway.ToolProxy
-	oauthService           OAuthService
 	oauthRepo              *oauth_repo.Queries
 	billingTracker         billing.Tracker
 	billingRepository      billing.Repository
@@ -151,7 +156,7 @@ type Service struct {
 	// HS256 with GRAM_JWT_SIGNING_KEY -- same key the chat-session signer
 	// uses, intentionally separate signer code so each path is removable
 	// in isolation.
-	userSessionSigner *usersessions.Signer
+	userSessionSigner *sessiontokens.Signer
 	// remoteChallengeMgr drives the per-remote OAuth authn leg used by the
 	// interactive /connect cards and the /remote_login_callback handler.
 	remoteChallengeMgr *remotesessions.ChallengeManager
@@ -269,7 +274,6 @@ func NewService(
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
 	funcCaller functions.ToolCaller,
-	oauthService OAuthService,
 	billingTracker billing.Tracker,
 	billingRepository billing.Repository,
 	telemLogger *tm.Logger,
@@ -285,7 +289,7 @@ func NewService(
 	platformFeatureChecker platformtools.FeatureChecker,
 	platformToolsets map[string]platformtools.Toolset,
 	identityResolver IdentityResolver,
-	userSessionSigner *usersessions.Signer,
+	userSessionSigner *sessiontokens.Signer,
 	remoteChallengeMgr *remotesessions.ChallengeManager,
 	remoteProxyManager *remotemcp.ProxyManager,
 	tunnelRoutes route.Store,
@@ -330,6 +334,7 @@ func NewService(
 		cimdOrgFlagMu:        sync.RWMutex{},
 		cimdOrgFlagLastKnown: map[string]bool{},
 		cimdResolver:         cimd.NewResolver(guardianPolicy, meterProvider, logger),
+		cimdAdmissionMetrics: admission.NewMetrics(meterProvider, logger),
 		toolProxy: gateway.NewToolProxy(
 			logger,
 			tracerProvider,
@@ -341,7 +346,6 @@ func NewService(
 			funcCaller,
 			platformSvc,
 		),
-		oauthService:           oauthService,
 		oauthRepo:              oauth_repo.New(db),
 		billingTracker:         billingTracker,
 		billingRepository:      billingRepository,
@@ -379,19 +383,27 @@ func NewService(
 	}
 }
 
-func (s *Service) authorizationChallengesURL(ctx context.Context) string {
+func (s *Service) requestAccessURL(ctx context.Context, serverID string, serverName string) string {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return ""
 	}
 
-	return mcpaccess.AuthorizationChallengesURL(s.siteURL, authCtx.OrganizationSlug)
+	return mcpaccess.RequestAccessURL(s.siteURL, authCtx.OrganizationSlug, mcpaccess.RequestAccessURLParams{
+		Scope:        "mcp:connect",
+		ResourceID:   serverID,
+		ResourceName: serverName,
+	})
 }
 
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
 	o11y.AttachHandler(mux, "POST", PlatformToolsetRoute, oops.ErrHandle(service.logger, service.ServePlatformToolset).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/remote_login_callback", oops.ErrHandle(service.logger, service.HandleRemoteLoginCallback).ServeHTTP)
+	// Backwards-compat: remote_session_clients flagged LegacyCallbackUrl were
+	// registered upstream against the retired oauth_proxy_servers /oauth/callback.
+	// Keep it mounted so their responses forward into remote_login_callback.
+	o11y.AttachHandler(mux, "GET", "/oauth/callback", oops.ErrHandle(service.logger, service.HandleLegacyProxyCallback).ServeHTTP)
 	// Public, unauthenticated outbound-CIMD document endpoint. Deployment-global
 	// (not slug-scoped): clients are addressed by their globally unique id.
 	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-client/{id}", oops.ErrHandle(service.logger, service.HandleClientMetadataDocument).ServeHTTP)
@@ -400,6 +412,7 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}", oops.MCPErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
 		return service.HandleGetServer(w, r, metadataService)
 	}).ServeHTTP)
+	o11y.AttachHandler(mux, "DELETE", "/mcp/{mcpSlug}", oops.MCPErrHandle(service.logger, service.HandleDeleteServer).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/install", oops.ErrHandle(service.logger, metadataService.ServeInstallPage).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/install-page-{hash}.js", oops.ErrHandle(service.logger, metadataService.ServeInstallPageScript).ServeHTTP)
 
@@ -414,6 +427,7 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/connect", oops.ErrHandle(service.logger, service.HandleConsent).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/connect", oops.ErrHandle(service.logger, service.HandleConsent).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/connect/remote-session", oops.ErrHandle(service.logger, service.HandleConsentAction).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/connect/first-party", oops.ErrHandle(service.logger, service.HandleFirstPartyConnect).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/consent-page-{hash}.js", oops.ErrHandle(service.logger, service.ServeConsentScript).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}/token", oops.ErrHandle(service.logger, service.HandleToken).ServeHTTP)
@@ -428,6 +442,14 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 // unexported manager field.
 func (s *Service) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Request) error {
 	return s.remoteChallengeMgr.HandleRemoteLoginCallback(w, r) //nolint:wrapcheck // thin passthrough; the inner handler already writes the HTTP response.
+}
+
+// HandleLegacyProxyCallback is the chi handler at `GET /oauth/callback`. Thin
+// passthrough to remotesessions.ChallengeManager: it forwards legacy
+// oauth_proxy_servers-era callbacks (remote_session_clients flagged
+// LegacyCallbackUrl) into /mcp/remote_login_callback.
+func (s *Service) HandleLegacyProxyCallback(w http.ResponseWriter, r *http.Request) error {
+	return s.remoteChallengeMgr.HandleLegacyProxyCallback(w, r) //nolint:wrapcheck // thin passthrough; the inner handler already writes the HTTP response.
 }
 
 // HandleClientMetadataDocument is the public outbound-CIMD document endpoint at
@@ -466,25 +488,107 @@ func (s *Service) HandleOpenAIAppsChallenge(w http.ResponseWriter, r *http.Reque
 	return nil
 }
 
-// HandleGetServer handles GET requests to /mcp/{mcpSlug}, checking for HTML requests
-// and delegating to metadata service, or returning method not allowed for others.
+// HandleGetServer handles GET requests to /mcp/{mcpSlug}. Browser requests
+// (HTML Accept header) get the install page. SSE requests (Accept:
+// text/event-stream) against a proxy-backed (remote/tunneled) mcp_server are
+// the Streamable HTTP standalone server->client stream (spec § Listening for
+// Messages from the Server) and dispatch through the unified endpoint
+// dispatcher so the proxy relays them upstream. Everything else — including
+// SSE requests against toolset-backed servers, which never send
+// server-initiated messages — keeps the legacy 405.
 func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metadataService *mcpmetadata.Service) error {
-	// Check if this is a browser request (HTML Accept header)
+	var wantsHTML, wantsSSE bool
 	for mediaTypeFull := range strings.SplitSeq(r.Header.Get("Accept"), ",") {
-		if mediatype, _, err := mime.ParseMediaType(mediaTypeFull); err == nil && (mediatype == "text/html" || mediatype == "application/xhtml+xml") {
-			// Intentionally NOT gated by enforceCustomDomainLockdown: the
-			// install page must remain reachable on the platform host even
-			// when the org's custom domain has an IP allowlist (private MCP
-			// install pages rely on the platform-host session cookie). Only
-			// the runtime POST path (ServePublic) is locked down.
-			if err := metadataService.ServeInstallPage(w, r); err != nil {
-				return fmt.Errorf("failed to serve install page: %w", err)
-			}
-			return nil
+		mediatype, params, err := mime.ParseMediaType(mediaTypeFull)
+		if err != nil {
+			continue
+		}
+		// An explicit q=0 marks the media type as not acceptable (RFC 9110
+		// § 12.4.2) — never route toward a representation the client rejected.
+		if q, qErr := strconv.ParseFloat(params["q"], 64); qErr == nil && q == 0 {
+			continue
+		}
+		switch mediatype {
+		case "text/html", "application/xhtml+xml":
+			wantsHTML = true
+		case "text/event-stream":
+			wantsSSE = true
+		}
+	}
+
+	if wantsHTML {
+		// Intentionally NOT gated by enforceCustomDomainLockdown: the
+		// install page must remain reachable on the platform host even
+		// when the org's custom domain has an IP allowlist (private MCP
+		// install pages rely on the platform-host session cookie). Only
+		// the runtime paths (ServePublic, serveProxyBackedEndpoint) are
+		// locked down.
+		if err := metadataService.ServeInstallPage(w, r); err != nil {
+			return fmt.Errorf("failed to serve install page: %w", err)
+		}
+		return nil
+	}
+
+	// The Streamable HTTP spec requires clients to send Accept:
+	// text/event-stream on this GET; gating on it keeps health checkers and
+	// other stray probes answering locally instead of generating upstream
+	// noise.
+	if wantsSSE {
+		if handled, err := s.serveProxyBackedEndpoint(w, r); handled {
+			return err
 		}
 	}
 
 	return oops.E(oops.CodeMethodNotAllowed, nil, "This MCP server uses POST-based Streamable HTTP transport. This GET request is a normal compatibility probe by the MCP client and can be safely ignored. The client will automatically use POST for actual communication.")
+}
+
+// HandleDeleteServer handles DELETE requests to /mcp/{mcpSlug} — Streamable
+// HTTP session termination (spec § Session Management). Proxy-backed servers
+// relay it upstream so the remote session is actually torn down;
+// toolset-backed servers hold no upstream session state, so the method stays
+// unsupported there.
+func (s *Service) HandleDeleteServer(w http.ResponseWriter, r *http.Request) error {
+	if handled, err := s.serveProxyBackedEndpoint(w, r); handled {
+		return err
+	}
+	return oops.E(oops.CodeMethodNotAllowed, nil, "session termination is not supported for this MCP server")
+}
+
+// serveProxyBackedEndpoint resolves {mcpSlug} and, when it maps to a
+// proxy-backed (remote or tunneled) mcp_server, dispatches the request
+// through the unified endpoint dispatcher — the same issuer gate + backend
+// switch the POST path uses. handled=true means an authoritative outcome was
+// reached (dispatched, or failed in a way the caller must propagate);
+// handled=false means the slug does not resolve or resolves to a non-proxy
+// backend, so callers fall back to their legacy behavior.
+func (s *Service) serveProxyBackedEndpoint(w http.ResponseWriter, r *http.Request) (handled bool, err error) {
+	ctx := r.Context()
+
+	mcpSlug := chi.URLParam(r, "mcpSlug")
+	if mcpSlug == "" {
+		return false, nil
+	}
+	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
+
+	mcpEndpoint, mcpServer, err := s.ResolveMCPEndpointAndServer(ctx, logger, mcpSlug)
+	var shareErr *oops.ShareableError
+	switch {
+	case err == nil:
+	case errors.As(err, &shareErr) && shareErr.Code == oops.CodeNotFound:
+		return false, nil
+	default:
+		return true, err
+	}
+
+	if !mcpServer.RemoteMcpServerID.Valid && !mcpServer.TunneledMcpServerID.Valid {
+		return false, nil
+	}
+
+	if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
+		return true, err
+	}
+
+	return true, s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, "mcp")
 }
 
 // writeOAuthServerMetadataResponse builds the OAuth server metadata body and
@@ -674,26 +778,6 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		return oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for issuer-gated toolset").LogError(ctx, s.logger)
 	}
 
-	var oAuthProxyProvider *oauth_repo.OauthProxyProvider
-	if toolset.OauthProxyServerID.Valid {
-		providers, err := s.oauthRepo.ListOAuthProxyProvidersByServer(
-			ctx,
-			oauth_repo.ListOAuthProxyProvidersByServerParams{
-				OauthProxyServerID: toolset.OauthProxyServerID.UUID,
-				ProjectID:          toolset.ProjectID,
-			},
-		)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to load OAuth proxy providers").LogError(ctx, s.logger)
-		}
-
-		if len(providers) == 0 {
-			return oops.E(oops.CodeUnexpected, nil, "no OAuth proxy providers found").LogError(ctx, s.logger)
-		}
-
-		oAuthProxyProvider = &providers[0]
-	}
-
 	// Token extraction — best effort for public MCPs with OAuth.
 	// We collect tokens if present but don't return 401 here.
 	// checkToolsetSecurity below enforces auth requirements and returns
@@ -701,7 +785,7 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	//
 	// Private MCPs still enforce identity auth at this level since that's user
 	// identity, not per-tool security.
-	oauthRequired := toolset.ExternalOauthServerID.Valid || (oAuthProxyProvider != nil)
+	oauthRequired := toolset.ExternalOauthServerID.Valid
 
 	// Issuer-gated path is fully separate from the legacy switch below: try
 	// validating a user-session JWT; on success stamp ctx and skip the legacy
@@ -751,44 +835,8 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 					Token:                 authToken,
 				})
 			}
-		case toolset.McpIsPublic && oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "custom":
-			// Custom OAuth provider flow — validate and collect tokens if present
-			if authToken != "" {
-				oauthToken, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, authToken)
-				if errors.Is(err, oauth.ErrExpiredExternalSecrets) && oauthToken != nil {
-					s.logger.InfoContext(ctx, "upstream credentials expired, attempting refresh", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
-					var refreshedToken *oauth.Token
-					refreshedToken, err = s.oauthService.RefreshProxyToken(ctx, toolset.ID, oauthToken, oAuthProxyProvider, toolset)
-					if err != nil {
-						s.logger.WarnContext(ctx, "upstream token refresh failed", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug), attr.SlogError(err))
-					} else {
-						oauthToken = refreshedToken
-					}
-				}
-				if err != nil {
-					s.logger.WarnContext(ctx, "OAuth token validation failed", attr.SlogToolsetID(toolset.ID.String()), attr.SlogError(err))
-				} else {
-					s.logger.InfoContext(ctx, "OAuth token validated successfully", attr.SlogToolsetID(toolset.ID.String()), attr.SlogOAuthProvider(oAuthProxyProvider.Slug))
-				}
-				// Collect upstream secrets so checkToolsetSecurity knows the user
-				// authenticated. We skip this when the Gram access token itself has
-				// expired (ErrExpiredAccessToken) — an expired token must not grant
-				// access. We still collect when only the upstream credentials expired
-				// (ErrExpiredExternalSecrets) because the user's Gram session is
-				// valid; the upstream refresh is best-effort.
-				if oauthToken != nil && !errors.Is(err, oauth.ErrExpiredAccessToken) {
-					for _, externalSecret := range oauthToken.ExternalSecrets {
-						tokenInputs = append(tokenInputs, oauthTokenInputs{
-							securityKeys:          externalSecret.SecurityKeys,
-							remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-							Token:                 externalSecret.Token,
-						})
-					}
-				}
-			}
 		case !toolset.McpIsPublic:
-			isOAuthCapable := oAuthProxyProvider != nil && oAuthProxyProvider.ProviderType == "gram"
-			ctx, err = s.RequirePrivateIdentityAuth(ctx, w, r, isOAuthCapable, toolset.ID, oauthProtectedResourceURL)
+			ctx, err = s.RequirePrivateIdentityAuth(ctx, w, r, false, toolset.ID, oauthProtectedResourceURL)
 			if err != nil {
 				return err
 			}
@@ -845,7 +893,7 @@ func (s *Service) ServeToolsetResolved(w http.ResponseWriter, r *http.Request, t
 				return oops.E(oops.CodeUnexpected, err, "failed to load access grants").LogError(ctx, s.logger)
 			}
 			if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())); err != nil {
-				return fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err, s.authorizationChallengesURL(ctx)))
+				return fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, toolset.ID.String(), toolset.Name)))
 			}
 		}
 
@@ -1309,34 +1357,7 @@ func (s *Service) authenticateToken(ctx context.Context, token string, oauthReso
 		return authorizedCtx, nil
 	}
 
-	var oAuthToken *oauth.Token
 	var err error
-	if isOAuthCapable {
-		oAuthToken, err = s.oauthService.ValidateAccessToken(ctx, oauthResourceID, token)
-	}
-	if err == nil && oAuthToken != nil {
-		// OAuth token validated, authenticate with session
-		if len(oAuthToken.ExternalSecrets) == 0 {
-			return ctx, oops.E(oops.CodeUnauthorized, nil, "no session token found")
-		}
-
-		ctx, err = s.sessions.Authenticate(ctx, oAuthToken.ExternalSecrets[0].Token)
-		if err != nil {
-			return ctx, oops.E(oops.CodeUnauthorized, err, "failed to authenticate session")
-		}
-
-		authCtx, ok := contextvalues.GetAuthContext(ctx)
-		if !ok || authCtx == nil {
-			return ctx, oops.E(oops.CodeUnauthorized, nil, "no auth context found")
-		}
-
-		s.logger.InfoContext(ctx, "authenticated via gram OAuth", attr.SlogToolsetID(oauthResourceID.String()))
-		return ctx, nil
-	}
-
-	if errors.Is(err, oauth.ErrExpiredAccessToken) {
-		return ctx, oops.E(oops.CodeUnauthorized, err, "expired access token")
-	}
 
 	// Strategy 2: Try API key authentication (consumer scope)
 	sc := security.APIKeyScheme{

@@ -72,6 +72,15 @@ type RiskFindingRow struct {
 	// (risk.markResultsFalsePositive), independent of ExcludedAt. Nil for a
 	// freshly-scanned finding or after risk.unmarkResultsFalsePositive.
 	FalsePositiveAt *time.Time `ch:"false_positive_at"`
+
+	// Reveal metadata: which text StartPos/EndPos index (Surface), the scanner
+	// field and gjson path the span matched, and the recorded tool call id
+	// anchoring the finding. All empty when unknown; see the risk_findings
+	// column comments for the value sets.
+	Surface    string `ch:"surface"`
+	Field      string `ch:"field"`
+	Path       string `ch:"path"`
+	ToolCallID string `ch:"tool_call_id"`
 }
 
 // chNullable maps a nil pointer to an untyped nil interface so a Nullable
@@ -134,6 +143,10 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			"false_positive_at",
 			"message_created_at",
 			"assistant_id",
+			"surface",
+			"field",
+			"path",
+			"tool_call_id",
 		)
 
 	// inserted_at must be strictly increasing within this batch, not just
@@ -196,6 +209,10 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			chNullable(row.FalsePositiveAt),
 			row.MessageCreatedAt,
 			row.AssistantID,
+			row.Surface,
+			row.Field,
+			row.Path,
+			row.ToolCallID,
 		)
 	}
 

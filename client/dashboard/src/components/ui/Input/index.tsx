@@ -162,7 +162,7 @@ export function Input({
     <div className="relative">
       <div
         className={cn(
-          "flex items-center gap-3 rounded-md border border-input bg-surface-primary-default px-4 py-2 text-muted-foreground",
+          "flex items-center gap-3 border border-input bg-surface-primary-default px-4 py-2 text-muted-foreground",
           icon && "px-3",
           isFocused && "border-focus text-default",
           hasError && "border-destructive-default",

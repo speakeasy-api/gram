@@ -94,12 +94,12 @@ function RemoteIdentityProviderRow({
   const canEdit = remoteSessionScopeTier(issuer) === "project";
 
   return (
-    <div className="rounded-md border p-3">
+    <div className="border p-3">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         {issuer.logoAssetId ? (
           <AssetImage
             assetId={issuer.logoAssetId}
-            className="size-8 shrink-0 rounded"
+            className="size-8 shrink-0"
           />
         ) : null}
         <div className="min-w-0 flex-1">

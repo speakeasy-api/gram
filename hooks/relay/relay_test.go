@@ -723,9 +723,12 @@ func TestWritePluginOpenCodeRendersShim(t *testing.T) {
 	require.Equal(t, "https://gram.test", cfg.ServerURL)
 }
 
-func TestClaudeConfigChangeIsRelayed(t *testing.T) {
+func TestClaudeConfigChangeIsRelayedAfterMCPInventory(t *testing.T) {
 	fs := newFakeServer(t, nil)
 	cfg := authedConfig(t, fs.URL)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("TMPDIR", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
 	t.Setenv("PATH", t.TempDir())
 	payload := []byte(`{"session_id":"session-1","hook_event_name":"ConfigChange","source":"project_settings"}`)
@@ -733,93 +736,15 @@ func TestClaudeConfigChangeIsRelayed(t *testing.T) {
 	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderClaudeCode, payload, "--variant=cli")
 
 	require.Equal(t, 0, res.ExitCode)
-	require.Equal(t, 1, fs.count())
-	require.Equal(t, components.TypeSessionUpdated, fs.last().Event.Type)
-	require.Equal(t, "ConfigChange", *fs.last().Source.RawEventName)
-	require.Nil(t, fs.last().Data, "a missing Claude CLI must fail open without inventory")
-}
-
-func TestParseClaudeMCPInventory(t *testing.T) {
-	entries := parseClaudeMCPInventory(strings.Join([]string{
-		"Checking MCP server health...",
-		"remote: https://user:password@mcp.example.com/sse?api_key=secret&workspace=acme (SSE) - connected",
-		"plugin:linear:issues: npx -y mcp-remote https://linear.example.com/mcp?token=secret (STDIO) - connected",
-		"claude.ai Notion (Acme): https://mcp.notion.com/mcp (HTTP) - needs authentication",
-	}, "\n"))
-
-	require.Len(t, entries, 3)
-	require.Equal(t, "remote", entries[0].Name)
-	require.Equal(t, "https://user:password@mcp.example.com/sse?api_key=secret&workspace=acme", entries[0].URL)
-	require.Empty(t, entries[0].Command)
-	require.Equal(t, "issues", entries[1].Name)
-	require.Equal(t, "npx -y mcp-remote https://linear.example.com/mcp?token=secret", entries[1].Command)
-	require.Equal(t, "Notion (Acme)", entries[2].Name)
-}
-
-func TestClaudeSessionStartRelaysRedactedMCPInventory(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("fake claude executable uses a POSIX shell")
-	}
-
-	binDir := t.TempDir()
-	claudePath := filepath.Join(binDir, "claude")
-	require.NoError(t, os.WriteFile(claudePath, []byte("#!/bin/sh\npwd > \"$FAKE_CLAUDE_CWD_FILE\"\nprintf '%s\\n' \"$FAKE_CLAUDE_MCP_LIST\"\n"), 0o700))
-	t.Setenv("PATH", binDir)
-	cwdFile := filepath.Join(t.TempDir(), "cwd")
-	t.Setenv("FAKE_CLAUDE_CWD_FILE", cwdFile)
-	t.Setenv("FAKE_CLAUDE_MCP_LIST", strings.Join([]string{
-		"remote: https://user:password@mcp.example.com/sse?api_key=secret&workspace=acme (SSE) - connected",
-		"local: env GITHUB_TOKEN=ghp_secret local-mcp --auth token (STDIO) - connected",
-		"malformed: https://user:leaked@example.com/%zz?token=leaked (HTTP) - connected",
-	}, "\n"))
-
-	fs := newFakeServer(t, nil)
-	cfg := authedConfig(t, fs.URL)
-	cwd := t.TempDir()
-	payload := []byte(`{"session_id":"session-inventory","cwd":"` + cwd + `","hook_event_name":"SessionStart","source":"startup"}`)
-
-	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderClaudeCode, payload, "--variant=cli")
-
-	require.Equal(t, 0, res.ExitCode)
-	require.Equal(t, 1, fs.count())
-	require.NotNil(t, fs.last().Data)
-	require.Len(t, fs.last().Data.McpInventory, 2)
-	require.Equal(t, "remote", *fs.last().Data.McpInventory[0].ServerName)
-	require.Equal(t, "https://mcp.example.com/sse?api_key=%2A%2A%2A&workspace=acme", *fs.last().Data.McpInventory[0].URL)
-	require.NotContains(t, *fs.last().Data.McpInventory[0].URL, "password")
-	require.Equal(t, "env GITHUB_TOKEN=*** local-mcp --auth ***", *fs.last().Data.McpInventory[1].Command)
-	invocationCWD, err := os.ReadFile(cwdFile)
-	require.NoError(t, err)
-	require.Equal(t, cwd, strings.TrimSpace(string(invocationCWD)))
-}
-
-func TestClaudeConfigChangeCollectsFreshMCPInventory(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("fake claude executable uses a POSIX shell")
-	}
-
-	binDir := t.TempDir()
-	claudePath := filepath.Join(binDir, "claude")
-	require.NoError(t, os.WriteFile(claudePath, []byte("#!/bin/sh\nprintf '%s\\n' \"$FAKE_CLAUDE_MCP_LIST\"\n"), 0o700))
-	t.Setenv("PATH", binDir)
-
-	fs := newFakeServer(t, nil)
-	cfg := authedConfig(t, fs.URL)
-	runner := NewRunner(cfg)
-	cwd := t.TempDir()
-	payload := []byte(`{"session_id":"session-inventory-refresh","cwd":"` + cwd + `","hook_event_name":"ConfigChange","source":"project_settings"}`)
-
-	t.Setenv("FAKE_CLAUDE_MCP_LIST", "first: https://first.example.com/mcp (HTTP) - connected")
-	first := agenthookstest.Invoke(t, runner, agenthooks.ProviderClaudeCode, payload, "--variant=cli")
-	require.Equal(t, 0, first.ExitCode)
-
-	t.Setenv("FAKE_CLAUDE_MCP_LIST", "second: https://second.example.com/mcp (HTTP) - connected")
-	second := agenthookstest.Invoke(t, runner, agenthooks.ProviderClaudeCode, payload, "--variant=cli")
-	require.Equal(t, 0, second.ExitCode)
-
 	require.Equal(t, 2, fs.count())
-	require.Equal(t, "https://first.example.com/mcp", *fs.requests[0].Data.McpInventory[0].URL)
-	require.Equal(t, "https://second.example.com/mcp", *fs.requests[1].Data.McpInventory[0].URL)
+	require.Equal(t, components.TypeMcpInventory, fs.requests[0].Event.Type)
+	require.NotNil(t, fs.requests[0].Data)
+	require.NotNil(t, fs.requests[0].Data.McpInventory)
+	require.Empty(t, fs.requests[0].Data.McpInventory)
+	configChange := fs.last()
+	require.Equal(t, components.TypeSessionUpdated, configChange.Event.Type)
+	require.Equal(t, "ConfigChange", *configChange.Source.RawEventName)
+	require.Nil(t, configChange.Data)
 }
 
 // TestLoginCommandQuotesUnsafePaths ensures the nudge command survives shell
@@ -1562,4 +1487,127 @@ func TestSendBoundsTotalRetryTime(t *testing.T) {
 
 	require.Equal(t, 0, res.statusCode, "a hung endpoint yields a transport failure, not a verdict")
 	require.Less(t, time.Since(start), 10*time.Second, "the send budget must bound retries end to end")
+}
+
+// TestEnvelopeReportsBinaryVersion keeps relay version skew diagnosable from
+// ingested events.
+func TestEnvelopeReportsBinaryVersion(t *testing.T) {
+	previous := BinaryVersion
+	t.Cleanup(func() { BinaryVersion = previous })
+	BinaryVersion = "9.9.9"
+
+	payload := buildEnvelope(&agenthooks.PromptEvent{
+		Event: agenthooks.Event{
+			Provider:   agenthooks.ProviderCodex,
+			Kind:       agenthooks.KindPromptSubmitted,
+			NativeName: "UserPromptSubmit",
+			Session:    agenthooks.SessionInfo{ID: "s1"},
+		},
+		Prompt: "hello",
+	}, "host")
+
+	require.NotNil(t, payload.Source.AdapterVersion)
+	require.Equal(t, "9.9.9", *payload.Source.AdapterVersion)
+}
+
+func TestMCPInventoryEnvelopeRedactsCredentials(t *testing.T) {
+	payload := buildEnvelope(&agenthooks.MCPInventoryEvent{
+		Event: agenthooks.Event{
+			Provider:   agenthooks.ProviderClaudeCode,
+			Kind:       agenthooks.KindMCPInventory,
+			NativeName: "MCPInventory",
+			Session:    agenthooks.SessionInfo{ID: "inventory-session"},
+		},
+		Servers: []agenthooks.MCPServer{
+			{Name: "remote", URL: "https://user:password@mcp.example.com/sse?api_key=secret&workspace=acme", Command: ""},
+			{Name: "local", URL: "", Command: "env GITHUB_TOKEN=secret local-mcp --auth token"},
+		},
+		Complete: true,
+	}, "host")
+
+	require.Equal(t, components.TypeMcpInventory, payload.Event.Type)
+	require.NotNil(t, payload.Data)
+	require.NotNil(t, payload.Data.McpInventoryCollected)
+	require.True(t, *payload.Data.McpInventoryCollected)
+	require.Len(t, payload.Data.McpInventory, 2)
+	require.Equal(t, "https://mcp.example.com/sse?api_key=%2A%2A%2A&workspace=acme", *payload.Data.McpInventory[0].URL)
+	require.Equal(t, "env GITHUB_TOKEN=*** local-mcp --auth ***", *payload.Data.McpInventory[1].Command)
+}
+
+func TestRunnerRelaysMCPInventoryBeforeFirstMCPTool(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("TMPDIR", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("PATH", t.TempDir())
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".claude.json"), []byte(`{"mcpServers":{"remote":{"url":"https://user:password@mcp.example.com/sse?api_key=secret&workspace=test"}}}`), 0o600))
+
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
+	payload := []byte(`{"session_id":"ordered-inventory-session","hook_event_name":"PreToolUse","tool_name":"mcp__remote__call","tool_input":{},"tool_use_id":"tool-1"}`)
+
+	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderClaudeCode, payload, "--variant=cli")
+
+	require.Equal(t, 0, res.ExitCode)
+	require.GreaterOrEqual(t, fs.count(), 2)
+	inventory := fs.requests[0]
+	require.Equal(t, components.TypeMcpInventory, inventory.Event.Type)
+	require.NotNil(t, inventory.Data)
+	require.Len(t, inventory.Data.McpInventory, 1)
+	require.NotNil(t, inventory.Data.McpInventoryCollected)
+	require.False(t, *inventory.Data.McpInventoryCollected,
+		"the config fallback is ordered but remains incomplete when the CLI probe fails")
+	require.Equal(t, "remote", *inventory.Data.McpInventory[0].ServerName)
+	require.Equal(t, "https://mcp.example.com/sse?api_key=%2A%2A%2A&workspace=test", *inventory.Data.McpInventory[0].URL)
+
+	tool := fs.last()
+	require.Equal(t, components.TypeToolRequested, tool.Event.Type)
+	require.NotNil(t, tool.Data)
+	require.NotNil(t, tool.Data.ToolCall)
+	require.Equal(t, "mcp__remote__call", *tool.Data.ToolCall.Name)
+}
+
+func TestRunnerRelaysIncompleteEmptyMCPInventory(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("TMPDIR", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("PATH", t.TempDir())
+
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
+	payload := []byte(`{"session_id":"empty-inventory-session","hook_event_name":"SessionStart","source":"startup"}`)
+
+	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderClaudeCode, payload, "--variant=cli")
+
+	require.Equal(t, 0, res.ExitCode)
+	require.Equal(t, 2, fs.count())
+	inventory := fs.requests[0]
+	require.Equal(t, components.TypeMcpInventory, inventory.Event.Type)
+	require.NotNil(t, inventory.Data)
+	require.NotNil(t, inventory.Data.McpInventory)
+	require.NotNil(t, inventory.Data.McpInventoryCollected)
+	require.False(t, *inventory.Data.McpInventoryCollected,
+		"a failed CLI probe must not turn an empty fallback into proof that no servers exist")
+	require.Empty(t, inventory.Data.McpInventory)
+	require.Equal(t, components.TypeSessionStarted, fs.requests[1].Event.Type)
+}
+
+func TestMCPInventoryEnvelopeReportsIncompleteSnapshot(t *testing.T) {
+	payload := buildEnvelope(&agenthooks.MCPInventoryEvent{
+		Event: agenthooks.Event{
+			Provider:   agenthooks.ProviderCodex,
+			Kind:       agenthooks.KindMCPInventory,
+			NativeName: "MCPInventory",
+			Session:    agenthooks.SessionInfo{ID: "partial-inventory-session"},
+		},
+		Servers:  []agenthooks.MCPServer{{Name: "known", URL: "https://mcp.example.test"}},
+		Complete: false,
+	}, "host")
+
+	require.NotNil(t, payload.Data)
+	require.Len(t, payload.Data.McpInventory, 1)
+	require.NotNil(t, payload.Data.McpInventoryCollected)
+	require.False(t, *payload.Data.McpInventoryCollected)
 }

@@ -1,5 +1,6 @@
 import { useSessionData } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { Link } from "react-router";
 import { useCaptureEnterpriseGateViewed } from "@/contexts/Telemetry";
 import { AuthShell } from "@/pages/login/components/auth-shell";
 import { DemoBookingFlow } from "@/pages/demo/components/DemoBookingFlow";
@@ -42,6 +43,14 @@ export default function BookDemo(): JSX.Element {
       }
     >
       <DemoBookingFlow />
+      <div className="mt-6 text-center">
+        <Link
+          to="/explore-demo"
+          className="auth-mono text-[12px] text-[var(--muted)] underline underline-offset-4 transition-colors hover:text-black"
+        >
+          Or explore a live demo org →
+        </Link>
+      </div>
     </AuthShell>
   );
 }

@@ -1,19 +1,18 @@
 import { Page } from "@/components/page-layout";
-import { getGradientColors } from "@/components/gradient-colors";
 import { RequireScope } from "@/components/require-scope";
 import { AssistantActivitySparkline } from "@/components/assistants/activity-sparkline";
 import { AssistantOwner } from "@/components/assistants/assistant-owner";
 import { AssistantStatusToggle } from "@/components/assistants/status-toggle";
 import { CardContextMenu } from "@/components/card-context-menu";
 import { Badge } from "@/components/ui/Badge";
-import { DotCard } from "@/components/ui/DotCard";
+import { Card } from "@/components/ui/Card";
 import { Action, MoreActions } from "@/components/ui/MoreActions";
 import { SearchBar } from "@/components/ui/SearchBar";
 import {
   PageTabsTrigger,
   Tabs,
   TabsContent,
-  TabsList,
+  PageTabsList,
 } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
 import { UpdatedAt } from "@/components/updated-at";
@@ -57,8 +56,8 @@ export function AssistantsRoot(): JSX.Element {
 
 function AssistantsEmptyState({ onCreate }: { onCreate: () => void }) {
   return (
-    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
-      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+    <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16">
+      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center">
         <Icon name="bot" className="text-muted-foreground h-6 w-6" />
       </div>
       <Text variant="subheading" className="mb-1">
@@ -123,9 +122,9 @@ export default function AssistantsIndex(): JSX.Element {
       <Page.Section>
         <Page.Section.Title stage="beta">Assistants</Page.Section.Title>
         <Page.Section.Description className="max-w-xl">
-          Openclaw-inspired secure Assistants. Every assistant connects through
-          the MCPs and Skills your org already uses, with identity, guardrails,
-          and audit built in. Deployed to Slack.
+          Secure assistants that connect through the MCPs and Skills your org
+          already uses, with identity, guardrails, and audit built in. Deployed
+          to Slack.
         </Page.Section.Description>
         <Page.Section.CTA>
           <RequireScope
@@ -173,11 +172,11 @@ export default function AssistantsIndex(): JSX.Element {
           className="flex w-full flex-col"
         >
           <div className="border-b">
-            <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
+            <PageTabsList className="h-auto gap-6 bg-transparent p-0">
               <PageTabsTrigger value="assistants">Assistants</PageTabsTrigger>
               <PageTabsTrigger value="triggers">Triggers</PageTabsTrigger>
               <PageTabsTrigger value="audit">Activity</PageTabsTrigger>
-            </TabsList>
+            </PageTabsList>
           </div>
           <TabsContent
             value="assistants"
@@ -238,18 +237,10 @@ function AssistantsBody({
   );
 }
 
-// Each assistant gets a deterministic gradient tile behind its Bot icon,
-// derived from its id via the same hash that powers project avatar colors.
-function AssistantIcon({ assistant }: { assistant: Pick<Assistant, "id"> }) {
-  const colors = getGradientColors(assistant.id);
+function AssistantIcon() {
   return (
-    <div
-      className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br"
-      style={{
-        backgroundImage: `linear-gradient(${colors.angle}deg, ${colors.from}, ${colors.to})`,
-      }}
-    >
-      <Bot className="h-7 w-7 text-white" />
+    <div className="border-border bg-surface-secondary-default flex h-12 w-12 items-center justify-center border">
+      <Bot className="text-muted-foreground h-7 w-7" />
     </div>
   );
 }
@@ -319,9 +310,9 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
     <CardContextMenu actions={actions}>
       <routes.assistants.detail.Link
         params={[assistant.id]}
-        className="focus-visible:ring-ring block h-full rounded-xl no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+        className="focus-visible:ring-ring block h-full no-underline hover:no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
       >
-        <DotCard icon={<AssistantIcon assistant={assistant} />}>
+        <Card.Entity icon={<AssistantIcon />}>
           {/* Header row: name + actions */}
           <div className="mb-3 flex items-start justify-between gap-2">
             <Text
@@ -360,7 +351,7 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
               <UpdatedAt date={new Date(assistant.updatedAt)} />
             </div>
           </div>
-        </DotCard>
+        </Card.Entity>
       </routes.assistants.detail.Link>
     </CardContextMenu>
   );

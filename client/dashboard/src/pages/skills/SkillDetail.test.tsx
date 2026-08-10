@@ -107,6 +107,7 @@ vi.mock("@gram/client/react-query/skill.js", () => ({
         summary: "Summary",
         classification: "custom",
         sourceKind: "manual",
+        tags: [],
         versionCount: 1,
         seenCount: 3,
         updatedAt: new Date("2026-07-16T00:00:00Z"),
@@ -160,6 +161,9 @@ vi.mock("@gram/client/react-query/skillDistributions.js", () => ({
 }));
 vi.mock("@gram/client/react-query/skills.js", () => ({
   invalidateAllSkills: testState.invalidateSkills,
+}));
+vi.mock("@gram/client/react-query/skillTags.js", () => ({
+  invalidateAllSkillTags: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@gram/client/react-query/archiveSkill.js", () => ({
   useArchiveSkillMutation: () => testState.archive,
@@ -231,12 +235,14 @@ vi.mock("@/components/ui/Button", () => {
     children,
     onClick,
     disabled,
+    variant,
   }: {
     children: ReactNode;
     onClick?: () => void;
     disabled?: boolean;
+    variant?: string;
   }) => (
-    <button onClick={onClick} disabled={disabled}>
+    <button onClick={onClick} disabled={disabled} data-variant={variant}>
       {children}
     </button>
   );
@@ -448,10 +454,15 @@ describe("SkillDetail", () => {
     ).toBeTruthy();
   });
 
-  it("archives with the exact wrapper, navigates back, and invalidates all skill caches", async () => {
+  it("uses the destructive primary archive action and archives the skill", async () => {
     testState.archive.mutateAsync.mockResolvedValue(undefined);
     render(<SkillDetail />);
-    fireEvent.click(screen.getByRole("button", { name: "Archive" }));
+    const archiveButton = screen.getByRole("button", { name: "Archive" });
+    expect(archiveButton.getAttribute("data-variant")).toBe(
+      "destructive-primary",
+    );
+
+    fireEvent.click(archiveButton);
     fireEvent.click(screen.getByRole("button", { name: "Archive skill" }));
 
     await waitFor(() => {

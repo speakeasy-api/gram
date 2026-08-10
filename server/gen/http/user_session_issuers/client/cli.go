@@ -71,12 +71,17 @@ func BuildUpdateUserSessionIssuerPayload(userSessionIssuersUpdateUserSessionIssu
 	{
 		err = json.Unmarshal([]byte(userSessionIssuersUpdateUserSessionIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authn_challenge_mode\": \"interactive\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"session_duration_hours\": 1,\n      \"slug\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authn_challenge_mode\": \"interactive\",\n      \"client_id_metadata_admission_mode\": \"presets\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"session_duration_hours\": 1,\n      \"slug\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.AuthnChallengeMode != nil {
 			if !(*body.AuthnChallengeMode == "chain" || *body.AuthnChallengeMode == "interactive") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.authn_challenge_mode", *body.AuthnChallengeMode, []any{"chain", "interactive"}))
+			}
+		}
+		if body.ClientIDMetadataAdmissionMode != nil {
+			if !(*body.ClientIDMetadataAdmissionMode == "disabled" || *body.ClientIDMetadataAdmissionMode == "presets" || *body.ClientIDMetadataAdmissionMode == "open") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_id_metadata_admission_mode", *body.ClientIDMetadataAdmissionMode, []any{"disabled", "presets", "open"}))
 			}
 		}
 		if err != nil {
@@ -102,10 +107,11 @@ func BuildUpdateUserSessionIssuerPayload(userSessionIssuersUpdateUserSessionIssu
 		}
 	}
 	v := &usersessionissuers.UpdateUserSessionIssuerPayload{
-		ID:                   body.ID,
-		Slug:                 body.Slug,
-		AuthnChallengeMode:   body.AuthnChallengeMode,
-		SessionDurationHours: body.SessionDurationHours,
+		ID:                            body.ID,
+		Slug:                          body.Slug,
+		AuthnChallengeMode:            body.AuthnChallengeMode,
+		SessionDurationHours:          body.SessionDurationHours,
+		ClientIDMetadataAdmissionMode: body.ClientIDMetadataAdmissionMode,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -248,51 +254,6 @@ func BuildDeleteUserSessionIssuerPayload(userSessionIssuersDeleteUserSessionIssu
 	}
 	v := &usersessionissuers.DeleteUserSessionIssuerPayload{}
 	v.ID = id
-	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
-// BuildMigrateLegacyGramRegistrationsPayload builds the payload for the
-// userSessionIssuers migrateLegacyGramRegistrations endpoint from CLI flags.
-func BuildMigrateLegacyGramRegistrationsPayload(userSessionIssuersMigrateLegacyGramRegistrationsBody string, userSessionIssuersMigrateLegacyGramRegistrationsSessionToken string, userSessionIssuersMigrateLegacyGramRegistrationsApikeyToken string, userSessionIssuersMigrateLegacyGramRegistrationsProjectSlugInput string) (*usersessionissuers.MigrateLegacyGramRegistrationsPayload, error) {
-	var err error
-	var body MigrateLegacyGramRegistrationsRequestBody
-	{
-		err = json.Unmarshal([]byte(userSessionIssuersMigrateLegacyGramRegistrationsBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"oauth_proxy_provider_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
-		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.oauth_proxy_provider_id", body.OauthProxyProviderID, goa.FormatUUID))
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", body.UserSessionIssuerID, goa.FormatUUID))
-		if err != nil {
-			return nil, err
-		}
-	}
-	var sessionToken *string
-	{
-		if userSessionIssuersMigrateLegacyGramRegistrationsSessionToken != "" {
-			sessionToken = &userSessionIssuersMigrateLegacyGramRegistrationsSessionToken
-		}
-	}
-	var apikeyToken *string
-	{
-		if userSessionIssuersMigrateLegacyGramRegistrationsApikeyToken != "" {
-			apikeyToken = &userSessionIssuersMigrateLegacyGramRegistrationsApikeyToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if userSessionIssuersMigrateLegacyGramRegistrationsProjectSlugInput != "" {
-			projectSlugInput = &userSessionIssuersMigrateLegacyGramRegistrationsProjectSlugInput
-		}
-	}
-	v := &usersessionissuers.MigrateLegacyGramRegistrationsPayload{
-		OauthProxyProviderID: body.OauthProxyProviderID,
-		UserSessionIssuerID:  body.UserSessionIssuerID,
-	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

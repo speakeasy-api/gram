@@ -38,7 +38,7 @@ func setupGuideMatchKind(kind guides.MatchKind) (wire string, ok bool) {
 // Both inputs can match the same guide, so results are deduplicated by slug: the
 // most specific match wins its match_kind, and the endpoint it selected lands in
 // matched_remote_id.
-func resolveSetupGuides(registrySpecifier, serverURL string) []*types.MCPSetupGuide {
+func resolveSetupGuides(registrySpecifier, serverURL, callbackURL string) []*types.MCPSetupGuide {
 	// ByURL is the only source of endpoint matches and Resolve the only source of
 	// alias matches, so this order is descending specificity and the first match
 	// for a guide is its most specific one.
@@ -66,7 +66,7 @@ func resolveSetupGuides(registrySpecifier, serverURL string) []*types.MCPSetupGu
 				continue
 			}
 
-			view = toMCPSetupGuide(guide, wire)
+			view = toMCPSetupGuide(guide, wire, callbackURL)
 			bySlug[match.Ref.Guide] = view
 			views = append(views, view)
 		}
@@ -80,7 +80,7 @@ func resolveSetupGuides(registrySpecifier, serverURL string) []*types.MCPSetupGu
 	return views
 }
 
-func toMCPSetupGuide(guide guides.Guide, matchKind string) *types.MCPSetupGuide {
+func toMCPSetupGuide(guide guides.Guide, matchKind, callbackURL string) *types.MCPSetupGuide {
 	remotes := make([]*types.MCPSetupGuideRemote, 0, len(guide.Remotes))
 	for _, remote := range guide.Remotes {
 		remotes = append(remotes, &types.MCPSetupGuideRemote{
@@ -96,6 +96,8 @@ func toMCPSetupGuide(guide guides.Guide, matchKind string) *types.MCPSetupGuide 
 	aliases := make([]string, 0, len(guide.Aliases))
 	aliases = append(aliases, guide.Aliases...)
 
+	vars := guides.Vars{OAuthCallbackURL: callbackURL}
+
 	return &types.MCPSetupGuide{
 		Slug:              string(guide.Slug),
 		Title:             guide.Title,
@@ -105,7 +107,7 @@ func toMCPSetupGuide(guide guides.Guide, matchKind string) *types.MCPSetupGuide 
 		Remotes:           remotes,
 		MatchedRemoteID:   nil,
 		MatchKind:         matchKind,
-		ExternalMarkdown:  string(guide.External),
-		SpeakeasyMarkdown: string(guide.Speakeasy),
+		ExternalMarkdown:  string(guide.RenderExternal(vars)),
+		SpeakeasyMarkdown: string(guide.RenderSpeakeasy(vars)),
 	}
 }

@@ -1,5 +1,8 @@
-# Fixed project name so all git worktrees share the same infra containers
-# instead of each worktree creating its own set and causing port conflicts.
+# Per-worktree infra. `git:workinit` sets a unique COMPOSE_PROJECT_NAME (and
+# `zero:remap-ports` remaps the host ports) so each worktree gets its own stack
+# — postgres, clickhouse, temporal, observability, etc. — without colliding.
+# The one exception is the stateless Presidio analyzer, which is shared across
+# all worktrees; see compose.shared.yml.
 name: ${COMPOSE_PROJECT_NAME:-gram}
 
 services:
@@ -173,23 +176,6 @@ services:
         "start",
         "--host-port=0.0.0.0:8085",
       ]
-
-  gram-presidio:
-    image: mcr.microsoft.com/presidio-analyzer:2.2.362
-    restart: unless-stopped
-    ports:
-      - "${PRESIDIO_PORT}:3000"
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:3000/health')",
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   mcp-registry-db:
     profiles: [local-registry]

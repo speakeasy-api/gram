@@ -8,6 +8,7 @@ mise.local.toml
 mise.*.local.toml
 flags.local.csv
 *.tsbuildinfo
+.eslintcache
 node_modules
 bin
 junit-report.xml
@@ -108,3 +109,10 @@ __pycache__/
 
 # Storybook build output
 storybook-static/
+
+# Stray browser-automation screenshots at repo root (agents must use .playwright-cli/)
+/*.png
+
+# Removed orphaned Speakeasy build output (#4947); the SDK generates into
+# client/dashboard/src/sdk — nothing may reappear here.
+/client/sdk/

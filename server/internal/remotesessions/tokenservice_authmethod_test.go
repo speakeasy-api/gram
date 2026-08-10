@@ -167,6 +167,7 @@ func seedExpiredRemoteSession(t *testing.T, ctx context.Context, ti *testInstanc
 		RefreshTokenEncrypted: conv.PtrToPGText(&refreshEncStr),
 		RefreshExpiresAt:      pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		Scopes:                []string{},
+		Resource:              pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
 }

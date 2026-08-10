@@ -48,6 +48,38 @@ interface EnvironmentVariableRowProps {
   onHeaderBlur: () => void;
 }
 
+// Maps a stored config entry's providedBy value back to the row state it
+// represents, for comparing against the row's current state.
+function stateForProvidedBy(providedBy: string): EnvVarState {
+  switch (providedBy) {
+    case "user":
+      return "user-provided";
+    case "none":
+      return "omitted";
+    default:
+      return "system";
+  }
+}
+
+// Whether the user actually edited this row (mode change or header rename).
+// The hasUnsavedChanges prop also counts required variables that were never
+// configured, which would paint the unsaved indicator on pristine rows.
+function hasRowEdits(
+  envVar: EnvironmentVariable,
+  environmentConfigs: EnvironmentVariableRowProps["environmentConfigs"],
+  editingState: Map<string, { headerDisplayName?: string }>,
+): boolean {
+  const entry = environmentConfigs.find((e) => e.variableName === envVar.key);
+  if (entry && envVar.state !== stateForProvidedBy(entry.providedBy)) {
+    return true;
+  }
+  const editing = editingState.get(envVar.id);
+  if (editing?.headerDisplayName !== undefined) {
+    return editing.headerDisplayName !== (entry?.headerDisplayName || "");
+  }
+  return false;
+}
+
 const MODE_OPTIONS: Array<{
   value: EnvVarState;
   label: string;
@@ -166,17 +198,19 @@ export function EnvironmentVariableRow({
     });
   }
 
+  const showUnsavedIndicator =
+    hasUnsavedChanges && hasRowEdits(envVar, environmentConfigs, editingState);
+
   return (
     <div
       className={cn(
         "group relative grid grid-cols-[auto_1fr_auto] items-center gap-4 px-4 py-4 transition-colors",
         index !== totalCount - 1 && "border-b",
-        hasUnsavedChanges && "bg-amber-50/50 dark:bg-amber-950/20",
       )}
     >
       {/* Unsaved changes indicator */}
-      {hasUnsavedChanges && (
-        <div className="absolute top-0 bottom-0 left-0 w-0.5 bg-amber-500" />
+      {showUnsavedIndicator && (
+        <div className="bg-warning absolute top-0 bottom-0 left-0 w-0.5" />
       )}
       {/* Status indicator / Delete button */}
       <div className="relative flex items-center">
@@ -215,7 +249,7 @@ export function EnvironmentVariableRow({
             }}
             placeholder={`Display name for ${envVar.key}`}
             autoFocus
-            className="border-input bg-background placeholder:text-muted-foreground focus:ring-ring h-5 w-full rounded border px-1.5 py-0 font-mono text-sm focus:ring-2 focus:outline-none"
+            className="border-input bg-background placeholder:text-muted-foreground focus:ring-ring h-5 w-full border px-1.5 py-0 font-mono text-sm focus:ring-2 focus:outline-none"
           />
         ) : (
           <div className="group/header-edit flex h-6 w-full items-center gap-2">
@@ -274,7 +308,7 @@ export function EnvironmentVariableRow({
       <div className="flex items-center">
         <div
           className={cn(
-            "border-input bg-background flex h-9 items-center overflow-hidden rounded-md border",
+            "border-input bg-background flex h-9 items-center overflow-hidden border",
             "focus-within:ring-ring focus-within:ring-2",
           )}
         >
@@ -288,7 +322,7 @@ export function EnvironmentVariableRow({
           >
             <SelectTrigger
               tabIndex={-1}
-              className="bg-muted/50 h-full w-[90px] gap-0.5 rounded-none border-0 border-r font-mono text-xs uppercase shadow-none focus:ring-0 focus-visible:ring-0"
+              className="bg-muted/50 h-full w-[90px] gap-0.5 border-0 border-r font-mono text-xs uppercase shadow-none focus:ring-0 focus-visible:ring-0"
             >
               <span>
                 {MODE_OPTIONS.find((o) => o.value === envVar.state)?.label}

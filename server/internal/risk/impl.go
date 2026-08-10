@@ -31,6 +31,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/risk/server"
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/assets/blobio"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -136,6 +137,10 @@ type Service struct {
 	// Optional: when nil the ClickHouse mirror is skipped; Postgres remains the
 	// source of truth either way.
 	findingsPub gcp.Publisher[*riskv1.Finding]
+	// assetStorage reads chat content part assets for the ClickHouse reveal
+	// path, the same store the batch analysis activity hydrates parts from.
+	// Optional: when nil, content-part findings are not reconstructible.
+	assetStorage blobio.Reader
 }
 
 var _ chat.MessageObserver = (*Service)(nil)
@@ -177,6 +182,7 @@ func NewObserver(
 		promptJudge:                  nil,
 		findingsCH:                   nil,
 		findingsPub:                  nil,
+		assetStorage:                 nil,
 	}
 }
 
@@ -204,6 +210,7 @@ func NewService(
 	shadowMCPInventoryURLLookup ShadowMCPInventoryURLLookup,
 	findingsCH *chrepo.Queries,
 	findingsPub gcp.Publisher[*riskv1.Finding],
+	assetStorage blobio.Reader,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("risk"))
 
@@ -233,6 +240,7 @@ func NewService(
 		promptJudge:                  promptJudge,
 		findingsCH:                   findingsCH,
 		findingsPub:                  findingsPub,
+		assetStorage:                 assetStorage,
 	}
 }
 
@@ -367,17 +375,31 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		enabled = *payload.Enabled
 	}
 
+	shadowMCPDisposition := conv.PtrValOr(payload.ShadowMcpDisposition, "")
+	if err := validateShadowMCPDisposition(shadowMCPDisposition, sources, action); err != nil {
+		return nil, err
+	}
+
+	if enabled && action == "block" && slices.Contains(sources, shadowmcp.SourceShadowMCP) {
+		if err := requireSingleShadowMCPBlockingPolicy(ctx, s.repo, *authCtx.ProjectID, uuid.Nil); err != nil {
+			return nil, err
+		}
+	}
+
 	var shadowMCPAllowedURLs []string
 	if payload.ShadowMcpAllowedUrls != nil {
-		shadowMCPAllowedURLs, err = validateShadowMCPAllowedURLs(ctx, s.shadowMCPInventoryURLLookup, *authCtx.ProjectID, enabled, sources, action, payload.ShadowMcpAllowedUrls)
+		shadowMCPAllowedURLs, err = validateShadowMCPAllowedURLs(ctx, s.shadowMCPInventoryURLLookup, *authCtx.ProjectID, enabled, sources, action, shadowMCPDisposition, payload.ShadowMcpAllowedUrls)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	shadowMCPDisposition := conv.PtrValOr(payload.ShadowMcpDisposition, "")
-	if err := validateShadowMCPDisposition(shadowMCPDisposition, sources, action); err != nil {
-		return nil, err
+	var shadowMCPBlockedURLs []string
+	if payload.ShadowMcpBlockedUrls != nil {
+		shadowMCPBlockedURLs, err = validateShadowMCPBlockedURLs(shadowMCPDisposition, payload.ShadowMcpBlockedUrls)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Auto-generate a name when the caller opted in (explicit auto_name=true
@@ -486,10 +508,24 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		if err := s.reconcileShadowMCPPolicyURLs(ctx, dbtx, policybypass.ReconcilePolicyURLsInput{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			PolicyID:       row.ID.String(),
+			Scope:          authz.ScopeRiskPolicyBypass,
 			DesiredURLs:    shadowMCPAllowedURLs,
 			Principals:     audiencePrincipals,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "reconcile shadow mcp policy allowed urls").LogError(ctx, s.logger)
+		}
+	}
+	if payload.ShadowMcpBlockedUrls != nil {
+		// Block rules apply to everyone in the project: the grant audience is
+		// always the all-users principal, independent of the policy audience.
+		if err := s.reconcileShadowMCPPolicyURLs(ctx, dbtx, policybypass.ReconcilePolicyURLsInput{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			PolicyID:       row.ID.String(),
+			Scope:          authz.ScopeRiskPolicyBlock,
+			DesiredURLs:    shadowMCPBlockedURLs,
+			Principals:     []urn.Principal{authz.AllUsersPrincipal()},
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "reconcile shadow mcp policy blocked urls").LogError(ctx, s.logger)
 		}
 	}
 
@@ -806,6 +842,12 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	if current.ShadowMcpDisposition.Valid && current.ShadowMcpDisposition.String != "" && effectiveDisposition == "" {
 		return nil, oops.E(oops.CodeInvalid, nil, "cannot change the sources or action of a shadow mcp policy with a disposition; delete and recreate the policy instead")
 	}
+
+	if enabled && action == "block" && slices.Contains(sources, shadowmcp.SourceShadowMCP) {
+		if err := requireSingleShadowMCPBlockingPolicy(ctx, s.repo, *authCtx.ProjectID, current.ID); err != nil {
+			return nil, err
+		}
+	}
 	if payload.ShadowMcpDisposition != nil {
 		if effectiveDisposition == "" {
 			return nil, oops.E(oops.CodeInvalid, nil, "shadow mcp disposition requires a blocking shadow mcp policy")
@@ -818,7 +860,15 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 	var shadowMCPAllowedURLs []string
 	audienceUpdateRequested := payload.AudienceType != nil || payload.AudiencePrincipalUrns != nil
 	if payload.ShadowMcpAllowedUrls != nil {
-		shadowMCPAllowedURLs, err = validateShadowMCPAllowedURLs(ctx, s.shadowMCPInventoryURLLookup, *authCtx.ProjectID, enabled, sources, action, payload.ShadowMcpAllowedUrls)
+		shadowMCPAllowedURLs, err = validateShadowMCPAllowedURLs(ctx, s.shadowMCPInventoryURLLookup, *authCtx.ProjectID, enabled, sources, action, effectiveDisposition, payload.ShadowMcpAllowedUrls)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var shadowMCPBlockedURLs []string
+	if payload.ShadowMcpBlockedUrls != nil {
+		shadowMCPBlockedURLs, err = validateShadowMCPBlockedURLs(effectiveDisposition, payload.ShadowMcpBlockedUrls)
 		if err != nil {
 			return nil, err
 		}
@@ -932,10 +982,24 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		if err := s.reconcileShadowMCPPolicyURLs(ctx, dbtx, policybypass.ReconcilePolicyURLsInput{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			PolicyID:       row.ID.String(),
+			Scope:          authz.ScopeRiskPolicyBypass,
 			DesiredURLs:    shadowMCPAllowedURLs,
 			Principals:     audiencePrincipals,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "reconcile shadow mcp policy allowed urls").LogError(ctx, s.logger)
+		}
+	}
+	if payload.ShadowMcpBlockedUrls != nil {
+		// Block rules apply to everyone in the project: the grant audience is
+		// always the all-users principal, independent of the policy audience.
+		if err := s.reconcileShadowMCPPolicyURLs(ctx, dbtx, policybypass.ReconcilePolicyURLsInput{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			PolicyID:       row.ID.String(),
+			Scope:          authz.ScopeRiskPolicyBlock,
+			DesiredURLs:    shadowMCPBlockedURLs,
+			Principals:     []urn.Principal{authz.AllUsersPrincipal()},
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "reconcile shadow mcp policy blocked urls").LogError(ctx, s.logger)
 		}
 	}
 
@@ -1357,6 +1421,14 @@ func (s *Service) UnmaskRiskResult(ctx context.Context, payload *gen.UnmaskRiskR
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return nil, oops.C(oops.CodeInvalid)
+	}
+
+	// When the listing serves from ClickHouse, listed ids may only exist there
+	// (Postgres result writes are being retired), so the reveal must resolve
+	// against the same store — reconstructing the raw match from the original
+	// chat data per the finding's stored surface metadata.
+	if s.listFromClickHouse(ctx, authCtx) {
+		return s.unmaskRiskResultFromClickHouse(ctx, authCtx, id)
 	}
 
 	row, err := s.repo.GetRiskResultByID(ctx, repo.GetRiskResultByIDParams{

@@ -17,6 +17,7 @@ import (
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/infra/pkg/topics"
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assistants"
@@ -24,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	resolution_activities "github.com/speakeasy-api/gram/server/internal/background/activities/chat_resolutions"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/outbox_relay"
+	"github.com/speakeasy-api/gram/server/internal/background/activities/publish_outbox"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_exclusion"
 	risk_policy "github.com/speakeasy-api/gram/server/internal/background/activities/risk_policy"
@@ -47,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
@@ -76,6 +79,10 @@ type Publishers struct {
 	// publisher on it (see risk_analysis.batchOnlyFindingSources).
 	RiskFindings  gcp.Publisher[*riskv1.Finding]
 	TelemetryLogs gcp.Publisher[*telemetryv1.LogRecord]
+	// Outbox publishes whatever the publish_outbox table holds. It resolves its
+	// topic per message rather than being bound to one, because the destination
+	// is a property of the row and not of this wiring.
+	Outbox topics.Publisher
 }
 
 type Activities struct {
@@ -142,12 +149,15 @@ type Activities struct {
 	cancelAssistantsSubscription    *activities.CancelAssistantsSubscription
 	outboxRelay                     *outbox_relay.Relay
 	outboxGC                        *outbox_relay.GC
+	publishOutbox                   *publish_outbox.Relay
 	pluginPublisher                 *activities.PluginPublisher
 	listSpendRuleOrgs               *spend_rules.ListOrgs
 	evaluateOrgSpendRules           *spend_rules.EvaluateOrg
 	skillEfficacyScorer             *activities.SkillEfficacyScorer
 	skillSuggestionAnalyzer         *activities.SkillSuggestionAnalyzer
 	chatAnalysisScorer              *activities.ChatAnalysisScorer
+	remoteSessionRefresh            *activities.RemoteSessionRefresh
+	demoteExpiredTrials             *activities.DemoteExpiredTrials
 }
 
 func NewActivities(
@@ -244,6 +254,19 @@ func NewActivities(
 		panic(fmt.Errorf("new chat analysis judges: %w", err))
 	}
 
+	// The scheduled refresh shares the remotesessions single-flight primitive,
+	// which needs the Redis lock cache; workers wired without one (e.g.
+	// deployment-processing test workers) get a nil activity and the wrapper
+	// fails loudly if the sweep is ever scheduled there.
+	var remoteSessionRefresh *activities.RemoteSessionRefresh
+	if cacheAdapter != nil {
+		remoteSessionRefresh = activities.NewRemoteSessionRefresh(
+			logger,
+			db,
+			remotesessions.NewRefreshService(logger, db, encryption, guardianPolicy, cacheAdapter),
+		)
+	}
+
 	var skillSuggestionAnalyzer *activities.SkillSuggestionAnalyzer
 	if db != nil && telemetryRepo != nil && chatClient != nil && temporalEnv != nil && judgeRateLimiter != nil {
 		engine, err := suggest.NewEngine(suggest.DefaultConfig(), logger, db, telemetryRepo, chatrepo.New(db), chatClient, judgeRateLimiter)
@@ -315,10 +338,12 @@ func NewActivities(
 		processWorkOSGlobalRoleEvents:   activities.NewProcessWorkOSGlobalRoleEvents(logger, db, workosClient),
 		processWorkOSUserEvents:         activities.NewProcessWorkOSUserEvents(logger, db, workosClient),
 		cancelAssistantsSubscription:    activities.NewCancelAssistantsSubscription(logger, billingRepo),
-		outboxRelay:                     outbox_relay.New(logger, tracerProvider, db, svixClient, productFeatures),
+		outboxRelay:                     outbox_relay.New(logger, tracerProvider, db, svixClient),
 		outboxGC:                        outbox_relay.NewGC(logger, meterProvider, db),
+		publishOutbox:                   publish_outbox.New(logger, tracerProvider, meterProvider, db, publishers.Outbox),
 		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
 		listSpendRuleOrgs:               spend_rules.NewListOrgs(logger, db),
+		demoteExpiredTrials:             activities.NewDemoteExpiredTrials(logger, db, openrouterProvisioner, auditLogger),
 		evaluateOrgSpendRules:           spend_rules.NewEvaluateOrg(logger, tracerProvider, db, spendRulesCH, cacheAdapter, features),
 		// The judge draws on the same per-(org, model) bucket and the same
 		// completion client as every other platform judge, so efficacy scoring
@@ -332,6 +357,7 @@ func NewActivities(
 			&TemporalSkillEfficacySignaler{TemporalEnv: temporalEnv, Logger: logger},
 		),
 		skillSuggestionAnalyzer: skillSuggestionAnalyzer,
+		remoteSessionRefresh:    remoteSessionRefresh,
 		// The judges draw on the same per-(org, model) bucket and the same
 		// completion client as every other platform judge, so chat analysis
 		// cannot outspend the org's key behind their backs.
@@ -710,6 +736,25 @@ func (a *Activities) RelayOutboxEvents(ctx context.Context, args []*outbox_relay
 	return nil
 }
 
+// DrainPublishOutbox claims, publishes and settles one batch in a single
+// activity. Keeping it fused is deliberate: splitting claim from publish would
+// put message bodies into workflow history.
+func (a *Activities) DrainPublishOutbox(ctx context.Context) (publish_outbox.DrainResult, error) {
+	result, err := a.publishOutbox.Drain(ctx)
+	if err != nil {
+		return publish_outbox.DrainResult{}, fmt.Errorf("drain publish outbox: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) GCPublishOutboxDeadLetters(ctx context.Context, cutoff time.Time, batchSize int32) (int64, error) {
+	n, err := a.publishOutbox.DeleteDeadLetters(ctx, cutoff, batchSize)
+	if err != nil {
+		return 0, fmt.Errorf("gc publish outbox dead letters: %w", err)
+	}
+	return n, nil
+}
+
 func (a *Activities) GCOutboxProcessedRows(ctx context.Context, cutoff time.Time, batchSize int32) (int64, error) {
 	n, err := a.outboxGC.DeleteProcessedRows(ctx, cutoff, batchSize)
 	if err != nil {
@@ -752,6 +797,46 @@ func (a *Activities) EvaluateOrgSpendRules(ctx context.Context, args spend_rules
 func (a *Activities) RefreshSpendRuleActor(ctx context.Context, args spend_rules.EvaluateActorArgs) error {
 	if err := a.evaluateOrgSpendRules.RefreshActor(ctx, args); err != nil {
 		return fmt.Errorf("refresh spend rule actor: %w", err)
+	}
+	return nil
+}
+
+func (a *Activities) ClaimDueRemoteSessionRefreshCandidates(
+	ctx context.Context,
+	input activities.ClaimDueRemoteSessionRefreshCandidatesInput,
+) ([]activities.RemoteSessionRefreshCandidate, error) {
+	if a.remoteSessionRefresh == nil {
+		return nil, fmt.Errorf("claim due remote session refresh candidates: refresh service not configured")
+	}
+	candidates, err := a.remoteSessionRefresh.ClaimDueCandidates(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("claim due remote session refresh candidates: %w", err)
+	}
+	return candidates, nil
+}
+
+func (a *Activities) RefreshRemoteSession(ctx context.Context, input activities.RefreshRemoteSessionInput) (activities.RefreshRemoteSessionResult, error) {
+	if a.remoteSessionRefresh == nil {
+		return activities.RefreshRemoteSessionResult{RateLimited: false}, fmt.Errorf("refresh remote session: refresh lock cache not configured")
+	}
+	result, err := a.remoteSessionRefresh.Do(ctx, input)
+	if err != nil {
+		return activities.RefreshRemoteSessionResult{RateLimited: false}, fmt.Errorf("refresh remote session: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) ListExpiredTrials(ctx context.Context) ([]string, error) {
+	orgs, err := a.demoteExpiredTrials.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list expired trials: %w", err)
+	}
+	return orgs, nil
+}
+
+func (a *Activities) DemoteExpiredTrial(ctx context.Context, args activities.DemoteExpiredTrialArgs) error {
+	if err := a.demoteExpiredTrials.Demote(ctx, args); err != nil {
+		return fmt.Errorf("demote expired trial: %w", err)
 	}
 	return nil
 }

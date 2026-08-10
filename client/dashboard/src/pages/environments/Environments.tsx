@@ -2,7 +2,7 @@ import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { CardContextMenu } from "@/components/card-context-menu";
-import { DotCard } from "@/components/ui/DotCard";
+import { Card } from "@/components/ui/Card";
 import { Action, MoreActions } from "@/components/ui/MoreActions";
 import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -104,7 +104,7 @@ function EnvironmentsInner() {
         </Page.Section.CTA>
         <Page.Section.Body>
           {environments.length === 0 ? (
-            <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
+            <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16">
               <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
                 <Blocks className="text-muted-foreground h-6 w-6" />
               </div>
@@ -142,9 +142,10 @@ function EnvironmentsInner() {
         onOpenChange={setCreateEnvironmentDialogOpen}
         title="Create an Environment"
         description="Give your environment a name."
+        submitButtonText="Create"
         inputs={{
           label: "Environment name",
-          placeholder: "Environment name",
+          placeholder: "e.g. Production",
           value: environmentName,
           onChange: (value) => setEnvironmentName(value),
           onSubmit: createEnvironment,
@@ -193,7 +194,9 @@ function EnvironmentCard({
         params={[environment.slug]}
         className="block h-full hover:no-underline"
       >
-        <DotCard icon={<Blocks className="text-muted-foreground h-8 w-8" />}>
+        <Card.Entity
+          icon={<Blocks className="text-muted-foreground h-8 w-8" />}
+        >
           <div className="mb-2 flex items-start justify-between gap-2">
             <Text
               variant="subheading"
@@ -222,7 +225,7 @@ function EnvironmentCard({
               <ArrowRight className="h-3.5 w-3.5" />
             </div>
           </div>
-        </DotCard>
+        </Card.Entity>
       </routes.environments.environment.Link>
     </CardContextMenu>
   );
