@@ -1,4 +1,4 @@
-h1:pVJAQ3A2wahEpqgJiBwPC+CpAKegV0mreZxyVfhbSik=
+h1:bvRgBNcI4gI2J05PsMOVdm5K6P9vR9sOKNSh9S/L84M=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -325,6 +325,7 @@ h1:pVJAQ3A2wahEpqgJiBwPC+CpAKegV0mreZxyVfhbSik=
 20260810123455_platform-mcp-registration-state.sql h1:yDNAdMh6PnyzQsrTqg+NbNGC37Y7XJYVYYaIpVKrL7o=
 20260810150015_publish-outbox-insert-path.sql h1:d45UyqLxoy+f7htf3W1ucji6FucjtB5R2MM2FJ9Hns4=
 20260810153647_publish-outbox-lz4-seq-cache.sql h1:xIEdcllTcUDaHgkRp42y9897yUzaBkd2pdt6GKCBWBE=
-20260810163823_assistant-mcp-oauth-clients.sql h1:3SDNME0e28ulOgm6XdC91bW3j8GcptUpH4xyBOmhKs8=
-20260810204321_remote-session-issuers-add-revocation-endpoint.sql h1:n4L5u3pykYniGVyho3RlHz41euHPG2ExpDZPuF8NFus=
-20260810205917_risk-results-skill-version-anchor.sql h1:VMkuw0/vcIkegfraayNidz8dlhS3+hh7Y/KKJwkSfB8=
+20260810161651_publish-outbox-dead-letters-drop-fk.sql h1:aH2YKcqFJw1Y54Yj0iyXFd+2Fn7CWD9GoVa8/0HhvpI=
+20260810163823_assistant-mcp-oauth-clients.sql h1:zNkigHjXhdwWOqpzHKgF/NIt9W8y+Up8HEg/QNnrgAU=
+20260810204321_remote-session-issuers-add-revocation-endpoint.sql h1:aPF0uScO1bejP+8zr+E7wiYD87rRZ+RlvTjf/UxI5bQ=
+20260810205917_risk-results-skill-version-anchor.sql h1:T5QeWl8DbmtNKwZzqs2hdVjs6WBtSH6idoLAPq1hJKk=

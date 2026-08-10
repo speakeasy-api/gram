@@ -1,0 +1,4 @@
+-- Set comment to column: "organization_id" on table: "publish_outbox"
+COMMENT ON COLUMN "publish_outbox"."organization_id" IS 'Owning organization, carried through to the published message. Deliberately not a foreign key: the check would take a KEY SHARE lock on the organization row for every enqueue, and a stream of those against one busy org generates multixacts on a row that other writers update. Rows live seconds and the relay never joins to the organization, so an org deleted mid-flight leaves rows that publish and then delete themselves. Nothing downstream may reference the organization either: publish_outbox_dead_letters drops its foreign key for the same reason, since a row that outlived its organization still has to be able to reach it.';
+-- Modify "publish_outbox_dead_letters" table
+ALTER TABLE "publish_outbox_dead_letters" DROP CONSTRAINT "publish_outbox_dead_letters_organization_id_fkey";
