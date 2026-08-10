@@ -231,7 +231,10 @@ JOIN users
   ON users.id = our.user_id
 JOIN organization_role_assignments AS ora
   ON ora.organization_id = our.organization_id
-  AND ora.workos_user_id = users.workos_id
+  AND (
+    ora.user_id = users.id
+    OR (ora.user_id IS NULL AND ora.workos_user_id = users.workos_id)
+  )
   AND ora.deleted_at IS NULL
 LEFT JOIN organization_roles
   ON ora.role_urn = 'role:organization:' || organization_roles.id::text
@@ -262,9 +265,8 @@ type GetActiveOrganizationAdminRow struct {
 }
 
 // Returns one active organization administrator and their Loops contact fields.
-// The role assignment is joined by WorkOS user ID because
-// organization_role_assignments.user_id is nullable during the
-// WorkOS-to-Gram backfill window.
+// Prefer the internal user ID when the assignment has been linked; fall back
+// to the WorkOS user ID for assignments that predate that backfill.
 func (q *Queries) GetActiveOrganizationAdmin(ctx context.Context, arg GetActiveOrganizationAdminParams) (GetActiveOrganizationAdminRow, error) {
 	row := q.db.QueryRow(ctx, getActiveOrganizationAdmin, arg.OrganizationID, arg.UserID)
 	var i GetActiveOrganizationAdminRow
@@ -789,7 +791,10 @@ JOIN users
   ON users.id = our.user_id
 JOIN organization_role_assignments AS ora
   ON ora.organization_id = our.organization_id
-  AND ora.workos_user_id = users.workos_id
+  AND (
+    ora.user_id = users.id
+    OR (ora.user_id IS NULL AND ora.workos_user_id = users.workos_id)
+  )
   AND ora.deleted_at IS NULL
 LEFT JOIN organization_roles
   ON ora.role_urn = 'role:organization:' || organization_roles.id::text
@@ -815,9 +820,8 @@ type ListActiveOrganizationAdminsRow struct {
 }
 
 // Returns active organization administrators and their Loops contact fields.
-// The role assignment is joined by WorkOS user ID because
-// organization_role_assignments.user_id is nullable during the
-// WorkOS-to-Gram backfill window.
+// Prefer the internal user ID when the assignment has been linked; fall back
+// to the WorkOS user ID for assignments that predate that backfill.
 func (q *Queries) ListActiveOrganizationAdmins(ctx context.Context, organizationID string) ([]ListActiveOrganizationAdminsRow, error) {
 	rows, err := q.db.Query(ctx, listActiveOrganizationAdmins, organizationID)
 	if err != nil {

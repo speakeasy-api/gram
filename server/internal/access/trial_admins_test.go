@@ -75,6 +75,10 @@ func TestListActiveOrganizationAdmins(t *testing.T) {
 	require.NoError(t, err)
 	seedAdminQueryRoleAssignment(t, ctx, queries, authCtx.ActiveOrganizationID, orgAdminUserID, "workos-org-admin", "admin", now)
 	seedAdminQueryRoleAssignment(t, ctx, queries, authCtx.ActiveOrganizationID, memberUserID, "workos-member", "member", now)
+	require.NoError(t, userrepo.New(ti.conn).OverwriteUserWorkosID(ctx, userrepo.OverwriteUserWorkosIDParams{
+		WorkosID: conv.PtrToPGText(nil),
+		ID:       orgAdminUserID,
+	}))
 
 	admins, err := queries.ListActiveOrganizationAdmins(ctx, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
