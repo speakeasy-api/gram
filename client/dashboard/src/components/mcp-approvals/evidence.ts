@@ -197,10 +197,18 @@ export function parseEvidenceDocument(
 
   let exposure: EvidenceExposure | undefined;
   const exposureRecord = asRecord(root["exposure"]);
-  if (exposureRecord) {
-    const status = str(exposureRecord, "status");
+  // A status other than seen/unseen is a document this parser does not
+  // understand; dropping the section renders "could not be gathered" — the
+  // conservative unknown — rather than a reassuring no-traffic state.
+  const exposureStatus = exposureRecord
+    ? str(exposureRecord, "status")
+    : undefined;
+  if (
+    exposureRecord &&
+    (exposureStatus === "seen" || exposureStatus === "unseen")
+  ) {
     exposure = {
-      status: status === "seen" ? "seen" : "unseen",
+      status: exposureStatus,
       canonicalUrl: str(exposureRecord, "canonical_url"),
       urlHost: str(exposureRecord, "url_host"),
       serverName: str(exposureRecord, "server_name"),

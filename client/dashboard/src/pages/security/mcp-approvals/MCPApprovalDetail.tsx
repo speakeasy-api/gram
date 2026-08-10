@@ -18,8 +18,8 @@ import { useGetMcpApprovalRequest } from "@gram/client/react-query/getMcpApprova
 import { invalidateAllListMcpApprovalRequests } from "@gram/client/react-query/listMcpApprovalRequests.js";
 import { useRefreshMcpApprovalEvidenceMutation } from "@gram/client/react-query/refreshMcpApprovalEvidence.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { RefreshCw } from "lucide-react";
-import { useMemo } from "react";
+import { ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
+import { useMemo, useState } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
 
@@ -53,8 +53,8 @@ export default function MCPApprovalDetail(): JSX.Element {
       <Page.Body>
         <RequireScope scope="mcp_approval:read" level="page">
           <Page.Section>
-            <Page.Section.Title stage="preview">
-              {detail?.request.targetRaw ?? "Approval request"}
+            <Page.Section.Title stage="preview" area="MCP access request">
+              {detail?.request.targetRaw ?? "Access request"}
             </Page.Section.Title>
             <Page.Section.CTA>
               <RefreshEvidenceButton
@@ -264,17 +264,61 @@ function PriorDecisions({
                   "{decision.rationale}"
                 </p>
               )}
-              <p className="text-muted-foreground mt-1 text-xs">
-                Decided on the evidence as it stood then
-                {decision.evidenceVersion !== undefined &&
-                  ` (v${decision.evidenceVersion})`}
-                .
-              </p>
+              <FrozenEvidence decision={decision} />
             </li>
           ))}
         </ul>
       )}
     </section>
+  );
+}
+
+/**
+ * The evidence exactly as it stood when a decision was made. Frozen at
+ * decision time — a later re-gather updates the request's evidence but never
+ * this snapshot, so what the reviewer actually saw stays inspectable.
+ */
+function FrozenEvidence({
+  decision,
+}: {
+  decision: ApprovalDecision;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const document = useMemo(
+    () => parseEvidenceDocument(decision.evidence, decision.evidenceVersion),
+    [decision],
+  );
+
+  if (decision.evidence === undefined || decision.evidence === null) {
+    return (
+      <p className="text-muted-foreground mt-1 text-xs">
+        No evidence was on file when this was decided.
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-1.5">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs"
+      >
+        {open ? (
+          <ChevronUp className="size-3" />
+        ) : (
+          <ChevronDown className="size-3" />
+        )}
+        {open ? "Hide" : "View"} the evidence as it stood then
+        {decision.evidenceVersion !== undefined &&
+          ` (v${decision.evidenceVersion})`}
+      </button>
+      {open && (
+        <div className="border-border mt-2 border-l pl-2.5">
+          <EvidencePanel document={document} collectedAt={undefined} />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -324,9 +368,104 @@ function ResearchReports({
             {report.error && (
               <p className="text-muted-foreground mt-1">{report.error}</p>
             )}
+            <ReportClaims report={report.report} />
           </li>
         ))}
       </ul>
     </section>
   );
+}
+
+type ReportClaim = {
+  text: string;
+  tier?: string;
+  citations: string[];
+};
+
+/**
+ * Reads the version-1 report payload: a list of claims, each carrying a
+ * provenance tier and its citations. Tolerant like the evidence parser — an
+ * unrecognized shape renders nothing rather than crashing the page.
+ */
+function reportClaims(report: unknown): ReportClaim[] {
+  if (typeof report !== "object" || report === null || Array.isArray(report)) {
+    return [];
+  }
+  const claims = (report as Record<string, unknown>)["claims"];
+  if (!Array.isArray(claims)) return [];
+
+  const out: ReportClaim[] = [];
+  for (const entry of claims) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const record = entry as Record<string, unknown>;
+    const text = record["text"];
+    if (typeof text !== "string" || text === "") continue;
+    const citations = record["citations"];
+    out.push({
+      text,
+      tier: typeof record["tier"] === "string" ? record["tier"] : undefined,
+      citations: Array.isArray(citations)
+        ? citations.filter(
+            (citation): citation is string => typeof citation === "string",
+          )
+        : [],
+    });
+  }
+
+  return out;
+}
+
+function tierLabel(tier: string): string {
+  switch (tier) {
+    case "independently_reported":
+      return "Independently reported";
+    case "vendor_claim":
+      return "Vendor claim";
+    case "community_report":
+      return "Community report";
+    default:
+      return tier.replaceAll("_", " ");
+  }
+}
+
+function ReportClaims({ report }: { report: unknown }): JSX.Element | null {
+  const claims = reportClaims(report);
+  if (claims.length === 0) return null;
+
+  return (
+    <ul className="divide-border border-border mt-2 divide-y border-t">
+      {claims.map((claim) => (
+        <li key={claim.text} className="space-y-1 py-1.5">
+          <p>{claim.text}</p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {claim.tier && (
+              <span className="border-border text-muted-foreground border px-1.5 py-px text-xs">
+                {tierLabel(claim.tier)}
+              </span>
+            )}
+            {claim.citations.map((citation) => (
+              <a
+                key={citation}
+                href={citation}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-muted-foreground hover:text-foreground truncate underline underline-offset-2"
+              >
+                {citationHost(citation)}
+              </a>
+            ))}
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** A citation renders as its host — the link itself carries the full URL. */
+function citationHost(citation: string): string {
+  try {
+    return new URL(citation).host;
+  } catch {
+    return citation;
+  }
 }

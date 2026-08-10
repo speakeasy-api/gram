@@ -807,7 +807,7 @@ async function seedMCPApprovalData(init: {
     log.info("Seeded MCP approval requests, decisions, and research report");
   } catch (e) {
     const err = e as { message?: string; stderr?: string };
-    log.warn(
+    log.stepFailed(
       `Failed to seed MCP approval data: ${err.message || err.stderr || JSON.stringify(e)}`,
     );
   }

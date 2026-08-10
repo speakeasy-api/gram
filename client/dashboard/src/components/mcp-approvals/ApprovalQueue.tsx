@@ -21,6 +21,11 @@ const FILTERS = defineFilters([
   { id: "status", label: "Status", kind: "select" },
 ]);
 
+// The server's maximum page. The API exposes no cursor yet, so a queue at
+// this bound is truncated — said out loud below the table rather than
+// silently, and narrowable with the status filter and search.
+const QUEUE_LIMIT = 200;
+
 function ServerCell({
   request,
 }: {
@@ -56,7 +61,11 @@ export function ApprovalQueue(): JSX.Element {
   const status = values.status;
 
   const listQuery = useListMcpApprovalRequests(
-    { gramProject: project.slug, status: status ?? undefined },
+    {
+      gramProject: project.slug,
+      status: status ?? undefined,
+      limit: QUEUE_LIMIT,
+    },
     undefined,
     { enabled: project.slug.length > 0 },
   );
@@ -100,6 +109,16 @@ export function ApprovalQueue(): JSX.Element {
       render: (request) => <span>{request.requesterCount}</span>,
     },
     {
+      key: "raised",
+      header: "First raised",
+      width: "140px",
+      render: (request) => (
+        <span className="text-muted-foreground text-sm">
+          <HumanizeDateTime date={request.createdAt} includeTime={false} />
+        </span>
+      ),
+    },
+    {
       key: "updated",
       header: "Updated",
       width: "160px",
@@ -138,6 +157,12 @@ export function ApprovalQueue(): JSX.Element {
         }
         noResultsMessage={<span>No matching requests.</span>}
       />
+      {(listQuery.data?.requests.length ?? 0) >= QUEUE_LIMIT && (
+        <p className="text-muted-foreground mt-2 text-xs">
+          Showing the {QUEUE_LIMIT} most recent requests — narrow by status or
+          search to reach the rest.
+        </p>
+      )}
     </>
   );
 }

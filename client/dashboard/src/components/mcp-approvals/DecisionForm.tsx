@@ -30,16 +30,23 @@ export function DecisionForm({
   const decide = useRecordMcpApprovalDecisionMutation();
 
   const submit = async (decision: "approved" | "denied") => {
-    await decide.mutateAsync({
-      request: {
-        gramProject: projectSlug,
-        recordDecisionRequestBody: {
-          id: requestId,
-          decision,
-          rationale: rationale.trim(),
+    try {
+      await decide.mutateAsync({
+        request: {
+          gramProject: projectSlug,
+          recordDecisionRequestBody: {
+            id: requestId,
+            decision,
+            rationale: rationale.trim(),
+          },
         },
-      },
-    });
+      });
+    } catch {
+      // The typed rationale is deliberately kept: a failed submit must not
+      // cost the reviewer their writing.
+      toast.error("Recording the decision failed — nothing was saved");
+      return;
+    }
     await Promise.all([
       invalidateGetMcpApprovalRequest(queryClient, [{ id: requestId }]),
       invalidateAllListMcpApprovalRequests(queryClient),

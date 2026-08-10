@@ -8,7 +8,12 @@ import { MCPTableRow, MCPTableRowSkeleton } from "@/components/mcp/MCPTableRow";
 import { ApprovalQueue } from "@/components/mcp-approvals/ApprovalQueue";
 import { Page } from "@/components/page-layout";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
-import { PageTabsList, PageTabsTrigger, Tabs } from "@/components/ui/Tabs";
+import {
+  PageTabsList,
+  PageTabsTrigger,
+  Tabs,
+  TabsContent,
+} from "@/components/ui/Tabs";
 import { DotTable } from "@/components/ui/DotTable";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
@@ -108,7 +113,13 @@ export const MCPPage = (): JSX.Element => {
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <Tabs value={activeTab} onValueChange={selectTab}>
+      {/* The tab views live in TabsContent inside the same Tabs root as the
+          triggers, so assistive tech gets the trigger→panel association. */}
+      <Tabs
+        value={activeTab}
+        onValueChange={selectTab}
+        className="flex min-h-0 flex-1 flex-col"
+      >
         <div className="border-border shrink-0 border-b px-8">
           <PageTabsList className="h-auto gap-6 bg-transparent p-0">
             <PageTabsTrigger value="servers">Servers</PageTabsTrigger>
@@ -120,27 +131,33 @@ export const MCPPage = (): JSX.Element => {
             </PageTabsTrigger>
           </PageTabsList>
         </div>
+        <Page.Body>
+          <TabsContent value="servers">
+            <RequireScope scope={["mcp:read", "mcp:write"]} level="page">
+              <MCPOverview />
+            </RequireScope>
+          </TabsContent>
+          <TabsContent value="requests">
+            <RequireScope scope="mcp_approval:read" level="page">
+              <Page.Section>
+                {/* area="" — the MCP area eyebrow already sits over the page
+                    via the tab strip; repeating it under a secondary heading
+                    reads as a stutter. */}
+                <Page.Section.Title area="">
+                  MCP Access Requests
+                </Page.Section.Title>
+                <Page.Section.Description>
+                  Your team's requests to use MCP servers. Evidence is gathered
+                  for each request — the decision stays yours.
+                </Page.Section.Description>
+                <Page.Section.Body>
+                  <ApprovalQueue />
+                </Page.Section.Body>
+              </Page.Section>
+            </RequireScope>
+          </TabsContent>
+        </Page.Body>
       </Tabs>
-      <Page.Body>
-        {activeTab === "servers" ? (
-          <RequireScope scope={["mcp:read", "mcp:write"]} level="page">
-            <MCPOverview />
-          </RequireScope>
-        ) : (
-          <RequireScope scope="mcp_approval:read" level="page">
-            <Page.Section>
-              <Page.Section.Title>MCP Access Requests</Page.Section.Title>
-              <Page.Section.Description>
-                Your team's requests to use MCP servers. Evidence is gathered
-                for each request — the decision stays yours.
-              </Page.Section.Description>
-              <Page.Section.Body>
-                <ApprovalQueue />
-              </Page.Section.Body>
-            </Page.Section>
-          </RequireScope>
-        )}
-      </Page.Body>
     </Page>
   );
 };

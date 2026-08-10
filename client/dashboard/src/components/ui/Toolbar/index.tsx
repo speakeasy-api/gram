@@ -299,11 +299,12 @@ function ToolbarFilters({
     ).length + customFilters.length;
 
   // The sheet only earns its trigger when it holds something the chip row
-  // doesn't: unpinned dimensions, a custom-attribute builder, or active
-  // custom filters. A schema of only pinned dimensions would make "More
-  // filters" a second door to the same controls.
+  // doesn't: unpinned dimensions, hideChip dimensions (which never render a
+  // chip even when pinned), a custom-attribute builder, or active custom
+  // filters. A schema of only pinned dimensions would make "More filters" a
+  // second door to the same controls.
   const sheetHasMore =
-    schema.some((d) => !d.pinned) ||
+    schema.some((d) => !d.pinned || d.hideChip) ||
     customBuilder !== undefined ||
     customFilters.length > 0;
 

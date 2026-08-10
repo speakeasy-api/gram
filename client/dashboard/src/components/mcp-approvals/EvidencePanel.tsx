@@ -2,6 +2,8 @@ import { Badge } from "@/components/ui/Badge";
 import { Heading } from "@/components/ui/Heading";
 import { HumanizeDateTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
+import { ChevronDown, ChevronUp } from "lucide-react";
+import { useState } from "react";
 import type {
   EvidenceAuthority,
   EvidenceCapability,
@@ -282,6 +284,14 @@ function AuthoritySection({
           )}
         </div>
       ))}
+      {authority.optionalSecrets.length > 0 && (
+        <div className="border-border text-muted-foreground border px-2.5 py-1.5 text-xs">
+          Accepts optional secrets:{" "}
+          <span className="text-foreground font-mono">
+            {authority.optionalSecrets.map((secret) => secret.name).join(", ")}
+          </span>
+        </div>
+      )}
       <div className="border-border border">
         <FactList facts={facts} bare />
         {authority.scopes.length > 0 && (
@@ -305,10 +315,9 @@ function AuthoritySection({
       </div>
       {authority.unauthenticatedTools.length > 0 && (
         <div className="border-warning border px-2.5 py-1.5 text-xs">
-          Answers without any credential:{" "}
-          <span className="font-mono">
-            {authority.unauthenticatedTools.join(", ")}
-          </span>
+          Listed {authority.unauthenticatedTools.length}{" "}
+          {authority.unauthenticatedTools.length === 1 ? "tool" : "tools"} to an
+          unauthenticated caller — the protocol answered without any credential.
         </div>
       )}
     </EvidenceGroup>
@@ -351,6 +360,21 @@ function DeclaredCapabilitySection({
   source: "server" | "registry" | undefined;
 }): JSX.Element {
   if (capabilities.length === 0) {
+    // A source that answered with zero tools is a real declaration —
+    // rendered as such, never as a failed gather.
+    if (source) {
+      return (
+        <EvidenceGroup question="What does it say it can do?">
+          <div className="border-border border px-2.5 py-1.5 text-xs">
+            {source === "registry"
+              ? "The registry catalog's copy declares no tools."
+              : "The server answered the listing with zero tools."}{" "}
+            The listing succeeded — this is a declared-empty toolset, not a
+            failed check.
+          </div>
+        </EvidenceGroup>
+      );
+    }
     return (
       <EvidenceGroup question="What does it say it can do?">
         <UnknownBlock>
@@ -371,15 +395,34 @@ function DeclaredCapabilitySection({
         <div className="border-warning border px-2.5 py-1.5 text-xs">
           {actingTools.length === 1
             ? "One tool declares"
-            : `${actingTools.length} tools declare`}{" "}
-          acting on your behalf:{" "}
-          <span className="font-mono">
-            {actingTools.map((tool) => tool.tool).join(", ")}
-          </span>
+            : `${actingTools.length} of ${capabilities.length} tools declare`}{" "}
+          acting on your behalf.
         </div>
       )}
-      <ul className="border-border divide-border divide-y border">
-        {capabilities.map((tool) => (
+      <ToolList capabilities={capabilities} />
+    </EvidenceGroup>
+  );
+}
+
+/** How many tool rows show before the rest collapses behind the toggle. */
+const TOOL_PREVIEW_COUNT = 3;
+
+function ToolList({
+  capabilities,
+}: {
+  capabilities: EvidenceCapability[];
+}): JSX.Element {
+  const [expanded, setExpanded] = useState(false);
+  const collapsible = capabilities.length > TOOL_PREVIEW_COUNT;
+  const visible =
+    collapsible && !expanded
+      ? capabilities.slice(0, TOOL_PREVIEW_COUNT)
+      : capabilities;
+
+  return (
+    <div className="border-border border">
+      <ul className="divide-border divide-y">
+        {visible.map((tool) => (
           <li
             key={tool.tool}
             className="flex flex-wrap items-center justify-between gap-2 px-3 py-1 text-xs"
@@ -404,7 +447,26 @@ function DeclaredCapabilitySection({
           </li>
         ))}
       </ul>
-    </EvidenceGroup>
+      {collapsible && (
+        <button
+          type="button"
+          onClick={() => setExpanded((current) => !current)}
+          className="text-muted-foreground hover:text-foreground border-border flex w-full items-center justify-center gap-1 border-t px-3 py-1 text-xs"
+        >
+          {expanded ? (
+            <>
+              Show fewer
+              <ChevronUp className="size-3" />
+            </>
+          ) : (
+            <>
+              Show all {capabilities.length} tools
+              <ChevronDown className="size-3" />
+            </>
+          )}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -426,6 +488,17 @@ function ProvenanceFacts({
   });
   if (provenance.status) {
     facts.push({ label: "Entry status", value: provenance.status });
+  }
+  if (provenance.publishedAt) {
+    facts.push({
+      label: "Version published",
+      value: (
+        <HumanizeDateTime
+          date={new Date(provenance.publishedAt)}
+          includeTime={false}
+        />
+      ),
+    });
   }
   if (provenance.updatedAt) {
     facts.push({
