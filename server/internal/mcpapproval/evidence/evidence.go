@@ -68,16 +68,15 @@ type Document struct {
 	Exposure *ExposureSection `json:"exposure,omitempty"`
 
 	// Authority is what the server and its authorization server publish about
-	// authentication. Not yet populated by Assemble — the OAuth-discovery and
-	// credential-declaration inputs are not available at intake for arbitrary
-	// servers — but part of the version-1 shape so gathers that have them
-	// (registry-catalogued servers, scheduled re-checks) can carry them
-	// without a version bump, and so frozen snapshots stay decodable when
-	// they arrive.
+	// authentication, gathered for remote targets through the well-known
+	// OAuth discovery endpoints. Also set when an unauthenticated tool
+	// listing succeeded — a server that served the protocol without any
+	// credential — even if it published no OAuth metadata.
 	Authority *AuthoritySection `json:"authority,omitempty"`
 
-	// Capabilities is what each tool declares about itself, with the same
-	// not-yet-populated caveat as Authority.
+	// Capabilities is what each tool declares about itself, gathered from the
+	// server's own unauthenticated tools/list or, failing that, the registry
+	// catalog's copy (see CapabilitiesSource).
 	Capabilities []CapabilitySection `json:"capabilities,omitempty"`
 
 	// CapabilitiesSource records where Capabilities came from: the server's
@@ -167,13 +166,20 @@ type CredentialSection struct {
 }
 
 // CapabilitySection mirrors capability.Assessment for storage: one tool's
-// declarations, never observations.
+// declarations, never observations. The four raw hints are stored alongside
+// the derived summary so the document preserves exactly what was declared —
+// including explicit-false and undeclared states — rather than only the
+// positive capabilities the assessment surfaces.
 type CapabilitySection struct {
 	Tool          string   `json:"tool"`
 	Declared      []string `json:"declared,omitempty"`
 	SchemaImplied []string `json:"schema_implied,omitempty"`
 	ActsOnBehalf  bool     `json:"acts_on_behalf,omitempty"`
 	Unannotated   bool     `json:"unannotated,omitempty"`
+	ReadOnlyHint  *bool    `json:"read_only_hint,omitempty"`
+	Destructive   *bool    `json:"destructive_hint,omitempty"`
+	Idempotent    *bool    `json:"idempotent_hint,omitempty"`
+	OpenWorld     *bool    `json:"open_world_hint,omitempty"`
 }
 
 // ProvenanceSection mirrors provenance.Provenance for storage, plus which
@@ -222,10 +228,11 @@ type ToolProber interface {
 }
 
 // CatalogLookup matches a server URL against the configured MCP registries.
-// A nil match with a nil error is checked-and-absent. *catalog.Source
-// satisfies it.
+// A nil match with a nil error is checked-and-absent. includeTools asks for
+// the entry's tool declarations, which cost an extra registry round trip;
+// when false, a match carries provenance only. *catalog.Source satisfies it.
 type CatalogLookup interface {
-	LookupCatalog(ctx context.Context, serverURL string) (*catalog.Match, error)
+	LookupCatalog(ctx context.Context, serverURL string, includeTools bool) (*catalog.Match, error)
 }
 
 var _ CatalogLookup = (*catalog.Source)(nil)
@@ -420,8 +427,39 @@ func (a *Assembler) probeToolDeclarations(ctx context.Context, serverURL string,
 
 	document.CapabilitiesSource = CapabilitiesFromServer
 	a.fillCapabilities(document, declarations)
+	recordUnauthenticatedListing(document, declarations)
 
 	return true
+}
+
+// recordUnauthenticatedListing carries a successful credential-less tools/list
+// into the authority section: the server served the MCP protocol and named
+// these tools to an unauthenticated caller. When no OAuth metadata was
+// published either, that success is itself the authority evidence — the
+// section is created with mode none rather than left absent, because "we
+// connected without any credential" is a real finding, unlike a pair of 404s
+// on well-known URLs.
+func recordUnauthenticatedListing(document *Document, declarations []capability.Declaration) {
+	names := make([]string, 0, len(declarations))
+	for _, declaration := range declarations {
+		names = append(names, declaration.Name)
+	}
+
+	if document.Authority == nil {
+		document.Authority = &AuthoritySection{
+			Mode:                 string(authority.ModeNone),
+			Transport:            "http",
+			Scopes:               nil,
+			DynamicRegistration:  false,
+			DemandedSecrets:      nil,
+			OptionalSecrets:      nil,
+			UnauthenticatedTools: names,
+			Undeclared:           false,
+		}
+		return
+	}
+
+	document.Authority.UnauthenticatedTools = names
 }
 
 // lookupCatalog matches the server against the configured registries. A match
@@ -435,7 +473,10 @@ func (a *Assembler) lookupCatalog(ctx context.Context, serverURL string, documen
 	lookupCtx, cancel := context.WithTimeout(ctx, a.sourceTimeout)
 	defer cancel()
 
-	match, err := a.catalog.LookupCatalog(lookupCtx, serverURL)
+	// Tool declarations are only requested when the server itself refused to
+	// answer: the details fetch is an extra registry round trip whose result
+	// would otherwise be discarded in favor of the server's own words.
+	match, err := a.catalog.LookupCatalog(lookupCtx, serverURL, !serverDeclared)
 	if err != nil {
 		document.Gaps = append(document.Gaps, GapCatalogLookup)
 		if !serverDeclared {
@@ -501,6 +542,10 @@ func (a *Assembler) fillCapabilities(document *Document, declarations []capabili
 			SchemaImplied: capabilityStrings(assessment.SchemaImplied),
 			ActsOnBehalf:  assessment.ActsOnBehalf,
 			Unannotated:   assessment.Unannotated,
+			ReadOnlyHint:  declaration.ReadOnly,
+			Destructive:   declaration.Destructive,
+			Idempotent:    declaration.Idempotent,
+			OpenWorld:     declaration.OpenWorld,
 		})
 	}
 }

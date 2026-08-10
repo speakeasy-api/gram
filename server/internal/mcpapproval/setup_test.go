@@ -319,7 +319,7 @@ func (quietProbes) ListToolDeclarations(_ context.Context, _ string) ([]capabili
 	return nil, nil
 }
 
-func (quietProbes) LookupCatalog(_ context.Context, _ string) (*catalog.Match, error) {
+func (quietProbes) LookupCatalog(_ context.Context, _ string, _ bool) (*catalog.Match, error) {
 	return nil, nil
 }
 

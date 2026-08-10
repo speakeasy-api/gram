@@ -540,13 +540,23 @@ func (s *Service) RefreshEvidence(ctx context.Context, payload *gen.RefreshEvide
 		return nil, oops.E(oops.CodeUnexpected, err, "error gathering evidence").LogError(ctx, s.logger)
 	}
 
-	if err := queries.SetApprovalRequestEvidence(ctx, repo.SetApprovalRequestEvidenceParams{
-		CurrentEvidence: document,
-		EvidenceVersion: evidence.Version,
-		ID:              requestID,
-		ProjectID:       projectID,
-	}); err != nil {
+	// Compare-and-set against the gather that was current when this refresh
+	// started: two concurrent refreshes race the network for seconds, and an
+	// unconditional write would let whichever finished last — not whichever
+	// gathered last — win. Losing the race is fine; the winner's evidence is
+	// at least as fresh, and the detail below returns it.
+	written, err := queries.SetApprovalRequestEvidenceIfUnchanged(ctx, repo.SetApprovalRequestEvidenceIfUnchangedParams{
+		CurrentEvidence:     document,
+		EvidenceVersion:     evidence.Version,
+		ID:                  requestID,
+		ProjectID:           projectID,
+		PreviousCollectedAt: row.EvidenceCollectedAt,
+	})
+	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error storing evidence").LogError(ctx, s.logger)
+	}
+	if written == 0 {
+		s.logger.InfoContext(ctx, "discarded refresh gather superseded by a concurrent write")
 	}
 
 	return s.requestDetail(ctx, projectID, requestID)
