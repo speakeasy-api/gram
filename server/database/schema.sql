@@ -4242,6 +4242,7 @@ CREATE TABLE IF NOT EXISTS assistant_mcp_oauth_clients (
   assistant_id uuid NOT NULL,
   oauth_server_issuer TEXT NOT NULL,
   redirect_uri TEXT NOT NULL,
+  -- Assistant MCP auth only registers confidential client_secret_basic clients.
   client_id TEXT,
   client_secret_encrypted TEXT,
   client_secret_expires_at timestamptz,
