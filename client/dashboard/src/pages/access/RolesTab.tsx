@@ -202,7 +202,9 @@ export function RolesTab(): JSX.Element {
     if (editRoleId && roles.length > 0) {
       const role = roles.find((r) => r.id === editRoleId);
       if (role) {
-        setEditingRole(role);
+        // Mirror the row/menu gate (org:admin) on the deep-link path too
+        // (still consume the param so it doesn't linger in the URL).
+        if (canManageRoles) setEditingRole(role);
         setSearchParams(
           (prev) => {
             prev.delete("editRole");
@@ -212,7 +214,7 @@ export function RolesTab(): JSX.Element {
         );
       }
     }
-  }, [searchParams, roles, setSearchParams]);
+  }, [searchParams, roles, setSearchParams, canManageRoles]);
 
   const defaultRole =
     roles.find((r) => r.isSystem && r.name === "Member") ?? null;
