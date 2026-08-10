@@ -8,7 +8,7 @@ import {
   type TrialLifecycle,
 } from "@/lib/trial-status";
 import { getGateCopy } from "@/pages/demo/upgrade-gate-copy";
-import { Link } from "react-router";
+import { Link, Navigate } from "react-router";
 
 const SALES_EMAIL = "sales@speakeasy.com";
 
@@ -16,13 +16,32 @@ const SALES_EMAIL = "sales@speakeasy.com";
 // ended and the sweep has demoted it, or a user on a running trial navigates
 // here to upgrade early.
 export default function TalkToUs(): JSX.Element {
-  const client = useSdkClient();
   const { session } = useSessionData();
   const now = new Date();
   const lifecycle: TrialLifecycle = getTrialLifecycleFromDates(
     session?.trial,
     now,
   );
+
+  // No trial on the session means a converted customer or an org that never
+  // trialed. Neither has a trial to talk about, and the gate never sends them
+  // here, so bounce rather than describe a trial they do not have.
+  if (lifecycle === "none") {
+    return <Navigate to="/" replace />;
+  }
+
+  return <UpgradeGate lifecycle={lifecycle} now={now} />;
+}
+
+function UpgradeGate({
+  lifecycle,
+  now,
+}: {
+  lifecycle: TrialLifecycle;
+  now: Date;
+}): JSX.Element {
+  const client = useSdkClient();
+  const { session } = useSessionData();
 
   useCaptureUpgradeGateViewed({
     email: session?.user.email ?? "",
