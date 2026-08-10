@@ -863,7 +863,7 @@ var UpdateShadowMCPInventoryServerNameForm = Type("UpdateShadowMCPInventoryServe
 })
 
 var ShadowMCPInventoryApprovalRequestModel = Type("ShadowMCPInventoryApprovalRequest", func() {
-	Description("The MCP approval request tracking a server. Decisions recorded on it are what allow or block the server.")
+	Description("The MCP approval request tracking review status for a server. Status records the review outcome, which may cover only selected principals; the server's access field reports enforcement state.")
 	Required("id", "status", "requester_count")
 
 	Attribute("id", String, func() {
