@@ -1,63 +1,16 @@
 import { useSessionData } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
-import { useCaptureTrialExpiredGateViewed } from "@/contexts/Telemetry";
+import { useCaptureUpgradeGateViewed } from "@/contexts/Telemetry";
 import { AuthShell } from "@/pages/login/components/auth-shell";
 import { DemoBookingFlow } from "@/pages/demo/components/DemoBookingFlow";
 import {
   getTrialLifecycleFromDates,
-  getTrialStatusFromDates,
-  isValidDate,
+  type TrialLifecycle,
 } from "@/lib/trial-status";
-import { format } from "date-fns";
+import { getGateCopy } from "@/pages/demo/upgrade-gate-copy";
+import { Link } from "react-router";
 
 const SALES_EMAIL = "sales@speakeasy.com";
-
-const SHARED_BODY =
-  "Book 30 minutes and we'll find the plan that fits your organization.";
-
-type GateCopy = {
-  /** Colour of the status dot. Static — the pulse is for live sessions. */
-  dotClassName: string;
-  status: string;
-  body: string;
-  detail: string;
-};
-
-// The page serves two audiences: an org walled after its trial ran out, and an
-// org still inside its trial that wants to upgrade early. Only the header copy
-// differs; the booking card below is the same either way. A trial that has
-// ended is the exception, so the running trial is the default — a session with
-// no readable trial gets that wording rather than a third variant.
-function getGateCopy(
-  trial: { startedAt: Date; endsAt: Date } | null | undefined,
-  now: Date,
-): GateCopy {
-  const endsAt = trial?.endsAt;
-
-  if (getTrialLifecycleFromDates(trial, now) === "expired") {
-    return {
-      dotClassName: "bg-[var(--vermilion)]",
-      status: isValidDate(endsAt)
-        ? `Trial ended ${format(endsAt, "MMM do, yyyy")}`
-        : "Trial ended",
-      body: `Trials run 14 days. ${SHARED_BODY}`,
-      detail:
-        "Your MCP servers, observability data, and policies are still here when you upgrade.",
-    };
-  }
-
-  const remainingDays = getTrialStatusFromDates(trial, now)?.remainingDays;
-  return {
-    dotClassName: "bg-[var(--moss)]",
-    status:
-      remainingDays === undefined
-        ? "Trial in progress"
-        : `Trial · ${remainingDays} day${remainingDays === 1 ? "" : "s"} left`,
-    body: `Upgrade before your trial ends and nothing pauses. ${SHARED_BODY}`,
-    detail:
-      "Your MCP servers, observability data, and policies carry over unchanged.",
-  };
-}
 
 // Reached two ways: the gate redirects an organization here once its trial has
 // ended and the sweep has demoted it, or a user on a running trial navigates
@@ -65,12 +18,18 @@ function getGateCopy(
 export default function TalkToUs(): JSX.Element {
   const client = useSdkClient();
   const { session } = useSessionData();
+  const now = new Date();
+  const lifecycle: TrialLifecycle = getTrialLifecycleFromDates(
+    session?.trial,
+    now,
+  );
 
-  useCaptureTrialExpiredGateViewed({
+  useCaptureUpgradeGateViewed({
     email: session?.user.email ?? "",
     organizationId: session?.organization?.id ?? "",
     organizationName: session?.organization?.name ?? "",
     organizationSlug: session?.organization?.slug ?? "",
+    trialLifecycle: lifecycle,
   });
 
   const handleLogout = async () => {
@@ -78,7 +37,7 @@ export default function TalkToUs(): JSX.Element {
     window.location.href = "/login";
   };
 
-  const copy = getGateCopy(session?.trial, new Date());
+  const copy = getGateCopy(session?.trial, now);
 
   return (
     <AuthShell
@@ -87,13 +46,24 @@ export default function TalkToUs(): JSX.Element {
       // The card carries its own prefill footnote instead ("2E Book a demo").
       showTerms={false}
       headerAction={
-        <button
-          type="button"
-          onClick={() => void handleLogout()}
-          className="auth-mono text-[12px] text-[var(--muted)] transition-colors hover:text-black"
-        >
-          Log out
-        </button>
+        // A walled org has nothing to go back to, so logging out is the only
+        // exit. Anyone else still has a dashboard and arrived here by choice.
+        lifecycle === "expired" ? (
+          <button
+            type="button"
+            onClick={() => void handleLogout()}
+            className="auth-mono text-[12px] text-[var(--muted)] transition-colors hover:text-black"
+          >
+            Log out
+          </button>
+        ) : (
+          <Link
+            to="/"
+            className="auth-mono text-[12px] text-[var(--muted)] transition-colors hover:text-black"
+          >
+            Back to dashboard
+          </Link>
+        )
       }
     >
       <DemoBookingFlow
