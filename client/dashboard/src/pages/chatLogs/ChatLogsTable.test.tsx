@@ -193,7 +193,7 @@ describe("ChatLogsTable", () => {
     expect(screen.queryByText("user_01HXXXXXXXXXXXXXXXXXXXXXXX")).toBeNull();
   });
 
-  it("colors the low severity band with the success token, not neutral gray", () => {
+  it("colors the risk count with the success token for low-severity-only sessions", () => {
     const { container } = renderTable(
       <ChatLogsTable
         chats={[
@@ -214,11 +214,37 @@ describe("ChatLogsTable", () => {
       />,
     );
 
-    expect(container.querySelector(".bg-success-foreground")).toBeTruthy();
-    expect(container.querySelector(".bg-foreground\\/60")).toBeNull();
+    expect(container.querySelector(".text-success-foreground")).toBeTruthy();
+    expect(container.querySelector(".text-destructive")).toBeNull();
   });
 
-  it("labels the risk histogram tooltip by finding counts, not a percentage of messages", () => {
+  it("colors the risk count destructive when any high-severity finding is present", () => {
+    const { container } = renderTable(
+      <ChatLogsTable
+        chats={[
+          {
+            ...makeChat("chat_01HXQ1P84WV3S9J7Z52DKVE7NE"),
+            lowRiskFindingsCount: 2,
+            highRiskFindingsCount: 1,
+            riskFindingsCount: 3,
+          },
+        ]}
+        onDeleteChat={() => {
+          /* test stub */
+        }}
+        onSelectChat={() => {
+          /* test stub */
+        }}
+        isLoading={false}
+        error={null}
+      />,
+    );
+
+    expect(container.querySelector(".text-destructive")).toBeTruthy();
+    expect(screen.getByText("3")).toBeTruthy();
+  });
+
+  it("labels the risk tooltip by finding counts per severity band", () => {
     renderTable(
       <ChatLogsTable
         chats={[

@@ -38,44 +38,43 @@ function getTraceId(chatId: string): string {
   return chatId.slice(0, 8);
 }
 
-// bg-warning/bg-success resolve to a near-white pale tint in light mode
-// (meant for subtle fill backgrounds, e.g. an alert's own background) — using
-// them for a solid bar fill is illegible. The "-foreground" variants are the
-// same hue at a legible, saturated weight in both themes.
+// Severity vocabulary matches SeverityBadge/scoreToRating (risk-ui.tsx /
+// risk-utils.ts), with high+critical folded into one "high" band. Color the
+// count by the worst band present so a session with only low-severity
+// findings (e.g. a repeated IP) reads as informational rather than alarming
+// red — without asking the list row to decode a three-bar chart.
 const SEVERITY_BAND_STYLE = {
-  low: { bar: "bg-success-foreground", label: "Low" },
-  medium: { bar: "bg-warning-foreground", label: "Medium" },
-  high: { bar: "bg-destructive", label: "High" },
+  low: { text: "text-success-foreground", label: "Low" },
+  medium: { text: "text-warning-foreground", label: "Medium" },
+  high: { text: "text-destructive", label: "High" },
 } as const;
 
 const SEVERITY_BANDS = ["low", "medium", "high"] as const;
 
-/** Mini severity histogram: one bar per severity band, each bar's height a
- * percentage of this session's total message count (capped at 100%) rather
- * than a single flat-alarming color. A session with a few low-severity
- * findings (e.g. an IP address) reads as informational, not threatening —
- * only bands with actual high-severity findings draw a tall red bar. Bars
- * use the same low/medium/high vocabulary as SeverityBadge/SeverityScore
- * (risk-ui.tsx), just rendered as a histogram instead of a single score. */
-function RiskHistogram({
+type SeverityBand = (typeof SEVERITY_BANDS)[number];
+
+function worstSeverityBand(counts: {
+  low: number;
+  medium: number;
+  high: number;
+}): SeverityBand | null {
+  if (counts.high > 0) return "high";
+  if (counts.medium > 0) return "medium";
+  if (counts.low > 0) return "low";
+  return null;
+}
+
+/** Deduped finding count, colored by the highest severity band present.
+ * Band breakdown lives in the tooltip so the list row stays a single signal
+ * (how many / how bad) instead of a mini chart. */
+function RiskIndicator({
   counts,
-  numMessages,
-  height = 44,
 }: {
   counts: { low: number; medium: number; high: number };
-  numMessages: number;
-  height?: number;
 }) {
   const total = counts.low + counts.medium + counts.high;
   const hasRisk = total > 0;
-  // Bar height is a rough visual proxy scaled against message count (capped
-  // at 100%), not a claim about how many messages are affected: one message
-  // can carry several distinct findings, so a findings count can exceed
-  // numMessages. The tooltip below therefore reports finding counts, not a
-  // "% of messages" figure, which could otherwise overstate how much of the
-  // session is affected.
-  const percentFor = (count: number) =>
-    numMessages > 0 ? Math.min(100, (count / numMessages) * 100) : 0;
+  const worst = worstSeverityBand(counts);
 
   return (
     <SimpleTooltip
@@ -90,35 +89,17 @@ function RiskHistogram({
           : "No risk findings on this session"
       }
     >
-      <div className="flex flex-col items-center gap-1">
-        <div
+      <div className="flex w-11 flex-col items-center gap-0.5">
+        <span className="text-eyebrow">Risk</span>
+        <span
           className={cn(
-            "flex items-end justify-center gap-1 rounded-md border px-2",
-            hasRisk ? "border-transparent" : "border-muted-foreground/30",
+            "font-display text-2xl leading-none font-thin tabular-nums",
+            worst
+              ? SEVERITY_BAND_STYLE[worst].text
+              : "text-muted-foreground/70",
           )}
-          style={{ width: 44, height }}
         >
-          {SEVERITY_BANDS.map((band) => {
-            const pct = percentFor(counts[band]);
-            return (
-              <div
-                key={band}
-                className="bg-muted/60 flex w-2 items-end overflow-hidden rounded-t-[2px]"
-                style={{ height: height - 12 }}
-              >
-                <div
-                  className={cn(
-                    "w-full rounded-t-[2px]",
-                    SEVERITY_BAND_STYLE[band].bar,
-                  )}
-                  style={{ height: `${pct}%` }}
-                />
-              </div>
-            );
-          })}
-        </div>
-        <span className="text-muted-foreground text-[9px] font-medium tracking-wider uppercase">
-          Risk
+          {total}
         </span>
       </div>
     </SimpleTooltip>
@@ -337,10 +318,7 @@ export function ChatLogsTable({
                 <div className="pointer-events-none relative z-20 flex items-center gap-5">
                   {/* Left: Risk findings indicator */}
                   <div className="shrink-0">
-                    <RiskHistogram
-                      counts={riskCounts}
-                      numMessages={chat.numMessages}
-                    />
+                    <RiskIndicator counts={riskCounts} />
                   </div>
 
                   {/* Center: Main content */}
