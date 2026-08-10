@@ -25,18 +25,26 @@ they are documented here rather than mounted live — see any migrated page in
 
 ## Which template?
 
-| Your page is…                                                        | Use                |
-| -------------------------------------------------------------------- | ------------------ |
-| a collection: search/filter + a table or card grid + empty state     | `ResourceListPage` |
-| one entity: a hero + sections (routed subpages, or a scroll)         | `DetailPage`       |
-| tabs that are _different resources_ (not one entity's sections)      | `TabbedPage`       |
-| a single create/edit form                                            | `FormPage`         |
-| stacked titled config sections (or a prose/tool column)              | `SettingsPage`     |
-| a dashboard: a stat row + summary/chart cards                        | `OverviewPage`     |
-| a fullbleed analytics surface (sticky filter bar + big table/charts) | `WorkbenchPage`    |
-| a multi-step flow                                                    | `WizardPage`       |
-| auth / standalone, outside the app shell                             | `CenteredPage`     |
-| a genuine bespoke app canvas (chat, playground, builder)             | `FullBleedPage`\*  |
+{/* HTML table — Storybook's MDX pipeline has no GFM, pipe tables render as
+    plain text. */}
+
+<table>
+  <thead>
+    <tr><th align="left">Your page is…</th><th align="left">Use</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>a collection: search/filter + a table or card grid + empty state</td><td><code>ResourceListPage</code></td></tr>
+    <tr><td>one entity: a hero + sections (routed subpages, or a scroll)</td><td><code>DetailPage</code></td></tr>
+    <tr><td>tabs that are <em>different resources</em> (not one entity's sections)</td><td><code>TabbedPage</code></td></tr>
+    <tr><td>a single create/edit form</td><td><code>FormPage</code></td></tr>
+    <tr><td>stacked titled config sections (or a prose/tool column)</td><td><code>SettingsPage</code></td></tr>
+    <tr><td>a dashboard: a stat row + summary/chart cards</td><td><code>OverviewPage</code></td></tr>
+    <tr><td>a fullbleed analytics surface (sticky filter bar + big table/charts)</td><td><code>WorkbenchPage</code></td></tr>
+    <tr><td>a multi-step flow</td><td><code>WizardPage</code></td></tr>
+    <tr><td>auth / standalone, outside the app shell</td><td><code>CenteredPage</code></td></tr>
+    <tr><td>a genuine bespoke app canvas (chat, playground, builder)</td><td><code>FullBleedPage</code>*</td></tr>
+  </tbody>
+</table>
 
 \* `FullBleedPage` is the **escape hatch**, not a content template. If your page
 doesn't fit one of the real templates, it's this — build custom inside it and
