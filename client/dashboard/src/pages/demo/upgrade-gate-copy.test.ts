@@ -9,7 +9,13 @@ beforeAll(() => {
   process.env.TZ = "UTC";
 });
 afterAll(() => {
-  process.env.TZ = originalTZ;
+  // Assigning undefined would leave the literal string "undefined" behind for
+  // whatever else shares this worker.
+  if (originalTZ === undefined) {
+    delete process.env.TZ;
+  } else {
+    process.env.TZ = originalTZ;
+  }
 });
 
 const NOW = new Date("2026-08-10T12:00:00.000Z");
