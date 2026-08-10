@@ -9,7 +9,7 @@ import { useLatestDeploymentSuspense } from "@gram/client/react-query/latestDepl
 import { useListDeploymentsSuspense } from "@gram/client/react-query/listDeployments.js";
 import { useListToolsetsSuspense } from "@gram/client/react-query/listToolsets.js";
 import { useRiskListCustomDetectionRulesSuspense } from "@gram/client/react-query/riskListCustomDetectionRules.js";
-import { useRiskListPolicyBypassRequestsSuspense } from "@gram/client/react-query/riskListPolicyBypassRequests.js";
+import { useListMcpApprovalRequestsSuspense } from "@gram/client/react-query/listMcpApprovalRequests.js";
 import { useRiskListPoliciesSuspense } from "@gram/client/react-query/riskListPolicies.js";
 import { usePluginsSuspense } from "@gram/client/react-query/plugins";
 import { Icon } from "@/components/ui/Icon";
@@ -324,38 +324,27 @@ function ApprovalRequestsGroup({ onNavigate }: GroupProps) {
   const routes = useRoutes();
   const navigate = useNavigate();
   const { projectSlug = "" } = useSlugs();
-  const { data } = useRiskListPolicyBypassRequestsSuspense({
+  const { data } = useListMcpApprovalRequestsSuspense({
     status: "requested",
     gramProject: projectSlug,
   });
   const requests = data?.requests ?? [];
   if (!requests.length) return null;
   return (
-    <CommandGroup heading="Approval Requests">
-      {requests.map((request) => {
-        const label =
-          request.targetLabel ??
-          request.targetKey ??
-          request.requesterEmail ??
-          request.requesterUserId ??
-          request.id;
-        return (
-          <ResultItem
-            key={request.id}
-            value={`approval request ${label} ${request.id}`}
-            label={label}
-            sublabel={request.status}
-            icon="inbox"
-            onSelect={() => {
-              // No per-request route; deep-link opens the review sheet by id.
-              void navigate(
-                `${routes.approvalRequests.href()}?review=${encodeURIComponent(request.id)}`,
-              );
-              onNavigate();
-            }}
-          />
-        );
-      })}
+    <CommandGroup heading="Access Requests">
+      {requests.map((request) => (
+        <ResultItem
+          key={request.id}
+          value={`access request ${request.targetRaw} ${request.id}`}
+          label={request.targetRaw}
+          sublabel={request.status}
+          icon="inbox"
+          onSelect={() => {
+            void navigate(routes.shadowMCP.request.href(request.id));
+            onNavigate();
+          }}
+        />
+      ))}
     </CommandGroup>
   );
 }

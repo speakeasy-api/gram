@@ -243,7 +243,7 @@ func (q *Queries) GetApprovalRequest(ctx context.Context, arg GetApprovalRequest
 }
 
 const getApprovalRequestForDecision = `-- name: GetApprovalRequestForDecision :one
-SELECT id, organization_id, target_raw, status, current_evidence, evidence_version
+SELECT id, organization_id, target_kind, target_raw, target_key, status, current_evidence, evidence_version
 FROM mcp_approval_requests
 WHERE id = $1
   AND project_id = $2
@@ -259,7 +259,9 @@ type GetApprovalRequestForDecisionParams struct {
 type GetApprovalRequestForDecisionRow struct {
 	ID              uuid.UUID
 	OrganizationID  string
+	TargetKind      string
 	TargetRaw       string
+	TargetKey       string
 	Status          string
 	CurrentEvidence []byte
 	EvidenceVersion int32
@@ -274,7 +276,9 @@ func (q *Queries) GetApprovalRequestForDecision(ctx context.Context, arg GetAppr
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
+		&i.TargetKind,
 		&i.TargetRaw,
+		&i.TargetKey,
 		&i.Status,
 		&i.CurrentEvidence,
 		&i.EvidenceVersion,

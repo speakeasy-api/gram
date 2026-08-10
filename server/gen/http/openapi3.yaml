@@ -34325,7 +34325,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/RiskPolicyBypassRequest'
+                                $ref: '#/components/schemas/PolicyBypassRedemption'
                     description: Created response.
                 "400":
                     content:
@@ -65390,6 +65390,26 @@ components:
                 - created_by_user_id
                 - created_at
                 - updated_at
+        PolicyBypassRedemption:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The id of the created or refreshed request.
+                kind:
+                    type: string
+                    description: The kind of request the token redeemed into.
+                    enum:
+                        - approval_request
+                        - bypass_request
+                status:
+                    type: string
+                    description: The request's current status.
+            description: 'What a redeemed block-link token turned into: an MCP access request when the approval workflow handles the server, or a legacy policy bypass request otherwise.'
+            required:
+                - kind
+                - id
+                - status
         PreviewSpendRuleRequestBody:
             type: object
             properties:

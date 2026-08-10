@@ -101,7 +101,6 @@ import SecurityOverview, {
   RiskOverviewRoot,
 } from "./pages/security/SecurityOverview";
 import RiskEventsPage from "./pages/security/RiskEventsPage";
-import ApprovalRequests from "./pages/security/ApprovalRequests";
 import MCPApprovalDetail from "./pages/security/mcp-approvals/MCPApprovalDetail";
 import ShadowMCP, { ShadowMCPRoot } from "./pages/shadow-mcp/ShadowMCP";
 import ShadowMCPServerDetail from "./pages/shadow-mcp/ShadowMCPServerDetail";
@@ -614,12 +613,6 @@ const ROUTE_STRUCTURE = {
     url: "detection-rules",
     icon: "scan-search",
     component: DetectionRules,
-  },
-  approvalRequests: {
-    title: "Approval Requests",
-    url: "approval-requests",
-    icon: "inbox",
-    component: ApprovalRequests,
   },
   policyCenter: {
     title: "Risk Policies",

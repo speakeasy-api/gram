@@ -4740,7 +4740,7 @@ func DecodeCreateRiskPolicyBypassRequestResponse(decoder func(*http.Response) go
 			if err != nil {
 				return nil, goahttp.ErrValidationError("risk", "createRiskPolicyBypassRequest", err)
 			}
-			res := NewCreateRiskPolicyBypassRequestRiskPolicyBypassRequestCreated(&body)
+			res := NewCreateRiskPolicyBypassRequestPolicyBypassRedemptionCreated(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (

@@ -4629,7 +4629,7 @@ func EncodeGetRiskPolicyStatusError(encoder func(context.Context, http.ResponseW
 // returned by the risk createRiskPolicyBypassRequest endpoint.
 func EncodeCreateRiskPolicyBypassRequestResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*risk.RiskPolicyBypassRequest)
+		res, _ := v.(*risk.PolicyBypassRedemption)
 		enc := encoder(ctx, w)
 		body := NewCreateRiskPolicyBypassRequestResponseBody(res)
 		w.WriteHeader(http.StatusCreated)

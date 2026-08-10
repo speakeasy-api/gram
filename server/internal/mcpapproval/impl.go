@@ -301,6 +301,48 @@ func (s *Service) admit(ctx context.Context, projectID uuid.UUID, organizationID
 	return summaryView(fromGetRow(row)), nil
 }
 
+// AdmitBlockedServer is the block-link intake: a blocked employee's redeemed
+// token attaches them as a requester on the server's single review, evidence
+// and all, exactly as a proactive createRequest would. It implements the
+// risk service's ShadowMCPApprovalIntake seam — injected at wiring so the
+// block path and the API share one admission, and approval stays the only
+// flow a shadow-MCP ask can land in.
+//
+// The caller has already bound the redemption to the requester; the feature
+// gate still applies, and its forbidden error is the documented signal to
+// fall back to the legacy bypass request.
+func (s *Service) AdmitBlockedServer(ctx context.Context, organizationID string, projectID uuid.UUID, serverURL, requesterUserID, requesterEmail, note string) (string, string, error) {
+	enabled, err := s.features.IsFeatureEnabled(ctx, organizationID, productfeatures.FeatureMCPApproval)
+	if err != nil {
+		return "", "", oops.E(oops.CodeUnexpected, err, "check mcp approval feature").LogError(ctx, s.logger)
+	}
+	if !enabled {
+		return "", "", oops.E(oops.CodeForbidden, nil, "MCP approval is not enabled for this organization")
+	}
+
+	key, display, err := admittableServerURL(serverURL)
+	if err != nil {
+		return "", "", err
+	}
+
+	summary, err := s.admit(ctx, projectID, organizationID, admission{
+		targetKind:      targetKindServerURL,
+		targetRaw:       display,
+		targetKey:       key,
+		bypassRequestID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		requesterID:     requesterUserID,
+		requesterEmail:  conv.PtrEmpty(requesterEmail),
+		note:            conv.PtrEmpty(strings.TrimSpace(note)),
+		actor:           requesterUserID,
+		actorEmail:      conv.PtrEmpty(requesterEmail),
+	})
+	if err != nil {
+		return "", "", err
+	}
+
+	return summary.ID, summary.Status, nil
+}
+
 func (s *Service) CreateRequest(ctx context.Context, payload *gen.CreateRequestPayload) (*gen.ApprovalRequestSummary, error) {
 	projectID, authCtx, err := s.member(ctx)
 	if err != nil {
@@ -714,8 +756,28 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 		// A denial grants nobody anything, whatever the caller sent.
 		granted = nil
 	}
+	if payload.Decision == decisionApproved && len(granted) == 0 {
+		// An approval that names no principals covers everyone. The resolved
+		// all-users principal is stored rather than an empty set, so the
+		// decision row says who was actually given access instead of leaving
+		// a blank the reader must know the default for.
+		granted = []string{authz.AllUsersPrincipal().String()}
+	}
 	if granted == nil {
 		granted = []string{}
+	}
+
+	// Parsed before the transaction: a malformed principal URN is the
+	// caller's error and must cost no transaction — and since these URNs
+	// become enforcement grants below, they can no longer be stored
+	// unvalidated.
+	grantedPrincipals := make([]urn.Principal, 0, len(granted))
+	for _, principalURN := range granted {
+		principal, err := urn.ParsePrincipal(principalURN)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid granted principal urn")
+		}
+		grantedPrincipals = append(grantedPrincipals, principal)
 	}
 
 	// The evidence is frozen as it stood on the request, and its version is
@@ -760,6 +822,25 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 		Status:    statusFor[payload.Decision],
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating approval request status").LogError(ctx, s.logger)
+	}
+
+	// The decision enforces in the same transaction it records: the grant
+	// writes and the decision row commit or roll back together, so enforced
+	// state can never disagree with the recorded history. target_key is the
+	// canonical inventory URL for server_url targets — the same key the
+	// shadow-MCP block rules and this org's traffic converge on. An stdio
+	// target has no URL to key a grant on; its decision records without
+	// enforcing.
+	if request.TargetKind == targetKindServerURL {
+		if err := reconcileDecisionGrants(ctx, dbtx, request.OrganizationID, projectID, request.TargetKey, payload.Decision == decisionApproved, grantedPrincipals); err != nil {
+			// An inexpressible blast radius surfaces as the caller's error
+			// with its explanation intact; everything else is unexpected.
+			var shareable *oops.ShareableError
+			if errors.As(err, &shareable) {
+				return nil, err
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "error enforcing decision").LogError(ctx, s.logger)
+		}
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {

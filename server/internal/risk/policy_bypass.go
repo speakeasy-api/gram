@@ -76,7 +76,7 @@ func (s *Service) ListRiskPolicyBypassRequests(ctx context.Context, payload *gen
 	return &gen.ListRiskPolicyBypassRequestsResult{Requests: requests}, nil
 }
 
-func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *gen.CreateRiskPolicyBypassRequestPayload) (*gen.RiskPolicyBypassRequest, error) {
+func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *gen.CreateRiskPolicyBypassRequestPayload) (*gen.PolicyBypassRedemption, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -123,6 +123,45 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 		return nil, oops.E(oops.CodeInvalid, err, "invalid risk policy bypass request policy id")
 	}
 
+	target, err := riskPolicyBypassTargetFromClaims(claims)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid risk policy bypass request target")
+	}
+
+	// A shadow-MCP block on a URL-identified server redeems into the MCP
+	// approval workflow when it is available: the ask attaches as a requester
+	// on the server's single review — deduplicated by canonical URL, evidence
+	// gathered — instead of minting a per-user bypass row. The legacy bypass
+	// request remains only for what the workflow cannot key: identity-only
+	// servers with no observed URL, and organizations without the approval
+	// feature (a forbidden intake error is that signal, not a failure).
+	if s.approvalIntake != nil && target.Kind == PolicyBypassTargetKindShadowMCPServer {
+		if serverURL := target.Dimensions[authz.SelectorKeyServerURL]; serverURL != "" {
+			admittedID, admittedStatus, err := s.approvalIntake.AdmitBlockedServer(
+				ctx,
+				claims.OrganizationID,
+				projectID,
+				serverURL,
+				authCtx.UserID,
+				conv.PtrValOrEmpty(authCtx.Email, ""),
+				strings.TrimSpace(conv.PtrValOr(claims.BlockReason, "")),
+			)
+			switch {
+			case err == nil:
+				return &gen.PolicyBypassRedemption{
+					Kind:   "approval_request",
+					ID:     admittedID,
+					Status: admittedStatus,
+				}, nil
+			case oopsCodeIs(err, oops.CodeForbidden):
+				// The approval workflow is not enabled for this organization;
+				// fall through to the legacy bypass request.
+			default:
+				return nil, oops.E(oops.CodeUnexpected, err, "admit blocked server into approval workflow").LogError(ctx, s.logger)
+			}
+		}
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin risk policy bypass request").LogError(ctx, s.logger)
@@ -144,10 +183,6 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").LogError(ctx, s.logger)
 	}
 
-	target, err := riskPolicyBypassTargetFromClaims(claims)
-	if err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid risk policy bypass request target")
-	}
 	row, err := q.UpsertRiskPolicyBypassRequest(ctx, repo.UpsertRiskPolicyBypassRequestParams{
 		ID:               requestID,
 		OrganizationID:   claims.OrganizationID,
@@ -174,7 +209,17 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 		return nil, oops.E(oops.CodeUnexpected, err, "commit risk policy bypass request").LogError(ctx, s.logger)
 	}
 
-	return riskPolicyBypassRequestView(row)
+	return &gen.PolicyBypassRedemption{
+		Kind:   "bypass_request",
+		ID:     row.ID.String(),
+		Status: row.Status,
+	}, nil
+}
+
+// oopsCodeIs reports whether err carries the given shareable error code.
+func oopsCodeIs(err error, code oops.Code) bool {
+	var shareable *oops.ShareableError
+	return errors.As(err, &shareable) && shareable.Code == code
 }
 
 func (s *Service) ApproveRiskPolicyBypassRequest(ctx context.Context, payload *gen.ApproveRiskPolicyBypassRequestPayload) (*gen.RiskPolicyBypassRequest, error) {

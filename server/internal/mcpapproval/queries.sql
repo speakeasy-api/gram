@@ -196,7 +196,7 @@ WHERE id = @id
 -- Locking read used inside the decision transaction. Serialises concurrent
 -- decisions on the same request, so the request's status always matches the
 -- newest decision rather than whichever transaction happened to commit last.
-SELECT id, organization_id, target_raw, status, current_evidence, evidence_version
+SELECT id, organization_id, target_kind, target_raw, target_key, status, current_evidence, evidence_version
 FROM mcp_approval_requests
 WHERE id = @id
   AND project_id = @project_id
