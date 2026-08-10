@@ -41,7 +41,9 @@ use agentkit_compaction::{
     DropFailedToolResultsStrategy, DropReasoningStrategy, StrategyCompactor,
     SummarizeOlderStrategy, TriggerFn,
 };
-use agentkit_core::{Item, ItemKind, Part, SessionId, ToolOutput, TurnCancellation};
+use agentkit_core::{
+    DataRef, Item, ItemKind, MediaPart, Modality, Part, SessionId, ToolOutput, TurnCancellation,
+};
 use agentkit_loop::{Agent, MutationPoint};
 use agentkit_provider_openrouter::OpenRouterProvider;
 use agentkit_tools_core::{CompositePermissionChecker, PermissionDecision};
@@ -609,9 +611,11 @@ pub fn build_compactor(
 ///   tool_calls from `Part::ToolCall` parts.
 /// * `Tool` items → one row per `Part::ToolResult` with its `call_id`.
 ///
-/// Non-text content (media, file, structured, reasoning, custom) is
-/// dropped — the strategy pipeline already strips reasoning, and the
-/// other kinds don't round-trip through the runner today.
+/// Media parts project to visible `[image: …]` placeholders (the persisted
+/// rows store plain text, so the payload cannot round-trip); other non-text
+/// content (file, structured, reasoning, custom) is dropped — the strategy
+/// pipeline already strips reasoning, and those kinds don't round-trip
+/// through the runner today.
 pub fn denormalize_transcript(items: &[Item]) -> Vec<RunnerMessage> {
     let mut out = Vec::with_capacity(items.len());
     for item in items {
@@ -673,14 +677,32 @@ pub fn denormalize_transcript(items: &[Item]) -> Vec<RunnerMessage> {
 fn concat_text(parts: &[Part]) -> String {
     let mut buf = String::new();
     for part in parts {
-        if let Part::Text(t) = part {
-            if !buf.is_empty() {
-                buf.push('\n');
-            }
-            buf.push_str(&t.text);
+        let piece = match part {
+            Part::Text(t) => t.text.clone(),
+            Part::Media(m) => media_placeholder(m),
+            _ => continue,
+        };
+        if !buf.is_empty() {
+            buf.push('\n');
         }
+        buf.push_str(&piece);
     }
     buf
+}
+
+/// Mirrors runtime.rs `text_with_image_placeholders`: media inside the
+/// preserved-verbatim turns cannot round-trip through the persisted
+/// compaction generation (rows store plain text), so it must leave a visible
+/// marker rather than vanish without a trace.
+fn media_placeholder(media: &MediaPart) -> String {
+    let label = match media.modality {
+        Modality::Image => "image",
+        _ => "media",
+    };
+    match &media.data {
+        DataRef::Uri(uri) if !uri.starts_with("data:") => format!("[{label}: {uri}]"),
+        _ => format!("[{label}: inline data]"),
+    }
 }
 
 // Mirrors `agentkit_adapter_completions::request::tool_output_to_string` so
@@ -1006,6 +1028,37 @@ mod tests {
         assert_eq!(
             out[0].content,
             RunnerContent::Text("line one\nline two".to_string())
+        );
+    }
+
+    #[test]
+    fn denormalize_user_media_leaves_placeholder() {
+        use agentkit_core::{DataRef, MediaPart, Modality, Part};
+
+        let item = Item::new(
+            ItemKind::User,
+            vec![
+                Part::text("see attached"),
+                Part::Media(MediaPart::new(
+                    Modality::Image,
+                    "image/png",
+                    DataRef::Uri("https://files.example.com/a.png".to_string()),
+                )),
+                Part::Media(MediaPart::new(
+                    Modality::Image,
+                    "image/png",
+                    DataRef::Uri("data:image/png;base64,AAAA".to_string()),
+                )),
+            ],
+        );
+        let out = denormalize_transcript(&[item]);
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            out[0].content,
+            RunnerContent::Text(
+                "see attached\n[image: https://files.example.com/a.png]\n[image: inline data]"
+                    .to_string()
+            )
         );
     }
 }

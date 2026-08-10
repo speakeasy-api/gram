@@ -263,21 +263,33 @@ func (c runtimeContent) IsZero() bool {
 	return c.Str == "" && c.Parts == nil
 }
 
-// Text returns the plain-text projection: the bare string, or the text parts
-// joined with newlines. Image parts contribute nothing.
+// Text returns the plain-text projection: the bare string, or the parts
+// joined with newlines. Image parts render as visible placeholders (matching
+// the runner's text_with_image_placeholders) so projecting structured content
+// never silently erases an image.
 func (c runtimeContent) Text() string {
 	if c.Parts == nil {
 		return c.Str
 	}
 	var sb strings.Builder
 	for _, part := range c.Parts {
-		if part.Type != contentPartTypeText {
+		var piece string
+		switch {
+		case part.Type == contentPartTypeText:
+			piece = part.Text
+		case part.Type == contentPartTypeImageURL && part.ImageURL != nil:
+			if strings.HasPrefix(part.ImageURL.URL, "data:") {
+				piece = "[image: inline data]"
+			} else {
+				piece = fmt.Sprintf("[image: %s]", part.ImageURL.URL)
+			}
+		default:
 			continue
 		}
 		if sb.Len() > 0 {
 			sb.WriteByte('\n')
 		}
-		sb.WriteString(part.Text)
+		sb.WriteString(piece)
 	}
 	return sb.String()
 }
@@ -299,6 +311,32 @@ func (c runtimeContent) supportedParts() bool {
 		}
 	}
 	return true
+}
+
+// replayableParts reports whether Parts should replay to the runner instead
+// of the text projection. Beyond the wire-shape check, structured replay is
+// reserved for arrays a remote image actually distinguishes from the text
+// column: all-text and empty arrays replay identically through the text
+// projection (and an empty array must never reach the model as
+// `"content": []`), while data:-URI image parts only occur in rows captured
+// before the chat sanitizer enforced no-image-bytes-at-rest, so those fall
+// back rather than replay multi-megabyte payloads.
+func (c runtimeContent) replayableParts() bool {
+	if !c.supportedParts() {
+		return false
+	}
+	hasImage := false
+	for _, part := range c.Parts {
+		if part.Type != contentPartTypeImageURL {
+			continue
+		}
+		u := part.ImageURL.URL
+		if !strings.HasPrefix(u, "https://") && !strings.HasPrefix(u, "http://") {
+			return false
+		}
+		hasImage = true
+	}
+	return hasImage
 }
 
 func (c runtimeContent) MarshalJSON() ([]byte, error) {

@@ -66,11 +66,11 @@ func TestRuntimeContent_PartsRoundTrip(t *testing.T) {
 	var out runtimeContent
 	require.NoError(t, json.Unmarshal(raw, &out))
 	require.Equal(t, in, out)
-	require.Equal(t, "look at this", out.Text())
+	require.Equal(t, "look at this\n[image: https://example.com/a.png]", out.Text())
 	require.True(t, out.supportedParts())
 }
 
-func TestRuntimeContent_TextJoinsTextParts(t *testing.T) {
+func TestRuntimeContent_TextRendersImagePlaceholders(t *testing.T) {
 	t.Parallel()
 
 	c := runtimeContent{
@@ -78,10 +78,11 @@ func TestRuntimeContent_TextJoinsTextParts(t *testing.T) {
 		Parts: []runtimeContentPart{
 			{Type: "text", Text: "one", ImageURL: nil},
 			{Type: "image_url", Text: "", ImageURL: &runtimeImageURL{URL: "https://example.com/a.png", Detail: ""}},
+			{Type: "image_url", Text: "", ImageURL: &runtimeImageURL{URL: "data:image/png;base64,AAAA", Detail: ""}},
 			{Type: "text", Text: "two", ImageURL: nil},
 		},
 	}
-	require.Equal(t, "one\ntwo", c.Text())
+	require.Equal(t, "one\n[image: https://example.com/a.png]\n[image: inline data]\ntwo", c.Text())
 }
 
 func TestRuntimeContent_UnsupportedPartTypeDetected(t *testing.T) {
@@ -119,9 +120,9 @@ func TestLoadHistoryMessageContent_PrefersStructuredContentRaw(t *testing.T) {
 	core := historyContentCore(t)
 	row := historyContentRow("projected text", []byte(`[{"type":"text","text":"structured text"},{"type":"image_url","image_url":{"url":"https://example.com/a.png"}}]`))
 
-	content := core.loadHistoryMessageContent(t.Context(), row)
+	content := core.loadHistoryMessageContent(t.Context(), row, nil)
 	require.Len(t, content.Parts, 2)
-	require.Equal(t, "structured text", content.Text())
+	require.Equal(t, "structured text\n[image: https://example.com/a.png]", content.Text())
 }
 
 func TestLoadHistoryMessageContent_BareStringContentRaw(t *testing.T) {
@@ -130,7 +131,7 @@ func TestLoadHistoryMessageContent_BareStringContentRaw(t *testing.T) {
 	core := historyContentCore(t)
 	row := historyContentRow("same text", []byte(`"same text"`))
 
-	content := core.loadHistoryMessageContent(t.Context(), row)
+	content := core.loadHistoryMessageContent(t.Context(), row, nil)
 	require.Equal(t, runtimeTextContent("same text"), content)
 }
 
@@ -140,7 +141,7 @@ func TestLoadHistoryMessageContent_FallsBackWithoutStructuredContent(t *testing.
 	core := historyContentCore(t)
 	row := historyContentRow("plain only", nil)
 
-	content := core.loadHistoryMessageContent(t.Context(), row)
+	content := core.loadHistoryMessageContent(t.Context(), row, nil)
 	require.Equal(t, runtimeTextContent("plain only"), content)
 }
 
@@ -150,7 +151,7 @@ func TestLoadHistoryMessageContent_FallsBackOnUnsupportedParts(t *testing.T) {
 	core := historyContentCore(t)
 	row := historyContentRow("audio transcript", []byte(`[{"type":"input_audio","input_audio":{"data":"x","format":"wav"}}]`))
 
-	content := core.loadHistoryMessageContent(t.Context(), row)
+	content := core.loadHistoryMessageContent(t.Context(), row, nil)
 	require.Equal(t, runtimeTextContent("audio transcript"), content)
 }
 
@@ -160,8 +161,58 @@ func TestLoadHistoryMessageContent_FallsBackOnMalformedJSON(t *testing.T) {
 	core := historyContentCore(t)
 	row := historyContentRow("fallback", []byte(`{not json`))
 
-	content := core.loadHistoryMessageContent(t.Context(), row)
+	content := core.loadHistoryMessageContent(t.Context(), row, nil)
 	require.Equal(t, runtimeTextContent("fallback"), content)
+}
+
+func TestLoadHistoryMessageContent_TextOnlyPartsFallBackToProjection(t *testing.T) {
+	t.Parallel()
+
+	// All-text arrays carry nothing the text column doesn't; replaying the
+	// projection keeps the wire identical to pre-parts history for the vast
+	// majority of rows (and for runners that predate RunnerContent).
+	core := historyContentCore(t)
+	row := historyContentRow("projected", []byte(`[{"type":"text","text":"structured"}]`))
+
+	content := core.loadHistoryMessageContent(t.Context(), row, nil)
+	require.Equal(t, runtimeTextContent("projected"), content)
+}
+
+func TestLoadHistoryMessageContent_EmptyPartsFallBackToProjection(t *testing.T) {
+	t.Parallel()
+
+	// An empty captured array must never replay as `"content": []` — that
+	// produces a zero-part item the completions API rejects, poisoning the
+	// whole thread's history.
+	core := historyContentCore(t)
+	row := historyContentRow("projected", []byte(`[]`))
+
+	content := core.loadHistoryMessageContent(t.Context(), row, nil)
+	require.Equal(t, runtimeTextContent("projected"), content)
+}
+
+func TestLoadHistoryMessageContent_DataURIImageFallsBackToProjection(t *testing.T) {
+	t.Parallel()
+
+	// data:-URI image parts predate the chat sanitizer's
+	// no-image-bytes-at-rest rule; replaying them would push multi-megabyte
+	// payloads (or unsanitized content) back through the model.
+	core := historyContentCore(t)
+	row := historyContentRow("projected", []byte(`[{"type":"image_url","image_url":{"url":"data:image/png;base64,AAAA"}}]`))
+
+	content := core.loadHistoryMessageContent(t.Context(), row, nil)
+	require.Equal(t, runtimeTextContent("projected"), content)
+}
+
+func TestLoadHistoryMessageContent_UsesPrefetchedAssetContent(t *testing.T) {
+	t.Parallel()
+
+	core := historyContentCore(t)
+	row := historyContentRow("projected", nil)
+	assetRaw := []byte(`[{"type":"text","text":"spilled"},{"type":"image_url","image_url":{"url":"https://example.com/b.png"}}]`)
+
+	content := core.loadHistoryMessageContent(t.Context(), row, assetRaw)
+	require.Len(t, content.Parts, 2)
 }
 
 func TestRuntimeMessage_JSONRoundTripThroughRunnerShape(t *testing.T) {
