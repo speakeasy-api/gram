@@ -571,22 +571,38 @@ func TestFindingCHWriter_HandleBatch_ResolvesAttribution(t *testing.T) {
 	require.True(t, unknownRow.CreatedAt.Equal(unknownRow.MessageCreatedAt))
 
 	// A finding claiming a message that belongs to another project must not
-	// inherit its chat or user ids. A findings batch can span projects, so
-	// this is enforced per finding rather than by scoping the query.
+	// inherit its chat or user ids. The batch also carries the message's own
+	// project's finding so the batch-scoped query does return the message row
+	// and only the per-finding project re-check stands between that row and
+	// the foreign finding.
+	legit := chFinding()
+	legit.SetChatMessageId(msgOwn.String())
+	legit.SetProjectId(authCtx.ProjectID.String())
+
 	otherProject := chFinding()
 	otherProject.SetChatMessageId(msgOwn.String())
 	otherProject.SetProjectId(uuid.NewString())
 
 	ins2 := &fakeCHInserter{}
 	w2 := risk.NewFindingCHWriter(testenv.NewLogger(t), ti.conn, testenv.NewMeterProvider(t), ins2, fp)
-	require.NoError(t, w2.HandleBatch(ctx, []*riskv1.Finding{otherProject}, nil))
+	require.NoError(t, w2.HandleBatch(ctx, []*riskv1.Finding{legit, otherProject}, nil))
 
 	crossRows := chRows(t, ins2)
-	require.Len(t, crossRows, 1)
-	require.Equal(t, msgOwn.String(), crossRows[0].ChatMessageID)
-	require.Empty(t, crossRows[0].ChatID)
-	require.Empty(t, crossRows[0].UserID)
-	require.Empty(t, crossRows[0].ExternalUserID)
+	require.Len(t, crossRows, 2)
+	byID2 := map[uuid.UUID]chrepo.RiskFindingRow{}
+	for _, r := range crossRows {
+		byID2[r.ID] = r
+	}
+
+	legitRow := byID2[uuid.MustParse(legit.GetId())]
+	require.Equal(t, chatID.String(), legitRow.ChatID)
+	require.Equal(t, "msg-user", legitRow.UserID)
+
+	crossRow := byID2[uuid.MustParse(otherProject.GetId())]
+	require.Equal(t, msgOwn.String(), crossRow.ChatMessageID)
+	require.Empty(t, crossRow.ChatID)
+	require.Empty(t, crossRow.UserID)
+	require.Empty(t, crossRow.ExternalUserID)
 }
 
 func TestFindingCHWriter_HandleBatch_ResolvesContentPartAttribution(t *testing.T) {

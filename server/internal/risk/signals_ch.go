@@ -23,12 +23,16 @@ const (
 	// realistic universe; the exposure rollup is computed from these rows and
 	// inherits the cap.
 	riskSignalRowLimit = 200
-	// riskSignalTopUsersPerRule is how many raw (user_id, external_user_id)
-	// groups are fetched per rule. Display shows up to this many after email
-	// merging.
+	// riskSignalTopUsersPerRule is how many merged display users each signal
+	// shows.
 	riskSignalTopUsersPerRule = 5
+	// riskSignalTopUsersFetchPerRule is how many raw (user_id,
+	// external_user_id) groups are fetched per rule — a buffer over the
+	// display count so merging raw id spellings of the same person can still
+	// fill the display list instead of truncating it at the query.
+	riskSignalTopUsersFetchPerRule = 3 * riskSignalTopUsersPerRule
 	// riskSignalTopUsersTotalLimit bounds the per-rule top-users fetch overall.
-	riskSignalTopUsersTotalLimit = riskSignalRowLimit * riskSignalTopUsersPerRule
+	riskSignalTopUsersTotalLimit = riskSignalRowLimit * riskSignalTopUsersFetchPerRule
 	// riskSignalSparkBuckets is how many equal-width buckets the window is
 	// split into for the per-signal sparkline. Buckets are epoch-aligned, so
 	// an arbitrary window can straddle one extra partial bucket.
@@ -104,7 +108,7 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 	})
 	group.Go(func() error {
 		var err error
-		userRows, err = s.findingsCH.ListRiskSignalTopUsers(groupCtx, currentWindow, riskSignalTopUsersPerRule, riskSignalTopUsersTotalLimit)
+		userRows, err = s.findingsCH.ListRiskSignalTopUsers(groupCtx, currentWindow, riskSignalTopUsersFetchPerRule, riskSignalTopUsersTotalLimit)
 		if err != nil {
 			return fmt.Errorf("list risk signal top users: %w", err)
 		}

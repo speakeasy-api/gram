@@ -1730,7 +1730,17 @@ LEFT JOIN LATERAL (
   LIMIT 1
 ) dir ON TRUE
 WHERE cm.id = ANY(@ids::uuid[])
-  AND cm.project_id = ANY(@project_ids::uuid[]);
+  AND cm.project_id = ANY(@project_ids::uuid[])
+  -- Nothing in the schema ties a message's project_id to its chat's, so a
+  -- message pointing at a chat in another project is rejected outright rather
+  -- than attributed: the chat-level user ids, the assistant link, and the
+  -- directory lookup's organization all come from that chat.
+  AND EXISTS (
+    SELECT 1
+    FROM chats pc
+    WHERE pc.id = cm.chat_id
+      AND pc.project_id = cm.project_id
+  );
 
 -- name: GetChatContentPartAttribution :many
 -- Resolves denormalized attribution for a content-part finding. The parent

@@ -2314,7 +2314,7 @@ async function seedRiskFindingsClickHouse(init: {
           WHEN rr.source IN ('prompt_injection', 'llm_judge', 'destructive_tool', 'cli_destructive') THEN ''
           WHEN rr.source = 'shadow_mcp' THEN rr.match
           WHEN (rr.rule_id = 'pii.email_address' OR rr.source = 'account_identity')
-            AND rr.match LIKE '%@%' THEN '***@' || split_part(rr.match, '@', 2)
+            AND rr.match LIKE '%@%' THEN '***@' || split_part(rr.match, '@', -1)
           WHEN rr.rule_id IN ('pii.credit_card', 'pii.iban_code', 'pii.us_bank_number', 'pii.crypto')
             THEN repeat('*', greatest(length(rr.match) - 4, 0)) || right(rr.match, 4)
           WHEN length(rr.match) >= 8
