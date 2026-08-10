@@ -1726,8 +1726,10 @@ type PromptTemplate struct {
 
 // Transactional outbox of pending Pub/Sub publishes. Rows are deleted once published, so the table is near-empty in steady state; permanent failures move to publish_outbox_dead_letters.
 type PublishOutbox struct {
-	ID             int64
-	PublicID       uuid.UUID
+	ID int64
+	// Stable id a producer can put inside its own message body. Deliberately unindexed: nothing looks a row up by it, so an index here would buy nothing and cost a uniqueness check on the caller's transaction. Collisions are prevented by minting uuidv7, not by the database.
+	PublicID uuid.UUID
+	// Owning organization, carried through to the published message. Deliberately not a foreign key: the check would take a KEY SHARE lock on the organization row for every enqueue, and a stream of those against one busy org generates multixacts on a row that other writers update. Rows live seconds and the relay never joins to the organization, so an org deleted mid-flight leaves rows that publish and then delete themselves.
 	OrganizationID string
 	// Proto full name of the topic-declaring message, e.g. "gram.webhooks.v1.Event". Resolved through the outbox topic registry at publish time.
 	Topic string
