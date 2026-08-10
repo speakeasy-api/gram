@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
@@ -459,7 +458,7 @@ func (l *LocalRuntimeBackend) RecycleImage(ctx context.Context, runtime assistan
 	return RuntimeBackendRecycleResult{Recycled: true, BackendMetadataJSON: payload}, nil
 }
 
-func (l *LocalRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey string, authToken string, prompt string, inputParts []runtimeContentPart, mcpServers []runtimeMCPServer) error {
+func (l *LocalRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, turn runTurnRequest) error {
 	if err := validateRuntimeBackend(l, runtime.Backend); err != nil {
 		return err
 	}
@@ -471,7 +470,7 @@ func (l *LocalRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRunt
 		return fmt.Errorf("%w: local runtime host port is not available", ErrRuntimeUnhealthy)
 	}
 
-	return l.runner.turn(ctx, localRuntimeEndpoint(metadata.HostPort), runtime, threadID, idempotencyKey, authToken, prompt, inputParts, mcpServers, localRuntimeTurnTimeout)
+	return l.runner.turn(ctx, localRuntimeEndpoint(metadata.HostPort), runtime, turn, localRuntimeTurnTimeout)
 }
 
 func (l *LocalRuntimeBackend) Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error) {

@@ -100,6 +100,7 @@ import (
 	platformdocs "github.com/speakeasy-api/gram/server/internal/platformtools/docs"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	platformskills "github.com/speakeasy-api/gram/server/internal/platformtools/skills"
+	platformslack "github.com/speakeasy-api/gram/server/internal/platformtools/slack"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/projects"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -873,6 +874,7 @@ func newStartCommand() *cli.Command {
 				auditLogger,
 				platformtoolsruntime.WithTriggerTools(triggerApp),
 				platformtoolsruntime.WithSlackHTTPClient(guardianPolicy.PooledClient()),
+				platformtoolsruntime.WithFileURLMinting(encryptionClient, serverURL),
 				platformtoolsruntime.WithFeatureChecker(platformFeatureChecker),
 				platformtoolsruntime.WithExternalTools(assistantPlatformExtras),
 			)
@@ -1160,6 +1162,7 @@ func newStartCommand() *cli.Command {
 			}
 
 			about.Attach(mux, about.NewService(logger, tracerProvider, guardianPolicy))
+			platformslack.NewFileProxy(logger, encryptionClient, guardianPolicy.PooledClient()).Attach(mux)
 			external.AttachWebhookHandler(mux, external.NewWebhookHandler(logger, tracerProvider, newWorkOSWebhooksClient(c), temporalEnv))
 			roleManager := access.NewRoleManager(logger, db, roleClient, auditLogger)
 			access.Attach(mux, access.NewService(logger, tracerProvider, db, chDB, sessionManager, roleManager, authzEngine, auditLogger, emailService, siteURL))

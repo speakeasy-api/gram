@@ -148,6 +148,12 @@ func (c *Client) CallWithToken(ctx context.Context, method string, payload map[s
 // environment, following the platform-tool preference order: bot token first
 // for general methods, user token only for user-scoped methods.
 func (c *Client) Token(kind TokenKind, env toolconfig.ToolCallEnv) (string, error) {
+	return TokenFromEnv(kind, env.Merged())
+}
+
+// TokenFromEnv resolves a Slack token from a merged environment view using
+// the kind's candidate-variable precedence.
+func TokenFromEnv(kind TokenKind, env *toolconfig.CaseInsensitiveEnv) (string, error) {
 	var candidates []string
 	switch kind {
 	case TokenRequireUser:
@@ -155,9 +161,8 @@ func (c *Client) Token(kind TokenKind, env toolconfig.ToolCallEnv) (string, erro
 	default:
 		candidates = []string{BotTokenEnvVar, UserTokenEnvVar, TokenEnvVar}
 	}
-	merged := env.Merged()
 	for _, key := range candidates {
-		if value := strings.TrimSpace(merged.Get(key)); value != "" {
+		if value := strings.TrimSpace(env.Get(key)); value != "" {
 			return value, nil
 		}
 	}

@@ -2768,7 +2768,14 @@ func (s *ServiceCore) processEventTurn(
 	if err != nil {
 		return nil, err
 	}
-	if err := s.runtime.RunTurn(ctx, runtime, thread.ID, event.ID.String(), turnToken, prompt, inputParts, mcpServers); err != nil {
+	if err := s.runtime.RunTurn(ctx, runtime, runTurnRequest{
+		ThreadID:       thread.ID,
+		IdempotencyKey: event.ID.String(),
+		AuthToken:      turnToken,
+		Prompt:         prompt,
+		InputParts:     inputParts,
+		MCPServers:     mcpServers,
+	}); err != nil {
 		return nil, fmt.Errorf("run assistant turn: %w", err)
 	}
 	return currentSnapshotBytes, nil

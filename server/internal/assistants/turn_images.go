@@ -3,8 +3,11 @@ package assistants
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"strings"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
@@ -77,22 +80,20 @@ func (s *ServiceCore) slackTurnImageParts(ctx context.Context, thread assistantT
 func (s *ServiceCore) slackTriggerToken(ctx context.Context, thread assistantThreadRecord, event assistantThreadEventRecord) (string, error) {
 	instance, err := triggerrepo.New(s.db).GetTriggerInstanceByIDPublic(ctx, event.TriggerInstanceID.UUID)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("load trigger instance for turn image inlining: %w", err)
 	}
 	if instance.ProjectID != thread.ProjectID || !instance.EnvironmentID.Valid {
 		return "", nil
 	}
 	envMap, err := s.envLoader.Load(ctx, thread.ProjectID, toolconfig.ID(instance.EnvironmentID.UUID))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("load trigger environment for turn image inlining: %w", err)
 	}
-	env := toolconfig.CIEnvFrom(envMap)
-	for _, key := range []string{slackapi.BotTokenEnvVar, slackapi.UserTokenEnvVar, slackapi.TokenEnvVar} {
-		if value := strings.TrimSpace(env.Get(key)); value != "" {
-			return value, nil
-		}
+	token, err := slackapi.TokenFromEnv(slackapi.TokenPreferBot, toolconfig.CIEnvFrom(envMap))
+	if err != nil {
+		return "", nil
 	}
-	return "", nil
+	return token, nil
 }
 
 // imageFileCandidates filters attachment metadata down to declared images
@@ -112,21 +113,35 @@ func imageFileCandidates(files []slackFilePayload) []slackFilePayload {
 	return images
 }
 
-// fetchInlineImageParts downloads each candidate within the per-turn byte
-// budget. A file that fails to download or validate is skipped, never fatal.
+// fetchInlineImageParts downloads the candidates concurrently — the fetches
+// share no state, so turn dispatch pays one file's latency instead of the
+// sum — then applies the per-turn byte budget in message order, so
+// concurrency cannot reorder which files get admitted. A file that fails to
+// download or validate is skipped, never fatal.
 func fetchInlineImageParts(ctx context.Context, logger *slog.Logger, fetcher slackImageFetcher, token string, files []slackFilePayload) []runtimeContentPart {
+	images := make([]*slackapi.ImageFile, len(files))
+	var eg errgroup.Group
+	for i, file := range files {
+		if file.Size > 0 && file.Size > maxTurnInlineImageBytes {
+			continue
+		}
+		eg.Go(func() error {
+			img, err := fetcher.FetchImageFile(ctx, file.ID, token)
+			if err != nil {
+				logger.WarnContext(ctx, "inline slack turn image; skipping file", attr.SlogError(err))
+				return nil
+			}
+			images[i] = img
+			return nil
+		})
+	}
+	// Workers never return errors; failures degrade to metadata-only.
+	_ = eg.Wait()
+
 	remaining := int64(maxTurnInlineImageBytes)
 	parts := make([]runtimeContentPart, 0, len(files))
-	for _, file := range files {
-		if file.Size > 0 && file.Size > remaining {
-			continue
-		}
-		img, err := fetcher.FetchImageFile(ctx, file.ID, token)
-		if err != nil {
-			logger.WarnContext(ctx, "inline slack turn image; skipping file", attr.SlogError(err))
-			continue
-		}
-		if int64(len(img.Data)) > remaining {
+	for _, img := range images {
+		if img == nil || int64(len(img.Data)) > remaining {
 			continue
 		}
 		remaining -= int64(len(img.Data))

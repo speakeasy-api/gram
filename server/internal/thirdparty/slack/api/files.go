@@ -47,19 +47,29 @@ func (f *ImageFile) DataURI() string {
 	return "data:" + f.MimeType + ";base64," + base64.StdEncoding.EncodeToString(f.Data)
 }
 
-// FetchImageFile resolves a Slack file ID via files.info and downloads its
-// private content with the supplied token. The download URL always comes
-// from Slack's files.info response — never from a caller — and its host must
-// be a slack.com host, so a forged file record cannot point the server at an
-// arbitrary origin. The downloaded bytes are capped at MaxImageFileBytes and
-// magic-byte sniffed against an image allowlist.
-func (c *Client) FetchImageFile(ctx context.Context, fileID string, token string) (*ImageFile, error) {
+// ImageFileRef is a resolved-but-not-downloaded Slack image file: the
+// metadata from files.info plus its validated private download URL.
+type ImageFileRef struct {
+	FileID string
+	Name   string
+	Title  string
+	// MimeType is Slack's declared mimetype; the sniff at download time
+	// decides what the content actually is.
+	MimeType string
+	Size     int64
+	// DownloadURL is the validated private download URL. It always comes
+	// from Slack's files.info response — never from a caller — and its host
+	// passed checkFileURL, so a forged file record cannot point the server
+	// at an arbitrary origin.
+	DownloadURL string
+}
+
+// ResolveImageFile resolves a Slack file ID via files.info and validates its
+// size and private download URL without downloading the content.
+func (c *Client) ResolveImageFile(ctx context.Context, fileID string, token string) (*ImageFileRef, error) {
 	if c.httpClient == nil {
 		return nil, fmt.Errorf("slack HTTP client not configured")
 	}
-
-	ctx, cancel := context.WithTimeout(ctx, imageFetchTimeout)
-	defer cancel()
 
 	body, err := c.CallWithToken(ctx, "files.info", map[string]any{"file": fileID}, token)
 	if err != nil {
@@ -101,7 +111,29 @@ func (c *Client) FetchImageFile(ctx context.Context, fileID string, token string
 		return nil, err
 	}
 
-	data, err := c.downloadFile(ctx, parsed.String(), token)
+	return &ImageFileRef{
+		FileID:      info.File.ID,
+		Name:        info.File.Name,
+		Title:       info.File.Title,
+		MimeType:    info.File.Mimetype,
+		Size:        info.File.Size,
+		DownloadURL: parsed.String(),
+	}, nil
+}
+
+// FetchImageFile resolves a Slack file ID via files.info and downloads its
+// private content with the supplied token. The downloaded bytes are capped
+// at MaxImageFileBytes and magic-byte sniffed against an image allowlist.
+func (c *Client) FetchImageFile(ctx context.Context, fileID string, token string) (*ImageFile, error) {
+	ctx, cancel := context.WithTimeout(ctx, imageFetchTimeout)
+	defer cancel()
+
+	ref, err := c.ResolveImageFile(ctx, fileID, token)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := c.downloadFile(ctx, ref.DownloadURL, token)
 	if err != nil {
 		return nil, fmt.Errorf("download slack file %s: %w", fileID, err)
 	}
@@ -112,9 +144,9 @@ func (c *Client) FetchImageFile(ctx context.Context, fileID string, token string
 	}
 
 	return &ImageFile{
-		FileID:   info.File.ID,
-		Name:     info.File.Name,
-		Title:    info.File.Title,
+		FileID:   ref.FileID,
+		Name:     ref.Name,
+		Title:    ref.Title,
 		MimeType: mime,
 		Data:     data,
 	}, nil
@@ -160,7 +192,8 @@ func (c *Client) downloadFile(ctx context.Context, fileURL string, token string)
 // the content it hands out.
 func (c *Client) checkFileURL(u *url.URL) error {
 	if c.baseURL != DefaultBaseURL {
-		if base, err := url.Parse(c.baseURL); err == nil && base.Host != "" && u.Host == base.Host {
+		base, err := url.Parse(c.baseURL)
+		if err == nil && base.Host != "" && u.Host == base.Host && u.Scheme == base.Scheme {
 			return nil
 		}
 	}

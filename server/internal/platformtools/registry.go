@@ -177,7 +177,7 @@ var registry = []toolFactory{
 		return platformslack.NewGetFileInfoTool(deps.SlackHTTPClient)
 	},
 	func(deps Dependencies) PlatformToolExecutor {
-		return platformslack.NewInspectFileTool(deps.SlackHTTPClient)
+		return platformslack.NewGetFileURLTool(deps.SlackHTTPClient, deps.Encryption, deps.ServerURL)
 	},
 	func(deps Dependencies) PlatformToolExecutor {
 		return platformslack.NewListFilesTool(deps.SlackHTTPClient)
@@ -272,6 +272,8 @@ func ListPlatformTools(extras ...ExternalTool) []ToolDescriptor {
 		TriggerApp:       nil,
 		SlackHTTPClient:  nil,
 		Audit:            nil,
+		Encryption:       nil,
+		ServerURL:        nil,
 	}
 	for _, factory := range registry {
 		tools = append(tools, factory(deps).Descriptor())
@@ -304,6 +306,8 @@ func ListTypedTools(
 		TriggerApp:       nil,
 		SlackHTTPClient:  nil,
 		Audit:            nil,
+		Encryption:       nil,
+		ServerURL:        nil,
 	}
 	for _, factory := range registry {
 		descriptor := factory(deps).Descriptor()

@@ -39,7 +39,6 @@ use crate::gram_client::GramBootstrapClient;
 use crate::http_layer::{McpRotatingClient, TokenRegistry, build_bootstrap_client, build_http};
 use crate::telemetry::SpanIdentity;
 use crate::tools;
-use crate::vision::VisionInterceptSource;
 use crate::wire::{McpServer, RunnerContent, RunnerContentPart, RunnerMessage, ThreadBootstrap};
 use crate::workdir::ASSISTANT_WORKDIR;
 
@@ -401,15 +400,14 @@ async fn spawn_thread(
     let fs_resources = FileSystemToolResources::new()
         .with_policy(FileSystemToolPolicy::new().require_read_before_write(true));
 
-    let native_tools = ToolRegistry::new().with(tools::bun_run::bun_run).with(
-        tools::mcp_force_reconnect::McpForceReconnectTool::new(Arc::clone(host)),
-    );
+    let native_tools = ToolRegistry::new()
+        .with(tools::bun_run::bun_run)
+        .with(tools::mcp_force_reconnect::McpForceReconnectTool::new(
+            Arc::clone(host),
+        ))
+        .with(tools::inspect_asset::InspectAssetTool::new(inbox_tx.clone()));
 
-    // The vision interceptor wraps the MCP catalog itself (inside the
-    // compose wrap) so nested compose calls are covered too, and the outer
-    // byte cap only ever sees the slimmed tool result.
-    let intercepted_mcp = VisionInterceptSource::new(mcp_catalog, inbox_tx.clone());
-    let compose_source = agentkit_tool_compose::ComposeTool::wrap(intercepted_mcp)
+    let compose_source = agentkit_tool_compose::ComposeTool::wrap(mcp_catalog)
         .with_source(native_tools.merge(agentkit_tool_fs::registry()));
     let clipped_source = ClippedToolSource::new(compose_source, host.spill_root.clone());
 

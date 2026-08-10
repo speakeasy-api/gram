@@ -11,8 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/speakeasy-api/gram/server/internal/chat"
 )
 
@@ -143,12 +141,12 @@ func (c runnerClient) state(ctx context.Context, baseURL string) (runnerStateRes
 
 // turn delivers a turn to /threads/{threadID}/turn, wrapping failures with
 // the classifyTurnError sentinel the service dispatches on.
-func (c runnerClient) turn(ctx context.Context, baseURL string, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey, authToken, prompt string, inputParts []runtimeContentPart, mcpServers []runtimeMCPServer, timeout time.Duration) error {
+func (c runnerClient) turn(ctx context.Context, baseURL string, runtime assistantRuntimeRecord, turn runTurnRequest, timeout time.Duration) error {
 	reqBody, err := json.Marshal(runtimeTurnRequest{
-		Input:       prompt,
-		InputParts:  inputParts,
-		AuthToken:   authToken,
-		MCPServers:  mcpServers,
+		Input:       turn.Prompt,
+		InputParts:  turn.InputParts,
+		AuthToken:   turn.AuthToken,
+		MCPServers:  turn.MCPServers,
 		AssistantID: runtime.AssistantID.String(),
 		ProjectID:   runtime.ProjectID.String(),
 	})
@@ -157,11 +155,11 @@ func (c runnerClient) turn(ctx context.Context, baseURL string, runtime assistan
 	}
 	req := runtimeHTTPRequest{
 		Method:         http.MethodPost,
-		Path:           "/threads/" + threadID.String() + "/turn",
+		Path:           "/threads/" + turn.ThreadID.String() + "/turn",
 		ContentType:    "application/json",
 		Body:           reqBody,
 		MaxTimeSeconds: int(timeout / time.Second),
-		IdempotencyKey: idempotencyKey,
+		IdempotencyKey: turn.IdempotencyKey,
 	}
 	if _, err := c.request(ctx, baseURL, req); err != nil {
 		return fmt.Errorf("%w: execute %s turn request: %w", classifyTurnError(err), c.backend, err)

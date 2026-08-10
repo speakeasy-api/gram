@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -14,11 +15,16 @@ import (
 
 type stubImageFetcher struct {
 	images map[string]*slackapi.ImageFile
-	calls  []string
+
+	// mu guards calls: fetchInlineImageParts downloads concurrently.
+	mu    sync.Mutex
+	calls []string
 }
 
 func (s *stubImageFetcher) FetchImageFile(_ context.Context, fileID string, _ string) (*slackapi.ImageFile, error) {
+	s.mu.Lock()
 	s.calls = append(s.calls, fileID)
+	s.mu.Unlock()
 	img, ok := s.images[fileID]
 	if !ok {
 		return nil, errors.New("file not found")
@@ -97,7 +103,7 @@ func TestFetchInlineImagePartsSkipsFailuresAndContinues(t *testing.T) {
 	}
 
 	parts := fetchInlineImageParts(t.Context(), testenv.NewLogger(t), fetcher, "tok", files)
-	require.Equal(t, []string{"F1", "F2"}, fetcher.calls, "a failed download must not stop later files")
+	require.ElementsMatch(t, []string{"F1", "F2"}, fetcher.calls, "a failed download must not stop other files")
 	require.Len(t, parts, 1)
 }
 
@@ -116,12 +122,13 @@ func TestFetchInlineImagePartsEnforcesTurnByteBudget(t *testing.T) {
 	files := []slackFilePayload{
 		{ID: "F1", Name: "", Title: "", Mimetype: "image/png", Size: 1, URLPrivateDownload: ""},
 		{ID: "F2", Name: "", Title: "", Mimetype: "image/png", Size: 1, URLPrivateDownload: ""},
-		// Declared size alone already blows the remaining budget: skipped
-		// without a download.
-		{ID: "F3", Name: "", Title: "", Mimetype: "image/png", Size: maxTurnInlineImageBytes, URLPrivateDownload: ""},
+		// Declared size over the whole turn budget: skipped without a
+		// download. Sizes within the budget download concurrently and the
+		// admit pass enforces the shared budget afterwards.
+		{ID: "F3", Name: "", Title: "", Mimetype: "image/png", Size: maxTurnInlineImageBytes + 1, URLPrivateDownload: ""},
 	}
 
 	parts := fetchInlineImageParts(t.Context(), testenv.NewLogger(t), fetcher, "tok", files)
 	require.Len(t, parts, 1, "second image exceeds the remaining budget after the first")
-	require.Equal(t, []string{"F1", "F2"}, fetcher.calls, "budget-exceeding declared size must skip the download")
+	require.ElementsMatch(t, []string{"F1", "F2"}, fetcher.calls, "budget-exceeding declared size must skip the download")
 }

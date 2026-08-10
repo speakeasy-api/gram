@@ -12,6 +12,33 @@ const (
 	runtimeBackendFlyIO = "flyio"
 )
 
+// runTurnRequest bundles everything a backend needs to deliver one turn to
+// the runner's /threads/{thread_id}/turn endpoint.
+type runTurnRequest struct {
+	ThreadID uuid.UUID
+
+	// IdempotencyKey deduplicates redelivered turns; the runner serializes
+	// admissions per key.
+	IdempotencyKey string
+
+	// AuthToken is the thread-scoped runtime token the runner uses for its
+	// management-API calls during the turn.
+	AuthToken string
+
+	// Prompt is the turn's user input text.
+	Prompt string
+
+	// InputParts optionally attaches structured content (e.g. image_url
+	// parts with data: URIs) that the runner folds into the turn's user
+	// item after the prompt text.
+	InputParts []runtimeContentPart
+
+	// MCPServers carries the assistant's current MCP set so the runner can
+	// reconcile newly attached or detached servers into a live thread
+	// without re-running the full thread bootstrap.
+	MCPServers []runtimeMCPServer
+}
+
 type RuntimeBackend interface {
 	Backend() string
 	SupportsBackend(backend string) bool
@@ -41,16 +68,10 @@ type RuntimeBackend interface {
 	// busy machine is skipped and the next admission's Ensure picks the
 	// upgrade up lazily.
 	RecycleImage(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendRecycleResult, error)
-	// RunTurn delivers a turn for `threadID` to the runner backing
-	// `runtime`. The call lands on /threads/{threadID}/turn so the
-	// runner can dispatch to the right per-thread tokio task.
-	// mcpServers carries the assistant's current MCP set so the runner
-	// can reconcile newly attached or detached servers into a live
-	// thread without re-running the full thread bootstrap.
-	// inputParts optionally attaches structured content (e.g. image_url
-	// parts with data: URIs) that the runner folds into the turn's user
-	// item after the prompt text.
-	RunTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey string, authToken string, prompt string, inputParts []runtimeContentPart, mcpServers []runtimeMCPServer) error
+	// RunTurn delivers a turn to the runner backing `runtime`. The call
+	// lands on /threads/{thread_id}/turn so the runner can dispatch to the
+	// right per-thread tokio task.
+	RunTurn(ctx context.Context, runtime assistantRuntimeRecord, turn runTurnRequest) error
 	Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error)
 	// Stop halts the active runtime so it can be re-admitted later. Backends
 	// may keep persisted state (e.g. Fly app + IP) intact for warm reuse.
