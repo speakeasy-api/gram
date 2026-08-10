@@ -316,9 +316,9 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
       >
         <Card.Entity
           icon={<AssistantIcon />}
-          className={BRAND_MESH_SURFACE_CLASS}
+          iconRailClassName={BRAND_MESH_SURFACE_CLASS}
+          overlay={<BrandMeshLayers />}
         >
-          <BrandMeshLayers />
           {/* Header row: name + actions */}
           <div className="mb-3 flex items-start justify-between gap-2">
             <Text

@@ -235,6 +235,8 @@ type CardEntityProps = {
   children: ReactNode;
   /** Content centered in a bordered box on the icon rail. */
   icon?: ReactNode;
+  /** Additional styling for the icon rail surface. */
+  iconRailClassName?: string;
   /** Extra content layered on the icon rail (e.g. an "Added" badge). */
   overlay?: ReactNode;
   className?: string;
@@ -249,6 +251,7 @@ type CardEntityProps = {
 const CardEntity: FC<CardEntityProps> = ({
   children,
   icon,
+  iconRailClassName,
   className,
   overlay,
   onClick,
@@ -273,7 +276,12 @@ const CardEntity: FC<CardEntityProps> = ({
       className,
     )}
   >
-    <div className="relative w-40 shrink-0 overflow-hidden border-r bg-surface-secondary-default">
+    <div
+      className={cn(
+        "relative w-40 shrink-0 overflow-hidden border-r bg-surface-secondary-default",
+        iconRailClassName,
+      )}
+    >
       {icon && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="border bg-card p-3">{icon}</div>
