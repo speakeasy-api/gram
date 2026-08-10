@@ -61,7 +61,7 @@ func (quietProbes) ListToolDeclarations(_ context.Context, _ string) ([]capabili
 	return nil, nil
 }
 
-func (quietProbes) LookupCatalog(_ context.Context, _ string) (*catalog.Match, error) {
+func (quietProbes) LookupCatalog(_ context.Context, _ string, _ bool) (*catalog.Match, error) {
 	return nil, nil
 }
 
@@ -340,7 +340,7 @@ func (failingProbes) ListToolDeclarations(_ context.Context, _ string) ([]capabi
 	return nil, errors.New("server refused unauthenticated tools/list")
 }
 
-func (failingProbes) LookupCatalog(_ context.Context, _ string) (*catalog.Match, error) {
+func (failingProbes) LookupCatalog(_ context.Context, _ string, _ bool) (*catalog.Match, error) {
 	return nil, errors.New("registry unreachable")
 }
 
@@ -374,7 +374,7 @@ func (declaringProbes) ListToolDeclarations(_ context.Context, _ string) ([]capa
 	}, nil
 }
 
-func (declaringProbes) LookupCatalog(_ context.Context, _ string) (*catalog.Match, error) {
+func (declaringProbes) LookupCatalog(_ context.Context, _ string, _ bool) (*catalog.Match, error) {
 	return &catalog.Match{
 		Registry:  "Test Registry",
 		Specifier: "com.example/server",
@@ -399,7 +399,7 @@ func (cataloguedOnlyProbes) ListToolDeclarations(_ context.Context, _ string) ([
 	return nil, errors.New("server refused unauthenticated tools/list")
 }
 
-func (cataloguedOnlyProbes) LookupCatalog(_ context.Context, _ string) (*catalog.Match, error) {
+func (cataloguedOnlyProbes) LookupCatalog(_ context.Context, _ string, _ bool) (*catalog.Match, error) {
 	readOnly := true
 	return &catalog.Match{
 		Registry:  "Test Registry",

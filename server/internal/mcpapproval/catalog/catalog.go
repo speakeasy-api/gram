@@ -66,8 +66,9 @@ func New(logger *slog.Logger, db *pgxpool.Pool, client *externalmcp.RegistryClie
 // catalogues the URL — checked-and-absent, distinct from a lookup failure. A
 // matched entry whose details fetch fails still returns the match, with Tools
 // nil: provenance comes from the already-fetched list entry and stands on its
-// own.
-func (s *Source) LookupCatalog(ctx context.Context, serverURL string) (*Match, error) {
+// own. includeTools false skips the details fetch entirely, for callers that
+// already have the server's own declarations and want provenance only.
+func (s *Source) LookupCatalog(ctx context.Context, serverURL string, includeTools bool) (*Match, error) {
 	canonical, ok := shadowmcp.CanonicalizeInventoryURL(serverURL)
 	if !ok {
 		return nil, nil
@@ -83,6 +84,10 @@ func (s *Source) LookupCatalog(ctx context.Context, serverURL string) (*Match, e
 		registry := externalmcp.Registry{ID: row.ID, URL: row.Url}
 		result, err := s.client.ListServers(ctx, registry, externalmcp.ListServersParams{Search: nil})
 		if err != nil {
+			// Logged per registry: a later registry may still match, and a
+			// match ends the loop with no error — this line is then the only
+			// record that one catalog went unconsulted.
+			s.logger.WarnContext(ctx, "catalog registry could not be listed", attr.SlogError(err))
 			if firstErr == nil {
 				firstErr = fmt.Errorf("list catalog servers: %w", err)
 			}
@@ -101,6 +106,9 @@ func (s *Source) LookupCatalog(ctx context.Context, serverURL string) (*Match, e
 					Specifier:  entry.RegistrySpecifier,
 					Provenance: provenance.Read(entry.Meta),
 					Tools:      nil,
+				}
+				if !includeTools {
+					return match, nil
 				}
 
 				details, err := s.client.GetServerDetails(ctx, registry, entry.RegistrySpecifier, []string{remote.URL})

@@ -11,6 +11,7 @@ package remoteprobe
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -55,6 +56,12 @@ func (p *Probe) DiscoverAuthority(ctx context.Context, serverURL string) (*autho
 	// summarise as "no credential requirement published", which overstates a
 	// pair of 404s on well-known URLs.
 	if result == nil || (result.Version == "none" && result.RegistrationEndpoint == "" && len(result.ScopesSupported) == 0) {
+		// Finding nothing because the probes could not run — unreachable
+		// host, TLS failure, 5xx — is a failed probe, not an absence of
+		// published metadata; it must land in the document's gaps.
+		if result != nil && result.ProbeIncomplete {
+			return nil, errors.New("oauth discovery probes did not complete")
+		}
 		return nil, nil
 	}
 
@@ -76,8 +83,23 @@ func (p *Probe) DiscoverAuthority(ctx context.Context, serverURL string) (*autho
 // schemas, per the capability package's framing — and a server that refuses
 // unauthenticated callers yields an error, which the evidence records as
 // could-not-consult rather than as a clean empty list.
+//
+// One transport caveat: the MCP SDK carries readOnlyHint and idempotentHint
+// as plain booleans, so a hint the server omitted arrives as false — which is
+// also what the MCP spec defines as their default. A tool that publishes an
+// annotations object therefore always carries all four hints here, with
+// omitted ones resolved to their spec defaults; only a tool with no
+// annotations at all surfaces as undeclared. The registry catalog path reads
+// raw JSON and preserves true field presence.
 func (p *Probe) ListToolDeclarations(ctx context.Context, serverURL string) ([]capability.Declaration, error) {
-	client, err := externalmcp.NewClient(ctx, p.logger, p.guardian, serverURL, externalmcptypes.TransportTypeStreamableHTTP, nil)
+	// Retries are disabled: the assembler bounds this source with its own
+	// deadline, and an unreachable host should spend one connection attempt,
+	// not several.
+	client, err := externalmcp.NewClient(ctx, p.logger, p.guardian, serverURL, externalmcptypes.TransportTypeStreamableHTTP, &externalmcp.ClientOptions{
+		Authorization:  "",
+		Headers:        nil,
+		DisableRetries: true,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("connect for tool declarations: %w", err)
 	}
