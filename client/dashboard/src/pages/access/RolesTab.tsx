@@ -294,7 +294,7 @@ export function RolesTab(): JSX.Element {
           <Badge
             variant="neutral"
             size="sm"
-            className="bg-background mt-0.5 w-16 shrink-0 justify-center"
+            className="bg-surface-primary-default mt-0.5 w-16 shrink-0 [&>span]:text-center"
           >
             Member
           </Badge>
@@ -308,7 +308,7 @@ export function RolesTab(): JSX.Element {
           <Badge
             variant="neutral"
             size="sm"
-            className="bg-background mt-0.5 w-16 shrink-0 justify-center"
+            className="bg-surface-primary-default mt-0.5 w-16 shrink-0 [&>span]:text-center"
           >
             Admin
           </Badge>
