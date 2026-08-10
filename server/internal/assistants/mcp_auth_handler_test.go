@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -98,6 +99,20 @@ func TestGetOrRegisterMCPAuthClientReusesRegistration(t *testing.T) {
 	request := <-requests
 	require.Equal(t, "Gram Assistant "+assistantID.String(), request.ClientName)
 	require.Equal(t, []string{redirectURI}, request.RedirectURIs)
+
+	err = assistantrepo.New(conn).DeleteAssistant(t.Context(), assistantrepo.DeleteAssistantParams{
+		AssistantID: assistantID,
+		ProjectID:   projectID,
+	})
+	require.NoError(t, err)
+	var registrationDeleted bool
+	err = conn.QueryRow(t.Context(), `
+		SELECT deleted
+		FROM assistant_mcp_oauth_clients
+		WHERE project_id = $1 AND assistant_id = $2
+	`, projectID, assistantID).Scan(&registrationDeleted)
+	require.NoError(t, err)
+	require.True(t, registrationDeleted)
 }
 
 func TestInvalidateMCPAuthClientForcesRegistration(t *testing.T) {

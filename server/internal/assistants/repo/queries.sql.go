@@ -766,11 +766,20 @@ func (q *Queries) CreateProjectManagedAssistant(ctx context.Context, arg CreateP
 }
 
 const deleteAssistant = `-- name: DeleteAssistant :exec
-UPDATE assistants
+WITH deleted_assistant AS (
+  UPDATE assistants target
+  SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+  WHERE target.id = $1
+    AND target.project_id = $2
+    AND target.deleted IS FALSE
+  RETURNING target.id, target.project_id
+)
+UPDATE assistant_mcp_oauth_clients clients
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE id = $1
-  AND project_id = $2
-  AND deleted IS FALSE
+FROM deleted_assistant assistant
+WHERE clients.assistant_id = assistant.id
+  AND clients.project_id = assistant.project_id
+  AND clients.deleted IS FALSE
 `
 
 type DeleteAssistantParams struct {

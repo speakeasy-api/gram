@@ -494,11 +494,20 @@ WHERE id = @assistant_id
 RETURNING id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at;
 
 -- name: DeleteAssistant :exec
-UPDATE assistants
+WITH deleted_assistant AS (
+  UPDATE assistants target
+  SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+  WHERE target.id = @assistant_id
+    AND target.project_id = @project_id
+    AND target.deleted IS FALSE
+  RETURNING target.id, target.project_id
+)
+UPDATE assistant_mcp_oauth_clients clients
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE id = @assistant_id
-  AND project_id = @project_id
-  AND deleted IS FALSE;
+FROM deleted_assistant assistant
+WHERE clients.assistant_id = assistant.id
+  AND clients.project_id = assistant.project_id
+  AND clients.deleted IS FALSE;
 
 -- name: RevokeSkillDistributionsByAssistant :many
 -- Returns pre-revocation state and skill identity for per-edge audit events.
