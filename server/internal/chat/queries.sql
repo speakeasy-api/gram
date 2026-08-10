@@ -81,10 +81,11 @@ VALUES (
 -- /chat/completions hot path and only runs for the rare already-deleted row. The
 -- assistant join means a deleted assistant's leftover thread can't heal the
 -- chat. The SET also guarantees RETURNING yields a row whether the chat was
--- newly inserted or already existed.
+-- newly inserted or already existed — except when the WHERE below rejects the
+-- conflict, which is how a foreign chat id is reported to the caller.
 ON CONFLICT (id) DO UPDATE SET deleted_at = CASE
     WHEN chats.deleted_at IS NULL THEN NULL
-    WHEN chats.project_id = EXCLUDED.project_id AND EXISTS (
+    WHEN EXISTS (
         SELECT 1 FROM assistant_threads t
         JOIN assistants a ON a.id = t.assistant_id
         WHERE t.chat_id = chats.id AND t.project_id = chats.project_id
@@ -92,6 +93,11 @@ ON CONFLICT (id) DO UPDATE SET deleted_at = CASE
     ) THEN NULL
     ELSE chats.deleted_at
 END
+-- The conflict target is the bare primary key, so a caller supplying another
+-- project's chat id would otherwise land on that row and get its id back from
+-- RETURNING. Rejecting the conflict yields no row, which the caller maps to an
+-- authorization failure.
+WHERE chats.project_id = EXCLUDED.project_id
 RETURNING id;
 
 -- name: UpsertExternalChat :one
@@ -139,13 +145,21 @@ RETURNING id;
 -- Links a chat to the AI integration config that imported it and returns the
 -- chat's persisted message pagination cursor so imports resume where the last
 -- successful page ended.
+-- ai_integration_config_chats has no project_id of its own, so it is scoped
+-- through the chat it links. Returns no row when the chat is not in the project.
+--
+-- The guard is tenancy only, deliberately not `deleted IS FALSE`: a user may
+-- soft-delete an imported chat, and a later activity for it must still link and
+-- advance the cursor. Rejecting deleted chats here would fail the whole sync and
+-- leave the integration retrying the same activity forever.
 INSERT INTO ai_integration_config_chats (
     ai_integration_config_id
   , chat_id
 )
-VALUES (
-    @ai_integration_config_id
-  , @chat_id
+SELECT @ai_integration_config_id::uuid, @chat_id::uuid
+WHERE EXISTS (
+    SELECT 1 FROM chats
+    WHERE id = @chat_id::uuid AND project_id = @project_id::uuid
 )
 ON CONFLICT (chat_id)
 DO UPDATE SET
@@ -157,7 +171,11 @@ RETURNING last_cursor_id;
 UPDATE ai_integration_config_chats
 SET last_cursor_id = @last_cursor_id
   , updated_at = clock_timestamp()
-WHERE chat_id = @chat_id;
+WHERE chat_id = @chat_id
+  AND EXISTS (
+    SELECT 1 FROM chats
+    WHERE chats.id = ai_integration_config_chats.chat_id AND chats.project_id = @project_id
+  );
 
 -- name: CreateChatMessage :copyfrom
 -- created_at is caller-supplied so hook-captured messages carry the event's
@@ -279,7 +297,7 @@ SELECT
     ) AS is_risk
 FROM chat_content_parts ccp
 WHERE ccp.chat_id = @chat_id
-  AND (ccp.project_id IS NULL OR ccp.project_id = @project_id::uuid)
+  AND ccp.project_id = @project_id::uuid
   AND ccp.deleted IS FALSE
   -- Only the parts the requested page can actually render: one anchored to a
   -- message on this page, or an unparented one the client places by time
@@ -718,7 +736,7 @@ FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.organization_id = c.organization_id AND ua.deleted_at IS NULL
 LEFT JOIN assistant_threads at ON at.chat_id = c.id AND at.deleted IS FALSE
 LEFT JOIN assistants a ON a.id = at.assistant_id AND a.deleted IS FALSE
-WHERE c.id = @id AND c.deleted IS FALSE;
+WHERE c.id = @id AND c.project_id = @project_id AND c.deleted IS FALSE;
 
 -- name: GetChatTitlesByIDs :many
 SELECT id, title FROM chats
@@ -772,14 +790,14 @@ ORDER BY 1;
 -- original occurred_at for hook-captured messages (spool replays arrive out
 -- of insert order), and seq breaks ties stably for same-timestamp rows.
 SELECT * FROM chat_messages
-WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uuid)
+WHERE chat_id = @chat_id AND project_id = @project_id::uuid
 ORDER BY created_at ASC, seq ASC;
 
 -- name: ListClaudeUserMessagesForPromptAttachmentParent :many
 SELECT cm.id, cm.content
 FROM chat_messages cm
 WHERE cm.chat_id = @chat_id
-  AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
+  AND cm.project_id = @project_id::uuid
   AND cm.role = 'user'
   AND cm.content != ''
 ORDER BY cm.seq DESC, cm.created_at DESC;
@@ -813,7 +831,7 @@ SELECT
   cm.tool_outcome_notes
 FROM chat_messages cm
 WHERE cm.chat_id = @chat_id
-  AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
+  AND cm.project_id = @project_id::uuid
   AND (
     sqlc.narg('cursor_created_at')::timestamptz IS NULL
     OR (cm.created_at, cm.seq, cm.id) < (
@@ -830,7 +848,7 @@ LIMIT @lim::integer;
 -- list drift and the client hits "chat history mismatch" at
 -- message_capture_strategy.go.
 SELECT COUNT(*) FROM chat_messages
-WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uuid);
+WHERE chat_id = @chat_id AND project_id = @project_id::uuid;
 
 -- name: GetChatMessageStats :one
 -- Chat-wide aggregates (total message count + most recent message timestamp).
@@ -842,7 +860,7 @@ SELECT
   COUNT(*)::bigint AS total,
   MAX(created_at)::timestamptz AS last_message_at
 FROM chat_messages
-WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uuid);
+WHERE chat_id = @chat_id AND project_id = @project_id::uuid;
 
 -- name: GetChatEntryTotals :one
 -- Per-generation trace-entry totals for the chat detail filter bar. The detail
@@ -868,7 +886,7 @@ WITH ordered AS (
     END AS has_tool_calls
   FROM chat_messages cm
   WHERE cm.chat_id = @chat_id
-    AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
+    AND cm.project_id = @project_id::uuid
     AND cm.generation = @generation::integer
 )
 SELECT
@@ -897,8 +915,8 @@ FROM ordered;
 -- Returns only the latest-generation rows; older generations are audit-only.
 SELECT cm.* FROM chat_messages cm
 WHERE cm.chat_id = @chat_id
-  AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
-  AND cm.generation = (SELECT MAX(generation) FROM chat_messages WHERE chat_id = @chat_id)
+  AND cm.project_id = @project_id::uuid
+  AND cm.generation = (SELECT MAX(generation) FROM chat_messages WHERE chat_id = @chat_id AND project_id = @project_id::uuid)
 ORDER BY cm.created_at ASC, cm.seq ASC;
 
 -- name: ListChatMessagesByGeneration :many
@@ -907,12 +925,13 @@ ORDER BY cm.created_at ASC, cm.seq ASC;
 -- even if a new generation is appended mid-workflow.
 SELECT cm.* FROM chat_messages cm
 WHERE cm.chat_id = @chat_id
-  AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
+  AND cm.project_id = @project_id::uuid
   AND cm.generation = @generation::integer
 ORDER BY cm.created_at ASC, cm.seq ASC;
 
 -- name: GetMaxGenerationForChat :one
-SELECT COALESCE(MAX(generation), 0)::integer AS generation FROM chat_messages WHERE chat_id = @chat_id;
+SELECT COALESCE(MAX(generation), 0)::integer AS generation FROM chat_messages
+WHERE chat_id = @chat_id AND project_id = @project_id::uuid;
 
 -- name: ListChatMessagesBeforePage :many
 -- Keyset page within a generation, newest first. The cursor stays the anchor
@@ -925,14 +944,14 @@ SELECT COALESCE(MAX(generation), 0)::integer AS generation FROM chat_messages WH
 -- rows remain.
 SELECT cm.* FROM chat_messages cm
 WHERE cm.chat_id = @chat_id
-  AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
+  AND cm.project_id = @project_id::uuid
   AND cm.generation = @generation::integer
   AND (
     sqlc.narg('before_seq')::bigint IS NULL
     OR (cm.created_at, cm.seq) < (
       SELECT a.created_at, a.seq FROM chat_messages a
       WHERE a.chat_id = @chat_id
-        AND (a.project_id IS NULL OR a.project_id = @project_id::uuid)
+        AND a.project_id = @project_id::uuid
         AND a.seq = sqlc.narg('before_seq')::bigint
     )
     -- A cursor whose anchor row no longer resolves must not dead-end the
@@ -942,7 +961,7 @@ WHERE cm.chat_id = @chat_id
       NOT EXISTS (
         SELECT 1 FROM chat_messages a
         WHERE a.chat_id = @chat_id
-          AND (a.project_id IS NULL OR a.project_id = @project_id::uuid)
+          AND a.project_id = @project_id::uuid
           AND a.seq = sqlc.narg('before_seq')::bigint
       )
       AND cm.seq < sqlc.narg('before_seq')::bigint
@@ -959,14 +978,14 @@ LIMIT @lim::integer;
 -- rows remain.
 SELECT cm.* FROM chat_messages cm
 WHERE cm.chat_id = @chat_id
-  AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
+  AND cm.project_id = @project_id::uuid
   AND cm.generation = @generation::integer
   AND (
     sqlc.narg('after_seq')::bigint IS NULL
     OR (cm.created_at, cm.seq) > (
       SELECT a.created_at, a.seq FROM chat_messages a
       WHERE a.chat_id = @chat_id
-        AND (a.project_id IS NULL OR a.project_id = @project_id::uuid)
+        AND a.project_id = @project_id::uuid
         AND a.seq = sqlc.narg('after_seq')::bigint
     )
     -- Same missing-anchor fallback as ListChatMessagesBeforePage.
@@ -974,7 +993,7 @@ WHERE cm.chat_id = @chat_id
       NOT EXISTS (
         SELECT 1 FROM chat_messages a
         WHERE a.chat_id = @chat_id
-          AND (a.project_id IS NULL OR a.project_id = @project_id::uuid)
+          AND a.project_id = @project_id::uuid
           AND a.seq = sqlc.narg('after_seq')::bigint
       )
       AND cm.seq > sqlc.narg('after_seq')::bigint
@@ -1000,7 +1019,7 @@ WITH ordered AS (
     count(*) OVER () AS total
   FROM chat_messages cm
   WHERE cm.chat_id = @chat_id
-    AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
+    AND cm.project_id = @project_id::uuid
     AND cm.generation = @generation::integer
 ),
 risk_rns AS (
@@ -1046,7 +1065,7 @@ WITH ordered AS (
     count(*) OVER () AS total
   FROM chat_messages cm
   WHERE cm.chat_id = @chat_id
-    AND (cm.project_id IS NULL OR cm.project_id = @project_id::uuid)
+    AND cm.project_id = @project_id::uuid
     AND cm.generation = @generation::integer
 ),
 match_rns AS (
@@ -1070,7 +1089,9 @@ ORDER BY o.created_at ASC, o.seq ASC;
 -- name: ListChatMessagesForMatch :many
 SELECT id, role, content, tool_call_id, tool_calls
 FROM chat_messages
-WHERE chat_id = @chat_id AND generation = @generation
+WHERE chat_id = @chat_id
+  AND project_id = @project_id::uuid
+  AND generation = @generation
 ORDER BY created_at ASC, seq ASC;
 
 -- name: UpdateChatTitle :exec
@@ -1078,7 +1099,7 @@ ORDER BY created_at ASC, seq ASC;
 -- landing during title generation (between the activity's read and this write)
 -- is never clobbered: the row no longer matches and the update no-ops.
 UPDATE chats SET title = @title, updated_at = NOW()
-WHERE id = @id AND title_manually_set IS FALSE;
+WHERE id = @id AND project_id = @project_id AND title_manually_set IS FALSE;
 
 -- name: RenameChat :exec
 -- Set or clear a chat's title and record whether a human chose it. Project-scoped
@@ -1109,28 +1130,19 @@ SET summary = @summary,
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING summary, summary_generated_at;
 
--- name: GetFirstUserChatMessage :one
-SELECT content FROM chat_messages
-WHERE chat_id = @chat_id
-  AND role = 'user'
-  AND content IS NOT NULL
-  AND content != ''
-ORDER BY created_at ASC
-LIMIT 1;
-
--- name: GetToolCallMessages :many
-SELECT * FROM chat_messages
-WHERE chat_id = @chat_id
-  AND role = 'tool'
-ORDER BY created_at ASC;
-
 -- name: UpdateToolCallOutcome :exec
 UPDATE chat_messages
 SET tool_outcome = @tool_outcome,
     tool_outcome_notes = @tool_outcome_notes
-WHERE id = @id;
+WHERE id = @id AND project_id = @project_id::uuid;
 
 -- name: InsertChatResolution :one
+-- Nothing in the schema ties chat_resolutions.project_id to its chat's, so the
+-- pairing is verified here: a mis-plumbed caller would otherwise write a row
+-- whose project_id contradicts its chat_id. Returns no row when the chat does
+-- not belong to the project. Tenancy only, not `deleted IS FALSE` — a chat
+-- soft-deleted while its analysis workflow is in flight would otherwise fail the
+-- activity and retry forever.
 INSERT INTO chat_resolutions (
     project_id,
     chat_id,
@@ -1138,31 +1150,34 @@ INSERT INTO chat_resolutions (
     resolution,
     resolution_notes,
     score
-) VALUES (
-    @project_id,
-    @chat_id,
-    @user_goal,
-    @resolution,
-    @resolution_notes,
-    @score
+)
+SELECT
+    @project_id::uuid,
+    @chat_id::uuid,
+    @user_goal::text,
+    @resolution::text,
+    @resolution_notes::text,
+    @score::int
+WHERE EXISTS (
+    SELECT 1 FROM chats
+    WHERE id = @chat_id::uuid AND project_id = @project_id::uuid
 ) RETURNING id;
 
 -- name: InsertChatResolutionMessage :exec
+-- chat_resolution_messages carries neither project_id nor chat_id, so it is
+-- scoped through the resolution it belongs to.
 INSERT INTO chat_resolution_messages (
     chat_resolution_id,
     message_id
-) VALUES (
-    @chat_resolution_id,
-    @message_id
+)
+SELECT @chat_resolution_id::uuid, @message_id::uuid
+WHERE EXISTS (
+    SELECT 1 FROM chat_resolutions
+    WHERE id = @chat_resolution_id::uuid AND project_id = @project_id::uuid
 );
 
 -- name: DeleteChatResolutions :exec
-DELETE FROM chat_resolutions WHERE chat_id = @chat_id;
-
--- name: ListChatResolutions :many
-SELECT * FROM chat_resolutions
-WHERE chat_id = @chat_id
-ORDER BY created_at DESC;
+DELETE FROM chat_resolutions WHERE chat_id = @chat_id AND project_id = @project_id;
 
 -- name: CountChatsWithResolutions :one
 SELECT COUNT(DISTINCT c.id) as total
@@ -1238,7 +1253,7 @@ WHERE c.project_id = @project_id
 -- name: ListUserFeedbackForChat :many
 SELECT *
 FROM chat_user_feedback
-WHERE chat_id = @chat_id
+WHERE chat_id = @chat_id AND project_id = @project_id
 ORDER BY created_at DESC;
 
 -- name: DeleteChatResolutionsAfterMessage :exec
@@ -1249,13 +1264,22 @@ WHERE id IN (
     JOIN chat_resolution_messages crm ON cr.id = crm.chat_resolution_id
     JOIN chat_messages cm ON crm.message_id = cm.id
     WHERE cr.chat_id = @chat_id
+      AND cr.project_id = @project_id
+      AND cm.project_id = @project_id
       AND (cm.created_at, cm.seq) > (
         SELECT created_at, seq FROM chat_messages
-        WHERE chat_messages.id = @after_message_id AND chat_messages.chat_id = @chat_id
+        WHERE chat_messages.id = @after_message_id
+          AND chat_messages.chat_id = @chat_id
+          AND chat_messages.project_id = @project_id
       )
   );
 
 -- name: InsertUserFeedback :one
+-- Nothing in the schema ties chat_user_feedback.project_id to its chat's, so the
+-- pairing is verified here rather than trusted from the caller. Returns no row
+-- when the chat does not belong to the project. Tenancy only, not
+-- `deleted IS FALSE`: the handler has already rejected deleted chats via
+-- GetChat, and re-checking here would turn a delete racing the insert into a 500.
 INSERT INTO chat_user_feedback (
     project_id,
     chat_id,
@@ -1263,19 +1287,23 @@ INSERT INTO chat_user_feedback (
     user_resolution,
     user_resolution_notes,
     chat_resolution_id
-) VALUES (
-    @project_id,
-    @chat_id,
-    @message_id,
-    @user_resolution,
-    @user_resolution_notes,
-    @chat_resolution_id
+)
+SELECT
+    @project_id::uuid,
+    @chat_id::uuid,
+    @message_id::uuid,
+    @user_resolution::text,
+    sqlc.narg('user_resolution_notes')::text,
+    sqlc.narg('chat_resolution_id')::uuid
+WHERE EXISTS (
+    SELECT 1 FROM chats
+    WHERE id = @chat_id::uuid AND project_id = @project_id::uuid
 ) RETURNING id;
 
 -- name: AddUserFeedbackChatResolution :exec
 UPDATE chat_user_feedback
 SET chat_resolution_id = @chat_resolution_id
-WHERE id = @id;
+WHERE id = @id AND project_id = @project_id;
 
 -- name: SoftDeleteChat :one
 -- Soft-delete a chat unless it backs a live assistant thread, and report the

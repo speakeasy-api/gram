@@ -5,12 +5,13 @@ import { NuqsAdapter } from "nuqs/adapters/react-router/v8";
 import { Toaster } from "@/components/ui/Sonner";
 import { ConfigProvider } from "@/components/ui/context/ConfigContext";
 import { TooltipProvider } from "@/components/ui/Tooltip";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BrowserRouter,
   Route,
   Routes,
   useLocation,
+  useNavigate,
   useSearchParams,
 } from "react-router";
 import { AppLayout, LoginCheck, OrgLayout } from "./components/app-layout.tsx";
@@ -20,7 +21,7 @@ import {
   recordVisit,
   RECENTS_LABEL_OVERRIDE_EVENT,
 } from "./components/command-palette/recentlyVisited";
-import { useUser } from "./contexts/Auth";
+import { useIsPlatformAdmin, useUser } from "./contexts/Auth";
 import { useProjectNavRoutes } from "./hooks/useProjectNavRoutes";
 import { useRBAC } from "./hooks/useRBAC";
 import { AuthProvider, ProjectProvider } from "./contexts/AuthProvider.tsx";
@@ -30,7 +31,6 @@ import { CommandPaletteProvider } from "./contexts/CommandPaletteProvider";
 import { useSlugs } from "./contexts/Sdk.tsx";
 import { SdkProvider } from "./contexts/SdkProvider.tsx";
 import { TelemetryProvider } from "./contexts/TelemetryProvider.tsx";
-import { PlatformAdminToolbar } from "./components/platform-admin-toolbar";
 import { usePageTitle } from "./hooks/use-page-title";
 import { PREFERRED_THEME_STORAGE_KEY } from "./lib/local-storage-keys";
 import CliCallback from "./pages/cli/CliCallback";
@@ -145,7 +145,6 @@ function AppContent() {
     <AuthProvider>
       <ProjectProvider>
         <RouteProvider />
-        <PlatformAdminToolbar />
       </ProjectProvider>
     </AuthProvider>
   );
@@ -165,6 +164,39 @@ const RouteProvider = () => {
 
   // Update document title based on active route
   usePageTitle(routes, orgRoutes);
+
+  // Ctrl+Shift+D toggles between the Platform Admin pages and wherever the
+  // user was working — carried over from the retired floating Developer
+  // Toolkit, which used the same chord to unhide itself. First press remembers
+  // the current page and jumps to the Platform Admin overview; pressing it
+  // again from any Platform Admin page returns to the remembered page. Same
+  // audience rule as the pages: platform admins, or anyone in dev.
+  const isPlatformAdmin = useIsPlatformAdmin();
+  const goToPlatformAdmin = orgRoutes.platformAdminOverview.goTo;
+  const navigate = useNavigate();
+  const platformAdminReturnPath = useRef<string | null>(null);
+  useEffect(() => {
+    if (!(import.meta.env.DEV || isPlatformAdmin)) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey && e.shiftKey && e.key === "D")) return;
+      e.preventDefault();
+      // Test the route segment below :orgSlug specifically — an org whose
+      // slug is literally "platform-admin" must not be mistaken for the
+      // admin pages (which would turn the first press into a no-op).
+      const onPlatformAdminPage =
+        location.pathname.split("/").filter(Boolean)[1] === "platform-admin";
+      if (onPlatformAdminPage) {
+        const returnPath = platformAdminReturnPath.current;
+        platformAdminReturnPath.current = null;
+        if (returnPath) void navigate(returnPath);
+      } else {
+        platformAdminReturnPath.current = location.pathname + location.search;
+        goToPlatformAdmin();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isPlatformAdmin, goToPlatformAdmin, location, navigate]);
 
   // Record the visited page for the command palette's "Recently Visited"
   // section. Stored client-side (localStorage), scoped per workspace.
@@ -244,7 +276,20 @@ const RouteProvider = () => {
             routeToNavAction(route, "Pages", `nav-page-${route.url || "home"}`),
           )
       : [];
-    const orgActions = routesToNavActions(orgRoutes, "Organization", "nav-org");
+    // Platform admin surfaces (platform-admin/* and the platform RIP catalog)
+    // follow the sidebar's audience rule: platform admins, or anyone in local
+    // dev. Filtering here keeps them out of the palette for regular users.
+    const showPlatformAdmin = import.meta.env.DEV || isPlatformAdmin;
+    const paletteOrgRoutes = Object.fromEntries(
+      Object.entries(orgRoutes).filter(
+        ([, route]) => showPlatformAdmin || !route.url.startsWith("platform-"),
+      ),
+    );
+    const orgActions = routesToNavActions(
+      paletteOrgRoutes,
+      "Organization",
+      "nav-org",
+    );
 
     const allActions = [...projectActions, ...orgActions];
     addActions(allActions);
@@ -257,6 +302,7 @@ const RouteProvider = () => {
     orgRoutes,
     projectSlug,
     hasAnyScope,
+    isPlatformAdmin,
     addActions,
     removeActions,
   ]);

@@ -1027,7 +1027,7 @@ func TestIngest_NonUUIDSessionIDStampsResolvedChatID(t *testing.T) {
 	require.Equal(t, "allow", res.Decision)
 
 	// The transcript lands under the mapped UUID.
-	persisted, err := chatRepo.New(ti.conn).GetChat(ctx, chatID)
+	persisted, err := chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{ID: chatID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
 
 	var logs []telemetryrepo.TelemetryLog
@@ -1101,7 +1101,7 @@ func TestIngest_LinksChatToUserAccount(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "allow", res.Decision)
 
-	chat, err := chatRepo.New(ti.conn).GetChat(ctx, chatID)
+	chat, err := chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{ID: chatID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
 	require.True(t, chat.UserAccountID.Valid)
 	require.Equal(t, userAccountID, chat.UserAccountID.UUID.String())

@@ -41,6 +41,7 @@ var scopeGrantSurfaces = map[Scope]GrantSurface{
 	ScopeRiskPolicyBypass:        GrantSurfaceRiskPolicy,
 	ScopeRiskPolicyBlock:         GrantSurfaceRiskPolicy,
 	ScopeChatRead:                GrantSurfaceAccess,
+	ScopeChatWrite:               GrantSurfaceAccess,
 }
 
 // GrantSurfaceForScope returns the surface that owns writes for scope.

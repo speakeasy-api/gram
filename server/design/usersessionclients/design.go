@@ -134,8 +134,9 @@ var UserSessionClient = Type("UserSessionClient", func() {
 	Attribute("updated_at", String, func() {
 		Format(FormatDateTime)
 	})
+	Attribute("active_session_count", Int, "How many live user_sessions this client currently holds. Counted the same way the sessions listing's active filter counts: not revoked, and the refresh token has not expired.")
 
-	Required("id", "user_session_issuer_id", "client_id", "client_name", "redirect_uris", "client_id_issued_at", "created_at", "updated_at")
+	Required("id", "user_session_issuer_id", "client_id", "client_name", "redirect_uris", "client_id_issued_at", "created_at", "updated_at", "active_session_count")
 })
 
 var ListUserSessionClientsResult = Type("ListUserSessionClientsResult", func() {

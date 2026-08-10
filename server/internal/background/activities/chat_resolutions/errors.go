@@ -100,7 +100,10 @@ func IsInferenceDisabled(err error) bool {
 // mismatch it returns a non-retryable Temporal error so the workflow can
 // continue-as-new on the new generation instead of acting on stale indices.
 func loadMessagesAtPinnedGeneration(ctx context.Context, queries *repo.Queries, chatID, projectID uuid.UUID, expectedGeneration int32) ([]repo.ChatMessage, error) {
-	currentGen, err := queries.GetMaxGenerationForChat(ctx, chatID)
+	currentGen, err := queries.GetMaxGenerationForChat(ctx, repo.GetMaxGenerationForChatParams{
+		ChatID:    chatID,
+		ProjectID: projectID,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("get max generation for chat: %w", err)
 	}

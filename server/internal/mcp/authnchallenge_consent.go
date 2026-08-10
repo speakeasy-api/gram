@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/urls"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	users_repo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
@@ -394,23 +395,51 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	}
 
 	// Explicit action required: fail closed on missing / unknown values so
-	// a malformed form post can't trigger the approval path.
+	// a malformed form post can't trigger the approval path. Checked before
+	// any flow-outcome metric is recorded, so a crafted action stays in the
+	// attacker-controllable bucket the guards above describe rather than
+	// counting against a config's health signal.
 	action := r.PostForm.Get("action")
-	switch action {
-	case "approve":
-		// fall through
-	case "deny":
+	if action != "approve" && action != "deny" {
+		return oops.E(oops.CodeBadRequest, nil, `action must be "approve" or "deny"`).LogError(ctx, logger)
+	}
+
+	// The RFC 9207 `iss` both branches below emit, resolved once so the deny
+	// and success responses cannot disagree. It hangs off the origin the
+	// challenge was minted under, not this request's: the remote-session
+	// return leg re-enters consent on the platform origin, so a POST carrying
+	// a custom-domain context can still be completing a flow the client
+	// recorded under a different origin (or vice versa).
+	issuer, err := endpoint.RootURL(challengeState.mintOriginOr(s.BaseURLForRequest(r)))
+	if err != nil {
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
+		return oops.E(oops.CodeUnexpected, err, "build authorization response issuer").LogError(ctx, logger)
+	}
+
+	if action == "deny" {
 		// Cancel: 303 (POST → GET) the MCP client back to its redirect_uri
 		// with access_denied per RFC 6749 §4.1.2.1, preserving the original
 		// state. The user reached the consent screen and chose "no" — a
 		// decline, not an errant config.
+		denyURL, err := buildClientRedirect(clientRedirectParams{
+			RedirectURI:      challengeState.RedirectURI,
+			Issuer:           issuer,
+			Code:             "",
+			State:            challengeState.State,
+			ErrorCode:        "access_denied",
+			ErrorDescription: "user denied consent",
+		})
+		if err != nil {
+			// Recorded as failed, not declined: the user's decline never
+			// reached the client, so this flow ended on a fault. Exactly one
+			// terminal outcome is counted per started flow either way.
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
+			return oops.E(oops.CodeUnexpected, err, "build client redirect").LogError(ctx, logger)
+		}
 		s.metrics.RecordOAuthFlowDeclined(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
 		logger.InfoContext(ctx, "oauth flow declined at consent", attr.SlogOAuthError("access_denied"))
-		denyURL := buildClientRedirect(challengeState.RedirectURI, "", challengeState.State, "access_denied", "user denied consent")
 		http.Redirect(w, r, denyURL, http.StatusSeeOther)
 		return nil
-	default:
-		return oops.E(oops.CodeBadRequest, nil, `action must be "approve" or "deny"`).LogError(ctx, logger)
 	}
 
 	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
@@ -470,7 +499,18 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		return oops.E(oops.CodeUnexpected, err, "store user session grant").LogError(ctx, logger)
 	}
 
-	clientRedirect := buildClientRedirect(challengeState.RedirectURI, code, challengeState.State, "", "")
+	clientRedirect, err := buildClientRedirect(clientRedirectParams{
+		RedirectURI:      challengeState.RedirectURI,
+		Issuer:           issuer,
+		Code:             code,
+		State:            challengeState.State,
+		ErrorCode:        "",
+		ErrorDescription: "",
+	})
+	if err != nil {
+		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, oauthFlowStageConsent)
+		return oops.E(oops.CodeUnexpected, err, "build client redirect").LogError(ctx, logger)
+	}
 	// 303 See Other (POST → GET): the consent submit is a POST; we want
 	// the user agent to GET the redirect target with NO body re-submission.
 	http.Redirect(w, r, clientRedirect, http.StatusSeeOther)
@@ -499,31 +539,89 @@ func resolveSubjectDisplay(ctx context.Context, db users_repo.DBTX, subject urn.
 	return fallback
 }
 
+// clientRedirectParams is the field set of one client-facing authorization
+// response.
+type clientRedirectParams struct {
+	// Code is the authorization code on a success response, empty on an error.
+	Code string
+
+	// ErrorCode carries an RFC 6749 §4.1.2.1 error code. Empty on a success
+	// response.
+	ErrorCode string
+
+	// ErrorDescription carries an RFC 6749 §4.1.2.1 error description. Empty on
+	// a success response.
+	ErrorDescription string
+
+	// Issuer is the RFC 9207 `iss` parameter — the endpoint's root URL, byte
+	// identical to the `issuer` advertised by the AS metadata document. Required
+	// on every authorization response, success and error alike (RFC 9207 §2).
+	// Clients compare it without any normalization (no case folding, default-port
+	// elision, trailing-slash or percent-encoding fixups), so it must be derived
+	// the same way ServeGetAuthorizationServer derives the advertised value.
+	Issuer string
+
+	// RedirectURI is the client's redirect_uri. Callers must only reach this
+	// helper with a URI already validated against the registered set on the
+	// client row; passing an untrusted URI turns the AS into an open redirector.
+	RedirectURI string
+
+	// State echoes the client's original `state` when it sent one.
+	State string
+}
+
+// responseOwnedParams are the query parameters an authorization response
+// defines. A registered redirect_uri may carry a query string of the client's
+// own, which is preserved per RFC 6749 §3.1.2, but any of these it contains is
+// cleared before the response is written: a client that reads `code` before
+// `error` would otherwise see a redirect_uri-supplied `code=…` on a decline as
+// a grant, and a redirect_uri-supplied `iss` could be chosen to pass the RFC
+// 9207 §2.4 comparison the response is meant to fail. `state` is deliberately
+// exempt: it is client-owned round-trip data with no spoofing value, and a
+// registered redirect_uri that embeds one relies on receiving it back on every
+// response. When the client sent a request `state`, the response value
+// overwrites any embedded one below.
+var responseOwnedParams = []string{"iss", "code", "error", "error_description"}
+
 // buildClientRedirect produces the URL to redirect the MCP client to,
-// preserving any prior query string on redirectURI and adding `code` (success)
-// or `error` / `error_description` (failure) plus the original `state`.
-func buildClientRedirect(redirectURI, code, originalState, errCode, errDescription string) string {
-	u, err := url.Parse(redirectURI)
+// preserving any prior query string on RedirectURI and adding `iss` plus
+// `code` (success) or `error` / `error_description` (failure) and the
+// original `state`.
+func buildClientRedirect(p clientRedirectParams) (string, error) {
+	// The issuer has to be the absolute URL the metadata document advertises.
+	// A relative or empty value is one a client validating per RFC 9207 §2.4
+	// discards without surfacing anything to the user, so it fails here where
+	// it is still visible. url.JoinPath returns no error for an empty base, so
+	// a missing origin arrives as a relative path rather than as a failure.
+	if !urls.IsAbsoluteHTTP(p.Issuer) {
+		return "", fmt.Errorf("authorization response issuer is not an absolute http(s) url: %q", p.Issuer)
+	}
+	u, err := url.Parse(p.RedirectURI)
 	if err != nil {
 		// Should never happen — redirect_uri was validated at HandleAuthorize
-		// time. Fall back to a best-effort string concatenation.
-		return redirectURI
+		// time. An unparseable URI has nowhere to carry the response
+		// parameters, so this is terminal for the flow.
+		return "", fmt.Errorf("parse client redirect_uri: %w", err)
 	}
 	q := u.Query()
-	if code != "" {
-		q.Set("code", code)
+	for _, param := range responseOwnedParams {
+		q.Del(param)
 	}
-	if errCode != "" {
-		q.Set("error", errCode)
-		if errDescription != "" {
-			q.Set("error_description", errDescription)
+	q.Set("iss", p.Issuer)
+	if p.Code != "" {
+		q.Set("code", p.Code)
+	}
+	if p.ErrorCode != "" {
+		q.Set("error", p.ErrorCode)
+		if p.ErrorDescription != "" {
+			q.Set("error_description", p.ErrorDescription)
 		}
 	}
-	if originalState != "" {
-		q.Set("state", originalState)
+	if p.State != "" {
+		q.Set("state", p.State)
 	}
 	u.RawQuery = q.Encode()
-	return u.String()
+	return u.String(), nil
 }
 
 // isUniqueViolation reports whether err is a Postgres unique-constraint
