@@ -59,9 +59,11 @@ const SLUG_EXEMPT_PATHS = [
   "/shared",
 ];
 
-// Paths the non-whitelisted gate lets through: the cold-signup gate's escape
-// hatch into the demo org, and the expired-trial gate's own route.
-const GATE_EXEMPT_PATHS = ["/explore-demo", "/talk-to-us"];
+// Exact match, with or without the trailing slash. A prefix match would let
+// deeper paths (e.g. /explore-demo/projects/x) through the gate.
+function isPath(pathname: string, path: string): boolean {
+  return pathname === path || pathname === `${path}/`;
+}
 
 export const AuthProvider = ({
   children,
@@ -121,27 +123,28 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   // Show book demo page if organization is not whitelisted
   // Check this before the no-org fallback so non-whitelisted orgs are blocked before reaching the normal app flow
   // /explore-demo stays reachable: it's the gate page's own escape hatch into
-  // the shared demo org (which is whitelisted). /talk-to-us has to be reachable
-  // too or the redirect below loops. Exact match only — a prefix match would
-  // let deeper paths (e.g. /explore-demo/projects/x) through the gate.
-  const isGateExemptPath = GATE_EXEMPT_PATHS.some(
-    (p) => location.pathname === p || location.pathname === `${p}/`,
-  );
-
+  // the shared demo org (which is whitelisted).
   if (
     session.activeOrganizationId &&
     !session.whitelisted &&
-    !isGateExemptPath
+    !isPath(location.pathname, "/explore-demo")
   ) {
+    // The switcher wins even on the upgrade gate's own route. Someone with a
+    // second organization has somewhere to go, and that page offers no way to
+    // reach it — landing there would strand them.
     if (session.organizations.length > 1) {
       return <SwitchOrg gate />;
     }
-    // An org that never trialed (or is still mid-trial) falls through to the
-    // cold-signup gate.
-    if (getTrialLifecycleFromDates(session.trial, new Date()) === "expired") {
-      return <Navigate to="/talk-to-us" replace />;
+    // Past this point the upgrade gate has to render, or the redirect below
+    // sends the user to a route that bounces them straight back to it.
+    if (!isPath(location.pathname, "/talk-to-us")) {
+      // An org that never trialed (or is still mid-trial) falls through to the
+      // cold-signup gate.
+      if (getTrialLifecycleFromDates(session.trial, new Date()) === "expired") {
+        return <Navigate to="/talk-to-us" replace />;
+      }
+      return <BookDemo />;
     }
-    return <BookDemo />;
   }
 
   if (!session.activeOrganizationId) {
