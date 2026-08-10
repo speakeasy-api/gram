@@ -124,7 +124,7 @@ export default function SwitchOrg({
         <button
           type="button"
           onClick={() => void handleLogout()}
-          className="auth-mono text-[12px] text-[var(--muted)] transition-colors hover:text-black"
+          className="auth-mono text-[13px] leading-none text-[var(--muted)] transition-colors hover:text-black"
         >
           Log out
         </button>

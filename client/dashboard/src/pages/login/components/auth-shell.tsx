@@ -105,11 +105,18 @@ export function AuthShell({
           <img src={speakeasyIcon} alt="" className="h-[22px] w-[22px]" />
           Speakeasy AI Control Plane
         </span>
-        <span className="flex items-center gap-6">
-          <span className="auth-mono text-[13px] text-[var(--muted)]">
+        {/* leading-none on both sides so the label and the action sit on the
+            same optical line — a button inherits its own line box otherwise. */}
+        <span className="flex items-center gap-4">
+          <span className="auth-mono text-[13px] leading-none text-[var(--muted)]">
             {page}
           </span>
-          {headerAction}
+          {headerAction && (
+            <>
+              <span aria-hidden="true" className="h-3 w-px bg-[var(--edge)]" />
+              {headerAction}
+            </>
+          )}
         </span>
       </header>
 
