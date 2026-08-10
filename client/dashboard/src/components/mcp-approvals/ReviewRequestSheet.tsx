@@ -48,7 +48,7 @@ export function ReviewRequestSheet({
               ready
             />
           </div>
-          <ApprovalReview requestId={request.id} />
+          <ApprovalReview requestId={request.id} showDecide />
         </div>
       </SheetContent>
     </Sheet>

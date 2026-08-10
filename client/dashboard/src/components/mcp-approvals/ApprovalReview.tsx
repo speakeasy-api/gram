@@ -8,12 +8,9 @@ import { Button } from "@/components/ui/Button";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { useProject } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
-import type { ShadowMCPPolicyDisposition } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
-import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { ApprovalDecision } from "@gram/client/models/components/approvaldecision.js";
 import type { ApprovalRequester } from "@gram/client/models/components/approvalrequester.js";
 import type { ResearchReport } from "@gram/client/models/components/researchreport.js";
-import type { Role } from "@gram/client/models/components/role.js";
 import {
   invalidateGetMcpApprovalRequest,
   useGetMcpApprovalRequest,
@@ -26,23 +23,23 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 /**
- * One approval review: the evidence, everyone who asked, every prior
- * decision, and the decision form. Rendered wherever a server is reviewed —
- * the Shadow MCP server page for URL targets, the standalone request page for
- * stdio targets — so both surfaces decide through the same flow. Its job is
- * to make one decision fast and defensible, and never to let an absence of
- * evidence read as evidence of safety.
+ * One approval review: the evidence, everyone who asked, and every prior
+ * decision. Rendered wherever a server is reviewed — the Shadow MCP server
+ * page for URL targets, the queue's review sheet for stdio targets. Its job
+ * is to make one decision fast and defensible, and never to let an absence
+ * of evidence read as evidence of safety.
+ *
+ * showDecide renders the inline decision form. The server page leaves it off
+ * — deciding there goes through the Decide Access sheet, and two decide
+ * surfaces on one page would race each other — while the stdio sheet, which
+ * has no other decide surface, turns it on.
  */
 export function ApprovalReview({
   requestId,
-  audience,
+  showDecide = false,
 }: {
   requestId: string;
-  audience?: {
-    members: AccessMember[];
-    roles: Role[];
-    disposition: ShadowMCPPolicyDisposition | null;
-  };
+  showDecide?: boolean;
 }): JSX.Element {
   const project = useProject();
 
@@ -79,13 +76,12 @@ export function ApprovalReview({
         />
         <Requesters requesters={detail.requesters} />
         <PriorDecisions decisions={detail.decisions} />
-        {detail.request.status === "requested" && (
+        {showDecide && detail.request.status === "requested" && (
           <section className="space-y-2">
             <h3 className="text-eyebrow">Decide</h3>
             <DecisionForm
               requestId={detail.request.id}
               projectSlug={project.slug}
-              audience={audience}
             />
           </section>
         )}

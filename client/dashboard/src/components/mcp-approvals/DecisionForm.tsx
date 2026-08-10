@@ -1,11 +1,6 @@
-import { audienceGroups } from "@/components/mcp-approvals/audience";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
-import { MultiSelect } from "@/components/ui/MultiSelect";
 import { TextArea } from "@/components/ui/Textarea";
-import type { ShadowMCPPolicyDisposition } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
-import type { AccessMember } from "@gram/client/models/components/accessmember.js";
-import type { Role } from "@gram/client/models/components/role.js";
 import { invalidateAllListMcpApprovalRequests } from "@gram/client/react-query/listMcpApprovalRequests.js";
 import { invalidateGetMcpApprovalRequest } from "@gram/client/react-query/getMcpApprovalRequest.js";
 import { useRecordMcpApprovalDecisionMutation } from "@gram/client/react-query/recordMcpApprovalDecision.js";
@@ -21,31 +16,20 @@ import { toast } from "sonner";
  *
  * The rationale is required by the API — it is the artifact cited when the
  * requester asks why — so the form enforces it before submitting rather than
- * round-tripping for the error. When an audience is supplied (URL targets,
- * where enforcement grants exist to scope), an approval can be narrowed to
- * selected roles and members; left empty it covers everyone. Under an
- * allow-by-default policy a narrow approval is inexpressible, so the picker
- * stays hidden and the approval clears the block for the whole project.
+ * round-tripping for the error. There is no audience picker here: this form
+ * serves stdio targets, whose decisions carry no enforcement grants to
+ * scope. URL targets decide through the Decide Access sheet instead.
  */
 export function DecisionForm({
   requestId,
   projectSlug,
-  audience,
 }: {
   requestId: string;
   projectSlug: string;
-  audience?: {
-    members: AccessMember[];
-    roles: Role[];
-    disposition: ShadowMCPPolicyDisposition | null;
-  };
 }): JSX.Element {
   const [rationale, setRationale] = useState("");
-  const [grantedPrincipals, setGrantedPrincipals] = useState<string[]>([]);
   const queryClient = useQueryClient();
   const decide = useRecordMcpApprovalDecisionMutation();
-  const audienceSelectable =
-    audience !== undefined && audience.disposition !== "allow_all";
 
   const submit = async (decision: "approved" | "denied") => {
     try {
@@ -56,12 +40,6 @@ export function DecisionForm({
             id: requestId,
             decision,
             rationale: rationale.trim(),
-            grantedPrincipalUrns:
-              decision === "approved" &&
-              audienceSelectable &&
-              grantedPrincipals.length > 0
-                ? grantedPrincipals
-                : undefined,
           },
         },
       });
@@ -78,7 +56,6 @@ export function DecisionForm({
       invalidateAllShadowMCPInventoryServer(queryClient),
     ]);
     setRationale("");
-    setGrantedPrincipals([]);
     toast.success(
       decision === "approved" ? "Request approved" : "Request denied",
     );
@@ -88,20 +65,6 @@ export function DecisionForm({
 
   return (
     <RequireScope scope="mcp_approval:decide" level="component">
-      {audienceSelectable && (
-        <div className="mb-2 space-y-1">
-          <MultiSelect
-            options={audienceGroups(audience.members, audience.roles)}
-            defaultValue={grantedPrincipals}
-            onValueChange={setGrantedPrincipals}
-            placeholder="Approve for everyone"
-          />
-          <p className="text-muted-foreground text-xs">
-            Who an approval covers. Leave empty for everyone; a denial always
-            blocks everyone.
-          </p>
-        </div>
-      )}
       {/* A compose card, not a form: borderless writing surface on a single
           hairline card, actions tucked into a divided footer. */}
       <div className="border-border bg-card border">

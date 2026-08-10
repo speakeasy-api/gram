@@ -437,7 +437,6 @@ describe("ShadowMCPServerDetail", () => {
     expect(screen.getByRole("heading", { name: "GitHub MCP" })).toBeTruthy();
     expect(screen.getByText("https://github.example.com/mcp")).toBeTruthy();
     expect(screen.getByText("Allowed")).toBeTruthy();
-    expect(screen.getByText("people waiting")).toBeTruthy();
     expect(screen.getByText("calls")).toBeTruthy();
     expect(screen.getByText("observed users")).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: "User" })).toBeTruthy();
@@ -795,7 +794,6 @@ describe("ShadowMCPServerDetail", () => {
     expect(screen.queryByText("No review yet")).toBeNull();
     const review = screen.getByTestId("approval-review");
     expect(review.getAttribute("data-request-id")).toBe("request-2");
-    expect(review.getAttribute("data-audience-disposition")).toBe("block_all");
   });
 
   it("renders the refresh evidence control only when an approval request exists", () => {

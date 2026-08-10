@@ -1,4 +1,3 @@
-import { audienceGroups } from "@/components/mcp-approvals/audience";
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -44,6 +43,41 @@ export type DecideAccessTarget = {
 };
 
 export type AccessDecision = "approved" | "denied";
+
+type AudienceGroup = {
+  heading: string;
+  options: { label: string; value: string }[];
+};
+
+/**
+ * The grouped role/member options an approval audience is picked from. Values
+ * are principal URNs — exactly what recordDecision's granted_principal_urns
+ * accepts.
+ */
+function audienceGroups(
+  members: AccessMember[],
+  roles: Role[],
+): AudienceGroup[] {
+  return [
+    {
+      heading: "Roles",
+      options: roles.map((role) => ({
+        label: role.name,
+        value: role.principalUrn,
+      })),
+    },
+    {
+      heading: "Members",
+      options: members.map((member) => ({
+        label:
+          member.name && member.name !== member.email
+            ? `${member.name} (${member.email})`
+            : member.email,
+        value: member.principalUrn,
+      })),
+    },
+  ].filter((group) => group.options.length > 0);
+}
 
 const RATIONALE_PREFILL: Record<AccessDecision, string> = {
   approved: "Approved for use in this project.",

@@ -134,29 +134,6 @@ function MetaItem({ label, value }: { label: string; value: string }) {
   );
 }
 
-/**
- * How many people are waiting on a decision. The approval request is the
- * source of truth; the legacy bypass-request count only fills in while old
- * pre-approval rows drain.
- */
-function pendingRequesterCount(server: ShadowMCPInventoryServer): number {
-  if (server.approvalRequest) {
-    return server.approvalRequest.status === "requested"
-      ? server.approvalRequest.requesterCount
-      : 0;
-  }
-  return server.requestCount;
-}
-
-function requestsMetricDescription(server: ShadowMCPInventoryServer): string {
-  if (server.approvalRequest && server.approvalRequest.status !== "requested") {
-    return server.approvalRequest.status === "approved" ? "approved" : "denied";
-  }
-  return pendingRequesterCount(server) === 1
-    ? "person waiting"
-    : "people waiting";
-}
-
 function ServerSummary({
   disposition,
   policyState,
@@ -169,13 +146,6 @@ function ServerSummary({
   return (
     <div className="space-y-4">
       <MetricCard.Group>
-        <MetricCard
-          size="sm"
-          label="Requests"
-          value={pendingRequesterCount(server)}
-          tone={pendingRequesterCount(server) > 0 ? "destructive" : "neutral"}
-          description={requestsMetricDescription(server)}
-        />
         <MetricCard
           size="sm"
           tone="information"
@@ -191,15 +161,6 @@ function ServerSummary({
           label="Observed use"
           value={server.observedUseCount}
           description={server.observedUseCount === 1 ? "call" : "calls"}
-        />
-        <MetricCard
-          size="sm"
-          tone="information"
-          label="Allowed policies"
-          value={server.allowedPolicyIds.length}
-          description={
-            server.allowedPolicyIds.length === 1 ? "policy" : "policies"
-          }
         />
       </MetricCard.Group>
       <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
@@ -587,14 +548,7 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                       </Text>
                     </div>
                     {server.approvalRequest ? (
-                      <ApprovalReview
-                        requestId={server.approvalRequest.id}
-                        audience={{
-                          members: membersQuery.data?.members ?? [],
-                          roles: rolesQuery.data?.roles ?? [],
-                          disposition,
-                        }}
-                      />
+                      <ApprovalReview requestId={server.approvalRequest.id} />
                     ) : (
                       <div className="bg-muted/20 flex min-h-24 flex-col items-center justify-center border border-dashed px-6 py-8 text-center">
                         <Text variant="body" className="font-medium">
