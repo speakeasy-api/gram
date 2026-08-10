@@ -180,11 +180,11 @@ const RouteProvider = () => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.ctrlKey && e.shiftKey && e.key === "D")) return;
       e.preventDefault();
-      // Segment match rather than substring so an org slug that merely
-      // contains "platform-admin" text can't confuse the toggle.
-      const onPlatformAdminPage = location.pathname
-        .split("/")
-        .includes("platform-admin");
+      // Test the route segment below :orgSlug specifically — an org whose
+      // slug is literally "platform-admin" must not be mistaken for the
+      // admin pages (which would turn the first press into a no-op).
+      const onPlatformAdminPage =
+        location.pathname.split("/").filter(Boolean)[1] === "platform-admin";
       if (onPlatformAdminPage) {
         const returnPath = platformAdminReturnPath.current;
         platformAdminReturnPath.current = null;
@@ -276,7 +276,20 @@ const RouteProvider = () => {
             routeToNavAction(route, "Pages", `nav-page-${route.url || "home"}`),
           )
       : [];
-    const orgActions = routesToNavActions(orgRoutes, "Organization", "nav-org");
+    // Platform admin surfaces (platform-admin/* and the platform RIP catalog)
+    // follow the sidebar's audience rule: platform admins, or anyone in local
+    // dev. Filtering here keeps them out of the palette for regular users.
+    const showPlatformAdmin = import.meta.env.DEV || isPlatformAdmin;
+    const paletteOrgRoutes = Object.fromEntries(
+      Object.entries(orgRoutes).filter(
+        ([, route]) => showPlatformAdmin || !route.url.startsWith("platform-"),
+      ),
+    );
+    const orgActions = routesToNavActions(
+      paletteOrgRoutes,
+      "Organization",
+      "nav-org",
+    );
 
     const allActions = [...projectActions, ...orgActions];
     addActions(allActions);
@@ -289,6 +302,7 @@ const RouteProvider = () => {
     orgRoutes,
     projectSlug,
     hasAnyScope,
+    isPlatformAdmin,
     addActions,
     removeActions,
   ]);

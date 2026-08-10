@@ -11,6 +11,24 @@ import { PlatformAdminGate } from "./PlatformAdminGate";
 
 const PLATFORM_ADMIN_KEY = "gram-dev-platform-admin";
 
+// localStorage throws when persistence is blocked (sandboxed frames, site
+// data disabled); degrade to the off state instead of crashing the page.
+function readPlatformAdminOverride(): boolean {
+  try {
+    return localStorage.getItem(PLATFORM_ADMIN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writePlatformAdminOverride(checked: boolean): void {
+  try {
+    localStorage.setItem(PLATFORM_ADMIN_KEY, checked ? "1" : "0");
+  } catch {
+    // The in-memory state above still reflects the toggle for this render.
+  }
+}
+
 export default function PlatformAdminOverview(): JSX.Element {
   return (
     <Page>
@@ -115,9 +133,7 @@ function OrgOverrideSection(): JSX.Element {
 // non-admins can exercise admin-gated UI. Not rendered outside local dev.
 function PlatformAdminImpersonationSection(): JSX.Element {
   const queryClient = useQueryClient();
-  const [platformAdmin, setPlatformAdmin] = useState(
-    () => localStorage.getItem(PLATFORM_ADMIN_KEY) === "1",
-  );
+  const [platformAdmin, setPlatformAdmin] = useState(readPlatformAdminOverride);
 
   return (
     <AdminSection
@@ -132,7 +148,7 @@ function PlatformAdminImpersonationSection(): JSX.Element {
             checked={platformAdmin}
             onCheckedChange={(checked) => {
               setPlatformAdmin(checked);
-              localStorage.setItem(PLATFORM_ADMIN_KEY, checked ? "1" : "0");
+              writePlatformAdminOverride(checked);
               void queryClient.invalidateQueries();
             }}
             aria-label="Toggle platform admin"

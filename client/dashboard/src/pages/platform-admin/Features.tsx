@@ -158,6 +158,10 @@ function ProductFeaturesSection(): JSX.Element {
               action={
                 <Switch
                   checked={rowPending ? !enabled : enabled}
+                  // One mutation at a time: `pendingFeature` tracks only the
+                  // latest variables, so concurrent toggles would flash stale
+                  // optimistic state and can race each other.
+                  disabled={isPending}
                   onCheckedChange={(next) =>
                     mutate({
                       request: {
@@ -301,6 +305,12 @@ function AnalysisRow({
   // otherwise.
   const action = () => {
     if (!enabled) {
+      // A cap of 0 disables the pipeline as surely as the switch, so an
+      // enable with 0 commits the suggested cap instead — reflect that in
+      // the input immediately so the field never contradicts the submit.
+      if (capNumber === 0) {
+        setCapInput(String(WORK_UNITS_SUGGESTED_CAP));
+      }
       upsert(true, capNumber > 0 ? capNumber : WORK_UNITS_SUGGESTED_CAP);
     } else if (capDirty) {
       upsert(true, capNumber);

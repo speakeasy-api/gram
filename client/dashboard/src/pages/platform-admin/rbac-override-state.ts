@@ -3,7 +3,7 @@
 // components/dev-toolbar-utils.ts) and turns it into the X-Gram-Scope-Override
 // header on every request, so the key and shape here must stay in sync with it.
 
-export const RBAC_OVERRIDE_STORAGE_KEY = "gram-rbac-dev-override";
+const RBAC_OVERRIDE_STORAGE_KEY = "gram-rbac-dev-override";
 
 export type ResourceType =
   | "org"
@@ -11,6 +11,7 @@ export type ResourceType =
   | "environment"
   | "skill"
   | "mcp"
+  | "risk_policy"
   | "chat";
 
 export const SCOPE_DEFS: {
@@ -86,6 +87,24 @@ export const SCOPE_DEFS: {
     description: "Execute MCP tool calls",
   },
   {
+    scope: "risk_policy:evaluate",
+    label: "risk_policy:evaluate",
+    resourceType: "risk_policy",
+    description: "Subject to targeted risk policies",
+  },
+  {
+    scope: "risk_policy:bypass",
+    label: "risk_policy:bypass",
+    resourceType: "risk_policy",
+    description: "Exempt from risk policy enforcement",
+  },
+  {
+    scope: "risk_policy:block",
+    label: "risk_policy:block",
+    resourceType: "risk_policy",
+    description: "Hard-block on risk policy violations",
+  },
+  {
     scope: "chat:read",
     label: "chat:read",
     resourceType: "chat",
@@ -99,6 +118,7 @@ export const GROUP_ORDER: { key: ResourceType; label: string }[] = [
   { key: "environment", label: "Environments" },
   { key: "skill", label: "Skills" },
   { key: "mcp", label: "MCP" },
+  { key: "risk_policy", label: "Risk Policies" },
   { key: "chat", label: "Agent Sessions" },
 ];
 
