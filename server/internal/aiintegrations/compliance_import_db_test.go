@@ -55,7 +55,7 @@ func TestUpsertActivityChatPreservesResolvedUserOnUnresolvedResync(t *testing.T)
 	chatID, _, err := svc.upsertActivityChat(ctx, cfg, resolved, resolver)
 	require.NoError(t, err)
 
-	chatRow, err := chatrepo.New(conn).GetChat(ctx, chatID)
+	chatRow, err := chatrepo.New(conn).GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: project.ID})
 	require.NoError(t, err)
 	require.Equal(t, userRow.ID, chatRow.UserID.String)
 
@@ -70,7 +70,7 @@ func TestUpsertActivityChatPreservesResolvedUserOnUnresolvedResync(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, chatID, sameChatID)
 
-	chatRow, err = chatrepo.New(conn).GetChat(ctx, chatID)
+	chatRow, err = chatrepo.New(conn).GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: project.ID})
 	require.NoError(t, err)
 	require.Equal(t, userRow.ID, chatRow.UserID.String, "resolved user must survive an unresolved re-sync")
 	require.Equal(t, "anthropic_user_1", chatRow.ExternalUserID.String, "external user id must survive an unresolved re-sync")
