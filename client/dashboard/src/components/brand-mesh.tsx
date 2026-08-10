@@ -1,5 +1,9 @@
 import type { ReactElement } from "react";
 
+/** Base host treatment shared by every brand-mesh surface. */
+export const BRAND_MESH_SURFACE_CLASS =
+  "from-card to-background relative isolate bg-gradient-to-br";
+
 /**
  * Brand-rainbow mesh treatment shared by the project home assistant card and
  * the /chat landing: the full tech-color rainbow (--gradient-brand-primary in
