@@ -123,6 +123,7 @@ async function $do(
   const query = encodeFormQuery({
     "cursor": payload?.cursor,
     "from": payload?.from,
+    "include_costs": payload?.include_costs,
     "include_scored_sessions": payload?.include_scored_sessions,
     "include_versions": payload?.include_versions,
     "limit": payload?.limit,

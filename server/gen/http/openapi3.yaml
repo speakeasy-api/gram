@@ -38267,6 +38267,13 @@ paths:
                     description: Include per-version daily trends.
                     type: boolean
                 - allowEmptyValue: true
+                  description: Compute attributed session cost from raw telemetry. Defaults to true. Set false for the skills list, which never displays cost, to skip the expensive telemetry scan.
+                  in: query
+                  name: include_costs
+                  schema:
+                    description: Compute attributed session cost from raw telemetry. Defaults to true. Set false for the skills list, which never displays cost, to skip the expensive telemetry scan.
+                    type: boolean
+                - allowEmptyValue: true
                   description: Include a newest-first page of scored sessions. Intended for one skill detail view.
                   in: query
                   name: include_scored_sessions

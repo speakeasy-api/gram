@@ -35,6 +35,10 @@ export type QuerySkillEfficacyInsightsRequest = {
    */
   includeVersions?: boolean | undefined;
   /**
+   * Compute attributed session cost from raw telemetry. Defaults to true. Set false for the skills list, which never displays cost, to skip the expensive telemetry scan.
+   */
+  includeCosts?: boolean | undefined;
+  /**
    * Include a newest-first page of scored sessions. Intended for one skill detail view.
    */
   includeScoredSessions?: boolean | undefined;
@@ -99,6 +103,7 @@ export type QuerySkillEfficacyInsightsRequest$Outbound = {
   from?: string | undefined;
   to?: string | undefined;
   include_versions?: boolean | undefined;
+  include_costs?: boolean | undefined;
   include_scored_sessions?: boolean | undefined;
   cursor?: string | undefined;
   limit: number;
@@ -116,6 +121,7 @@ export const QuerySkillEfficacyInsightsRequest$outboundSchema: z.ZodMiniType<
     from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     includeVersions: z.optional(z.boolean()),
+    includeCosts: z.optional(z.boolean()),
     includeScoredSessions: z.optional(z.boolean()),
     cursor: z.optional(z.string()),
     limit: z._default(z.int(), 20),
@@ -126,6 +132,7 @@ export const QuerySkillEfficacyInsightsRequest$outboundSchema: z.ZodMiniType<
     return remap$(v, {
       skillIds: "skill_ids",
       includeVersions: "include_versions",
+      includeCosts: "include_costs",
       includeScoredSessions: "include_scored_sessions",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",

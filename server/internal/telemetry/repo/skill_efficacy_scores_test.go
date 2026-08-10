@@ -183,6 +183,7 @@ func TestQuerySkillInsightsAggregatesMappingsAndScoresWithoutUsage(t *testing.T)
 		From:            observedAt.Add(-time.Hour),
 		To:              observedAt.Add(time.Hour),
 		IntervalSeconds: int64((24 * time.Hour).Seconds()),
+		IncludeCosts:    true,
 	})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
@@ -200,6 +201,69 @@ func TestQuerySkillInsightsAggregatesMappingsAndScoresWithoutUsage(t *testing.T)
 	require.EqualValues(t, 1, rows[0].ROIConfidenceHigh)
 	require.EqualValues(t, 1, rows[0].IgnoredCount)
 	require.EqualValues(t, 1, rows[0].PartiallyFollowedCount)
+}
+
+// TestQuerySkillInsightsIncludeCostsTogglesTelemetryScan proves that attributed
+// session cost is computed only when IncludeCosts is set. With it off (the
+// skills-list path) activations still resolve but the raw telemetry_logs scan is
+// skipped, so cost is zero even though a matching usage row exists.
+func TestQuerySkillInsightsIncludeCostsTogglesTelemetryScan(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	queries := repo.New(conn)
+
+	orgID := uuid.NewString()
+	projectID := uuid.New()
+	observedAt := time.Now().UTC().Truncate(time.Second).Add(-time.Hour)
+	sessionID := uuid.NewString()
+	skillID := uuid.New()
+	skillVersionID := uuid.New()
+
+	// An assistant completion usage row carries the session's attributed cost.
+	logID, err := uuid.NewV7()
+	require.NoError(t, err)
+	require.NoError(t, conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			trace_id, span_id, attributes, resource_attributes,
+			gram_project_id, gram_urn, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, logID.String(), observedAt.UnixNano(), observedAt.UnixNano(), "INFO", "assistant.completion",
+		nil, nil, `{"gen_ai.conversation.id":"`+sessionID+`","gen_ai.usage.cost":0.42}`, "{}",
+		projectID.String(), "assistants:chat:completion", "gram-server"))
+
+	require.NoError(t, queries.InsertSkillSessionVersions(ctx, []repo.SkillSessionVersion{{
+		ID: uuid.New(), CreatedAt: observedAt, SeenAt: observedAt, OrganizationID: orgID, ProjectID: projectID,
+		SessionID: sessionID, SkillID: skillID, SkillVersionID: skillVersionID,
+		CanonicalSHA256: "0000000000000000000000000000000000000000000000000000000000000000", Surface: "assistant",
+	}}))
+	testenv.FlushClickHouseAsyncInserts(t, conn)
+
+	base := repo.QuerySkillInsightsParams{
+		OrganizationID: orgID, ProjectID: projectID.String(), SkillIDs: []string{skillID.String()}, SkillVersionIDs: nil,
+		From: observedAt.Add(-time.Hour), To: observedAt.Add(time.Hour), IntervalSeconds: int64((24 * time.Hour).Seconds()),
+	}
+
+	withCosts := base
+	withCosts.IncludeCosts = true
+	rows, err := queries.QuerySkillInsights(ctx, withCosts)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.EqualValues(t, 1, rows[0].ActivationCount)
+	require.EqualValues(t, 1, rows[0].ActivatedSessions)
+	require.InDelta(t, 0.42, rows[0].TotalSessionCost, 1e-9)
+
+	withoutCosts := base
+	withoutCosts.IncludeCosts = false
+	rows, err = queries.QuerySkillInsights(ctx, withoutCosts)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.EqualValues(t, 1, rows[0].ActivationCount)
+	require.EqualValues(t, 1, rows[0].ActivatedSessions)
+	require.Zero(t, rows[0].TotalSessionCost)
 }
 
 func TestQuerySkillInsightsDeduplicatesPhysicalScoresByEventID(t *testing.T) {
@@ -239,6 +303,7 @@ func TestQuerySkillInsightsDeduplicatesPhysicalScoresByEventID(t *testing.T) {
 	rows, err := queries.QuerySkillInsights(ctx, repo.QuerySkillInsightsParams{
 		OrganizationID: orgID, ProjectID: projectID.String(), SkillIDs: []string{score.SkillID.String()}, SkillVersionIDs: nil,
 		From: observedAt.Add(-time.Hour), To: observedAt.Add(time.Hour), IntervalSeconds: int64((24 * time.Hour).Seconds()),
+		IncludeCosts: true,
 	})
 	require.NoError(t, err)
 	require.Len(t, rows, 1)

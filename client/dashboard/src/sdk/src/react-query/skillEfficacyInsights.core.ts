@@ -85,6 +85,7 @@ export function buildSkillEfficacyInsightsQuery(
       from: request?.from,
       to: request?.to,
       includeVersions: request?.includeVersions,
+      includeCosts: request?.includeCosts,
       includeScoredSessions: request?.includeScoredSessions,
       cursor: request?.cursor,
       limit: request?.limit,
@@ -132,6 +133,7 @@ export function buildSkillEfficacyInsightsInfiniteQuery(
       from: request?.from,
       to: request?.to,
       includeVersions: request?.includeVersions,
+      includeCosts: request?.includeCosts,
       includeScoredSessions: request?.includeScoredSessions,
       cursor: request?.cursor,
       limit: request?.limit,
@@ -178,6 +180,7 @@ export function queryKeySkillEfficacyInsights(
     from?: Date | undefined;
     to?: Date | undefined;
     includeVersions?: boolean | undefined;
+    includeCosts?: boolean | undefined;
     includeScoredSessions?: boolean | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;
@@ -194,6 +197,7 @@ export function queryKeySkillEfficacyInsightsInfinite(
     from?: Date | undefined;
     to?: Date | undefined;
     includeVersions?: boolean | undefined;
+    includeCosts?: boolean | undefined;
     includeScoredSessions?: boolean | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;

@@ -81,6 +81,33 @@ func TestQueryInsightsAggregatesVersionsAndReturnsScoredSessions(t *testing.T) {
 	require.Nil(t, result.NextCursor)
 }
 
+func TestQueryInsightsIncludeCostsControlsMainQuery(t *testing.T) {
+	skillID := uuid.NewString()
+	reader := &insightsReaderStub{rows: []telemetryrepo.SkillInsightBucket{{SkillID: skillID, SkillVersionID: uuid.NewString(), ActivationCount: 4}}}
+	ctx, ti := newTestServiceWithInsights(t, reader)
+	setSkillsFeature(t, ctx, ti, true)
+	ctx = withProjectGrants(t, ctx, authz.ScopeSkillRead)
+
+	// The skill has no persisted versions, so no regression base resolves and
+	// the main insights query is the only ClickHouse call.
+	_, err := ti.service.QueryInsights(ctx, &gen.QueryInsightsPayload{
+		SessionToken: nil, ProjectSlugInput: nil, SkillIds: []string{skillID}, From: nil, To: nil,
+		IncludeVersions: nil, IncludeCosts: nil, IncludeScoredSessions: nil, Cursor: nil, Limit: 20,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, reader.queryCalls)
+	require.True(t, reader.queryParams.IncludeCosts, "costs default to on for unspecified payloads")
+
+	exclude := false
+	_, err = ti.service.QueryInsights(ctx, &gen.QueryInsightsPayload{
+		SessionToken: nil, ProjectSlugInput: nil, SkillIds: []string{skillID}, From: nil, To: nil,
+		IncludeVersions: nil, IncludeCosts: &exclude, IncludeScoredSessions: nil, Cursor: nil, Limit: 20,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 2, reader.queryCalls)
+	require.False(t, reader.queryParams.IncludeCosts, "the skills list opts out of the telemetry cost scan")
+}
+
 func TestQueryInsightsPaginatesScoredSessions(t *testing.T) {
 	skillID := uuid.NewString()
 	from := time.Now().UTC().Truncate(time.Second).Add(-48 * time.Hour)
@@ -269,6 +296,10 @@ func TestQueryInsightsRegressionSignalUsesSuggestionPolicyAndEffectiveVersions(t
 	require.True(t, signal.Regression)
 	require.Equal(t, current.ID.String(), signal.CurrentVersionID)
 	require.Equal(t, predecessor.ID.String(), *signal.PredecessorVersionID)
+	// The regression query only compares efficacy scores, so it never triggers
+	// the expensive telemetry cost scan. It runs after the main query, so the
+	// last recorded params belong to it.
+	require.False(t, reader.queryParams.IncludeCosts)
 	require.InDelta(t, 0.6, signal.CurrentAverageScore, 0.000001)
 	require.InDelta(t, 0.8, signal.PredecessorAverageScore, 0.000001)
 	require.EqualValues(t, 10, signal.CurrentScoredSessions)

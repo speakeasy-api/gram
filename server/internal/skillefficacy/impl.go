@@ -146,6 +146,10 @@ func (s *Service) QueryInsights(ctx context.Context, payload *gen.QueryInsightsP
 			responseSkillIDs = append(responseSkillIDs, skill.Skill.ID.String())
 		}
 	}
+	// Costs come from an expensive raw-telemetry scan; only compute them when the
+	// caller asks. Defaults to true so existing SDK/API consumers are unchanged;
+	// the skills list opts out because it never displays session cost.
+	includeCosts := payload.IncludeCosts == nil || *payload.IncludeCosts
 	var rows []telemetryrepo.SkillInsightBucket
 	if len(responseSkillIDs) > 0 {
 		rows, err = s.insights.QuerySkillInsights(ctx, telemetryrepo.QuerySkillInsightsParams{
@@ -156,6 +160,7 @@ func (s *Service) QueryInsights(ctx context.Context, payload *gen.QueryInsightsP
 			From:            from,
 			To:              to,
 			IntervalSeconds: int64((24 * time.Hour).Seconds()),
+			IncludeCosts:    includeCosts,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "query skill efficacy insights").LogError(ctx, logger)
@@ -236,6 +241,8 @@ func (s *Service) attachRegressionSignals(ctx context.Context, logger *slog.Logg
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: authCtx.ProjectID.String(), SkillIDs: regressionSkillIDs,
 		SkillVersionIDs: versionIDs, From: windowEnd.Add(-config.TrendWindow), To: windowEnd,
 		IntervalSeconds: int64(config.TrendWindow.Seconds()),
+		// Regression signals only compare efficacy scores, never cost.
+		IncludeCosts: false,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "query skill efficacy regression signal").LogError(ctx, logger)

@@ -535,6 +535,9 @@ func EncodeQueryInsightsRequest(encoder func(*http.Request) goahttp.Encoder) fun
 		if p.IncludeVersions != nil {
 			values.Add("include_versions", fmt.Sprintf("%v", *p.IncludeVersions))
 		}
+		if p.IncludeCosts != nil {
+			values.Add("include_costs", fmt.Sprintf("%v", *p.IncludeCosts))
+		}
 		if p.IncludeScoredSessions != nil {
 			values.Add("include_scored_sessions", fmt.Sprintf("%v", *p.IncludeScoredSessions))
 		}

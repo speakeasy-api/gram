@@ -472,6 +472,7 @@ func DecodeQueryInsightsRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 			from                  *string
 			to                    *string
 			includeVersions       *bool
+			includeCosts          *bool
 			includeScoredSessions *bool
 			cursor                *string
 			limit                 int
@@ -503,6 +504,16 @@ func DecodeQueryInsightsRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("include_versions", includeVersionsRaw, "boolean"))
 				}
 				includeVersions = &v
+			}
+		}
+		{
+			includeCostsRaw := qp.Get("include_costs")
+			if includeCostsRaw != "" {
+				v, err2 := strconv.ParseBool(includeCostsRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("include_costs", includeCostsRaw, "boolean"))
+				}
+				includeCosts = &v
 			}
 		}
 		{
@@ -548,7 +559,7 @@ func DecodeQueryInsightsRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		if err != nil {
 			return payload, err
 		}
-		payload = NewQueryInsightsPayload(skillIds, from, to, includeVersions, includeScoredSessions, cursor, limit, sessionToken, projectSlugInput)
+		payload = NewQueryInsightsPayload(skillIds, from, to, includeVersions, includeCosts, includeScoredSessions, cursor, limit, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
