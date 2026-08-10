@@ -1,5 +1,82 @@
 # dashboard
 
+## 0.104.0
+
+### Minor Changes
+
+- 5027338: The MCP server Clients and Sessions tab now leads with active session and client counts, and renders both listings as searchable, filterable, sortable tables paginated ten rows at a time, with member avatars and creation dates on sessions. The clients table reports how many active sessions each client holds, backed by a new `active_session_count` field on the user session clients API, and clicking that count narrows both listings to that client behind a clear-filter bar.
+
+### Patch Changes
+
+- 1fa0caf: Surface that Claude Cowork still needs its own manual setup step when Device
+  Agent is selected on the "Instrument agents" onboarding step — Device Agent
+  only covers coding assistants running on the developer's machine, not
+  Cowork's cloud sandbox. The new note links straight into the Manual Setup
+  flow for Cowork.
+
+  Also aligns MDM vendor wording with the Iru rebrand ("Iru (formerly Kandji)")
+  across the Device Agent setup page and Codex onboarding copy, matching the
+  naming already used on the MDM integrations page.
+
+  Conversation events (`UserPromptSubmit`/`Stop`) are now also written to
+  ClickHouse telemetry so the onboarding "Confirm traffic" feed shows prompts
+  and assistant replies, not only tool calls.
+
+## 0.103.0
+
+### Minor Changes
+
+- e136806: MCP server detail pages gain a Clients and Sessions tab, which lists the clients registered against the server's session issuer alongside its active sessions, and takes over the user-sessions listing that previously sat under authentication settings. CIMD-resolved OAuth clients are now distinguished from DCR-registered ones in the dashboard.
+- 76592ef: Rework the toolset OAuth configuration UI now that the OAuth proxy provider system is removed. The "Configure OAuth" wizard keeps its structure, but its custom path now provisions a user session issuer (creating a remote_session_issuer + remote_session_client and linking the toolset) instead of an OAuth proxy server; the external-OAuth path is unchanged. The separate migrate-from-proxy modal and the Platform/Edit OAuth-proxy modals are removed.
+- f6df724: Add opencode to the managed tools list on the device agent fleet
+  configuration page, with the same off/user/managed enforcement layer
+  selection as the other supported tools.
+- d80c633: Restyle the dashboard to the new editorial design language: flat square
+  surfaces with hairline borders, serif display page titles with area
+  micro-labels, unified uppercase table headers, colorized metric tiles, a
+  restrained ink-and-brand chart palette with a dark-mode ramp, muted avatar
+  tints, and a styled not-found page for unmatched routes.
+- 46a645f: Platform admins can now consolidate an organization's remote identity provider onto the shared platform catalog entry for the same upstream. A new Convergence tab on a platform provider lists the organizations running their own provider for that upstream, along with how many clients would move and any metadata differences, and consolidating one re-points those clients without anyone having to sign in again. Providers whose issuer URL differs only by a trailing slash or an explicit default port now count as the same upstream, since those near-duplicates are the ones most worth folding together.
+
+### Patch Changes
+
+- 04679cd: Show Agent Plugins compatibility status and portable ZIP downloads on plugin list and detail pages.
+- 7b746d3: Fix AI Integrations poll-cadence labels to match actual sync intervals: Anthropic Compliance activity feed now reads "Every 5m" (was "Every 10m"), Claude Chat usage/cost metrics now read "Every 4h" (was "Hourly"), and Codex & ChatGPT cost metrics now read "Every 5m" (was "Hourly").
+- a9dd912: Clean up the floating "Bulk actions" toolbar on Risk Events and Risk
+  Overview category tables: removed the doubled border (the toolbar and its
+  "Bulk actions" trigger button each had their own), which read as a boxy
+  nested-border look, in favor of a single borderless pill with just a
+  shadow. Also insets the toolbar a few pixels from the table's header row
+  instead of sitting flush against its top edge.
+- b6e2941: Extend the brand-mesh surface treatment from the project home assistant
+  card to the full `/chat` landing page: the same neutral card-to-background
+  gradient with the brand rainbow breathing in from the top-right corner and
+  a film-grain wash. The decorative layers are now a shared `BrandMeshLayers`
+  component so the two surfaces can't drift apart, and the landing's scroll
+  container moved to an inner wrapper so the mesh and the back button stay
+  pinned while the content scrolls.
+- 0c1e8b6: Update the macOS setup walkthrough on the Device Agent page to install from
+  the signed `.pkg` instead of the retired curl-download-and-chmod script. The pkg installs the daemon, CLI, menu-bar UI, and privileged
+  helper together and registers its own LaunchAgents, so the walkthrough now
+  covers a manual `installer` run or a normal MDM Package push instead of a
+  separate download/chmod/service-register sequence. Windows and Linux are
+  unaffected — they still ship as raw binaries.
+
+  Also makes Device Agent the default choice (instead of Manual Setup) on the
+  "Instrument agent platforms" onboarding step, and drops its "Preview"
+  badge — it's out of preview.
+
+- 8a85b99: Relabel the amber badge that marks platform-admin-only UI from "Dev" to
+  "Internal Admin". The badge appears on the platform admin toolbar and on
+  admin-only fields of the device agent configuration page; "Dev" read as
+  "development build" rather than "visible to Speakeasy staff only", which
+  is what it actually means. Renamed the component to `InternalAdminBadge`
+  to match.
+- 0fad940: Stop the Policy Center table from printing the same thing twice per row. The "Categories / Prompt" column has been folded into the policy column as a second line that only appears when the policy name doesn't already convey it — so "Secrets Exposure Flagger" no longer sits next to "Secrets", and a prompt-based policy whose name is an excerpt of its guardrail shows the name alone. Policies whose name omits a category (or whose guardrail says more than its name) still show the detail, now with the freed-up width.
+- 6ff5ca0: Add user-opted-in automatic remote session token refresh and hide its organization settings until enabled.
+- 793abde: Public skill share links now use your custom domain when one is verified and activated. The share page (and a raw SKILL.md download) is served at `https://<your-domain>/shared/skills/<token>`, scoped so a domain can only ever serve skills belonging to its own organization, and the dashboard copies links with the custom domain automatically.
+- bb83418: Make clickable table rows keyboard-focusable and activatable with Enter or Space.
+
 ## 0.102.0
 
 ### Minor Changes

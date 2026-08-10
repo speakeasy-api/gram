@@ -3068,16 +3068,15 @@ func (s *Service) evaluateGuardrailForChat(
 	includeCEL string,
 	exemptCEL string,
 ) (*gen.PromptGuardrailEvalResult, error) {
-	// GetChat filters soft-deleted chats.
+	// GetChat is project-scoped and filters soft-deleted chats, so a chat in
+	// another project is indistinguishable from one that does not exist.
 	chatRepo := chatrepo.New(s.db)
-	chatRow, err := chatRepo.GetChat(ctx, chatID)
+	_, err := chatRepo.GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: projectID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeNotFound, err, "chat not found")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "load chat").LogError(ctx, s.logger)
-	case chatRow.ProjectID != projectID:
-		return nil, oops.C(oops.CodeNotFound)
 	}
 
 	rows, err := chatRepo.ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{

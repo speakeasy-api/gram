@@ -31,7 +31,7 @@ func TestService_GenerateTitle_ReadReturnsCurrentTitle(t *testing.T) {
 	require.Equal(t, "New Chat", res.Title)
 
 	// Read path must not flip the manual flag.
-	chat, err := repo.New(ti.conn).GetChat(ctx, untitledID)
+	chat, err := repo.New(ti.conn).GetChat(ctx, repo.GetChatParams{ID: untitledID, ProjectID: ti.projectID})
 	require.NoError(t, err)
 	require.False(t, chat.TitleManuallySet)
 }
@@ -49,7 +49,7 @@ func TestService_GenerateTitle_SetManualTitle(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "My Conversation", res.Title)
 
-	chat, err := repo.New(ti.conn).GetChat(ctx, chatID)
+	chat, err := repo.New(ti.conn).GetChat(ctx, repo.GetChatParams{ID: chatID, ProjectID: ti.projectID})
 	require.NoError(t, err)
 	require.True(t, chat.Title.Valid)
 	require.Equal(t, "My Conversation", chat.Title.String)
@@ -73,7 +73,7 @@ func TestService_GenerateTitle_ResetClearsManualFlag(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, res.Title)
 
-	chat, err := repo.New(ti.conn).GetChat(ctx, chatID)
+	chat, err := repo.New(ti.conn).GetChat(ctx, repo.GetChatParams{ID: chatID, ProjectID: ti.projectID})
 	require.NoError(t, err)
 	require.False(t, chat.Title.Valid)
 	require.False(t, chat.TitleManuallySet)
@@ -104,7 +104,7 @@ func TestService_GenerateTitle_AcceptsMaxLengthMultibyteTitle(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, multibyte, res.Title)
 
-	chat, err := repo.New(ti.conn).GetChat(ctx, chatID)
+	chat, err := repo.New(ti.conn).GetChat(ctx, repo.GetChatParams{ID: chatID, ProjectID: ti.projectID})
 	require.NoError(t, err)
 	require.True(t, chat.Title.Valid)
 	require.Equal(t, multibyte, chat.Title.String)
@@ -122,8 +122,10 @@ func TestService_GenerateTitle_NotFound(t *testing.T) {
 }
 
 // A chat owned by another project must not be renamable through this caller's
-// project-scoped context.
-func TestService_GenerateTitle_CrossProjectUnauthorized(t *testing.T) {
+// project-scoped context. GetChat is project-scoped, so it reads as not-found
+// rather than unauthorized — the caller learns nothing about whether the id
+// exists elsewhere.
+func TestService_GenerateTitle_CrossProjectNotFound(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
 	ctx := initSessionCtx(t, ti)
@@ -144,5 +146,68 @@ func TestService_GenerateTitle_CrossProjectUnauthorized(t *testing.T) {
 
 	title := "Sneaky"
 	_, err = ti.service.GenerateTitle(ctx, &gen.GenerateTitlePayload{ID: otherChatID.String(), Title: &title})
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+// A title is derived from the transcript, and renaming mutates another user's
+// session — both need the same grant that reading it does.
+func TestService_GenerateTitle_MemberCannotTouchAnothersChat(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	seedCtx := initSessionCtx(t, ti)
+
+	victim := seedChat(t, seedCtx, ti, "some-other-user", "", "Their Private Title")
+
+	memberCtx, _ := memberSessionCtx(t, ti)
+
+	_, err := ti.service.GenerateTitle(memberCtx, &gen.GenerateTitlePayload{ID: victim.String()})
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	renamed := "renamed by someone else"
+	_, err = ti.service.GenerateTitle(memberCtx, &gen.GenerateTitlePayload{ID: victim.String(), Title: &renamed})
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	chat, err := repo.New(ti.conn).GetChat(seedCtx, repo.GetChatParams{ID: victim, ProjectID: ti.projectID})
+	require.NoError(t, err)
+	require.Equal(t, "Their Private Title", chat.Title.String)
+}
+
+// generateTitle inherits the service-level ChatSessionsToken scheme, so an
+// embedded end-user token can reach it. Renaming your own chat is the real
+// Elements path and must keep working.
+func TestService_GenerateTitle_ExternalUserCanRenameOwnChat(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	seedCtx := initSessionCtx(t, ti)
+
+	chatID := seedChat(t, seedCtx, ti, "", "external-user-A", "Original")
+
+	renamed := "My Renamed Thread"
+	res, err := ti.service.GenerateTitle(
+		chatSessionTokenCtx(t, ti, "external-user-A"),
+		&gen.GenerateTitlePayload{ID: chatID.String(), Title: &renamed},
+	)
+	require.NoError(t, err)
+	require.Equal(t, renamed, res.Title)
+}
+
+// The same token pointed at a different external user's chat is the case that
+// was exploitable: renaming and reading another end user's session title.
+func TestService_GenerateTitle_ExternalUserCannotRenameOthersChat(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	seedCtx := initSessionCtx(t, ti)
+
+	chatID := seedChat(t, seedCtx, ti, "", "external-user-A", "User A Title")
+
+	renamed := "hijacked"
+	_, err := ti.service.GenerateTitle(
+		chatSessionTokenCtx(t, ti, "external-user-B"),
+		&gen.GenerateTitlePayload{ID: chatID.String(), Title: &renamed},
+	)
 	requireOopsCode(t, err, oops.CodeUnauthorized)
+
+	chat, err := repo.New(ti.conn).GetChat(seedCtx, repo.GetChatParams{ID: chatID, ProjectID: ti.projectID})
+	require.NoError(t, err)
+	require.Equal(t, "User A Title", chat.Title.String)
 }

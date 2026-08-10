@@ -308,6 +308,42 @@ INSERT INTO risk_results (
   @chat_content_part_id, @source, TRUE, @rule_id, @description, @match, @tags
 );
 
+-- name: GetPlatformMCPSetupHandoffHashFixture :one
+-- Test-only inspection of the one-way setup credential persisted by Platform MCP.
+SELECT handoff_hash
+FROM platform_mcp_setup_handoffs
+WHERE id = @id;
+
+-- name: ExpirePlatformMCPSetupHandoffFixture :exec
+-- Test-only fixture to verify expired setup handoffs cannot be redeemed.
+UPDATE platform_mcp_setup_handoffs
+SET expires_at = clock_timestamp() - interval '1 second'
+WHERE id = @id;
+
+-- name: GetPlatformMCPReadinessFingerprintFixture :one
+-- Test-only inspection of the non-secret identity fingerprint persisted by Platform MCP.
+SELECT provider_authorization_fingerprint
+FROM platform_mcp_readiness
+WHERE registration_id = @registration_id
+ORDER BY checked_at DESC, id DESC
+LIMIT 1;
+
+-- name: CountPlatformMCPSetupMilestoneFixture :one
+-- Test-only count for idempotent Platform MCP setup evidence.
+SELECT count(*)
+FROM platform_mcp_onboarding_milestones
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND mcp_key = @mcp_key
+  AND attempt_id = @attempt_id
+  AND milestone = @milestone;
+
+-- name: ExpireRemoteSessionAccessTokenFixture :exec
+-- Test-only fixture forcing the shared remote-session refresh path.
+UPDATE remote_sessions
+SET access_expires_at = clock_timestamp() - interval '1 minute'
+WHERE id = @id;
+
 -- name: GetToolCallBlockLinksFixture :one
 -- Test-only. The block page query deliberately does not expose the optional
 -- foreign keys, but asserting that the salvage cleared exactly the link the

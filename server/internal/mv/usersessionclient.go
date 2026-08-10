@@ -16,7 +16,10 @@ import (
 // was resolved from a Client ID Metadata Document rather than registered via
 // RFC 7591 DCR. For a CIMD row it equals client_id (enforced by the
 // user_session_clients_client_id_metadata_uri_match_check constraint).
-func BuildUserSessionClientView(row repo.UserSessionClient) *types.UserSessionClient {
+//
+// activeSessionCount is supplied by the caller rather than read off the row:
+// it is a tally over user_sessions, which the client queries do not join.
+func BuildUserSessionClientView(row repo.UserSessionClient, activeSessionCount int32) *types.UserSessionClient {
 	var clientSecretExpiresAt *string
 	if row.ClientSecretExpiresAt.Valid {
 		s := row.ClientSecretExpiresAt.Time.Format(time.RFC3339)
@@ -34,5 +37,6 @@ func BuildUserSessionClientView(row repo.UserSessionClient) *types.UserSessionCl
 		ClientSecretExpiresAt: clientSecretExpiresAt,
 		CreatedAt:             row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:             row.UpdatedAt.Time.Format(time.RFC3339),
+		ActiveSessionCount:    int(activeSessionCount),
 	}
 }

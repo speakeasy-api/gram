@@ -35,16 +35,17 @@ import { cn } from "@/lib/utils";
 import { visiblePermissionCount } from "./roleDialogState";
 
 // Single source of truth for the per-role actions: the "⋯" dropdown and the
-// row's right-click context menu both render from this list. System roles are
-// fixed (their grants aren't editable), so they get no actions at all.
+// row's right-click context menu both render from this list. Edit always;
+// Delete only for non-system roles.
 function roleActions(
   role: Role,
   { onEdit, onDelete }: { onEdit: () => void; onDelete: () => void },
 ): Action[] {
-  if (role.isSystem) return [];
   return [
     { label: "Edit", onClick: onEdit },
-    { label: "Delete", destructive: true, onClick: onDelete },
+    ...(!role.isSystem
+      ? [{ label: "Delete", destructive: true, onClick: onDelete }]
+      : []),
   ];
 }
 
@@ -128,21 +129,20 @@ function RoleRow({
       photoUrl: m.photoUrl,
     }));
 
-  // Mirror the row-actions menu via the shared builder. Without org:admin —
-  // or for a fixed system role — the menu is empty and the row stays unwrapped.
+  // Mirror the row-actions menu via the shared builder. Without org:admin the
+  // menu is empty and the row stays unwrapped.
   const actions: Action[] = canManageRoles
     ? roleActions(role, { onEdit, onDelete })
     : [];
-  const canEdit = canManageRoles && !role.isSystem;
 
   return (
     <TableRowContextMenu actions={actions}>
       <div
-        role={canEdit ? "button" : undefined}
-        tabIndex={canEdit ? 0 : undefined}
-        onClick={canEdit ? onEdit : undefined}
+        role={canManageRoles ? "button" : undefined}
+        tabIndex={canManageRoles ? 0 : undefined}
+        onClick={canManageRoles ? onEdit : undefined}
         onKeyDown={
-          canEdit
+          canManageRoles
             ? (e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
@@ -153,7 +153,7 @@ function RoleRow({
         }
         className={cn(
           "border-border col-span-full grid grid-cols-subgrid items-center gap-x-6 border-b px-4 py-3 last:border-b-0",
-          canEdit && "hover:bg-muted/50 cursor-pointer",
+          canManageRoles && "hover:bg-muted/50 cursor-pointer",
         )}
       >
         <div className="flex items-center gap-2">
@@ -169,19 +169,11 @@ function RoleRow({
         <Text variant="body" className="text-muted-foreground min-w-0 truncate">
           {role.description}
         </Text>
-        <Text variant="body">
-          {role.isSystem
-            ? role.name === "Admin"
-              ? "All"
-              : "System"
-            : visiblePermissionCount(role.grants)}
-        </Text>
+        <Text variant="body">{visiblePermissionCount(role.grants)}</Text>
         <MemberFacepile members={roleMembers} />
         <div aria-hidden />
         <div onClick={(e) => e.stopPropagation()} className="flex justify-end">
-          {!role.isSystem && (
-            <RoleActionsMenu role={role} onEdit={onEdit} onDelete={onDelete} />
-          )}
+          <RoleActionsMenu role={role} onEdit={onEdit} onDelete={onDelete} />
         </div>
       </div>
     </TableRowContextMenu>
@@ -210,9 +202,9 @@ export function RolesTab(): JSX.Element {
     if (editRoleId && roles.length > 0) {
       const role = roles.find((r) => r.id === editRoleId);
       if (role) {
-        // System roles are fixed — never deep-link them into the edit sheet
+        // Mirror the row/menu gate (org:admin) on the deep-link path too
         // (still consume the param so it doesn't linger in the URL).
-        if (!role.isSystem) setEditingRole(role);
+        if (canManageRoles) setEditingRole(role);
         setSearchParams(
           (prev) => {
             prev.delete("editRole");
@@ -222,7 +214,7 @@ export function RolesTab(): JSX.Element {
         );
       }
     }
-  }, [searchParams, roles, setSearchParams]);
+  }, [searchParams, roles, setSearchParams, canManageRoles]);
 
   const defaultRole =
     roles.find((r) => r.isSystem && r.name === "Member") ?? null;
@@ -304,7 +296,7 @@ export function RolesTab(): JSX.Element {
           <Badge
             variant="neutral"
             size="sm"
-            className="bg-background mt-0.5 w-16 shrink-0 justify-center"
+            className="bg-surface-primary-default mt-0.5 w-16 shrink-0 [&>span]:text-center"
           >
             Member
           </Badge>
@@ -318,7 +310,7 @@ export function RolesTab(): JSX.Element {
           <Badge
             variant="neutral"
             size="sm"
-            className="bg-background mt-0.5 w-16 shrink-0 justify-center"
+            className="bg-surface-primary-default mt-0.5 w-16 shrink-0 [&>span]:text-center"
           >
             Admin
           </Badge>
