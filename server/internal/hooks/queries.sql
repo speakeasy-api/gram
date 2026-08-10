@@ -136,6 +136,7 @@ INSERT INTO chats (
   , external_user_id
   , user_account_id
   , title
+  , cwd
   , created_at
   , updated_at
 )
@@ -147,12 +148,14 @@ VALUES (
     @external_user_id,
     sqlc.narg(user_account_id),
     @title,
+    sqlc.narg(cwd),
     NOW(),
     NOW()
 )
 ON CONFLICT (id) DO UPDATE SET
     updated_at = NOW()
   , user_account_id = COALESCE(EXCLUDED.user_account_id, chats.user_account_id)
+  , cwd = COALESCE(EXCLUDED.cwd, chats.cwd)
 RETURNING id;
 
 -- name: UpdateClaudeCodeSessionTimestamp :exec

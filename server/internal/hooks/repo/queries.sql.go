@@ -756,6 +756,7 @@ INSERT INTO chats (
   , external_user_id
   , user_account_id
   , title
+  , cwd
   , created_at
   , updated_at
 )
@@ -767,12 +768,14 @@ VALUES (
     $5,
     $6,
     $7,
+    $8,
     NOW(),
     NOW()
 )
 ON CONFLICT (id) DO UPDATE SET
     updated_at = NOW()
   , user_account_id = COALESCE(EXCLUDED.user_account_id, chats.user_account_id)
+  , cwd = COALESCE(EXCLUDED.cwd, chats.cwd)
 RETURNING id
 `
 
@@ -784,6 +787,7 @@ type UpsertClaudeCodeSessionParams struct {
 	ExternalUserID pgtype.Text
 	UserAccountID  uuid.NullUUID
 	Title          pgtype.Text
+	Cwd            pgtype.Text
 }
 
 func (q *Queries) UpsertClaudeCodeSession(ctx context.Context, arg UpsertClaudeCodeSessionParams) (uuid.UUID, error) {
@@ -795,6 +799,7 @@ func (q *Queries) UpsertClaudeCodeSession(ctx context.Context, arg UpsertClaudeC
 		arg.ExternalUserID,
 		arg.UserAccountID,
 		arg.Title,
+		arg.Cwd,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)

@@ -2379,3 +2379,47 @@ func TestIngest_ShadowMCPMetaToolGateReadsSessionState(t *testing.T) {
 	require.Equal(t, "deny", result.Decision,
 		"the session reported a successful read, so the guard must enforce on its meta-tool calls")
 }
+
+// Canonical events carry the session working directory (hook.ingest.v1
+// session.cwd); the chat row must persist it so session portability can
+// materialize a moved session into the right project directory. Later events
+// without a cwd must never null out a previously recorded one.
+func TestIngest_PersistsSessionCwd(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	// Chat rows are only written when session capture is enabled for the org.
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "canonical-session-cwd"
+	chatID := sessionIDToUUID(sessionID)
+	cwd := "/Users/test/code/api"
+
+	prompt := "add a --verbose flag"
+	payload := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	payload.Session.Cwd = &cwd
+	payload.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &prompt}}
+	res, err := ti.service.Ingest(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, "allow", res.Decision)
+
+	chat, err := chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{ID: chatID, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.True(t, chat.Cwd.Valid, "chat must persist the session cwd")
+	require.Equal(t, cwd, chat.Cwd.String)
+
+	// A follow-up event with no cwd keeps the recorded one.
+	second := "now update the README"
+	followUp := canonicalIngestPayload("claude", "prompt.submitted", sessionID)
+	followUp.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: &second}}
+	_, err = ti.service.Ingest(ctx, followUp)
+	require.NoError(t, err)
+
+	chat, err = chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{ID: chatID, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	require.True(t, chat.Cwd.Valid)
+	require.Equal(t, cwd, chat.Cwd.String)
+}

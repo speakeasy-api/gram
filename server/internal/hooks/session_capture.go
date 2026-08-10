@@ -392,6 +392,7 @@ func (s *Service) insertMessageWithFallbackUpsertResult(
 		ExternalUserID: conv.ToPGTextEmpty(metadata.UserEmail),
 		UserAccountID:  conv.StringToNullUUID(metadata.UserAccountID),
 		Title:          conv.ToPGText(defaultTitle),
+		Cwd:            conv.ToPGTextEmpty(metadata.Cwd),
 	})
 	if upsertErr != nil {
 		return false, fmt.Errorf("upsert claude code session after FK violation: %w", upsertErr)
