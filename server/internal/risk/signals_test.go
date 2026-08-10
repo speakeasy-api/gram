@@ -10,6 +10,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -25,6 +26,7 @@ func TestGetRiskSignals_ClickHouse(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ti.flags.SetFlag(feature.FlagRiskWatchdog, authCtx.ActiveOrganizationID, true)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
@@ -179,6 +181,7 @@ func TestGetRiskSignals_EmptyWindow(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ti.flags.SetFlag(feature.FlagRiskWatchdog, authCtx.ActiveOrganizationID, true)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
@@ -194,6 +197,21 @@ func TestGetRiskSignals_EmptyWindow(t *testing.T) {
 	require.Equal(t, int64(0), result.Findings24h)
 	require.InDelta(t, 0, result.OrgRiskScore, 0.001)
 	require.InDelta(t, 0, result.PreviousOrgRiskScore, 0.001)
+}
+
+// TestGetRiskSignals_FlagDisabled asserts an org without the
+// gram-risk-watchdog PostHog flag is refused even with the org:admin scope.
+func TestGetRiskSignals_FlagDisabled(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	_, err := ti.service.GetRiskSignals(ctx, &gen.GetRiskSignalsPayload{From: nil, To: nil})
+	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
 // TestGetRiskSignals_RequiresOrgAdmin asserts the endpoint denies callers
@@ -217,6 +235,9 @@ func TestGetRiskSignals_InvalidWindow(t *testing.T) {
 	ctx, ti := newTestRiskService(t)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	// The flag gate runs before window validation, so it must be open for
+	// the window errors to surface.
+	ti.flags.SetFlag(feature.FlagRiskWatchdog, authCtx.ActiveOrganizationID, true)
 	ctx = withExactAccessGrants(t, ctx, ti.conn,
 		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
 	)
