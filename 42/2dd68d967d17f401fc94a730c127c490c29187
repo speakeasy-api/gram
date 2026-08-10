@@ -1,0 +1,20 @@
+server/internal/authz/challenge_logger.go
+  s_6cd0b3509a4ad1::t_7956083d042c3b 53,201
+  s_6cd0b3509a4ad1::t_81c217343122d5 19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "422dd68d967d17f401fc94a730c127c490c29187",
+  "prompts": {},
+  "sessions": {
+    "s_6cd0b3509a4ad1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fd754-8571-7ca3-9b80-f41a12ff308a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
