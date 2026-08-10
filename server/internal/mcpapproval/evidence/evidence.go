@@ -355,8 +355,8 @@ func (a *Assembler) Assemble(ctx context.Context, projectID uuid.UUID, resolved 
 			}
 		}
 
-		a.probeAuthority(ctx, target, &document)
-		serverDeclared := a.probeToolDeclarations(ctx, target, &document)
+		authorityConsulted := a.probeAuthority(ctx, target, &document)
+		serverDeclared := a.probeToolDeclarations(ctx, target, &document, authorityConsulted)
 		a.lookupCatalog(ctx, target, &document, serverDeclared)
 	}
 
@@ -369,20 +369,21 @@ func (a *Assembler) Assemble(ctx context.Context, projectID uuid.UUID, resolved 
 }
 
 // probeAuthority asks the server's well-known endpoints what authentication
-// it publishes. A probe that finds nothing leaves the section absent — the
+// it publishes, reporting whether discovery ran to completion. A probe that
+// finds nothing leaves the section absent — the
 // server publishing no OAuth metadata is not the server declaring it needs
 // nothing.
-func (a *Assembler) probeAuthority(ctx context.Context, serverURL string, document *Document) {
+func (a *Assembler) probeAuthority(ctx context.Context, serverURL string, document *Document) bool {
 	probeCtx, cancel := context.WithTimeout(ctx, a.sourceTimeout)
 	defer cancel()
 
 	declaration, err := a.authorityProbe.DiscoverAuthority(probeCtx, serverURL)
 	if err != nil {
 		document.Gaps = append(document.Gaps, GapAuthorityProbe)
-		return
+		return false
 	}
 	if declaration == nil {
-		return
+		return true
 	}
 
 	summary := authority.Summarise(*declaration)
@@ -396,6 +397,8 @@ func (a *Assembler) probeAuthority(ctx context.Context, serverURL string, docume
 		UnauthenticatedTools: summary.UnauthenticatedTools,
 		Undeclared:           summary.Undeclared,
 	}
+
+	return true
 }
 
 func credentialSections(credentials []authority.Credential) []CredentialSection {
@@ -416,7 +419,12 @@ func credentialSections(credentials []authority.Credential) []CredentialSection 
 // refusal is not yet a gap, because the catalog lookup may still supply the
 // registry's copy of the declarations; recording the gap when both fail is
 // lookupCatalog's job.
-func (a *Assembler) probeToolDeclarations(ctx context.Context, serverURL string, document *Document) bool {
+//
+// authorityConsulted gates the synthetic authority section: when the
+// authority probe itself failed, asserting "answers without any credential"
+// alongside an authority_probe_failed gap would be the exact
+// failed-probe-reads-as-clean conflation the gaps exist to prevent.
+func (a *Assembler) probeToolDeclarations(ctx context.Context, serverURL string, document *Document, authorityConsulted bool) bool {
 	probeCtx, cancel := context.WithTimeout(ctx, a.sourceTimeout)
 	defer cancel()
 
@@ -427,7 +435,9 @@ func (a *Assembler) probeToolDeclarations(ctx context.Context, serverURL string,
 
 	document.CapabilitiesSource = CapabilitiesFromServer
 	a.fillCapabilities(document, declarations)
-	recordUnauthenticatedListing(document, declarations)
+	if authorityConsulted {
+		recordUnauthenticatedListing(document, declarations)
+	}
 
 	return true
 }

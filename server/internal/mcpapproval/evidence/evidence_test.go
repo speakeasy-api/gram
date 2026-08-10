@@ -545,3 +545,49 @@ func TestAssemble_FailedProbesAreGaps(t *testing.T) {
 	packageDoc := decode(t, packageRaw)
 	require.NotContains(t, packageDoc, "gaps")
 }
+
+// authorityFailsToolsAnswer stands in for a server whose OAuth well-knowns
+// fail at the transport level while unauthenticated tools/list answers.
+type authorityFailsToolsAnswer struct{}
+
+func (authorityFailsToolsAnswer) DiscoverAuthority(_ context.Context, _ string) (*authority.Declaration, error) {
+	return nil, errors.New("well-known probes unreachable")
+}
+
+func (authorityFailsToolsAnswer) ListToolDeclarations(_ context.Context, _ string) ([]capability.Declaration, error) {
+	return []capability.Declaration{{
+		Name: "search", Description: "", InputSchema: "",
+		ReadOnly: nil, Destructive: nil, Idempotent: nil, OpenWorld: nil,
+	}}, nil
+}
+
+func (authorityFailsToolsAnswer) LookupCatalog(_ context.Context, _ string, _ bool) (*catalog.Match, error) {
+	return nil, nil
+}
+
+// A failed authority probe must never be papered over by the unauthenticated
+// listing: the gap stays, and no synthetic mode-none section appears claiming
+// the server needs no credential.
+func TestAssemble_FailedAuthorityProbeIsNotMaskedByUnauthenticatedListing(t *testing.T) {
+	t.Parallel()
+
+	assembler := evidence.NewAssembler(
+		&fakePackages{metadata: nil, err: nil},
+		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
+		authorityFailsToolsAnswer{},
+		authorityFailsToolsAnswer{},
+		authorityFailsToolsAnswer{},
+	)
+
+	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("https://mcp.example.com/mcp"))
+	require.NoError(t, err)
+	doc := decode(t, raw)
+
+	gaps, ok := doc["gaps"].([]any)
+	require.True(t, ok)
+	require.Contains(t, gaps, "authority_probe_failed")
+	require.NotContains(t, doc, "authority", "a failed probe must not be papered over with a synthetic mode-none section")
+
+	// The capability section still carries the answered listing.
+	require.Equal(t, "server", doc["capabilities_source"])
+}
