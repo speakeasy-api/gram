@@ -1,0 +1,2 @@
+ALTER TABLE `risk_findings` ADD COLUMN `chat_source` LowCardinality(String) DEFAULT '' COMMENT 'Canonical product surface the scanned message came from (chat_messages.source canonicalized at ingest, e.g. codex, cursor, claude-code). Empty for rows written before the column existed or when attribution is unresolved.';
+ALTER TABLE `risk_findings` ADD COLUMN `team` LowCardinality(String) DEFAULT '' COMMENT 'WorkOS directory department_name of the resolved user at ingest. Empty when the user has no directory profile or attribution is unresolved.';
