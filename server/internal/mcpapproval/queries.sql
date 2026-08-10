@@ -36,6 +36,26 @@ WHERE r.id = @id
   AND r.project_id = @project_id
   AND r.deleted IS FALSE;
 
+-- name: GetApprovalRequestByTarget :one
+-- Resolves the review tracking a target within the caller's project, so the
+-- read-side ensure path can return an existing dossier without re-admitting
+-- it — a page view must not re-run evidence gathering or audit a create that
+-- did not happen.
+SELECT
+  r.*
+  , (
+      SELECT count(*)
+      FROM mcp_approval_request_requesters req
+      WHERE req.mcp_approval_request_id = r.id
+        AND req.project_id = r.project_id
+        AND req.deleted IS FALSE
+    ) AS requester_count
+FROM mcp_approval_requests r
+WHERE r.project_id = @project_id
+  AND r.target_kind = @target_kind
+  AND r.target_key = @target_key
+  AND r.deleted IS FALSE;
+
 -- name: ListApprovalRequestsByTargetKeys :many
 -- Resolves the approval request tracking each of a set of canonical server
 -- URLs, so the Shadow MCP inventory can join approval state onto its rows.

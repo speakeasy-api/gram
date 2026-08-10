@@ -333,6 +333,24 @@ func (s *Service) EnsureServerReview(ctx context.Context, payload *gen.EnsureSer
 		return nil, err
 	}
 
+	// A dossier that already exists with a gathered document resolves as a
+	// plain read: the server page calls this endpoint on every view, so a
+	// repeat resolve must not re-run the evidence probes, touch the row, or
+	// audit a create that did not happen. A row whose gather previously
+	// failed (no evidence yet) falls through to admit so the gather is
+	// retried; concurrent first opens race harmlessly into the upsert.
+	existing, err := repo.New(s.db).GetApprovalRequestByTarget(ctx, repo.GetApprovalRequestByTargetParams{
+		ProjectID:  projectID,
+		TargetKind: targetKindServerURL,
+		TargetKey:  key,
+	})
+	switch {
+	case err == nil && existing.EvidenceCollectedAt.Valid:
+		return summaryView(fromTargetRow(existing)), nil
+	case err != nil && !errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading approval request").LogError(ctx, s.logger)
+	}
+
 	return s.admit(ctx, projectID, organizationID, admission{
 		targetKind:      targetKindServerURL,
 		targetRaw:       display,

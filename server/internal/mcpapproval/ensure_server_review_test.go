@@ -3,10 +3,14 @@ package mcpapproval_test
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_approval"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -39,6 +43,38 @@ func TestEnsureServerReview_OpensDossierWithoutRequester(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, dossier.ID, again.ID)
 	require.Equal(t, "unreviewed", again.Status)
+}
+
+// The server page calls EnsureServerReview on every view, so a repeat resolve
+// of a dossier that already has gathered evidence must behave as a plain read:
+// no evidence re-gather, no row touch, and no create audit entry.
+func TestEnsureServerReview_RepeatResolveIsAPlainRead(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	dossier, err := ti.service.EnsureServerReview(ctx, ensurePayload("https://repeat.example.com/mcp"))
+	require.NoError(t, err)
+
+	first, err := ti.repo.GetApprovalRequest(ctx, repo.GetApprovalRequestParams{ID: uuid.MustParse(dossier.ID), ProjectID: ti.projectID})
+	require.NoError(t, err)
+	require.True(t, first.EvidenceCollectedAt.Valid, "first open gathers evidence")
+
+	audits, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMCPApprovalRequestCreate)
+	require.NoError(t, err)
+
+	again, err := ti.service.EnsureServerReview(ctx, ensurePayload("https://repeat.example.com/mcp"))
+	require.NoError(t, err)
+	require.Equal(t, dossier.ID, again.ID)
+
+	after, err := ti.repo.GetApprovalRequest(ctx, repo.GetApprovalRequestParams{ID: first.ID, ProjectID: ti.projectID})
+	require.NoError(t, err)
+	require.Equal(t, first.EvidenceCollectedAt.Time, after.EvidenceCollectedAt.Time, "repeat resolve must not re-gather evidence")
+	require.Equal(t, first.UpdatedAt.Time, after.UpdatedAt.Time, "repeat resolve must not touch the row")
+
+	auditsAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMCPApprovalRequestCreate)
+	require.NoError(t, err)
+	require.Equal(t, audits, auditsAfter, "repeat resolve must not audit a create")
 }
 
 func TestEnsureServerReview_StaysOutOfTheQueue(t *testing.T) {

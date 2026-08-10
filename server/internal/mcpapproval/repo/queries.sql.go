@@ -242,6 +242,80 @@ func (q *Queries) GetApprovalRequest(ctx context.Context, arg GetApprovalRequest
 	return i, err
 }
 
+const getApprovalRequestByTarget = `-- name: GetApprovalRequestByTarget :one
+SELECT
+  r.id, r.organization_id, r.project_id, r.target_kind, r.target_raw, r.target_key, r.artifact_ref, r.version_pinned, r.risk_policy_bypass_request_id, r.status, r.current_evidence, r.evidence_version, r.evidence_collected_at, r.created_at, r.updated_at, r.deleted_at, r.deleted
+  , (
+      SELECT count(*)
+      FROM mcp_approval_request_requesters req
+      WHERE req.mcp_approval_request_id = r.id
+        AND req.project_id = r.project_id
+        AND req.deleted IS FALSE
+    ) AS requester_count
+FROM mcp_approval_requests r
+WHERE r.project_id = $1
+  AND r.target_kind = $2
+  AND r.target_key = $3
+  AND r.deleted IS FALSE
+`
+
+type GetApprovalRequestByTargetParams struct {
+	ProjectID  uuid.UUID
+	TargetKind string
+	TargetKey  string
+}
+
+type GetApprovalRequestByTargetRow struct {
+	ID                        uuid.UUID
+	OrganizationID            string
+	ProjectID                 uuid.UUID
+	TargetKind                string
+	TargetRaw                 string
+	TargetKey                 string
+	ArtifactRef               pgtype.Text
+	VersionPinned             bool
+	RiskPolicyBypassRequestID uuid.NullUUID
+	Status                    string
+	CurrentEvidence           []byte
+	EvidenceVersion           int32
+	EvidenceCollectedAt       pgtype.Timestamptz
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
+	DeletedAt                 pgtype.Timestamptz
+	Deleted                   bool
+	RequesterCount            int64
+}
+
+// Resolves the review tracking a target within the caller's project, so the
+// read-side ensure path can return an existing dossier without re-admitting
+// it — a page view must not re-run evidence gathering or audit a create that
+// did not happen.
+func (q *Queries) GetApprovalRequestByTarget(ctx context.Context, arg GetApprovalRequestByTargetParams) (GetApprovalRequestByTargetRow, error) {
+	row := q.db.QueryRow(ctx, getApprovalRequestByTarget, arg.ProjectID, arg.TargetKind, arg.TargetKey)
+	var i GetApprovalRequestByTargetRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.TargetKind,
+		&i.TargetRaw,
+		&i.TargetKey,
+		&i.ArtifactRef,
+		&i.VersionPinned,
+		&i.RiskPolicyBypassRequestID,
+		&i.Status,
+		&i.CurrentEvidence,
+		&i.EvidenceVersion,
+		&i.EvidenceCollectedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+		&i.RequesterCount,
+	)
+	return i, err
+}
+
 const getApprovalRequestForDecision = `-- name: GetApprovalRequestForDecision :one
 SELECT id, organization_id, target_raw, status, current_evidence, evidence_version
 FROM mcp_approval_requests
