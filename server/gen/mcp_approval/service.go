@@ -20,6 +20,10 @@ type Service interface {
 	ListRequests(context.Context, *ListRequestsPayload) (res *ListApprovalRequestsResult, err error)
 	// Fetch one MCP approval request with its evidence and decision history.
 	GetRequest(context.Context, *GetRequestPayload) (res *ApprovalRequestDetail, err error)
+	// Resolve the evidence dossier for a server URL, opening one when none exists.
+	// Gathers evidence without recording any ask or decision, so a server can be
+	// inspected before — or without — anyone requesting it.
+	EnsureServerReview(context.Context, *EnsureServerReviewPayload) (res *ApprovalRequestSummary, err error)
 	// Ask for an MCP server to be reviewed. Repeat asks for the same server attach
 	// to the existing review rather than opening a second one.
 	CreateRequest(context.Context, *CreateRequestPayload) (res *ApprovalRequestSummary, err error)
@@ -54,7 +58,7 @@ const ServiceName = "mcpApproval"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"listRequests", "getRequest", "createRequest", "promote", "refreshEvidence", "recordDecision"}
+var MethodNames = [7]string{"listRequests", "getRequest", "ensureServerReview", "createRequest", "promote", "refreshEvidence", "recordDecision"}
 
 // ApprovalDecision is the result type of the mcpApproval service
 // recordDecision method.
@@ -106,7 +110,7 @@ type ApprovalRequestDetail struct {
 }
 
 // ApprovalRequestSummary is the result type of the mcpApproval service
-// createRequest method.
+// ensureServerReview method.
 type ApprovalRequestSummary struct {
 	// The approval request ID.
 	ID string
@@ -160,6 +164,16 @@ type CreateRequestPayload struct {
 	// Why the requester wants it. The one input no automated evidence supplies, so
 	// it cannot be blank.
 	Note string
+}
+
+// EnsureServerReviewPayload is the payload type of the mcpApproval service
+// ensureServerReview method.
+type EnsureServerReviewPayload struct {
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// The server URL the dossier describes.
+	Target string
 }
 
 // GetRequestPayload is the payload type of the mcpApproval service getRequest
