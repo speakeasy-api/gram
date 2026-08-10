@@ -3,6 +3,7 @@ package externalmcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -127,9 +128,7 @@ func DiscoverOAuthMetadata(ctx context.Context, logger *slog.Logger, guardianPol
 			resourceMeta = meta
 			// Follow the chain to get AS metadata
 			if len(meta.AuthorizationServers) > 0 {
-				expectedIssuer := meta.AuthorizationServers[0]
-				asURL := buildWellKnownURL(expectedIssuer)
-				asMeta, err := fetchAuthServerMetadata(ctx, logger, guardianPolicy, asURL, expectedIssuer)
+				asMeta, err := fetchAdvertisedAuthServerMetadata(ctx, logger, guardianPolicy, meta.AuthorizationServers)
 				if err != nil {
 					return nil, fmt.Errorf("fetch protected resource authorization server metadata: %w", err)
 				}
@@ -147,9 +146,7 @@ func DiscoverOAuthMetadata(ctx context.Context, logger *slog.Logger, guardianPol
 			resourceMeta = meta
 			// Follow the chain
 			if len(meta.AuthorizationServers) > 0 {
-				expectedIssuer := meta.AuthorizationServers[0]
-				asURL := buildWellKnownURL(expectedIssuer)
-				asMeta, err := fetchAuthServerMetadata(ctx, logger, guardianPolicy, asURL, expectedIssuer)
+				asMeta, err := fetchAdvertisedAuthServerMetadata(ctx, logger, guardianPolicy, meta.AuthorizationServers)
 				if err != nil {
 					return nil, fmt.Errorf("fetch discovered authorization server metadata: %w", err)
 				}
@@ -179,9 +176,7 @@ func DiscoverOAuthMetadata(ctx context.Context, logger *slog.Logger, guardianPol
 			if err == nil && meta != nil {
 				resourceMeta = meta
 				if len(meta.AuthorizationServers) > 0 {
-					expectedIssuer := meta.AuthorizationServers[0]
-					asURL := buildWellKnownURL(expectedIssuer)
-					asMeta, err := fetchAuthServerMetadata(ctx, logger, guardianPolicy, asURL, expectedIssuer)
+					asMeta, err := fetchAdvertisedAuthServerMetadata(ctx, logger, guardianPolicy, meta.AuthorizationServers)
 					if err != nil {
 						return nil, fmt.Errorf("fetch origin authorization server metadata: %w", err)
 					}
@@ -364,6 +359,24 @@ func fetchAuthServerMetadata(
 		return nil, fmt.Errorf("authorization server metadata issuer mismatch")
 	}
 	return metadata, nil
+}
+
+func fetchAdvertisedAuthServerMetadata(
+	ctx context.Context,
+	logger *slog.Logger,
+	guardianPolicy *guardian.Policy,
+	issuers []string,
+) (*authServerMetadata, error) {
+	var errs []error
+	for _, issuer := range issuers {
+		metadata, err := fetchAuthServerMetadata(ctx, logger, guardianPolicy, buildWellKnownURL(issuer), issuer)
+		if err == nil {
+			return metadata, nil
+		}
+		errs = append(errs, fmt.Errorf("issuer %q: %w", issuer, err))
+	}
+
+	return nil, fmt.Errorf("no advertised authorization server metadata was usable: %w", errors.Join(errs...))
 }
 
 func validateOAuthIssuer(rawURL string) error {
