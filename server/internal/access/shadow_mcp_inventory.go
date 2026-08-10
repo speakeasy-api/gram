@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -22,6 +23,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -46,6 +49,47 @@ const (
 	shadowMCPInventoryDecisionAllow = "allow"
 	shadowMCPInventoryDecisionDeny  = "deny"
 )
+
+func (s *Service) requireOrgAdmin(ctx context.Context) (*contextvalues.AuthContext, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+	return ac, nil
+}
+
+func (s *Service) requireProjectInOrganization(ctx context.Context, organizationID string, projectID uuid.UUID) error {
+	_, err := projectsrepo.New(s.db).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{
+		ID:             projectID,
+		OrganizationID: organizationID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return oops.E(oops.CodeNotFound, nil, "project not found").LogError(ctx, s.logger)
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "get project").LogError(ctx, s.logger)
+	default:
+		return nil
+	}
+}
+
+func formatTimePtrValue(ts *time.Time) *string {
+	if ts == nil || ts.IsZero() {
+		return nil
+	}
+	value := ts.UTC().Format(time.RFC3339)
+	return &value
+}
+
+func formatTimeValue(ts time.Time) string {
+	if ts.IsZero() {
+		return time.Time{}.UTC().Format(time.RFC3339)
+	}
+	return ts.UTC().Format(time.RFC3339)
+}
 
 func (s *Service) ListShadowMCPInventory(ctx context.Context, payload *gen.ListShadowMCPInventoryPayload) (*gen.ListShadowMCPInventoryResult, error) {
 	ac, err := s.requireOrgAdmin(ctx)
@@ -292,6 +336,61 @@ func (s *Service) DeleteShadowMCPInventoryPolicyBypass(ctx context.Context, payl
 	return s.shadowMCPInventoryURLState(ctx, ac.ActiveOrganizationID, projectID, inventoryURL.CanonicalURL)
 }
 
+func (s *Service) BlockShadowMCPInventoryServer(ctx context.Context, payload *gen.BlockShadowMCPInventoryServerPayload) (*gen.ShadowMCPInventoryURLState, error) {
+	ac, projectID, inventoryURL, err := s.shadowMCPInventoryMutationContext(ctx, payload.ProjectID, payload.ServerURL)
+	if err != nil {
+		return nil, err
+	}
+	policyID, err := s.requireShadowMCPAllowAllPolicy(ctx, projectID, payload.PolicyID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := policybypass.ReplacePolicyURLAudience(ctx, s.db, ac.ActiveOrganizationID, authz.ScopeRiskPolicyBlock, policyID, inventoryURL.CanonicalURL, []urn.Principal{authz.AllUsersPrincipal()}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "block shadow mcp inventory server").LogError(ctx, s.logger)
+	}
+
+	return s.shadowMCPInventoryURLState(ctx, ac.ActiveOrganizationID, projectID, inventoryURL.CanonicalURL)
+}
+
+func (s *Service) UnblockShadowMCPInventoryServer(ctx context.Context, payload *gen.UnblockShadowMCPInventoryServerPayload) (*gen.ShadowMCPInventoryURLState, error) {
+	ac, projectID, inventoryURL, err := s.shadowMCPInventoryMutationContext(ctx, payload.ProjectID, payload.ServerURL)
+	if err != nil {
+		return nil, err
+	}
+	policyID, err := s.requireShadowMCPAllowAllPolicy(ctx, projectID, payload.PolicyID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := policybypass.RevokePolicyURL(ctx, s.db, ac.ActiveOrganizationID, authz.ScopeRiskPolicyBlock, policyID, inventoryURL.CanonicalURL); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "unblock shadow mcp inventory server").LogError(ctx, s.logger)
+	}
+
+	return s.shadowMCPInventoryURLState(ctx, ac.ActiveOrganizationID, projectID, inventoryURL.CanonicalURL)
+}
+
+// requireShadowMCPAllowAllPolicy validates that policyID names an enabled
+// allow_all blocking shadow MCP policy in the project and returns its id.
+func (s *Service) requireShadowMCPAllowAllPolicy(ctx context.Context, projectID uuid.UUID, rawPolicyID string) (string, error) {
+	policyID := strings.TrimSpace(rawPolicyID)
+	if _, err := uuid.Parse(policyID); err != nil {
+		return "", oops.E(oops.CodeBadRequest, err, "invalid policy id")
+	}
+	blockingPolicies, err := s.shadowMCPInventoryBlockingPolicies(ctx, s.db, projectID)
+	if err != nil {
+		return "", err
+	}
+	policy, ok := blockingPolicies[policyID]
+	if !ok {
+		return "", oops.E(oops.CodeBadRequest, nil, "policy must be an enabled blocking shadow mcp policy")
+	}
+	if !policy.ShadowMcpDisposition.Valid || policy.ShadowMcpDisposition.String != shadowmcp.DispositionAllowAll {
+		return "", oops.E(oops.CodeBadRequest, nil, "policy must have the allow_all shadow mcp disposition")
+	}
+	return policyID, nil
+}
+
 func (s *Service) ResolveShadowMCPInventoryRequest(ctx context.Context, payload *gen.ResolveShadowMCPInventoryRequestPayload) (*gen.ShadowMCPInventoryURLState, error) {
 	ac, projectID, inventoryURL, err := s.shadowMCPInventoryMutationContext(ctx, payload.ProjectID, payload.ServerURL)
 	if err != nil {
@@ -303,7 +402,9 @@ func (s *Service) ResolveShadowMCPInventoryRequest(ctx context.Context, payload 
 	default:
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid shadow mcp inventory request decision")
 	}
-	policyIDs, err := shadowMCPInventoryPolicyIDs(payload.PolicyIds, decision == shadowMCPInventoryDecisionAllow)
+	// Policy ids are validated lazily: an allow decision on an allow_all
+	// policy edits the blocked list and needs no policy selection.
+	policyIDs, err := shadowMCPInventoryPolicyIDs(payload.PolicyIds, false)
 	if err != nil {
 		return nil, err
 	}
@@ -316,9 +417,27 @@ func (s *Service) ResolveShadowMCPInventoryRequest(ctx context.Context, payload 
 
 	var policyAudiences map[string][]urn.Principal
 	if decision == shadowMCPInventoryDecisionAllow {
-		policyAudiences, err = s.replaceShadowMCPInventoryURLBypassGrants(ctx, dbtx, ac.ActiveOrganizationID, projectID, inventoryURL.CanonicalURL, policyIDs)
+		blockingPolicies, err := s.shadowMCPInventoryBlockingPolicies(ctx, dbtx, projectID)
 		if err != nil {
 			return nil, err
+		}
+		if allowAllPolicy := shadowMCPInventoryAllowAllPolicy(blockingPolicies); allowAllPolicy != nil {
+			// Approval under allow_all unblocks the server for the whole
+			// project: revoke the URL's risk_policy:block grant instead of
+			// minting bypass grants, and resolve the pending requests against
+			// that policy with no granted principals.
+			if err := policybypass.RevokePolicyURL(ctx, dbtx, ac.ActiveOrganizationID, authz.ScopeRiskPolicyBlock, allowAllPolicy.ID.String(), inventoryURL.CanonicalURL); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "unblock shadow mcp server").LogError(ctx, s.logger)
+			}
+			policyIDs = []string{allowAllPolicy.ID.String()}
+		} else {
+			if len(policyIDs) == 0 {
+				return nil, oops.E(oops.CodeBadRequest, nil, "at least one policy id is required")
+			}
+			policyAudiences, err = s.replaceShadowMCPInventoryURLBypassGrants(ctx, dbtx, ac.ActiveOrganizationID, projectID, inventoryURL.CanonicalURL, policyIDs)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -464,8 +583,8 @@ func (s *Service) replaceShadowMCPInventoryURLBypassGrants(
 	}
 	for _, policy := range shadowMCPPolicies {
 		policyID := policy.ID.String()
-		if err := revokeShadowMCPInventoryURLBypassGrant(ctx, db, organizationID, policyID, canonicalURL); err != nil {
-			return nil, err
+		if err := policybypass.RevokePolicyURL(ctx, db, organizationID, authz.ScopeRiskPolicyBypass, policyID, canonicalURL); err != nil {
+			return nil, fmt.Errorf("revoke shadow mcp inventory policy bypass grant: %w", err)
 		}
 	}
 
@@ -480,16 +599,7 @@ func (s *Service) replaceShadowMCPInventoryURLBypassGrants(
 			return nil, err
 		}
 		audiences[policyID] = principals
-		if err := authz.GrantResourceToPrincipals(ctx, db, authz.ResourceGrant{
-			Resource: authz.Resource{
-				OrganizationID: organizationID,
-				Scope:          authz.ScopeRiskPolicyBypass,
-				ResourceID:     policyID,
-			},
-			Effect:     authz.PolicyEffectAllow,
-			Principals: principals,
-			Selector:   shadowMCPInventoryURLBypassSelector(policyID, canonicalURL),
-		}); err != nil {
+		if err := policybypass.ReplacePolicyURLAudience(ctx, db, organizationID, authz.ScopeRiskPolicyBypass, policyID, canonicalURL, principals); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "grant shadow mcp inventory policy bypass").LogError(ctx, s.logger)
 		}
 	}
@@ -512,6 +622,21 @@ func (s *Service) shadowMCPInventoryBlockingPolicies(ctx context.Context, db ris
 	return policies, nil
 }
 
+// shadowMCPInventoryAllowAllPolicy returns the allow_all blocking policy when
+// every enabled blocking policy declares the allow_all disposition. Mirrors
+// the forURL semantics: with mixed legacy data, deny-by-default wins and this
+// returns nil.
+func shadowMCPInventoryAllowAllPolicy(blockingPolicies map[string]riskrepo.RiskPolicy) *riskrepo.RiskPolicy {
+	var candidate *riskrepo.RiskPolicy
+	for _, policy := range blockingPolicies {
+		if !policy.ShadowMcpDisposition.Valid || policy.ShadowMcpDisposition.String != shadowmcp.DispositionAllowAll {
+			return nil
+		}
+		candidate = &policy
+	}
+	return candidate
+}
+
 func (s *Service) shadowMCPInventoryProjectPolicies(ctx context.Context, db riskrepo.DBTX, projectID uuid.UUID) ([]riskrepo.RiskPolicy, error) {
 	rows, err := riskrepo.New(db).ListRiskPolicies(ctx, projectID)
 	if err != nil {
@@ -527,48 +652,6 @@ func (s *Service) shadowMCPInventoryProjectPolicies(ctx context.Context, db risk
 	return policies, nil
 }
 
-func revokeShadowMCPInventoryURLBypassGrant(ctx context.Context, db riskrepo.DBTX, organizationID string, policyID string, canonicalURL string) error {
-	grants, err := authz.ListGrantsForResource(ctx, db, authz.Resource{
-		OrganizationID: organizationID,
-		Scope:          authz.ScopeRiskPolicyBypass,
-		ResourceID:     policyID,
-	})
-	if err != nil {
-		return fmt.Errorf("list shadow mcp inventory bypass grants: %w", err)
-	}
-
-	principals := make([]urn.Principal, 0, len(grants))
-	for _, grant := range grants {
-		if grant.Effect != authz.PolicyEffectAllow {
-			continue
-		}
-		if !maps.Equal(grant.Selector, shadowMCPInventoryURLBypassSelector(policyID, canonicalURL)) {
-			continue
-		}
-		principal, err := urn.ParsePrincipal(grant.PrincipalUrn)
-		if err != nil {
-			return fmt.Errorf("parse shadow mcp inventory bypass principal: %w", err)
-		}
-		principals = append(principals, principal)
-	}
-	if len(principals) == 0 {
-		return nil
-	}
-	if err := authz.RevokeResourceFromPrincipals(ctx, db, authz.ResourceGrant{
-		Resource: authz.Resource{
-			OrganizationID: organizationID,
-			Scope:          authz.ScopeRiskPolicyBypass,
-			ResourceID:     policyID,
-		},
-		Effect:     authz.PolicyEffectAllow,
-		Principals: principals,
-		Selector:   shadowMCPInventoryURLBypassSelector(policyID, canonicalURL),
-	}); err != nil {
-		return fmt.Errorf("revoke shadow mcp inventory policy bypass grant: %w", err)
-	}
-	return nil
-}
-
 func shadowMCPInventoryPolicyAudiencePrincipals(ctx context.Context, db riskrepo.DBTX, organizationID string, policyID string) ([]urn.Principal, error) {
 	grants, err := authz.ListGrantsForResource(ctx, db, authz.Resource{
 		OrganizationID: organizationID,
@@ -581,9 +664,6 @@ func shadowMCPInventoryPolicyAudiencePrincipals(ctx context.Context, db riskrepo
 
 	principals := make([]urn.Principal, 0, len(grants))
 	for _, grant := range grants {
-		if grant.Effect != authz.PolicyEffectAllow {
-			continue
-		}
 		if !maps.Equal(grant.Selector, authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policyID)) {
 			continue
 		}
@@ -772,12 +852,6 @@ func shadowMCPInventoryPrincipalStrings(principals []urn.Principal) []string {
 	return slices.Compact(values)
 }
 
-func shadowMCPInventoryURLBypassSelector(policyID string, canonicalURL string) authz.Selector {
-	selector := authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID)
-	selector[authz.SelectorKeyServerURL] = canonicalURL
-	return selector
-}
-
 func (s *Service) shadowMCPInventoryURLState(ctx context.Context, organizationID string, projectID uuid.UUID, canonicalURL string) (*gen.ShadowMCPInventoryURLState, error) {
 	state, err := s.shadowMCPInventoryPolicyState(ctx, organizationID, projectID, []string{canonicalURL})
 	if err != nil {
@@ -792,6 +866,7 @@ func buildShadowMCPInventoryURLState(rowState shadowMCPInventoryRowState) *gen.S
 		RequestCount:     rowState.RequestCount,
 		LatestRequest:    rowState.LatestRequest,
 		AllowedPolicyIds: rowState.AllowedPolicyIDs,
+		BlockedPolicyIds: rowState.BlockedPolicyIDs,
 	}
 }
 
@@ -805,7 +880,12 @@ func shadowMCPInventoryUsageByURL(rows []telemetryrepo.ShadowMCPInventoryUsageRo
 
 type shadowMCPInventoryPolicyState struct {
 	hasBlockingPolicy bool
+	// hasBlockAllPolicy is set when any enabled blocking policy denies by
+	// default. When only allow_all blocking policies exist, rows are blocked
+	// solely by risk_policy:block grants (blockedPolicyIDs).
+	hasBlockAllPolicy bool
 	allowedPolicyIDs  map[string][]string
+	blockedPolicyIDs  map[string][]string
 	requestsByURL     map[string]shadowMCPInventoryRequestState
 }
 
@@ -814,6 +894,7 @@ type shadowMCPInventoryRowState struct {
 	RequestCount     int
 	LatestRequest    *gen.ShadowMCPInventoryRequestSummary
 	AllowedPolicyIDs []string
+	BlockedPolicyIDs []string
 }
 
 type shadowMCPInventoryRequestState struct {
@@ -825,7 +906,9 @@ type shadowMCPInventoryRequestState struct {
 func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizationID string, projectID uuid.UUID, canonicalURLs []string) (shadowMCPInventoryPolicyState, error) {
 	state := shadowMCPInventoryPolicyState{
 		hasBlockingPolicy: false,
+		hasBlockAllPolicy: false,
 		allowedPolicyIDs:  map[string][]string{},
+		blockedPolicyIDs:  map[string][]string{},
 		requestsByURL:     map[string]shadowMCPInventoryRequestState{},
 	}
 	if len(canonicalURLs) == 0 {
@@ -857,6 +940,29 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 		policyID := policy.ID.String()
 		blockingPolicyIDs[policyID] = struct{}{}
 
+		// allow_all policies carry their exceptions as risk_policy:block
+		// grants and never have per-URL bypass grants, so only the block
+		// grants are listed for them.
+		if policy.ShadowMcpDisposition.Valid && policy.ShadowMcpDisposition.String == shadowmcp.DispositionAllowAll {
+			blockGrants, err := authz.ListGrantsForResource(ctx, s.db, authz.Resource{
+				OrganizationID: organizationID,
+				Scope:          authz.ScopeRiskPolicyBlock,
+				ResourceID:     policyID,
+			})
+			if err != nil {
+				return state, fmt.Errorf("listing block grants for shadow mcp policy: %w", err)
+			}
+			for _, grant := range blockGrants {
+				serverURL := grant.Selector[authz.SelectorKeyServerURL]
+				if _, ok := canonicalURLSet[serverURL]; !ok {
+					continue
+				}
+				state.blockedPolicyIDs[serverURL] = append(state.blockedPolicyIDs[serverURL], policyID)
+			}
+			continue
+		}
+		state.hasBlockAllPolicy = true
+
 		grants, err := authz.ListGrantsForResource(ctx, s.db, authz.Resource{
 			OrganizationID: organizationID,
 			Scope:          authz.ScopeRiskPolicyBypass,
@@ -866,9 +972,6 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 			return state, fmt.Errorf("listing grants for shadow mcp policy: %w", err)
 		}
 		for _, grant := range grants {
-			if grant.Effect != authz.PolicyEffectAllow {
-				continue
-			}
 			serverURL := grant.Selector[authz.SelectorKeyServerURL]
 			if _, ok := canonicalURLSet[serverURL]; !ok {
 				continue
@@ -924,6 +1027,10 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 		slices.Sort(policyIDs)
 		state.allowedPolicyIDs[serverURL] = slices.Compact(policyIDs)
 	}
+	for serverURL, policyIDs := range state.blockedPolicyIDs {
+		slices.Sort(policyIDs)
+		state.blockedPolicyIDs[serverURL] = slices.Compact(policyIDs)
+	}
 
 	return state, nil
 }
@@ -931,12 +1038,17 @@ func (s *Service) shadowMCPInventoryPolicyState(ctx context.Context, organizatio
 func (s shadowMCPInventoryPolicyState) forURL(canonicalURL string) shadowMCPInventoryRowState {
 	requestState := s.requestsByURL[canonicalURL]
 	allowedPolicyIDs := s.allowedPolicyIDs[canonicalURL]
+	onBlockedList := len(s.blockedPolicyIDs[canonicalURL]) > 0
 	access := shadowMCPInventoryAccessNone
 	switch {
 	case len(allowedPolicyIDs) > 0:
 		access = shadowMCPInventoryAccessAllowed
-	case s.hasBlockingPolicy:
+	case s.hasBlockAllPolicy || onBlockedList:
 		access = shadowMCPInventoryAccessBlocked
+	case s.hasBlockingPolicy:
+		// Only allow_all blocking policies exist and this URL is not on any
+		// blocked list: the default disposition permits it.
+		access = shadowMCPInventoryAccessAllowed
 	}
 
 	return shadowMCPInventoryRowState{
@@ -944,6 +1056,7 @@ func (s shadowMCPInventoryPolicyState) forURL(canonicalURL string) shadowMCPInve
 		RequestCount:     requestState.Count,
 		LatestRequest:    requestState.Latest,
 		AllowedPolicyIDs: allowedPolicyIDs,
+		BlockedPolicyIDs: s.blockedPolicyIDs[canonicalURL],
 	}
 }
 
@@ -990,16 +1103,26 @@ func buildShadowMCPInventoryServer(row telemetryrepo.ShadowMCPInventoryURLRow, u
 		RequestCount:       rowState.RequestCount,
 		LatestRequest:      rowState.LatestRequest,
 		AllowedPolicyIds:   rowState.AllowedPolicyIDs,
+		BlockedPolicyIds:   rowState.BlockedPolicyIDs,
 	}
 }
 
 func buildShadowMCPInventoryUser(row telemetryrepo.ShadowMCPInventoryUserRow) *gen.ShadowMCPInventoryUser {
+	sources := make([]*gen.ShadowMCPInventoryUserSource, 0, len(row.Sources))
+	for _, source := range row.Sources {
+		sources = append(sources, &gen.ShadowMCPInventoryUserSource{
+			Source:           source.Source,
+			ObservedUseCount: shadowMCPInventoryCount(source.CallCount),
+		})
+	}
+
 	return &gen.ShadowMCPInventoryUser{
 		UserKey:          row.UserKey,
 		Name:             nil,
 		Email:            conv.PtrEmpty(row.UserEmail),
 		LastCalled:       formatTimeValue(row.LastCalled),
 		ObservedUseCount: shadowMCPInventoryCount(row.CallCount),
+		Sources:          sources,
 	}
 }
 

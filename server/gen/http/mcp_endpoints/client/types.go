@@ -55,6 +55,8 @@ type CreateMcpEndpointResponseBody struct {
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// The slug
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// Whether this endpoint is mapped to its custom-domain root
+	IsDomainRoot *bool `form:"is_domain_root,omitempty" json:"is_domain_root,omitempty" xml:"is_domain_root,omitempty"`
 	// When the MCP endpoint was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the MCP endpoint was last updated
@@ -75,6 +77,8 @@ type GetMcpEndpointResponseBody struct {
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// The slug
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// Whether this endpoint is mapped to its custom-domain root
+	IsDomainRoot *bool `form:"is_domain_root,omitempty" json:"is_domain_root,omitempty" xml:"is_domain_root,omitempty"`
 	// When the MCP endpoint was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the MCP endpoint was last updated
@@ -101,6 +105,8 @@ type UpdateMcpEndpointResponseBody struct {
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// The slug
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// Whether this endpoint is mapped to its custom-domain root
+	IsDomainRoot *bool `form:"is_domain_root,omitempty" json:"is_domain_root,omitempty" xml:"is_domain_root,omitempty"`
 	// When the MCP endpoint was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the MCP endpoint was last updated
@@ -1257,6 +1263,8 @@ type McpEndpointResponseBody struct {
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// The slug
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// Whether this endpoint is mapped to its custom-domain root
+	IsDomainRoot *bool `form:"is_domain_root,omitempty" json:"is_domain_root,omitempty" xml:"is_domain_root,omitempty"`
 	// When the MCP endpoint was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the MCP endpoint was last updated
@@ -1295,6 +1303,7 @@ func NewCreateMcpEndpointMcpEndpointOK(body *CreateMcpEndpointResponseBody) *typ
 		CustomDomainID: body.CustomDomainID,
 		McpServerID:    *body.McpServerID,
 		Slug:           types.McpEndpointSlug(*body.Slug),
+		IsDomainRoot:   *body.IsDomainRoot,
 		CreatedAt:      *body.CreatedAt,
 		UpdatedAt:      *body.UpdatedAt,
 	}
@@ -1461,6 +1470,7 @@ func NewGetMcpEndpointMcpEndpointOK(body *GetMcpEndpointResponseBody) *types.Mcp
 		CustomDomainID: body.CustomDomainID,
 		McpServerID:    *body.McpServerID,
 		Slug:           types.McpEndpointSlug(*body.Slug),
+		IsDomainRoot:   *body.IsDomainRoot,
 		CreatedAt:      *body.CreatedAt,
 		UpdatedAt:      *body.UpdatedAt,
 	}
@@ -1793,6 +1803,7 @@ func NewUpdateMcpEndpointMcpEndpointOK(body *UpdateMcpEndpointResponseBody) *typ
 		CustomDomainID: body.CustomDomainID,
 		McpServerID:    *body.McpServerID,
 		Slug:           types.McpEndpointSlug(*body.Slug),
+		IsDomainRoot:   *body.IsDomainRoot,
 		CreatedAt:      *body.CreatedAt,
 		UpdatedAt:      *body.UpdatedAt,
 	}
@@ -2265,6 +2276,9 @@ func ValidateCreateMcpEndpointResponseBody(body *CreateMcpEndpointResponseBody) 
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
+	if body.IsDomainRoot == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_domain_root", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -2314,6 +2328,9 @@ func ValidateGetMcpEndpointResponseBody(body *GetMcpEndpointResponseBody) (err e
 	}
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.IsDomainRoot == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_domain_root", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
@@ -2380,6 +2397,9 @@ func ValidateUpdateMcpEndpointResponseBody(body *UpdateMcpEndpointResponseBody) 
 	}
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.IsDomainRoot == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_domain_root", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
@@ -3879,6 +3899,9 @@ func ValidateMcpEndpointResponseBody(body *McpEndpointResponseBody) (err error) 
 	}
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.IsDomainRoot == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("is_domain_root", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))

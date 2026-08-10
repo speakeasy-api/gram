@@ -1,0 +1,3 @@
+ALTER TABLE `risk_findings` ADD COLUMN `message_created_at` DateTime64(9) DEFAULT created_at COMMENT 'Event time of the scanned chat message (chat_messages.created_at). Defaults to created_at (scan time) for rows written before the column existed or when attribution is unresolved.' CODEC(DoubleDelta, ZSTD(1));
+ALTER TABLE `risk_findings` ADD COLUMN `assistant_id` String DEFAULT '' COMMENT 'Assistant linked to the finding chat via a live assistant_threads row at ingest. Empty when the chat has no assistant link or attribution is unresolved.' CODEC(ZSTD(1));
+ALTER TABLE `risk_findings` ADD INDEX `idx_risk_findings_assistant_id` ((assistant_id)) TYPE bloom_filter(0.01) GRANULARITY 1;

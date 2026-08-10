@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -144,4 +145,33 @@ func TestIsOrgWidePluginHooksAPIKey(t *testing.T) {
 			require.Equal(t, tt.want, IsOrgWidePluginHooksAPIKey(tt.keyName, tt.key, tt.keyPrefix))
 		})
 	}
+}
+
+func TestIsLiteLLMAPIKeyName(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]bool{
+		"litellm-1785700000000-1234abcd":                                  true,
+		"litellm-0c082267fdc3492fb43250ecddc402e6-1785700000000-1234abcd": true,
+		"litellm-personal":               false,
+		"litellm-178570000000-1234abcd":  false,
+		"litellm-1785700000000-1234ABCd": false,
+		"litellm-1785700000000-1234abc":  false,
+		"other-1785700000000-1234abcd":   false,
+	}
+	for name, expected := range tests {
+		require.Equal(t, expected, IsLiteLLMAPIKeyName(name), name)
+	}
+}
+
+func TestLiteLLMInstanceIDFromAPIKeyName(t *testing.T) {
+	t.Parallel()
+
+	expected := uuid.MustParse("0c082267-fdc3-492f-b432-50ecddc402e6")
+	actual, ok := LiteLLMInstanceIDFromAPIKeyName("litellm-0c082267fdc3492fb43250ecddc402e6-1785700000000-1234abcd")
+	require.True(t, ok)
+	require.Equal(t, expected, actual)
+
+	_, ok = LiteLLMInstanceIDFromAPIKeyName("litellm-1785700000000-1234abcd")
+	require.False(t, ok)
 }

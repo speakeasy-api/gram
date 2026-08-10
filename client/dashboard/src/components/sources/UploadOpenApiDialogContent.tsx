@@ -1,8 +1,9 @@
 import { OpenApiSourceInput } from "@/components/OpenApiSourceInput";
-import { Spinner } from "@/components/ui/spinner";
+import { Spinner } from "@/components/ui/Spinner";
 import { useUploadOpenAPISteps } from "@/pages/onboarding/upload-openapi-utils";
 import { UploadedDocument } from "@/components/uploaded-document";
-import { Button, Dialog } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import React from "react";
 import { toast } from "sonner";
 
@@ -78,8 +79,12 @@ export function UploadOpenApiDialogContent({
           onClick={() => void deploySpecUpdate()}
           disabled={!file || isDeploying || !documentSlug}
         >
-          {isDeploying && <Spinner />}
-          {isDeploying ? "Deploying..." : "Deploy"}
+          {isDeploying && (
+            <Button.LeftIcon>
+              <Spinner />
+            </Button.LeftIcon>
+          )}
+          <Button.Text>{isDeploying ? "Deploying..." : "Deploy"}</Button.Text>
         </Button>
       </Dialog.Footer>
     </>

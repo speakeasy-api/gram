@@ -5,15 +5,12 @@ import type { Toolset } from "@/lib/toolTypes";
  * page shows. React-free so the matrix stays unit testable.
  */
 
-export type OAuthParadigm = "external" | "gram" | "proxy";
+// OAuth proxy has been retired, so external OAuth is the only remaining legacy
+// paradigm.
+export type OAuthParadigm = "external";
 
 export function getOAuthParadigm(toolset: Toolset): OAuthParadigm | null {
-  if (toolset.externalOauthServer) return "external";
-  if (!toolset.oauthProxyServer) return null;
-  return toolset.oauthProxyServer.oauthProxyProviders?.[0]?.providerType ===
-    "gram"
-    ? "gram"
-    : "proxy";
+  return toolset.externalOauthServer ? "external" : null;
 }
 
 /**
@@ -55,24 +52,41 @@ export function toolsetAuthSurface({
 }
 
 /**
- * Convert path offered on the "legacy" surface. Proxy paradigms migrate via
- * the wire modal (it clones the proxy's credentials); external OAuth has none
- * to clone, so it converts by attaching a fresh provider via the attach sheet.
+ * Convert path offered on the "legacy" surface. External OAuth has no upstream
+ * client to clone, so it converts by attaching a fresh provider via the attach
+ * sheet.
  */
-export type ToolsetConvertAction = "wire-modal" | "attach-sheet";
+export type ToolsetConvertAction = "attach-sheet";
 
 export function toolsetConvertAction(
   oauthParadigm: OAuthParadigm | null,
 ): ToolsetConvertAction | null {
   switch (oauthParadigm) {
-    case "proxy":
-    case "gram":
-      return "wire-modal";
     case "external":
       return "attach-sheet";
     case null:
       return null;
   }
+}
+
+/**
+ * External OAuth is supported for enabled, public toolset servers whose tools
+ * advertise OAuth or whose attached external MCP source requires it. Keep this
+ * aligned with the legacy OAuth section so the user-sessions surface does not
+ * expose a configuration the serve path cannot use.
+ */
+export function canConfigureExternalOAuth(
+  toolset: Toolset,
+  externalMcpRequiresOAuth: boolean,
+): boolean {
+  const hasOAuthAuthorizationCodeFlow =
+    (toolset.oauthEnablementMetadata?.oauth2SecurityCount ?? 0) > 0;
+
+  return Boolean(
+    toolset.mcpEnabled &&
+    toolset.mcpIsPublic &&
+    (hasOAuthAuthorizationCodeFlow || externalMcpRequiresOAuth),
+  );
 }
 
 /**

@@ -1,5 +1,11 @@
 # function-runners
 
+## 0.4.0
+
+### Minor Changes
+
+- 5cfbb83: Expose MCP Client Metadata to Gram Functions tool calls
+
 ## 0.3.2
 
 ### Patch Changes
@@ -127,6 +133,7 @@
 ### Patch Changes
 
 - caee968: Harden function runner images by:
+
   - Add basic safety checks after image builds to screen out setuid/setgid and check fs permissions.
   - Remove most unnecessary system binaries
   - Using root to bootstrap the filesystem of the runner then starting the runner as a non-root user. This ensures code is tamper proof. Alpine's `exec-su` is used to drop privileges.

@@ -6,13 +6,39 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
+	gen "github.com/speakeasy-api/gram/server/gen/skills"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
 )
 
-func BuildSkillView(skill repo.Skill, latestVersionID uuid.UUID, versionCount int64) *types.Skill {
+func BuildSkillFeedbackView(feedback repo.SkillFeedback) *gen.SkillFeedback {
+	return &gen.SkillFeedback{
+		ID:             feedback.ID.String(),
+		Source:         gen.SkillFeedbackSource(feedback.Source),
+		Outcome:        gen.SkillFeedbackOutcome(feedback.Outcome),
+		Note:           conv.FromPGText[string](feedback.Note),
+		SkillVersionID: conv.FromNullableUUID(feedback.SkillVersionID),
+		ReviewedAt:     conv.PtrEmpty(conv.FromPGTimestamptz(feedback.ReviewedAt)),
+		CreatedAt:      conv.FromPGTimestamptz(feedback.CreatedAt),
+	}
+}
+
+func BuildSkillFeedbackListView(rows []repo.SkillFeedback) []*gen.SkillFeedback {
+	result := make([]*gen.SkillFeedback, len(rows))
+	for i, row := range rows {
+		result[i] = BuildSkillFeedbackView(row)
+	}
+	return result
+}
+
+func BuildSkillView(skill repo.Skill, latestVersionID uuid.UUID, versionCount int64, hasValidVersion bool, shareToken pgtype.Text) *types.Skill {
+	var latestVersionIDValue *string
+	if latestVersionID != uuid.Nil {
+		latestVersionIDValue = conv.PtrEmpty(latestVersionID.String())
+	}
 	return &types.Skill{
 		ID:              skill.ID.String(),
 		ProjectID:       skill.ProjectID.String(),
@@ -21,23 +47,42 @@ func BuildSkillView(skill repo.Skill, latestVersionID uuid.UUID, versionCount in
 		Summary:         conv.FromPGText[string](skill.Summary),
 		SourceKind:      skill.SourceKind,
 		Classification:  skill.Classification,
-		LatestVersionID: latestVersionID.String(),
+		Tags:            skillTagsOrEmpty(skill.Tags),
+		LatestVersionID: latestVersionIDValue,
 		VersionCount:    versionCount,
+		HasValidVersion: hasValidVersion,
+		FirstSeenAt:     conv.PtrEmpty(conv.FromPGTimestamptz(skill.FirstSeenAt)),
+		LastSeenAt:      conv.PtrEmpty(conv.FromPGTimestamptz(skill.LastSeenAt)),
+		SeenCount:       skill.SeenCount,
+		ShareToken:      conv.FromPGText[string](shareToken),
 		CreatedAt:       conv.FromPGTimestamptz(skill.CreatedAt),
 		UpdatedAt:       conv.FromPGTimestamptz(skill.UpdatedAt),
 	}
 }
 
+func skillTagsOrEmpty(tags []string) []string {
+	if tags == nil {
+		return []string{}
+	}
+	return tags
+}
+
 func BuildSkillListView(rows []repo.ListSkillsRow) []*types.Skill {
 	result := make([]*types.Skill, len(rows))
 	for i, row := range rows {
-		result[i] = BuildSkillView(row.Skill, row.LatestVersionID, row.VersionCount)
+		result[i] = BuildSkillView(row.Skill, row.LatestVersionID, row.VersionCount, row.HasValidVersion, row.ShareToken)
 	}
 
 	return result
 }
 
-func BuildSkillVersionView(version repo.SkillVersion, frontmatter map[string]any) (*types.SkillVersion, error) {
+type SkillVersionSightingStats struct {
+	FirstSeenAt pgtype.Timestamptz
+	LastSeenAt  pgtype.Timestamptz
+	SeenCount   int64
+}
+
+func BuildSkillVersionView(version repo.SkillVersion, derivedFromVersionID uuid.NullUUID, frontmatter map[string]any, sightings SkillVersionSightingStats) (*types.SkillVersion, error) {
 	metadata := make(map[string]any)
 	metadataDecoder := json.NewDecoder(bytes.NewReader(version.Metadata))
 	metadataDecoder.UseNumber()
@@ -62,27 +107,35 @@ func BuildSkillVersionView(version repo.SkillVersion, frontmatter map[string]any
 	}
 
 	return &types.SkillVersion{
-		ID:               version.ID.String(),
-		SkillID:          version.SkillID.String(),
-		Content:          version.Content,
-		CanonicalSha256:  version.CanonicalSha256,
-		RawSha256:        version.RawSha256,
-		Description:      conv.FromPGText[string](version.Description),
-		Metadata:         metadata,
-		Frontmatter:      frontmatter,
-		SpecValid:        version.SpecValid,
-		ValidationErrors: validationErrors,
-		CreatedAt:        conv.FromPGTimestamptz(version.CreatedAt),
-		CreatedByUserID:  version.CreatedByUserID,
+		ID:                   version.ID.String(),
+		SkillID:              version.SkillID.String(),
+		Content:              version.Content,
+		CanonicalSha256:      version.CanonicalSha256,
+		RawSha256:            version.RawSha256,
+		Description:          conv.FromPGText[string](version.Description),
+		Metadata:             metadata,
+		Frontmatter:          frontmatter,
+		SpecValid:            version.SpecValid,
+		ValidationErrors:     validationErrors,
+		DerivedFromVersionID: conv.FromNullableUUID(derivedFromVersionID),
+		CreatedAt:            conv.FromPGTimestamptz(version.CreatedAt),
+		CreatedByUserID:      version.CreatedByUserID,
+		FirstSeenAt:          conv.PtrEmpty(conv.FromPGTimestamptz(sightings.FirstSeenAt)),
+		LastSeenAt:           conv.PtrEmpty(conv.FromPGTimestamptz(sightings.LastSeenAt)),
+		SeenCount:            sightings.SeenCount,
 	}, nil
 }
 
-func BuildSkillVersionListView(rows []repo.SkillVersion, frontmatter func(content string) map[string]any) ([]*types.SkillVersion, error) {
+func BuildSkillVersionListView(rows []repo.ListSkillVersionsRow, frontmatter func(content string) map[string]any) ([]*types.SkillVersion, error) {
 	result := make([]*types.SkillVersion, len(rows))
 	for i, row := range rows {
-		view, err := BuildSkillVersionView(row, frontmatter(row.Content))
+		view, err := BuildSkillVersionView(row.SkillVersion, row.DerivedFromVersionID, frontmatter(row.SkillVersion.Content), SkillVersionSightingStats{
+			FirstSeenAt: row.FirstSeenAt,
+			LastSeenAt:  row.LastSeenAt,
+			SeenCount:   row.SeenCount,
+		})
 		if err != nil {
-			return nil, fmt.Errorf("build skill version %s: %w", row.ID, err)
+			return nil, fmt.Errorf("build skill version %s: %w", row.SkillVersion.ID, err)
 		}
 		result[i] = view
 	}

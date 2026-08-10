@@ -1,4 +1,4 @@
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import {
@@ -7,8 +7,8 @@ import {
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuTrigger,
-} from "./ui/context-menu";
-import type { Action } from "./ui/more-actions";
+} from "@/components/ui/ContextMenu";
+import type { Action } from "@/components/ui/MoreActions";
 
 /**
  * Wraps a card (or any element) so right-clicking it opens a context menu of the

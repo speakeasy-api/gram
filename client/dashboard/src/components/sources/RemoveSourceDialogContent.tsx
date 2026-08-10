@@ -1,14 +1,17 @@
-import { Input } from "@/components/ui/input";
+import { Input } from "@/components/ui/Input";
 import { slugify } from "@/lib/constants";
-import { Dialog, Alert, Button } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import { Loader2Icon } from "lucide-react";
 import { useState } from "react";
 import { NamedAsset } from "./SourceCard";
 
-// Remote/tunneled MCP removal needs linked server/endpoint state, so Settings owns it.
+// Remote/tunneled/unproxied MCP removal needs linked server/endpoint
+// state, so Settings owns it.
 type RemovableAsset = Exclude<
   NamedAsset,
-  { type: "remotemcp" } | { type: "tunneledmcp" }
+  { type: "remotemcp" } | { type: "tunneledmcp" } | { type: "unproxiedmcp" }
 >;
 
 interface RemoveSourceDialogContentProps {

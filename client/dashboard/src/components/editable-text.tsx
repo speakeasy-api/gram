@@ -1,6 +1,6 @@
 import { ReactNode, useEffect, useState } from "react";
 import { InputDialog } from "./input-dialog";
-import { Editable } from "./ui/editable";
+import { Editable } from "@/components/ui/Editable";
 
 interface EditableTextProps {
   label: string;

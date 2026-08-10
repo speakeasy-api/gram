@@ -24,7 +24,7 @@ import { ServiceError } from "../models/errors/serviceerror.js";
 import {
   ListRiskPolicyBypassRequestsRequest,
   ListRiskPolicyBypassRequestsSecurity,
-  QueryParamStatus,
+  Status,
 } from "../models/operations/listriskpolicybypassrequests.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -119,7 +119,7 @@ export function setRiskListPolicyBypassRequestsData(
   queryKeyBase: [
     parameters: {
       policyId?: string | undefined;
-      status?: QueryParamStatus | undefined;
+      status?: Status | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
@@ -137,7 +137,7 @@ export function invalidateRiskListPolicyBypassRequests(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       policyId?: string | undefined;
-      status?: QueryParamStatus | undefined;
+      status?: Status | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;

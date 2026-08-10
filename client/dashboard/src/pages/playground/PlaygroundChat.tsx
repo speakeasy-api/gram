@@ -1,9 +1,9 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
+} from "@/components/ui/Popover";
 import { useProject, useSession } from "@/contexts/Auth";
 import type { Toolset } from "@/lib/toolTypes";
 import { getPlaygroundMcpBaseURL } from "@/lib/utils";
@@ -14,7 +14,7 @@ import {
   type Model,
 } from "@/elements";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
-import { useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
 import { useQuery } from "@tanstack/react-query";
 import { HistoryIcon } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
@@ -212,7 +212,7 @@ export function PlaygroundChat({
           <div className="border-b-border flex shrink-0 items-center justify-between gap-2 border-b px-4 py-3">
             <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
               <PopoverTrigger asChild>
-                <Button size="sm" variant="ghost">
+                <Button size="sm" variant="tertiary">
                   <HistoryIcon className="mr-2 size-4" />
                   Chat History
                 </Button>

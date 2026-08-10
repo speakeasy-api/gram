@@ -100,6 +100,9 @@ type RunnerToolCallRequest struct {
 
 	ToolURN  urn.Tool
 	ToolName string
+	// Meta describes the caller of this specific tool call. Nil when nothing
+	// is known about them (a direct, non-MCP invocation).
+	Meta *ToolCallMeta
 }
 
 type RunnerResourceReadRequest struct {

@@ -32,6 +32,16 @@ func DeleteGlobalIssuerAdminRemoteSessionsPath() string {
 	return "/rpc/adminRemoteSessions.deleteGlobalIssuer"
 }
 
+// FetchGlobalIssuerMetadataAdminRemoteSessionsPath returns the URL path to the adminRemoteSessions service fetchGlobalIssuerMetadata HTTP endpoint.
+func FetchGlobalIssuerMetadataAdminRemoteSessionsPath() string {
+	return "/rpc/adminRemoteSessions.fetchGlobalIssuerMetadata"
+}
+
+// RefreshGlobalIssuerMetadataAdminRemoteSessionsPath returns the URL path to the adminRemoteSessions service refreshGlobalIssuerMetadata HTTP endpoint.
+func RefreshGlobalIssuerMetadataAdminRemoteSessionsPath() string {
+	return "/rpc/adminRemoteSessions.refreshGlobalIssuerMetadata"
+}
+
 // CreateGlobalClientAdminRemoteSessionsPath returns the URL path to the adminRemoteSessions service createGlobalClient HTTP endpoint.
 func CreateGlobalClientAdminRemoteSessionsPath() string {
 	return "/rpc/adminRemoteSessions.createGlobalClient"
@@ -55,4 +65,19 @@ func UpdateGlobalClientAdminRemoteSessionsPath() string {
 // DeleteGlobalClientAdminRemoteSessionsPath returns the URL path to the adminRemoteSessions service deleteGlobalClient HTTP endpoint.
 func DeleteGlobalClientAdminRemoteSessionsPath() string {
 	return "/rpc/adminRemoteSessions.deleteGlobalClient"
+}
+
+// ListGlobalIssuerConvergenceCandidatesAdminRemoteSessionsPath returns the URL path to the adminRemoteSessions service listGlobalIssuerConvergenceCandidates HTTP endpoint.
+func ListGlobalIssuerConvergenceCandidatesAdminRemoteSessionsPath() string {
+	return "/rpc/adminRemoteSessions.listGlobalIssuerConvergenceCandidates"
+}
+
+// GetGlobalIssuerMigratePreflightAdminRemoteSessionsPath returns the URL path to the adminRemoteSessions service getGlobalIssuerMigratePreflight HTTP endpoint.
+func GetGlobalIssuerMigratePreflightAdminRemoteSessionsPath() string {
+	return "/rpc/adminRemoteSessions.getGlobalIssuerMigratePreflight"
+}
+
+// MigrateToGlobalIssuerAdminRemoteSessionsPath returns the URL path to the adminRemoteSessions service migrateToGlobalIssuer HTTP endpoint.
+func MigrateToGlobalIssuerAdminRemoteSessionsPath() string {
+	return "/rpc/adminRemoteSessions.migrateToGlobalIssuer"
 }

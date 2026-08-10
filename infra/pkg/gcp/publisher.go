@@ -46,6 +46,33 @@ func (e *errPublishResult) Get(ctx context.Context) (serverID string, err error)
 	return "", e.err
 }
 
+// NewErrPublishResult returns a PublishResult already settled with err, for
+// failures that happen before a message reaches Pub/Sub. It is the counterpart
+// of NewSuccessPublishResult, so callers layered on this package do not each
+// re-implement a pre-publish failure result.
+func NewErrPublishResult(err error) PublishResult {
+	return &errPublishResult{err: err}
+}
+
+// stopBlocking races a publisher's blocking Stop against ctx. The underlying
+// flush cannot be cancelled, so when ctx expires first the flush is left to
+// finish in the background — shutdown stays bounded by the caller's deadline
+// rather than stalling indefinitely.
+func stopBlocking(ctx context.Context, pub *pubsub.Publisher) error {
+	done := make(chan struct{})
+	go func() {
+		pub.Stop()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 type psPublisherOptions struct {
 	propagation     propagation.TextMapPropagator
 	publishSettings *pubsub.PublishSettings
@@ -126,23 +153,12 @@ func (p *psPublisher[M]) Publish(ctx context.Context, msg M) PublishResult {
 	return res
 }
 
-// Stop flushes buffered messages and releases the publisher's resources. The
-// underlying pubsub.Publisher.Stop blocks until the flush completes and cannot
-// itself be cancelled, so it runs in a goroutine and is raced against ctx. If
-// ctx is cancelled first, Stop returns the context error while the flush
-// continues in the background, ensuring shutdown stays bounded by the caller's
-// deadline rather than stalling indefinitely.
+// Stop flushes buffered messages and releases the publisher's resources,
+// bounded by ctx.
 func (p *psPublisher[M]) Stop(ctx context.Context) error {
-	done := make(chan struct{})
-	go func() {
-		p.pub.Stop()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-		return nil
-	case <-ctx.Done():
-		return fmt.Errorf("stop publisher: %w", ctx.Err())
+	if err := stopBlocking(ctx, p.pub); err != nil {
+		return fmt.Errorf("stop publisher: %w", err)
 	}
+
+	return nil
 }

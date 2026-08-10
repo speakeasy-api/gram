@@ -15,13 +15,10 @@ var sq = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
 // The call is fire-and-forget from CH's perspective: it acks once the row is
 // queued in CH's async insert buffer, not once the row is committed to disk.
 func (q *Queries) InsertChallenge(ctx context.Context, row ChallengeRow) error {
-	ctx = clickhouse.Context(ctx,
-		clickhouse.WithAsync(false),
-		clickhouse.WithSettings(clickhouse.Settings{
-			"async_insert":          1,
-			"wait_for_async_insert": 0,
-		}),
-	)
+	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
+		"async_insert":          1,
+		"wait_for_async_insert": 0,
+	}))
 
 	reqScope := make([]string, len(row.RequestedChecks))
 	reqKind := make([]string, len(row.RequestedChecks))
@@ -177,6 +174,20 @@ func challengeWhere(sb squirrel.SelectBuilder, f ChallengeListFilters) squirrel.
 		})
 	}
 	return sb
+}
+
+// challengeAttributed keeps only rows that name what was checked.
+//
+// Batch Filter and FindMatched calls log a single row for the whole batch with
+// a nil focus check, so scope, resource_kind and resource_id are all written
+// empty. Those rows carry nothing to display and nothing to grant against, and
+// they are produced on the hottest paths (project and toolset listing, MCP
+// tools/list), which makes them the most recent buckets in almost every
+// organization. Dropping them here rather than in the caller keeps LIMIT/OFFSET
+// and the bucket total consistent with what is actually returned — filtering
+// after pagination lets them fill a page and starve it of real buckets.
+func challengeAttributed(sb squirrel.SelectBuilder) squirrel.SelectBuilder {
+	return sb.Where("scope != '' AND resource_kind != '' AND resource_id != ''")
 }
 
 // challengePagination applies LIMIT/OFFSET to a squirrel SelectBuilder when not skipped.
@@ -409,6 +420,7 @@ func (q *Queries) ListChallengeBuckets(ctx context.Context, f ChallengeListFilte
 		GroupBy(challengeBucketGroupBy).
 		OrderBy("max(timestamp) DESC")
 	sb = challengeWhere(sb, f)
+	sb = challengeAttributed(sb)
 	sb = challengePagination(sb, f)
 
 	query, args, err := sb.ToSql()
@@ -463,6 +475,7 @@ func (q *Queries) CountChallengeBuckets(ctx context.Context, f ChallengeListFilt
 		From("authz_challenges").
 		GroupBy(challengeBucketGroupBy)
 	inner = challengeWhere(inner, f)
+	inner = challengeAttributed(inner)
 
 	innerQuery, args, err := inner.ToSql()
 	if err != nil {

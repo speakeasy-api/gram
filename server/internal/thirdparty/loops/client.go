@@ -40,6 +40,8 @@ type SendTransactionalInput struct {
 	// AddToAudience instructs Loops to upsert a contact in the audience as a
 	// side effect of sending the email.
 	AddToAudience bool
+	// IdempotencyKey deduplicates sends for 24 hours and is limited to 100 characters.
+	IdempotencyKey string
 }
 
 // New returns a Client that is always safe to call.
@@ -83,7 +85,12 @@ type transactionalResponse struct {
 }
 
 func (c *httpClient) SendTransactional(ctx context.Context, input SendTransactionalInput) error {
-	payload, err := json.Marshal(transactionalRequest(input))
+	payload, err := json.Marshal(transactionalRequest{
+		TransactionalID: input.TransactionalID,
+		Email:           input.Email,
+		DataVariables:   input.DataVariables,
+		AddToAudience:   input.AddToAudience,
+	})
 	if err != nil {
 		return fmt.Errorf("marshal transactional request: %w", err)
 	}
@@ -95,6 +102,9 @@ func (c *httpClient) SendTransactional(ctx context.Context, input SendTransactio
 
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
+	if input.IdempotencyKey != "" {
+		req.Header.Set("Idempotency-Key", input.IdempotencyKey)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -105,6 +115,12 @@ func (c *httpClient) SendTransactional(ctx context.Context, input SendTransactio
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("read transactional response: %w", err)
+	}
+
+	// A 409 for an idempotent send means Loops already accepted it.
+	if resp.StatusCode == http.StatusConflict && input.IdempotencyKey != "" {
+		c.logger.DebugContext(ctx, "loops suppressed duplicate transactional email", attr.SlogName(input.TransactionalID))
+		return nil
 	}
 
 	if resp.StatusCode != http.StatusOK {

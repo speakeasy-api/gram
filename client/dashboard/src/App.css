@@ -1,9 +1,56 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "tw-shimmer";
-@reference "../node_modules/@speakeasy-api/moonshine/src/global.css";
+@plugin "@tailwindcss/typography";
+
+/* Design system tokens and utilities. Order matters: base tokens must come
+   before the utilities that reference them. */
+@import "./components/ui/styles/base.css";
+@import "./components/ui/styles/utilities.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
+@custom-variant interact {
+  &:hover,
+  &:focus-visible {
+    @slot;
+  }
+}
+
+/* Stack, Grid and the responsive prop helpers build these class names at
+   runtime, so Tailwind cannot see them in the source and has to be told to
+   emit them. */
+/* The Gap and Padding prop types accept the whole Tailwind spacing scale, so
+   the unprefixed classes have to cover all of it or values like `gap={1.5}`
+   resolve to nothing. Responsive variants stay on the common subset to keep
+   the generated stylesheet from ballooning. */
+@source inline("{p-,px-,py-,pr-,pb-,pl-,pt-}{0,0.5,1,1.5,2,2.5,3,3.5,4,5,6,7,8,9,10,11,12,14,16,20,24,28,32,36,40,44,48,52,56,60,64,72,80,96}");
+@source inline("gap-{0,0.5,1,1.5,2,2.5,3,3.5,4,5,6,7,8,9,10,11,12,14,16,20,24,28,32,36,40,44,48,52,56,60,64,72,80,96}");
+@source inline(
+  "{sm:,md:,lg:,xl:,2xl:}{p-,px-,py-,pr-,pb-,pl-,pt-}{0,0.5,1,2,3,4,5,6,8,10,12,16}"
+);
+@source inline("{sm:,md:,lg:,xl:,2xl:}gap-{0,0.5,1,2,3,4,5,6,8,10,12,16}");
+@source inline("{,sm:,md:,lg:,xl:,2xl:}grid-cols-{1,2,3,4,5,6,7,8,9,10,11,12}");
+@source inline("{,sm:,md:,lg:,xl:,2xl:}col-span-{1,2,3,4,5,6,7,8,9,10,11,12}");
+@source inline(
+  "{,sm:,md:,lg:,xl:,2xl:}flex-{row,col,nowrap,wrap,wrap-reverse,none,1,auto,initial,grow,shrink}"
+);
+@source inline(
+  "{,sm:,md:,lg:,xl:,2xl:}justify-{start,center,end,between,evenly}"
+);
+@source inline(
+  "{,sm:,md:,lg:,xl:,2xl:}items-{start,center,end,stretch,baseline}"
+);
+@source inline("{,sm:,md:,lg:,xl:,2xl:}size-{8,12,16,24,32}");
+
+@theme {
+  --font-sans: var(--font-diatype);
+  --font-mono: var(--font-diatype-mono);
+  --font-display: var(--font-tobias);
+  --font-ascii: var(--font-speakeasy), var(--font-diatype-mono), monospace;
+
+  /* Extended text scale */
+  --text-2xs: 0.5625rem; /* 9px */
+}
 
 @font-face {
   font-family: "Diatype";
@@ -43,14 +90,14 @@
 :root {
   --optional-label: "optional";
 
-  --radius: 0.625rem;
+  --radius: 0rem;
 }
 
 @theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  /* Square corners everywhere: wipe the radius scale so rounded-* utilities
+     are not generated. rounded-full stays available for true circles
+     (avatars, status dots, spinners). */
+  --radius-*: initial;
 
   --header-height: 3rem;
   --sidebar-width: 16rem;
@@ -229,6 +276,90 @@
   }
 }
 
+/* Chat suggestion launch, first half: the clicked suggestion chip flies to the
+   centre of the screen and becomes the overlay card, both tagged `chat-launch`
+   (see `useChatLaunch`). The UA's default cross-fade sells the content change;
+   only the timing is tuned. The second half is NOT a view transition — the
+   user bubble lives inside the Elements shadow root, where a
+   `view-transition-name` produces no pseudo-element at all, so the card is
+   FLIP-animated onto the bubble instead. */
+::view-transition-group(chat-launch) {
+  animation-duration: 420ms;
+  animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* No cross-fade: the chip and the card show the same icon and label, so fading
+   between them just reads as the card materialising. Dropping the UA's default
+   animations leaves the chip's snapshot hidden and the card's fully opaque from
+   frame one, so the only thing that moves is the group's geometry — the chip
+   scales up and travels to the centre. */
+::view-transition-old(chat-launch) {
+  animation: none;
+  opacity: 0;
+}
+
+::view-transition-new(chat-launch) {
+  animation: none;
+  opacity: 1;
+}
+
+/* Nothing else on screen may fade while the chip flies. The page itself is
+   swapping route in the same transition, and the UA's 250ms root cross-fade
+   under an otherwise-instant card reads as the card fading in; the veil ramping
+   up reads the same way. Both are cut to an instant swap, scoped to this
+   transition by the class `useChatLaunch` sets on <html>. */
+html.chat-launching::view-transition-old(root),
+html.chat-launching::view-transition-new(root) {
+  animation-duration: 1ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(chat-launch),
+  ::view-transition-old(chat-launch),
+  ::view-transition-new(chat-launch) {
+    animation: none;
+  }
+}
+
+/* Highlight sweep over the launch card's label while it swaps the suggestion
+   title for the full message (driven from `chat-launch.ts`). A pseudo-element
+   sweep rather than a background-clip gradient, because the label keeps its own
+   colour — the shimmer passes over the text, it doesn't paint it. */
+.chat-launch-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.chat-launch-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgb(255 255 255 / 0.45) 50%,
+    transparent 70%
+  );
+  animation: 900ms ease-out 1 both chat-launch-shimmer-sweep;
+  pointer-events: none;
+}
+
+@keyframes chat-launch-shimmer-sweep {
+  from {
+    transform: translateX(-120%);
+  }
+  to {
+    transform: translateX(120%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-launch-shimmer::after {
+    animation: none;
+    opacity: 0;
+  }
+}
+
 /* Dotted background scroll animation for catalog cards */
 @keyframes scroll-dots {
   from {
@@ -321,4 +452,40 @@
 .dot-card:hover .scroll-dots-target {
   animation: scroll-dots 3s linear infinite;
   color: oklch(0.553 0.013 58.071 / 0.4);
+}
+
+/* Side panel open/close (see `SidePanelSurface`). The panel is a layout sibling
+   rather than an overlay, so opening it has to move the page: the aside's own
+   width is what animates, and the page reflows into what is left. The content
+   inside is pinned to the panel's final width so it does not re-wrap on every
+   frame — it slides in from behind the right edge as the gap opens. */
+.side-panel-enter {
+  animation: 260ms cubic-bezier(0.32, 0.72, 0, 1) side-panel-in;
+}
+
+/* Faster on the way out, and `forwards` holds it collapsed for the few frames
+   between the animation ending and React unmounting it. */
+.side-panel-exit {
+  animation: 200ms cubic-bezier(0.32, 0.72, 0, 1) forwards side-panel-out;
+}
+
+@keyframes side-panel-in {
+  from {
+    width: 0;
+    opacity: 0;
+  }
+}
+
+@keyframes side-panel-out {
+  to {
+    width: 0;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .side-panel-enter,
+  .side-panel-exit {
+    animation-duration: 1ms;
+  }
 }

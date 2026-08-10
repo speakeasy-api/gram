@@ -11,6 +11,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -60,6 +62,53 @@ func TestDeleteMcpEndpoint(t *testing.T) {
 		ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestDeleteMcpEndpoint_RootAutoClearsAndAuditsMapping(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	domain, err := customdomainsrepo.New(ti.conn).CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         "endpoint-delete-root.example.com",
+		IpAllowlist:    []string{},
+	})
+	require.NoError(t, err)
+	serverID := seedMcpServerWithVisibility(t, ctx, ti.conn, *authCtx.ProjectID, "public")
+	endpoint, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID:      *authCtx.ProjectID,
+		CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
+		McpServerID:    serverID,
+		Slug:           "root",
+	})
+	require.NoError(t, err)
+	require.NoError(t, customdomainsrepo.New(ti.conn).SetRootMcpEndpoint(ctx, customdomainsrepo.SetRootMcpEndpointParams{
+		McpEndpointID:  endpoint.ID,
+		CustomDomainID: domain.ID,
+	}))
+	beforeAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionCustomDomainsUpdate)
+	require.NoError(t, err)
+
+	err = ti.service.DeleteMcpEndpoint(ctx, &gen.DeleteMcpEndpointPayload{ID: endpoint.ID.String()})
+	require.NoError(t, err)
+
+	afterAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionCustomDomainsUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeAuditCount+1, afterAuditCount)
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionCustomDomainsUpdate)
+	require.NoError(t, err)
+	beforeSnapshot, err := audittest.DecodeAuditData(record.BeforeSnapshot)
+	require.NoError(t, err)
+	afterSnapshot, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, endpoint.ID.String(), beforeSnapshot["RootMcpEndpointID"])
+	require.Nil(t, afterSnapshot["RootMcpEndpointID"])
+	route, err := customdomainsrepo.New(ti.conn).GetCustomDomainRouteConfig(ctx, domain.ID)
+	require.NoError(t, err)
+	require.Equal(t, uuid.Nil, route.RootMcpEndpointID)
+	require.Empty(t, route.RootSlug)
 }
 
 func TestDeleteMcpEndpoint_NotFound(t *testing.T) {

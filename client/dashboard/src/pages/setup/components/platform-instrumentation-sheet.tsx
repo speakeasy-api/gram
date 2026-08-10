@@ -12,6 +12,7 @@ import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import { useSlugs } from "@/contexts/Sdk";
+import { useOrgRoutes } from "@/routes";
 import { toast } from "sonner";
 import { codeToHtml, type BundledLanguage } from "shiki";
 import {
@@ -20,10 +21,11 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
+} from "@/components/ui/Sheet";
 import { AGENT_PLATFORMS } from "../setup-data";
 import type { AgentPlatform, PlatformSetupStatus } from "../types";
-import { Button, Link } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Link } from "@/components/ui/Link";
 import { cn } from "@/lib/utils";
 import { PLATFORM_LOGOS, INVERT_LOGO_IN_DARK } from "./platform-logos";
 
@@ -36,6 +38,7 @@ const CODEX_PLUGIN_NAME_PLACEHOLDER = "{{GRAM_CODEX_PLUGIN_NAME}}";
 const CLAUDE_PLUGIN_NAME_PLACEHOLDER = "{{GRAM_CLAUDE_PLUGIN_NAME}}";
 const CURSOR_PLUGIN_NAME_PLACEHOLDER = "{{GRAM_CURSOR_PLUGIN_NAME}}";
 const MARKETPLACE_NAME_PLACEHOLDER = "{{GRAM_MARKETPLACE_NAME}}";
+const DEVICE_AGENT_URL_PLACEHOLDER = "{{GRAM_DEVICE_AGENT_URL}}";
 
 function HighlightedCode({
   code,
@@ -136,6 +139,7 @@ export function PlatformInstrumentationSheet({
   const { data: publishStatus } = usePublishStatus();
   const { data: marketplaceSettings } = useMarketplaceSettings();
   const { orgSlug = "" } = useSlugs();
+  const deviceAgentUrl = useOrgRoutes().deviceAgent.href();
   const repoOwner = publishStatus?.repoOwner ?? "";
   const repoName = publishStatus?.repoName ?? "";
   const marketplaceUrl = publishStatus?.marketplaceUrl ?? "";
@@ -351,9 +355,9 @@ export function PlatformInstrumentationSheet({
               key={platform.id}
               type="button"
               onClick={() => setPickedPlatformId(platform.id)}
-              className="border-border bg-card hover:border-foreground/20 flex w-full items-center gap-4 rounded-lg border p-4 text-left transition-all"
+              className="border-border bg-card hover:border-foreground/20 flex w-full items-center gap-4 border p-4 text-left transition-all"
             >
-              <div className="bg-secondary flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg">
+              <div className="bg-secondary flex h-10 w-10 flex-shrink-0 items-center justify-center">
                 {PLATFORM_LOGOS[platform.id] ? (
                   <img
                     src={PLATFORM_LOGOS[platform.id]}
@@ -452,12 +456,28 @@ export function PlatformInstrumentationSheet({
                 [CLAUDE_PLUGIN_NAME_PLACEHOLDER, claudePluginName],
                 [CURSOR_PLUGIN_NAME_PLACEHOLDER, cursorPluginName],
                 [MARKETPLACE_NAME_PLACEHOLDER, marketplaceName],
+                [DEVICE_AGENT_URL_PLACEHOLDER, deviceAgentUrl],
               ];
+              const applySubstitutions = (
+                input: string,
+                subs: Array<[string, string]> = substitutions,
+              ): string => {
+                let out = input;
+                for (const [marker, value] of subs) {
+                  out = out.split(marker).join(value);
+                }
+                return out;
+              };
+              // The API key is a live secret and must never be interpolated
+              // into a URL — an href leaks it via the address bar, Referer
+              // header, browser history, and server logs. helpLink URLs use a
+              // secret-free subset of the substitutions.
+              const urlSubstitutions = substitutions.filter(
+                ([marker]) => marker !== API_KEY_PLACEHOLDER,
+              );
               let displayCode = step.code;
               if (displayCode) {
-                for (const [marker, value] of substitutions) {
-                  displayCode = displayCode.split(marker).join(value);
-                }
+                displayCode = applySubstitutions(displayCode);
               }
               // Don't render the code block when a step depends on the API key
               // and we haven't yet minted one, or references the marketplace
@@ -483,7 +503,7 @@ export function PlatformInstrumentationSheet({
                     {step.title}
                   </h4>
                   {step.screenshot && (
-                    <figure className="border-border !my-6 overflow-hidden rounded-md border">
+                    <figure className="border-border !my-6 overflow-hidden border">
                       <img
                         src={step.screenshot.src}
                         alt={step.screenshot.alt}
@@ -510,7 +530,7 @@ export function PlatformInstrumentationSheet({
                         <p className="text-muted-foreground text-sm leading-relaxed">
                           {before}
                           <Link
-                            href={url}
+                            href={applySubstitutions(url, urlSubstitutions)}
                             target="_blank"
                             rel="noopener noreferrer"
                             size="sm"
@@ -524,7 +544,7 @@ export function PlatformInstrumentationSheet({
                     })()}
 
                   {step.eligibility && (
-                    <div className="bg-secondary/40 border-border !mt-6 space-y-4 rounded-lg border p-4">
+                    <div className="bg-secondary/40 border-border !mt-6 space-y-4 border p-4">
                       <p className="text-foreground text-sm font-medium">
                         {step.eligibility.question}
                       </p>
@@ -566,7 +586,7 @@ export function PlatformInstrumentationSheet({
                   )}
 
                   {needsKey && error && (
-                    <div className="text-destructive bg-destructive/5 border-destructive/20 flex items-start gap-2 rounded-md border p-2.5 text-xs">
+                    <div className="text-destructive bg-destructive/5 border-destructive/20 flex items-start gap-2 border p-2.5 text-xs">
                       <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
                       <div className="flex-1">
                         <p className="font-medium">
@@ -585,7 +605,7 @@ export function PlatformInstrumentationSheet({
                   )}
 
                   {displayCode && codeBlockReady && (
-                    <div className="overflow-hidden rounded-md bg-zinc-950">
+                    <div className="overflow-hidden bg-zinc-950">
                       <div className="flex items-center justify-between px-3 py-2.5">
                         <span className="text-[10px] tracking-wider text-zinc-500 uppercase">
                           {step.language ?? "shell"}
@@ -598,7 +618,7 @@ export function PlatformInstrumentationSheet({
                               `${activePlatform.id}-${idx}`,
                             );
                           }}
-                          className="flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium tracking-wider text-zinc-300 uppercase transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+                          className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium tracking-wider text-zinc-300 uppercase transition-colors hover:bg-zinc-800 hover:text-zinc-100"
                         >
                           {copiedField === `${activePlatform.id}-${idx}` ? (
                             <Check className="h-3 w-3" />

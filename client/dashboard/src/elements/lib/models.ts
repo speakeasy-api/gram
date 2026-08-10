@@ -1,6 +1,7 @@
 // List of openrouter models available to the user
 // This list should be updated to match the model whitelist on the backend side.
 export const MODELS = [
+  "anthropic/claude-opus-5",
   "anthropic/claude-fable-5",
   "anthropic/claude-sonnet-5",
   "anthropic/claude-opus-4.8",
@@ -44,5 +45,4 @@ export const MODELS = [
 // config.model.defaultModel. Kept explicit (rather than MODELS[0]) so
 // reordering MODELS — e.g. listing a premium model first — can never
 // silently change what unconfigured embeds run on.
-export const DEFAULT_MODEL: (typeof MODELS)[number] =
-  "anthropic/claude-sonnet-5";
+export const DEFAULT_MODEL: (typeof MODELS)[number] = "anthropic/claude-opus-5";

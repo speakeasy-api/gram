@@ -4,12 +4,13 @@ import {
   RouteNotFoundState,
   SecondaryRouteAction,
 } from "@/components/route-not-found-state";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Skeleton, SkeletonTable } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Skeleton, SkeletonTable } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
+import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { Markdown } from "@/elements/components/Markdown";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { isNotFoundError } from "@/lib/route-errors";
@@ -21,19 +22,37 @@ import { useRoutes } from "@/routes";
 import type { SkillVersion } from "@gram/client/models/components/skillversion.js";
 import { useSkill } from "@gram/client/react-query/skill.js";
 import { useSkillVersionsInfinite } from "@gram/client/react-query/skillVersions.js";
-import { Badge, type Column, Table } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { type Column, Table } from "@/components/ui/Table";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import {
   ArchiveSkillDialog,
   type ArchiveSkillTarget,
 } from "./ArchiveSkillDialog";
+import { EditSkillDetailsDialog } from "./EditSkillDetailsDialog";
 import { SkillDistributionsSection } from "./SkillDistributionsSection";
+import { SkillFeedbackSection } from "./SkillFeedbackSection";
+import {
+  SKILL_INSIGHTS_SECTION_ID,
+  SkillInsightsSection,
+} from "./SkillInsightsSection";
+import {
+  SKILL_ADOPTION_SECTION_ID,
+  SKILL_TIMELINE_SECTION_ID,
+  SkillActivitySections,
+} from "./SkillActivitySections";
 import { stripSkillFrontmatter } from "./skill-manifest";
 import { SkillManifestDialog } from "./SkillManifestDialog";
 import { SkillPluginBanner } from "./SkillPluginBanner";
 import { SkillValidationErrors } from "./SkillValidationErrors";
-import { selectDiffVersions } from "./version-selection";
+import { RestoreSkillVersionDialog } from "./RestoreSkillVersionDialog";
+import { SuggestedSkillEditSection } from "./SuggestedSkillEditSection";
+import {
+  selectDiffVersions,
+  type VersionChangeDirection,
+  versionChangeDirection,
+} from "./version-selection";
 
 const SkillTextDiff = lazy(() => import("./SkillTextDiff"));
 
@@ -44,12 +63,28 @@ export const SKILL_VERSIONS_SECTION_ID = "versions";
 const SKILL_DANGER_SECTION_ID = "danger";
 
 const SKILL_SECTION_IDS: readonly string[] = [
+  SKILL_ADOPTION_SECTION_ID,
+  SKILL_INSIGHTS_SECTION_ID,
   SKILL_MANIFEST_SECTION_ID,
   SKILL_FRONTMATTER_SECTION_ID,
   SKILL_DISTRIBUTIONS_SECTION_ID,
   SKILL_VERSIONS_SECTION_ID,
+  SKILL_TIMELINE_SECTION_ID,
   SKILL_DANGER_SECTION_ID,
 ];
+
+function versionAnchorLabel(
+  version: SkillVersion,
+  currentVersion: SkillVersion,
+): string {
+  const hash = version.canonicalSha256.slice(0, 8);
+  if (version.id === currentVersion.id)
+    return `Version ${hash}, current version`;
+  if (!version.specValid) return `Version ${hash}, invalid version`;
+  const direction = versionChangeDirection(version, currentVersion);
+  if (direction === "backward") return `Version ${hash}, roll back target`;
+  return `Version ${hash}, promotion target`;
+}
 
 function useScrollToSectionHash(): void {
   const location = useLocation();
@@ -146,45 +181,90 @@ function SkillDetailSections({
   const routes = useRoutes();
   const navigate = useNavigate();
   const [editOpen, setEditOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState<ArchiveSkillTarget | null>(
     null,
   );
   useScrollToSectionHash();
 
   const { skill, latestVersion } = skillQueryData;
-  const body = stripSkillFrontmatter(latestVersion.content);
+  const versionsQuery = useSkillVersionsInfinite({ id: skill.id }, undefined, {
+    throwOnError: false,
+  });
+  useDrainInfiniteQuery(versionsQuery);
+  const versionsLoading =
+    !versionsQuery.error &&
+    (versionsQuery.isPending ||
+      versionsQuery.hasNextPage ||
+      versionsQuery.isFetchingNextPage);
+  const versions =
+    versionsQuery.data?.pages.flatMap((page) => page.result.versions) ?? [];
+  const versionLabels = new Map(
+    [...versions]
+      .sort(
+        (left, right) => left.createdAt.getTime() - right.createdAt.getTime(),
+      )
+      .map((version, index) => [
+        version.id,
+        `v${skill.versionCount - versions.length + index + 1} (${version.canonicalSha256.slice(0, 8)})`,
+      ]),
+  );
+  const body = latestVersion
+    ? stripSkillFrontmatter(latestVersion.content)
+    : "";
   const frontmatterEntries = Object.entries(
-    latestVersion.frontmatter ?? {},
+    latestVersion?.frontmatter ?? {},
   ).filter(([key]) => key !== "name" && key !== "description");
 
   return (
     <>
-      <SkillPluginBanner skillId={skillId} />
+      <SkillPluginBanner skill={skill} />
 
-      <SettingsSection id={SKILL_MANIFEST_SECTION_ID}>
+      <SettingsSection>
         <SettingsSection.Header>
-          <SettingsSection.Title>SKILL.md</SettingsSection.Title>
+          <SettingsSection.Title>Skill details</SettingsSection.Title>
           <SettingsSection.Description>
-            The latest version of this skill's manifest, exactly as agents load
-            it.
+            Registry identity and presentation metadata.
           </SettingsSection.Description>
         </SettingsSection.Header>
         <SettingsSection.Panel>
           <SettingsSection.Body>
-            {!latestVersion.specValid && (
-              <ValidationErrors errors={latestVersion.validationErrors} />
-            )}
-            <div className="overflow-x-auto">
-              <ManifestBody body={body} />
-            </div>
+            <dl className="grid gap-4 sm:grid-cols-3">
+              <div>
+                <dt className="text-muted-foreground text-xs">
+                  Canonical name
+                </dt>
+                <dd className="mt-1 font-mono text-sm">{skill.name}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground text-xs">Display name</dt>
+                <dd className="mt-1 text-sm">{skill.displayName}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground text-xs">Summary</dt>
+                <dd className="mt-1 text-sm">{skill.summary || "None"}</dd>
+              </div>
+              <div className="sm:col-span-3">
+                <dt className="text-muted-foreground text-xs">Tags</dt>
+                <dd className="mt-1">
+                  {skill.tags.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {skill.tags.map((tag) => (
+                        <Badge key={tag} variant="neutral" className="text-xs">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-sm">None</span>
+                  )}
+                </dd>
+              </div>
+            </dl>
           </SettingsSection.Body>
           <SettingsSection.Footer>
             <SettingsSection.FooterHint>
-              Latest version{" "}
-              <span className="font-mono">
-                {latestVersion.canonicalSha256.slice(0, 8)}
-              </span>{" "}
-              · updated <HumanizeDateTime date={skill.updatedAt} />
+              Renaming keeps activation attribution on this skill.
             </SettingsSection.FooterHint>
             <SettingsSection.FooterActions>
               <RequireScope
@@ -192,12 +272,81 @@ function SkillDetailSections({
                 resourceId={project.id}
                 level="component"
               >
-                <Button size="sm" onClick={() => setEditOpen(true)}>
-                  Edit skill
+                <Button size="sm" onClick={() => setDetailsOpen(true)}>
+                  Edit details
                 </Button>
               </RequireScope>
             </SettingsSection.FooterActions>
           </SettingsSection.Footer>
+        </SettingsSection.Panel>
+      </SettingsSection>
+
+      <SkillActivitySections
+        data={skillQueryData}
+        versionLabels={versionLabels}
+        versionsLoading={versionsLoading}
+      />
+
+      {latestVersion && (
+        <SuggestedSkillEditSection
+          skillId={skillId}
+          latestVersion={latestVersion}
+        />
+      )}
+
+      <SkillInsightsSection
+        data={skillQueryData}
+        versionLabels={versionLabels}
+        versionsLoading={versionsLoading}
+        versionsError={versionsQuery.error}
+      />
+
+      <SettingsSection id={SKILL_MANIFEST_SECTION_ID}>
+        <SettingsSection.Header>
+          <SettingsSection.Title>SKILL.md</SettingsSection.Title>
+          <SettingsSection.Description>
+            The current version of this skill's manifest, exactly as agents load
+            it.
+          </SettingsSection.Description>
+        </SettingsSection.Header>
+        <SettingsSection.Panel>
+          <SettingsSection.Body>
+            {latestVersion && !latestVersion.specValid && (
+              <ValidationErrors errors={latestVersion.validationErrors} />
+            )}
+            <div className="overflow-x-auto">
+              {latestVersion ? (
+                <ManifestBody body={body} />
+              ) : (
+                <Text small muted>
+                  Manifest content has not been captured for this observed
+                  skill.
+                </Text>
+              )}
+            </div>
+          </SettingsSection.Body>
+          {latestVersion && (
+            <SettingsSection.Footer>
+              <SettingsSection.FooterHint>
+                Current version{" "}
+                <span className="font-mono">
+                  {latestVersion.canonicalSha256.slice(0, 8)}
+                </span>{" "}
+                · updated <HumanizeDateTime date={skill.updatedAt} />
+              </SettingsSection.FooterHint>
+              <SettingsSection.FooterActions>
+                <RequireScope
+                  scope="skill:write"
+                  resourceId={project.id}
+                  level="component"
+                >
+                  <Button size="sm" onClick={() => setEditOpen(true)}>
+                    Edit SKILL.md
+                  </Button>
+                </RequireScope>
+              </SettingsSection.FooterActions>
+            </SettingsSection.Footer>
+          )}
         </SettingsSection.Panel>
       </SettingsSection>
 
@@ -230,39 +379,48 @@ function SkillDetailSections({
         </SettingsSection>
       )}
 
-      <SettingsSection id={SKILL_DISTRIBUTIONS_SECTION_ID}>
-        <SettingsSection.Header>
-          <SettingsSection.Title>Plugin distributions</SettingsSection.Title>
-          <SettingsSection.Description>
-            The plugins carrying this skill. Distributed skills ship inside the
-            plugin package and reach everyone who installs the plugin.
-          </SettingsSection.Description>
-        </SettingsSection.Header>
-        <SkillDistributionsSection skillId={skillId} />
-      </SettingsSection>
+      {latestVersion && (
+        <SettingsSection id={SKILL_DISTRIBUTIONS_SECTION_ID}>
+          <SettingsSection.Header>
+            <SettingsSection.Title>Plugin distributions</SettingsSection.Title>
+            <SettingsSection.Description>
+              Used by {skillQueryData.assistantCount}{" "}
+              {skillQueryData.assistantCount === 1 ? "assistant" : "assistants"}
+              . The plugins carrying this skill ship it inside the plugin
+              package for everyone who installs it.
+            </SettingsSection.Description>
+          </SettingsSection.Header>
+          <SkillDistributionsSection skillId={skillId} />
+        </SettingsSection>
+      )}
 
-      <SettingsSection id={SKILL_VERSIONS_SECTION_ID}>
-        <SettingsSection.Header>
-          <SettingsSection.Title>Version history</SettingsSection.Title>
-          <SettingsSection.Description>
-            Every recorded version of this skill's manifest.
-          </SettingsSection.Description>
-        </SettingsSection.Header>
-        <VersionHistory skillId={skillId} latestVersionId={latestVersion.id} />
-      </SettingsSection>
+      {latestVersion && (
+        <SettingsSection id={SKILL_VERSIONS_SECTION_ID}>
+          <SettingsSection.Header>
+            <SettingsSection.Title>Version history</SettingsSection.Title>
+            <SettingsSection.Description>
+              Versions are ordered by creation date, newest first. After a
+              rollback, the current version may appear below newer versions.
+            </SettingsSection.Description>
+          </SettingsSection.Header>
+          <VersionHistory skillId={skillId} currentVersion={latestVersion} />
+        </SettingsSection>
+      )}
+
+      <SkillFeedbackSection skillId={skillId} projectId={project.id} />
 
       <DangerSettingsSection id={SKILL_DANGER_SECTION_ID}>
         <DangerSettingsSection.Header>
           <DangerSettingsSection.Title>Danger zone</DangerSettingsSection.Title>
         </DangerSettingsSection.Header>
         <DangerSettingsSection.Panel>
-          <DangerSettingsSection.Body className="flex flex-wrap items-center justify-between gap-4">
-            <div className="space-y-1">
-              <Type className="text-sm font-semibold">Archive this skill</Type>
-              <Type small muted className="max-w-xl">
+          <DangerSettingsSection.Body className="flex flex-wrap items-center justify-between gap-2">
+            <div className="space-y-1 m-0">
+              <Text className="text-sm font-semibold">Archive this skill</Text>
+              <Text small muted className="max-w-xl">
                 Archiving removes the skill from this project's catalog and
                 revokes its plugin distributions.
-              </Type>
+              </Text>
             </div>
             <RequireScope
               scope="skill:write"
@@ -270,7 +428,7 @@ function SkillDetailSections({
               level="component"
             >
               <Button
-                variant="destructiveGhost"
+                variant="destructive-primary"
                 onClick={() =>
                   setArchiveTarget({
                     id: skill.id,
@@ -285,13 +443,22 @@ function SkillDetailSections({
         </DangerSettingsSection.Panel>
       </DangerSettingsSection>
 
-      <SkillManifestDialog
-        key={editOpen ? "edit" : "closed"}
-        mode="edit"
-        open={editOpen}
-        onOpenChange={setEditOpen}
-        skillId={skill.id}
-        initialContent={latestVersion.content}
+      {latestVersion && (
+        <SkillManifestDialog
+          key={editOpen ? "edit" : "closed"}
+          mode="edit"
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          skillId={skill.id}
+          derivedFromVersionId={latestVersion.id}
+          initialContent={latestVersion.content}
+        />
+      )}
+      <EditSkillDetailsDialog
+        key={detailsOpen ? "details-open" : "details-closed"}
+        skill={skill}
+        open={detailsOpen}
+        onOpenChange={setDetailsOpen}
       />
       <ArchiveSkillDialog
         skill={archiveTarget}
@@ -304,30 +471,42 @@ function SkillDetailSections({
 
 function VersionHistory({
   skillId,
-  latestVersionId,
+  currentVersion,
 }: {
   skillId: string;
-  latestVersionId: string;
+  currentVersion: SkillVersion;
 }): JSX.Element {
+  const project = useProject();
+  const location = useLocation();
   const versionsQuery = useSkillVersionsInfinite({ id: skillId }, undefined, {
     throwOnError: false,
   });
   const [selectedVersions, setSelectedVersions] = useState<Set<string>>(
     () => new Set(),
   );
+  const [restoreTarget, setRestoreTarget] = useState<{
+    version: SkillVersion;
+    direction: VersionChangeDirection;
+  } | null>(null);
 
   const versions =
     versionsQuery.data?.pages.flatMap((page) => page.result.versions) ?? [];
   const diffVersions = selectDiffVersions(
     versions,
     selectedVersions,
-    latestVersionId,
+    currentVersion,
   );
   const comparable = versions.length > 1;
+  useEffect(() => {
+    const target = document.getElementById(location.hash.slice(1));
+    if (!target || !location.hash.startsWith("#version-")) return;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    target.focus();
+  }, [location.hash, versions.length]);
   let loadMoreLabel = "Load more versions";
   if (versionsQuery.isFetchingNextPage) loadMoreLabel = "Loading...";
   const columns = versionColumns({
-    latestVersionId,
+    currentVersionId: currentVersion.id,
     comparable,
     selectedVersions,
     onToggle: (versionId) => {
@@ -341,16 +520,45 @@ function VersionHistory({
         return next;
       });
     },
+    restoreAction: (version) => {
+      const direction = versionChangeDirection(version, currentVersion);
+      return (
+        <div
+          id={`version-${version.id}`}
+          role="group"
+          tabIndex={-1}
+          aria-label={versionAnchorLabel(version, currentVersion)}
+          className="focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none"
+        >
+          {direction && version.specValid && (
+            <RequireScope
+              scope="skill:write"
+              resourceId={project.id}
+              level="component"
+              reason="You need write access to change the current skill version."
+            >
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setRestoreTarget({ version, direction })}
+              >
+                {direction === "backward" ? "Roll back" : "Promote"}
+              </Button>
+            </RequireScope>
+          )}
+        </div>
+      );
+    },
   });
 
   return (
-    <SettingsSection.Panel>
-      <SettingsSection.Body>
+    <>
+      <div className="space-y-4">
         {comparable && (
-          <Type small muted>
-            Select one older version to compare it with latest, or select any
-            two loaded versions.
-          </Type>
+          <Text small muted>
+            Select one version to compare it with current, or select any two
+            loaded versions.
+          </Text>
         )}
         {versionsQuery.isPending && !versionsQuery.data && <SkeletonTable />}
         {versionsQuery.error && !versionsQuery.data && (
@@ -375,7 +583,7 @@ function VersionHistory({
         )}
         {versionsQuery.hasNextPage && !versionsQuery.isFetchNextPageError && (
           <Button
-            variant="outline"
+            variant="secondary"
             disabled={versionsQuery.isFetchingNextPage}
             onClick={() => void versionsQuery.fetchNextPage()}
           >
@@ -383,17 +591,23 @@ function VersionHistory({
           </Button>
         )}
         <VersionDiff versions={diffVersions} />
-      </SettingsSection.Body>
-    </SettingsSection.Panel>
+      </div>
+      <RestoreSkillVersionDialog
+        skillId={skillId}
+        version={restoreTarget?.version ?? null}
+        direction={restoreTarget?.direction ?? null}
+        onClose={() => setRestoreTarget(null)}
+      />
+    </>
   );
 }
 
 function ManifestBody({ body }: { body: string }): JSX.Element {
   if (body.trim().length === 0) {
     return (
-      <Type small muted>
+      <Text small muted>
         This manifest has no Markdown body.
-      </Type>
+      </Text>
     );
   }
   return <Markdown className="text-sm">{body}</Markdown>;
@@ -410,9 +624,9 @@ function SkillDetailLoading(): JSX.Element {
           aria-label="Loading skill"
           className="mx-auto w-full max-w-[1270px] flex-1 space-y-10 px-8 py-8"
         >
-          <Skeleton className="h-36 w-full rounded-xl" />
-          <Skeleton className="h-80 w-full rounded-xl" />
-          <Skeleton className="h-48 w-full rounded-xl" />
+          <Skeleton className="h-36 w-full" />
+          <Skeleton className="h-80 w-full" />
+          <Skeleton className="h-48 w-full" />
         </div>
       </Page.Body>
     </Page>
@@ -425,25 +639,27 @@ function ValidationErrors({
   errors: SkillVersion["validationErrors"];
 }): JSX.Element {
   return (
-    <div className="border-destructive/40 bg-destructive/5 rounded-lg border p-4">
-      <Type variant="subheading" className="text-destructive mb-2">
-        Latest version has validation issues
-      </Type>
+    <div className="border-destructive/40 bg-destructive/5 border p-4">
+      <Text variant="subheading" className="text-destructive mb-2">
+        Current version has validation issues
+      </Text>
       <SkillValidationErrors errors={errors} />
     </div>
   );
 }
 
 function versionColumns({
-  latestVersionId,
+  currentVersionId,
   comparable,
   selectedVersions,
   onToggle,
+  restoreAction,
 }: {
-  latestVersionId: string;
+  currentVersionId: string;
   comparable: boolean;
   selectedVersions: Set<string>;
   onToggle: (versionId: string) => void;
+  restoreAction: (version: SkillVersion) => JSX.Element;
 }): Column<SkillVersion>[] {
   const compareColumn: Column<SkillVersion> = {
     key: "compare",
@@ -465,14 +681,19 @@ function versionColumns({
     {
       key: "hash",
       header: "Version",
-      width: "160px",
+      width: "280px",
       render: (version) => (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-sm">
             {version.canonicalSha256.slice(0, 8)}
           </span>
-          {version.id === latestVersionId && (
-            <Badge variant="information">Latest</Badge>
+          {version.id === currentVersionId && (
+            <Badge variant="information">Current</Badge>
+          )}
+          {version.derivedFromVersionId && (
+            <Badge variant="neutral" title={version.derivedFromVersionId}>
+              Derived
+            </Badge>
           )}
         </div>
       ),
@@ -493,25 +714,75 @@ function versionColumns({
       ),
     },
     {
+      key: "activations",
+      header: "Activations",
+      width: "110px",
+      render: (version) => <Text small>{version.seenCount}</Text>,
+    },
+    {
+      key: "firstSeen",
+      header: "First activated",
+      width: "150px",
+      render: (version) =>
+        version.firstSeenAt ? (
+          <Text
+            small
+            muted
+            title={dateTimeFormatters.full.format(version.firstSeenAt)}
+          >
+            <HumanizeDateTime date={version.firstSeenAt} />
+          </Text>
+        ) : (
+          <Text small muted>
+            Never
+          </Text>
+        ),
+    },
+    {
+      key: "lastSeen",
+      header: "Last activated",
+      width: "150px",
+      render: (version) =>
+        version.lastSeenAt ? (
+          <Text
+            small
+            muted
+            title={dateTimeFormatters.full.format(version.lastSeenAt)}
+          >
+            <HumanizeDateTime date={version.lastSeenAt} />
+          </Text>
+        ) : (
+          <Text small muted>
+            Never
+          </Text>
+        ),
+    },
+    {
       key: "created",
       header: "Created",
       width: "150px",
       render: (version) => (
-        <Type small title={dateTimeFormatters.full.format(version.createdAt)}>
+        <Text small title={dateTimeFormatters.full.format(version.createdAt)}>
           <HumanizeDateTime date={version.createdAt} />
-        </Type>
+        </Text>
       ),
+    },
+    {
+      key: "actions",
+      header: "",
+      width: "180px",
+      render: restoreAction,
     },
   ];
 }
 
 function LoadMoreError({ onRetry }: { onRetry: () => void }): JSX.Element {
   return (
-    <div className="border-destructive/40 bg-destructive/5 flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
-      <Type small className="text-destructive">
+    <div className="border-destructive/40 bg-destructive/5 flex flex-wrap items-center justify-between gap-3 border p-3">
+      <Text small className="text-destructive">
         Unable to load more versions.
-      </Type>
-      <Button size="sm" variant="outline" onClick={onRetry}>
+      </Text>
+      <Button size="sm" variant="secondary" onClick={onRetry}>
         Retry
       </Button>
     </div>
@@ -527,10 +798,10 @@ function VersionDiff({
   const [older, newer] = versions;
   return (
     <div className="space-y-3">
-      <Type small muted mono className="text-xs tracking-wider">
+      <Text small muted mono className="text-xs tracking-wider">
         Diff · {older.canonicalSha256.slice(0, 8)} →{" "}
         {newer.canonicalSha256.slice(0, 8)}
-      </Type>
+      </Text>
       <Suspense fallback={<Skeleton className="h-80 w-full" />}>
         <SkillTextDiff
           oldContent={older.content}

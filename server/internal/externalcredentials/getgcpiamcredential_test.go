@@ -10,6 +10,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
 )
 
 func TestGetGcpIamCredential_Success(t *testing.T) {
@@ -48,4 +50,18 @@ func TestGetGcpIamCredential_InvalidID(t *testing.T) {
 		SessionToken: nil,
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestGetGcpIamCredential_ForbiddenWithoutEntitlement(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	created := createGCPImpersonationCredential(t, ctx, ti, "gcp-get-no-entitlement")
+	productfeaturestest.Disable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureCustomerManagedEncryptionKeys)
+
+	_, err := ti.service.GetGcpIamCredential(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgRead, authz.WildcardResource)), &gen.GetGcpIamCredentialPayload{
+		ID:           created.ID,
+		SessionToken: nil,
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
 }

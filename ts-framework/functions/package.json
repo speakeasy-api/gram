@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "@gram-ai/functions",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "description": "",
   "author": "Georges Haidar <georges@speakeasyapi.dev>",
   "main": "dist/index.js",
@@ -27,7 +27,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "packageManager": "pnpm@11.10.0",
+  "packageManager": "pnpm@11.19.0",
   "files": [
     "src",
     "dist"
@@ -59,13 +59,14 @@
     "@logtape/logtape": "^2.2.4",
     "@logtape/pretty": "^2.2.4",
     "@stricli/core": "^1.2.9",
-    "archiver": "^7.0.1",
+    "archiver": "^8.0.0",
     "esbuild": "^0.27.7",
     "zod": "^4",
     "zx": "8.8.5-lite"
   },
   "devDependencies": {
-    "@types/archiver": "^6.0.4",
+    "@modelcontextprotocol/sdk": "catalog:",
+    "@types/archiver": "^8.0.0",
     "vitest": "^4.1.10"
   }
 }

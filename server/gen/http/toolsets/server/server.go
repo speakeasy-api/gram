@@ -30,8 +30,6 @@ type Server struct {
 	CloneToolset             http.Handler
 	AddExternalOAuthServer   http.Handler
 	RemoveOAuthServer        http.Handler
-	AddOAuthProxyServer      http.Handler
-	UpdateOAuthProxyServer   http.Handler
 	SetUserSessionIssuer     http.Handler
 	SetToolVariationsGroup   http.Handler
 }
@@ -74,8 +72,6 @@ func New(
 			{"CloneToolset", "POST", "/rpc/toolsets.clone"},
 			{"AddExternalOAuthServer", "POST", "/rpc/toolsets.addExternalOAuthServer"},
 			{"RemoveOAuthServer", "POST", "/rpc/toolsets.removeOAuthServer"},
-			{"AddOAuthProxyServer", "POST", "/rpc/toolsets.addOAuthProxyServer"},
-			{"UpdateOAuthProxyServer", "POST", "/rpc/toolsets.updateOAuthProxyServer"},
 			{"SetUserSessionIssuer", "POST", "/rpc/toolsets.setUserSessionIssuer"},
 			{"SetToolVariationsGroup", "POST", "/rpc/toolsets.setToolVariationsGroup"},
 		},
@@ -90,8 +86,6 @@ func New(
 		CloneToolset:             NewCloneToolsetHandler(e.CloneToolset, mux, decoder, encoder, errhandler, formatter),
 		AddExternalOAuthServer:   NewAddExternalOAuthServerHandler(e.AddExternalOAuthServer, mux, decoder, encoder, errhandler, formatter),
 		RemoveOAuthServer:        NewRemoveOAuthServerHandler(e.RemoveOAuthServer, mux, decoder, encoder, errhandler, formatter),
-		AddOAuthProxyServer:      NewAddOAuthProxyServerHandler(e.AddOAuthProxyServer, mux, decoder, encoder, errhandler, formatter),
-		UpdateOAuthProxyServer:   NewUpdateOAuthProxyServerHandler(e.UpdateOAuthProxyServer, mux, decoder, encoder, errhandler, formatter),
 		SetUserSessionIssuer:     NewSetUserSessionIssuerHandler(e.SetUserSessionIssuer, mux, decoder, encoder, errhandler, formatter),
 		SetToolVariationsGroup:   NewSetToolVariationsGroupHandler(e.SetToolVariationsGroup, mux, decoder, encoder, errhandler, formatter),
 	}
@@ -113,8 +107,6 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CloneToolset = m(s.CloneToolset)
 	s.AddExternalOAuthServer = m(s.AddExternalOAuthServer)
 	s.RemoveOAuthServer = m(s.RemoveOAuthServer)
-	s.AddOAuthProxyServer = m(s.AddOAuthProxyServer)
-	s.UpdateOAuthProxyServer = m(s.UpdateOAuthProxyServer)
 	s.SetUserSessionIssuer = m(s.SetUserSessionIssuer)
 	s.SetToolVariationsGroup = m(s.SetToolVariationsGroup)
 }
@@ -135,8 +127,6 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCloneToolsetHandler(mux, h.CloneToolset)
 	MountAddExternalOAuthServerHandler(mux, h.AddExternalOAuthServer)
 	MountRemoveOAuthServerHandler(mux, h.RemoveOAuthServer)
-	MountAddOAuthProxyServerHandler(mux, h.AddOAuthProxyServer)
-	MountUpdateOAuthProxyServerHandler(mux, h.UpdateOAuthProxyServer)
 	MountSetUserSessionIssuerHandler(mux, h.SetUserSessionIssuer)
 	MountSetToolVariationsGroupHandler(mux, h.SetToolVariationsGroup)
 }
@@ -707,112 +697,6 @@ func NewRemoveOAuthServerHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "removeOAuthServer")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountAddOAuthProxyServerHandler configures the mux to serve the "toolsets"
-// service "addOAuthProxyServer" endpoint.
-func MountAddOAuthProxyServerHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/rpc/toolsets.addOAuthProxyServer", f)
-}
-
-// NewAddOAuthProxyServerHandler creates a HTTP handler which loads the HTTP
-// request and calls the "toolsets" service "addOAuthProxyServer" endpoint.
-func NewAddOAuthProxyServerHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeAddOAuthProxyServerRequest(mux, decoder)
-		encodeResponse = EncodeAddOAuthProxyServerResponse(encoder)
-		encodeError    = EncodeAddOAuthProxyServerError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "addOAuthProxyServer")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountUpdateOAuthProxyServerHandler configures the mux to serve the
-// "toolsets" service "updateOAuthProxyServer" endpoint.
-func MountUpdateOAuthProxyServerHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/rpc/toolsets.updateOAuthProxyServer", f)
-}
-
-// NewUpdateOAuthProxyServerHandler creates a HTTP handler which loads the HTTP
-// request and calls the "toolsets" service "updateOAuthProxyServer" endpoint.
-func NewUpdateOAuthProxyServerHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeUpdateOAuthProxyServerRequest(mux, decoder)
-		encodeResponse = EncodeUpdateOAuthProxyServerResponse(encoder)
-		encodeError    = EncodeUpdateOAuthProxyServerError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "updateOAuthProxyServer")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
 		payload, err := decodeRequest(r)
 		if err != nil {

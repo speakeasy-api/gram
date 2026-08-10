@@ -17,6 +17,7 @@ message GitleaksAnalysis {
 
   string reply_urn = 8;
   string content = 9;
+  string content_part_id = 10;
 
   option (gcp.pubsub.v1.topic) = {
     retention_hint: {

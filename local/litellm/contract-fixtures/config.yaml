@@ -1,0 +1,50 @@
+model_list:
+  - model_name: fixture-openai
+    litellm_params:
+      model: openai/fixture-openai
+      api_base: os.environ/FIXTURE_PROVIDER_BASE
+      api_key: fixture-provider-key
+  - model_name: fixture-responses
+    litellm_params:
+      model: openai/fixture-responses
+      api_base: os.environ/FIXTURE_PROVIDER_BASE
+      api_key: fixture-provider-key
+  - model_name: fixture-anthropic
+    litellm_params:
+      model: anthropic/fixture-anthropic
+      api_base: os.environ/FIXTURE_PROVIDER_BASE
+      api_key: fixture-provider-key
+
+general_settings:
+  master_key: fixture-master-key
+  database_url: os.environ/DATABASE_URL
+  pass_through_endpoints:
+    - id: fixture-text-endpoint
+      path: /fixture/text
+      target: os.environ/FIXTURE_TEXT_TARGET
+      auth: false
+      methods: [POST]
+      # LiteLLM 1.94.0 models per-endpoint guardrails as a map keyed by the
+      # globally registered guardrail name. Its configured pass-through path
+      # applies request_fields but drops the logging context before post-call
+      # dispatch, so response_fields is retained here as the intended contract
+      # even though the pinned version emits no response callback.
+      guardrails:
+        fixture-contract:
+          request_fields: [input]
+          response_fields: [output]
+
+guardrails:
+  - guardrail_name: fixture-contract
+    litellm_params:
+      guardrail: generic_guardrail_api
+      mode: [pre_call, post_call]
+      api_base: os.environ/FIXTURE_GUARDRAIL_BASE
+      default_on: true
+      streaming_end_of_stream_only: true
+      extra_headers:
+        - x-gram-session-id
+        - x-claude-code-session-id
+        - session-id
+        - thread-id
+        - x-session-id

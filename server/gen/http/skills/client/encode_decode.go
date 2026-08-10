@@ -504,6 +504,490 @@ func DecodeAddVersionResponse(decoder func(*http.Response) goahttp.Decoder, rest
 	}
 }
 
+// BuildRestoreVersionRequest instantiates a HTTP request object with method
+// and path set to call the "skills" service "restoreVersion" endpoint
+func (c *Client) BuildRestoreVersionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RestoreVersionSkillsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("skills", "restoreVersion", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRestoreVersionRequest returns an encoder for requests sent to the
+// skills restoreVersion server.
+func EncodeRestoreVersionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*skills.RestoreVersionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("skills", "restoreVersion", "*skills.RestoreVersionPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewRestoreVersionRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("skills", "restoreVersion", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRestoreVersionResponse returns a decoder for responses returned by the
+// skills restoreVersion endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeRestoreVersionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRestoreVersionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RestoreVersionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "restoreVersion", err)
+			}
+			err = ValidateRestoreVersionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "restoreVersion", err)
+			}
+			res := NewRestoreVersionRecordSkillResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RestoreVersionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "restoreVersion", err)
+			}
+			err = ValidateRestoreVersionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "restoreVersion", err)
+			}
+			return nil, NewRestoreVersionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RestoreVersionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "restoreVersion", err)
+			}
+			err = ValidateRestoreVersionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "restoreVersion", err)
+			}
+			return nil, NewRestoreVersionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RestoreVersionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "restoreVersion", err)
+			}
+			err = ValidateRestoreVersionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "restoreVersion", err)
+			}
+			return nil, NewRestoreVersionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RestoreVersionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "restoreVersion", err)
+			}
+			err = ValidateRestoreVersionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "restoreVersion", err)
+			}
+			return nil, NewRestoreVersionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RestoreVersionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "restoreVersion", err)
+			}
+			err = ValidateRestoreVersionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "restoreVersion", err)
+			}
+			return nil, NewRestoreVersionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RestoreVersionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "restoreVersion", err)
+			}
+			err = ValidateRestoreVersionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "restoreVersion", err)
+			}
+			return nil, NewRestoreVersionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RestoreVersionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "restoreVersion", err)
+			}
+			err = ValidateRestoreVersionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "restoreVersion", err)
+			}
+			return nil, NewRestoreVersionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RestoreVersionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "restoreVersion", err)
+				}
+				err = ValidateRestoreVersionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "restoreVersion", err)
+				}
+				return nil, NewRestoreVersionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RestoreVersionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "restoreVersion", err)
+				}
+				err = ValidateRestoreVersionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "restoreVersion", err)
+				}
+				return nil, NewRestoreVersionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("skills", "restoreVersion", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RestoreVersionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "restoreVersion", err)
+			}
+			err = ValidateRestoreVersionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "restoreVersion", err)
+			}
+			return nil, NewRestoreVersionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("skills", "restoreVersion", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildUpdateRequest instantiates a HTTP request object with method and path
+// set to call the "skills" service "update" endpoint
+func (c *Client) BuildUpdateRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpdateSkillsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("skills", "update", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpdateRequest returns an encoder for requests sent to the skills
+// update server.
+func EncodeUpdateRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*skills.UpdatePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("skills", "update", "*skills.UpdatePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewUpdateRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("skills", "update", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpdateResponse returns a decoder for responses returned by the skills
+// update endpoint. restoreBody controls whether the response body should be
+// restored after having been read.
+// DecodeUpdateResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpdateResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpdateResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "update", err)
+			}
+			err = ValidateUpdateResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "update", err)
+			}
+			res := NewUpdateSkillOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpdateUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "update", err)
+			}
+			err = ValidateUpdateUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "update", err)
+			}
+			return nil, NewUpdateUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpdateForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "update", err)
+			}
+			err = ValidateUpdateForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "update", err)
+			}
+			return nil, NewUpdateForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpdateBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "update", err)
+			}
+			err = ValidateUpdateBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "update", err)
+			}
+			return nil, NewUpdateBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpdateNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "update", err)
+			}
+			err = ValidateUpdateNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "update", err)
+			}
+			return nil, NewUpdateNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpdateConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "update", err)
+			}
+			err = ValidateUpdateConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "update", err)
+			}
+			return nil, NewUpdateConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpdateUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "update", err)
+			}
+			err = ValidateUpdateUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "update", err)
+			}
+			return nil, NewUpdateUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpdateInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "update", err)
+			}
+			err = ValidateUpdateInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "update", err)
+			}
+			return nil, NewUpdateInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpdateInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "update", err)
+				}
+				err = ValidateUpdateInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "update", err)
+				}
+				return nil, NewUpdateInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpdateUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "update", err)
+				}
+				err = ValidateUpdateUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "update", err)
+				}
+				return nil, NewUpdateUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("skills", "update", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpdateGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "update", err)
+			}
+			err = ValidateUpdateGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "update", err)
+			}
+			return nil, NewUpdateGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("skills", "update", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListRequest instantiates a HTTP request object with method and path set
 // to call the "skills" service "list" endpoint
 func (c *Client) BuildListRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -544,6 +1028,19 @@ func EncodeListRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.R
 			values.Add("cursor", *p.Cursor)
 		}
 		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		if p.Search != nil {
+			values.Add("search", *p.Search)
+		}
+		for _, value := range p.SourceKinds {
+			values.Add("source_kinds", value)
+		}
+		for _, value := range p.Classifications {
+			values.Add("classifications", value)
+		}
+		for _, value := range p.Tags {
+			values.Add("tags", value)
+		}
+		values.Add("sort", p.Sort)
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -744,6 +1241,1935 @@ func DecodeListResponse(decoder func(*http.Response) goahttp.Decoder, restoreBod
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("skills", "list", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListTagsRequest instantiates a HTTP request object with method and path
+// set to call the "skills" service "listTags" endpoint
+func (c *Client) BuildListTagsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListTagsSkillsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("skills", "listTags", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListTagsRequest returns an encoder for requests sent to the skills
+// listTags server.
+func EncodeListTagsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*skills.ListTagsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("skills", "listTags", "*skills.ListTagsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListTagsResponse returns a decoder for responses returned by the
+// skills listTags endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeListTagsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListTagsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListTagsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listTags", err)
+			}
+			err = ValidateListTagsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listTags", err)
+			}
+			res := NewListTagsListSkillTagsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListTagsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listTags", err)
+			}
+			err = ValidateListTagsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listTags", err)
+			}
+			return nil, NewListTagsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListTagsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listTags", err)
+			}
+			err = ValidateListTagsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listTags", err)
+			}
+			return nil, NewListTagsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListTagsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listTags", err)
+			}
+			err = ValidateListTagsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listTags", err)
+			}
+			return nil, NewListTagsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListTagsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listTags", err)
+			}
+			err = ValidateListTagsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listTags", err)
+			}
+			return nil, NewListTagsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListTagsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listTags", err)
+			}
+			err = ValidateListTagsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listTags", err)
+			}
+			return nil, NewListTagsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListTagsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listTags", err)
+			}
+			err = ValidateListTagsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listTags", err)
+			}
+			return nil, NewListTagsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListTagsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listTags", err)
+			}
+			err = ValidateListTagsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listTags", err)
+			}
+			return nil, NewListTagsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListTagsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "listTags", err)
+				}
+				err = ValidateListTagsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "listTags", err)
+				}
+				return nil, NewListTagsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListTagsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "listTags", err)
+				}
+				err = ValidateListTagsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "listTags", err)
+				}
+				return nil, NewListTagsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("skills", "listTags", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListTagsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listTags", err)
+			}
+			err = ValidateListTagsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listTags", err)
+			}
+			return nil, NewListTagsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("skills", "listTags", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListSuggestionsRequest instantiates a HTTP request object with method
+// and path set to call the "skills" service "listSuggestions" endpoint
+func (c *Client) BuildListSuggestionsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListSuggestionsSkillsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("skills", "listSuggestions", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListSuggestionsRequest returns an encoder for requests sent to the
+// skills listSuggestions server.
+func EncodeListSuggestionsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*skills.ListSuggestionsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("skills", "listSuggestions", "*skills.ListSuggestionsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		if p.SkillID != nil {
+			values.Add("skill_id", *p.SkillID)
+		}
+		if p.Cursor != nil {
+			values.Add("cursor", *p.Cursor)
+		}
+		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListSuggestionsResponse returns a decoder for responses returned by
+// the skills listSuggestions endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListSuggestionsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListSuggestionsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListSuggestionsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listSuggestions", err)
+			}
+			err = ValidateListSuggestionsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listSuggestions", err)
+			}
+			res := NewListSuggestionsListSkillSuggestionsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListSuggestionsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listSuggestions", err)
+			}
+			err = ValidateListSuggestionsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listSuggestions", err)
+			}
+			return nil, NewListSuggestionsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListSuggestionsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listSuggestions", err)
+			}
+			err = ValidateListSuggestionsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listSuggestions", err)
+			}
+			return nil, NewListSuggestionsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListSuggestionsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listSuggestions", err)
+			}
+			err = ValidateListSuggestionsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listSuggestions", err)
+			}
+			return nil, NewListSuggestionsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListSuggestionsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listSuggestions", err)
+			}
+			err = ValidateListSuggestionsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listSuggestions", err)
+			}
+			return nil, NewListSuggestionsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListSuggestionsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listSuggestions", err)
+			}
+			err = ValidateListSuggestionsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listSuggestions", err)
+			}
+			return nil, NewListSuggestionsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListSuggestionsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listSuggestions", err)
+			}
+			err = ValidateListSuggestionsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listSuggestions", err)
+			}
+			return nil, NewListSuggestionsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListSuggestionsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listSuggestions", err)
+			}
+			err = ValidateListSuggestionsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listSuggestions", err)
+			}
+			return nil, NewListSuggestionsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListSuggestionsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "listSuggestions", err)
+				}
+				err = ValidateListSuggestionsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "listSuggestions", err)
+				}
+				return nil, NewListSuggestionsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListSuggestionsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "listSuggestions", err)
+				}
+				err = ValidateListSuggestionsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "listSuggestions", err)
+				}
+				return nil, NewListSuggestionsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("skills", "listSuggestions", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListSuggestionsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listSuggestions", err)
+			}
+			err = ValidateListSuggestionsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listSuggestions", err)
+			}
+			return nil, NewListSuggestionsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("skills", "listSuggestions", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListFeedbackRequest instantiates a HTTP request object with method and
+// path set to call the "skills" service "listFeedback" endpoint
+func (c *Client) BuildListFeedbackRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListFeedbackSkillsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("skills", "listFeedback", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListFeedbackRequest returns an encoder for requests sent to the skills
+// listFeedback server.
+func EncodeListFeedbackRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*skills.ListFeedbackPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("skills", "listFeedback", "*skills.ListFeedbackPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		if p.Cursor != nil {
+			values.Add("cursor", *p.Cursor)
+		}
+		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListFeedbackResponse returns a decoder for responses returned by the
+// skills listFeedback endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeListFeedbackResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListFeedbackResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListFeedbackResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listFeedback", err)
+			}
+			err = ValidateListFeedbackResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listFeedback", err)
+			}
+			res := NewListFeedbackListSkillFeedbackResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListFeedbackUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listFeedback", err)
+			}
+			err = ValidateListFeedbackUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listFeedback", err)
+			}
+			return nil, NewListFeedbackUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListFeedbackForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listFeedback", err)
+			}
+			err = ValidateListFeedbackForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listFeedback", err)
+			}
+			return nil, NewListFeedbackForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListFeedbackBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listFeedback", err)
+			}
+			err = ValidateListFeedbackBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listFeedback", err)
+			}
+			return nil, NewListFeedbackBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListFeedbackNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listFeedback", err)
+			}
+			err = ValidateListFeedbackNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listFeedback", err)
+			}
+			return nil, NewListFeedbackNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListFeedbackConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listFeedback", err)
+			}
+			err = ValidateListFeedbackConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listFeedback", err)
+			}
+			return nil, NewListFeedbackConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListFeedbackUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listFeedback", err)
+			}
+			err = ValidateListFeedbackUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listFeedback", err)
+			}
+			return nil, NewListFeedbackUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListFeedbackInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listFeedback", err)
+			}
+			err = ValidateListFeedbackInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listFeedback", err)
+			}
+			return nil, NewListFeedbackInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListFeedbackInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "listFeedback", err)
+				}
+				err = ValidateListFeedbackInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "listFeedback", err)
+				}
+				return nil, NewListFeedbackInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListFeedbackUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "listFeedback", err)
+				}
+				err = ValidateListFeedbackUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "listFeedback", err)
+				}
+				return nil, NewListFeedbackUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("skills", "listFeedback", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListFeedbackGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listFeedback", err)
+			}
+			err = ValidateListFeedbackGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listFeedback", err)
+			}
+			return nil, NewListFeedbackGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("skills", "listFeedback", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildTriggerSuggestionRequest instantiates a HTTP request object with method
+// and path set to call the "skills" service "triggerSuggestion" endpoint
+func (c *Client) BuildTriggerSuggestionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: TriggerSuggestionSkillsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("skills", "triggerSuggestion", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeTriggerSuggestionRequest returns an encoder for requests sent to the
+// skills triggerSuggestion server.
+func EncodeTriggerSuggestionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*skills.TriggerSuggestionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("skills", "triggerSuggestion", "*skills.TriggerSuggestionPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewTriggerSuggestionRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("skills", "triggerSuggestion", err)
+		}
+		return nil
+	}
+}
+
+// DecodeTriggerSuggestionResponse returns a decoder for responses returned by
+// the skills triggerSuggestion endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeTriggerSuggestionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeTriggerSuggestionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusAccepted:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body TriggerSuggestionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "triggerSuggestion", err)
+			}
+			err = ValidateTriggerSuggestionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "triggerSuggestion", err)
+			}
+			return nil, NewTriggerSuggestionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body TriggerSuggestionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "triggerSuggestion", err)
+			}
+			err = ValidateTriggerSuggestionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "triggerSuggestion", err)
+			}
+			return nil, NewTriggerSuggestionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body TriggerSuggestionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "triggerSuggestion", err)
+			}
+			err = ValidateTriggerSuggestionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "triggerSuggestion", err)
+			}
+			return nil, NewTriggerSuggestionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body TriggerSuggestionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "triggerSuggestion", err)
+			}
+			err = ValidateTriggerSuggestionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "triggerSuggestion", err)
+			}
+			return nil, NewTriggerSuggestionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body TriggerSuggestionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "triggerSuggestion", err)
+			}
+			err = ValidateTriggerSuggestionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "triggerSuggestion", err)
+			}
+			return nil, NewTriggerSuggestionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body TriggerSuggestionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "triggerSuggestion", err)
+			}
+			err = ValidateTriggerSuggestionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "triggerSuggestion", err)
+			}
+			return nil, NewTriggerSuggestionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body TriggerSuggestionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "triggerSuggestion", err)
+			}
+			err = ValidateTriggerSuggestionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "triggerSuggestion", err)
+			}
+			return nil, NewTriggerSuggestionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body TriggerSuggestionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "triggerSuggestion", err)
+				}
+				err = ValidateTriggerSuggestionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "triggerSuggestion", err)
+				}
+				return nil, NewTriggerSuggestionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body TriggerSuggestionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "triggerSuggestion", err)
+				}
+				err = ValidateTriggerSuggestionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "triggerSuggestion", err)
+				}
+				return nil, NewTriggerSuggestionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("skills", "triggerSuggestion", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body TriggerSuggestionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "triggerSuggestion", err)
+			}
+			err = ValidateTriggerSuggestionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "triggerSuggestion", err)
+			}
+			return nil, NewTriggerSuggestionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("skills", "triggerSuggestion", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildApproveSuggestionRequest instantiates a HTTP request object with method
+// and path set to call the "skills" service "approveSuggestion" endpoint
+func (c *Client) BuildApproveSuggestionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ApproveSuggestionSkillsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("skills", "approveSuggestion", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeApproveSuggestionRequest returns an encoder for requests sent to the
+// skills approveSuggestion server.
+func EncodeApproveSuggestionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*skills.ApproveSuggestionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("skills", "approveSuggestion", "*skills.ApproveSuggestionPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewApproveSuggestionRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("skills", "approveSuggestion", err)
+		}
+		return nil
+	}
+}
+
+// DecodeApproveSuggestionResponse returns a decoder for responses returned by
+// the skills approveSuggestion endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeApproveSuggestionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeApproveSuggestionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ApproveSuggestionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "approveSuggestion", err)
+			}
+			err = ValidateApproveSuggestionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "approveSuggestion", err)
+			}
+			res := NewApproveSuggestionApproveSkillSuggestionResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ApproveSuggestionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "approveSuggestion", err)
+			}
+			err = ValidateApproveSuggestionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "approveSuggestion", err)
+			}
+			return nil, NewApproveSuggestionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ApproveSuggestionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "approveSuggestion", err)
+			}
+			err = ValidateApproveSuggestionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "approveSuggestion", err)
+			}
+			return nil, NewApproveSuggestionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ApproveSuggestionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "approveSuggestion", err)
+			}
+			err = ValidateApproveSuggestionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "approveSuggestion", err)
+			}
+			return nil, NewApproveSuggestionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ApproveSuggestionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "approveSuggestion", err)
+			}
+			err = ValidateApproveSuggestionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "approveSuggestion", err)
+			}
+			return nil, NewApproveSuggestionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ApproveSuggestionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "approveSuggestion", err)
+			}
+			err = ValidateApproveSuggestionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "approveSuggestion", err)
+			}
+			return nil, NewApproveSuggestionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ApproveSuggestionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "approveSuggestion", err)
+			}
+			err = ValidateApproveSuggestionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "approveSuggestion", err)
+			}
+			return nil, NewApproveSuggestionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ApproveSuggestionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "approveSuggestion", err)
+			}
+			err = ValidateApproveSuggestionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "approveSuggestion", err)
+			}
+			return nil, NewApproveSuggestionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ApproveSuggestionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "approveSuggestion", err)
+				}
+				err = ValidateApproveSuggestionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "approveSuggestion", err)
+				}
+				return nil, NewApproveSuggestionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ApproveSuggestionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "approveSuggestion", err)
+				}
+				err = ValidateApproveSuggestionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "approveSuggestion", err)
+				}
+				return nil, NewApproveSuggestionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("skills", "approveSuggestion", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ApproveSuggestionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "approveSuggestion", err)
+			}
+			err = ValidateApproveSuggestionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "approveSuggestion", err)
+			}
+			return nil, NewApproveSuggestionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("skills", "approveSuggestion", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildDismissSuggestionRequest instantiates a HTTP request object with method
+// and path set to call the "skills" service "dismissSuggestion" endpoint
+func (c *Client) BuildDismissSuggestionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DismissSuggestionSkillsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("skills", "dismissSuggestion", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDismissSuggestionRequest returns an encoder for requests sent to the
+// skills dismissSuggestion server.
+func EncodeDismissSuggestionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*skills.DismissSuggestionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("skills", "dismissSuggestion", "*skills.DismissSuggestionPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewDismissSuggestionRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("skills", "dismissSuggestion", err)
+		}
+		return nil
+	}
+}
+
+// DecodeDismissSuggestionResponse returns a decoder for responses returned by
+// the skills dismissSuggestion endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeDismissSuggestionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDismissSuggestionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body DismissSuggestionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "dismissSuggestion", err)
+			}
+			err = ValidateDismissSuggestionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "dismissSuggestion", err)
+			}
+			res := NewDismissSuggestionSkillEditSuggestionOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body DismissSuggestionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "dismissSuggestion", err)
+			}
+			err = ValidateDismissSuggestionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "dismissSuggestion", err)
+			}
+			return nil, NewDismissSuggestionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DismissSuggestionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "dismissSuggestion", err)
+			}
+			err = ValidateDismissSuggestionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "dismissSuggestion", err)
+			}
+			return nil, NewDismissSuggestionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DismissSuggestionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "dismissSuggestion", err)
+			}
+			err = ValidateDismissSuggestionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "dismissSuggestion", err)
+			}
+			return nil, NewDismissSuggestionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DismissSuggestionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "dismissSuggestion", err)
+			}
+			err = ValidateDismissSuggestionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "dismissSuggestion", err)
+			}
+			return nil, NewDismissSuggestionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DismissSuggestionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "dismissSuggestion", err)
+			}
+			err = ValidateDismissSuggestionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "dismissSuggestion", err)
+			}
+			return nil, NewDismissSuggestionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DismissSuggestionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "dismissSuggestion", err)
+			}
+			err = ValidateDismissSuggestionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "dismissSuggestion", err)
+			}
+			return nil, NewDismissSuggestionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DismissSuggestionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "dismissSuggestion", err)
+			}
+			err = ValidateDismissSuggestionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "dismissSuggestion", err)
+			}
+			return nil, NewDismissSuggestionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DismissSuggestionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "dismissSuggestion", err)
+				}
+				err = ValidateDismissSuggestionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "dismissSuggestion", err)
+				}
+				return nil, NewDismissSuggestionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DismissSuggestionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "dismissSuggestion", err)
+				}
+				err = ValidateDismissSuggestionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "dismissSuggestion", err)
+				}
+				return nil, NewDismissSuggestionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("skills", "dismissSuggestion", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DismissSuggestionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "dismissSuggestion", err)
+			}
+			err = ValidateDismissSuggestionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "dismissSuggestion", err)
+			}
+			return nil, NewDismissSuggestionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("skills", "dismissSuggestion", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListSuggestionFeedbackRequest instantiates a HTTP request object with
+// method and path set to call the "skills" service "listSuggestionFeedback"
+// endpoint
+func (c *Client) BuildListSuggestionFeedbackRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListSuggestionFeedbackSkillsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("skills", "listSuggestionFeedback", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListSuggestionFeedbackRequest returns an encoder for requests sent to
+// the skills listSuggestionFeedback server.
+func EncodeListSuggestionFeedbackRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*skills.ListSuggestionFeedbackPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("skills", "listSuggestionFeedback", "*skills.ListSuggestionFeedbackPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListSuggestionFeedbackResponse returns a decoder for responses
+// returned by the skills listSuggestionFeedback endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeListSuggestionFeedbackResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListSuggestionFeedbackResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListSuggestionFeedbackResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listSuggestionFeedback", err)
+			}
+			err = ValidateListSuggestionFeedbackResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listSuggestionFeedback", err)
+			}
+			res := NewListSuggestionFeedbackListSkillSuggestionFeedbackResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListSuggestionFeedbackUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listSuggestionFeedback", err)
+			}
+			err = ValidateListSuggestionFeedbackUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listSuggestionFeedback", err)
+			}
+			return nil, NewListSuggestionFeedbackUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListSuggestionFeedbackForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listSuggestionFeedback", err)
+			}
+			err = ValidateListSuggestionFeedbackForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listSuggestionFeedback", err)
+			}
+			return nil, NewListSuggestionFeedbackForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListSuggestionFeedbackBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listSuggestionFeedback", err)
+			}
+			err = ValidateListSuggestionFeedbackBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listSuggestionFeedback", err)
+			}
+			return nil, NewListSuggestionFeedbackBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListSuggestionFeedbackNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listSuggestionFeedback", err)
+			}
+			err = ValidateListSuggestionFeedbackNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listSuggestionFeedback", err)
+			}
+			return nil, NewListSuggestionFeedbackNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListSuggestionFeedbackConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listSuggestionFeedback", err)
+			}
+			err = ValidateListSuggestionFeedbackConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listSuggestionFeedback", err)
+			}
+			return nil, NewListSuggestionFeedbackConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListSuggestionFeedbackUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listSuggestionFeedback", err)
+			}
+			err = ValidateListSuggestionFeedbackUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listSuggestionFeedback", err)
+			}
+			return nil, NewListSuggestionFeedbackUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListSuggestionFeedbackInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listSuggestionFeedback", err)
+			}
+			err = ValidateListSuggestionFeedbackInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listSuggestionFeedback", err)
+			}
+			return nil, NewListSuggestionFeedbackInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListSuggestionFeedbackInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "listSuggestionFeedback", err)
+				}
+				err = ValidateListSuggestionFeedbackInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "listSuggestionFeedback", err)
+				}
+				return nil, NewListSuggestionFeedbackInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListSuggestionFeedbackUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "listSuggestionFeedback", err)
+				}
+				err = ValidateListSuggestionFeedbackUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "listSuggestionFeedback", err)
+				}
+				return nil, NewListSuggestionFeedbackUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("skills", "listSuggestionFeedback", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListSuggestionFeedbackGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listSuggestionFeedback", err)
+			}
+			err = ValidateListSuggestionFeedbackGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listSuggestionFeedback", err)
+			}
+			return nil, NewListSuggestionFeedbackGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("skills", "listSuggestionFeedback", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildApproveAllSuggestionsRequest instantiates a HTTP request object with
+// method and path set to call the "skills" service "approveAllSuggestions"
+// endpoint
+func (c *Client) BuildApproveAllSuggestionsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ApproveAllSuggestionsSkillsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("skills", "approveAllSuggestions", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeApproveAllSuggestionsRequest returns an encoder for requests sent to
+// the skills approveAllSuggestions server.
+func EncodeApproveAllSuggestionsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*skills.ApproveAllSuggestionsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("skills", "approveAllSuggestions", "*skills.ApproveAllSuggestionsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewApproveAllSuggestionsRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("skills", "approveAllSuggestions", err)
+		}
+		return nil
+	}
+}
+
+// DecodeApproveAllSuggestionsResponse returns a decoder for responses returned
+// by the skills approveAllSuggestions endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeApproveAllSuggestionsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeApproveAllSuggestionsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ApproveAllSuggestionsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "approveAllSuggestions", err)
+			}
+			err = ValidateApproveAllSuggestionsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "approveAllSuggestions", err)
+			}
+			res := NewApproveAllSuggestionsApproveAllSkillSuggestionsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ApproveAllSuggestionsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "approveAllSuggestions", err)
+			}
+			err = ValidateApproveAllSuggestionsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "approveAllSuggestions", err)
+			}
+			return nil, NewApproveAllSuggestionsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ApproveAllSuggestionsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "approveAllSuggestions", err)
+			}
+			err = ValidateApproveAllSuggestionsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "approveAllSuggestions", err)
+			}
+			return nil, NewApproveAllSuggestionsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ApproveAllSuggestionsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "approveAllSuggestions", err)
+			}
+			err = ValidateApproveAllSuggestionsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "approveAllSuggestions", err)
+			}
+			return nil, NewApproveAllSuggestionsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ApproveAllSuggestionsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "approveAllSuggestions", err)
+			}
+			err = ValidateApproveAllSuggestionsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "approveAllSuggestions", err)
+			}
+			return nil, NewApproveAllSuggestionsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ApproveAllSuggestionsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "approveAllSuggestions", err)
+			}
+			err = ValidateApproveAllSuggestionsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "approveAllSuggestions", err)
+			}
+			return nil, NewApproveAllSuggestionsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ApproveAllSuggestionsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "approveAllSuggestions", err)
+			}
+			err = ValidateApproveAllSuggestionsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "approveAllSuggestions", err)
+			}
+			return nil, NewApproveAllSuggestionsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ApproveAllSuggestionsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "approveAllSuggestions", err)
+			}
+			err = ValidateApproveAllSuggestionsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "approveAllSuggestions", err)
+			}
+			return nil, NewApproveAllSuggestionsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ApproveAllSuggestionsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "approveAllSuggestions", err)
+				}
+				err = ValidateApproveAllSuggestionsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "approveAllSuggestions", err)
+				}
+				return nil, NewApproveAllSuggestionsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ApproveAllSuggestionsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "approveAllSuggestions", err)
+				}
+				err = ValidateApproveAllSuggestionsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "approveAllSuggestions", err)
+				}
+				return nil, NewApproveAllSuggestionsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("skills", "approveAllSuggestions", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ApproveAllSuggestionsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "approveAllSuggestions", err)
+			}
+			err = ValidateApproveAllSuggestionsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "approveAllSuggestions", err)
+			}
+			return nil, NewApproveAllSuggestionsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("skills", "approveAllSuggestions", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -985,6 +3411,251 @@ func DecodeGetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("skills", "get", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListUnknownActivationsRequest instantiates a HTTP request object with
+// method and path set to call the "skills" service "listUnknownActivations"
+// endpoint
+func (c *Client) BuildListUnknownActivationsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListUnknownActivationsSkillsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("skills", "listUnknownActivations", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListUnknownActivationsRequest returns an encoder for requests sent to
+// the skills listUnknownActivations server.
+func EncodeListUnknownActivationsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*skills.ListUnknownActivationsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("skills", "listUnknownActivations", "*skills.ListUnknownActivationsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		if p.Cursor != nil {
+			values.Add("cursor", *p.Cursor)
+		}
+		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListUnknownActivationsResponse returns a decoder for responses
+// returned by the skills listUnknownActivations endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeListUnknownActivationsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListUnknownActivationsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListUnknownActivationsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listUnknownActivations", err)
+			}
+			err = ValidateListUnknownActivationsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listUnknownActivations", err)
+			}
+			res := NewListUnknownActivationsListUnknownSkillActivationsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListUnknownActivationsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listUnknownActivations", err)
+			}
+			err = ValidateListUnknownActivationsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listUnknownActivations", err)
+			}
+			return nil, NewListUnknownActivationsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListUnknownActivationsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listUnknownActivations", err)
+			}
+			err = ValidateListUnknownActivationsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listUnknownActivations", err)
+			}
+			return nil, NewListUnknownActivationsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListUnknownActivationsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listUnknownActivations", err)
+			}
+			err = ValidateListUnknownActivationsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listUnknownActivations", err)
+			}
+			return nil, NewListUnknownActivationsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListUnknownActivationsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listUnknownActivations", err)
+			}
+			err = ValidateListUnknownActivationsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listUnknownActivations", err)
+			}
+			return nil, NewListUnknownActivationsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListUnknownActivationsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listUnknownActivations", err)
+			}
+			err = ValidateListUnknownActivationsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listUnknownActivations", err)
+			}
+			return nil, NewListUnknownActivationsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListUnknownActivationsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listUnknownActivations", err)
+			}
+			err = ValidateListUnknownActivationsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listUnknownActivations", err)
+			}
+			return nil, NewListUnknownActivationsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListUnknownActivationsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listUnknownActivations", err)
+			}
+			err = ValidateListUnknownActivationsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listUnknownActivations", err)
+			}
+			return nil, NewListUnknownActivationsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListUnknownActivationsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "listUnknownActivations", err)
+				}
+				err = ValidateListUnknownActivationsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "listUnknownActivations", err)
+				}
+				return nil, NewListUnknownActivationsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListUnknownActivationsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "listUnknownActivations", err)
+				}
+				err = ValidateListUnknownActivationsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "listUnknownActivations", err)
+				}
+				return nil, NewListUnknownActivationsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("skills", "listUnknownActivations", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListUnknownActivationsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "listUnknownActivations", err)
+			}
+			err = ValidateListUnknownActivationsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "listUnknownActivations", err)
+			}
+			return nil, NewListUnknownActivationsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("skills", "listUnknownActivations", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -1934,6 +4605,723 @@ func DecodeUndistributeResponse(decoder func(*http.Response) goahttp.Decoder, re
 	}
 }
 
+// BuildShareRequest instantiates a HTTP request object with method and path
+// set to call the "skills" service "share" endpoint
+func (c *Client) BuildShareRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ShareSkillsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("skills", "share", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeShareRequest returns an encoder for requests sent to the skills share
+// server.
+func EncodeShareRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*skills.SharePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("skills", "share", "*skills.SharePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewShareRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("skills", "share", err)
+		}
+		return nil
+	}
+}
+
+// DecodeShareResponse returns a decoder for responses returned by the skills
+// share endpoint. restoreBody controls whether the response body should be
+// restored after having been read.
+// DecodeShareResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeShareResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ShareResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "share", err)
+			}
+			err = ValidateShareResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "share", err)
+			}
+			res := NewShareSkillShareLinkOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ShareUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "share", err)
+			}
+			err = ValidateShareUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "share", err)
+			}
+			return nil, NewShareUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ShareForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "share", err)
+			}
+			err = ValidateShareForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "share", err)
+			}
+			return nil, NewShareForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ShareBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "share", err)
+			}
+			err = ValidateShareBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "share", err)
+			}
+			return nil, NewShareBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ShareNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "share", err)
+			}
+			err = ValidateShareNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "share", err)
+			}
+			return nil, NewShareNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ShareConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "share", err)
+			}
+			err = ValidateShareConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "share", err)
+			}
+			return nil, NewShareConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ShareUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "share", err)
+			}
+			err = ValidateShareUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "share", err)
+			}
+			return nil, NewShareUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ShareInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "share", err)
+			}
+			err = ValidateShareInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "share", err)
+			}
+			return nil, NewShareInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ShareInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "share", err)
+				}
+				err = ValidateShareInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "share", err)
+				}
+				return nil, NewShareInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ShareUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "share", err)
+				}
+				err = ValidateShareUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "share", err)
+				}
+				return nil, NewShareUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("skills", "share", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ShareGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "share", err)
+			}
+			err = ValidateShareGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "share", err)
+			}
+			return nil, NewShareGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("skills", "share", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildUnshareRequest instantiates a HTTP request object with method and path
+// set to call the "skills" service "unshare" endpoint
+func (c *Client) BuildUnshareRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UnshareSkillsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("skills", "unshare", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUnshareRequest returns an encoder for requests sent to the skills
+// unshare server.
+func EncodeUnshareRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*skills.UnsharePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("skills", "unshare", "*skills.UnsharePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewUnshareRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("skills", "unshare", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUnshareResponse returns a decoder for responses returned by the skills
+// unshare endpoint. restoreBody controls whether the response body should be
+// restored after having been read.
+// DecodeUnshareResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUnshareResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body UnshareUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "unshare", err)
+			}
+			err = ValidateUnshareUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "unshare", err)
+			}
+			return nil, NewUnshareUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UnshareForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "unshare", err)
+			}
+			err = ValidateUnshareForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "unshare", err)
+			}
+			return nil, NewUnshareForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UnshareBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "unshare", err)
+			}
+			err = ValidateUnshareBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "unshare", err)
+			}
+			return nil, NewUnshareBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UnshareNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "unshare", err)
+			}
+			err = ValidateUnshareNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "unshare", err)
+			}
+			return nil, NewUnshareNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UnshareConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "unshare", err)
+			}
+			err = ValidateUnshareConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "unshare", err)
+			}
+			return nil, NewUnshareConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UnshareUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "unshare", err)
+			}
+			err = ValidateUnshareUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "unshare", err)
+			}
+			return nil, NewUnshareUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UnshareInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "unshare", err)
+			}
+			err = ValidateUnshareInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "unshare", err)
+			}
+			return nil, NewUnshareInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UnshareInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "unshare", err)
+				}
+				err = ValidateUnshareInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "unshare", err)
+				}
+				return nil, NewUnshareInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UnshareUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "unshare", err)
+				}
+				err = ValidateUnshareUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "unshare", err)
+				}
+				return nil, NewUnshareUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("skills", "unshare", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UnshareGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "unshare", err)
+			}
+			err = ValidateUnshareGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "unshare", err)
+			}
+			return nil, NewUnshareGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("skills", "unshare", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetSharedRequest instantiates a HTTP request object with method and
+// path set to call the "skills" service "getShared" endpoint
+func (c *Client) BuildGetSharedRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetSharedSkillsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("skills", "getShared", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetSharedRequest returns an encoder for requests sent to the skills
+// getShared server.
+func EncodeGetSharedRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*skills.GetSharedPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("skills", "getShared", "*skills.GetSharedPayload", v)
+		}
+		values := req.URL.Query()
+		values.Add("token", p.Token)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetSharedResponse returns a decoder for responses returned by the
+// skills getShared endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeGetSharedResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetSharedResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetSharedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "getShared", err)
+			}
+			err = ValidateGetSharedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "getShared", err)
+			}
+			var (
+				cacheControl   *string
+				xRobotsTag     *string
+				referrerPolicy *string
+			)
+			cacheControlRaw := resp.Header.Get("Cache-Control")
+			if cacheControlRaw != "" {
+				cacheControl = &cacheControlRaw
+			}
+			xRobotsTagRaw := resp.Header.Get("X-Robots-Tag")
+			if xRobotsTagRaw != "" {
+				xRobotsTag = &xRobotsTagRaw
+			}
+			referrerPolicyRaw := resp.Header.Get("Referrer-Policy")
+			if referrerPolicyRaw != "" {
+				referrerPolicy = &referrerPolicyRaw
+			}
+			res := NewGetSharedSharedSkillOK(&body, cacheControl, xRobotsTag, referrerPolicy)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetSharedUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "getShared", err)
+			}
+			err = ValidateGetSharedUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "getShared", err)
+			}
+			return nil, NewGetSharedUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetSharedForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "getShared", err)
+			}
+			err = ValidateGetSharedForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "getShared", err)
+			}
+			return nil, NewGetSharedForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetSharedBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "getShared", err)
+			}
+			err = ValidateGetSharedBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "getShared", err)
+			}
+			return nil, NewGetSharedBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetSharedNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "getShared", err)
+			}
+			err = ValidateGetSharedNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "getShared", err)
+			}
+			return nil, NewGetSharedNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetSharedConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "getShared", err)
+			}
+			err = ValidateGetSharedConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "getShared", err)
+			}
+			return nil, NewGetSharedConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetSharedUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "getShared", err)
+			}
+			err = ValidateGetSharedUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "getShared", err)
+			}
+			return nil, NewGetSharedUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetSharedInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "getShared", err)
+			}
+			err = ValidateGetSharedInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "getShared", err)
+			}
+			return nil, NewGetSharedInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetSharedInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "getShared", err)
+				}
+				err = ValidateGetSharedInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "getShared", err)
+				}
+				return nil, NewGetSharedInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetSharedUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("skills", "getShared", err)
+				}
+				err = ValidateGetSharedUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("skills", "getShared", err)
+				}
+				return nil, NewGetSharedUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("skills", "getShared", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetSharedGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("skills", "getShared", err)
+			}
+			err = ValidateGetSharedGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("skills", "getShared", err)
+			}
+			return nil, NewGetSharedGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("skills", "getShared", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListDistributionsRequest instantiates a HTTP request object with method
 // and path set to call the "skills" service "listDistributions" endpoint
 func (c *Client) BuildListDistributionsRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -2195,10 +5583,19 @@ func unmarshalSkillResponseBodyToTypesSkill(v *SkillResponseBody) *types.Skill {
 		Summary:         v.Summary,
 		SourceKind:      *v.SourceKind,
 		Classification:  *v.Classification,
-		LatestVersionID: *v.LatestVersionID,
+		LatestVersionID: v.LatestVersionID,
 		VersionCount:    *v.VersionCount,
+		HasValidVersion: *v.HasValidVersion,
+		FirstSeenAt:     v.FirstSeenAt,
+		LastSeenAt:      v.LastSeenAt,
+		SeenCount:       *v.SeenCount,
+		ShareToken:      v.ShareToken,
 		CreatedAt:       *v.CreatedAt,
 		UpdatedAt:       *v.UpdatedAt,
+	}
+	res.Tags = make([]string, len(v.Tags))
+	for i, val := range v.Tags {
+		res.Tags[i] = val
 	}
 
 	return res
@@ -2208,15 +5605,19 @@ func unmarshalSkillResponseBodyToTypesSkill(v *SkillResponseBody) *types.Skill {
 // *types.SkillVersion from a value of type *SkillVersionResponseBody.
 func unmarshalSkillVersionResponseBodyToTypesSkillVersion(v *SkillVersionResponseBody) *types.SkillVersion {
 	res := &types.SkillVersion{
-		ID:              *v.ID,
-		SkillID:         *v.SkillID,
-		Content:         *v.Content,
-		CanonicalSha256: *v.CanonicalSha256,
-		RawSha256:       *v.RawSha256,
-		Description:     v.Description,
-		SpecValid:       *v.SpecValid,
-		CreatedAt:       *v.CreatedAt,
-		CreatedByUserID: *v.CreatedByUserID,
+		ID:                   *v.ID,
+		SkillID:              *v.SkillID,
+		Content:              *v.Content,
+		CanonicalSha256:      *v.CanonicalSha256,
+		RawSha256:            *v.RawSha256,
+		Description:          v.Description,
+		SpecValid:            *v.SpecValid,
+		DerivedFromVersionID: v.DerivedFromVersionID,
+		CreatedAt:            *v.CreatedAt,
+		CreatedByUserID:      *v.CreatedByUserID,
+		FirstSeenAt:          v.FirstSeenAt,
+		LastSeenAt:           v.LastSeenAt,
+		SeenCount:            *v.SeenCount,
 	}
 	res.Metadata = make(map[string]any, len(v.Metadata))
 	for key, val := range v.Metadata {
@@ -2250,6 +5651,199 @@ func unmarshalSkillValidationErrorResponseBodyToTypesSkillValidationError(v *Ski
 		Code:    *v.Code,
 		Field:   *v.Field,
 		Message: *v.Message,
+	}
+
+	return res
+}
+
+// unmarshalSkillEditSuggestionResponseBodyToTypesSkillEditSuggestion builds a
+// value of type *types.SkillEditSuggestion from a value of type
+// *SkillEditSuggestionResponseBody.
+func unmarshalSkillEditSuggestionResponseBodyToTypesSkillEditSuggestion(v *SkillEditSuggestionResponseBody) *types.SkillEditSuggestion {
+	res := &types.SkillEditSuggestion{
+		ID:                   *v.ID,
+		SkillID:              *v.SkillID,
+		SkillName:            *v.SkillName,
+		SkillDisplayName:     *v.SkillDisplayName,
+		BaseVersionID:        *v.BaseVersionID,
+		ProposedContent:      *v.ProposedContent,
+		AppliesCleanly:       *v.AppliesCleanly,
+		Rationale:            *v.Rationale,
+		Status:               *v.Status,
+		FeedbackCount:        *v.FeedbackCount,
+		FeedbackSessionCount: *v.FeedbackSessionCount,
+		ScoredSessionCount:   *v.ScoredSessionCount,
+		ApprovedByUserID:     v.ApprovedByUserID,
+		ApprovedAt:           v.ApprovedAt,
+		CreatedAt:            *v.CreatedAt,
+		UpdatedAt:            *v.UpdatedAt,
+	}
+	res.Changes = make([]*types.SkillEditSuggestionChange, len(v.Changes))
+	for i, val := range v.Changes {
+		if val == nil {
+			res.Changes[i] = nil
+			continue
+		}
+		res.Changes[i] = unmarshalSkillEditSuggestionChangeResponseBodyToTypesSkillEditSuggestionChange(val)
+	}
+
+	return res
+}
+
+// unmarshalSkillEditSuggestionChangeResponseBodyToTypesSkillEditSuggestionChange
+// builds a value of type *types.SkillEditSuggestionChange from a value of type
+// *SkillEditSuggestionChangeResponseBody.
+func unmarshalSkillEditSuggestionChangeResponseBodyToTypesSkillEditSuggestionChange(v *SkillEditSuggestionChangeResponseBody) *types.SkillEditSuggestionChange {
+	res := &types.SkillEditSuggestionChange{
+		ID:                   *v.ID,
+		SuggestionID:         *v.SuggestionID,
+		ProposedDiff:         *v.ProposedDiff,
+		Rationale:            *v.Rationale,
+		AppliesCleanly:       *v.AppliesCleanly,
+		FeedbackCount:        *v.FeedbackCount,
+		FeedbackSessionCount: *v.FeedbackSessionCount,
+		CreatedAt:            *v.CreatedAt,
+	}
+
+	return res
+}
+
+// unmarshalSkillFeedbackCountsResponseBodyToSkillsSkillFeedbackCounts builds a
+// value of type *skills.SkillFeedbackCounts from a value of type
+// *SkillFeedbackCountsResponseBody.
+func unmarshalSkillFeedbackCountsResponseBodyToSkillsSkillFeedbackCounts(v *SkillFeedbackCountsResponseBody) *skills.SkillFeedbackCounts {
+	res := &skills.SkillFeedbackCounts{
+		Total:           *v.Total,
+		Helped:          *v.Helped,
+		PartiallyHelped: *v.PartiallyHelped,
+		DidNotHelp:      *v.DidNotHelp,
+		Misleading:      *v.Misleading,
+		Harmful:         *v.Harmful,
+	}
+
+	return res
+}
+
+// unmarshalSkillFeedbackMetricsResponseBodyToSkillsSkillFeedbackMetrics builds
+// a value of type *skills.SkillFeedbackMetrics from a value of type
+// *SkillFeedbackMetricsResponseBody.
+func unmarshalSkillFeedbackMetricsResponseBodyToSkillsSkillFeedbackMetrics(v *SkillFeedbackMetricsResponseBody) *skills.SkillFeedbackMetrics {
+	res := &skills.SkillFeedbackMetrics{
+		WindowStart:                 *v.WindowStart,
+		WindowEnd:                   *v.WindowEnd,
+		FeedbackInWindow:            *v.FeedbackInWindow,
+		ActivationsInWindow:         *v.ActivationsInWindow,
+		FeedbackActivationsInWindow: *v.FeedbackActivationsInWindow,
+		Unreviewed:                  *v.Unreviewed,
+		Converted:                   *v.Converted,
+	}
+
+	return res
+}
+
+// unmarshalSkillFeedbackTimelinePointResponseBodyToSkillsSkillFeedbackTimelinePoint
+// builds a value of type *skills.SkillFeedbackTimelinePoint from a value of
+// type *SkillFeedbackTimelinePointResponseBody.
+func unmarshalSkillFeedbackTimelinePointResponseBodyToSkillsSkillFeedbackTimelinePoint(v *SkillFeedbackTimelinePointResponseBody) *skills.SkillFeedbackTimelinePoint {
+	res := &skills.SkillFeedbackTimelinePoint{
+		BucketStart:   *v.BucketStart,
+		FeedbackCount: *v.FeedbackCount,
+	}
+
+	return res
+}
+
+// unmarshalSkillFeedbackResponseBodyToSkillsSkillFeedback builds a value of
+// type *skills.SkillFeedback from a value of type *SkillFeedbackResponseBody.
+func unmarshalSkillFeedbackResponseBodyToSkillsSkillFeedback(v *SkillFeedbackResponseBody) *skills.SkillFeedback {
+	res := &skills.SkillFeedback{
+		ID:             *v.ID,
+		Source:         skills.SkillFeedbackSource(*v.Source),
+		Outcome:        skills.SkillFeedbackOutcome(*v.Outcome),
+		Note:           v.Note,
+		SkillVersionID: v.SkillVersionID,
+		ReviewedAt:     v.ReviewedAt,
+		CreatedAt:      *v.CreatedAt,
+	}
+
+	return res
+}
+
+// unmarshalSkillSuggestionApprovalItemResponseBodyToSkillsSkillSuggestionApprovalItem
+// builds a value of type *skills.SkillSuggestionApprovalItem from a value of
+// type *SkillSuggestionApprovalItemResponseBody.
+func unmarshalSkillSuggestionApprovalItemResponseBodyToSkillsSkillSuggestionApprovalItem(v *SkillSuggestionApprovalItemResponseBody) *skills.SkillSuggestionApprovalItem {
+	res := &skills.SkillSuggestionApprovalItem{
+		SuggestionID:       *v.SuggestionID,
+		SkillID:            *v.SkillID,
+		SkillName:          *v.SkillName,
+		SkillDisplayName:   *v.SkillDisplayName,
+		Outcome:            *v.Outcome,
+		ResultingVersionID: v.ResultingVersionID,
+		Message:            v.Message,
+	}
+
+	return res
+}
+
+// unmarshalSkillAdoptionResponseBodyToSkillsSkillAdoption builds a value of
+// type *skills.SkillAdoption from a value of type *SkillAdoptionResponseBody.
+func unmarshalSkillAdoptionResponseBodyToSkillsSkillAdoption(v *SkillAdoptionResponseBody) *skills.SkillAdoption {
+	res := &skills.SkillAdoption{
+		WindowStart:         *v.WindowStart,
+		WindowEnd:           *v.WindowEnd,
+		DistinctHostnames:   *v.DistinctHostnames,
+		ActivationsInWindow: *v.ActivationsInWindow,
+	}
+
+	return res
+}
+
+// unmarshalSkillSightingTimelinePointResponseBodyToSkillsSkillSightingTimelinePoint
+// builds a value of type *skills.SkillSightingTimelinePoint from a value of
+// type *SkillSightingTimelinePointResponseBody.
+func unmarshalSkillSightingTimelinePointResponseBodyToSkillsSkillSightingTimelinePoint(v *SkillSightingTimelinePointResponseBody) *skills.SkillSightingTimelinePoint {
+	res := &skills.SkillSightingTimelinePoint{
+		BucketStart:     *v.BucketStart,
+		SkillVersionID:  v.SkillVersionID,
+		ActivationCount: *v.ActivationCount,
+	}
+
+	return res
+}
+
+// unmarshalSkillDriftResponseBodyToSkillsSkillDrift builds a value of type
+// *skills.SkillDrift from a value of type *SkillDriftResponseBody.
+func unmarshalSkillDriftResponseBodyToSkillsSkillDrift(v *SkillDriftResponseBody) *skills.SkillDrift {
+	res := &skills.SkillDrift{
+		WindowStart:           *v.WindowStart,
+		WindowEnd:             *v.WindowEnd,
+		TargetState:           *v.TargetState,
+		ActiveMachines:        *v.ActiveMachines,
+		OnTargetMachines:      *v.OnTargetMachines,
+		DriftedMachines:       *v.DriftedMachines,
+		IndeterminateMachines: *v.IndeterminateMachines,
+	}
+	res.TargetVersionIds = make([]string, len(v.TargetVersionIds))
+	for i, val := range v.TargetVersionIds {
+		res.TargetVersionIds[i] = val
+	}
+
+	return res
+}
+
+// unmarshalUnknownSkillActivationResponseBodyToSkillsUnknownSkillActivation
+// builds a value of type *skills.UnknownSkillActivation from a value of type
+// *UnknownSkillActivationResponseBody.
+func unmarshalUnknownSkillActivationResponseBodyToSkillsUnknownSkillActivation(v *UnknownSkillActivationResponseBody) *skills.UnknownSkillActivation {
+	res := &skills.UnknownSkillActivation{
+		ID:          *v.ID,
+		SkillName:   *v.SkillName,
+		Provider:    *v.Provider,
+		Source:      v.Source,
+		SourceLevel: v.SourceLevel,
+		SeenAt:      *v.SeenAt,
+		Reason:      *v.Reason,
 	}
 
 	return res

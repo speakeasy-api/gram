@@ -22,6 +22,7 @@ message PromptInjectionAnalysis {
   string body = 12;
   string tool_name = 13;
   repeated ToolCall tool_calls = 14;
+  string content_part_id = 15;
 
   message ToolCall {
     string name = 1;

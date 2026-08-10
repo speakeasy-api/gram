@@ -10,6 +10,10 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type GetProductFeaturesResponseBody = {
   /**
+   * Whether the organization can provision push integrations for AI platforms
+   */
+  aiPlatformPushIntegrationsEnabled: boolean;
+  /**
    * Whether authz challenge logging to ClickHouse is enabled
    */
   authzChallengeLoggingEnabled: boolean;
@@ -17,6 +21,10 @@ export type GetProductFeaturesResponseBody = {
    * Whether the organization can supply its own model provider API keys (BYOK)
    */
   customModelKeysEnabled: boolean;
+  /**
+   * Whether the organization can manage the external credentials and cloud KMS keys backing customer-managed encryption
+   */
+  customerManagedEncryptionKeysEnabled: boolean;
   /**
    * Whether the organization uses the device agent (any device has polled agent.getPlugins). Derived from device-agent syncs, not an admin-settable feature.
    */
@@ -34,6 +42,14 @@ export type GetProductFeaturesResponseBody = {
    */
   logsEnabled: boolean;
   /**
+   * Whether the organization is eligible for the Gram Platform MCP capability
+   */
+  platformMcpEnabled: boolean;
+  /**
+   * Whether consent screens expose automatic remote-session refresh for the organization
+   */
+  remoteSessionAutoRefreshEnabled: boolean;
+  /**
    * Whether SCIM/directory sync setup is enabled for the organization
    */
   scimEnabled: boolean;
@@ -41,6 +57,10 @@ export type GetProductFeaturesResponseBody = {
    * Whether Claude Code session capture is enabled
    */
   sessionCaptureEnabled: boolean;
+  /**
+   * Whether skill capture stores activation metadata without requesting manifest content
+   */
+  skillCaptureMetadataOnly: boolean;
   /**
    * Whether the Skills page is enabled for the organization
    */
@@ -53,10 +73,6 @@ export type GetProductFeaturesResponseBody = {
    * Whether tool I/O logging is enabled
    */
   toolIoLogsEnabled: boolean;
-  /**
-   * Whether webhooks are enabled
-   */
-  webhooks: boolean;
 };
 
 /** @internal */
@@ -65,29 +81,40 @@ export const GetProductFeaturesResponseBody$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    ai_platform_push_integrations_enabled: z.boolean(),
     authz_challenge_logging_enabled: z.boolean(),
     custom_model_keys_enabled: z.boolean(),
+    customer_managed_encryption_keys_enabled: z.boolean(),
     device_agent: z.boolean(),
     hooks_browser_login_enabled: z.boolean(),
     hooks_fail_open_enabled: z.boolean(),
     logs_enabled: z.boolean(),
+    platform_mcp_enabled: z.boolean(),
+    remote_session_auto_refresh_enabled: z.boolean(),
     scim_enabled: z.boolean(),
     session_capture_enabled: z.boolean(),
+    skill_capture_metadata_only: z.boolean(),
     skills_enabled: z.boolean(),
     sso_enabled: z.boolean(),
     tool_io_logs_enabled: z.boolean(),
-    webhooks: z.boolean(),
   }),
   z.transform((v) => {
     return remap$(v, {
+      "ai_platform_push_integrations_enabled":
+        "aiPlatformPushIntegrationsEnabled",
       "authz_challenge_logging_enabled": "authzChallengeLoggingEnabled",
       "custom_model_keys_enabled": "customModelKeysEnabled",
+      "customer_managed_encryption_keys_enabled":
+        "customerManagedEncryptionKeysEnabled",
       "device_agent": "deviceAgent",
       "hooks_browser_login_enabled": "hooksBrowserLoginEnabled",
       "hooks_fail_open_enabled": "hooksFailOpenEnabled",
       "logs_enabled": "logsEnabled",
+      "platform_mcp_enabled": "platformMcpEnabled",
+      "remote_session_auto_refresh_enabled": "remoteSessionAutoRefreshEnabled",
       "scim_enabled": "scimEnabled",
       "session_capture_enabled": "sessionCaptureEnabled",
+      "skill_capture_metadata_only": "skillCaptureMetadataOnly",
       "skills_enabled": "skillsEnabled",
       "sso_enabled": "ssoEnabled",
       "tool_io_logs_enabled": "toolIoLogsEnabled",

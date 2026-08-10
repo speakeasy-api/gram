@@ -12,6 +12,36 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const abandonAssistantMCPOAuthClientRegistration = `-- name: AbandonAssistantMCPOAuthClientRegistration :exec
+UPDATE assistant_mcp_oauth_clients
+SET
+  registration_started_at = to_timestamp(0),
+  updated_at = clock_timestamp()
+WHERE project_id = $1
+  AND assistant_id = $2
+  AND oauth_server_issuer = $3
+  AND registration_owner = $4
+  AND client_id IS NULL
+  AND deleted IS FALSE
+`
+
+type AbandonAssistantMCPOAuthClientRegistrationParams struct {
+	ProjectID         uuid.UUID
+	AssistantID       uuid.UUID
+	OauthServerIssuer string
+	RegistrationOwner uuid.NullUUID
+}
+
+func (q *Queries) AbandonAssistantMCPOAuthClientRegistration(ctx context.Context, arg AbandonAssistantMCPOAuthClientRegistrationParams) error {
+	_, err := q.db.Exec(ctx, abandonAssistantMCPOAuthClientRegistration,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.OauthServerIssuer,
+		arg.RegistrationOwner,
+	)
+	return err
+}
+
 const acquireAssistantAdvisoryLock = `-- name: AcquireAssistantAdvisoryLock :exec
 SELECT pg_advisory_xact_lock(hashtext('asst:' || $1::text))
 `
@@ -167,17 +197,93 @@ func (q *Queries) CallerOwnsDashboardChat(ctx context.Context, arg CallerOwnsDas
 	return ok, err
 }
 
+const claimAssistantMCPOAuthClientRegistration = `-- name: ClaimAssistantMCPOAuthClientRegistration :execrows
+INSERT INTO assistant_mcp_oauth_clients AS clients (
+  project_id,
+  assistant_id,
+  oauth_server_issuer,
+  redirect_uri,
+  registration_owner,
+  registration_started_at
+) SELECT
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  clock_timestamp()
+FROM assistants owner
+WHERE owner.id = $2
+  AND owner.project_id = $1
+  AND owner.deleted IS FALSE
+FOR UPDATE
+ON CONFLICT (project_id, assistant_id, oauth_server_issuer) WHERE deleted IS FALSE
+DO UPDATE SET
+  client_id = NULL,
+  client_secret_encrypted = NULL,
+  client_secret_expires_at = NULL,
+  redirect_uri = EXCLUDED.redirect_uri,
+  registration_owner = EXCLUDED.registration_owner,
+  registration_started_at = EXCLUDED.registration_started_at,
+  updated_at = clock_timestamp()
+WHERE
+  (
+    clients.client_id IS NULL
+    AND clients.registration_started_at < clock_timestamp() - $6::interval
+  )
+  OR
+  (
+    clients.client_id IS NOT NULL
+    AND clients.client_secret_expires_at IS NOT NULL
+    AND clients.client_secret_expires_at <= $7
+  )
+  OR (
+    clients.client_id IS NOT NULL
+    AND clients.redirect_uri <> EXCLUDED.redirect_uri
+  )
+`
+
+type ClaimAssistantMCPOAuthClientRegistrationParams struct {
+	ProjectID         uuid.UUID
+	AssistantID       uuid.UUID
+	OauthServerIssuer string
+	RedirectUri       string
+	RegistrationOwner uuid.NullUUID
+	ClaimLease        pgtype.Interval
+	UsableAfter       pgtype.Timestamptz
+}
+
+func (q *Queries) ClaimAssistantMCPOAuthClientRegistration(ctx context.Context, arg ClaimAssistantMCPOAuthClientRegistrationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, claimAssistantMCPOAuthClientRegistration,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.OauthServerIssuer,
+		arg.RedirectUri,
+		arg.RegistrationOwner,
+		arg.ClaimLease,
+		arg.UsableAfter,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const claimNextPendingEvent = `-- name: ClaimNextPendingEvent :one
 WITH next_event AS (
-  SELECT e.id
+  SELECT e.id, t.skill_set_snapshot
   FROM assistant_thread_events e
+  JOIN assistant_threads t
+    ON t.id = e.assistant_thread_id
+    AND t.project_id = e.project_id
   WHERE e.project_id = $2
     AND e.assistant_thread_id = $3
     AND e.deleted IS FALSE
     AND e.status = $4
+    AND t.deleted IS FALSE
   ORDER BY e.created_at ASC
   LIMIT 1
-  FOR UPDATE SKIP LOCKED
+  FOR UPDATE OF e SKIP LOCKED
 )
 UPDATE assistant_thread_events e
 SET
@@ -186,7 +292,8 @@ SET
   updated_at = clock_timestamp()
 FROM next_event
 WHERE e.id = next_event.id
-RETURNING e.id, e.assistant_thread_id, e.assistant_id, e.project_id, e.trigger_instance_id, e.event_id, e.correlation_id, e.status, e.normalized_payload_json, e.source_payload_json, e.attempts, e.last_error, e.created_at
+  AND e.project_id = $2
+RETURNING e.id, e.assistant_thread_id, e.assistant_id, e.project_id, e.trigger_instance_id, e.event_id, e.correlation_id, e.status, e.normalized_payload_json, e.source_payload_json, e.attempts, e.last_error, e.created_at, next_event.skill_set_snapshot
 `
 
 type ClaimNextPendingEventParams struct {
@@ -210,6 +317,7 @@ type ClaimNextPendingEventRow struct {
 	Attempts              int64
 	LastError             pgtype.Text
 	CreatedAt             pgtype.Timestamptz
+	SkillSetSnapshot      []byte
 }
 
 func (q *Queries) ClaimNextPendingEvent(ctx context.Context, arg ClaimNextPendingEventParams) (ClaimNextPendingEventRow, error) {
@@ -234,6 +342,7 @@ func (q *Queries) ClaimNextPendingEvent(ctx context.Context, arg ClaimNextPendin
 		&i.Attempts,
 		&i.LastError,
 		&i.CreatedAt,
+		&i.SkillSetSnapshot,
 	)
 	return i, err
 }
@@ -270,26 +379,112 @@ func (q *Queries) ClearAssistantToolsets(ctx context.Context, arg ClearAssistant
 	return err
 }
 
-const completeAssistantThreadEvent = `-- name: CompleteAssistantThreadEvent :exec
-UPDATE assistant_thread_events
+const completeAssistantMCPOAuthClientRegistration = `-- name: CompleteAssistantMCPOAuthClientRegistration :execrows
+UPDATE assistant_mcp_oauth_clients AS clients
 SET
-  status = $1,
-  processed_at = clock_timestamp(),
-  last_error = NULL,
+  client_id = $1,
+  client_secret_encrypted = $2,
+  client_secret_expires_at = $3,
+  registration_owner = NULL,
+  registration_started_at = NULL,
   updated_at = clock_timestamp()
-WHERE id = $2
-  AND project_id = $3
+WHERE clients.project_id = $4
+  AND clients.assistant_id = $5
+  AND clients.oauth_server_issuer = $6
+  AND clients.registration_owner = $7
+  AND clients.client_id IS NULL
+  AND EXISTS (
+    SELECT 1
+    FROM assistants owner
+    WHERE owner.id = $5
+      AND owner.project_id = $4
+      AND owner.deleted IS FALSE
+  )
+  AND clients.deleted IS FALSE
 `
 
-type CompleteAssistantThreadEventParams struct {
-	CompletedStatus string
-	EventID         uuid.UUID
-	ProjectID       uuid.UUID
+type CompleteAssistantMCPOAuthClientRegistrationParams struct {
+	ClientID              pgtype.Text
+	ClientSecretEncrypted pgtype.Text
+	ClientSecretExpiresAt pgtype.Timestamptz
+	ProjectID             uuid.UUID
+	AssistantID           uuid.UUID
+	OauthServerIssuer     string
+	RegistrationOwner     uuid.NullUUID
 }
 
-func (q *Queries) CompleteAssistantThreadEvent(ctx context.Context, arg CompleteAssistantThreadEventParams) error {
-	_, err := q.db.Exec(ctx, completeAssistantThreadEvent, arg.CompletedStatus, arg.EventID, arg.ProjectID)
-	return err
+func (q *Queries) CompleteAssistantMCPOAuthClientRegistration(ctx context.Context, arg CompleteAssistantMCPOAuthClientRegistrationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, completeAssistantMCPOAuthClientRegistration,
+		arg.ClientID,
+		arg.ClientSecretEncrypted,
+		arg.ClientSecretExpiresAt,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.OauthServerIssuer,
+		arg.RegistrationOwner,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const completeAssistantThreadEventAndAdvanceSkillSnapshot = `-- name: CompleteAssistantThreadEventAndAdvanceSkillSnapshot :one
+WITH completed_event AS (
+  UPDATE assistant_thread_events event
+  SET
+    status = $1,
+    processed_at = clock_timestamp(),
+    last_error = NULL,
+    updated_at = clock_timestamp()
+  WHERE event.id = $2
+    AND event.project_id = $3
+    AND event.status = $4
+    AND event.attempts = $5
+  RETURNING event.assistant_thread_id
+), advanced_snapshot AS (
+  UPDATE assistant_threads t
+  SET skill_set_snapshot = $6::jsonb
+  FROM completed_event e
+  WHERE t.id = e.assistant_thread_id
+    AND t.project_id = $3
+    AND t.deleted IS FALSE
+    AND t.skill_set_snapshot IS NOT DISTINCT FROM $7::jsonb
+    AND (t.skill_set_snapshot IS NULL OR $8::boolean)
+    AND (
+      $7::jsonb IS NULL
+      OR $6::jsonb IS DISTINCT FROM $7::jsonb
+    )
+  RETURNING t.id
+)
+SELECT EXISTS(SELECT 1 FROM completed_event) AS completed
+`
+
+type CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams struct {
+	CompletedStatus  string
+	EventID          uuid.UUID
+	ProjectID        uuid.UUID
+	ProcessingStatus string
+	ClaimedAttempt   int64
+	CurrentSnapshot  []byte
+	ClaimedSnapshot  []byte
+	AllowAdvance     bool
+}
+
+func (q *Queries) CompleteAssistantThreadEventAndAdvanceSkillSnapshot(ctx context.Context, arg CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams) (bool, error) {
+	row := q.db.QueryRow(ctx, completeAssistantThreadEventAndAdvanceSkillSnapshot,
+		arg.CompletedStatus,
+		arg.EventID,
+		arg.ProjectID,
+		arg.ProcessingStatus,
+		arg.ClaimedAttempt,
+		arg.CurrentSnapshot,
+		arg.ClaimedSnapshot,
+		arg.AllowAdvance,
+	)
+	var completed bool
+	err := row.Scan(&completed)
+	return completed, err
 }
 
 const countActiveAssistantRuntimes = `-- name: CountActiveAssistantRuntimes :one
@@ -846,6 +1041,100 @@ func (q *Queries) GetAssistantIgnoringDeleted(ctx context.Context, arg GetAssist
 	return i, err
 }
 
+const getAssistantMCPOAuthClient = `-- name: GetAssistantMCPOAuthClient :one
+SELECT
+  client_id,
+  client_secret_encrypted,
+  (
+    client_id IS NOT NULL
+    AND client_secret_encrypted IS NOT NULL
+    AND redirect_uri = $1
+    AND (client_secret_expires_at IS NULL OR client_secret_expires_at > $2)
+  ) AS usable,
+  (
+    (
+      client_id IS NULL
+      AND registration_started_at < clock_timestamp() - $3::interval
+    )
+    OR
+    (
+      client_id IS NOT NULL
+      AND client_secret_expires_at IS NOT NULL
+      AND client_secret_expires_at <= $2
+    )
+    OR (client_id IS NOT NULL AND redirect_uri <> $1)
+  ) AS claimable
+FROM assistant_mcp_oauth_clients clients
+WHERE clients.project_id = $4
+  AND clients.assistant_id = $5
+  AND clients.oauth_server_issuer = $6
+  AND EXISTS (
+    SELECT 1
+    FROM assistants owner
+    WHERE owner.id = $5
+      AND owner.project_id = $4
+      AND owner.deleted IS FALSE
+  )
+  AND clients.deleted IS FALSE
+`
+
+type GetAssistantMCPOAuthClientParams struct {
+	RedirectUri       string
+	UsableAfter       pgtype.Timestamptz
+	ClaimLease        pgtype.Interval
+	ProjectID         uuid.UUID
+	AssistantID       uuid.UUID
+	OauthServerIssuer string
+}
+
+type GetAssistantMCPOAuthClientRow struct {
+	ClientID              pgtype.Text
+	ClientSecretEncrypted pgtype.Text
+	Usable                pgtype.Bool
+	Claimable             pgtype.Bool
+}
+
+func (q *Queries) GetAssistantMCPOAuthClient(ctx context.Context, arg GetAssistantMCPOAuthClientParams) (GetAssistantMCPOAuthClientRow, error) {
+	row := q.db.QueryRow(ctx, getAssistantMCPOAuthClient,
+		arg.RedirectUri,
+		arg.UsableAfter,
+		arg.ClaimLease,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.OauthServerIssuer,
+	)
+	var i GetAssistantMCPOAuthClientRow
+	err := row.Scan(
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.Usable,
+		&i.Claimable,
+	)
+	return i, err
+}
+
+const getAssistantMCPOAuthClientDeleted = `-- name: GetAssistantMCPOAuthClientDeleted :one
+SELECT deleted
+FROM assistant_mcp_oauth_clients
+WHERE project_id = $1
+  AND assistant_id = $2
+  AND oauth_server_issuer = $3
+`
+
+type GetAssistantMCPOAuthClientDeletedParams struct {
+	ProjectID         uuid.UUID
+	AssistantID       uuid.UUID
+	OauthServerIssuer string
+}
+
+// Test-only helper for verifying credential retirement on assistant deletion.
+func (q *Queries) GetAssistantMCPOAuthClientDeleted(ctx context.Context, arg GetAssistantMCPOAuthClientDeletedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, getAssistantMCPOAuthClientDeleted, arg.ProjectID, arg.AssistantID, arg.OauthServerIssuer)
+	var deleted bool
+	err := row.Scan(&deleted)
+	return deleted, err
+}
+
 const getAssistantRuntime = `-- name: GetAssistantRuntime :one
 SELECT id, assistant_thread_id, assistant_id, project_id, backend, state, warm_until, lease_owner, last_heartbeat_at, backend_metadata_json, ended_at, runtime_version, created_at, updated_at, deleted_at, deleted, ended FROM assistant_runtimes
 WHERE id = $1
@@ -925,6 +1214,60 @@ func (q *Queries) GetAssistantRuntimeV2(ctx context.Context, arg GetAssistantRun
 		&i.BackendMetadataJson,
 		&i.State,
 		&i.WarmUntil,
+	)
+	return i, err
+}
+
+const getAssistantSkillFeedbackObservation = `-- name: GetAssistantSkillFeedbackObservation :one
+SELECT
+  so.skill_id::uuid AS skill_id,
+  so.skill_version_id::uuid AS skill_version_id,
+  so.skill_name,
+  t.chat_id
+FROM assistant_threads t
+JOIN skill_observations so
+  ON so.project_id = t.project_id
+  AND so.provider = 'assistant'
+  AND so.session_id = t.chat_id::text
+WHERE t.project_id = $1
+  AND t.assistant_id = $2
+  AND t.id = $3
+  AND t.deleted IS FALSE
+  AND so.idempotency_key LIKE 'assistant:' || $2::text || ':' || t.chat_id::text || ':%'
+  AND so.skill_name = $4
+  AND so.reconciled_at IS NOT NULL
+  AND so.reconcile_error_code IS NULL
+ORDER BY so.seen_at DESC, so.id DESC
+LIMIT 1
+`
+
+type GetAssistantSkillFeedbackObservationParams struct {
+	ProjectID   uuid.UUID
+	AssistantID uuid.UUID
+	ThreadID    uuid.UUID
+	SkillName   string
+}
+
+type GetAssistantSkillFeedbackObservationRow struct {
+	SkillID        uuid.UUID
+	SkillVersionID uuid.UUID
+	SkillName      string
+	ChatID         uuid.UUID
+}
+
+func (q *Queries) GetAssistantSkillFeedbackObservation(ctx context.Context, arg GetAssistantSkillFeedbackObservationParams) (GetAssistantSkillFeedbackObservationRow, error) {
+	row := q.db.QueryRow(ctx, getAssistantSkillFeedbackObservation,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.ThreadID,
+		arg.SkillName,
+	)
+	var i GetAssistantSkillFeedbackObservationRow
+	err := row.Scan(
+		&i.SkillID,
+		&i.SkillVersionID,
+		&i.SkillName,
+		&i.ChatID,
 	)
 	return i, err
 }
@@ -1093,6 +1436,28 @@ func (q *Queries) GetProjectName(ctx context.Context, projectID uuid.UUID) (stri
 	return name, err
 }
 
+const initThreadSkillSnapshot = `-- name: InitThreadSkillSnapshot :one
+UPDATE assistant_threads
+SET skill_set_snapshot = COALESCE(skill_set_snapshot, $1::jsonb)
+WHERE id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+RETURNING skill_set_snapshot
+`
+
+type InitThreadSkillSnapshotParams struct {
+	Candidate []byte
+	ThreadID  uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) InitThreadSkillSnapshot(ctx context.Context, arg InitThreadSkillSnapshotParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, initThreadSkillSnapshot, arg.Candidate, arg.ThreadID, arg.ProjectID)
+	var skill_set_snapshot []byte
+	err := row.Scan(&skill_set_snapshot)
+	return skill_set_snapshot, err
+}
+
 const insertAssistantThreadEvent = `-- name: InsertAssistantThreadEvent :one
 INSERT INTO assistant_thread_events (
   assistant_thread_id,
@@ -1146,6 +1511,36 @@ func (q *Queries) InsertAssistantThreadEvent(ctx context.Context, arg InsertAssi
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const invalidateAssistantMCPOAuthClient = `-- name: InvalidateAssistantMCPOAuthClient :exec
+UPDATE assistant_mcp_oauth_clients
+SET
+  client_secret_expires_at = to_timestamp(0),
+  updated_at = clock_timestamp()
+WHERE project_id = $1
+  AND assistant_id = $2
+  AND oauth_server_issuer = $3
+  AND client_id = $4
+  AND client_id IS NOT NULL
+  AND deleted IS FALSE
+`
+
+type InvalidateAssistantMCPOAuthClientParams struct {
+	ProjectID         uuid.UUID
+	AssistantID       uuid.UUID
+	OauthServerIssuer string
+	ClientID          pgtype.Text
+}
+
+func (q *Queries) InvalidateAssistantMCPOAuthClient(ctx context.Context, arg InvalidateAssistantMCPOAuthClientParams) error {
+	_, err := q.db.Exec(ctx, invalidateAssistantMCPOAuthClient,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.OauthServerIssuer,
+		arg.ClientID,
+	)
+	return err
 }
 
 const listActiveAssistantRuntimes = `-- name: ListActiveAssistantRuntimes :many
@@ -1814,10 +2209,14 @@ JOIN skills s
 JOIN LATERAL (
   SELECT sv.id, sv.description
   FROM skill_versions sv
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = sd.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
   WHERE sv.skill_id = sd.skill_id
     AND sv.spec_valid IS TRUE
     AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
-  ORDER BY sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
 WHERE sd.assistant_id = ANY($1::uuid[])
@@ -1843,8 +2242,10 @@ type LoadAssistantSkillsRow struct {
 	Description       pgtype.Text
 }
 
-// The active/resolvable predicates in LoadAssistantSkills and
-// LoadAttachedAssistantSkill must stay identical.
+// The active/resolvable distribution predicates in LoadAssistantSkills and
+// LoadAttachedAssistantSkill must stay identical. ResolveAssistantTurnSkills
+// intentionally omits distribution and pinning because turn-selected skills
+// resolve directly from the project registry.
 func (q *Queries) LoadAssistantSkills(ctx context.Context, arg LoadAssistantSkillsParams) ([]LoadAssistantSkillsRow, error) {
 	rows, err := q.db.Query(ctx, loadAssistantSkills, arg.AssistantIds, arg.ProjectID)
 	if err != nil {
@@ -2016,7 +2417,13 @@ func (q *Queries) LoadAssistantToolsets(ctx context.Context, arg LoadAssistantTo
 }
 
 const loadAttachedAssistantSkill = `-- name: LoadAttachedAssistantSkill :one
-SELECT resolved.content
+SELECT
+  s.id AS skill_id,
+  s.name,
+  resolved.id AS skill_version_id,
+  resolved.content,
+  resolved.canonical_sha256,
+  resolved.raw_sha256
 FROM skill_distributions sd
 JOIN assistants a
   ON a.id = sd.assistant_id
@@ -2027,12 +2434,16 @@ JOIN skills s
   AND s.project_id = sd.project_id
   AND s.archived_at IS NULL
 JOIN LATERAL (
-  SELECT sv.id, sv.content
+  SELECT sv.id, sv.content, sv.canonical_sha256, sv.raw_sha256
   FROM skill_versions sv
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = sd.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
   WHERE sv.skill_id = sd.skill_id
     AND sv.spec_valid IS TRUE
     AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
-  ORDER BY sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
 WHERE sd.assistant_id = $1
@@ -2050,11 +2461,27 @@ type LoadAttachedAssistantSkillParams struct {
 	Name        string
 }
 
-func (q *Queries) LoadAttachedAssistantSkill(ctx context.Context, arg LoadAttachedAssistantSkillParams) (string, error) {
+type LoadAttachedAssistantSkillRow struct {
+	SkillID         uuid.UUID
+	Name            string
+	SkillVersionID  uuid.UUID
+	Content         string
+	CanonicalSha256 string
+	RawSha256       string
+}
+
+func (q *Queries) LoadAttachedAssistantSkill(ctx context.Context, arg LoadAttachedAssistantSkillParams) (LoadAttachedAssistantSkillRow, error) {
 	row := q.db.QueryRow(ctx, loadAttachedAssistantSkill, arg.AssistantID, arg.ProjectID, arg.Name)
-	var content string
-	err := row.Scan(&content)
-	return content, err
+	var i LoadAttachedAssistantSkillRow
+	err := row.Scan(
+		&i.SkillID,
+		&i.Name,
+		&i.SkillVersionID,
+		&i.Content,
+		&i.CanonicalSha256,
+		&i.RawSha256,
+	)
+	return i, err
 }
 
 const loadThreadContext = `-- name: LoadThreadContext :one
@@ -2467,6 +2894,66 @@ func (q *Queries) ReapStuckAssistantRuntimes(ctx context.Context, arg ReapStuckA
 	return items, nil
 }
 
+const recordAssistantSkillObservation = `-- name: RecordAssistantSkillObservation :execrows
+WITH observed AS (
+  SELECT clock_timestamp() AS seen_at
+)
+INSERT INTO skill_observations (
+    project_id
+  , idempotency_key
+  , provider
+  , session_id
+  , skill_name
+  , raw_sha256
+  , seen_at
+  , skill_id
+  , skill_version_id
+  , reconciled_at
+)
+SELECT
+    s.project_id
+  , 'assistant:' || $1::uuid || ':' || $2::text || ':' || sv.id::text
+  , 'assistant'
+  , $2::text
+  , s.name
+  , sv.raw_sha256
+  , observed.seen_at
+  , s.id
+  , sv.id
+  , observed.seen_at
+FROM skills s
+JOIN skill_versions sv
+  ON sv.skill_id = s.id
+  AND sv.id = $3
+CROSS JOIN observed
+WHERE s.project_id = $4
+  AND s.id = $5
+ON CONFLICT (project_id, idempotency_key) WHERE idempotency_key IS NOT NULL
+DO UPDATE SET seen_at = EXCLUDED.seen_at
+`
+
+type RecordAssistantSkillObservationParams struct {
+	AssistantID    uuid.UUID
+	SessionID      string
+	SkillVersionID uuid.UUID
+	ProjectID      uuid.UUID
+	SkillID        uuid.UUID
+}
+
+func (q *Queries) RecordAssistantSkillObservation(ctx context.Context, arg RecordAssistantSkillObservationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordAssistantSkillObservation,
+		arg.AssistantID,
+		arg.SessionID,
+		arg.SkillVersionID,
+		arg.ProjectID,
+		arg.SkillID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const requeueStaleAssistantEvents = `-- name: RequeueStaleAssistantEvents :many
 UPDATE assistant_thread_events
 SET
@@ -2635,6 +3122,71 @@ func (q *Queries) ResetAssistantThreadEventToPending(ctx context.Context, arg Re
 		arg.ProjectID,
 	)
 	return err
+}
+
+const resolveAssistantTurnSkills = `-- name: ResolveAssistantTurnSkills :many
+SELECT
+  s.id AS skill_id,
+  s.name,
+  resolved.id AS resolved_version_id,
+  resolved.description,
+  resolved.content
+FROM skills s
+JOIN LATERAL (
+  SELECT sv.id, sv.description, sv.content
+  FROM skill_versions sv
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = s.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
+  WHERE sv.skill_id = s.id
+    AND sv.spec_valid IS TRUE
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
+  LIMIT 1
+) resolved ON TRUE
+WHERE s.project_id = $1
+  AND s.id = ANY($2::uuid[])
+  AND s.archived_at IS NULL
+ORDER BY s.name ASC, s.id ASC
+`
+
+type ResolveAssistantTurnSkillsParams struct {
+	ProjectID uuid.UUID
+	SkillIds  []uuid.UUID
+}
+
+type ResolveAssistantTurnSkillsRow struct {
+	SkillID           uuid.UUID
+	Name              string
+	ResolvedVersionID uuid.UUID
+	Description       pgtype.Text
+	Content           string
+}
+
+func (q *Queries) ResolveAssistantTurnSkills(ctx context.Context, arg ResolveAssistantTurnSkillsParams) ([]ResolveAssistantTurnSkillsRow, error) {
+	rows, err := q.db.Query(ctx, resolveAssistantTurnSkills, arg.ProjectID, arg.SkillIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ResolveAssistantTurnSkillsRow
+	for rows.Next() {
+		var i ResolveAssistantTurnSkillsRow
+		if err := rows.Scan(
+			&i.SkillID,
+			&i.Name,
+			&i.ResolvedVersionID,
+			&i.Description,
+			&i.Content,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const resolveEnvironmentsForWrite = `-- name: ResolveEnvironmentsForWrite :many
@@ -2820,6 +3372,24 @@ func (q *Queries) ResolveToolsetsForWrite(ctx context.Context, arg ResolveToolse
 	return items, nil
 }
 
+const retireAssistantMCPOAuthClients = `-- name: RetireAssistantMCPOAuthClients :exec
+UPDATE assistant_mcp_oauth_clients
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE assistant_id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+`
+
+type RetireAssistantMCPOAuthClientsParams struct {
+	AssistantID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) RetireAssistantMCPOAuthClients(ctx context.Context, arg RetireAssistantMCPOAuthClientsParams) error {
+	_, err := q.db.Exec(ctx, retireAssistantMCPOAuthClients, arg.AssistantID, arg.ProjectID)
+	return err
+}
+
 const revertExpireAssistantRuntimeToActive = `-- name: RevertExpireAssistantRuntimeToActive :exec
 UPDATE assistant_runtimes
 SET
@@ -2863,10 +3433,14 @@ JOIN assistants a ON a.id = prev.assistant_id AND a.project_id = prev.project_id
 JOIN LATERAL (
   SELECT sv.id
   FROM skill_versions sv
+  LEFT JOIN skill_version_origins svo
+    ON svo.project_id = prev.project_id
+    AND svo.skill_id = sv.skill_id
+    AND svo.skill_version_id = sv.id
   WHERE sv.skill_id = prev.skill_id
     AND sv.spec_valid IS TRUE
     AND (prev.pinned_version_id IS NULL OR sv.id = prev.pinned_version_id)
-  ORDER BY sv.created_at DESC, sv.id DESC
+  ORDER BY (svo.origin IS DISTINCT FROM 'captured') DESC, COALESCE(sv.promoted_at, sv.created_at) DESC, sv.id DESC
   LIMIT 1
 ) resolved ON TRUE
 WHERE prev.id = sd.id

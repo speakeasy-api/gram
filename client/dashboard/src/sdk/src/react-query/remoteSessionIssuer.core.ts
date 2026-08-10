@@ -51,6 +51,7 @@ export function buildRemoteSessionIssuerQuery(
     queryKey: queryKeyRemoteSessionIssuer({
       id: request?.id,
       slug: request?.slug,
+      issuer: request?.issuer,
       gramSession: request?.gramSession,
       gramKey: request?.gramKey,
       gramProject: request?.gramProject,
@@ -83,6 +84,7 @@ export function queryKeyRemoteSessionIssuer(
   parameters: {
     id?: string | undefined;
     slug?: string | undefined;
+    issuer?: string | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
     gramProject?: string | undefined;

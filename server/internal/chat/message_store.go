@@ -1,13 +1,19 @@
 package chat
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"log/slog"
+	"path"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -25,8 +31,11 @@ type ChatMessageWriter struct {
 	logger       *slog.Logger
 	assetStorage assets.BlobStore
 	observers    []MessageObserver
-	shutdownCtx  context.Context //nolint:containedctx // must outlive any single request
-	cancel       context.CancelFunc
+	// turnStream, when set, receives a frame per persisted row so dashboard
+	// subscribers can render a turn without polling. Nil disables publishing.
+	turnStream  *TurnStream
+	shutdownCtx context.Context //nolint:containedctx // must outlive any single request
+	cancel      context.CancelFunc
 }
 
 func NewChatMessageWriter(logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore) (w *ChatMessageWriter, shutdown func(context.Context) error) {
@@ -38,6 +47,7 @@ func NewChatMessageWriter(logger *slog.Logger, db *pgxpool.Pool, assetStorage as
 		observers:    nil,
 		shutdownCtx:  ctx,
 		cancel:       cancel,
+		turnStream:   nil,
 	}
 	shutdown = func(_ context.Context) error {
 		cancel()
@@ -46,8 +56,85 @@ func NewChatMessageWriter(logger *slog.Logger, db *pgxpool.Pool, assetStorage as
 	return w, shutdown
 }
 
+// WithTurnStream enables per-row turn frame publishing.
+func (w *ChatMessageWriter) WithTurnStream(stream *TurnStream) *ChatMessageWriter {
+	w.turnStream = stream
+	return w
+}
+
 func (w *ChatMessageWriter) AddObserver(obs MessageObserver) {
 	w.observers = append(w.observers, obs)
+}
+
+func (w *ChatMessageWriter) WriteContentPartAsset(ctx context.Context, projectID uuid.UUID, chatID uuid.UUID, content []byte) (string, error) {
+	urls, err := w.WriteContentPartAssets(ctx, projectID, chatID, [][]byte{content})
+	if err != nil {
+		return "", err
+	}
+	return urls[0], nil
+}
+
+func (w *ChatMessageWriter) WriteContentPartAssets(ctx context.Context, projectID uuid.UUID, chatID uuid.UUID, contents [][]byte) ([]string, error) {
+	if len(contents) == 0 {
+		return nil, nil
+	}
+	if w == nil || w.assetStorage == nil {
+		return nil, fmt.Errorf("content part asset storage unavailable")
+	}
+
+	paths := make([]string, len(contents))
+	leaders := make(map[string]int, len(contents))
+	for i, content := range contents {
+		hash := sha256.Sum256(content)
+		assetPath := path.Join(projectID.String(), "chats", chatID.String(), "content-parts", hex.EncodeToString(hash[:])+".txt")
+		paths[i] = assetPath
+		if _, ok := leaders[assetPath]; !ok {
+			leaders[assetPath] = i
+		}
+	}
+
+	type uploadResult struct {
+		assetURL string
+		err      error
+	}
+	results := make([]uploadResult, len(contents))
+	var group errgroup.Group
+	group.SetLimit(maxConcurrentChatAssetWork)
+	for assetPath, leader := range leaders {
+		group.Go(func() error {
+			content := contents[leader]
+			writer, assetURL, err := w.assetStorage.Write(ctx, assetPath, "text/plain; charset=utf-8", int64(len(content)))
+			if err != nil {
+				results[leader] = uploadResult{assetURL: "", err: fmt.Errorf("open content part asset for writing: %w", err)}
+				return nil
+			}
+			if _, err := io.Copy(writer, bytes.NewReader(content)); err != nil {
+				defer o11y.NoLogDefer(func() error { return writer.Close() })
+				results[leader] = uploadResult{assetURL: "", err: fmt.Errorf("write content part asset: %w", err)}
+				return nil
+			}
+			if err := writer.Close(); err != nil {
+				results[leader] = uploadResult{assetURL: "", err: fmt.Errorf("close content part asset: %w", err)}
+				return nil
+			}
+			results[leader] = uploadResult{assetURL: assetURL.String(), err: nil}
+			return nil
+		})
+	}
+	if err := group.Wait(); err != nil {
+		return nil, fmt.Errorf("upload content part assets: %w", err)
+	}
+
+	urls := make([]string, len(contents))
+	for i, assetPath := range paths {
+		leader := leaders[assetPath]
+		result := results[leader]
+		if result.err != nil {
+			return nil, result.err
+		}
+		urls[i] = result.assetURL
+	}
+	return urls, nil
 }
 
 // stampUnsetCreatedAt fills rows that carry no explicit created_at with one
@@ -86,6 +173,7 @@ func (w *ChatMessageWriter) Write(ctx context.Context, projectID uuid.UUID, para
 		return 0, err
 	}
 	if n > 0 {
+		w.publishTurnFrames(ctx, nil, params)
 		w.notifyMessagesStored(ctx, projectID)
 	}
 	return n, nil
@@ -154,6 +242,9 @@ func (w *ChatMessageWriter) WriteTurn(ctx context.Context, projectID uuid.UUID, 
 	}
 
 	if int64(len(pending))+n > 0 {
+		// After commit: a frame announces a row that exists, so a rolled-back
+		// turn never announces itself.
+		w.publishTurnFrames(ctx, pending, assistants)
 		w.notifyMessagesStored(ctx, projectID)
 	}
 	return nil
@@ -170,6 +261,7 @@ func (w *ChatMessageWriter) WriteWithAssets(ctx context.Context, projectID uuid.
 	if err := w.storeMessages(ctx, w.db, rows); err != nil {
 		return err
 	}
+	w.publishRowFrames(ctx, rows)
 	w.notifyMessagesStored(ctx, projectID)
 	return nil
 }

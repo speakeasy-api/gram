@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -29,6 +30,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
+	"github.com/speakeasy-api/gram/server/internal/skills/suggest"
+	"github.com/speakeasy-api/gram/server/internal/spendrules"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -52,8 +56,15 @@ type Service struct {
 	chatTitleGenerator ChatTitleGenerator
 	riskScanner        risk.RiskScanner
 	policyBypass       *risk.PolicyBypassEvaluator
+	spendGate          *spendrules.Gate
 	shadowMCPClient    *shadowmcp.Client
 	writer             *chat.ChatMessageWriter
+	// efficacySignaler is optional: when nil, hook paths record exactly as
+	// before and emit no wakes.
+	efficacySignaler efficacy.Signaler
+	// suggestionSignaler is optional: when nil, recorded feedback skips the
+	// suggestion-analysis wake.
+	suggestionSignaler suggest.Signaler
 	serverURL          *url.URL
 	siteURL            *url.URL
 	jwtSecret          string
@@ -104,6 +115,12 @@ type SessionMetadata struct {
 	// accounts logged in on one machine — the device bridge that links a personal
 	// account to the employee learned from a team session on the same device.
 	DeviceID string
+	// Hostname is the device hostname the Go hooks report on every event
+	// (gram.hook.hostname). Cached with the session so the Claude OTEL path —
+	// whose rows carry no hostname of their own — can stamp it onto cost rows,
+	// letting the user breakdown fall back to the device when the session has
+	// no email (company-credential sessions emit no user identity).
+	Hostname string
 	// AccountType is "team" or "personal" once classified, else empty.
 	AccountType string
 	// BillingMode is the admin-declared billing mode for the provider org this
@@ -143,6 +160,29 @@ type ChatTitleGenerator interface {
 	ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID, projectID string) error
 }
 
+// skillEfficacySignalTimeout bounds one wake. A wake is best-effort and always
+// follows a durable write, so it must never hold a hook response open on a
+// slow coordinator.
+const skillEfficacySignalTimeout = time.Second
+
+// signalSkillEfficacy delivers one best-effort wake for a project. Detached
+// from the request context: the write the wake reports is already durable, so a
+// client disconnect must not drop it. Failures are logged and swallowed —
+// no hook decision, response or tool flow depends on a wake landing.
+func (s *Service) signalSkillEfficacy(ctx context.Context, projectID uuid.UUID) {
+	if s.efficacySignaler == nil || projectID == uuid.Nil {
+		return
+	}
+	signalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), skillEfficacySignalTimeout)
+	defer cancel()
+	if err := s.efficacySignaler.Signal(signalCtx, projectID); err != nil {
+		s.logger.ErrorContext(ctx, "signal skill efficacy coordinator from hook",
+			attr.SlogError(err),
+			attr.SlogProjectID(projectID.String()),
+		)
+	}
+}
+
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
@@ -161,8 +201,11 @@ func NewService(
 	chatTitleGenerator ChatTitleGenerator,
 	riskScanner risk.RiskScanner,
 	policyBypass *risk.PolicyBypassEvaluator,
+	spendGate *spendrules.Gate,
 	shadowMCPClient *shadowmcp.Client,
 	writer *chat.ChatMessageWriter,
+	efficacySignaler efficacy.Signaler,
+	suggestionSignaler suggest.Signaler,
 	serverURL *url.URL,
 	siteURL *url.URL,
 	jwtSecret string,
@@ -182,8 +225,11 @@ func NewService(
 		chatTitleGenerator: chatTitleGenerator,
 		riskScanner:        riskScanner,
 		policyBypass:       policyBypass,
+		spendGate:          spendGate,
 		shadowMCPClient:    shadowMCPClient,
 		writer:             writer,
+		efficacySignaler:   efficacySignaler,
+		suggestionSignaler: suggestionSignaler,
 		serverURL:          serverURL,
 		siteURL:            siteURL,
 		jwtSecret:          jwtSecret,
@@ -223,6 +269,28 @@ func hashToolCallIDToTraceID(toolCallID string) string {
 	hash := sha256.Sum256([]byte(toolCallID))
 	// Take first 16 bytes (128 bits) of the hash to create a 32-hex-char trace ID
 	return hex.EncodeToString(hash[:16])
+}
+
+// syntheticToolCallID is the per-(session, tool) tool-call id for senders whose
+// hook payloads carry no per-call id (Codex, and canonical-API senders that
+// omit tool.id). The recorded chat tool_calls id and the telemetry trace id
+// must both derive from this one key: the shadow-MCP provenance lookup joins a
+// recorded id to its telemetry rows via
+// trace_id = hashToolCallIDToTraceID(recorded id) (see
+// internal/telemetry/repo/mcp_match_lookup.go), so deriving the two sides from
+// different values makes every call permanently unjoinable. Returns "" when
+// either part is missing — there is no meaningful per-tool key to share then,
+// and callers keep their previous fallback.
+//
+// The session id is length-prefixed so the encoding is injective: session ids
+// are client-controlled and may themselves contain "|", and two distinct
+// (session, tool) pairs colliding onto one key would let the provenance
+// lookup resolve one call to another call's MCP server.
+func syntheticToolCallID(sessionID, toolName string) string {
+	if sessionID == "" || toolName == "" {
+		return ""
+	}
+	return strconv.Itoa(len(sessionID)) + "|" + sessionID + "|" + toolName
 }
 
 // generateSpanID generates a W3C-compliant span ID (16 hex characters)

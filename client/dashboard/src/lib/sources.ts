@@ -10,13 +10,15 @@ export type SourceType =
   | "function"
   | "externalmcp"
   | "remotemcp"
-  | "tunneledmcp";
+  | "tunneledmcp"
+  | "unproxiedmcp";
 export type UrnKind =
   | "http"
   | "function"
   | "externalmcp"
   | "remotemcp"
-  | "tunneledmcp";
+  | "tunneledmcp"
+  | "unproxiedmcp";
 
 const sourceTypeToUrn: Record<SourceType, UrnKind> = {
   openapi: "http",
@@ -24,6 +26,7 @@ const sourceTypeToUrn: Record<SourceType, UrnKind> = {
   externalmcp: "externalmcp",
   remotemcp: "remotemcp",
   tunneledmcp: "tunneledmcp",
+  unproxiedmcp: "unproxiedmcp",
 };
 
 const urnToSourceType: Record<UrnKind, SourceType> = {
@@ -32,6 +35,7 @@ const urnToSourceType: Record<UrnKind, SourceType> = {
   externalmcp: "externalmcp",
   remotemcp: "remotemcp",
   tunneledmcp: "tunneledmcp",
+  unproxiedmcp: "unproxiedmcp",
 };
 
 export function sourceTypeToUrnKind(type: SourceType): UrnKind {
@@ -48,6 +52,28 @@ export function attachmentToURNPrefix(type: SourceType, slug: string): string {
 
 export function formatRemoteMcpUrlForDisplay(url: string): string {
   return url.replace(/^https?:\/\//, "");
+}
+
+// validateMcpServerUrl mirrors server-side url.Parse: must be absolute,
+// http(s), with a non-empty host. Shared by every "add an MCP server by URL"
+// form (remote, unproxied) so client-side feedback stays in sync; the
+// backend re-validates regardless.
+export function validateMcpServerUrl(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return "URL is required";
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return "Enter a valid absolute URL (e.g. https://example.com/mcp)";
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return "URL must use http or https";
+  }
+  if (!parsed.hostname) {
+    return "URL must include a host";
+  }
+  return null;
 }
 
 // formatRemoteMcpDisplay is the canonical "what to render for this server"
@@ -82,6 +108,27 @@ export function formatRemoteSessionIssuerDisplay(issuer: {
   return formatRemoteMcpDisplay({ name: issuer.name, url: issuer.issuer });
 }
 
+// A remote identity provider or session client belongs to one of three tenancy
+// tiers, derived from which owning ids it carries. The API serializes an absent
+// owner as an empty string, so a falsy check is the tier test.
+//
+// - project: owned by a single project (projectId set).
+// - organization: shared across the org's projects (projectId empty,
+//   organizationId set).
+// - platform: the shared catalog curated by platform admins (both empty). Tenants
+//   inherit these read-only and may attach their own clients, but cannot edit,
+//   move, or delete them.
+export type RemoteSessionScopeTier = "project" | "organization" | "platform";
+
+export function remoteSessionScopeTier(entity: {
+  projectId?: string | null;
+  organizationId?: string | null;
+}): RemoteSessionScopeTier {
+  if (entity.projectId) return "project";
+  if (entity.organizationId) return "organization";
+  return "platform";
+}
+
 // Derive a default display name from an Issuer URL's hostname. Unlike the slug
 // transform this keeps the hostname human-readable: dots are preserved rather
 // than hyphenated. (URL parsing lowercases the host either way.) Returns null
@@ -112,6 +159,15 @@ export function remoteMcpRouteParam(server: {
 
 export function tunneledMcpRouteParam(server: { id: string }): string {
   return server.id;
+}
+
+// unproxiedMcpRouteParam mirrors [remoteMcpRouteParam] for unproxied MCP
+// servers.
+export function unproxiedMcpRouteParam(server: {
+  id: string;
+  slug?: string | null | undefined;
+}): string {
+  return server.slug?.trim() || server.id;
 }
 
 // mcpServerRouteParam returns the value to embed in dashboard URLs for an
@@ -149,6 +205,18 @@ export function getRemoteMcpServerArgs(idOrSlug: string): {
 
 export function getTunneledMcpServerArgs(id: string): { id: string } {
   return { id };
+}
+
+// getUnproxiedMcpServerArgs mirrors [getRemoteMcpServerArgs] for
+// unproxied MCP servers.
+export function getUnproxiedMcpServerArgs(idOrSlug: string): {
+  id?: string;
+  slug?: string;
+} {
+  if (uuidRegex.test(idOrSlug)) {
+    return { id: idOrSlug };
+  }
+  return { slug: idOrSlug };
 }
 
 // getMcpServerArgs maps a route-param string into the request shape that

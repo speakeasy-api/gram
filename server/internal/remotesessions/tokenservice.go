@@ -4,12 +4,15 @@
 // MCP runtime has just authenticated via a Gram user-session JWT, find
 // the upstream access token to forward on the request.
 //
-// Two entry points exposed:
+// Three entry points exposed:
 //
 //   - ResolveAccessToken: per-client primitive. Given a
 //     remote_session_client id and a subject, returns the stored
 //     upstream access token (refreshing if necessary) or empty string
 //     if no usable token exists.
+//   - ResolveAuthorization: resolves one tenant-qualified reviewed issuer
+//     binding and returns its ephemeral access token plus safe identity
+//     metadata for callers that must record authorization freshness.
 //   - ResolveAccessTokens: the variant the MCP serving path calls.
 //     Resolves one upstream token per remote_session_issuer the subject
 //     has linked under the user_session_issuer, returning them as a
@@ -77,7 +80,10 @@ func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Valu
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
 	if method == TokenEndpointAuthMethodBasic {
-		req.SetBasicAuth(clientID, clientSecret)
+		// RFC 6749 §2.3.1: client credentials must be form-urlencoded before
+		// going into the Basic authorization header. Upstreams that decode per
+		// spec (e.g. Snowflake) reject raw credentials containing '+' or '%'.
+		req.SetBasicAuth(url.QueryEscape(clientID), url.QueryEscape(clientSecret))
 	}
 	return req, nil
 }
@@ -86,7 +92,22 @@ func newTokenEndpointRequest(ctx context.Context, endpoint string, form url.Valu
 // this toolset but the subject has no usable token." Callers (the MCP
 // runtime) surface this as a fresh auth challenge so the user can
 // re-link upstream.
-var ErrNoValidToken = errors.New("remotesessions: no valid token for subject")
+var (
+	ErrNoValidToken                 = errors.New("remotesessions: no valid token for subject")
+	ErrNoRemoteSessionClientBinding = errors.New("remotesessions: no client binding for remote issuer")
+	ErrInvalidAuthorizationRequest  = errors.New("remotesessions: invalid authorization request")
+)
+
+// ResolvedAuthorization is the ephemeral result of resolving one reviewed
+// remote-session issuer for a subject. AccessToken must remain in process and
+// must never be persisted or logged by callers.
+type ResolvedAuthorization struct {
+	AccessToken            string
+	RemoteSessionID        uuid.UUID
+	RemoteSessionUpdatedAt time.Time
+	RemoteSessionClientID  uuid.UUID
+	RemoteSessionIssuerID  uuid.UUID
+}
 
 // ResolveAccessToken returns the upstream access token stored for the
 // (client, subject) pair, refreshing via the upstream /token endpoint
@@ -123,6 +144,12 @@ func (m *ChallengeManager) ResolveAccessToken(
 
 	tok, err := m.validateAndRefresh(ctx, sess, resource)
 	if err != nil {
+		// A known-expired access token with no usable refresh grant is the
+		// ordinary reconnect path. The downstream 401 carries the challenge;
+		// logging every retry here would turn one stale session into noise.
+		if errors.Is(err, ErrNoValidToken) {
+			return "", nil
+		}
 		// validateAndRefresh errors only when a refresh was required (the
 		// stored access token is past its usable window) and could not be
 		// completed — the upstream rejected the refresh token, or the stored
@@ -146,6 +173,75 @@ func (m *ChallengeManager) ResolveAccessToken(
 		return "", nil
 	}
 	return tok, nil
+}
+
+// ResolveAuthorization resolves exactly one remote-session issuer binding for a
+// project user-session issuer. It selects the client through the tenant-scoped
+// attachment, then reuses ResolveAccessToken's refresh and revocation behavior.
+//
+// ErrNoRemoteSessionClientBinding means the reviewed issuer is not configured
+// for this user-session issuer. ErrNoValidToken means the binding exists but the
+// subject has no usable authorization.
+func (m *ChallengeManager) ResolveAuthorization(
+	ctx context.Context,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+	remoteSessionIssuerID uuid.UUID,
+	subject urn.SessionSubject,
+	resource string,
+) (ResolvedAuthorization, error) {
+	if projectID == uuid.Nil || organizationID == "" || userSessionIssuerID == uuid.Nil || remoteSessionIssuerID == uuid.Nil || subject.IsZero() {
+		return ResolvedAuthorization{}, ErrInvalidAuthorizationRequest
+	}
+
+	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID)
+	if err != nil {
+		return ResolvedAuthorization{}, fmt.Errorf("list remote_session_clients: %w", err)
+	}
+
+	var clientID uuid.UUID
+	for _, client := range clients {
+		if client.RemoteSessionIssuerID != remoteSessionIssuerID {
+			continue
+		}
+		if err := inv.Check("remotesessions.ResolveAuthorization",
+			"at most one remote_session_client per (user_session_issuer, remote_session_issuer)", clientID == uuid.Nil,
+		); err != nil {
+			return ResolvedAuthorization{}, fmt.Errorf("invariant: %w", err)
+		}
+		clientID = client.ClientID
+	}
+	if clientID == uuid.Nil {
+		return ResolvedAuthorization{}, ErrNoRemoteSessionClientBinding
+	}
+
+	token, err := m.ResolveAccessToken(ctx, clientID, subject, resource)
+	if err != nil {
+		return ResolvedAuthorization{}, fmt.Errorf("resolve remote-session access token: %w", err)
+	}
+	if token == "" {
+		return ResolvedAuthorization{}, ErrNoValidToken
+	}
+
+	session, err := remotesessions_repo.New(m.db).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            subject,
+		RemoteSessionClientID: clientID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ResolvedAuthorization{}, ErrNoValidToken
+	}
+	if err != nil {
+		return ResolvedAuthorization{}, fmt.Errorf("load resolved remote_session: %w", err)
+	}
+
+	return ResolvedAuthorization{
+		AccessToken:            token,
+		RemoteSessionID:        session.ID,
+		RemoteSessionUpdatedAt: session.UpdatedAt.Time,
+		RemoteSessionClientID:  clientID,
+		RemoteSessionIssuerID:  remoteSessionIssuerID,
+	}, nil
 }
 
 // ResolveAccessTokens is the variant the MCP serving path calls. It
@@ -225,46 +321,30 @@ func (m *ChallengeManager) ResolveAccessTokens(
 	return tokens, nil
 }
 
-// defaultNoExpiryRefreshInterval is the application-layer cadence at which a
-// token whose upstream omitted expires_in but still handed us a refresh token
-// is re-validated by attempting a refresh. The provider gave a renewal path
-// without a stated lifetime, so we do not trust the token forever: it is
-// served for this long past its last issuance (updated_at), then refreshed.
-// Mirrors the historical fabricated now+1h expiry without persisting one in
-// the database. A default for now; likely to become configurable.
-const defaultNoExpiryRefreshInterval = time.Hour
-
 // validateAndRefresh returns the upstream access token for sess, refreshing
 // via the upstream /token endpoint when the token is past its usable window
 // and a refresh_token is present.
 //
 // The usable window depends on what the upstream told us:
 //   - access_expires_at set: the upstream-stated expiry governs.
-//   - NULL with no refresh token: non-expiring (e.g. Slack non-rotating
-//     xoxp) — served indefinitely.
-//   - NULL with a refresh token: no stated lifetime but a renewal path, so
-//     served until updated_at + defaultNoExpiryRefreshInterval, then refreshed.
+//   - access_expires_at NULL: no expiry was reported, so the stored access
+//     token is served as-is. A refresh token does not imply that access expires.
+//
+// Scheduled auto-refresh separately exercises unused refresh grants. Its
+// failure must not turn an access token with no known expiry into a reconnect.
 func (m *ChallengeManager) validateAndRefresh(
 	ctx context.Context,
 	sess remotesessions_repo.RemoteSession,
 	resource string,
 ) (string, error) {
-	hasRefresh := sess.RefreshTokenEncrypted.Valid && sess.RefreshTokenEncrypted.String != ""
-
-	// usableUntil is the instant after which we stop serving the stored access
-	// token as-is; nil means "never" (non-expiring).
-	var usableUntil *time.Time
-	switch {
-	case sess.AccessExpiresAt.Valid:
-		usableUntil = &sess.AccessExpiresAt.Time
-	case hasRefresh:
-		deadline := sess.UpdatedAt.Time.Add(defaultNoExpiryRefreshInterval)
-		usableUntil = &deadline
-	default:
-		usableUntil = nil
+	now := time.Now()
+	if sess.AuthorizationExpiresAt.Valid && !sess.AuthorizationExpiresAt.Time.After(now) {
+		return "", ErrNoValidToken
 	}
 
-	if usableUntil == nil || usableUntil.After(time.Now()) {
+	hasRefresh := sess.RefreshTokenEncrypted.Valid && sess.RefreshTokenEncrypted.String != ""
+
+	if !sess.AccessExpiresAt.Valid || sess.AccessExpiresAt.Time.After(now) {
 		plain, err := m.enc.Decrypt(sess.AccessTokenEncrypted)
 		if err != nil {
 			return "", fmt.Errorf("decrypt access token: %w", err)
@@ -275,25 +355,18 @@ func (m *ChallengeManager) validateAndRefresh(
 	if !hasRefresh {
 		return "", ErrNoValidToken
 	}
-	return m.refreshAccessToken(ctx, sess, resource)
-}
 
-// refreshAccessToken is the lazy-path wrapper: it runs the shared refresh and
-// returns just the new access token, discarding the persisted row.
-func (m *ChallengeManager) refreshAccessToken(
-	ctx context.Context,
-	sess remotesessions_repo.RemoteSession,
-	resource string,
-) (string, error) {
-	_, accessToken, err := refreshSessionTokens(ctx, remotesessions_repo.New(m.db), m.enc, m.policy, sess, resource)
+	res, err := m.refresher.RefreshNow(ctx, sess, resource)
 	if err != nil {
 		return "", err
 	}
-	return accessToken, nil
+	// RefreshOutcomeSessionInactive lands here as an empty token, which the
+	// caller treats the same as "never linked".
+	return res.AccessToken, nil
 }
 
 // refreshSessionTokens POSTs grant_type=refresh_token to the upstream token
-// endpoint and persists the new token pair on success, returning the upserted
+// endpoint and persists the new token pair on success, returning the updated
 // remote_session row and the new plaintext access token.
 //
 // It is shared by the lazy MCP resolution path (ChallengeManager) and the
@@ -351,7 +424,12 @@ func refreshSessionTokens(
 		form.Set("resource", resource)
 	}
 
-	req, err := newTokenEndpointRequest(ctx, client.TokenEndpoint.String, form, authMethod, client.ExternalClientID, clientSecret)
+	// Scoped to the exchange so an unresponsive upstream cannot outlive the
+	// single-flight lease; the persist below still runs on ctx.
+	postCtx, cancel := context.WithTimeout(ctx, refreshUpstreamTimeout)
+	defer cancel()
+
+	req, err := newTokenEndpointRequest(postCtx, client.TokenEndpoint.String, form, authMethod, client.ExternalClientID, clientSecret)
 	if err != nil {
 		return zero, "", fmt.Errorf("new refresh request: %w", err)
 	}
@@ -367,7 +445,7 @@ func refreshSessionTokens(
 		return zero, "", fmt.Errorf("read refresh response: %w", err)
 	}
 	if resp.StatusCode/100 != 2 {
-		return zero, "", newTokenRefreshErrorFromHTTP(resp.Status, body)
+		return zero, "", newTokenRefreshErrorFromHTTP(resp.StatusCode, resp.Status, body)
 	}
 	var tok tokenResponse
 	if err := json.Unmarshal(body, &tok); err != nil {
@@ -392,28 +470,48 @@ func refreshSessionTokens(
 
 	// expires_in absent ⇒ NULL (no known expiry), matching exchangeCode. Never
 	// fabricate a deadline the upstream did not assert.
+	now := time.Now()
 	var accessExpires *time.Time
 	if tok.ExpiresIn > 0 {
-		v := time.Now().Add(time.Duration(tok.ExpiresIn) * time.Second)
+		v := now.Add(time.Duration(tok.ExpiresIn) * time.Second)
 		accessExpires = &v
 	}
-	refreshExpires := sess.RefreshExpiresAt
-	if tok.RefreshExpiresIn > 0 {
-		v := time.Now().Add(time.Duration(tok.RefreshExpiresIn) * time.Second)
-		refreshExpires = conv.ToPGTimestamptz(v)
+	refreshTimeout, refreshTimeoutReported := tok.RefreshTokenTimeoutSeconds()
+	refreshExpires := conv.PtrToPGTimestamptz(expirationDeadline(now, refreshTimeout, refreshTimeoutReported))
+
+	// authorization_expires_in is an absolute property of the grant. Preserve
+	// the known deadline when a later response omits it; replace it when the
+	// provider reports the remaining authorization lifetime again.
+	authorizationExpires := sess.AuthorizationExpiresAt
+	if lifetime, reported := tok.AuthorizationLifetimeSeconds(); reported {
+		authorizationExpires = conv.PtrToPGTimestamptz(expirationDeadline(now, lifetime, true))
+	}
+	scopes := tok.Scopes()
+	if len(scopes) == 0 {
+		// RFC 6749 §6: an omitted scope means the refreshed token retains the
+		// original grant's scope.
+		scopes = sess.Scopes
 	}
 
-	updated, err := q.UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
-		SubjectUrn:            sess.SubjectUrn,
-		UserSessionIssuerID:   sess.UserSessionIssuerID,
-		RemoteSessionClientID: sess.RemoteSessionClientID,
-		AccessTokenEncrypted:  accessEnc,
-		AccessExpiresAt:       conv.PtrToPGTimestamptz(accessExpires),
-		RefreshTokenEncrypted: newRefreshEnc,
-		RefreshExpiresAt:      refreshExpires,
-		Scopes:                sess.Scopes,
+	// CAS on the updated_at read before the POST: overwriting a row someone
+	// else rotated would persist a refresh token the provider has already
+	// consumed. A revocation mid-POST drops the row out of scope too.
+	updated, err := q.UpdateRemoteSessionTokensIfUnchanged(ctx, remotesessions_repo.UpdateRemoteSessionTokensIfUnchangedParams{
+		SubjectUrn:             sess.SubjectUrn,
+		UserSessionIssuerID:    sess.UserSessionIssuerID,
+		RemoteSessionClientID:  sess.RemoteSessionClientID,
+		AccessTokenEncrypted:   accessEnc,
+		AccessExpiresAt:        conv.PtrToPGTimestamptz(accessExpires),
+		RefreshTokenEncrypted:  newRefreshEnc,
+		AuthorizationExpiresAt: authorizationExpires,
+		RefreshExpiresAt:       refreshExpires,
+		Scopes:                 scopes,
+		ExpectedUpdatedAt:      sess.UpdatedAt,
 	})
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return zero, "", newTokenRefreshError("the session was rotated by another request or revoked while this refresh was in flight; reload to see its current state", errRefreshNotApplied)
+		}
 		return zero, "", fmt.Errorf("persist refreshed session: %w", err)
 	}
 

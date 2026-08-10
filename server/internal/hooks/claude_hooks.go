@@ -28,7 +28,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	claudeevents "github.com/speakeasy-api/gram/server/internal/hookevents/adapters/claude"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -72,6 +71,16 @@ func newHooksRequestDecoder(logger *slog.Logger) func(r *http.Request) goahttp.D
 		ctx := r.Context()
 		contentType := r.Header.Get("Content-Type")
 		contentEncoding := r.Header.Get("Content-Encoding")
+		skillUpload := r.URL.Path == "/rpc/hooks.uploadSkillContent"
+		logBody := func(body []byte) []byte {
+			if skillUpload {
+				return nil
+			}
+			return body
+		}
+		if skillUpload && r.Body != nil {
+			r.Body = http.MaxBytesReader(nil, r.Body, maxSkillUploadRequestBodyBytes)
+		}
 
 		raw, err := io.ReadAll(r.Body)
 		_ = r.Body.Close()
@@ -89,16 +98,27 @@ func newHooksRequestDecoder(logger *slog.Logger) func(r *http.Request) goahttp.D
 			if gerr != nil {
 				wrapped := fmt.Errorf("open gzip reader for hooks request: %w", gerr)
 				return decoderFunc(func(_ any) error {
-					logDecodeFailure(ctx, logger, wrapped, raw, contentType, contentEncoding)
+					logDecodeFailure(ctx, logger, wrapped, logBody(raw), contentType, contentEncoding)
 					return wrapped
 				})
 			}
-			decompressed, gerr := io.ReadAll(gz)
+			var reader io.Reader = gz
+			if skillUpload {
+				reader = io.LimitReader(gz, maxSkillUploadRequestBodyBytes+1)
+			}
+			decompressed, gerr := io.ReadAll(reader)
 			_ = gz.Close()
 			if gerr != nil {
 				wrapped := fmt.Errorf("decompress gzip hooks request body: %w", gerr)
 				return decoderFunc(func(_ any) error {
-					logDecodeFailure(ctx, logger, wrapped, raw, contentType, contentEncoding)
+					logDecodeFailure(ctx, logger, wrapped, logBody(raw), contentType, contentEncoding)
+					return wrapped
+				})
+			}
+			if skillUpload && len(decompressed) > maxSkillUploadRequestBodyBytes {
+				wrapped := fmt.Errorf("decompressed skill content upload exceeds %d bytes", maxSkillUploadRequestBodyBytes)
+				return decoderFunc(func(_ any) error {
+					logDecodeFailure(ctx, logger, wrapped, nil, contentType, contentEncoding)
 					return wrapped
 				})
 			}
@@ -119,7 +139,7 @@ func newHooksRequestDecoder(logger *slog.Logger) func(r *http.Request) goahttp.D
 
 		return decoderFunc(func(v any) error {
 			if derr := inner.Decode(v); derr != nil {
-				logDecodeFailure(ctx, logger, derr, body, contentType, contentEncoding)
+				logDecodeFailure(ctx, logger, derr, logBody(body), contentType, contentEncoding)
 				return fmt.Errorf("decode hooks request body: %w", derr)
 			}
 			return nil
@@ -189,33 +209,6 @@ func (d *formDecoder) Decode(v any) error {
 	return nil
 }
 
-// Metrics handles authenticated OTEL metrics data from Claude Code
-func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) error {
-	logger := s.logger.With(
-		attr.SlogHookSource("claude"),
-		attr.SlogHookEvent("Metrics"),
-	)
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return oops.E(oops.CodeUnauthorized, errors.New("rejected unauthorized claude OTEL metrics request"), "unauthorized").LogWarn(ctx, logger, attr.SlogEvent("claude_metrics_unauthorized"))
-	}
-
-	orgID := authCtx.ActiveOrganizationID
-	projectID := authCtx.ProjectID.String()
-
-	logger.InfoContext(ctx, "Received Claude token metrics",
-		attr.SlogEvent("claude_metrics"),
-		attr.SlogOrganizationID(orgID),
-		attr.SlogProjectID(projectID),
-	)
-
-	// Write metrics to ClickHouse
-	s.writeMetricsToClickHouse(ctx, payload, orgID, projectID)
-
-	return nil
-}
-
 // Claude is the unified endpoint for all Claude Code hook events.
 func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *gen.ClaudeHookResult, err error) {
 	start := time.Now()
@@ -254,11 +247,12 @@ func (s *Service) Claude(ctx context.Context, payload *gen.ClaudePayload) (res *
 	}
 	orgSlug := ""
 	outcome := hookMetricOutcomeAccepted
+	ctx, riskScanned := withRiskScanTracker(ctx)
 	defer func() {
 		if err != nil && outcome == hookMetricOutcomeAccepted {
 			outcome = hookMetricOutcomeFailure
 		}
-		s.metrics.RecordHookEventDuration(ctx, "claude", hookEventName, outcome, claudeHookDecision(res), orgSlug, time.Since(start))
+		s.metrics.RecordHookEventDuration(ctx, "claude", hookEventName, outcome, claudeHookDecision(res), orgSlug, *riskScanned, time.Since(start))
 	}()
 
 	if hasPluginAuth {
@@ -747,6 +741,7 @@ func (s *Service) claudeAuthContextMetadata(ctx context.Context, sessionID, user
 			ExternalAccountUUID: "",
 			ExternalAccountID:   "",
 			DeviceID:            "",
+			Hostname:            "",
 			AccountType:         "",
 			BillingMode:         "",
 			UserAccountID:       "",
@@ -766,6 +761,7 @@ func (s *Service) claudeAuthContextMetadata(ctx context.Context, sessionID, user
 		ExternalAccountUUID: "",
 		ExternalAccountID:   "",
 		DeviceID:            "",
+		Hostname:            "",
 		AccountType:         "",
 		BillingMode:         "",
 		UserAccountID:       "",
@@ -843,6 +839,43 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 	payload := claudePayloadFromEvent(ev.Event)
 	if payload == nil {
 		return makeHookResult(ev.RawEventType), nil
+	}
+	// Spend gate runs before any risk-policy evaluation: an over-budget user
+	// gets tool calls denied even mid-turn, for native and MCP tools alike.
+	if block := s.checkSpendGate(ctx, ev.Event); block != nil {
+		auditReason := spendBlockReason("tool call", block)
+		userReason := auditReason
+		if payload.SessionID != nil {
+			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
+				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
+			}
+		}
+		if blockID, err := uuid.NewV7(); err == nil && !s.isHookDuplicate(ctx) && s.repo != nil && strings.TrimSpace(ev.Context.OrganizationID) != "" && ev.Context.ProjectID != uuid.Nil {
+			userReason = appendBlockURL(userReason, s.blockViewURL(blockID))
+			userID := ev.Context.User.ID
+			userEmail := ev.Context.User.Email
+			asyncCtx := context.WithoutCancel(ctx)
+			// Resolve the owning user inside the goroutine so any DB lookup
+			// stays off the deny hot path.
+			go func() {
+				if userID == "" {
+					userID = s.resolveUserByEmail(asyncCtx, userEmail, ev.Context.OrganizationID)
+				}
+				s.insertToolCallBlock(asyncCtx, blockID, toolCallBlockParams{
+					Provider:       "claude",
+					OrganizationID: ev.Context.OrganizationID,
+					ProjectID:      ev.Context.ProjectID,
+					Reason:         auditReason,
+					ToolName:       ev.ToolName,
+					UserID:         userID,
+					RiskPolicyID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+					RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+					ChatID:         chatIDForBlock(conv.PtrValOr(payload.SessionID, "")),
+					ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				})
+			}()
+		}
+		return constructBlockResponse(payload.HookEventName, userReason), nil
 	}
 	if s.riskScanner != nil && ev.ConversationID != "" {
 		// Acknowledged warn is excluded from the enforcement block so it falls
@@ -1019,21 +1052,33 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 
 	matched := matchCachedMCPEntry(entries, serverPrefix)
 	var detail string
-	switch {
-	case matched == nil:
-		detail = fmt.Sprintf("MCP server %q is not in the active configuration", serverPrefix)
-	case matched.URL != "" && !s.isGramHostedMCPURLForOrg(ctx, matched.URL, metadata.GramOrgID):
-		detail = fmt.Sprintf("MCP server %q is not Gram-hosted (URL: %s)", serverPrefix, matched.URL)
-	case matched.URL == "" && matched.Command != "":
-		// Local stdio servers have no URL, so the Gram-hosted check above
-		// can't apply. Treat them as shadow MCPs until explicitly approved
-		// by command.
-		detail = fmt.Sprintf("MCP server %q is a local stdio server (command: %s)", serverPrefix, matched.Command)
-	case matched.URL == "" && matched.Command == "":
-		// Defensive: the parser populates either URL or Command for every
-		// real entry, but if a future format slips past it we'd rather
-		// fail closed with a clear reason than silently allow.
-		detail = fmt.Sprintf("MCP server %q has no recognizable target", serverPrefix)
+	if policy.IsAllowAll() {
+		// Permit-by-default: only a blocked-list URL match denies. Servers
+		// missing from the inventory, local stdio servers, and unrecognizable
+		// entries are all allowed — the fail-closed reasons below are
+		// block_all concepts. Gram-hosted URLs stay allowed even if listed.
+		if matched != nil && matched.URL != "" && !s.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, matched.URL, metadata.GramOrgID) {
+			if blockedURL, blocked := shadowmcp.BlockedURLMatch(policy.BlockedURLs, matched.URL); blocked {
+				detail = fmt.Sprintf("MCP server %q is blocked by policy (URL: %s)", serverPrefix, blockedURL)
+			}
+		}
+	} else {
+		switch {
+		case matched == nil:
+			detail = fmt.Sprintf("MCP server %q is not in the active configuration", serverPrefix)
+		case matched.URL != "" && !s.shadowMCPClient.IsGramHostedMCPURLForOrg(ctx, matched.URL, metadata.GramOrgID):
+			detail = fmt.Sprintf("MCP server %q is not Gram-hosted (URL: %s)", serverPrefix, matched.URL)
+		case matched.URL == "" && matched.Command != "":
+			// Local stdio servers have no URL, so the Gram-hosted check above
+			// can't apply. Treat them as shadow MCPs until explicitly approved
+			// by command.
+			detail = fmt.Sprintf("MCP server %q is a local stdio server (command: %s)", serverPrefix, matched.Command)
+		case matched.URL == "" && matched.Command == "":
+			// Defensive: the parser populates either URL or Command for every
+			// real entry, but if a future format slips past it we'd rather
+			// fail closed with a clear reason than silently allow.
+			detail = fmt.Sprintf("MCP server %q has no recognizable target", serverPrefix)
+		}
 	}
 	evidence := shadowmcp.AccessEvidence{
 		FullURL:        "",
@@ -1056,26 +1101,30 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		return result, nil
 	}
 
-	if _, allowed := s.canBypassPolicy(ctx, metadata.GramOrgID, metadata.UserID, policy.ID, evidence, mcpToolName); allowed {
-		matchedURL, matchedCommand := "", ""
-		if matched != nil {
-			matchedURL = matched.URL
-			matchedCommand = matched.Command
+	// Bypass grants are a block_all concept: under allow-all the blocked-list
+	// membership above is the whole check.
+	if !policy.IsAllowAll() {
+		if _, allowed := s.canBypassPolicy(ctx, metadata.GramOrgID, metadata.UserID, policy.ID, evidence, mcpToolName); allowed {
+			matchedURL, matchedCommand := "", ""
+			if matched != nil {
+				matchedURL = matched.URL
+				matchedCommand = matched.Command
+			}
+			s.logger.InfoContext(ctx, "shadow-mcp call allowed via risk policy bypass grant",
+				attr.SlogEvent("claude_hook_policy_bypass_allow"),
+				attr.SlogToolName(rawToolName),
+				attr.SlogRiskPolicyID(policy.ID),
+				attr.SlogValueAny(map[string]any{
+					"serverPrefix":   serverPrefix,
+					"matchedURL":     matchedURL,
+					"matchedCommand": matchedCommand,
+				}),
+			)
+			if output != nil {
+				output.PermissionDecision = &allow
+			}
+			return result, nil
 		}
-		s.logger.InfoContext(ctx, "shadow-mcp call allowed via risk policy bypass grant",
-			attr.SlogEvent("claude_hook_policy_bypass_allow"),
-			attr.SlogToolName(rawToolName),
-			attr.SlogRiskPolicyID(policy.ID),
-			attr.SlogValueAny(map[string]any{
-				"serverPrefix":   serverPrefix,
-				"matchedURL":     matchedURL,
-				"matchedCommand": matchedCommand,
-			}),
-		)
-		if output != nil {
-			output.PermissionDecision = &allow
-		}
-		return result, nil
 	}
 
 	auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
@@ -1303,7 +1352,7 @@ func (s *Service) recordShadowMCPBlockFinding(
 		OrganizationID:    metadata.GramOrgID,
 		RiskPolicyID:      policyID,
 		RiskPolicyVersion: policy.Version,
-		ChatMessageID:     msgID,
+		ChatMessageID:     uuid.NullUUID{UUID: msgID, Valid: true},
 		Description:       pgtype.Text{String: description, Valid: description != ""},
 		Match:             pgtype.Text{String: match, Valid: match != ""},
 		Confidence:        pgtype.Float8{Float64: 1.0, Valid: true},
@@ -1340,16 +1389,8 @@ func (s *Service) writeClaudeBlockToClickHouse(ctx context.Context, payload *gen
 	}
 
 	s.telemetryLogger.Log(ctx, telemetry.LogParams{
-		Timestamp: time.Now(),
-		ToolInfo: telemetry.ToolInfo{
-			Name:           toolName,
-			OrganizationID: metadata.GramOrgID,
-			ProjectID:      projectID.String(),
-			ID:             "",
-			URN:            "",
-			DeploymentID:   "",
-			FunctionID:     nil,
-		},
+		Timestamp:  time.Now(),
+		ToolInfo:   telemetryToolInfo(metadata, projectID, toolName),
 		UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
 		Attributes: attrs,
 	})

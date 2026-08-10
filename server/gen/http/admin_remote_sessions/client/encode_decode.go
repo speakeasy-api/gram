@@ -338,7 +338,7 @@ func DecodeListGlobalIssuersResponse(decoder func(*http.Response) goahttp.Decode
 			if err != nil {
 				return nil, goahttp.ErrValidationError("adminRemoteSessions", "listGlobalIssuers", err)
 			}
-			res := NewListGlobalIssuersListRemoteSessionIssuersResultOK(&body)
+			res := NewListGlobalIssuersListGlobalRemoteSessionIssuersResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
@@ -572,7 +572,7 @@ func DecodeGetGlobalIssuerResponse(decoder func(*http.Response) goahttp.Decoder,
 			if err != nil {
 				return nil, goahttp.ErrValidationError("adminRemoteSessions", "getGlobalIssuer", err)
 			}
-			res := NewGetGlobalIssuerRemoteSessionIssuerOK(&body)
+			res := NewGetGlobalIssuerGlobalRemoteSessionIssuerOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
@@ -1180,6 +1180,478 @@ func DecodeDeleteGlobalIssuerResponse(decoder func(*http.Response) goahttp.Decod
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("adminRemoteSessions", "deleteGlobalIssuer", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildFetchGlobalIssuerMetadataRequest instantiates a HTTP request object
+// with method and path set to call the "adminRemoteSessions" service
+// "fetchGlobalIssuerMetadata" endpoint
+func (c *Client) BuildFetchGlobalIssuerMetadataRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: FetchGlobalIssuerMetadataAdminRemoteSessionsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("adminRemoteSessions", "fetchGlobalIssuerMetadata", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeFetchGlobalIssuerMetadataRequest returns an encoder for requests sent
+// to the adminRemoteSessions fetchGlobalIssuerMetadata server.
+func EncodeFetchGlobalIssuerMetadataRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*adminremotesessions.FetchGlobalIssuerMetadataPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("adminRemoteSessions", "fetchGlobalIssuerMetadata", "*adminremotesessions.FetchGlobalIssuerMetadataPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewFetchGlobalIssuerMetadataRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+		}
+		return nil
+	}
+}
+
+// DecodeFetchGlobalIssuerMetadataResponse returns a decoder for responses
+// returned by the adminRemoteSessions fetchGlobalIssuerMetadata endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeFetchGlobalIssuerMetadataResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeFetchGlobalIssuerMetadataResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body FetchGlobalIssuerMetadataResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			err = ValidateFetchGlobalIssuerMetadataResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			res := NewFetchGlobalIssuerMetadataRemoteSessionIssuerDraftOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body FetchGlobalIssuerMetadataUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			err = ValidateFetchGlobalIssuerMetadataUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			return nil, NewFetchGlobalIssuerMetadataUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body FetchGlobalIssuerMetadataForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			err = ValidateFetchGlobalIssuerMetadataForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			return nil, NewFetchGlobalIssuerMetadataForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body FetchGlobalIssuerMetadataBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			err = ValidateFetchGlobalIssuerMetadataBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			return nil, NewFetchGlobalIssuerMetadataBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body FetchGlobalIssuerMetadataNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			err = ValidateFetchGlobalIssuerMetadataNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			return nil, NewFetchGlobalIssuerMetadataNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body FetchGlobalIssuerMetadataConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			err = ValidateFetchGlobalIssuerMetadataConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			return nil, NewFetchGlobalIssuerMetadataConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body FetchGlobalIssuerMetadataUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			err = ValidateFetchGlobalIssuerMetadataUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			return nil, NewFetchGlobalIssuerMetadataUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body FetchGlobalIssuerMetadataInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			err = ValidateFetchGlobalIssuerMetadataInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			return nil, NewFetchGlobalIssuerMetadataInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body FetchGlobalIssuerMetadataInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+				}
+				err = ValidateFetchGlobalIssuerMetadataInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+				}
+				return nil, NewFetchGlobalIssuerMetadataInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body FetchGlobalIssuerMetadataUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+				}
+				err = ValidateFetchGlobalIssuerMetadataUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+				}
+				return nil, NewFetchGlobalIssuerMetadataUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("adminRemoteSessions", "fetchGlobalIssuerMetadata", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body FetchGlobalIssuerMetadataGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			err = ValidateFetchGlobalIssuerMetadataGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+			}
+			return nil, NewFetchGlobalIssuerMetadataGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("adminRemoteSessions", "fetchGlobalIssuerMetadata", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRefreshGlobalIssuerMetadataRequest instantiates a HTTP request object
+// with method and path set to call the "adminRemoteSessions" service
+// "refreshGlobalIssuerMetadata" endpoint
+func (c *Client) BuildRefreshGlobalIssuerMetadataRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RefreshGlobalIssuerMetadataAdminRemoteSessionsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("adminRemoteSessions", "refreshGlobalIssuerMetadata", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRefreshGlobalIssuerMetadataRequest returns an encoder for requests
+// sent to the adminRemoteSessions refreshGlobalIssuerMetadata server.
+func EncodeRefreshGlobalIssuerMetadataRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*adminremotesessions.RefreshGlobalIssuerMetadataPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("adminRemoteSessions", "refreshGlobalIssuerMetadata", "*adminremotesessions.RefreshGlobalIssuerMetadataPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewRefreshGlobalIssuerMetadataRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRefreshGlobalIssuerMetadataResponse returns a decoder for responses
+// returned by the adminRemoteSessions refreshGlobalIssuerMetadata endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeRefreshGlobalIssuerMetadataResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRefreshGlobalIssuerMetadataResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RefreshGlobalIssuerMetadataResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			err = ValidateRefreshGlobalIssuerMetadataResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			res := NewRefreshGlobalIssuerMetadataRemoteSessionIssuerRefreshOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RefreshGlobalIssuerMetadataUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			err = ValidateRefreshGlobalIssuerMetadataUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			return nil, NewRefreshGlobalIssuerMetadataUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RefreshGlobalIssuerMetadataForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			err = ValidateRefreshGlobalIssuerMetadataForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			return nil, NewRefreshGlobalIssuerMetadataForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RefreshGlobalIssuerMetadataBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			err = ValidateRefreshGlobalIssuerMetadataBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			return nil, NewRefreshGlobalIssuerMetadataBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RefreshGlobalIssuerMetadataNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			err = ValidateRefreshGlobalIssuerMetadataNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			return nil, NewRefreshGlobalIssuerMetadataNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RefreshGlobalIssuerMetadataConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			err = ValidateRefreshGlobalIssuerMetadataConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			return nil, NewRefreshGlobalIssuerMetadataConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RefreshGlobalIssuerMetadataUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			err = ValidateRefreshGlobalIssuerMetadataUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			return nil, NewRefreshGlobalIssuerMetadataUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RefreshGlobalIssuerMetadataInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			err = ValidateRefreshGlobalIssuerMetadataInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			return nil, NewRefreshGlobalIssuerMetadataInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RefreshGlobalIssuerMetadataInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+				}
+				err = ValidateRefreshGlobalIssuerMetadataInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+				}
+				return nil, NewRefreshGlobalIssuerMetadataInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RefreshGlobalIssuerMetadataUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+				}
+				err = ValidateRefreshGlobalIssuerMetadataUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+				}
+				return nil, NewRefreshGlobalIssuerMetadataUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("adminRemoteSessions", "refreshGlobalIssuerMetadata", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RefreshGlobalIssuerMetadataGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			err = ValidateRefreshGlobalIssuerMetadataGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+			}
+			return nil, NewRefreshGlobalIssuerMetadataGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("adminRemoteSessions", "refreshGlobalIssuerMetadata", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -2349,6 +2821,734 @@ func DecodeDeleteGlobalClientResponse(decoder func(*http.Response) goahttp.Decod
 	}
 }
 
+// BuildListGlobalIssuerConvergenceCandidatesRequest instantiates a HTTP
+// request object with method and path set to call the "adminRemoteSessions"
+// service "listGlobalIssuerConvergenceCandidates" endpoint
+func (c *Client) BuildListGlobalIssuerConvergenceCandidatesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListGlobalIssuerConvergenceCandidatesAdminRemoteSessionsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("adminRemoteSessions", "listGlobalIssuerConvergenceCandidates", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListGlobalIssuerConvergenceCandidatesRequest returns an encoder for
+// requests sent to the adminRemoteSessions
+// listGlobalIssuerConvergenceCandidates server.
+func EncodeListGlobalIssuerConvergenceCandidatesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*adminremotesessions.ListGlobalIssuerConvergenceCandidatesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("adminRemoteSessions", "listGlobalIssuerConvergenceCandidates", "*adminremotesessions.ListGlobalIssuerConvergenceCandidatesPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("target_id", p.TargetID)
+		if p.Cursor != nil {
+			values.Add("cursor", *p.Cursor)
+		}
+		if p.Limit != nil {
+			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListGlobalIssuerConvergenceCandidatesResponse returns a decoder for
+// responses returned by the adminRemoteSessions
+// listGlobalIssuerConvergenceCandidates endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeListGlobalIssuerConvergenceCandidatesResponse may return the following
+// errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListGlobalIssuerConvergenceCandidatesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListGlobalIssuerConvergenceCandidatesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "listGlobalIssuerConvergenceCandidates", err)
+			}
+			err = ValidateListGlobalIssuerConvergenceCandidatesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "listGlobalIssuerConvergenceCandidates", err)
+			}
+			res := NewListGlobalIssuerConvergenceCandidatesListIssuerConvergenceCandidatesResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListGlobalIssuerConvergenceCandidatesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "listGlobalIssuerConvergenceCandidates", err)
+			}
+			err = ValidateListGlobalIssuerConvergenceCandidatesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "listGlobalIssuerConvergenceCandidates", err)
+			}
+			return nil, NewListGlobalIssuerConvergenceCandidatesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListGlobalIssuerConvergenceCandidatesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "listGlobalIssuerConvergenceCandidates", err)
+			}
+			err = ValidateListGlobalIssuerConvergenceCandidatesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "listGlobalIssuerConvergenceCandidates", err)
+			}
+			return nil, NewListGlobalIssuerConvergenceCandidatesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListGlobalIssuerConvergenceCandidatesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "listGlobalIssuerConvergenceCandidates", err)
+			}
+			err = ValidateListGlobalIssuerConvergenceCandidatesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "listGlobalIssuerConvergenceCandidates", err)
+			}
+			return nil, NewListGlobalIssuerConvergenceCandidatesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListGlobalIssuerConvergenceCandidatesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "listGlobalIssuerConvergenceCandidates", err)
+			}
+			err = ValidateListGlobalIssuerConvergenceCandidatesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "listGlobalIssuerConvergenceCandidates", err)
+			}
+			return nil, NewListGlobalIssuerConvergenceCandidatesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListGlobalIssuerConvergenceCandidatesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "listGlobalIssuerConvergenceCandidates", err)
+			}
+			err = ValidateListGlobalIssuerConvergenceCandidatesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "listGlobalIssuerConvergenceCandidates", err)
+			}
+			return nil, NewListGlobalIssuerConvergenceCandidatesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListGlobalIssuerConvergenceCandidatesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "listGlobalIssuerConvergenceCandidates", err)
+			}
+			err = ValidateListGlobalIssuerConvergenceCandidatesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "listGlobalIssuerConvergenceCandidates", err)
+			}
+			return nil, NewListGlobalIssuerConvergenceCandidatesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListGlobalIssuerConvergenceCandidatesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "listGlobalIssuerConvergenceCandidates", err)
+			}
+			err = ValidateListGlobalIssuerConvergenceCandidatesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "listGlobalIssuerConvergenceCandidates", err)
+			}
+			return nil, NewListGlobalIssuerConvergenceCandidatesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListGlobalIssuerConvergenceCandidatesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("adminRemoteSessions", "listGlobalIssuerConvergenceCandidates", err)
+				}
+				err = ValidateListGlobalIssuerConvergenceCandidatesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("adminRemoteSessions", "listGlobalIssuerConvergenceCandidates", err)
+				}
+				return nil, NewListGlobalIssuerConvergenceCandidatesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListGlobalIssuerConvergenceCandidatesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("adminRemoteSessions", "listGlobalIssuerConvergenceCandidates", err)
+				}
+				err = ValidateListGlobalIssuerConvergenceCandidatesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("adminRemoteSessions", "listGlobalIssuerConvergenceCandidates", err)
+				}
+				return nil, NewListGlobalIssuerConvergenceCandidatesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("adminRemoteSessions", "listGlobalIssuerConvergenceCandidates", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListGlobalIssuerConvergenceCandidatesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "listGlobalIssuerConvergenceCandidates", err)
+			}
+			err = ValidateListGlobalIssuerConvergenceCandidatesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "listGlobalIssuerConvergenceCandidates", err)
+			}
+			return nil, NewListGlobalIssuerConvergenceCandidatesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("adminRemoteSessions", "listGlobalIssuerConvergenceCandidates", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetGlobalIssuerMigratePreflightRequest instantiates a HTTP request
+// object with method and path set to call the "adminRemoteSessions" service
+// "getGlobalIssuerMigratePreflight" endpoint
+func (c *Client) BuildGetGlobalIssuerMigratePreflightRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetGlobalIssuerMigratePreflightAdminRemoteSessionsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("adminRemoteSessions", "getGlobalIssuerMigratePreflight", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetGlobalIssuerMigratePreflightRequest returns an encoder for requests
+// sent to the adminRemoteSessions getGlobalIssuerMigratePreflight server.
+func EncodeGetGlobalIssuerMigratePreflightRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*adminremotesessions.GetGlobalIssuerMigratePreflightPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("adminRemoteSessions", "getGlobalIssuerMigratePreflight", "*adminremotesessions.GetGlobalIssuerMigratePreflightPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("source_id", p.SourceID)
+		values.Add("target_id", p.TargetID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetGlobalIssuerMigratePreflightResponse returns a decoder for
+// responses returned by the adminRemoteSessions
+// getGlobalIssuerMigratePreflight endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeGetGlobalIssuerMigratePreflightResponse may return the following
+// errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetGlobalIssuerMigratePreflightResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetGlobalIssuerMigratePreflightResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "getGlobalIssuerMigratePreflight", err)
+			}
+			err = ValidateGetGlobalIssuerMigratePreflightResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "getGlobalIssuerMigratePreflight", err)
+			}
+			res := NewGetGlobalIssuerMigratePreflightIssuerMigratePreflightOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetGlobalIssuerMigratePreflightUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "getGlobalIssuerMigratePreflight", err)
+			}
+			err = ValidateGetGlobalIssuerMigratePreflightUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "getGlobalIssuerMigratePreflight", err)
+			}
+			return nil, NewGetGlobalIssuerMigratePreflightUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetGlobalIssuerMigratePreflightForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "getGlobalIssuerMigratePreflight", err)
+			}
+			err = ValidateGetGlobalIssuerMigratePreflightForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "getGlobalIssuerMigratePreflight", err)
+			}
+			return nil, NewGetGlobalIssuerMigratePreflightForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetGlobalIssuerMigratePreflightBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "getGlobalIssuerMigratePreflight", err)
+			}
+			err = ValidateGetGlobalIssuerMigratePreflightBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "getGlobalIssuerMigratePreflight", err)
+			}
+			return nil, NewGetGlobalIssuerMigratePreflightBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetGlobalIssuerMigratePreflightNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "getGlobalIssuerMigratePreflight", err)
+			}
+			err = ValidateGetGlobalIssuerMigratePreflightNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "getGlobalIssuerMigratePreflight", err)
+			}
+			return nil, NewGetGlobalIssuerMigratePreflightNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetGlobalIssuerMigratePreflightConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "getGlobalIssuerMigratePreflight", err)
+			}
+			err = ValidateGetGlobalIssuerMigratePreflightConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "getGlobalIssuerMigratePreflight", err)
+			}
+			return nil, NewGetGlobalIssuerMigratePreflightConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetGlobalIssuerMigratePreflightUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "getGlobalIssuerMigratePreflight", err)
+			}
+			err = ValidateGetGlobalIssuerMigratePreflightUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "getGlobalIssuerMigratePreflight", err)
+			}
+			return nil, NewGetGlobalIssuerMigratePreflightUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetGlobalIssuerMigratePreflightInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "getGlobalIssuerMigratePreflight", err)
+			}
+			err = ValidateGetGlobalIssuerMigratePreflightInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "getGlobalIssuerMigratePreflight", err)
+			}
+			return nil, NewGetGlobalIssuerMigratePreflightInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetGlobalIssuerMigratePreflightInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("adminRemoteSessions", "getGlobalIssuerMigratePreflight", err)
+				}
+				err = ValidateGetGlobalIssuerMigratePreflightInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("adminRemoteSessions", "getGlobalIssuerMigratePreflight", err)
+				}
+				return nil, NewGetGlobalIssuerMigratePreflightInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetGlobalIssuerMigratePreflightUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("adminRemoteSessions", "getGlobalIssuerMigratePreflight", err)
+				}
+				err = ValidateGetGlobalIssuerMigratePreflightUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("adminRemoteSessions", "getGlobalIssuerMigratePreflight", err)
+				}
+				return nil, NewGetGlobalIssuerMigratePreflightUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("adminRemoteSessions", "getGlobalIssuerMigratePreflight", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetGlobalIssuerMigratePreflightGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "getGlobalIssuerMigratePreflight", err)
+			}
+			err = ValidateGetGlobalIssuerMigratePreflightGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "getGlobalIssuerMigratePreflight", err)
+			}
+			return nil, NewGetGlobalIssuerMigratePreflightGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("adminRemoteSessions", "getGlobalIssuerMigratePreflight", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildMigrateToGlobalIssuerRequest instantiates a HTTP request object with
+// method and path set to call the "adminRemoteSessions" service
+// "migrateToGlobalIssuer" endpoint
+func (c *Client) BuildMigrateToGlobalIssuerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: MigrateToGlobalIssuerAdminRemoteSessionsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("adminRemoteSessions", "migrateToGlobalIssuer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeMigrateToGlobalIssuerRequest returns an encoder for requests sent to
+// the adminRemoteSessions migrateToGlobalIssuer server.
+func EncodeMigrateToGlobalIssuerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*adminremotesessions.MigrateToGlobalIssuerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("adminRemoteSessions", "migrateToGlobalIssuer", "*adminremotesessions.MigrateToGlobalIssuerPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewMigrateToGlobalIssuerRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("adminRemoteSessions", "migrateToGlobalIssuer", err)
+		}
+		return nil
+	}
+}
+
+// DecodeMigrateToGlobalIssuerResponse returns a decoder for responses returned
+// by the adminRemoteSessions migrateToGlobalIssuer endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeMigrateToGlobalIssuerResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeMigrateToGlobalIssuerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body MigrateToGlobalIssuerResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "migrateToGlobalIssuer", err)
+			}
+			err = ValidateMigrateToGlobalIssuerResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "migrateToGlobalIssuer", err)
+			}
+			res := NewMigrateToGlobalIssuerMigrateRemoteSessionIssuerResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body MigrateToGlobalIssuerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "migrateToGlobalIssuer", err)
+			}
+			err = ValidateMigrateToGlobalIssuerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "migrateToGlobalIssuer", err)
+			}
+			return nil, NewMigrateToGlobalIssuerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body MigrateToGlobalIssuerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "migrateToGlobalIssuer", err)
+			}
+			err = ValidateMigrateToGlobalIssuerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "migrateToGlobalIssuer", err)
+			}
+			return nil, NewMigrateToGlobalIssuerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body MigrateToGlobalIssuerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "migrateToGlobalIssuer", err)
+			}
+			err = ValidateMigrateToGlobalIssuerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "migrateToGlobalIssuer", err)
+			}
+			return nil, NewMigrateToGlobalIssuerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body MigrateToGlobalIssuerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "migrateToGlobalIssuer", err)
+			}
+			err = ValidateMigrateToGlobalIssuerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "migrateToGlobalIssuer", err)
+			}
+			return nil, NewMigrateToGlobalIssuerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body MigrateToGlobalIssuerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "migrateToGlobalIssuer", err)
+			}
+			err = ValidateMigrateToGlobalIssuerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "migrateToGlobalIssuer", err)
+			}
+			return nil, NewMigrateToGlobalIssuerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body MigrateToGlobalIssuerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "migrateToGlobalIssuer", err)
+			}
+			err = ValidateMigrateToGlobalIssuerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "migrateToGlobalIssuer", err)
+			}
+			return nil, NewMigrateToGlobalIssuerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body MigrateToGlobalIssuerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "migrateToGlobalIssuer", err)
+			}
+			err = ValidateMigrateToGlobalIssuerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "migrateToGlobalIssuer", err)
+			}
+			return nil, NewMigrateToGlobalIssuerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body MigrateToGlobalIssuerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("adminRemoteSessions", "migrateToGlobalIssuer", err)
+				}
+				err = ValidateMigrateToGlobalIssuerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("adminRemoteSessions", "migrateToGlobalIssuer", err)
+				}
+				return nil, NewMigrateToGlobalIssuerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body MigrateToGlobalIssuerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("adminRemoteSessions", "migrateToGlobalIssuer", err)
+				}
+				err = ValidateMigrateToGlobalIssuerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("adminRemoteSessions", "migrateToGlobalIssuer", err)
+				}
+				return nil, NewMigrateToGlobalIssuerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("adminRemoteSessions", "migrateToGlobalIssuer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body MigrateToGlobalIssuerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("adminRemoteSessions", "migrateToGlobalIssuer", err)
+			}
+			err = ValidateMigrateToGlobalIssuerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("adminRemoteSessions", "migrateToGlobalIssuer", err)
+			}
+			return nil, NewMigrateToGlobalIssuerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("adminRemoteSessions", "migrateToGlobalIssuer", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// unmarshalGlobalRemoteSessionIssuerResponseBodyToAdminremotesessionsGlobalRemoteSessionIssuer
+// builds a value of type *adminremotesessions.GlobalRemoteSessionIssuer from a
+// value of type *GlobalRemoteSessionIssuerResponseBody.
+func unmarshalGlobalRemoteSessionIssuerResponseBodyToAdminremotesessionsGlobalRemoteSessionIssuer(v *GlobalRemoteSessionIssuerResponseBody) *adminremotesessions.GlobalRemoteSessionIssuer {
+	res := &adminremotesessions.GlobalRemoteSessionIssuer{
+		GlobalClientCount: *v.GlobalClientCount,
+		TenantClientCount: *v.TenantClientCount,
+	}
+	res.Issuer = unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v.Issuer)
+
+	return res
+}
+
 // unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer builds a
 // value of type *types.RemoteSessionIssuer from a value of type
 // *RemoteSessionIssuerResponseBody.
@@ -2430,6 +3630,28 @@ func unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(v *Remot
 		for i, val := range v.Scope {
 			res.Scope[i] = val
 		}
+	}
+
+	return res
+}
+
+// unmarshalIssuerConvergenceCandidateResponseBodyToAdminremotesessionsIssuerConvergenceCandidate
+// builds a value of type *adminremotesessions.IssuerConvergenceCandidate from
+// a value of type *IssuerConvergenceCandidateResponseBody.
+func unmarshalIssuerConvergenceCandidateResponseBodyToAdminremotesessionsIssuerConvergenceCandidate(v *IssuerConvergenceCandidateResponseBody) *adminremotesessions.IssuerConvergenceCandidate {
+	res := &adminremotesessions.IssuerConvergenceCandidate{
+		OrganizationID:   *v.OrganizationID,
+		OrganizationName: *v.OrganizationName,
+		ClientCount:      *v.ClientCount,
+	}
+	res.Issuer = unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v.Issuer)
+	res.EndpointMismatches = make([]string, len(v.EndpointMismatches))
+	for i, val := range v.EndpointMismatches {
+		res.EndpointMismatches[i] = val
+	}
+	res.Warnings = make([]string, len(v.Warnings))
+	for i, val := range v.Warnings {
+		res.Warnings[i] = val
 	}
 
 	return res

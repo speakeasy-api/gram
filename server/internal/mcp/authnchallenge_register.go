@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -101,7 +102,7 @@ func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint
 
 	req.SetDefaults()
 	if err := req.Validate(); err != nil {
-		var oauthErr *usersessions.OAuthError
+		var oauthErr *oauthwire.Error
 		if errors.As(err, &oauthErr) {
 			return writeDCRError(ctx, w, logger, oauthErr.Code, oauthErr.Description)
 		}

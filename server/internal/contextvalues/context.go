@@ -65,6 +65,7 @@ const (
 	AdminAuthContextKey         contextKey = "adminAuthKey"
 	RPCContextKey               contextKey = "rpcContextKey"
 	pubsubSubscriberContextKey  contextKey = "pubsubSubscriberKey"
+	oauthClientIDContextKey     contextKey = "oauthClientIDKey"
 )
 
 func SetSessionTokenInContext(ctx context.Context, value string) context.Context {
@@ -138,6 +139,26 @@ func SetAssistantPrincipal(ctx context.Context, value AssistantPrincipal) contex
 func GetAssistantPrincipal(ctx context.Context) (AssistantPrincipal, bool) {
 	value, ok := ctx.Value(AssistantPrincipalKey).(AssistantPrincipal)
 	return value, ok
+}
+
+// SetOAuthClientID records the OAuth client the request's bearer token was
+// issued to.
+//
+// It lives outside AuthContext on purpose: an anonymous session on a public
+// MCP server has a real registered OAuth client but deliberately never gets an
+// AuthContext, since stamping the endpoint's organization would misrepresent
+// an unknown caller as a member of it.
+func SetOAuthClientID(ctx context.Context, value string) context.Context {
+	return context.WithValue(ctx, oauthClientIDContextKey, value)
+}
+
+// GetOAuthClientID returns the OAuth client the request authenticated as. The
+// second result is false when the request carried no OAuth client — an
+// unauthenticated caller, a non-OAuth credential, or a token minted before the
+// `client_id` claim existed.
+func GetOAuthClientID(ctx context.Context) (string, bool) {
+	value, ok := ctx.Value(oauthClientIDContextKey).(string)
+	return value, ok && value != ""
 }
 
 func SetAdminSessionTokenInContext(ctx context.Context, value string) context.Context {

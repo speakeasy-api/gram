@@ -1,14 +1,16 @@
 import { Page } from "@/components/page-layout";
 import { Textarea } from "@/components/moon/textarea";
 import { RequireScope } from "@/components/require-scope";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Type } from "@/components/ui/type";
+import { Badge } from "@/components/ui/Badge";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
-import { Button, Input, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Stack } from "@/components/ui/Stack";
 import { useQueries } from "@tanstack/react-query";
 import {
   Globe,
@@ -153,9 +155,9 @@ function CreateCollectionForm() {
 
   const selectedCount = selectedToolsetIds.size + selectedMcpServerIds.size;
 
-  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setName(e.target.value);
-    const newSlug = slugify(e.target.value);
+  const handleNameChange = (next: string) => {
+    setName(next);
+    const newSlug = slugify(next);
     if (!slugTouched) {
       setSlug(newSlug);
     }
@@ -243,8 +245,8 @@ function CreateCollectionForm() {
                 id="slug"
                 placeholder="e.g. developer-productivity-suite"
                 value={slug}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                  setSlug(e.target.value);
+                onChange={(value) => {
+                  setSlug(value);
                   setSlugTouched(true);
                 }}
                 required
@@ -262,8 +264,8 @@ function CreateCollectionForm() {
                 id="namespace"
                 placeholder={`${baseNamespace}.my-collection`}
                 value={namespace}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                  setNamespace(e.target.value);
+                onChange={(value) => {
+                  setNamespace(value);
                   setNamespaceTouched(true);
                 }}
                 required
@@ -298,7 +300,7 @@ function CreateCollectionForm() {
                 <button
                   type="button"
                   className={cn(
-                    "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
+                    "flex items-center gap-1.5 border px-3 py-1.5 text-sm transition-colors",
                     visibility === "public"
                       ? "border-foreground/30 bg-accent"
                       : "border-border hover:bg-accent/50",
@@ -311,7 +313,7 @@ function CreateCollectionForm() {
                 <button
                   type="button"
                   className={cn(
-                    "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors",
+                    "flex items-center gap-1.5 border px-3 py-1.5 text-sm transition-colors",
                     visibility === "private"
                       ? "border-foreground/30 bg-accent"
                       : "border-border hover:bg-accent/50",
@@ -333,7 +335,7 @@ function CreateCollectionForm() {
               <label className="mb-2 block text-sm font-medium">
                 MCP Servers ({selectedCount} selected)
               </label>
-              <div className="rounded-md border">
+              <div className="border">
                 <div className="relative border-b">
                   <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
                   <input
@@ -352,11 +354,11 @@ function CreateCollectionForm() {
                   ) : filteredServers.length === 0 ? (
                     <div className="flex flex-col items-center justify-center p-4 text-center">
                       <ServerIcon className="text-muted-foreground mb-1 h-6 w-6" />
-                      <Type small muted>
+                      <Text small muted>
                         {serverSearch
                           ? "No servers match your search."
                           : "No MCP servers available."}
-                      </Type>
+                      </Text>
                     </div>
                   ) : (
                     filteredServers.map((server) => (
@@ -376,14 +378,14 @@ function CreateCollectionForm() {
                             </span>
                             {server.kind === "mcpServer" && (
                               <Badge
-                                variant="secondary"
+                                variant="neutral"
                                 className="shrink-0 text-xs"
                               >
                                 Remote MCP
                               </Badge>
                             )}
                             <Badge
-                              variant="secondary"
+                              variant="neutral"
                               className="shrink-0 text-xs"
                             >
                               {server.projectName}

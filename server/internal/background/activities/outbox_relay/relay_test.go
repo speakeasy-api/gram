@@ -130,7 +130,6 @@ func TestFilterNoopEvents_PassesThroughEnabled(t *testing.T) {
 	payload := mustMarshal(t, map[string]any{"key": "value"})
 
 	orgID := seedOrg(t, inst.conn, "app-123", true)
-	enableWebhooksFeature(t, inst.conn, orgID)
 	outboxID := seedOutboxEntry(t, inst.conn, orgID, "test.event", payload)
 
 	events := []*outbox_relay.Event{
@@ -155,7 +154,6 @@ func TestFilterNoopEvents_NoSvixAppID(t *testing.T) {
 	payload := mustMarshal(t, map[string]any{"key": "value"})
 
 	orgID := seedOrg(t, inst.conn, "", false)
-	enableWebhooksFeature(t, inst.conn, orgID)
 	outboxID := seedOutboxEntry(t, inst.conn, orgID, "test.event", payload)
 
 	events := []*outbox_relay.Event{
@@ -179,35 +177,10 @@ func TestFilterNoopEvents_WebhooksDisabled(t *testing.T) {
 	payload := mustMarshal(t, map[string]any{"key": "value"})
 
 	orgID := seedOrg(t, inst.conn, "app-123", false)
-	enableWebhooksFeature(t, inst.conn, orgID)
 	outboxID := seedOutboxEntry(t, inst.conn, orgID, "test.event", payload)
 
 	events := []*outbox_relay.Event{
 		{OutboxID: outboxID, OrganizationID: orgID, SvixAppID: "app-123", WebhooksEnabled: false},
-	}
-
-	result, err := inst.relay.FilterNoopEvents(ctx, events)
-	require.NoError(t, err)
-	require.Empty(t, result)
-
-	state, err := testrepo.New(inst.conn).GetOutboxRelayState(ctx, outboxID)
-	require.NoError(t, err)
-	require.True(t, state.Noop)
-}
-
-func TestFilterNoopEvents_FeatureFlagDisabled(t *testing.T) {
-	t.Parallel()
-
-	inst := newRelayTestInstance(t)
-	ctx := t.Context()
-	payload := mustMarshal(t, map[string]any{"key": "value"})
-
-	// Org has svix configured but feature flag is NOT enabled.
-	orgID := seedOrg(t, inst.conn, "app-123", true)
-	outboxID := seedOutboxEntry(t, inst.conn, orgID, "test.event", payload)
-
-	events := []*outbox_relay.Event{
-		{OutboxID: outboxID, OrganizationID: orgID, SvixAppID: "app-123", WebhooksEnabled: true},
 	}
 
 	result, err := inst.relay.FilterNoopEvents(ctx, events)
@@ -228,21 +201,20 @@ func TestFilterNoopEvents_Mixed(t *testing.T) {
 
 	// Org A: webhooks enabled — event should pass through.
 	orgA := seedOrg(t, inst.conn, "app-a", true)
-	enableWebhooksFeature(t, inst.conn, orgA)
 	idA := seedOutboxEntry(t, inst.conn, orgA, "test.event", payload)
 
 	// Org B: no svix app ID — event should be noop'd.
 	orgB := seedOrg(t, inst.conn, "", false)
 	idB := seedOutboxEntry(t, inst.conn, orgB, "test.event", payload)
 
-	// Org C: feature flag disabled — event should be noop'd.
-	orgC := seedOrg(t, inst.conn, "app-c", true)
+	// Org C: onboarded to svix but webhooks turned off — event should be noop'd.
+	orgC := seedOrg(t, inst.conn, "app-c", false)
 	idC := seedOutboxEntry(t, inst.conn, orgC, "test.event", payload)
 
 	events := []*outbox_relay.Event{
 		{OutboxID: idA, OrganizationID: orgA, SvixAppID: "app-a", WebhooksEnabled: true},
 		{OutboxID: idB, OrganizationID: orgB, SvixAppID: "", WebhooksEnabled: false},
-		{OutboxID: idC, OrganizationID: orgC, SvixAppID: "app-c", WebhooksEnabled: true},
+		{OutboxID: idC, OrganizationID: orgC, SvixAppID: "app-c", WebhooksEnabled: false},
 	}
 
 	result, err := inst.relay.FilterNoopEvents(ctx, events)
@@ -263,26 +235,25 @@ func TestFilterNoopEvents_Mixed(t *testing.T) {
 	require.True(t, stateC.Noop)
 }
 
-func TestFilterNoopEvents_CachesPerOrg(t *testing.T) {
+func TestFilterNoopEvents_MultipleEventsSameOrg(t *testing.T) {
 	t.Parallel()
 
 	inst := newRelayTestInstance(t)
 	ctx := t.Context()
 	payload := mustMarshal(t, map[string]any{"key": "value"})
 
-	// Same org, two events: feature flag disabled → both noop'd.
-	orgID := seedOrg(t, inst.conn, "app-123", true)
+	// Same org, two events: webhooks disabled → both noop'd.
+	orgID := seedOrg(t, inst.conn, "app-123", false)
 	id1 := seedOutboxEntry(t, inst.conn, orgID, "test.event", payload)
 	id2 := seedOutboxEntry(t, inst.conn, orgID, "test.event", payload)
 
 	events := []*outbox_relay.Event{
-		{OutboxID: id1, OrganizationID: orgID, SvixAppID: "app-123", WebhooksEnabled: true},
-		{OutboxID: id2, OrganizationID: orgID, SvixAppID: "app-123", WebhooksEnabled: true},
+		{OutboxID: id1, OrganizationID: orgID, SvixAppID: "app-123", WebhooksEnabled: false},
+		{OutboxID: id2, OrganizationID: orgID, SvixAppID: "app-123", WebhooksEnabled: false},
 	}
 
 	result, err := inst.relay.FilterNoopEvents(ctx, events)
 	require.NoError(t, err)
-	// Feature flag not enabled, so both events are noop'd.
 	require.Empty(t, result)
 
 	q := testrepo.New(inst.conn)
@@ -312,10 +283,9 @@ func TestRelayEvents_SuccessfulDelivery(t *testing.T) {
 	ctx := t.Context()
 
 	orgID := seedOrg(t, inst.conn, "app-success", true)
-	enableWebhooksFeature(t, inst.conn, orgID)
 	outboxID := seedOutboxEntry(t, inst.conn, orgID, "test.event", mustMarshal(t, map[string]any{"action": "created"}))
 
-	inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything).
+	inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything, mock.Anything).
 		Return(&models.MessageOut{
 			Id:        "svix-msg-abc",
 			EventType: "test.event",
@@ -359,10 +329,9 @@ func testRelayPermanentError(t *testing.T, httpStatus int) {
 	ctx := t.Context()
 
 	orgID := seedOrg(t, inst.conn, "app-perm", true)
-	enableWebhooksFeature(t, inst.conn, orgID)
 	outboxID := seedOutboxEntry(t, inst.conn, orgID, "test.event", mustMarshal(t, map[string]any{"x": 1}))
 
-	inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything).
+	inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, &svixtest.HTTPStatusError{Code: httpStatus})
 
 	err := inst.relay.RelayEvents(ctx, []*outbox_relay.Event{
@@ -395,10 +364,9 @@ func testRelayTransientError(t *testing.T, httpStatus int) {
 	ctx := t.Context()
 
 	orgID := seedOrg(t, inst.conn, "app-trans", true)
-	enableWebhooksFeature(t, inst.conn, orgID)
 	outboxID := seedOutboxEntry(t, inst.conn, orgID, "test.event", mustMarshal(t, map[string]any{"x": 1}))
 
-	inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything).
+	inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, &svixtest.HTTPStatusError{Code: httpStatus})
 
 	err := inst.relay.RelayEvents(ctx, []*outbox_relay.Event{
@@ -422,13 +390,12 @@ func TestRelayEvents_MaxAttemptsExceeded(t *testing.T) {
 	ctx := t.Context()
 
 	orgID := seedOrg(t, inst.conn, "app-maxretry", true)
-	enableWebhooksFeature(t, inst.conn, orgID)
 	outboxID := seedOutboxEntry(t, inst.conn, orgID, "test.event", mustMarshal(t, map[string]any{"x": 1}))
 
 	// Pre-seed 9 failed attempts — next failure (attempt 10) should dead-letter.
 	preloadAttempts(t, inst.conn, outboxID, 9)
 
-	inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything).
+	inst.svixSrv.On("CreateMessage", mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, &svixtest.HTTPStatusError{Code: 500})
 
 	err := inst.relay.RelayEvents(ctx, []*outbox_relay.Event{
@@ -450,7 +417,6 @@ func TestRelayEvents_InvalidPayload(t *testing.T) {
 	ctx := t.Context()
 
 	orgID := seedOrg(t, inst.conn, "app-badpayload", true)
-	enableWebhooksFeature(t, inst.conn, orgID)
 	// JSON array is valid JSONB but fails json.Unmarshal to map[string]any.
 	outboxID := seedOutboxEntry(t, inst.conn, orgID, "test.event", []byte(`[1, 2, 3]`))
 

@@ -29,6 +29,9 @@ type Server struct {
 	ListRiskResultsForAgent        http.Handler
 	UnmaskRiskResult               http.Handler
 	ListRiskResultsByChat          http.Handler
+	MarkRiskResultsFalsePositive   http.Handler
+	UnmarkRiskResultsFalsePositive http.Handler
+	ListDismissedRiskResults       http.Handler
 	GetRiskOverview                http.Handler
 	ListRiskCategories             http.Handler
 	CompileExpr                    http.Handler
@@ -101,6 +104,9 @@ func New(
 			{"ListRiskResultsForAgent", "GET", "/rpc/risk.listResultsForAgent"},
 			{"UnmaskRiskResult", "POST", "/rpc/risk.unmaskResult"},
 			{"ListRiskResultsByChat", "GET", "/rpc/risk.listResultsByChat"},
+			{"MarkRiskResultsFalsePositive", "POST", "/rpc/risk.markResultsFalsePositive"},
+			{"UnmarkRiskResultsFalsePositive", "POST", "/rpc/risk.unmarkResultsFalsePositive"},
+			{"ListDismissedRiskResults", "GET", "/rpc/risk.listDismissedResults"},
 			{"GetRiskOverview", "GET", "/rpc/risk.getOverview"},
 			{"ListRiskCategories", "GET", "/rpc/risk.listCategories"},
 			{"CompileExpr", "GET", "/rpc/risk.compileCELExpression"},
@@ -145,6 +151,9 @@ func New(
 		ListRiskResultsForAgent:        NewListRiskResultsForAgentHandler(e.ListRiskResultsForAgent, mux, decoder, encoder, errhandler, formatter),
 		UnmaskRiskResult:               NewUnmaskRiskResultHandler(e.UnmaskRiskResult, mux, decoder, encoder, errhandler, formatter),
 		ListRiskResultsByChat:          NewListRiskResultsByChatHandler(e.ListRiskResultsByChat, mux, decoder, encoder, errhandler, formatter),
+		MarkRiskResultsFalsePositive:   NewMarkRiskResultsFalsePositiveHandler(e.MarkRiskResultsFalsePositive, mux, decoder, encoder, errhandler, formatter),
+		UnmarkRiskResultsFalsePositive: NewUnmarkRiskResultsFalsePositiveHandler(e.UnmarkRiskResultsFalsePositive, mux, decoder, encoder, errhandler, formatter),
+		ListDismissedRiskResults:       NewListDismissedRiskResultsHandler(e.ListDismissedRiskResults, mux, decoder, encoder, errhandler, formatter),
 		GetRiskOverview:                NewGetRiskOverviewHandler(e.GetRiskOverview, mux, decoder, encoder, errhandler, formatter),
 		ListRiskCategories:             NewListRiskCategoriesHandler(e.ListRiskCategories, mux, decoder, encoder, errhandler, formatter),
 		CompileExpr:                    NewCompileExprHandler(e.CompileExpr, mux, decoder, encoder, errhandler, formatter),
@@ -196,6 +205,9 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListRiskResultsForAgent = m(s.ListRiskResultsForAgent)
 	s.UnmaskRiskResult = m(s.UnmaskRiskResult)
 	s.ListRiskResultsByChat = m(s.ListRiskResultsByChat)
+	s.MarkRiskResultsFalsePositive = m(s.MarkRiskResultsFalsePositive)
+	s.UnmarkRiskResultsFalsePositive = m(s.UnmarkRiskResultsFalsePositive)
+	s.ListDismissedRiskResults = m(s.ListDismissedRiskResults)
 	s.GetRiskOverview = m(s.GetRiskOverview)
 	s.ListRiskCategories = m(s.ListRiskCategories)
 	s.CompileExpr = m(s.CompileExpr)
@@ -246,6 +258,9 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListRiskResultsForAgentHandler(mux, h.ListRiskResultsForAgent)
 	MountUnmaskRiskResultHandler(mux, h.UnmaskRiskResult)
 	MountListRiskResultsByChatHandler(mux, h.ListRiskResultsByChat)
+	MountMarkRiskResultsFalsePositiveHandler(mux, h.MarkRiskResultsFalsePositive)
+	MountUnmarkRiskResultsFalsePositiveHandler(mux, h.UnmarkRiskResultsFalsePositive)
+	MountListDismissedRiskResultsHandler(mux, h.ListDismissedRiskResults)
 	MountGetRiskOverviewHandler(mux, h.GetRiskOverview)
 	MountListRiskCategoriesHandler(mux, h.ListRiskCategories)
 	MountCompileExprHandler(mux, h.CompileExpr)
@@ -793,6 +808,168 @@ func NewListRiskResultsByChatHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listRiskResultsByChat")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountMarkRiskResultsFalsePositiveHandler configures the mux to serve the
+// "risk" service "markRiskResultsFalsePositive" endpoint.
+func MountMarkRiskResultsFalsePositiveHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/risk.markResultsFalsePositive", f)
+}
+
+// NewMarkRiskResultsFalsePositiveHandler creates a HTTP handler which loads
+// the HTTP request and calls the "risk" service "markRiskResultsFalsePositive"
+// endpoint.
+func NewMarkRiskResultsFalsePositiveHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeMarkRiskResultsFalsePositiveRequest(mux, decoder)
+		encodeResponse = EncodeMarkRiskResultsFalsePositiveResponse(encoder)
+		encodeError    = EncodeMarkRiskResultsFalsePositiveError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "markRiskResultsFalsePositive")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUnmarkRiskResultsFalsePositiveHandler configures the mux to serve the
+// "risk" service "unmarkRiskResultsFalsePositive" endpoint.
+func MountUnmarkRiskResultsFalsePositiveHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/risk.unmarkResultsFalsePositive", f)
+}
+
+// NewUnmarkRiskResultsFalsePositiveHandler creates a HTTP handler which loads
+// the HTTP request and calls the "risk" service
+// "unmarkRiskResultsFalsePositive" endpoint.
+func NewUnmarkRiskResultsFalsePositiveHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUnmarkRiskResultsFalsePositiveRequest(mux, decoder)
+		encodeResponse = EncodeUnmarkRiskResultsFalsePositiveResponse(encoder)
+		encodeError    = EncodeUnmarkRiskResultsFalsePositiveError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "unmarkRiskResultsFalsePositive")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListDismissedRiskResultsHandler configures the mux to serve the "risk"
+// service "listDismissedRiskResults" endpoint.
+func MountListDismissedRiskResultsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/risk.listDismissedResults", f)
+}
+
+// NewListDismissedRiskResultsHandler creates a HTTP handler which loads the
+// HTTP request and calls the "risk" service "listDismissedRiskResults"
+// endpoint.
+func NewListDismissedRiskResultsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListDismissedRiskResultsRequest(mux, decoder)
+		encodeResponse = EncodeListDismissedRiskResultsResponse(encoder)
+		encodeError    = EncodeListDismissedRiskResultsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listDismissedRiskResults")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "risk")
 		payload, err := decodeRequest(r)
 		if err != nil {

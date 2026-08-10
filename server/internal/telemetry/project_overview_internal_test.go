@@ -9,10 +9,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/codes"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"go.opentelemetry.io/otel/sdk/trace/tracetest"
-	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
@@ -23,9 +19,8 @@ func TestFetchProjectOverviewClickHouseRunsSessionQueriesConcurrently(t *testing
 	reader := newBarrierProjectOverviewReader(4)
 	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 	defer cancel()
-	tracer, recorder := newProjectOverviewTestTracer(t)
 
-	result, err := fetchProjectOverviewClickHouse(ctx, tracer, reader, projectOverviewClickHouseParams{
+	result, err := fetchProjectOverviewClickHouse(ctx, reader, projectOverviewClickHouseParams{
 		projectID:       "00000000-0000-0000-0000-000000000001",
 		timeStart:       200,
 		timeEnd:         300,
@@ -47,7 +42,6 @@ func TestFetchProjectOverviewClickHouseRunsSessionQueriesConcurrently(t *testing
 	require.Equal(t, int32(1), reader.topServerCalls.Load())
 	require.Zero(t, reader.topUserCalls.Load())
 	require.Zero(t, reader.llmClientCalls.Load())
-	require.Len(t, recorder.Ended(), 4)
 }
 
 func TestFetchProjectOverviewClickHouseRunsToolCallQueriesConcurrently(t *testing.T) {
@@ -56,9 +50,8 @@ func TestFetchProjectOverviewClickHouseRunsToolCallQueriesConcurrently(t *testin
 	reader := newBarrierProjectOverviewReader(6)
 	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 	defer cancel()
-	tracer, recorder := newProjectOverviewTestTracer(t)
 
-	result, err := fetchProjectOverviewClickHouse(ctx, tracer, reader, projectOverviewClickHouseParams{
+	result, err := fetchProjectOverviewClickHouse(ctx, reader, projectOverviewClickHouseParams{
 		projectID:       "00000000-0000-0000-0000-000000000001",
 		timeStart:       200,
 		timeEnd:         300,
@@ -80,52 +73,6 @@ func TestFetchProjectOverviewClickHouseRunsToolCallQueriesConcurrently(t *testin
 	require.Equal(t, int32(1), reader.topServerCalls.Load())
 	require.Equal(t, int32(1), reader.topUserCalls.Load())
 	require.Equal(t, int32(1), reader.llmClientCalls.Load())
-	require.Len(t, recorder.Ended(), 6)
-}
-
-func TestTraceProjectOverviewQueryMarksFailedSpanAsError(t *testing.T) {
-	t.Parallel()
-
-	tracer, recorder := newProjectOverviewTestTracer(t)
-	queryErr := fmt.Errorf("query failed")
-
-	err := traceProjectOverviewQuery(t.Context(), tracer, "project-overview-query", func(context.Context) error {
-		return queryErr
-	})
-	require.ErrorIs(t, err, queryErr)
-
-	spans := recorder.Ended()
-	require.Len(t, spans, 1)
-	require.Equal(t, codes.Error, spans[0].Status().Code)
-	require.Equal(t, queryErr.Error(), spans[0].Status().Description)
-	require.Len(t, spans[0].Events(), 1)
-	require.Equal(t, "exception", spans[0].Events()[0].Name)
-}
-
-func TestTraceProjectOverviewQueryLeavesSuccessfulSpanUnset(t *testing.T) {
-	t.Parallel()
-
-	tracer, recorder := newProjectOverviewTestTracer(t)
-
-	err := traceProjectOverviewQuery(t.Context(), tracer, "project-overview-query", func(context.Context) error {
-		return nil
-	})
-	require.NoError(t, err)
-
-	spans := recorder.Ended()
-	require.Len(t, spans, 1)
-	require.Equal(t, codes.Unset, spans[0].Status().Code)
-	require.Empty(t, spans[0].Events())
-}
-
-func newProjectOverviewTestTracer(t *testing.T) (trace.Tracer, *tracetest.SpanRecorder) {
-	t.Helper()
-
-	recorder := tracetest.NewSpanRecorder()
-	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
-	t.Cleanup(func() { _ = provider.Shutdown(context.Background()) })
-
-	return provider.Tracer("project-overview-test"), recorder
 }
 
 type barrierProjectOverviewReader struct {

@@ -1,15 +1,15 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { CardContextMenu } from "@/components/card-context-menu";
-import { Card, Cards } from "@/components/ui/card";
-import { Action, MoreActions } from "@/components/ui/more-actions";
+import { Card, Cards } from "@/components/ui/Card";
+import { Action, MoreActions } from "@/components/ui/MoreActions";
 import { UpdatedAt } from "@/components/updated-at";
 import { useRoutes } from "@/routes";
 import { PromptTemplate } from "@gram/client/models/components/prompttemplate.js";
 import { useDeleteTemplateMutation } from "@gram/client/react-query/deleteTemplate.js";
 import { invalidateAllTemplates } from "@gram/client/react-query/templates.js";
 import { usePrompts } from "./usePrompts";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { Outlet } from "react-router";

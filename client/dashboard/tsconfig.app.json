@@ -10,6 +10,7 @@
 
     /* Bundler mode */
     "moduleResolution": "bundler",
+    "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
     "isolatedModules": true,
     "moduleDetection": "force",
@@ -30,5 +31,5 @@
     "noUncheckedIndexedAccess": true,
     "erasableSyntaxOnly": true
   },
-  "include": ["src"]
+  "include": ["src", ".storybook/preview.tsx", ".storybook/providers.tsx"]
 }

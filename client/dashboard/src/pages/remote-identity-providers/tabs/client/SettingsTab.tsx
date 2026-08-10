@@ -1,13 +1,13 @@
 import { RequireScope } from "@/components/require-scope";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Type } from "@/components/ui/type";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { Text } from "@/components/ui/Text";
 import { useOrgRoutes } from "@/routes";
 import type { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import { invalidateAllOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
 import { useUpdateOrganizationRemoteSessionClientMutation } from "@gram/client/react-query/updateOrganizationRemoteSessionClient.js";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -88,10 +88,10 @@ export function SettingsTab({
             onChange={setClientSecret}
             placeholder="Enter a new secret to rotate; leave blank to keep current"
           />
-          <Type small muted>
+          <Text small muted>
             The secret is encrypted at rest and never displayed. Leave blank to
             keep the existing secret.
-          </Type>
+          </Text>
         </div>
         <div>
           <RequireScope scope="org:admin" level="component">
@@ -104,11 +104,11 @@ export function SettingsTab({
         </div>
       </div>
 
-      <div className="border-destructive/30 flex flex-col gap-2 rounded-md border p-4">
-        <Type className="font-medium">Danger Zone</Type>
-        <Type small muted>
+      <div className="border-destructive/30 flex flex-col gap-2 border p-4">
+        <Text className="font-medium">Danger Zone</Text>
+        <Text small muted>
           Deleting this client is permanent and revokes all of its sessions.
-        </Type>
+        </Text>
         <div>
           <RequireScope scope="org:admin" level="component">
             <Button

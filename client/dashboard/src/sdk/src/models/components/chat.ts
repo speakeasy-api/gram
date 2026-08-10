@@ -8,6 +8,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { AgentUsage, AgentUsage$inboundSchema } from "./agentusage.js";
+import {
+  ChatContentPart,
+  ChatContentPart$inboundSchema,
+} from "./chatcontentpart.js";
 import { ChatMessage, ChatMessage$inboundSchema } from "./chatmessage.js";
 import { ChatTotals, ChatTotals$inboundSchema } from "./chattotals.js";
 import { RiskSegment, RiskSegment$inboundSchema } from "./risksegment.js";
@@ -22,6 +26,18 @@ export type Chat = {
    */
   accountType?: string | undefined;
   agentUsage?: AgentUsage | undefined;
+  /**
+   * The ID of the assistant that produced this chat, if any
+   */
+  assistantId?: string | undefined;
+  /**
+   * The name of the assistant that produced this chat, if any
+   */
+  assistantName?: string | undefined;
+  /**
+   * Non-turn content attached to this chat, such as prompt attachments.
+   */
+  contentParts: Array<ChatContentPart>;
   /**
    * When the chat was created.
    */
@@ -67,6 +83,10 @@ export type Chat = {
    */
   numMessages: number;
   /**
+   * True when the chat is pinned
+   */
+  pinned?: boolean | undefined;
+  /**
    * Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
    */
   riskFindingsCount?: number | undefined;
@@ -78,6 +98,14 @@ export type Chat = {
    * The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)
    */
   source?: string | undefined;
+  /**
+   * Persisted LLM summary of the session transcript, if one has been generated
+   */
+  summary?: string | undefined;
+  /**
+   * When the session summary was last generated.
+   */
+  summaryGeneratedAt?: Date | undefined;
   /**
    * The title of the chat
    */
@@ -110,6 +138,14 @@ export type Chat = {
    * The ID of the user who created the chat
    */
   userId?: string | undefined;
+  /**
+   * Work units of value delivered in this chat as judged by the work-units analysis. Absent unless the organization has work-units analysis enabled and this chat has been scored.
+   */
+  workUnits?: number | undefined;
+  /**
+   * Full work-units analysis verdict as JSON (per-task breakdown, rationales, and flags). Present only when `work_units` is present.
+   */
+  workUnitsReport?: string | undefined;
 };
 
 /** @internal */
@@ -118,6 +154,9 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
     account_email: z.optional(z.string()),
     account_type: z.optional(z.string()),
     agent_usage: z.optional(AgentUsage$inboundSchema),
+    assistant_id: z.optional(z.string()),
+    assistant_name: z.optional(z.string()),
+    content_parts: z.array(ChatContentPart$inboundSchema),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -135,9 +174,14 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
     max_generation: z.int(),
     messages: z.array(ChatMessage$inboundSchema),
     num_messages: z.int(),
+    pinned: z.optional(z.boolean()),
     risk_findings_count: z.optional(z.int()),
     risk_segments: z.optional(z.array(RiskSegment$inboundSchema)),
     source: z.optional(z.string()),
+    summary: z.optional(z.string()),
+    summary_generated_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
     title: z.string(),
     total_cost: z.optional(z.number()),
     total_input_tokens: z.optional(z.int()),
@@ -149,12 +193,17 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
       z.transform(v => new Date(v)),
     ),
     user_id: z.optional(z.string()),
+    work_units: z.optional(z.number()),
+    work_units_report: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       "account_email": "accountEmail",
       "account_type": "accountType",
       "agent_usage": "agentUsage",
+      "assistant_id": "assistantId",
+      "assistant_name": "assistantName",
+      "content_parts": "contentParts",
       "created_at": "createdAt",
       "external_user_id": "externalUserId",
       "has_more_after": "hasMoreAfter",
@@ -165,12 +214,15 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
       "num_messages": "numMessages",
       "risk_findings_count": "riskFindingsCount",
       "risk_segments": "riskSegments",
+      "summary_generated_at": "summaryGeneratedAt",
       "total_cost": "totalCost",
       "total_input_tokens": "totalInputTokens",
       "total_output_tokens": "totalOutputTokens",
       "total_tokens": "totalTokens",
       "updated_at": "updatedAt",
       "user_id": "userId",
+      "work_units": "workUnits",
+      "work_units_report": "workUnitsReport",
     });
   }),
 );

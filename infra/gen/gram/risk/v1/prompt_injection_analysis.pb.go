@@ -37,6 +37,7 @@ type PromptInjectionAnalysis struct {
 	xxx_hidden_Body              *string                              `protobuf:"bytes,12,opt,name=body"`
 	xxx_hidden_ToolName          *string                              `protobuf:"bytes,13,opt,name=tool_name,json=toolName"`
 	xxx_hidden_ToolCalls         *[]*PromptInjectionAnalysis_ToolCall `protobuf:"bytes,14,rep,name=tool_calls,json=toolCalls"`
+	xxx_hidden_ContentPartId     *string                              `protobuf:"bytes,15,opt,name=content_part_id,json=contentPartId"`
 	XXX_raceDetectHookData       protoimpl.RaceDetectHookData
 	XXX_presence                 [1]uint32
 	unknownFields                protoimpl.UnknownFields
@@ -201,73 +202,88 @@ func (x *PromptInjectionAnalysis) GetToolCalls() []*PromptInjectionAnalysis_Tool
 	return nil
 }
 
+func (x *PromptInjectionAnalysis) GetContentPartId() string {
+	if x != nil {
+		if x.xxx_hidden_ContentPartId != nil {
+			return *x.xxx_hidden_ContentPartId
+		}
+		return ""
+	}
+	return ""
+}
+
 func (x *PromptInjectionAnalysis) SetRequestId(v string) {
 	x.xxx_hidden_RequestId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 14)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 15)
 }
 
 func (x *PromptInjectionAnalysis) SetChatMessageId(v string) {
 	x.xxx_hidden_ChatMessageId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 14)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 15)
 }
 
 func (x *PromptInjectionAnalysis) SetProjectId(v string) {
 	x.xxx_hidden_ProjectId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 14)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 15)
 }
 
 func (x *PromptInjectionAnalysis) SetOrganizationId(v string) {
 	x.xxx_hidden_OrganizationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 14)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 15)
 }
 
 func (x *PromptInjectionAnalysis) SetRiskPolicyId(v string) {
 	x.xxx_hidden_RiskPolicyId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 14)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 15)
 }
 
 func (x *PromptInjectionAnalysis) SetRiskPolicyVersion(v int64) {
 	x.xxx_hidden_RiskPolicyVersion = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 14)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 15)
 }
 
 func (x *PromptInjectionAnalysis) SetCreatedAt(v string) {
 	x.xxx_hidden_CreatedAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 14)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 15)
 }
 
 func (x *PromptInjectionAnalysis) SetContent(v string) {
 	x.xxx_hidden_Content = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 14)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 15)
 }
 
 func (x *PromptInjectionAnalysis) SetUserId(v string) {
 	x.xxx_hidden_UserId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 14)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 15)
 }
 
 func (x *PromptInjectionAnalysis) SetL1Enabled(v bool) {
 	x.xxx_hidden_L1Enabled = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 14)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 15)
 }
 
 func (x *PromptInjectionAnalysis) SetMessageType(v string) {
 	x.xxx_hidden_MessageType = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 14)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 15)
 }
 
 func (x *PromptInjectionAnalysis) SetBody(v string) {
 	x.xxx_hidden_Body = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 14)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 15)
 }
 
 func (x *PromptInjectionAnalysis) SetToolName(v string) {
 	x.xxx_hidden_ToolName = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 14)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 15)
 }
 
 func (x *PromptInjectionAnalysis) SetToolCalls(v []*PromptInjectionAnalysis_ToolCall) {
 	x.xxx_hidden_ToolCalls = &v
+}
+
+func (x *PromptInjectionAnalysis) SetContentPartId(v string) {
+	x.xxx_hidden_ContentPartId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 14, 15)
 }
 
 func (x *PromptInjectionAnalysis) HasRequestId() bool {
@@ -361,6 +377,13 @@ func (x *PromptInjectionAnalysis) HasToolName() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 12)
 }
 
+func (x *PromptInjectionAnalysis) HasContentPartId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 14)
+}
+
 func (x *PromptInjectionAnalysis) ClearRequestId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_RequestId = nil
@@ -426,6 +449,11 @@ func (x *PromptInjectionAnalysis) ClearToolName() {
 	x.xxx_hidden_ToolName = nil
 }
 
+func (x *PromptInjectionAnalysis) ClearContentPartId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 14)
+	x.xxx_hidden_ContentPartId = nil
+}
+
 type PromptInjectionAnalysis_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
@@ -443,6 +471,7 @@ type PromptInjectionAnalysis_builder struct {
 	Body              *string
 	ToolName          *string
 	ToolCalls         []*PromptInjectionAnalysis_ToolCall
+	ContentPartId     *string
 }
 
 func (b0 PromptInjectionAnalysis_builder) Build() *PromptInjectionAnalysis {
@@ -450,58 +479,62 @@ func (b0 PromptInjectionAnalysis_builder) Build() *PromptInjectionAnalysis {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.RequestId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 14)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 15)
 		x.xxx_hidden_RequestId = b.RequestId
 	}
 	if b.ChatMessageId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 14)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 15)
 		x.xxx_hidden_ChatMessageId = b.ChatMessageId
 	}
 	if b.ProjectId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 14)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 15)
 		x.xxx_hidden_ProjectId = b.ProjectId
 	}
 	if b.OrganizationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 14)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 15)
 		x.xxx_hidden_OrganizationId = b.OrganizationId
 	}
 	if b.RiskPolicyId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 14)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 15)
 		x.xxx_hidden_RiskPolicyId = b.RiskPolicyId
 	}
 	if b.RiskPolicyVersion != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 14)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 15)
 		x.xxx_hidden_RiskPolicyVersion = *b.RiskPolicyVersion
 	}
 	if b.CreatedAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 14)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 15)
 		x.xxx_hidden_CreatedAt = b.CreatedAt
 	}
 	if b.Content != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 14)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 15)
 		x.xxx_hidden_Content = b.Content
 	}
 	if b.UserId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 14)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 15)
 		x.xxx_hidden_UserId = b.UserId
 	}
 	if b.L1Enabled != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 14)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 15)
 		x.xxx_hidden_L1Enabled = *b.L1Enabled
 	}
 	if b.MessageType != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 14)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 15)
 		x.xxx_hidden_MessageType = b.MessageType
 	}
 	if b.Body != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 14)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 15)
 		x.xxx_hidden_Body = b.Body
 	}
 	if b.ToolName != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 14)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 15)
 		x.xxx_hidden_ToolName = b.ToolName
 	}
 	x.xxx_hidden_ToolCalls = &b.ToolCalls
+	if b.ContentPartId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 14, 15)
+		x.xxx_hidden_ContentPartId = b.ContentPartId
+	}
 	return m0
 }
 
@@ -620,7 +653,7 @@ var File_gram_risk_v1_prompt_injection_analysis_proto protoreflect.FileDescripto
 
 const file_gram_risk_v1_prompt_injection_analysis_proto_rawDesc = "" +
 	"\n" +
-	",gram/risk/v1/prompt_injection_analysis.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xdc\x04\n" +
+	",gram/risk/v1/prompt_injection_analysis.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\x84\x05\n" +
 	"\x17PromptInjectionAnalysis\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12&\n" +
@@ -641,7 +674,8 @@ const file_gram_risk_v1_prompt_injection_analysis_proto_rawDesc = "" +
 	"\x04body\x18\f \x01(\tR\x04body\x12\x1b\n" +
 	"\ttool_name\x18\r \x01(\tR\btoolName\x12M\n" +
 	"\n" +
-	"tool_calls\x18\x0e \x03(\v2..gram.risk.v1.PromptInjectionAnalysis.ToolCallR\ttoolCalls\x1a<\n" +
+	"tool_calls\x18\x0e \x03(\v2..gram.risk.v1.PromptInjectionAnalysis.ToolCallR\ttoolCalls\x12&\n" +
+	"\x0fcontent_part_id\x18\x0f \x01(\tR\rcontentPartId\x1a<\n" +
 	"\bToolCall\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
 	"\targuments\x18\x02 \x01(\tR\targuments:\n" +

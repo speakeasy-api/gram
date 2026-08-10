@@ -16,10 +16,12 @@ import (
 // ingest paths — the Claude OTEL logs endpoint, the Codex logs endpoint, and
 // the Cursor afterAgentResponse hook — with cache-heavy usage, then asserts
 // the tokens-under-management measure counts exactly input + output + cache
-// WRITES for every surface, never cache READS. This pins the cross-surface
-// semantic contract: Claude and Cursor report input EXCLUSIVE of cache
-// tokens, Codex reports it INCLUSIVE (cached is a subset of input) and
-// ingest normalizes it, so cache reads are excluded from billing uniformly.
+// WRITES for every surface, never cache READS. For Codex this pins the
+// raw-stream cutover: usage is read straight off codex:otel:logs
+// response.completed rows, whose cache-INCLUSIVE input count must be
+// normalized to the disjoint shape by the attribute_metrics_summaries MV
+// (input - cached), or the cache reads would inflate TUM by orders of
+// magnitude.
 func TestTumCacheExclusion_AllSurfaces(t *testing.T) {
 	t.Parallel()
 
@@ -58,14 +60,15 @@ func TestTumCacheExclusion_AllSurfaces(t *testing.T) {
 		},
 	)))
 
-	// Codex: input_token_count is cache-INCLUSIVE (cached is a subset);
-	// ingest normalizes to the disjoint shape; codex reports no cache
-	// writes. TUM = (9000-8800) + 60 = 260.
+	// Codex: cache-INCLUSIVE input semantics at the source (OpenAI-style:
+	// cached is a subset of input). The row persists as a raw codex:otel:logs
+	// row and the MV normalizes to disjoint components: input 9000 - 8800
+	// cached = 200, plus output 60. TUM = 200 + 60 = 260 (no cache writes).
 	require.NoError(t, ti.service.Logs(ctx, codexLogsPayload(&gen.OTELLogRecord{
 		TimeUnixNano: new(nanoString(now)),
 		Attributes: []*gen.OTELAttribute{
-			strAttr("event.name", codexSSEEventName),
-			strAttr("event.kind", codexResponseCompletedKind),
+			strAttr("event.name", "codex.sse_event"),
+			strAttr("event.kind", "response.completed"),
 			strAttr("conversation.id", "tum-codex-conv"),
 			strAttr("model", "gpt-5.4-codex"),
 			strAttr("input_token_count", "9000"),
@@ -114,7 +117,7 @@ func TestTumCacheExclusion_AllSurfaces(t *testing.T) {
 			total += b.Tokens
 		}
 		assert.Equal(c, int64(7140+260+3325), total,
-			"TUM must count input + output + cache writes, never cache reads, on every surface")
+			"TUM must count input + output + cache writes, never cache reads")
 	}, 15*time.Second, 200*time.Millisecond)
 
 	rows, err := chQueries.GetTumBreakdownDimByDay(ctx, params, "hook_source")
@@ -123,9 +126,9 @@ func TestTumCacheExclusion_AllSurfaces(t *testing.T) {
 	for _, r := range rows {
 		bySurface[r.Value] += r.Tokens
 	}
-	require.Equal(t, map[string]int64{
-		"claude-code": 7140,
-		"codex":       260,
-		"cursor":      3325,
-	}, bySurface)
+	require.Equal(t, int64(7140), bySurface["claude-code"])
+	// Codex usage comes straight off the raw codex:otel:logs row: the
+	// cache-inclusive input is normalized to 200 disjoint input + 60 output.
+	require.Equal(t, int64(260), bySurface["codex"])
+	require.Equal(t, int64(3325), bySurface["cursor"])
 }

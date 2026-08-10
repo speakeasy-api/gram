@@ -16,30 +16,33 @@ import (
 
 // Client is the "remoteSessionIssuers" service client.
 type Client struct {
-	DiscoverRemoteSessionIssuerEndpoint goa.Endpoint
-	CreateRemoteSessionIssuerEndpoint   goa.Endpoint
-	UpdateRemoteSessionIssuerEndpoint   goa.Endpoint
-	ListRemoteSessionIssuersEndpoint    goa.Endpoint
-	GetRemoteSessionIssuerEndpoint      goa.Endpoint
-	DeleteRemoteSessionIssuerEndpoint   goa.Endpoint
+	FetchRemoteSessionIssuerMetadataEndpoint   goa.Endpoint
+	RefreshRemoteSessionIssuerMetadataEndpoint goa.Endpoint
+	CreateRemoteSessionIssuerEndpoint          goa.Endpoint
+	UpdateRemoteSessionIssuerEndpoint          goa.Endpoint
+	ListRemoteSessionIssuersEndpoint           goa.Endpoint
+	GetRemoteSessionIssuerEndpoint             goa.Endpoint
+	DeleteRemoteSessionIssuerEndpoint          goa.Endpoint
 }
 
 // NewClient initializes a "remoteSessionIssuers" service client given the
 // endpoints.
-func NewClient(discoverRemoteSessionIssuer, createRemoteSessionIssuer, updateRemoteSessionIssuer, listRemoteSessionIssuers, getRemoteSessionIssuer, deleteRemoteSessionIssuer goa.Endpoint) *Client {
+func NewClient(fetchRemoteSessionIssuerMetadata, refreshRemoteSessionIssuerMetadata, createRemoteSessionIssuer, updateRemoteSessionIssuer, listRemoteSessionIssuers, getRemoteSessionIssuer, deleteRemoteSessionIssuer goa.Endpoint) *Client {
 	return &Client{
-		DiscoverRemoteSessionIssuerEndpoint: discoverRemoteSessionIssuer,
-		CreateRemoteSessionIssuerEndpoint:   createRemoteSessionIssuer,
-		UpdateRemoteSessionIssuerEndpoint:   updateRemoteSessionIssuer,
-		ListRemoteSessionIssuersEndpoint:    listRemoteSessionIssuers,
-		GetRemoteSessionIssuerEndpoint:      getRemoteSessionIssuer,
-		DeleteRemoteSessionIssuerEndpoint:   deleteRemoteSessionIssuer,
+		FetchRemoteSessionIssuerMetadataEndpoint:   fetchRemoteSessionIssuerMetadata,
+		RefreshRemoteSessionIssuerMetadataEndpoint: refreshRemoteSessionIssuerMetadata,
+		CreateRemoteSessionIssuerEndpoint:          createRemoteSessionIssuer,
+		UpdateRemoteSessionIssuerEndpoint:          updateRemoteSessionIssuer,
+		ListRemoteSessionIssuersEndpoint:           listRemoteSessionIssuers,
+		GetRemoteSessionIssuerEndpoint:             getRemoteSessionIssuer,
+		DeleteRemoteSessionIssuerEndpoint:          deleteRemoteSessionIssuer,
 	}
 }
 
-// DiscoverRemoteSessionIssuer calls the "discoverRemoteSessionIssuer" endpoint
-// of the "remoteSessionIssuers" service.
-// DiscoverRemoteSessionIssuer may return the following errors:
+// FetchRemoteSessionIssuerMetadata calls the
+// "fetchRemoteSessionIssuerMetadata" endpoint of the "remoteSessionIssuers"
+// service.
+// FetchRemoteSessionIssuerMetadata may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -51,13 +54,37 @@ func NewClient(discoverRemoteSessionIssuer, createRemoteSessionIssuer, updateRem
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) DiscoverRemoteSessionIssuer(ctx context.Context, p *DiscoverRemoteSessionIssuerPayload) (res *types.RemoteSessionIssuerDraft, err error) {
+func (c *Client) FetchRemoteSessionIssuerMetadata(ctx context.Context, p *FetchRemoteSessionIssuerMetadataPayload) (res *types.RemoteSessionIssuerDraft, err error) {
 	var ires any
-	ires, err = c.DiscoverRemoteSessionIssuerEndpoint(ctx, p)
+	ires, err = c.FetchRemoteSessionIssuerMetadataEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
 	return ires.(*types.RemoteSessionIssuerDraft), nil
+}
+
+// RefreshRemoteSessionIssuerMetadata calls the
+// "refreshRemoteSessionIssuerMetadata" endpoint of the "remoteSessionIssuers"
+// service.
+// RefreshRemoteSessionIssuerMetadata may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) RefreshRemoteSessionIssuerMetadata(ctx context.Context, p *RefreshRemoteSessionIssuerMetadataPayload) (res *types.RemoteSessionIssuerRefresh, err error) {
+	var ires any
+	ires, err = c.RefreshRemoteSessionIssuerMetadataEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.RemoteSessionIssuerRefresh), nil
 }
 
 // CreateRemoteSessionIssuer calls the "createRemoteSessionIssuer" endpoint of

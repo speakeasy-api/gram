@@ -2,6 +2,8 @@ package relay
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
 )
@@ -137,6 +140,7 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 			clients[entry.ServerURL] = cl
 		}
 		res := cl.send(ctx, a.c, entry.Envelope, entry.IdempotencyKey)
+		replayCreds := a.c
 		if res.authRejected {
 			// A rejected credential is machine state, not event state — the
 			// backlog would deliver fine after a re-login or key rotation.
@@ -147,6 +151,7 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 				org := creds{ServerURL: entry.ServerURL, APIKey: a.orgKey, Project: entry.ProjectSlug, Email: "", Org: entry.OrgID, Source: credOrg}
 				res = cl.send(ctx, org, entry.Envelope, entry.IdempotencyKey)
 				if !res.authRejected {
+					replayCreds = org
 					auths[key] = drainAuth{c: org, ok: true, orgKey: a.orgKey}
 				}
 			}
@@ -158,6 +163,10 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 		}
 		switch {
 		case res.accepted():
+			if err := uploadSkillContent(ctx, replayCreds, res, replayedSkill(entry)); err != nil {
+				s.Skipped++
+				continue
+			}
 			if removeSpoolEntry(path) {
 				s.Replayed++
 			} else {
@@ -181,6 +190,89 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 	}
 	s.Remaining = len(listSpoolEntries(dir))
 	return s
+}
+
+func replayedSkill(entry spoolEntry) *resolvedSkill {
+	if entry.Envelope.Data == nil || entry.Envelope.Data.Skill == nil || entry.Envelope.Data.Skill.RawSha256 == nil {
+		return nil
+	}
+	skill := entry.Envelope.Data.Skill
+	if content, ok := spooledSkillOutput(entry); ok {
+		return &resolvedSkill{
+			content:      content,
+			rawSHA256:    *skill.RawSha256,
+			captureReady: true,
+			name:         skill.Name,
+		}
+	}
+	// Legacy v1 entries recorded where the manifest was read from instead of
+	// carrying its content in the tool output. Re-read that path, gated on the
+	// stored hash: matching content is byte-identical to what the server
+	// recorded at capture time, and anything else (edited, replaced) drains
+	// without a content upload like any other content-less entry.
+	if skill.SourcePath != nil {
+		content, ok := readSpooledSkillSource(*skill.SourcePath)
+		if ok {
+			digest := sha256.Sum256([]byte(content))
+			if hex.EncodeToString(digest[:]) == *skill.RawSha256 {
+				return &resolvedSkill{
+					content:      content,
+					rawSHA256:    *skill.RawSha256,
+					captureReady: true,
+					name:         skill.Name,
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func spooledSkillOutput(entry spoolEntry) (string, bool) {
+	if entry.Envelope.Data.ToolCall == nil {
+		return "", false
+	}
+	var content string
+	switch output := entry.Envelope.Data.ToolCall.Output.(type) {
+	case string:
+		content = output
+	case json.RawMessage:
+		if json.Unmarshal(output, &content) != nil {
+			return "", false
+		}
+	default:
+		return "", false
+	}
+	return content, true
+}
+
+func readSpooledSkillSource(path string) (string, bool) {
+	if !filepath.IsAbs(path) {
+		return "", false
+	}
+	// Lstat + regular-file check keeps the drain from blocking on a FIFO and
+	// from following symlinks; a non-regular source drains content-less like
+	// any other mismatch. The SameFile comparison pins the opened descriptor
+	// to the inode Lstat classified, so a path swapped in between the two
+	// calls is rejected rather than read.
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		return "", false
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return "", false
+	}
+	opened, err := file.Stat()
+	if err != nil || !os.SameFile(info, opened) {
+		_ = file.Close()
+		return "", false
+	}
+	content, readErr := io.ReadAll(io.LimitReader(file, maxSkillContentBytes+1))
+	closeErr := file.Close()
+	if readErr != nil || closeErr != nil || len(content) > maxSkillContentBytes || !utf8.Valid(content) {
+		return "", false
+	}
+	return string(content), true
 }
 
 // decodeSpoolEntry unmarshals an entry, restoring every any-typed envelope
@@ -259,7 +351,7 @@ func resolveDrainAuth(entry spoolEntry, key string, memo map[string]drainAuth) d
 	}
 	a := drainAuth{c: creds{ServerURL: "", APIKey: "", Project: "", Email: "", Org: "", Source: credEnv}, ok: false, orgKey: ""}
 	if !insecureServerURL(entry.ServerURL) {
-		cfg := Config{ServerURL: entry.ServerURL, ProjectSlug: entry.ProjectSlug, OrgID: entry.OrgID, HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: entry.ConfigPath, ConfigError: ""}
+		cfg := Config{ServerURL: entry.ServerURL, SiteURL: "", ProjectSlug: entry.ProjectSlug, OrgID: entry.OrgID, HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: entry.ConfigPath, ConfigError: ""}
 		if entry.ConfigPath != "" {
 			if fc, err := readFileConfig(entry.ConfigPath); err == nil &&
 				sameDeployment(fc.ServerURL, fc.Org, entry.ServerURL, entry.OrgID) {

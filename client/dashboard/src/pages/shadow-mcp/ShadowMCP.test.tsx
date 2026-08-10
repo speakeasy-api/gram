@@ -81,7 +81,7 @@ vi.mock("@gram/client/react-query/roles.js", () => ({
   useRoles: mocks.useRoles,
 }));
 
-vi.mock("@/components/ui/skeleton", () => ({
+vi.mock("@/components/ui/Skeleton", () => ({
   SkeletonTable: () => <div>Loading table</div>,
 }));
 
@@ -143,7 +143,7 @@ describe("ShadowMCP", () => {
     id = `${action}-policy`,
     sources = ["shadow_mcp"],
   }: {
-    action: "block" | "flag";
+    action: "block" | "flag" | "warn";
     enabled?: boolean;
     id?: string;
     sources?: string[];
@@ -220,6 +220,7 @@ describe("ShadowMCP", () => {
       data: {
         policies: [
           riskPolicy({ action: "flag" }),
+          riskPolicy({ action: "block", enabled: false, id: "disabled-block" }),
           riskPolicy({ action: "block", id: "block-policy-1" }),
         ],
       },
@@ -242,10 +243,32 @@ describe("ShadowMCP", () => {
       ),
     ).toBeTruthy();
     expect(
-      screen.getByText("Shadow MCP policies: flag-policy,block-policy-1"),
+      screen.getByText("Shadow MCP policies: block-policy-1"),
     ).toBeTruthy();
     expect(screen.getByText("Roles: Admin")).toBeTruthy();
     expect(screen.getByText("Members: Admin User")).toBeTruthy();
+  });
+
+  it("renders warning policy status when no blocking policy is enabled", () => {
+    mocks.useRiskListPolicies.mockReturnValue({
+      data: { policies: [riskPolicy({ action: "warn" })] },
+      isError: false,
+      isLoading: false,
+    });
+
+    render(<ShadowMCP />);
+
+    expect(screen.getByText("Warning")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Warn policy is enabled. Users must acknowledge warnings before continuing.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Shadow MCP inventory for project-1 with policy warning",
+      ),
+    ).toBeTruthy();
   });
 
   it("renders flagging policy status when no blocking policy is enabled", () => {

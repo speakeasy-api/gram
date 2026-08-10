@@ -93,7 +93,6 @@ var Toolset = Type("Toolset", func() {
 	Attribute("custom_domain_id", String, "The ID of the custom domain to use for the toolset")
 	Attribute("origin", ToolsetOrigin, "The registry lineage for toolsets installed from an external MCP catalog")
 	Attribute("external_oauth_server", ExternalOAuthServer, "The external OAuth server details")
-	Attribute("oauth_proxy_server", OAuthProxyServer, "The OAuth proxy server details")
 	Attribute("user_session_issuer_id", String, "The id of the user_session_issuer wired to this toolset. Set via toolsets.setUserSessionIssuer; null when no USI is linked.")
 	Attribute("user_session_issuer_slug", Slug, "The slug of the user_session_issuer wired to this toolset; present when user_session_issuer_id is.")
 	Attribute("tool_variations_group_id", String, "The id of the tool variations group enabling MCP tool filtering for this toolset. Set via toolsets.setToolVariationsGroup; null when filtering is disabled.")
@@ -189,85 +188,10 @@ var ExternalOAuthServer = Type("ExternalOAuthServer", func() {
 	Required("id", "project_id", "slug", "metadata", "created_at", "updated_at")
 })
 
-var OAuthProxyProvider = Type("OAuthProxyProvider", func() {
-	Meta("struct:pkg:path", "types")
-
-	Attribute("id", String, "The ID of the OAuth proxy provider")
-	Attribute("slug", Slug, "The slug of the OAuth proxy provider")
-	Attribute("provider_type", String, func() {
-		Description("The type of OAuth provider")
-		Enum("custom", "gram")
-	})
-	Attribute("authorization_endpoint", String, "The authorization endpoint URL")
-	Attribute("token_endpoint", String, "The token endpoint URL")
-	Attribute("scopes_supported", ArrayOf(String), "The OAuth scopes supported by this provider")
-	Attribute("grant_types_supported", ArrayOf(String), "The grant types supported by this provider")
-	Attribute("token_endpoint_auth_methods_supported", ArrayOf(String), "The token endpoint auth methods supported by this provider")
-	Attribute("environment_slug", Slug, "The environment slug where OAuth credentials are stored")
-	Attribute("created_at", String, func() {
-		Description("When the OAuth proxy provider was created.")
-		Format(FormatDateTime)
-	})
-	Attribute("updated_at", String, func() {
-		Description("When the OAuth proxy provider was last updated.")
-		Format(FormatDateTime)
-	})
-	Required("id", "slug", "provider_type", "authorization_endpoint", "token_endpoint", "created_at", "updated_at")
-})
-
-var OAuthProxyServer = Type("OAuthProxyServer", func() {
-	Meta("struct:pkg:path", "types")
-
-	Attribute("id", String, "The ID of the OAuth proxy server")
-	Attribute("project_id", String, "The project ID this OAuth proxy server belongs to")
-	Attribute("slug", Slug, "The slug of the OAuth proxy server")
-	Attribute("audience", String, "The audience parameter to send to the upstream OAuth provider")
-	Attribute("oauth_proxy_providers", ArrayOf(OAuthProxyProvider), "The OAuth proxy providers for this server")
-	Attribute("created_at", String, func() {
-		Description("When the OAuth proxy server was created.")
-		Format(FormatDateTime)
-	})
-	Attribute("updated_at", String, func() {
-		Description("When the OAuth proxy server was last updated.")
-		Format(FormatDateTime)
-	})
-	Required("id", "project_id", "slug", "created_at", "updated_at")
-})
-
 var ExternalOAuthServerForm = Type("ExternalOAuthServerForm", func() {
 	Meta("struct:pkg:path", "types")
 
 	Attribute("slug", Slug, "The slug of the external OAuth server")
 	Attribute("metadata", Any, "The metadata for the external OAuth server")
 	Required("slug", "metadata")
-})
-
-var OAuthProxyServerForm = Type("OAuthProxyServerForm", func() {
-	Meta("struct:pkg:path", "types")
-
-	Attribute("slug", Slug, "The slug of the OAuth proxy server")
-	Attribute("audience", String, "The audience parameter to send to the upstream OAuth provider")
-	Attribute("provider_type", String, func() {
-		Description("The type of OAuth provider")
-		Enum("custom", "gram")
-	})
-	Attribute("authorization_endpoint", String, "The authorization endpoint URL")
-	Attribute("token_endpoint", String, "The token endpoint URL")
-	Attribute("scopes_supported", ArrayOf(String), "OAuth scopes to request")
-	Attribute("token_endpoint_auth_methods_supported", ArrayOf(String), "Auth methods (client_secret_basic or client_secret_post)")
-	Attribute("environment_slug", Slug, "The environment slug to store secrets")
-	Required("slug", "provider_type")
-})
-
-var OAuthProxyServerUpdateForm = Type("OAuthProxyServerUpdateForm", func() {
-	Meta("struct:pkg:path", "types")
-
-	Attribute("audience", String, "The audience parameter to send to the upstream OAuth provider")
-	Attribute("authorization_endpoint", String, "The authorization endpoint URL")
-	Attribute("token_endpoint", String, "The token endpoint URL")
-	Attribute("scopes_supported", ArrayOf(String), "OAuth scopes to request (omit = no change, empty array = clear)")
-	Attribute("token_endpoint_auth_methods_supported", ArrayOf(String), "Auth methods (omit = no change, empty array = clear)")
-	Attribute("environment_slug", Slug, "The environment slug to store secrets")
-	// provider_type and slug are intentionally excluded — they are immutable after creation.
-	// No Required() — every field is optional for partial updates.
 })

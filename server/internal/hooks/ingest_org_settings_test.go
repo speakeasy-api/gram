@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -63,4 +64,18 @@ func TestIngest_KeylessCarriesNoOrgSettings(t *testing.T) {
 	require.NotNil(t, result)
 	require.Equal(t, "allow", result.Decision)
 	require.Nil(t, result.Effects)
+}
+
+func TestWithOrgSettings_MergesSkillCaptureEffects(t *testing.T) {
+	t.Parallel()
+	_, ti := newTestHooksService(t)
+	ti.service.productFeatures = captureFeatureStub{skills: true, metadataOnly: false, fail: ""}
+	res := canonicalAllowResult()
+	res.Effects = map[string]any{"existing": true}
+
+	res = ti.service.withOrgSettings(t.Context(), "org", res, &skillCaptureSignal{rawSHA256: strings.Repeat("a", 64), known: false})
+	require.Equal(t, true, res.Effects["existing"])
+	require.Equal(t, true, requireEffectMap(t, res.Effects, "skill_capture")["content_required"])
+	settings := requireEffectMap(t, res.Effects, "org_settings")
+	require.Equal(t, false, settings["skill_capture_metadata_only"])
 }

@@ -15,7 +15,7 @@ import { ListExternalCredentialsResult } from "../models/components/listexternal
 import {
   ListExternalCredentialsRequest,
   ListExternalCredentialsSecurity,
-  Provider,
+  QueryParamProvider,
 } from "../models/operations/listexternalcredentials.js";
 import { unwrapAsync } from "../types/fp.js";
 export type ListExternalCredentialsQueryData = ListExternalCredentialsResult;
@@ -79,7 +79,7 @@ export function buildListExternalCredentialsQuery(
 
 export function queryKeyListExternalCredentials(
   parameters: {
-    provider?: Provider | undefined;
+    provider?: QueryParamProvider | undefined;
     gramSession?: string | undefined;
   },
 ): QueryKey {

@@ -1,17 +1,16 @@
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/Badge";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
-import type { Action } from "@/components/ui/more-actions";
-import { Type } from "@/components/ui/type";
-import { Switch } from "@/components/ui/switch";
+import type { Action } from "@/components/ui/MoreActions";
+import { Text } from "@/components/ui/Text";
+import { Switch } from "@/components/ui/Switch";
+import { Button } from "@/components/ui/Button";
 import {
-  Button,
-  type Column,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Table,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { type Column, Table } from "@/components/ui/Table";
 import { useRiskDeleteExclusionMutation } from "@gram/client/react-query/riskDeleteExclusion.js";
 import {
   invalidateAllRiskListExclusions,
@@ -95,9 +94,9 @@ export function ExclusionsTab({
       header: "Criteria",
       width: "2fr",
       render: (exclusion) => (
-        <Type className="truncate font-mono text-xs" mono>
+        <Text className="truncate font-mono text-xs" mono>
           {serializeExclusionExpression(exclusion)}
-        </Type>
+        </Text>
       ),
     },
     {
@@ -105,7 +104,7 @@ export function ExclusionsTab({
       header: "Type",
       width: "0.8fr",
       render: (exclusion) => (
-        <Badge variant="secondary">{exclusion.matchType}</Badge>
+        <Badge variant="neutral">{exclusion.matchType}</Badge>
       ),
     },
     {
@@ -115,7 +114,7 @@ export function ExclusionsTab({
       render: (exclusion) => {
         const name = policyName(exclusion.riskPolicyId);
         if (!name) return <Badge variant="warning">Global</Badge>;
-        return <Badge variant="secondary">{name}</Badge>;
+        return <Badge variant="neutral">{name}</Badge>;
       },
     },
     {
@@ -136,9 +135,9 @@ export function ExclusionsTab({
       header: "Created",
       width: "0.9fr",
       render: (exclusion) => (
-        <Type className="text-muted-foreground" small>
+        <Text className="text-muted-foreground" small>
           {format(exclusion.createdAt, "MMM d, yyyy")}
-        </Type>
+        </Text>
       ),
     },
     {
@@ -155,7 +154,7 @@ export function ExclusionsTab({
 
   let body: ReactNode;
   if (isLoading) {
-    body = <Type className="text-muted-foreground">Loading exclusions…</Type>;
+    body = <Text className="text-muted-foreground">Loading exclusions…</Text>;
   } else if (exclusions.length === 0) {
     body = (
       <ExclusionsEmptyState
@@ -229,18 +228,18 @@ function ExclusionActionsMenu({ actions }: { actions: Action[] }): JSX.Element {
 
 function ExclusionsEmptyState({ onCreate }: { onCreate: () => void }) {
   return (
-    <div className="bg-background flex h-[360px] w-full flex-col items-center justify-center gap-4 rounded-xl border">
+    <div className="bg-background flex h-[360px] w-full flex-col items-center justify-center gap-4 border">
       <div className="space-y-1 text-center">
-        <Type className="font-medium">No exclusions yet</Type>
-        <Type small muted>
+        <Text className="font-medium">No exclusions yet</Text>
+        <Text small muted>
           Create an exclusion to suppress false-positive findings.
-        </Type>
+        </Text>
       </div>
       <Button onClick={onCreate}>
         <Button.LeftIcon>
           <Plus className="h-4 w-4" />
         </Button.LeftIcon>
-        <Button.Text>Create exclusion</Button.Text>
+        <Button.Text>Set up exclusion rule</Button.Text>
       </Button>
     </div>
   );

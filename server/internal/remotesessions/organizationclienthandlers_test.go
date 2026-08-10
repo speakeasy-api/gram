@@ -43,6 +43,67 @@ func TestListClients(t *testing.T) {
 	require.Equal(t, 0, result.Items[0].ActiveSessionCount)
 }
 
+// TestListClients_PlatformIssuerHidesOtherOrganizationsClients proves the
+// tenant isolation the Clients tab depends on. A platform issuer is shared:
+// every organization sees the same issuer row and can register its own clients
+// against it. The listing must still show each organization only its own.
+//
+// This is the one tier where isolation cannot come from the issuer. For an
+// org-owned issuer, `i.organization_id = @organization_id` already fences the
+// result. A platform issuer's organization_id is NULL, so that comparison is
+// NULL rather than true for every caller, and the whole guarantee rests on the
+// second arm, `c.organization_id = @organization_id`. If a writer ever left a
+// client's organization_id unset on a platform issuer, that row would match
+// neither arm and become invisible to its owner — never visible to the wrong
+// one — so this asserts both directions: each org sees its own client and not
+// the other's.
+func TestListClients_PlatformIssuerHidesOtherOrganizationsClients(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	platformID := seedGlobalRemoteIssuer(t, ctx, ti.conn, "shared-platform-isolation")
+
+	// The caller's organization registers a client on the shared issuer.
+	ownClient, err := ti.service.CreateClient(ctx, newCreateClientPayload(platformID.String(), nil, nil))
+	require.NoError(t, err)
+
+	// A second organization registers its own client on the same issuer.
+	otherOrgID := createOrganization(t, ctx, ti.conn, "other-org-isolation")
+	otherClientID := seedOrgLevelRemoteClient(
+		t, ctx, ti.conn, otherOrgID, platformID, "other-org-client",
+	)
+	require.NotEqual(t, authCtx.ActiveOrganizationID, otherOrgID)
+
+	list, err := ti.service.ListClients(ctx, &orgclientsgen.ListClientsPayload{
+		IssuerID:     platformID.String(),
+		Cursor:       nil,
+		Limit:        nil,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+
+	ids := make([]string, 0, len(list.Items))
+	for _, item := range list.Items {
+		ids = append(ids, item.Client.ID)
+	}
+	require.Contains(t, ids, ownClient.ID, "the caller's own client on the shared issuer must be listed")
+	require.NotContains(t, ids, otherClientID.String(), "another organization's client on the shared issuer must not leak")
+	require.Len(t, list.Items, 1, "only the caller's own client is visible on a shared platform issuer")
+
+	// The same fence applies to the by-id read behind the client detail page,
+	// which would otherwise be a way around the listing.
+	_, err = ti.service.GetClient(ctx, &orgclientsgen.GetClientPayload{
+		ID:           otherClientID.String(),
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
 // TestGetClient_NotFound proves an unknown remote_session_client id in the
 // caller's organization returns NotFound.
 func TestGetClient_NotFound(t *testing.T) {
@@ -474,4 +535,96 @@ func TestCreateClient_EncryptsSecret(t *testing.T) {
 	require.True(t, stored.RemoteSessionClient.ClientSecretEncrypted.Valid)
 	require.NotEmpty(t, stored.RemoteSessionClient.ClientSecretEncrypted.String)
 	require.NotEqual(t, secret, stored.RemoteSessionClient.ClientSecretEncrypted.String)
+}
+
+// TestCreateClient_OrgAdminAttachesToPlatformIssuer proves an org-admin
+// standalone client can be created against a platform issuer. With no owning
+// project on the issuer, the client is organization-level (NULL project,
+// organization_id set), attachable by every project in the org.
+func TestCreateClient_OrgAdminAttachesToPlatformIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	platformID := seedGlobalRemoteIssuer(t, ctx, ti.conn, "attach-platform-org")
+
+	created, err := ti.service.CreateClient(ctx, newCreateClientPayload(platformID.String(), nil, nil))
+	require.NoError(t, err)
+	require.Empty(t, created.ProjectID, "client on a platform issuer with no project is organization-level")
+	require.Equal(t, authCtx.ActiveOrganizationID, created.OrganizationID)
+	require.Equal(t, platformID.String(), created.RemoteSessionIssuerID)
+}
+
+// TestOrgAdmin_ManagesTenantClientOnPlatformIssuer proves that once an org-admin
+// client is created on a platform issuer it stays fully manageable through the
+// org-admin surface: listable under the issuer, fetchable, patchable, and
+// deletable. Before the org-reachability rescope these all scoped through the
+// issuer's organization_id, which is NULL for a platform issuer, so the client
+// was write-only state.
+func TestOrgAdmin_ManagesTenantClientOnPlatformIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	platformID := seedGlobalRemoteIssuer(t, ctx, ti.conn, "manage-platform")
+	created, err := ti.service.CreateClient(ctx, newCreateClientPayload(platformID.String(), nil, nil))
+	require.NoError(t, err)
+
+	// Listable under the issuer.
+	list, err := ti.service.ListClients(ctx, &orgclientsgen.ListClientsPayload{
+		IssuerID:     platformID.String(),
+		Cursor:       nil,
+		Limit:        nil,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+	foundInList := false
+	for _, item := range list.Items {
+		if item.Client.ID == created.ID {
+			foundInList = true
+		}
+	}
+	require.True(t, foundInList, "tenant client on a platform issuer should be listable by the org admin")
+
+	// Fetchable.
+	got, err := ti.service.GetClient(ctx, &orgclientsgen.GetClientPayload{
+		ID:           created.ID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, created.ID, got.ID)
+
+	// Patchable.
+	newMethod := "client_secret_post"
+	updated, err := ti.service.UpdateClient(ctx, &orgclientsgen.UpdateClientPayload{
+		ID:                      created.ID,
+		ClientSecret:            nil,
+		TokenEndpointAuthMethod: &newMethod,
+		Scope:                   nil,
+		Audience:                nil,
+		SessionToken:            nil,
+		ApikeyToken:             nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.TokenEndpointAuthMethod)
+	require.Equal(t, newMethod, *updated.TokenEndpointAuthMethod)
+
+	// Deletable.
+	err = ti.service.DeleteClient(ctx, &orgclientsgen.DeleteClientPayload{
+		ID:           created.ID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.GetClient(ctx, &orgclientsgen.GetClientPayload{
+		ID:           created.ID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
 }

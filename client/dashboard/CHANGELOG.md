@@ -1,5 +1,390 @@
 # dashboard
 
+## 0.104.0
+
+### Minor Changes
+
+- 5027338: The MCP server Clients and Sessions tab now leads with active session and client counts, and renders both listings as searchable, filterable, sortable tables paginated ten rows at a time, with member avatars and creation dates on sessions. The clients table reports how many active sessions each client holds, backed by a new `active_session_count` field on the user session clients API, and clicking that count narrows both listings to that client behind a clear-filter bar.
+
+### Patch Changes
+
+- 1fa0caf: Surface that Claude Cowork still needs its own manual setup step when Device
+  Agent is selected on the "Instrument agents" onboarding step — Device Agent
+  only covers coding assistants running on the developer's machine, not
+  Cowork's cloud sandbox. The new note links straight into the Manual Setup
+  flow for Cowork.
+
+  Also aligns MDM vendor wording with the Iru rebrand ("Iru (formerly Kandji)")
+  across the Device Agent setup page and Codex onboarding copy, matching the
+  naming already used on the MDM integrations page.
+
+  Conversation events (`UserPromptSubmit`/`Stop`) are now also written to
+  ClickHouse telemetry so the onboarding "Confirm traffic" feed shows prompts
+  and assistant replies, not only tool calls.
+
+## 0.103.0
+
+### Minor Changes
+
+- e136806: MCP server detail pages gain a Clients and Sessions tab, which lists the clients registered against the server's session issuer alongside its active sessions, and takes over the user-sessions listing that previously sat under authentication settings. CIMD-resolved OAuth clients are now distinguished from DCR-registered ones in the dashboard.
+- 76592ef: Rework the toolset OAuth configuration UI now that the OAuth proxy provider system is removed. The "Configure OAuth" wizard keeps its structure, but its custom path now provisions a user session issuer (creating a remote_session_issuer + remote_session_client and linking the toolset) instead of an OAuth proxy server; the external-OAuth path is unchanged. The separate migrate-from-proxy modal and the Platform/Edit OAuth-proxy modals are removed.
+- f6df724: Add opencode to the managed tools list on the device agent fleet
+  configuration page, with the same off/user/managed enforcement layer
+  selection as the other supported tools.
+- d80c633: Restyle the dashboard to the new editorial design language: flat square
+  surfaces with hairline borders, serif display page titles with area
+  micro-labels, unified uppercase table headers, colorized metric tiles, a
+  restrained ink-and-brand chart palette with a dark-mode ramp, muted avatar
+  tints, and a styled not-found page for unmatched routes.
+- 46a645f: Platform admins can now consolidate an organization's remote identity provider onto the shared platform catalog entry for the same upstream. A new Convergence tab on a platform provider lists the organizations running their own provider for that upstream, along with how many clients would move and any metadata differences, and consolidating one re-points those clients without anyone having to sign in again. Providers whose issuer URL differs only by a trailing slash or an explicit default port now count as the same upstream, since those near-duplicates are the ones most worth folding together.
+
+### Patch Changes
+
+- 04679cd: Show Agent Plugins compatibility status and portable ZIP downloads on plugin list and detail pages.
+- 7b746d3: Fix AI Integrations poll-cadence labels to match actual sync intervals: Anthropic Compliance activity feed now reads "Every 5m" (was "Every 10m"), Claude Chat usage/cost metrics now read "Every 4h" (was "Hourly"), and Codex & ChatGPT cost metrics now read "Every 5m" (was "Hourly").
+- a9dd912: Clean up the floating "Bulk actions" toolbar on Risk Events and Risk
+  Overview category tables: removed the doubled border (the toolbar and its
+  "Bulk actions" trigger button each had their own), which read as a boxy
+  nested-border look, in favor of a single borderless pill with just a
+  shadow. Also insets the toolbar a few pixels from the table's header row
+  instead of sitting flush against its top edge.
+- b6e2941: Extend the brand-mesh surface treatment from the project home assistant
+  card to the full `/chat` landing page: the same neutral card-to-background
+  gradient with the brand rainbow breathing in from the top-right corner and
+  a film-grain wash. The decorative layers are now a shared `BrandMeshLayers`
+  component so the two surfaces can't drift apart, and the landing's scroll
+  container moved to an inner wrapper so the mesh and the back button stay
+  pinned while the content scrolls.
+- 0c1e8b6: Update the macOS setup walkthrough on the Device Agent page to install from
+  the signed `.pkg` instead of the retired curl-download-and-chmod script. The pkg installs the daemon, CLI, menu-bar UI, and privileged
+  helper together and registers its own LaunchAgents, so the walkthrough now
+  covers a manual `installer` run or a normal MDM Package push instead of a
+  separate download/chmod/service-register sequence. Windows and Linux are
+  unaffected — they still ship as raw binaries.
+
+  Also makes Device Agent the default choice (instead of Manual Setup) on the
+  "Instrument agent platforms" onboarding step, and drops its "Preview"
+  badge — it's out of preview.
+
+- 8a85b99: Relabel the amber badge that marks platform-admin-only UI from "Dev" to
+  "Internal Admin". The badge appears on the platform admin toolbar and on
+  admin-only fields of the device agent configuration page; "Dev" read as
+  "development build" rather than "visible to Speakeasy staff only", which
+  is what it actually means. Renamed the component to `InternalAdminBadge`
+  to match.
+- 0fad940: Stop the Policy Center table from printing the same thing twice per row. The "Categories / Prompt" column has been folded into the policy column as a second line that only appears when the policy name doesn't already convey it — so "Secrets Exposure Flagger" no longer sits next to "Secrets", and a prompt-based policy whose name is an excerpt of its guardrail shows the name alone. Policies whose name omits a category (or whose guardrail says more than its name) still show the detail, now with the freed-up width.
+- 6ff5ca0: Add user-opted-in automatic remote session token refresh and hide its organization settings until enabled.
+- 793abde: Public skill share links now use your custom domain when one is verified and activated. The share page (and a raw SKILL.md download) is served at `https://<your-domain>/shared/skills/<token>`, scoped so a domain can only ever serve skills belonging to its own organization, and the dashboard copies links with the custom domain automatically.
+- bb83418: Make clickable table rows keyboard-focusable and activatable with Enter or Space.
+
+## 0.102.0
+
+### Minor Changes
+
+- 546c449: Collect a work email on the sign-up page and hand it to the hosted AuthKit
+  screen. `auth.login` takes an optional `email`; when a login carries a company
+  name — the marker that it began on `/sign-up` — the server sets WorkOS's
+  `login_hint` so the email field arrives pre-filled, and `screen_hint=sign-up` so
+  the user lands on the sign-up screen rather than sign-in. The email is validated
+  before the login nonce is minted and is never stored. The call to action now
+  reads "Start Trial"; it previously named a single identity provider, which
+  misdescribed a hand-off that has always been generic.
+- 54755b5: Add a Device Agent configuration tab for organization administrators to choose
+  per-tool enforcement layers, release policy, and reconciliation cadence.
+- 13301b5: Add a self-serve path into the shared read-only demo organization. A new `auth.enterDemo` endpoint switches any authenticated session into the demo org (no membership required); request auth, grant resolution, and member/role listings gain demo carve-outs; the demo org always enforces a fixed read-only scope set with a verb-based write guard as backstop. The dashboard gains an `/explore-demo` entry route, an "explore a live demo org" link on the book-a-demo gate, and a demo banner whose exit switches back to the user's own organization without logging out.
+- 909b466: The External Services page is now organization-scoped: org admins register how Gram authenticates into their own cloud account, behind a new `customer_managed_encryption_keys` entitlement enforced on both `externalCredentials` and `externalKeys`. The platform-admin UI is removed, though its endpoints remain for HTTP-only management. Two new methods support verification: `externalCredentials.verifyGcpIam` probes that Gram can actually impersonate the named service account, and `externalCredentials.getGcpSetupInfo` reports the Gram service account a customer must grant `roles/iam.serviceAccountTokenCreator` to.
+- f95d50f: Platform admins can now curate the shared remote identity provider catalog from the dashboard, under a new Platform Admin section in the sidebar: list, create, edit, refresh discoverable metadata, and delete the providers that every organization inherits. The listing reports platform-owned and tenant-owned client counts separately, so a delete that will be refused says up front which blockers the admin can clear and which belong to an organization. `adminRemoteSessions.listGlobalIssuers` and `adminRemoteSessions.getGlobalIssuer` now return both counts alongside the issuer. Organizations can register a client against an inherited platform provider straight from their own provider list.
+- 546c449: Add a `/sign-up` page that collects the company name before handing off to the
+  identity provider. `auth.login` takes an optional `org_name` param; when set, the
+  server validates it and stashes a signup intent against the login nonce, then
+  creates the organization during the auth callback once the identity provider has
+  answered. The name never travels through a redirect param or the address bar, and
+  a failed signup returns to `/sign-up` rather than `/register`. Signup attempts and
+  the resulting org creation are captured as `onboarding_event` / `new_org_created`
+  with `created_via: "signup"` so the funnel can be measured end to end.
+- ca3e972: Show active trial status in the project and organization navigation, including the current trial day, remaining days, elapsed progress, and a link to Sales.
+
+### Patch Changes
+
+- 847a496: Adding Figma from the MCP catalog now connects your project directly to Figma's official server instead of routing through a proxy, so there's nothing to authorize or allowlist.
+- 0afb752: Import ChatGPT conversations from the OpenAI Compliance Logs Platform. A new `chatgpt_compliance` AI-integration provider polls workspace-scoped `CONVERSATION_MESSAGE` log files (the supported successor to the deprecated stateful conversations endpoint) and persists them as external chats and messages — the same tables and Agent Sessions surface the Anthropic compliance import feeds. The provider is separate from `codex_compliance` because the scopes differ: COSTS files are per API organization while conversation logs are per ChatGPT workspace, so the new config takes a workspace UUID. Includes the workspace-scoped compliance client, Temporal schedule wiring, and a "ChatGPT Conversations" integration card in org settings.
+- 7fd5e1a: Classify Codex account identity and billing mode (DNO-734). Codex sessions on
+  every capture path (legacy hooks, OTEL logs, ingest adapter) now stamp
+  account_type from email resolution — resolved work email is team, anything
+  else personal — and team sessions resolve the org-level billing mode declared
+  on the codex_compliance integration config (the session provider "openai" now
+  maps to that config, fixing the mapping bug that made the config's
+  billing_mode unreachable). Compliance COSTS import rows (codex and
+  ChatGPT/Work) carry account_type=team and the config's billing mode directly.
+  The estimated-cost tooltip copy mentions ChatGPT plans alongside Claude's.
+- 49e00bb: Import Codex cloud task transcripts as agent sessions (DNO-752). A new
+  codex_cloud_sessions schedule on the chatgpt_compliance integration polls the
+  workspace-scoped CODEX_LOG compliance feed and persists cloud web-task
+  prompts and responses as external chats + messages under the new codex-web
+  chat source, with prompt-derived titles and idempotent replays. Only
+  CODEX_WEB client events are imported (desktop-app events are counted and
+  skipped pending the unified-app verification), and the feed's per-turn token
+  counts are deliberately not persisted — cloud tokens meter through the
+  compliance COSTS promotion, so carrying them here would double count.
+  Enforcement over cloud runs remains impossible (post-hoc batch feed); this
+  provides visibility and post-hoc review only. Also fixes a latent
+  multi-schedule reset gap: a key or external-scope change on an integration
+  now resets every synced sibling schedule's watermark (previously only the
+  provider-named schedule reset, so a workspace/org change could leave a
+  sibling feed silently skipping the new scope's history).
+- c44a461: Extend spend-gate enforcement to Codex and Cursor at parity with Claude. Over-budget actors are now denied on the legacy provider endpoints (`hooks.codex`: PreToolUse, PermissionRequest, UserPromptSubmit; `hooks.cursor`: preToolUse, beforeMCPExecution, beforeSubmitPrompt) and on the unified `hooks.ingest` path for the codex and cursor adapters (case-insensitive match) — previously the ingest spend gate was Claude-only even though risk scanning already ran adapter-agnostically there. Cursor MCP calls are spend-gated exactly once (at beforeMCPExecution, mirroring the risk-scan dedup), tool-call spend denies mint a durable block page whose link rides the deny reason, idempotent redeliveries keep the deny without minting duplicate block rows, and the block page headline falls back to spend-rule framing instead of rendering an empty policy name. The gate keeps running before any risk-policy evaluation and failing open on infrastructure errors; opencode still passes through pending a product decision on its enforcement surface.
+- 230744c: Refresh the Codex setup copy for the unified ChatGPT desktop app (DNO-737).
+  The tile referred to a standalone "Codex desktop app" that OpenAI has since
+  merged into the ChatGPT app, and now states that Codex mode there is covered
+  while Chat and Work modes are not — those are captured through the OpenAI
+  Compliance API integration instead. The two OpenAI hook/plugin doc links were
+  redirecting and now point at their current destinations.
+- 547bb72: Reduce the Skills table to its most useful overview columns and rebalance their widths for easier scanning.
+- da7e758: Display enabled warning policies in the Shadow MCP inventory status card.
+- f926dc1: Add project-scoped LiteLLM integration provisioning, key rotation, revocation, and lifecycle metadata APIs.
+- 20662cc: The project sidebar now keeps nav groups collapsed by default: only the group containing the current page opens automatically, and a new chevron on each group header lets you pin other groups open without navigating. Vertical spacing between and within groups is tighter, so more of the nav fits on screen.
+- ff02538: Make the root TypeScript check pass and keep generated SDK warnings out of dashboard linting.
+- 817174d: Make RBAC always on, provision built-in roles and grants for new organizations,
+  and assign the first organization user the Admin role.
+- 9f35728: Make Skills table columns sortable from their headers while preserving recently updated as the default order.
+- ba561ad: Webhooks are now available to every organization, marked Beta. The Webhooks page
+  no longer shows a preview gate, and delivery is controlled solely by the
+  organization's own webhooks toggle.
+
+## 0.101.0
+
+### Minor Changes
+
+- 73b9590: Requests and approvals now understand allow-all shadow MCP policies. Approving a bypass request (from the approvals page or the inventory review flow) on an allow_all policy revokes the server URL's risk_policy:block grant — a project-wide unblock with no principal-scoped bypass grants. Revoking restores the block grant; denying leaves it untouched. The request status change is audited like every other bypass-request decision. The approval UIs skip the audience/policy pickers for these requests and explain that approval unblocks the server for everyone in the project.
+- bd3aac6: Shadow MCP inventory and status surfaces are now disposition-aware. Under an allow-all policy the inventory reports servers as allowed by default and blocked only when a block rule lists them, the policy status banner explains the allow-by-default posture, and the primary per-server action flips from managing allow rules to Block Server / Unblock Server — which add and remove the policy's risk_policy:block grants through dedicated inventory endpoints.
+
+## 0.100.0
+
+### Minor Changes
+
+- 944c4df: Shadow MCP policy creation now offers a default-disposition choice: Block all servers (allow exceptions) or Allow all servers (block exceptions). The server selector flips between picking allowed and blocked servers to match, and the disposition is shown read-only when editing since switching posture requires deleting and recreating the policy.
+- b131cea: Project assistant tool calls now render Claude-style: the assistant precedes each tool batch with a terse activity phrase ("Investigating failures in the last 30 days") which becomes the heading of a single collapsed tool group. Consecutive batches merge into one group whose heading advances (with shimmer) as the investigation progresses, groups never auto-expand, and the global thinking loader hides while a tool group is streaming. The dashboard output-channel guidance instructs the model to emit the phrase before every tool call.
+- 41626e6: Add a contract value estimator to the TUM Contract section of the billing page (platform admin only). It approximates what an enterprise account is worth under either commercial model — a committed platform fee with tiered overage, or uncommitted pay-as-you-go — off the org's observed tokens under management, and flags accounts whose overage has grown large enough relative to their base contract to warrant an expansion conversation.
+
+### Patch Changes
+
+- 6ca548f: Add the `chatgpt` and `chatgpt-work` sources to the product-surface taxonomy now that ChatGPT/Work compliance usage is admitted to the summaries. The compliance importer now routes Work rows to the `chatgpt-work` hook source (ChatGPT and unknown surfaces stay `chatgpt`) so the per-product split survives summarization — hook_source is a summary GROUP BY dimension while the raw `codex.compliance.product` attribute is not, and summaries outlive the raw-row TTL. Also: a `chatgpt` chat source alias, ChatGPT/ChatGPT Work labels and the OpenAI mark in the dashboard label/icon maps and onboarding live-tail, broadened "OpenAI Compliance Logs" settings copy, and local seed fixtures emitting compliance-shaped `chatgpt:usage:metrics` rows for both products.
+- dd9e519: Announce the contract estimator's load failure to screen readers. The message replaces a loading skeleton after the page has settled, so without a live region there was no indication the estimate had failed or that reloading was the way to recover.
+
+## 0.99.0
+
+### Minor Changes
+
+- c0395b5: Selectively extract high-value, reusable business memories from completed chats, omit semantic duplicates, and add an organization-admin corpus browser with semantic search, source-transcript navigation, and a complete content-scope tree with distinct-memory counts.
+
+### Patch Changes
+
+- d243364: The billing page's usage card now follows the selected time range instead of always showing the full billing cycle. A custom range (typed, calendar-picked, or bar-click drill-down) shows the range's billed tokens, a time-attributed overage figure (tokens recorded after the cycle's cumulative usage crossed the allowance, crossing day prorated), and the per-unit average over the range window; the allowance figure, percentage, and meter remain cycle-only concepts and hide on partial ranges. The details table's Overage column uses the same attribution for ranges instead of showing an em dash, so the card and table always agree.
+- 57ff66a: Add a typed, reactive PostHog feature-flag hook that distinguishes loading, enabled, disabled, missing, and error states. Project navigation now uses the hook as an integration proof while preserving existing opt-in and opt-out behavior.
+
+## 0.98.0
+
+### Minor Changes
+
+- 3b66258: Custom domains can now route their root URL to a default MCP server. Pick one of the domain's MCP endpoints as the default and `https://your-domain.com/` serves that server directly — MCP clients connect at the root and browsers see the installation page — while renaming the endpoint's slug updates the routing automatically. Custom domains can also serve an OpenAI app-submission verification token at `/.well-known/openai-apps-challenge`, so ChatGPT app reviews can verify domain ownership without any changes on your site. Both settings live on the custom domain page; the default server can also be set from an MCP server's own settings.
+
+### Patch Changes
+
+- 80b855f: Stop enumerating supported coding agents (Cursor, Claude Code, Codex, …) in Shadow MCP detector copy and other user-facing product strings. Prefer generic wording so new agents like opencode do not require list updates.
+
+## 0.97.0
+
+### Minor Changes
+
+- 2822d51: `remoteSessionIssuers.get` can now look an identity provider up by its upstream issuer URL, returning the one the project would use (preferring project over organization over platform) or 404 when nothing describes that URL yet. The dashboard's automatic setup flows use it to decide whether to reuse an existing provider instead of scanning the provider list in the browser, which also lets them reuse platform-catalog providers for the first time.
+- 56aa9f2: Restructure the Device Agent MDM integrations page around the source → coverage → destination pipeline. A pipeline banner shows live connected counts (updating as connections are enabled/disabled) and the org-wide fleet coverage, over two role-labeled groups. Detail pages are now role-specific: inventory sources keep their device inventory and "synced" language, while evidence destinations drop the inventory table (a sink owns no devices), show what they publish org-wide, use "pushed" language, and surface a "Fleet sourced from" breakdown linking to the sources that feed them.
+- 5bf2d45: Select project skills as additional context for an individual Project Assistant turn.
+
+### Patch Changes
+
+- 936828a: Fix the agent-coverage meter reading as far more filled than its real percentage in dark mode. The track used `bg-muted`, which collapses to the card color in dark mode, hiding the uncovered remainder so the filled portion looked much larger than its true share. The track now uses a foreground tint that stays visible on both light and dark grounds.
+- b5f47cb: Tuck optional device-integration settings behind an "Advanced" disclosure in the connect/configure sheet, so the default view shows only the required fields (e.g. Drata is just Region + API Key + Test — the Custom Connection ID is created automatically). Driven by the descriptor's `required` flag, so it applies to every provider; the section auto-expands when an optional field already holds a value.
+- 19f2841: Apply RBAC grants regardless of account tier and remove the dashboard rollout flag.
+- 1a74d9d: Restore external OAuth configuration on eligible MCP server authentication pages.
+- 36aa306: Improve external OAuth setup with automatic metadata discovery, inline validation, connection testing, and clearer authentication actions.
+- 1ad71b0: Hide Microsoft Intune from the MDM integrations UI until it is fully supported — a central `isProviderVisible` filter removes hidden providers from the list, the pipeline source count, the fleet-source breakdown, and direct-URL access, while leaving backend registration untouched. Also pluralize the pipeline agent-input label to "Active agents" and label its source as "reported by device agent".
+- b5f47cb: Hide the Vanta evidence-push provider from the MDM integrations UI until a supported path exists — Vanta does not support custom resources for partner-built integrations. Uses the existing `isProviderVisible` frontend gate, so backend registration is untouched and revealing it later is a one-line change.
+
+## 0.96.0
+
+### Minor Changes
+
+- 4bf8450: Let tenants inherit and attach clients to platform (global) remote identity providers while the issuers themselves stay read-only, and keep tenant clients on a platform issuer fully manageable through the organization-admin surface. The dashboard renders the new `Platform` tier and resolves issuers by `project > organization > platform` precedence.
+- 725bfaa: Skill edit suggestions now support batch apply: select individual proposed changes and apply them together as a single new version. The batch controls moved from the per-change comment box to a control bar above the diff.
+- 598799f: Add the MDM Integrations dashboard: an org-level catalog page listing MDM
+  and compliance providers from the backend registry, with a credential sheet
+  rendered from each provider's field spec (secret values masked and
+  write-only), a save → test-connection → enable flow, and per-schedule sync
+  status with pause/resume and sync-now controls. The Device Agent page gains a
+  coverage section joining MDM-managed devices against agent heartbeats, with
+  per-bucket summary tiles and a filterable device list that visually
+  distinguishes the stale-agent drift case. Both surfaces are gated behind the
+  `gram-device-integrations` PostHog flag.
+- 432d06c: feat: device-level agent coverage behind a rollout flag
+
+  Coverage can now match a device's hardware serial against per-device agent
+  heartbeats instead of its assigned-user email, falling back to email when no
+  serial match exists. Adds an `agent_other_device` bucket for "the user runs
+  the agent, just not on this machine", and an `attestation` field so clients
+  word the coverage claim to match the mode. Gated per org by the
+  `device-level-coverage` PostHog flag; evidence pushes stay user-level until
+  the sink field names change with them.
+
+- 811d494: automatically publish tool metadata from dashboard
+- a1e2015: opencode observability: surface opencode as a hook source in the dashboard (icon, platform filters) and add its install instructions to the setup flow.
+- ce74cd3: Paginate scored skill sessions, collapse their table by default, and link chats to the agent sessions explorer.
+- 43018c5: permission remote MCP tools by name in the role editor
+
+### Patch Changes
+
+- 7147f70: Persist edits made from the Playground's Add/Manage Tools dialog. Failed edits remain open for retry instead of reporting success before the update is saved.
+- b6d3a27: Add skill feedback metrics, grouped review evidence, and manually triggered suggestion analysis.
+- 703756b: Add `fetchMetadata` and `refreshMetadata` across all three remote identity provider tiers. `fetchMetadata` is keyed by issuer URL and persists nothing, as the pre-create step; `refreshMetadata` is keyed by issuer id and re-reads an existing provider's RFC 8414 document, persisting only discovered values (endpoints, the `*_supported` arrays, `client_id_metadata_document_supported`, and the documentation URLs) while leaving Gram's own behavior and display fields untouched. A "Refresh Discoverable Metadata" action is available from the Remote Identity Providers listing.
+- c93a9e1: Show the judge's rationale for prompt injection and prompt-based policy findings in Risk Events and the risk overview category drill-down, and drop the rule label for those findings since it only restated the category.
+- 023bec6: Use the searchable multi-select skill picker when attaching skills to assistants.
+- 6cc0201: Redesign the "Book a demo" enterprise gate on the shared auth shell, so it matches the login, register, and switch-organization screens. The page now carries the brand gradient strip, the control-plane header with a Log out action, and the animated governed-agent session alongside the booking card. The Cal.com embed is framed as a native booking card — its own theme variables are set from the auth-brand palette so the calendar reads as part of the page rather than an embedded iframe — and the details handed to the calendar are footnoted underneath.
+
+  The embed's appearance settings are now sent through Cal's `ui` instruction. They were previously passed as prefill config, where Cal ignored them, so the embed had been rendering its own event-title block over the card header and none of the brand colors were applied.
+
+- 7734a63: Chart skill activations by version across the rolling 30-day window.
+- 4225015: Custom domains that stay unhealthy for over a week (7+ consecutive failed daily checks) are now automatically disabled: their routing and TLS certificate are removed, and the dashboard explains what went wrong and walks admins through fixing the issue and reverifying the domain. Gram-side check failures never count toward disabling.
+- d3ad7d3: Add the device integrations framework: a capability-based provider registry (`InventorySource` for MDM fleet pulls, `EvidenceSink` for compliance evidence pushes) and a new `deviceIntegrations` management service. Organizations can connect a provider with secret credentials stored as an encrypted write-only document and non-secret settings kept readable, validated against the provider's declared field spec; credential rotation updates the config in place so synced device inventory is never orphaned. The service exposes provider discovery (credential specs drive dashboard form rendering), config CRUD with audit logging, a bounded test-connection probe through the SSRF-hardened guardian client, per-schedule state with distinct user-disable and system-auto-pause semantics, and agent-coverage reads: a bucketed summary (active / stale / no agent / no email / unresolved / missing, plus unmanaged agent users) and a paginated device listing, both computed as read-time joins between MDM inventory and the per-user agent heartbeat.
+
+  Settings updates merge per key with the stored document (omitted keys keep their values), credential rotation resets the schedules' sync execution state and pushed-snapshot digest, and audit before-snapshots are read inside the upsert transaction. The dashboard's OTel forwarding section is updated for a generated SDK type rename.
+
+- 3558aa7: Device integrations: enabling a connection (and "Sync now") triggers the
+  sync coordinator immediately instead of waiting for its next tick; the
+  configure sheet disables the connection test while the draft has unsaved
+  changes and explains that tests run against saved credentials; managed
+  device and schedule tables get properly spaced empty states; and the Iru
+  provider rejects the tenant console URL with an error naming the correct
+  API URL.
+- cda58dc: Remove the unused `replayed` field from the `RiskResult` API type. The flag was
+  denormalized from the scanned chat message onto every risk listing row but never
+  rendered by any consumer; dropping it shrinks the listing queries ahead of
+  serving the Risk Events page from ClickHouse.
+- efe9101: Add the Microsoft Intune inventory-source provider to device integrations:
+  Entra ID client-credentials auth (classifying Entra's 400 invalid_client
+  shape as a credential rejection), field-selected managed-device pulls via
+  Microsoft Graph with server-driven nextLink pagination (cursor validated to
+  stay on the Graph host), and mapping into the normalized managed-device
+  shape with emailAddress-then-UPN user attribution.
+- c5ca622: Add the Jamf Pro inventory-source provider to the device integrations framework, plus its dashboard presentation entry (Apple-fleet icon and console setup steps for minting the least-privilege API client). Organizations connect a Jamf Cloud tenant with an instance URL and least-privilege API Client credentials (an API Role with only "Read Computers"); the provider authenticates via the OAuth client-credentials grant with the token cached until expiry, pulls the computer inventory in stably ordered, section-filtered pages, and maps each device's serial, hostname, OS, assigned-user email, and last check-in into the managed-device store — preserving the full vendor record. Credential rejections, including tokens expiring mid-pull, classify as auth errors feeding the scheduler's auto-pause streak, and every API request carries the unique User-Agent header the Jamf Technology Partner Program requires.
+- df696de: Page the skills table and move its default search, filters, and sorting to the server.
+- 8eafabf: Tunneled MCP servers can now be published with public visibility, letting anyone call them anonymously with no login. Turn on **Public Access** for a tunnel source, then set an MCP server fronting it to Public. Public tunneled servers expose every tool to the open internet, so a high-friction confirmation guards the toggle and the MCP server visibility control stays locked to Private until the source opts in.
+- 3f11ea3: Remove the unused Redis-backed Shadow MCP access-rule and approval-request API in favor of risk policy bypass grants.
+- d960f03: Show the required permission on the page-level access-restricted screen. A "What access do I need?" disclosure expands into a bordered panel naming the scopes an organization admin can grant, so a blocked user knows what to ask for instead of just being told they lack access.
+- ea27950: Prioritize addable skills and add search to the plugin skill picker.
+- 074cb4b: Show the skill efficacy methodology in the dashboard instead of linking to GitHub.
+- 4f941e2: Label skill version history actions as rollbacks or roll-forwards relative to the current version.
+- d9fe35f: Redesign the switch-organization screen and the no-access gate on the new auth shell. The dropdown is replaced with a selectable organization list that pins the current org under a "Current" chip, the gate variant shows a no-access banner for the blocked org above the switchable list, and both screens get a Log out link in the shell header.
+- 8880982: Polish trial-facing setup and administration surfaces: use current Speakeasy
+  branding on public install pages, return an empty custom-domain list without a
+  404, remove invalid DOM and SVG attributes, explain unavailable collection
+  installs, and focus observability setup on supported integrations.
+- b3d06d1: Explain tokens under management on the billing page with the same definition as the public billing docs, and link the info affordances straight to that docs section.
+
+## 0.95.0
+
+### Minor Changes
+
+- 861e650: Add on-demand LLM session summaries (`chat.summarize`) and pin controls on Agent Sessions: persisted summaries in the session side panel, pin/unpin on list rows and the detail sheet, and a Pinned filter.
+- 03b0c2e: Add platform-admin management of Gram's own platform-level external credentials (starting with the ambient GCP identity) via a new `adminExternalCredentials` API (create, read, update, delete) and an "External Services" section in the organization settings with a creation sheet and a per-credential detail page. Includes a live "who am I" Verify probe backed by a reusable `gcpauth` identity resolver.
+- 084cc71: Add Budgets v1: org-scoped per-person budget rules with CEL actor targeting over directory-synced attributes. A periodic Temporal evaluator sums each matched actor's LLM spend from ClickHouse against the rule's per-person limit for UTC calendar windows, records warning/breach events, and publishes circuit state to Redis. Rules with action=block deny the blocked user's Claude Code traffic (UserPromptSubmit and PreToolUse, before risk-policy scans) until the window resets. Rules are append-only version snapshots: editing archives the current version row and creates a successor (version + 1), and rules are archived — never deleted — so historical events always resolve to the exact config that fired them. In the dashboard, Budgets renders as a tab on the Costs page wired to the new `spendrules` management API (rule create/edit/archive, live actor preview, overview cards, events tab); the tab only appears when the `gram-budgets-page` PostHog flag is enabled, so the surface can be released to select users.
+- 5aaea21: Upgrade the dashboard chat runtime to AI SDK 7, including matching major
+  versions of the AI SDK integrations and OpenRouter provider plus the AI SDK
+  7-compatible assistant-ui adapter.
+
+### Patch Changes
+
+- f1d60da: Add a platform-admin surface for the chat analysis pipeline's per-organization settings. A new `adminChatAnalysis` management service (`getSettings` / `upsertWorkUnitsSettings`, session-only, gated on the platform-admin flag) reads and writes the organization's `chat_analysis_settings` row for the work-units judge, taking the same organization advisory lock the reservation transaction holds and recording before/after audit snapshots under the new `chat_analysis_settings` subject. The developer toolkit's Features tab gains a matching "Work Units Chat Analysis" section: an org-wide enable/disable control plus the daily evaluation cap, with a suggested cap prefilled when enabling an organization that never had one. A third method, `triggerAnalysis`, wakes the chat analysis coordinator of every project in the organization on demand — surfaced as a "Run now" button in the same section — so an admin can start a pass immediately instead of waiting for a chat write or the periodic sweep.
+- 465c861: Add an All / Pinned view toggle on Agent Sessions so pinned sessions have a dedicated list instead of living only behind a filter chip.
+- 118b7bc: Make common relative date ranges on the Billing page work without an AI request, including "this month", "this year", and "since July 1".
+- e1b188a: `chat.load` now accepts a producer-scoped API key (`Gram-Key`) in addition to a dashboard session and a chat-session token, so backend integrations can pull chat transcripts programmatically without a browser session. Only a **direct** producer API key is treated as a first-party project credential: like the dashboard session (and the way RBAC already exempts API keys via `ShouldEnforce`), it can load any chat in its project, including chats owned by an external user. External-user callers and chat-session tokens stay owner-matched even when the token carries the minting key's `APIKeyID`, and the project/org boundary still applies. The dashboard's producer key-scope description now notes it can export chat transcripts, and the endpoint is added to the public SDK/docs allowlist so its API-key auth is captured in the published API docs.
+- ffae6fa: Add daily custom-domain routing and TLS certificate health checks in an observation-only first release: checks log their findings, including the admin notifications a future release will send, without persisting health state or emailing anyone yet. The dashboard groundwork for health warnings and a manual recheck ships alongside but stays dormant until observation ends.
+- cb9189c: Add Claude Opus 5 (`anthropic/claude-opus-5`) to the supported model catalog and make it the default for in-app chat and newly created assistants. Specialized judge, embedding, and other purpose-specific model selections remain unchanged.
+- 5ebeba4: Redesign the login and register screens with the Speakeasy website styling. The left pane replaces the static platform diagram with an animated agent-session walkthrough — a Connected-to-Speakeasy banner followed by five governed policy decisions (grant, flag, deny, hold, audit) lighting up on a loop under a Tobias display headline — and the right pane becomes a white panel with the Speakeasy lockup, pill CTA for SSO login (or the organization creation form on register), and the brand gradient strip across the top of the screen.
+- b87e3a4: Make the MCP environment variable "Import .env" control open a local file picker, populate one secret row per assignment, and report invalid files instead of doing nothing.
+- 16d009d: Point the profile menu's "Platform Status" link at `https://status.speakeasy.com/`, matching the domain the status page now lives on (the neighbouring Roadmap link already uses `speakeasy.com`).
+- 74cf920: Move the detection sensitivity slider from its own policy-editor stage into the Detect stage. The slider now appears as a card below the detector categories, only while a confidence-scored category (Financial, PII, Government IDs, Healthcare, or Off-Policy) is enabled, and the standard policy flow shrinks to Detect → Scope → Action → Review. The slider help text no longer references internal engine names.
+- ad71caf: Dead or mistyped public skill share links now show the page's friendly "This skill isn't available" state instead of the full-page crash screen. The crash screen's debug details also redact capability tokens from error messages and request URLs so a share token is never displayed verbatim.
+- ffd219f: Send a robots noindex signal for the whole dashboard host: the app shell now carries `<meta name="robots" content="noindex, nofollow">` and nginx adds a matching `X-Robots-Tag` header (including on error responses). Nothing on the host wants search indexing — the app is behind login and `/shared/*` pages are tokenized public share links.
+
+## 0.94.0
+
+### Minor Changes
+
+- cc076e2: Serve the Employee Enrollment list from the pre-aggregated `attribute_metrics_summaries` view (DNO-618). `telemetry.searchUsers` gains a `source` level: `logs` (default, unchanged) scans raw `telemetry_logs`, while `agent_metrics` reads the pre-aggregated view — canonical observed agent usage (Claude Code, Codex, Cursor, Claude Chat), keyed by email — which is far cheaper (the enrollment query drops from ~seconds to tens of milliseconds on large projects). Identities that never carry an email in the window (which have no token usage) are surfaced separately from raw logs with activity but no token counts, so unknown users stay visible.
+
+  Note the enrollment token numbers change: they now reflect the same canonical agent-usage measure the costs/billing pages use, rather than the previous raw `gen_ai.usage.*` sum that mixed in Gram-hosted completions and duplicate usage-metric rows while missing Claude Code OTEL usage. Only the enrollment list opts in via `source=agent_metrics`; all other `searchUsers` consumers are unchanged.
+
+### Patch Changes
+
+- 5e8e13f: Speed up the Employee Enrollment page (DNO-618). `telemetry.searchUsers` gains a `metrics` level: `full` (default, unchanged) computes the complete set of aggregates, while `basic` projects only user identity, first/last activity, input/output token sums, and the raw user ids the account-enrichment join needs — skipping the per-tool and per-hook-source map aggregations (`sumMapIf`), chat-cardinality (`uniqExactIf`), and cost/cache/avg columns that dominate the per-row ClickHouse work. The enrollment list, which renders only the lean fields (linked accounts come from Postgres), now requests `basic`, so its query no longer builds breakdowns it discards.
+- b8d43ac: Fix the Employee Enrollment page showing enrolled employees with 0 tokens (their usage appearing under "Unknown users" instead). When a member's telemetry splits across identity keys — an opaque user_id with no email (e.g. Gram tool calls) plus their email (Claude/Cursor usage) — the id-keyed, token-less summary was shadowing the member's token-bearing email summary. `buildEmployees` now matches a member against both their id and their email and merges the results, so their tokens, activity, and linked accounts are attributed correctly and their usage is no longer orphaned into the unattributed list.
+- c773dae: Keep MultiSelect trigger controls inside the container: selected badges now
+  shrink and truncate long labels with an ellipsis instead of pushing the
+  clear "X" and dropdown chevron past the right edge, as seen on the plugin
+  Manage assignments sheet.
+- e62d157: Add organization Skills settings for content upload and efficacy sampling.
+
+## 0.93.0
+
+### Minor Changes
+
+- c08521f: Expose per-schedule state for AI integrations and rebuild the dashboard page around it. New aiIntegrations.listSchedules, setScheduleEnabled, and retrySchedule endpoints surface each sync schedule's status (pending/success/failed/auto-paused/disabled), last error, and timestamps, backed by a new user-controlled disabled_at pause that is independent of auto-pause. Each schedule also carries a backend-owned product-level stream identifier and kind (e.g. claude.chat.message events, cursor.usage and claude.chat.cost.usd metrics). The AI Integrations dashboard section moves to a dedicated page with one expandable row per provider connection showing its event and metric streams, each with live status, inline errors, retry, an independent pause toggle, and a link to where the imported data lands.
+- 8567fb6: Promote OpenAI Codex to a supported platform in the onboarding "Instrument agent platforms" step. The tile now covers both the Codex CLI and the Codex desktop app, and its walkthrough documents the two required steps: deploying the Speakeasy device agent via MDM (linking out to the device agent setup page) and forwarding Codex OpenTelemetry logs to Speakeasy. Also refreshes the "coming soon" list (adds opencode, Devin, and Mistral; drops AWS Bedrock) ahead of those integrations landing, and makes the onboarding stepper's step numbers clickable to preview any step (forward or back) without advancing onboarding progress.
+- 572392a: Restructure the costs explorer around a stacked cost-over-time chart and one unified control bar. The chart (the billing token-usage panel generalized into a shared `StackedTimeSeriesPanel`) stacks daily spend by the current breakdown axis, with weekly/monthly bars for week-over-week comparison and click/drag drill-down into a date range. The search box, breakdown axis track, CSV export, a new Reset button, the dataset selector, and the date-range picker now form a two-row control bar under the headline stats that pins to the top of the page when scrolled past. Re-pivoting or drilling updates the page in place instead of flashing back to skeletons. The billing page renders through the same shared chart with no visual change, and `Page.Toolbar` gains multi-row (`Row`/`Leading`) composition.
+- ccdc7f4: Add project skill efficacy, activation, attributed session cost, estimated savings, trends, and scored-session insights.
+- a07dcff: Make the Shadow MCP detector mutually exclusive with other built-in policy detectors in create and edit flows, with disabled-switch tooltips explaining how to change the selection.
+- e980481: Add atomic Shadow MCP policy setup with project inventory URL selection, searchable modal review, and URL allow-rule reconciliation.
+- fd17ed6: Split the tool-usage summary into per-panel endpoints so the MCP & Tools dashboard streams in each card as its data arrives instead of blocking on the slowest aggregate (INC-417).
+
+  `getToolUsageSummary` now has seven sibling endpoints — `getToolUsageTotals`, `getToolUsageTargets`, `getToolUsageUsers`, `getToolUsageTargetTimeSeries`, `getToolUsageUserTimeSeries`, `getToolUsageUsersByTarget`, and `getToolUsageTargetToolBreakdown` — each returning one section of the summary from the same shared query helpers and filter payload. The aggregate endpoint is unchanged for the platform agent tool that wants everything in one call. The MCP & Tools page fetches the seven sections in parallel (the cheap totals query gates the page shell; each panel shows its own loading skeleton and, if its section query fails, its own error state rather than a misleading empty chart), and the MCP overview "Top users" table now fetches only the users section it needs.
+
+### Patch Changes
+
+- 3ca88b2: Add organizationRemoteSessionIssuers.migrate API and UI to consolidate two remote identity providers that point at the same upstream authorization server, re-pointing the source's clients onto the target and soft-deleting the source without forcing anyone to re-authenticate
+- 3203363: Fix Claude Desktop agent sessions showing an opaque user ID instead of the user's name. The Anthropic compliance import no longer clobbers a previously resolved chat owner when a later sync activity carries no actor identity (empty strings defeated the upsert's COALESCE guard — NULL is passed instead), and connected-user email resolution is now case-insensitive on both the server and the dashboard. When a session's owner still can't be matched to an org member, the agent-sessions list and session details now show a tooltip explaining why.
+- 041e7af: feat: add Codex compliance cost polling
+- c2e07e2: Remove stale references to the retired prompt-injection ML classifier. Dashboard copy and the managed-assistant instructions now describe the LLM judge, which has been the only prompt-injection engine since the classifier and heuristics were dropped.
+- bb9aac8: Enable project assistants in the dashboard to emit Elements chart and generative UI blocks by sharing the canonical widget prompts between the client and server.
+- 96f7f73: Skill summaries now stay in sync with the current version: publishing a new version — whether recorded manually or captured from a session — updates the skill's registry summary from the manifest description, so skills captured before their contents arrived no longer show "No summary" forever. The dashboard's Add Skills dialog on the plugin page is now a multi-select that batches distributions, keeps skills without a distributable version listed but disabled with the reason and a Fix link, and the skill page's distribution banner turns red and explains what blocks distribution when a skill has no versions or none pass validation. Version badges in the version history table no longer overlap the Validity column.
+
+## 0.92.0
+
+### Minor Changes
+
+- ce5571d: Rename and edit captured skills, preserve immutable version lineage, and expose curation controls in the dashboard.
+- 7728555: Playground: tunneled MCP servers can now be selected and chatted with (behind the `gram-tunneled-mcp` flag).
+
+### Patch Changes
+
+- 792f487: Fix a crash in the policy scope traffic preview when a matched message produced no highlight spans.
+- 2d80662: Add a "What's shipped this week on the platform?" suggestion to the chat landing page and the project assistant's slash-command menu. Picking it starts a session that asks the assistant to check the changelog for the week's platform releases.
+- eacabda: Make the cost explorer's breakdown machinery treat the "(unset)" bucket as a first-class group everywhere, fixing the hidden Account Type breakdown on drilled slices that mix classified and unclassified spend (DNO-425).
+
+  Server: telemetry.query's dimension_values now keeps the '' bucket for every groupable dimension — it is the "(unset)" row a breakdown by that dimension renders, so consumers can count it. Only dimensions where '' means "not applicable" (the Claude attribution cuts and query_source, flagged in the dimension registry) still drop it. Empty role/group arrays likewise surface as the "(unset)" bucket.
+
+  Dashboard: the breakdown axis is resolved against the slice's actual group counts by one shared resolver, at drill time (using the clicked row's dimension values) and on load — a division whose spend all sits in one department lands directly on its users with no Department selector, while a division splitting into a named department plus department-less spend keeps the Department cut (previously hidden). The entity/detail query no longer depends on the axis (removing an internal resolution cycle), grouped queries wait for the resolved axis instead of fetching twice, a `?by=` naming a pinned or un-splittable dimension falls back to the level's default, and the URL is rewritten in place whenever the rendered axis diverges from `?by=` so links always reflect the view.
+
+- 8571971: Add the standard toolbar search box to the costs breakdown section, filtering the visible breakdown rows (or sessions) client-side while keeping the preset breakdown-axis controls in place.
+- afdca04: Polish the Device Agent install page: replace the distorted Linux mascot with the official Tux, add an MDM rollout recommendation, and drop the preview badges on the page title and sidebar nav item.
+- 86f8a76: Serve the project homepage's hook/agent-view metrics (Total Spend, Sessions, Top Users, Most Agent Sessions by User, Most Used Agents) from the pre-aggregated `attribute_metrics_summaries` table via `telemetry.query` instead of paginating every user through `telemetry.searchUsers` (which scanned raw `telemetry_logs`). This is the same source the Costs page uses, so the homepage and Costs figures now agree. The MCP-hosting fallback view is unchanged.
+- 1a04494: Fall back to the device hostname on the user cost breakdown when a session carries no email. The Go hooks report the machine's hostname on every event; it now rides the session cache onto Claude OTEL cost rows, and the `email` telemetry dimension groups identity-less spend per device instead of pooling it all into one bucket. Only sessions with neither email nor hostname remain under "Team-wide API Usage".
+- 6ea128d: feat: surface issuer setup documentation when creating clients. `remote_session_issuer` records now expose a `client_setup_documentation_url`, settable on create and update across the project-scoped, org-admin, and platform-admin (global) issuer surfaces. The dashboard edits it on the issuer Settings tab and shows it on the Overview tab alongside the discovered RFC 8414 `service_documentation`. Both are linked from the New Client sheet — as **Client Setup Documentation** and **Service Documentation** — so customers can set up an OAuth client with the provider themselves, owning its credentials, access, and rate limits rather than sharing a Gram-owned client. `client_setup_documentation_url` must be an absolute `http(s)` URL (validated with `urls.IsAbsoluteHTTP`, since it is rendered as a link); an empty string clears it.
+- e5800a5: Flag inactive MCP servers on the Distribute MCP listing. A new `telemetry.getMcpServerActivity` endpoint reports per-server tool-call activity, and each card/row now shows a subtle indicator when a server has never received a tool call and a warning when it has had no tool calls in the last two weeks.
+- 72855da: Normalize provider names and product-surface labels across reporting, agent sessions, tool logs, and cost views. Anthropic compliance imports now persist canonical Claude desktop/web source slugs, while historical source aliases remain filterable.
+- 223394c: Add a search bar to the plugin detail page that filters the plugin's MCP servers, assignments, and skills, with distinct empty states for "nothing added yet" vs "no search matches".
+- 0f7a061: Fix dashboard React warnings caused by nested log controls, duplicate risk-rule keys, command-palette focus restoration, and unsupported Moonshine button children.
+- 1a04494: Label the empty user bucket on cost breakdowns as "Team-wide API Usage" instead of "(unset)". Claude Code sessions authenticated with a company API key or gateway emit no user identity, so their pooled spend is the shared team account's usage, not a data gap. The label applies everywhere the user dimension renders — the cost table, the Top spenders widget (which now includes the bucket instead of hiding it), the drill-in profile, breadcrumbs, and the billing token-usage breakdown — while other dimensions keep "(unset)".
+- 1dc4aec: Upgrade recharts from v2 to v3 in the Elements chart plugins, migrating off the deprecated Cell component with no visual changes.
+
 ## 0.91.1
 
 ### Patch Changes

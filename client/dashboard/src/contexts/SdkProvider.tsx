@@ -1,7 +1,7 @@
 import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
 import { isProjectOverviewQueryKey } from "@/components/project/projectOverviewQuery";
 import { clearStorageForLogout } from "@/lib/logout-storage";
-import { getServerURL } from "@/lib/utils";
+import { getApiBaseURL } from "@/lib/utils";
 import { datadogRum } from "@datadog/browser-rum";
 import { Gram } from "@gram/client";
 import { HTTPClient } from "@gram/client/lib/http.js";
@@ -72,7 +72,7 @@ export const SdkProvider = ({
     });
 
     const gram = new Gram({
-      serverURL: getServerURL(),
+      serverURL: getApiBaseURL(),
       httpClient,
     });
 

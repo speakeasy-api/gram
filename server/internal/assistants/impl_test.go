@@ -482,7 +482,7 @@ func newRBACServiceWithConn(t *testing.T, dbName string) (*Service, context.Cont
 	logger := testenv.NewLogger(t)
 	chConn, err := assistantsInfra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	service := &Service{
 		tracer:   testenv.NewTracerProvider(t).Tracer("test"),
 		logger:   logger,

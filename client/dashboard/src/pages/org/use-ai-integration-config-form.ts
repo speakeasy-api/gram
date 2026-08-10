@@ -21,7 +21,7 @@ type UseAIIntegrationConfigFormOptions = {
   onDeleteSuccess?: () => void;
 };
 
-type AIIntegrationConfigForm = {
+export type AIIntegrationConfigForm = {
   data: ReturnType<typeof useAiIntegrationConfig>["data"];
   isLoading: boolean;
   enabled: boolean;
@@ -37,6 +37,7 @@ type AIIntegrationConfigForm = {
   isMutating: boolean;
   canSave: boolean;
   save: () => void;
+  saveEnabled: (nextEnabled: boolean) => void;
   remove: () => void;
 };
 
@@ -128,7 +129,30 @@ export function useAIIntegrationConfigForm(
         upsertConfigRequestBody: {
           provider: provider.provider,
           apiKey: apiKey.trim(),
-          enabled,
+          // A first-time connect starts enabled; the connection switch and
+          // dialog manage the flag from then on.
+          enabled: isConfigured ? enabled : true,
+          billingMode,
+          ...(provider.requiresOrganizationId
+            ? { externalOrganizationId: organizationId.trim() }
+            : {}),
+        },
+      },
+    });
+  };
+
+  // Instantly persists an enabled/disabled flip for an already-saved
+  // connection, keeping the rest of the stored config as-is. Lets the
+  // connection switch act on its own instead of waiting for the Save button.
+  const saveEnabled = (nextEnabled: boolean) => {
+    setEnabled(nextEnabled);
+    if (!isConfigured || !hasSavedKey) return;
+    upsert({
+      request: {
+        upsertConfigRequestBody: {
+          provider: provider.provider,
+          apiKey: "",
+          enabled: nextEnabled,
           billingMode,
           ...(provider.requiresOrganizationId
             ? { externalOrganizationId: organizationId.trim() }
@@ -165,6 +189,7 @@ export function useAIIntegrationConfigForm(
     isMutating,
     canSave,
     save,
+    saveEnabled,
     remove,
   };
 }

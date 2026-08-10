@@ -5,6 +5,7 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import {
   ListSkillsResult,
@@ -27,6 +28,30 @@ export type ListSkillsSecurity = {
   option2?: ListSkillsSecurityOption2 | undefined;
 };
 
+export const SourceKinds = {
+  Manual: "manual",
+  Captured: "captured",
+} as const;
+export type SourceKinds = ClosedEnum<typeof SourceKinds>;
+
+export const Classifications = {
+  Custom: "custom",
+  BuiltIn: "built_in",
+} as const;
+export type Classifications = ClosedEnum<typeof Classifications>;
+
+/**
+ * How to order skills.
+ */
+export const Sort = {
+  Name: "name",
+  Updated: "updated",
+} as const;
+/**
+ * How to order skills.
+ */
+export type Sort = ClosedEnum<typeof Sort>;
+
 export type ListSkillsRequest = {
   /**
    * Cursor for the next page of skills.
@@ -36,6 +61,26 @@ export type ListSkillsRequest = {
    * The number of skills to return per page.
    */
   limit?: number | undefined;
+  /**
+   * Search skill names, display names, and summaries.
+   */
+  search?: string | undefined;
+  /**
+   * Only return skills from these sources.
+   */
+  sourceKinds?: Array<SourceKinds> | undefined;
+  /**
+   * Only return skills with these classifications.
+   */
+  classifications?: Array<Classifications> | undefined;
+  /**
+   * Only return skills that have any of these tags.
+   */
+  tags?: Array<string> | undefined;
+  /**
+   * How to order skills.
+   */
+  sort?: Sort | undefined;
   /**
    * Session header
    */
@@ -148,9 +193,26 @@ export function listSkillsSecurityToJSON(
 }
 
 /** @internal */
+export const SourceKinds$outboundSchema: z.ZodMiniEnum<typeof SourceKinds> = z
+  .enum(SourceKinds);
+
+/** @internal */
+export const Classifications$outboundSchema: z.ZodMiniEnum<
+  typeof Classifications
+> = z.enum(Classifications);
+
+/** @internal */
+export const Sort$outboundSchema: z.ZodMiniEnum<typeof Sort> = z.enum(Sort);
+
+/** @internal */
 export type ListSkillsRequest$Outbound = {
   cursor?: string | undefined;
   limit: number;
+  search?: string | undefined;
+  source_kinds?: Array<string> | undefined;
+  classifications?: Array<string> | undefined;
+  tags?: Array<string> | undefined;
+  sort: string;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -164,12 +226,18 @@ export const ListSkillsRequest$outboundSchema: z.ZodMiniType<
   z.object({
     cursor: z.optional(z.string()),
     limit: z._default(z.int(), 50),
+    search: z.optional(z.string()),
+    sourceKinds: z.optional(z.array(SourceKinds$outboundSchema)),
+    classifications: z.optional(z.array(Classifications$outboundSchema)),
+    tags: z.optional(z.array(z.string())),
+    sort: z._default(Sort$outboundSchema, "name"),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      sourceKinds: "source_kinds",
       gramSession: "Gram-Session",
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",

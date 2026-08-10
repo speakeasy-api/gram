@@ -17,6 +17,7 @@ INSERT INTO risk_policies (
   , enabled
   , action
   , audience_type
+  , shadow_mcp_disposition
   , auto_name
   , user_message
   , prompt
@@ -42,6 +43,7 @@ VALUES (
   , @enabled
   , @action
   , @audience_type
+  , sqlc.narg(shadow_mcp_disposition)::text
   , @auto_name
   , @user_message
   , sqlc.narg(prompt)::text
@@ -486,18 +488,6 @@ WHERE rr.project_id = @project_id
   AND rr.risk_policy_id = @risk_policy_id
   AND rr.risk_policy_version = @risk_policy_version;
 
--- name: CountAnalyzedMessagesByProject :many
--- Batched form of CountAnalyzedMessages: the analyzed-message count for every
--- (policy, version) in a project in one query, so ListRiskPolicies avoids a
--- per-policy round trip.
-SELECT
-    rr.risk_policy_id
-  , rr.risk_policy_version
-  , COUNT(DISTINCT rr.chat_message_id)::BIGINT AS analyzed_messages
-FROM risk_results rr
-WHERE rr.project_id = @project_id
-GROUP BY rr.risk_policy_id, rr.risk_policy_version;
-
 -- name: CountFindingsByPolicy :one
 SELECT COUNT(*)::BIGINT
 FROM risk_results
@@ -853,18 +843,56 @@ SET risk_analyzed_at = clock_timestamp()
 WHERE id = ANY(@message_ids::uuid[])
   AND project_id = @project_id;
 
+-- name: FetchUnanalyzedContentPartIDs :many
+-- Scans the partial index chat_content_parts_risk_analyzed_at_null_idx
+-- (project_id, id WHERE risk_analyzed_at IS NULL), mirroring the chat_messages
+-- unanalyzed sweep for non-turn content.
+SELECT ccp.id
+FROM chat_content_parts ccp
+WHERE ccp.project_id = @project_id
+  AND ccp.risk_analyzed_at IS NULL
+  AND ccp.id >= @id_lower_bound
+ORDER BY ccp.id DESC
+LIMIT @batch_limit;
+
+-- name: MarkContentPartsRiskAnalyzed :exec
+UPDATE chat_content_parts
+SET risk_analyzed_at = clock_timestamp()
+WHERE id = ANY(@content_part_ids::uuid[])
+  AND project_id = @project_id;
+
 -- name: GetMessageContentBatch :many
 -- The scanned user's id rides along so the LLM judge's completion telemetry
 -- can attribute scanning volume to whose traffic was analyzed. Same
 -- attribution rule as ListRiskOverviewTopUsers: the message's own user_id
 -- wins, the chat owner's is the fallback — and a soft-deleted chat's owner
 -- never is (LEFT JOIN so the message still gets scanned, just unattributed).
-SELECT cm.id, cm.role, cm.content, cm.tool_calls,
+--
+-- created_at bounds the shadow-MCP scanner's ClickHouse provenance lookup to
+-- the batch's own time range, keeping that query on the telemetry table's
+-- time-ordered primary key instead of scanning the full retention window.
+--
+-- source names the agent that recorded the message (Codex, Cursor, the ingest
+-- adapter, ...). The shadow-MCP scanner attributes its provenance-resolution
+-- metric to it, which is the one attribution available when the call resolved
+-- to no telemetry row at all — precisely the population that metric exists to
+-- measure.
+SELECT cm.id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.source,
   COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::TEXT AS chat_user_id
 FROM chat_messages cm
 LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
 WHERE cm.id = ANY(@ids::uuid[])
   AND cm.project_id = @project_id;
+
+-- name: GetContentPartBatch :many
+SELECT ccp.id, ccp.kind AS message_type, ccp.content_asset_url, ccp.created_at, ccp.source,
+  COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::TEXT AS chat_user_id
+FROM chat_content_parts ccp
+LEFT JOIN chat_messages cm ON cm.id = ccp.parent_chat_message_id
+LEFT JOIN chats c ON c.id = ccp.chat_id AND c.deleted IS FALSE
+WHERE ccp.id = ANY(@ids::uuid[])
+  AND ccp.project_id = @project_id
+  AND ccp.deleted IS FALSE;
 
 -- name: GetBatchChatIdentities :many
 -- One row per chat represented in a batch of messages, for the session-scoped
@@ -942,6 +970,7 @@ INSERT INTO risk_results (
   , risk_policy_id
   , risk_policy_version
   , chat_message_id
+  , chat_content_part_id
   , source
   , found
   , rule_id
@@ -961,6 +990,7 @@ VALUES (
   , @risk_policy_id
   , @risk_policy_version
   , @chat_message_id
+  , @chat_content_part_id
   , @source
   , @found
   , @rule_id
@@ -980,15 +1010,22 @@ WHERE risk_policy_id = @risk_policy_id
   AND project_id = @project_id
   AND chat_message_id = ANY(@message_ids::uuid[]);
 
+-- name: DeleteRiskResultsForContentParts :exec
+DELETE FROM risk_results
+WHERE risk_policy_id = @risk_policy_id
+  AND project_id = @project_id
+  AND chat_content_part_id = ANY(@content_part_ids::uuid[]);
+
 -- name: GetRiskResultByID :one
 -- Single-row lookup backing risk.results.unmask: fetch a result's raw match
 -- plus its owning chat_id so the caller can authorize a chat:read check
 -- before returning the plaintext. Applies the same found/excluded/
 -- false-positive filters as every other risk_results read so a stale result
 -- id (excluded or swept as noise since it was listed) can't be unmasked.
-SELECT rr.id, rr.match, rr.source, cm.chat_id
+SELECT rr.id, rr.match, rr.source, COALESCE(cm.chat_id, ccp.chat_id) AS chat_id
 FROM risk_results rr
-JOIN chat_messages cm ON cm.id = rr.chat_message_id
+LEFT JOIN chat_messages cm ON cm.id = rr.chat_message_id
+LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
 WHERE rr.id = @id
   AND rr.project_id = @project_id
   AND rr.found IS TRUE
@@ -1021,30 +1058,32 @@ WHERE rr.id = @id
 -- assistant link at all.
 SELECT
     sub.id, sub.project_id, sub.organization_id, sub.risk_policy_id,
-    sub.risk_policy_version, sub.chat_message_id, sub.source, sub.found,
+    sub.risk_policy_version, sub.chat_message_id, sub.chat_content_part_id, sub.source, sub.found,
     sub.rule_id, sub.description, sub.match, sub.start_pos, sub.end_pos,
     sub.confidence, sub.tags, sub.spans, sub.dead_letter_reason, sub.created_at,
     sub.chat_id, sub.message_created_at, sub.chat_title, sub.chat_user_id,
-    sub.block_id, sub.replayed
+    sub.block_id
 FROM (
   SELECT
       rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id,
-      rr.risk_policy_version, rr.chat_message_id, rr.source, rr.found,
+      rr.risk_policy_version, rr.chat_message_id, rr.chat_content_part_id, rr.source, rr.found,
       rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos,
       rr.confidence, rr.tags, rr.spans, rr.dead_letter_reason, rr.created_at,
-      cm.chat_id, cm.created_at AS message_created_at, cm.replayed,
+      COALESCE(cm.chat_id, ccp.chat_id) AS chat_id,
+      COALESCE(cm.created_at, ccp.created_at) AS message_created_at,
       c.title AS chat_title, c.external_user_id AS chat_user_id,
       COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id,
       CASE
         WHEN @unique_match::boolean THEN ROW_NUMBER() OVER (
           PARTITION BY rr.risk_policy_id, rr.rule_id, rr.match
-          ORDER BY cm.created_at DESC, rr.id DESC
+          ORDER BY COALESCE(cm.created_at, ccp.created_at) DESC, rr.id DESC
         )
         ELSE 1
       END AS dedup_rank
   FROM risk_results rr
-  JOIN chat_messages cm ON cm.id = rr.chat_message_id
-  LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+  LEFT JOIN chat_messages cm ON cm.id = rr.chat_message_id
+  LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
+  LEFT JOIN chats c ON c.id = COALESCE(cm.chat_id, ccp.chat_id) AND c.deleted IS FALSE
   JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
     AND (rp.enabled IS TRUE OR rr.risk_policy_id = sqlc.narg(policy_id)::uuid)
   LEFT JOIN LATERAL (
@@ -1057,17 +1096,17 @@ FROM (
   WHERE rr.project_id = @project_id
     AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
     AND (sqlc.narg(policy_id)::uuid IS NULL OR rr.risk_policy_id = sqlc.narg(policy_id)::uuid)
-    AND (sqlc.narg(from_time)::timestamptz IS NULL OR cm.created_at >= sqlc.narg(from_time)::timestamptz)
-    AND (sqlc.narg(to_time)::timestamptz IS NULL OR cm.created_at < sqlc.narg(to_time)::timestamptz)
+    AND (sqlc.narg(from_time)::timestamptz IS NULL OR COALESCE(cm.created_at, ccp.created_at) >= sqlc.narg(from_time)::timestamptz)
+    AND (sqlc.narg(to_time)::timestamptz IS NULL OR COALESCE(cm.created_at, ccp.created_at) < sqlc.narg(to_time)::timestamptz)
     AND (@rule_id::text = '' OR rr.rule_id ILIKE '%' || @rule_id::text || '%')
     AND (@user_id::text = '' OR c.external_user_id ILIKE '%' || @user_id::text || '%')
     AND (NOT @non_assistant::boolean OR NOT EXISTS (
       SELECT 1 FROM assistant_threads at
-      WHERE at.chat_id = cm.chat_id AND at.deleted IS FALSE
+      WHERE at.chat_id = COALESCE(cm.chat_id, ccp.chat_id) AND at.deleted IS FALSE
     ))
     AND (sqlc.narg(assistant_id)::uuid IS NULL OR EXISTS (
       SELECT 1 FROM assistant_threads at
-      WHERE at.chat_id = cm.chat_id AND at.deleted IS FALSE
+      WHERE at.chat_id = COALESCE(cm.chat_id, ccp.chat_id) AND at.deleted IS FALSE
         AND at.assistant_id = sqlc.narg(assistant_id)::uuid
     ))
     AND (@category::text = '' OR (
@@ -1132,10 +1171,11 @@ LIMIT @page_limit;
 -- historical findings even after it has been turned off, so disabled policies
 -- still show the matches they produced while active. Deleted policies remain
 -- excluded. The frontend flags the inactive policy as historical data.
-SELECT rr.*, cm.chat_id, cm.created_at AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
+SELECT rr.*, COALESCE(cm.chat_id, ccp.chat_id) AS chat_id, COALESCE(cm.created_at, ccp.created_at) AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
 FROM risk_results rr
-JOIN chat_messages cm ON cm.id = rr.chat_message_id
-LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+LEFT JOIN chat_messages cm ON cm.id = rr.chat_message_id
+LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
+LEFT JOIN chats c ON c.id = COALESCE(cm.chat_id, ccp.chat_id) AND c.deleted IS FALSE
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
 LEFT JOIN LATERAL (
   SELECT tcb.id AS block_id FROM tool_call_blocks tcb
@@ -1149,16 +1189,17 @@ WHERE rr.project_id = @project_id
   AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
   AND (
     sqlc.narg(cursor_message_created_at)::timestamptz IS NULL
-    OR (cm.created_at, rr.id) < (sqlc.narg(cursor_message_created_at)::timestamptz, sqlc.narg(cursor_id)::uuid)
+    OR (COALESCE(cm.created_at, ccp.created_at), rr.id) < (sqlc.narg(cursor_message_created_at)::timestamptz, sqlc.narg(cursor_id)::uuid)
   )
-ORDER BY cm.created_at DESC, rr.id DESC
+ORDER BY COALESCE(cm.created_at, ccp.created_at) DESC, rr.id DESC
 LIMIT @page_limit;
 
 -- name: ListRiskResultsByChatFound :many
-SELECT rr.*, cm.chat_id, cm.created_at AS message_created_at, cm.replayed, c.title AS chat_title, c.external_user_id AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
+SELECT rr.*, COALESCE(cm.chat_id, ccp.chat_id) AS chat_id, COALESCE(cm.created_at, ccp.created_at) AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
 FROM risk_results rr
-JOIN chat_messages cm ON cm.id = rr.chat_message_id
-LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+LEFT JOIN chat_messages cm ON cm.id = rr.chat_message_id
+LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
+LEFT JOIN chats c ON c.id = COALESCE(cm.chat_id, ccp.chat_id) AND c.deleted IS FALSE
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 LEFT JOIN LATERAL (
   SELECT tcb.id AS block_id FROM tool_call_blocks tcb
@@ -1167,14 +1208,14 @@ LEFT JOIN LATERAL (
     AND tcb.deleted IS FALSE
   ORDER BY tcb.created_at DESC LIMIT 1
 ) blk ON TRUE
-WHERE cm.chat_id = @chat_id
+WHERE COALESCE(cm.chat_id, ccp.chat_id) = @chat_id
   AND rr.project_id = @project_id
   AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
   AND (
     sqlc.narg(cursor_message_created_at)::timestamptz IS NULL
-    OR (cm.created_at, rr.id) < (sqlc.narg(cursor_message_created_at)::timestamptz, sqlc.narg(cursor_id)::uuid)
+    OR (COALESCE(cm.created_at, ccp.created_at), rr.id) < (sqlc.narg(cursor_message_created_at)::timestamptz, sqlc.narg(cursor_id)::uuid)
   )
-ORDER BY cm.created_at DESC, rr.id DESC
+ORDER BY COALESCE(cm.created_at, ccp.created_at) DESC, rr.id DESC
 LIMIT @page_limit;
 
 -- name: ListRiskResultsGroupedByChat :many
@@ -1339,6 +1380,82 @@ SET deleted_at = clock_timestamp()
 WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
+
+-- Manual false-positive dismissal -------------------------------------------
+-- Distinct from rule-based exclusions (excluded_at/excluded_exclusion_id):
+-- these mark specific results a reviewer picked by hand as noise, via
+-- false_positive_at/false_positive_reason. Both partial indexes on
+-- risk_results already filter on false_positive_at IS NULL, so marking a
+-- result here drops it out of the "active findings" surfaces the same way an
+-- exclusion does, without touching excluded_at.
+
+-- name: GetRiskResultsByIDs :many
+-- Fetches full rows for a batch of finding ids, scoped to the project. Powers
+-- suggestExclusion's batch-suggestion path (deriving a suggested exclusion
+-- pattern from a multiselect of findings) — needs match/rule_id/source per
+-- row, not just the id, and looking them up server-side (rather than trusting
+-- client-supplied content) means the suggestion sees authoritative,
+-- unmasked data regardless of what the UI has revealed.
+SELECT *
+FROM risk_results
+WHERE project_id = @project_id
+  AND id = ANY(@ids::uuid[]);
+
+-- name: MarkRiskResultsFalsePositive :many
+-- Returns full rows (not just id): the caller republishes each one onto the
+-- findings topic to append a ClickHouse state-change row, and needs the
+-- finding content (source/rule_id/match/...) to build that message.
+UPDATE risk_results
+SET false_positive_at = clock_timestamp()
+  , false_positive_reason = sqlc.narg(reason)
+WHERE project_id = @project_id
+  AND id = ANY(@ids::uuid[])
+  AND false_positive_at IS NULL
+RETURNING *;
+
+-- name: UnmarkRiskResultsFalsePositive :many
+UPDATE risk_results
+SET false_positive_at = NULL
+  , false_positive_reason = NULL
+WHERE project_id = @project_id
+  AND id = ANY(@ids::uuid[])
+  AND false_positive_at IS NOT NULL
+RETURNING *;
+
+-- name: ListFalsePositiveRiskResults :many
+-- Powers the Dismissed tab: every result manually marked as a false positive
+-- in this project, newest dismissal first. Cursor is (false_positive_at, id)
+-- for stable pagination, matching the ListRiskResultsByProjectFound
+-- convention. block_id is always the nil UUID (foundRowToResult maps that to
+-- a nil pointer) since the Dismissed tab doesn't need durable tool-call-block
+-- links. LEFT JOINs both anchor tables (a result is anchored to exactly one,
+-- per risk_results_anchor_check) so content-part-anchored dismissals are not
+-- silently dropped, matching the ListRiskResultsByProjectFound convention.
+SELECT
+    rr.id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id,
+    rr.source, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos,
+    rr.confidence, rr.tags, rr.spans, rr.created_at,
+    rr.false_positive_at, rr.false_positive_reason,
+    COALESCE(cm.chat_id, ccp.chat_id) AS chat_id,
+    c.title AS chat_title, c.external_user_id AS chat_user_id
+FROM risk_results rr
+LEFT JOIN chat_messages cm ON cm.id = rr.chat_message_id
+LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
+LEFT JOIN chats c ON c.id = COALESCE(cm.chat_id, ccp.chat_id) AND c.deleted IS FALSE
+WHERE rr.project_id = @project_id
+  AND rr.false_positive_at IS NOT NULL
+  AND (
+    sqlc.narg(cursor_false_positive_at)::timestamptz IS NULL
+    OR (rr.false_positive_at, rr.id) < (sqlc.narg(cursor_false_positive_at)::timestamptz, sqlc.narg(cursor_id)::uuid)
+  )
+ORDER BY rr.false_positive_at DESC, rr.id DESC
+LIMIT @page_limit;
+
+-- name: CountFalsePositiveRiskResults :one
+SELECT COUNT(*)::BIGINT
+FROM risk_results
+WHERE project_id = @project_id
+  AND false_positive_at IS NOT NULL;
 
 -- Exclusion reconcile sweep -------------------------------------------------
 -- All batches are keyset-paginated by id (id > @cursor, ORDER BY id, LIMIT
@@ -1544,6 +1661,199 @@ WHERE project_id = @project_id
   AND reviewed_by = @reviewed_by
   AND deleted IS FALSE
 RETURNING *;
+
+-- name: ListUserEmailsByIDs :many
+-- Display-email lookup for the ClickHouse-backed overview top-users list,
+-- tenant-bound through org membership so a caller can never resolve emails of
+-- users outside its organization. Soft-deleted memberships are intentionally
+-- included: findings from since-removed org members keep a resolvable email,
+-- mirroring the Postgres overview query's unconditional users join.
+SELECT u.id, u.email
+FROM users u
+JOIN organization_user_relationships our
+  ON our.user_id = u.id
+  AND our.organization_id = @organization_id
+WHERE u.id = ANY(@ids::text[]);
+
+-- name: GetChatMessageAttribution :many
+-- Resolves the denormalized attribution (chat id, user ids, message event
+-- time, assistant link) the ClickHouse finding writer stamps on risk_findings
+-- rows at ingest. Message-level ids win over chat-level ids; both empty and
+-- NULL collapse to ''. The assistant id is the chat's most recent live
+-- assistant_threads link, or the nil UUID when the chat has no assistant.
+SELECT
+    cm.id
+  , cm.chat_id
+  , cm.created_at AS message_created_at
+  , COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::text AS user_id
+  , COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::text AS external_user_id
+  , COALESCE(thread.assistant_id, '00000000-0000-0000-0000-000000000000'::uuid) AS assistant_id
+FROM chat_messages cm
+LEFT JOIN chats c
+  ON c.id = cm.chat_id
+  AND c.deleted IS FALSE
+LEFT JOIN LATERAL (
+  SELECT at.assistant_id
+  FROM assistant_threads at
+  WHERE at.chat_id = cm.chat_id
+    AND at.deleted IS FALSE
+  ORDER BY at.created_at DESC
+  LIMIT 1
+) thread ON TRUE
+WHERE cm.id = ANY(@ids::uuid[]);
+
+-- name: GetChatContentPartAttribution :many
+-- Resolves denormalized attribution for a content-part finding. The parent
+-- message's user ids win over chat-level ids; both empty and NULL collapse to
+-- ''. A content part without a parent still resolves chat-level attribution.
+-- A findings batch can span projects, so the scope is the batch's set of
+-- project ids rather than a single id. project_id is still returned because
+-- that set only proves the part belongs to SOME project in the batch: the
+-- caller re-checks it against the individual finding's project.
+SELECT
+    ccp.id
+  , ccp.chat_id
+  , ccp.project_id
+  , COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::text AS user_id
+  , COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::text AS external_user_id
+FROM chat_content_parts ccp
+-- The parent must sit in the part's own chat. Unconstrained, a stale or forged
+-- parent_chat_message_id would hand another tenant's user ids to this row.
+LEFT JOIN chat_messages cm
+  ON cm.id = ccp.parent_chat_message_id
+  AND cm.chat_id = ccp.chat_id
+LEFT JOIN chats c
+  ON c.id = ccp.chat_id
+  AND c.deleted IS FALSE
+WHERE ccp.id = ANY(@ids::uuid[])
+  AND ccp.project_id = ANY(@project_ids::uuid[])
+  AND ccp.deleted IS FALSE
+  -- Nothing in the schema ties a part's project_id to its chat's, so a part
+  -- pointing at a chat in another project is rejected outright rather than
+  -- attributed. Constraining the chats join alone would not be enough: the
+  -- parent message is reached through ccp.chat_id, so its user ids would still
+  -- come from the foreign chat.
+  AND EXISTS (
+    SELECT 1
+    FROM chats pc
+    WHERE pc.id = ccp.chat_id
+      AND pc.project_id = ccp.project_id
+  );
+
+-- name: ListChatTitlesByIDs :many
+-- Display enrichment for the ClickHouse-served risk events listing: chat
+-- titles are read from Postgres at page render time rather than denormalized
+-- into ClickHouse, because titles are generated after the scan and would be
+-- stale at ingest.
+SELECT c.id, c.title
+FROM chats c
+WHERE c.project_id = @project_id
+  AND c.id = ANY(@ids::uuid[])
+  AND c.deleted IS FALSE;
+
+-- name: ListLatestToolCallBlocksByMessageIDs :many
+-- Display enrichment for the ClickHouse-served risk events listing: the
+-- latest live tool call block per chat message, mirroring the LATERAL join in
+-- ListRiskResultsByProjectFound.
+SELECT DISTINCT ON (tcb.chat_message_id) tcb.chat_message_id, tcb.id AS block_id
+FROM tool_call_blocks tcb
+WHERE tcb.project_id = @project_id
+  AND tcb.chat_message_id = ANY(@ids::uuid[])
+  AND tcb.deleted IS FALSE
+ORDER BY tcb.chat_message_id, tcb.created_at DESC;
+
+-- name: GetChatMessageForUnmask :one
+-- Source material for the ClickHouse-backed reveal path: the anchored chat
+-- message's recorded content and tool calls, which the reveal reconstructs the
+-- raw match from (see unmask_ch.go). role gates the scan-surface composition
+-- exactly like batch analysis (only assistant tool-request messages compose
+-- tool-call arguments into the scanned text). chat_id backs the chat:read
+-- authorization check when the ClickHouse row carries no denormalized chat id.
+SELECT cm.id, cm.chat_id, cm.role, cm.content, cm.tool_calls, cm.created_at
+FROM chat_messages cm
+WHERE cm.id = @id
+  AND cm.project_id = @project_id
+  -- Nothing in the schema ties a message's project_id to its chat's, so a
+  -- message pointing at a chat in another project is rejected outright: the
+  -- chat:read gate is evaluated against the finding's chat id, and serving
+  -- content anchored in a foreign chat would bypass it.
+  AND EXISTS (
+    SELECT 1
+    FROM chats c
+    WHERE c.id = cm.chat_id
+      AND c.project_id = cm.project_id
+  );
+
+-- name: GetChatContentPartForUnmask :one
+-- Content-part variant of GetChatMessageForUnmask: the part's content lives in
+-- the assets blob store, so this returns the asset URL for the caller to read
+-- (size-capped) plus the chat id for authorization.
+SELECT ccp.id, ccp.chat_id, ccp.content_asset_url
+FROM chat_content_parts ccp
+WHERE ccp.id = @id
+  AND ccp.project_id = @project_id
+  AND ccp.deleted IS FALSE
+  -- Same cross-project guard as GetChatMessageForUnmask, and the same one the
+  -- ingest-side GetChatContentPartAttribution applies: a part whose chat lives
+  -- in another project never exposes its asset url.
+  AND EXISTS (
+    SELECT 1
+    FROM chats c
+    WHERE c.id = ccp.chat_id
+      AND c.project_id = ccp.project_id
+  );
+
+-- name: GetChatUserAccountEmailForUnmask :one
+-- Reveal candidate for derived account_identity findings: their match is the
+-- chat's AI-account email (see scanners/accountidentity), resolved through the
+-- same chats.user_account_id link the scanner used. Org-scoped so a forged
+-- chat id cannot read another tenant's account email.
+SELECT ua.email
+FROM chats c
+JOIN user_accounts ua ON ua.id = c.user_account_id AND ua.deleted IS FALSE
+WHERE c.id = @chat_id
+  AND c.organization_id = @organization_id
+  AND c.deleted IS FALSE;
+
+-- name: CreateChatForTest :one
+INSERT INTO chats (project_id, organization_id, user_id, external_user_id)
+VALUES (@project_id, @organization_id, @user_id, @external_user_id)
+RETURNING id;
+
+-- name: CreateAssistantForTest :one
+INSERT INTO assistants (project_id, organization_id, name, model, instructions)
+VALUES (@project_id, @organization_id, @name, 'test-model', '')
+RETURNING id;
+
+-- name: CreateAssistantThreadForTest :one
+INSERT INTO assistant_threads (assistant_id, project_id, correlation_id, chat_id, source_kind)
+VALUES (@assistant_id, @project_id, @correlation_id, @chat_id, 'test')
+RETURNING id;
+
+-- name: CreateChatMessageForTest :one
+INSERT INTO chat_messages (chat_id, project_id, role, content, user_id, external_user_id)
+VALUES (@chat_id, @project_id, 'user', @content, @user_id, @external_user_id)
+RETURNING id;
+
+-- name: CreateChatMessageWithToolCallsForTest :one
+INSERT INTO chat_messages (chat_id, project_id, role, content, tool_calls)
+VALUES (@chat_id, @project_id, @role, @content, @tool_calls)
+RETURNING id;
+
+-- name: CreateUserAccountForTest :one
+INSERT INTO user_accounts (organization_id, external_account_uuid, email)
+VALUES (@organization_id, @external_account_uuid, @email)
+RETURNING id;
+
+-- name: LinkChatUserAccountForTest :exec
+UPDATE chats
+SET user_account_id = @user_account_id
+WHERE id = @chat_id;
+
+-- name: CreateChatContentPartForTest :one
+INSERT INTO chat_content_parts (chat_id, project_id, kind, content_asset_url, parent_chat_message_id)
+VALUES (@chat_id, @project_id, @kind, @content_asset_url, @parent_chat_message_id)
+RETURNING id;
 
 -- name: SetRiskResultExcludedForTest :exec
 UPDATE risk_results

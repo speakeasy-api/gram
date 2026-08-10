@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import Editor, { loader, type OnMount } from "@monaco-editor/react";
-import { useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
 import type * as Monaco from "monaco-editor";
 import * as monaco from "monaco-editor";
 import { useEffect, useRef, type JSX } from "react";
@@ -381,7 +381,7 @@ export function CelMonacoEditor({
   return (
     <div
       className={cn(
-        "border-input dark:bg-input/30 w-full overflow-hidden rounded-md border bg-transparent py-2 shadow-xs",
+        "border-input dark:bg-input/30 w-full overflow-hidden border bg-transparent py-2 shadow-xs",
         className,
       )}
     >

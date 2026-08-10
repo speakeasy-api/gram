@@ -36,16 +36,53 @@ const prefixSecret = "secret."
 // initialization.
 var detectorInitMu sync.Mutex
 
-// newDetector creates a gitleaks detector using the default config, serialized
-// by detectorInitMu to avoid viper's init-time data race.
+// newDetector creates a gitleaks detector using the default config extended with
+// our AWS credential rules (see awsRules), serialized by detectorInitMu to avoid
+// viper's init-time data race.
+//
+// For speed, gitleaks does not run every rule's regex against every input: it
+// first does a single Aho-Corasick pass for all rules' keywords and only
+// evaluates a rule's regex when one of that rule's keywords is present. That
+// keyword trie is built once, inside NewDetector, from Config.Keywords — so a
+// keyworded rule whose keywords are absent from the trie is silently never
+// evaluated. We therefore inject the AWS rules AND their keywords into the config
+// and then construct the detector, rather than adding rules to an already-built
+// detector (which would leave the trie stale and skip our rules).
 func newDetector() (*detect.Detector, error) {
 	detectorInitMu.Lock()
 	defer detectorInitMu.Unlock()
-	detector, err := detect.NewDetectorDefaultConfig()
+	base, err := detect.NewDetectorDefaultConfig()
 	if err != nil {
 		return nil, fmt.Errorf("create gitleaks detector: %w", err)
 	}
-	return detector, nil
+
+	cfg := base.Config
+	for _, rule := range awsRules() {
+		// Validate explicitly: constructing config.Rule values in Go bypasses the
+		// TOML translation path that would normally call Validate, so a malformed
+		// rule (e.g. a SecretGroup past the regex's capture count) would otherwise
+		// fail silently as a rule that never matches. Surface it at startup.
+		if err := rule.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid AWS gitleaks rule %q: %w", rule.RuleID, err)
+		}
+		cfg.Rules[rule.RuleID] = rule
+		cfg.OrderedRules = append(cfg.OrderedRules, rule.RuleID)
+		for _, k := range rule.Keywords {
+			cfg.Keywords[strings.ToLower(k)] = struct{}{}
+		}
+	}
+
+	// An AWS access key id (AKIA/ASIA...) is an identifier, not a secret — AWS
+	// logs it in CloudTrail — so we do not surface it as a leaked-secret finding.
+	// But the composite aws-secret-access-key rule needs it as a proximity anchor,
+	// so we keep the built-in rule evaluated and only suppress its own report via
+	// SkipReport (the finding still counts for RequiredRules matching).
+	if r, ok := cfg.Rules[awsAccessTokenRuleID]; ok {
+		r.SkipReport = true
+		cfg.Rules[awsAccessTokenRuleID] = r
+	}
+
+	return detect.NewDetector(cfg), nil
 }
 
 // Scanner is the single gitleaks scanner used across the codebase — batch
@@ -167,15 +204,27 @@ func (s *Scanner) ScanBatch(ctx context.Context, contents []string) ([][]scanner
 // are canonicalized to the shared snake_case-with-dots form and line/column
 // positions are mapped to byte offsets. Gitleaks ships human-readable
 // descriptions that never echo the matched secret, so they pass through.
+//
+// The reported Match (and its span) is narrowed to the rule's SecretGroup value
+// when the rule captures one — i.e. the secret itself, not the surrounding
+// context. Label-anchored rules (gitleaks' generic-api-key, our
+// aws-session-token, ...) match `Label: "value"` but set finding.Secret to the
+// value alone; reporting the full match would mask/redact the non-sensitive
+// label along with the secret. Narrowing keeps the invariant Match ==
+// content[StartPos:EndPos].
 func convertFindings(content string, raw []report.Finding) []scanners.Finding {
 	out := make([]scanners.Finding, 0, len(raw))
 	for _, f := range raw {
 		startPos := lineColToBytePos(content, f.StartLine, f.StartColumn)
 		endPos := min(lineColToBytePos(content, f.EndLine, f.EndColumn)+1, len(content))
+		match := f.Match
+		if narrowed, ns, ne, ok := narrowToSecret(content, startPos, endPos, f.Match, f.Secret); ok {
+			match, startPos, endPos = narrowed, ns, ne
+		}
 		out = append(out, scanners.Finding{
 			RuleID:      guardRuleID(CanonicalRuleID(f.RuleID)),
 			Description: f.Description,
-			Match:       f.Match,
+			Match:       match,
 			StartPos:    startPos,
 			EndPos:      endPos,
 			Tags:        parseTags(f.Tags),
@@ -190,6 +239,31 @@ func convertFindings(content string, raw []report.Finding) []scanners.Finding {
 		})
 	}
 	return out
+}
+
+// narrowToSecret locates a finding's SecretGroup value inside its full-match
+// span [start,end) and returns the value plus its byte span. It returns
+// ok=false — leaving the caller with the full match — when there is nothing to
+// narrow (no distinct secret group) or the value cannot be located inside the
+// span (a positioning edge case), so the fallback never drops a finding.
+//
+// The value is located by its LAST occurrence in the match: label-anchored rules
+// capture the trailing value (`Label: "<secret>"`), so if the value string also
+// appears earlier (e.g. inside the label), the last occurrence is the captured
+// secret — the one that must stay covered.
+func narrowToSecret(content string, start, end int, fullMatch, secret string) (string, int, int, bool) {
+	if secret == "" || secret == fullMatch {
+		return "", 0, 0, false
+	}
+	if start < 0 || end > len(content) || start > end {
+		return "", 0, 0, false
+	}
+	rel := strings.LastIndex(content[start:end], secret)
+	if rel < 0 {
+		return "", 0, 0, false
+	}
+	ns := start + rel
+	return secret, ns, ns + len(secret), true
 }
 
 // guardRuleID panics in test builds when id is not canonical, catching rule-id

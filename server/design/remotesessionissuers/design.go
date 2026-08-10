@@ -15,11 +15,11 @@ var _ = Service("remoteSessionIssuers", func() {
 	})
 	shared.DeclareErrorResponses()
 
-	Method("discoverRemoteSessionIssuer", func() {
-		Description("Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createRemoteSessionIssuer. No persistence.")
+	Method("fetchRemoteSessionIssuerMetadata", func() {
+		Description("Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createRemoteSessionIssuer. Keyed by issuer URL; no record need exist and nothing is persisted. Use refreshMetadata to re-discover and persist against an existing issuer.")
 
 		Payload(func() {
-			Attribute("issuer", String, "Issuer URL to discover (e.g. https://login.linear.com).")
+			Attribute("issuer", String, "Issuer URL to fetch metadata for (e.g. https://login.linear.com).")
 			Required("issuer")
 			security.SessionPayload()
 			security.ByKeyPayload()
@@ -29,16 +29,44 @@ var _ = Service("remoteSessionIssuers", func() {
 		Result(RemoteSessionIssuerDraft)
 
 		HTTP(func() {
-			POST("/rpc/remoteSessionIssuers.discover")
+			POST("/rpc/remoteSessionIssuers.fetchMetadata")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "discoverRemoteSessionIssuer")
-		Meta("openapi:extension:x-speakeasy-name-override", "discover")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DiscoverRemoteSessionIssuer"}`)
+		Meta("openapi:operationId", "fetchRemoteSessionIssuerMetadata")
+		Meta("openapi:extension:x-speakeasy-name-override", "fetchMetadata")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "FetchRemoteSessionIssuerMetadata"}`)
+	})
+
+	Method("refreshRemoteSessionIssuerMetadata", func() {
+		Description("Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires project:write.")
+
+		Payload(func() {
+			Attribute("id", String, "The remote_session_issuer id.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(RemoteSessionIssuerRefresh)
+
+		HTTP(func() {
+			POST("/rpc/remoteSessionIssuers.refreshMetadata")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "refreshRemoteSessionIssuerMetadata")
+		Meta("openapi:extension:x-speakeasy-name-override", "refreshMetadata")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RefreshRemoteSessionIssuerMetadata"}`)
 	})
 
 	Method("createRemoteSessionIssuer", func() {
@@ -121,13 +149,14 @@ var _ = Service("remoteSessionIssuers", func() {
 	})
 
 	Method("getRemoteSessionIssuer", func() {
-		Description("Get a remote_session_issuer by id or by slug. Provide exactly one.")
+		Description("Get a remote_session_issuer by id, by slug, or by upstream issuer URL. Provide exactly one.\n\nLooking up by issuer is how an automatic setup flow decides whether an upstream authorization server already has an identity provider before creating one: a 404 means nothing describes that URL yet, so create it. Unlike id and slug, which address at most one record, several issuers may legitimately describe the same URL — a project may keep its own alongside one inherited from its organization or from the platform catalog. This returns the one this project would use, preferring project over organization over platform and, within a tier, the oldest.\n\nThe issuer URL is canonicalized before matching: scheme and host are lowercased, the scheme's default port is dropped, and trailing slashes are stripped. http and https are deliberately NOT equated, path case is significant, and a URL carrying a query or fragment is rejected (RFC 8414 forbids both on issuer identifiers). Canonicalization applies to the supplied URL only, never to stored values, so an issuer recorded with an unusual spelling may not be found and a duplicate is created instead, which is the safe direction to fail.")
 
 		Payload(func() {
 			Attribute("id", String, "The remote_session_issuer id.", func() {
 				Format(FormatUUID)
 			})
 			Attribute("slug", String, "The remote_session_issuer slug.")
+			Attribute("issuer", String, "The upstream issuer URL (e.g. https://login.linear.app). Returns the issuer this project would use for that URL, or 404 when none describes it.")
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
@@ -139,6 +168,7 @@ var _ = Service("remoteSessionIssuers", func() {
 			GET("/rpc/remoteSessionIssuers.get")
 			Param("id")
 			Param("slug")
+			Param("issuer")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
@@ -380,6 +410,116 @@ var _ = Service("organizationRemoteSessionIssuers", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "move")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "MoveOrganizationRemoteSessionIssuer"}`)
 	})
+
+	Method("getIssuerMigratePreflight", func() {
+		Description("Authoritative impact summary for migrating a remote_session_issuer's clients onto another issuer: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Requires org:read.")
+
+		Payload(func() {
+			Attribute("source_id", String, "The remote_session_issuer to migrate away from.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("target_id", String, "The remote_session_issuer to migrate onto.", func() {
+				Format(FormatUUID)
+			})
+			Required("source_id", "target_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(OrganizationIssuerMigratePreflight)
+
+		HTTP(func() {
+			GET("/rpc/organizationRemoteSessionIssuers.getMigratePreflight")
+			Param("source_id")
+			Param("target_id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getOrganizationRemoteSessionIssuerMigratePreflight")
+		Meta("openapi:extension:x-speakeasy-name-override", "getMigratePreflight")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationRemoteSessionIssuerMigratePreflight"}`)
+	})
+
+	Method("migrateIssuer", func() {
+		Description("Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller's organization and agree on issuer, token_endpoint, and authorization_endpoint. The issuer identifier is compared canonically, so two spellings differing only by a trailing slash or an explicit default port count as the same upstream; the two endpoints are compared literally. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.")
+
+		Payload(func() {
+			Attribute("source_id", String, "The remote_session_issuer to migrate away from; soft-deleted on success.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("target_id", String, "The remote_session_issuer to migrate onto; survives and adopts the source's clients.", func() {
+				Format(FormatUUID)
+			})
+			Required("source_id", "target_id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(MigrateOrganizationRemoteSessionIssuerResult)
+
+		HTTP(func() {
+			POST("/rpc/organizationRemoteSessionIssuers.migrate")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "migrateOrganizationRemoteSessionIssuer")
+		Meta("openapi:extension:x-speakeasy-name-override", "migrate")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "MigrateOrganizationRemoteSessionIssuer"}`)
+	})
+
+	Method("fetchIssuerMetadata", func() {
+		Description("Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for organizationRemoteSessionIssuers.create. Keyed by issuer URL; no record need exist and nothing is persisted. The organization-scoped counterpart of remoteSessionIssuers.fetchMetadata, so creating an organization-level issuer no longer has to borrow an unrelated project's scope. Requires org:admin.")
+
+		Payload(func() {
+			Attribute("issuer", String, "Issuer URL to fetch metadata for (e.g. https://login.linear.com).")
+			Required("issuer")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(RemoteSessionIssuerDraft)
+
+		HTTP(func() {
+			POST("/rpc/organizationRemoteSessionIssuers.fetchMetadata")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "fetchOrganizationRemoteSessionIssuerMetadata")
+		Meta("openapi:extension:x-speakeasy-name-override", "fetchMetadata")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "FetchOrganizationRemoteSessionIssuerMetadata"}`)
+	})
+
+	Method("refreshIssuerMetadata", func() {
+		Description("Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id; serves both organizational and project-specific issuers in the caller's organization. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires org:admin.")
+
+		Payload(func() {
+			Attribute("id", String, "The remote_session_issuer id.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(RemoteSessionIssuerRefresh)
+
+		HTTP(func() {
+			POST("/rpc/organizationRemoteSessionIssuers.refreshMetadata")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "refreshOrganizationRemoteSessionIssuerMetadata")
+		Meta("openapi:extension:x-speakeasy-name-override", "refreshMetadata")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RefreshOrganizationRemoteSessionIssuerMetadata"}`)
+	})
 })
 
 var CreateRemoteSessionIssuerForm = Type("CreateRemoteSessionIssuerForm", func() {
@@ -507,6 +647,17 @@ var RemoteSessionIssuerDraft = Type("RemoteSessionIssuerDraft", func() {
 	Attribute("discovery_warnings", ArrayOf(String), "Warnings describing any RFC 8414 deviations encountered during discovery.")
 
 	Required("issuer", "oidc", "passthrough", "client_id_metadata_document_supported", "discovery_warnings")
+})
+
+var RemoteSessionIssuerRefresh = Type("RemoteSessionIssuerRefresh", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("Result of refreshMetadata: the stored remote_session_issuer as it now stands, plus any warnings raised while re-reading the upstream RFC 8414 document. Distinct from RemoteSessionIssuerDraft, which describes an issuer that may not exist yet and is never persisted.")
+
+	Attribute("issuer", RemoteSessionIssuer, "The remote_session_issuer after the refreshed metadata was persisted.")
+	Attribute("discovery_warnings", ArrayOf(String), "Warnings describing any RFC 8414 deviations encountered while re-reading the issuer's metadata document. A refresh that returns warnings still persisted its result; deviations severe enough to distrust the document abort the refresh with an error instead.")
+
+	Required("issuer", "discovery_warnings")
 })
 
 var ListRemoteSessionIssuersResult = Type("ListRemoteSessionIssuersResult", func() {

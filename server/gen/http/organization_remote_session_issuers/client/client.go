@@ -46,6 +46,22 @@ type Client struct {
 	// endpoint.
 	MoveIssuerDoer goahttp.Doer
 
+	// GetIssuerMigratePreflight Doer is the HTTP client used to make requests to
+	// the getIssuerMigratePreflight endpoint.
+	GetIssuerMigratePreflightDoer goahttp.Doer
+
+	// MigrateIssuer Doer is the HTTP client used to make requests to the
+	// migrateIssuer endpoint.
+	MigrateIssuerDoer goahttp.Doer
+
+	// FetchIssuerMetadata Doer is the HTTP client used to make requests to the
+	// fetchIssuerMetadata endpoint.
+	FetchIssuerMetadataDoer goahttp.Doer
+
+	// RefreshIssuerMetadata Doer is the HTTP client used to make requests to the
+	// refreshIssuerMetadata endpoint.
+	RefreshIssuerMetadataDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -67,18 +83,22 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateIssuerDoer:             doer,
-		ListIssuersDoer:              doer,
-		GetIssuerDoer:                doer,
-		GetIssuerDeletePreflightDoer: doer,
-		UpdateIssuerDoer:             doer,
-		DeleteIssuerDoer:             doer,
-		MoveIssuerDoer:               doer,
-		RestoreResponseBody:          restoreBody,
-		scheme:                       scheme,
-		host:                         host,
-		decoder:                      dec,
-		encoder:                      enc,
+		CreateIssuerDoer:              doer,
+		ListIssuersDoer:               doer,
+		GetIssuerDoer:                 doer,
+		GetIssuerDeletePreflightDoer:  doer,
+		UpdateIssuerDoer:              doer,
+		DeleteIssuerDoer:              doer,
+		MoveIssuerDoer:                doer,
+		GetIssuerMigratePreflightDoer: doer,
+		MigrateIssuerDoer:             doer,
+		FetchIssuerMetadataDoer:       doer,
+		RefreshIssuerMetadataDoer:     doer,
+		RestoreResponseBody:           restoreBody,
+		scheme:                        scheme,
+		host:                          host,
+		decoder:                       dec,
+		encoder:                       enc,
 	}
 }
 
@@ -245,6 +265,103 @@ func (c *Client) MoveIssuer() goa.Endpoint {
 		resp, err := c.MoveIssuerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "moveIssuer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetIssuerMigratePreflight returns an endpoint that makes HTTP requests to
+// the organizationRemoteSessionIssuers service getIssuerMigratePreflight
+// server.
+func (c *Client) GetIssuerMigratePreflight() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetIssuerMigratePreflightRequest(c.encoder)
+		decodeResponse = DecodeGetIssuerMigratePreflightResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetIssuerMigratePreflightRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetIssuerMigratePreflightDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "getIssuerMigratePreflight", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// MigrateIssuer returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionIssuers service migrateIssuer server.
+func (c *Client) MigrateIssuer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeMigrateIssuerRequest(c.encoder)
+		decodeResponse = DecodeMigrateIssuerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildMigrateIssuerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.MigrateIssuerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "migrateIssuer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// FetchIssuerMetadata returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionIssuers service fetchIssuerMetadata server.
+func (c *Client) FetchIssuerMetadata() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeFetchIssuerMetadataRequest(c.encoder)
+		decodeResponse = DecodeFetchIssuerMetadataResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildFetchIssuerMetadataRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.FetchIssuerMetadataDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "fetchIssuerMetadata", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RefreshIssuerMetadata returns an endpoint that makes HTTP requests to the
+// organizationRemoteSessionIssuers service refreshIssuerMetadata server.
+func (c *Client) RefreshIssuerMetadata() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRefreshIssuerMetadataRequest(c.encoder)
+		decodeResponse = DecodeRefreshIssuerMetadataResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRefreshIssuerMetadataRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RefreshIssuerMetadataDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizationRemoteSessionIssuers", "refreshIssuerMetadata", err)
 		}
 		return decodeResponse(resp)
 	}

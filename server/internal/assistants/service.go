@@ -31,10 +31,12 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slackclient "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
@@ -49,6 +51,7 @@ const (
 	StatusPaused = "paused"
 
 	sourceKindSlack     = bgtriggers.DefinitionSlugSlack
+	sourceKindMSTeams   = bgtriggers.DefinitionSlugMSTeams
 	sourceKindLinear    = bgtriggers.DefinitionSlugLinear
 	sourceKindGithub    = bgtriggers.DefinitionSlugGithub
 	sourceKindCron      = bgtriggers.DefinitionSlugCron
@@ -181,6 +184,7 @@ type assistantThreadEventRecord struct {
 	Attempts              int
 	LastError             pgtype.Text
 	CreatedAt             time.Time
+	SkillSetSnapshot      []byte
 }
 
 // assistantToolsetRow is the hydrated view of a row in assistant_toolsets
@@ -392,6 +396,7 @@ type ServiceCore struct {
 	wakeCanceller     WakeCanceller
 	chatWriter        *chat.ChatMessageWriter
 	dashboardIngestor DashboardIngestor
+	featureFlags      feature.Provider
 	turnClassified    metric.Int64Counter
 }
 
@@ -436,6 +441,7 @@ func NewServiceCore(
 		wakeCanceller:     nil,
 		chatWriter:        nil,
 		dashboardIngestor: nil,
+		featureFlags:      nil,
 		turnClassified:    turnClassified,
 	}
 }
@@ -459,6 +465,14 @@ func (s *ServiceCore) SetDashboardIngestor(i DashboardIngestor) {
 // site. Self-heal is skipped if the writer was never set.
 func (s *ServiceCore) SetChatMessageWriter(w *chat.ChatMessageWriter) {
 	s.chatWriter = w
+}
+
+// SetFeatureProvider wires PostHog flag evaluation. Set after construction
+// to match the existing post-construction injection pattern and avoid
+// churning every test call site. A nil provider leaves every flag-gated
+// grant off (fail closed).
+func (s *ServiceCore) SetFeatureProvider(p feature.Provider) {
+	s.featureFlags = p
 }
 
 // resolveAssistantContextWindow returns the smallest context_length the gram
@@ -1417,6 +1431,12 @@ func (s *ServiceCore) DeleteAssistant(ctx context.Context, projectID uuid.UUID, 
 	if err != nil {
 		return fmt.Errorf("delete assistant: %w", err)
 	}
+	if err := queries.RetireAssistantMCPOAuthClients(ctx, assistantrepo.RetireAssistantMCPOAuthClientsParams{
+		AssistantID: assistantID,
+		ProjectID:   projectID,
+	}); err != nil {
+		return fmt.Errorf("retire assistant mcp oauth clients: %w", err)
+	}
 	if err := s.revokeAssistantSkillDistributions(ctx, tx, projectID, assistantID, actor, actorDisplayName); err != nil {
 		return err
 	}
@@ -1881,7 +1901,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 		ChatID:         chatID,
 		ProjectID:      assistant.ProjectID,
 		OrganizationID: assistant.OrganizationID,
-		UserID:         conv.ToPGTextEmpty(dashboardChatUserID(sourceKind, normalizedPayloadJSON)),
+		UserID:         conv.ToPGTextEmpty(assistantChatOwnerID(sourceKind, normalizedPayloadJSON, assistant.CreatedByUserID)),
 		Title:          conv.ToPGText(chat.DefaultChatTitle),
 	}); err != nil {
 		return EnqueueResult{}, fmt.Errorf("upsert assistant chat: %w", err)
@@ -1930,7 +1950,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 
 // dashboardChatUserID extracts the Gram user id from a dashboard turn payload
 // so UpsertAssistantChat can stamp it on the chats row. External-source turns
-// return empty — their chat rows are owner-less.
+// return empty — see assistantChatOwnerID for who owns those.
 func dashboardChatUserID(sourceKind string, normalizedPayloadJSON []byte) string {
 	if sourceKind != sourceKindDashboard {
 		return ""
@@ -1940,6 +1960,26 @@ func dashboardChatUserID(sourceKind string, normalizedPayloadJSON []byte) string
 		return ""
 	}
 	return dash.UserID
+}
+
+// assistantChatOwnerID picks the owner to stamp on an assistant's chat row: the
+// dashboard user who sent the turn, falling back to whoever created the
+// assistant.
+//
+// The fallback exists because externally-triggered turns (cron, Slack, warmup)
+// carry no user, which left those chats owner-less. Owner-less is not a neutral
+// state — chat access is decided by owner-matching first and an explicit
+// chat:read/chat:write grant otherwise, so a chat nobody owns is one nobody can
+// read, continue, rename or delete without a custom role. Attributing it to the
+// assistant's creator makes the session behave like one they started.
+//
+// Returns empty when the assistant has no creator either (older or
+// platform-managed assistants); the chat is then owner-less exactly as before.
+func assistantChatOwnerID(sourceKind string, normalizedPayloadJSON []byte, createdByUserID string) string {
+	if userID := dashboardChatUserID(sourceKind, normalizedPayloadJSON); userID != "" {
+		return userID
+	}
+	return createdByUserID
 }
 
 // CheckDashboardChatOwnership returns nil when callerUserID owns the chats row
@@ -1959,8 +1999,16 @@ func (s *ServiceCore) CheckDashboardChatOwnership(ctx context.Context, projectID
 }
 
 func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, []byte, error) {
+	sourcePayloadJSON := task.RawPayload
+	if !json.Valid(sourcePayloadJSON) {
+		wrapped, err := json.Marshal(map[string]string{"raw": string(task.RawPayload)})
+		if err != nil {
+			return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
+		}
+		sourcePayloadJSON = wrapped
+	}
 	switch task.DefinitionSlug {
-	case "slack":
+	case sourceKindSlack:
 		var event slackEventPayload
 		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
 			return "", nil, nil, nil, fmt.Errorf("decode slack trigger event: %w", err)
@@ -1977,14 +2025,22 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal slack source ref: %w", err)
 		}
-		sourcePayloadJSON := task.RawPayload
-		if !json.Valid(sourcePayloadJSON) {
-			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
-			if err != nil {
-				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
-			}
-		}
 		return sourceKindSlack, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
+	case sourceKindMSTeams:
+		var event msteamsEventPayload
+		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
+			return "", nil, nil, nil, fmt.Errorf("decode msteams trigger event: %w", err)
+		}
+		sourceRefJSON, err := json.Marshal(msteamsSourceRef{
+			TenantID:       event.TenantID,
+			ConversationID: event.ConversationID,
+			ServiceURL:     event.ServiceURL,
+			UserID:         event.UserID,
+		})
+		if err != nil {
+			return "", nil, nil, nil, fmt.Errorf("marshal msteams source ref: %w", err)
+		}
+		return sourceKindMSTeams, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	case sourceKindLinear:
 		var event linearEventPayload
 		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
@@ -1996,13 +2052,6 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		})
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal linear source ref: %w", err)
-		}
-		sourcePayloadJSON := task.RawPayload
-		if !json.Valid(sourcePayloadJSON) {
-			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
-			if err != nil {
-				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
-			}
 		}
 		return sourceKindLinear, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	case sourceKindGithub:
@@ -2018,13 +2067,6 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal github source ref: %w", err)
 		}
-		sourcePayloadJSON := task.RawPayload
-		if !json.Valid(sourcePayloadJSON) {
-			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
-			if err != nil {
-				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
-			}
-		}
 		return sourceKindGithub, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	case sourceKindCron:
 		var event cronEventPayload
@@ -2037,13 +2079,6 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		})
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal cron source ref: %w", err)
-		}
-		sourcePayloadJSON := task.RawPayload
-		if !json.Valid(sourcePayloadJSON) {
-			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
-			if err != nil {
-				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
-			}
 		}
 		return sourceKindCron, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	case sourceKindWake:
@@ -2058,13 +2093,6 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal wake source ref: %w", err)
 		}
-		sourcePayloadJSON := task.RawPayload
-		if !json.Valid(sourcePayloadJSON) {
-			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
-			if err != nil {
-				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
-			}
-		}
 		return sourceKindWake, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	case sourceKindDashboard:
 		var event dashboardEventPayload
@@ -2074,13 +2102,6 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		sourceRefJSON, err := json.Marshal(dashboardSourceRef{UserID: event.UserID})
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal dashboard source ref: %w", err)
-		}
-		sourcePayloadJSON := task.RawPayload
-		if !json.Valid(sourcePayloadJSON) {
-			sourcePayloadJSON, err = json.Marshal(map[string]string{"raw": string(task.RawPayload)})
-			if err != nil {
-				return "", nil, nil, nil, fmt.Errorf("marshal fallback source payload: %w", err)
-			}
 		}
 		return sourceKindDashboard, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	default:
@@ -2264,8 +2285,10 @@ func (s *ServiceCore) EnsureWarmupThread(ctx context.Context, assistantID uuid.U
 		ChatID:         chatID,
 		ProjectID:      assistant.ProjectID,
 		OrganizationID: assistant.OrganizationID,
-		UserID:         pgtype.Text{String: "", Valid: false},
-		Title:          conv.ToPGText(chat.DefaultChatTitle),
+		// Warmup turns have no user either, so the creator owns them for the
+		// same reason external-source turns do.
+		UserID: conv.ToPGTextEmpty(assistant.CreatedByUserID),
+		Title:  conv.ToPGText(chat.DefaultChatTitle),
 	}); err != nil {
 		return noop, fmt.Errorf("upsert warmup chat: %w", err)
 	}
@@ -2438,7 +2461,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "turn_start", "assistant turn started", "INFO", nil)
 
 		stopLeaseHeartbeat := s.startProcessingLeaseHeartbeat(turnCtx, thread.ProjectID, runtimeRecord.ID, event.ID)
-		runErr := s.processEventTurn(turnCtx, thread, assistant, runtimeRecord, event)
+		currentSkillSnapshot, runErr := s.processEventTurn(turnCtx, thread, assistant, runtimeRecord, event)
 		stopLeaseHeartbeat()
 		if runErr != nil {
 			s.logger.WarnContext(ctx, "assistant turn failed",
@@ -2635,8 +2658,20 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			}, nil
 		}
 
-		if err := s.completeEvent(ctx, thread.ProjectID, event.ID); err != nil {
+		completed, err := s.completeEvent(ctx, thread.ProjectID, event.ID, event.Attempts, event.SkillSetSnapshot, currentSkillSnapshot, event.Attempts == 1)
+		if err != nil {
 			return ProcessThreadEventsResult{}, err
+		}
+		if !completed {
+			return ProcessThreadEventsResult{
+				AssistantID:         assistant.ID,
+				WarmUntil:           runtimeRecord.WarmUntil.Time,
+				WarmTTLSeconds:      assistant.WarmTTLSeconds,
+				RuntimeActive:       true,
+				RetryAdmission:      true,
+				ProcessedAnyEvent:   processedAny,
+				BootstrappedRuntime: bootstrappedRuntime,
+			}, nil
 		}
 		s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "event_completed", "assistant event completed", "INFO", nil)
 		processedAny = true
@@ -2663,38 +2698,55 @@ func (s *ServiceCore) processEventTurn(
 	assistant assistantRecord,
 	runtime assistantRuntimeRecord,
 	event assistantThreadEventRecord,
-) error {
+) ([]byte, error) {
+	skills, err := s.loadAssistantSkills(ctx, assistant.ProjectID, []uuid.UUID{assistant.ID})
+	if err != nil {
+		return nil, err
+	}
+	currentSnapshot := newAssistantSkillSetSnapshot(skills[assistant.ID])
+	currentSnapshotBytes, err := marshalAssistantSkillSetSnapshot(currentSnapshot)
+	if err != nil {
+		return nil, fmt.Errorf("marshal current assistant skill snapshot: %w", err)
+	}
+	notice := ""
+	if event.SkillSetSnapshot != nil {
+		claimedSnapshot, err := decodeAssistantSkillSetSnapshot(event.SkillSetSnapshot)
+		if err != nil {
+			return nil, err
+		}
+		notice = renderAssistantSkillSetChange(claimedSnapshot, currentSnapshot)
+	}
+
 	mcpServers := s.currentRuntimeMCPServers(ctx, assistant)
 
-	if prompt, ok := decodeMCPAuthTurn(ctx, s.logger, event); ok {
+	prompt, actorUserID := "", assistant.CreatedByUserID
+	if mcpAuthPrompt, ok := decodeMCPAuthTurn(ctx, s.logger, event); ok {
 		// MCP auth resumption is a system event with no human sender — act as
 		// the assistant's creator.
-		turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID, assistant.CreatedByUserID)
+		prompt = mcpAuthPrompt
+	} else {
+		adapter, err := getSourceAdapter(thread.SourceKind)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		if err := s.runtime.RunTurn(ctx, runtime, thread.ID, event.ID.String(), turnToken, prompt, mcpServers); err != nil {
-			return fmt.Errorf("run assistant turn: %w", err)
+		prompt, err = adapter.DecodeTurn(event)
+		if err != nil {
+			return nil, fmt.Errorf("decode assistant turn: %w", err)
 		}
-		return nil
+		actorUserID = turnUserID(assistant, thread, event)
 	}
-
-	adapter, err := getSourceAdapter(thread.SourceKind)
+	prompt, err = insertAssistantEnvironmentChange(prompt, notice)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	prompt, err := adapter.DecodeTurn(event)
+	turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID, actorUserID)
 	if err != nil {
-		return fmt.Errorf("decode assistant turn: %w", err)
-	}
-	turnToken, err := s.MintThreadScopedRuntimeToken(assistant, thread.ID, turnUserID(assistant, thread, event))
-	if err != nil {
-		return err
+		return nil, err
 	}
 	if err := s.runtime.RunTurn(ctx, runtime, thread.ID, event.ID.String(), turnToken, prompt, mcpServers); err != nil {
-		return fmt.Errorf("run assistant turn: %w", err)
+		return nil, fmt.Errorf("run assistant turn: %w", err)
 	}
-	return nil
+	return currentSnapshotBytes, nil
 }
 
 // currentRuntimeMCPServers builds the MCP server set the runner should be
@@ -2731,6 +2783,9 @@ func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assi
 	case mErr == nil:
 		if managed.ID == assistant.ID {
 			platformSlugs = append(platformSlugs, platformtools.ManagedAssistantPlatformToolsetSlug)
+			if s.platformMCPReadEnabled(ctx, assistant.ProjectID) {
+				platformSlugs = append(platformSlugs, platformtools.PlatformMCPReadToolsetSlug)
+			}
 		}
 	case errors.Is(mErr, pgx.ErrNoRows):
 		// Project has no managed assistant; managed-only tools stay ungranted.
@@ -2738,6 +2793,29 @@ func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assi
 		return nil, fmt.Errorf("resolve managed assistant: %w", mErr)
 	}
 	return platformSlugs, nil
+}
+
+// platformMCPReadEnabled reports whether the organization owning projectID is
+// cleared for the Platform MCP read toolset rollout. Evaluation mirrors the
+// Platform MCP organization gate: distinct ID is the org ID with the org-slug
+// PostHog group. Errors fail closed but never abort the turn — a flag-provider
+// outage must not take down bootstrap or reconcile, so the toolset is simply
+// withheld until evaluation recovers.
+func (s *ServiceCore) platformMCPReadEnabled(ctx context.Context, projectID uuid.UUID) bool {
+	if s.featureFlags == nil {
+		return false
+	}
+	project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, projectID)
+	if err != nil {
+		s.logger.WarnContext(ctx, "resolve organization for platform mcp read toolset", attr.SlogError(err))
+		return false
+	}
+	enabled, err := s.featureFlags.IsFlagEnabled(ctx, feature.FlagAssistantPlatformMCP, project.ID, feature.OrgProjectGroups(project.Slug, ""))
+	if err != nil {
+		s.logger.WarnContext(ctx, "evaluate assistant platform mcp flag", attr.SlogError(err))
+		return false
+	}
+	return enabled
 }
 
 // turnUserID returns the Gram user whose identity a turn should act under.
@@ -2880,6 +2958,23 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	if err := s.hydrateAssistantSkills(ctx, assistant.ProjectID, &assistant); err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "load assistant skills").LogError(ctx, s.logger, logAttrs...)
 	}
+	candidate := newAssistantSkillSetSnapshot(assistant.Skills)
+	candidateSnapshot, err := marshalAssistantSkillSetSnapshot(candidate)
+	if err != nil {
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "marshal assistant skill snapshot").LogError(ctx, s.logger, logAttrs...)
+	}
+	persistedSnapshot, err := assistantrepo.New(s.db).InitThreadSkillSnapshot(ctx, assistantrepo.InitThreadSkillSnapshotParams{
+		Candidate: candidateSnapshot,
+		ThreadID:  thread.ID,
+		ProjectID: thread.ProjectID,
+	})
+	if err != nil {
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "initialize assistant skill snapshot").LogError(ctx, s.logger, logAttrs...)
+	}
+	baselineSkills, err := decodeAssistantSkillSetSnapshot(persistedSnapshot)
+	if err != nil {
+		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "decode assistant skill snapshot").LogError(ctx, s.logger, logAttrs...)
+	}
 
 	runtimeServerURL := s.runtime.ServerURL()
 	if runtimeServerURL == nil {
@@ -2900,7 +2995,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	// assistant can tell the user which integration is broken.
 	mcpServers := resolveAssistantMCPServers(ctx, s.logger, runtimeServerURL, assistant.Toolsets, assistant.MCPServers, platformSlugs)
 
-	instructions, err := composeInstructions(assistant.Instructions, thread, assistant.Skills)
+	instructions, err := composeInstructions(assistant.Instructions, thread, baselineSkills.Skills)
 	if err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "compose assistant instructions").LogError(ctx, s.logger, logAttrs...)
 	}
@@ -2954,7 +3049,7 @@ Two MCP auth events may appear in thread, each as <message-context> block with E
 
 - EventType "assistant_mcp_auth" reports result. Status "success" + still need server → call mcp_force_reconnect with server_id = MCPServerID, then continue task. Status "failed" → inform the user the auth attempt failed, include ErrorDescription if present.`
 
-func composeInstructions(base string, thread assistantThreadRecord, skills []assistantSkillRow) (string, error) {
+func composeInstructions(base string, thread assistantThreadRecord, skills []assistantSkillSnapshot) (string, error) {
 	adapter, err := getSourceAdapter(thread.SourceKind)
 	if err != nil {
 		return "", err
@@ -2968,12 +3063,13 @@ func composeInstructions(base string, thread assistantThreadRecord, skills []ass
 		parts = append(parts, base)
 	}
 	if len(skills) > 0 {
-		lines := make([]string, 0, len(skills)+1)
+		lines := make([]string, 0, len(skills)+2)
 		lines = append(lines, "## Skills")
+		lines = append(lines, "If a user turn includes a <skill-context> block for one of these skills, its embedded <skill-content> is already loaded and takes precedence for that turn. Do not call mcp__p-assistants_skills_load for that skill in that turn.")
 		for _, skill := range skills {
 			name := strings.Join(strings.Fields(skill.Name), " ")
 			description := conv.TruncateString(strings.Join(strings.Fields(skill.Description), " "), 200)
-			lines = append(lines, "- Name: "+strconv.Quote(name)+"; description: "+strconv.Quote(description)+". Call mcp__p-assistants_skills_load with name "+strconv.Quote(name)+" before relying on this skill.")
+			lines = append(lines, "- Name: "+strconv.Quote(name)+"; description: "+strconv.Quote(description)+". Unless this turn already includes a <skill-context> for this skill, call mcp__p-assistants_skills_load with name "+strconv.Quote(name)+" before relying on this skill.")
 		}
 		parts = append(parts, strings.Join(lines, "\n"))
 	}
@@ -3444,20 +3540,26 @@ func (s *ServiceCore) claimNextPendingEvent(ctx context.Context, projectID, thre
 			Attempts:              conv.SafeInt(row.Attempts),
 			LastError:             row.LastError,
 			CreatedAt:             row.CreatedAt.Time,
+			SkillSetSnapshot:      row.SkillSetSnapshot,
 		}, true, nil
 	}
 }
 
-func (s *ServiceCore) completeEvent(ctx context.Context, projectID, eventID uuid.UUID) error {
-	err := assistantrepo.New(s.db).CompleteAssistantThreadEvent(ctx, assistantrepo.CompleteAssistantThreadEventParams{
-		CompletedStatus: eventStatusCompleted,
-		EventID:         eventID,
-		ProjectID:       projectID,
+func (s *ServiceCore) completeEvent(ctx context.Context, projectID, eventID uuid.UUID, claimedAttempt int, claimedSnapshot, currentSnapshot []byte, allowAdvance bool) (bool, error) {
+	completed, err := assistantrepo.New(s.db).CompleteAssistantThreadEventAndAdvanceSkillSnapshot(ctx, assistantrepo.CompleteAssistantThreadEventAndAdvanceSkillSnapshotParams{
+		AllowAdvance:     allowAdvance,
+		ClaimedAttempt:   int64(claimedAttempt),
+		CompletedStatus:  eventStatusCompleted,
+		EventID:          eventID,
+		ProcessingStatus: eventStatusProcessing,
+		ProjectID:        projectID,
+		CurrentSnapshot:  currentSnapshot,
+		ClaimedSnapshot:  claimedSnapshot,
 	})
 	if err != nil {
-		return fmt.Errorf("complete assistant thread event: %w", err)
+		return false, fmt.Errorf("complete assistant thread event: %w", err)
 	}
-	return nil
+	return completed, nil
 }
 
 // recordTurnClassification counts a failed turn by its classifyTurnError

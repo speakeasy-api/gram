@@ -5,11 +5,15 @@ import (
 	"encoding/json"
 	"testing"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
 func TestService_Callback(t *testing.T) {
@@ -300,7 +304,7 @@ func TestService_Callback(t *testing.T) {
 
 		userInfo := defaultMockUserInfo()
 		userInfo.Organizations = []MockOrganizationEntry{}
-		ctx, instance := newTestAuthService(t, userInfo)
+		ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
 
 		ctx, stateParam := instance.stateWithNonce(ctx, t, "/?disposition=assistants")
 
@@ -606,4 +610,140 @@ func extractNonceFromState(t *testing.T, stateParam string) string {
 	}
 	require.NoError(t, json.Unmarshal(raw, &state))
 	return state.Nonce
+}
+
+func TestService_Callback_SignupIntent(t *testing.T) {
+	t.Parallel()
+
+	t.Run("zero-org user with an intent gets the org created", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		userInfo.Organizations = nil
+		// This path actually provisions an org, so it needs the harness that
+		// wires a WorkOS client and backfills the user's workos_id — the admin
+		// grant inside persistProvisionedOrganization requires one.
+		ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
+
+		ctx, stateParam := instance.stateWithSignupIntent(ctx, t, "", "Acme Inc")
+		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
+			Code:  "mock_code",
+			State: &stateParam,
+		})
+		require.NoError(t, err)
+		require.NotContains(t, result.Location, "signin_error=")
+		require.NotEmpty(t, result.SessionToken)
+
+		session, err := instance.sessionManager.GetSession(ctx, result.SessionToken)
+		require.NoError(t, err)
+		require.NotEmpty(t, session.ActiveOrganizationID, "the signup org must be active on the session")
+
+		org, err := orgRepo.New(instance.conn).GetOrganizationMetadata(ctx, session.ActiveOrganizationID)
+		require.NoError(t, err)
+		require.Equal(t, "Acme Inc", org.Name)
+		require.True(t, org.Whitelisted, "signup orgs match register and clear the demo gate")
+		require.Equal(t, "enterprise", org.GramAccountType)
+
+		trial, err := trialsRepo.New(instance.conn).GetTrial(ctx, session.ActiveOrganizationID)
+		require.NoError(t, err)
+		require.Equal(t, "enterprise", trial.Tier)
+	})
+
+	t.Run("intent is consumed so it cannot be replayed", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		userInfo.Organizations = nil
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		ctx, stateParam := instance.stateWithSignupIntent(ctx, t, "", "Acme Inc")
+		nonce := extractNonceFromState(t, stateParam)
+
+		_, err := instance.service.Callback(ctx, &gen.CallbackPayload{
+			Code:  "mock_code",
+			State: &stateParam,
+		})
+		require.NoError(t, err)
+
+		var intent map[string]any
+		err = instance.nonceStore.Get(ctx, "auth:signup_intent:"+nonce, &intent)
+		// ErrorIs, not Error: a bare error assertion would also pass if Redis
+		// were unreachable, turning "the key is gone" into a claim the test
+		// never actually checked.
+		require.ErrorIs(t, err, redisCache.ErrCacheMiss, "intent must be deleted after the callback")
+	})
+
+	t.Run("user who already has orgs ignores the intent and consumes it", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo() // has one org
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		// Seed user + org in DB so BuildUserInfoFromDB finds a non-zero org
+		// count — otherwise this is indistinguishable from the zero-org case
+		// and would not actually exercise "already has orgs".
+		require.NoError(t, instance.createTestUser(ctx, userInfo))
+		for _, org := range userInfo.Organizations {
+			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
+		}
+
+		ctx, stateParam := instance.stateWithSignupIntent(ctx, t, "", "Acme Inc")
+		nonce := extractNonceFromState(t, stateParam)
+
+		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
+			Code:  "mock_code",
+			State: &stateParam,
+		})
+		require.NoError(t, err)
+		require.NotContains(t, result.Location, "signin_error=")
+
+		var intent map[string]any
+		err = instance.nonceStore.Get(ctx, "auth:signup_intent:"+nonce, &intent)
+		require.ErrorIs(t, err, redisCache.ErrCacheMiss, "intent must be consumed even when unused")
+
+		orgs, err := orgRepo.New(instance.conn).ListOrganizationsForUser(ctx, conv.ToPGText(userInfo.UserID))
+		require.NoError(t, err)
+		require.Len(t, orgs, 1, "no second org may be created for a user who already has one")
+	})
+
+	t.Run("intent wins over the assistants disposition", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		userInfo.Organizations = nil
+		ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
+
+		ctx, stateParam := instance.stateWithSignupIntent(ctx, t, "/?disposition=assistants", "Acme Inc")
+		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
+			Code:  "mock_code",
+			State: &stateParam,
+		})
+		require.NoError(t, err)
+
+		session, err := instance.sessionManager.GetSession(ctx, result.SessionToken)
+		require.NoError(t, err)
+
+		org, err := orgRepo.New(instance.conn).GetOrganizationMetadata(ctx, session.ActiveOrganizationID)
+		require.NoError(t, err)
+		require.Equal(t, "Acme Inc", org.Name, "the typed name must beat a generated assistants name")
+	})
+
+	t.Run("zero-org user without an intent is unaffected", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		userInfo.Organizations = nil
+		ctx, instance := newTestAuthService(t, userInfo)
+
+		ctx, stateParam := instance.stateWithNonce(ctx, t, "")
+		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
+			Code:  "mock_code",
+			State: &stateParam,
+		})
+		require.NoError(t, err)
+
+		session, err := instance.sessionManager.GetSession(ctx, result.SessionToken)
+		require.NoError(t, err)
+		require.Empty(t, session.ActiveOrganizationID, "no intent means no org, as today")
+	})
 }

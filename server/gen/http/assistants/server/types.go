@@ -72,6 +72,8 @@ type SendMessageRequestBody struct {
 	// Stable key the client mints once per message so retries dedupe instead of
 	// enqueuing twice. A new key is generated server-side when omitted.
 	IdempotencyKey *string `form:"idempotency_key,omitempty" json:"idempotency_key,omitempty" xml:"idempotency_key,omitempty"`
+	// Project skills to make available for this turn.
+	SkillIds []string `form:"skill_ids,omitempty" json:"skill_ids,omitempty" xml:"skill_ids,omitempty"`
 }
 
 // ListAssistantsResponseBody is the type of the "assistants" service
@@ -3404,6 +3406,12 @@ func NewSendMessagePayload(body *SendMessageRequestBody, sessionToken *string, p
 		ChatID:         body.ChatID,
 		IdempotencyKey: body.IdempotencyKey,
 	}
+	if body.SkillIds != nil {
+		v.SkillIds = make([]string, len(body.SkillIds))
+		for i, val := range body.SkillIds {
+			v.SkillIds[i] = val
+		}
+	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -3527,6 +3535,12 @@ func ValidateSendMessageRequestBody(body *SendMessageRequestBody) (err error) {
 		if utf8.RuneCountInString(*body.IdempotencyKey) > 255 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.idempotency_key", *body.IdempotencyKey, utf8.RuneCountInString(*body.IdempotencyKey), 255, false))
 		}
+	}
+	if len(body.SkillIds) > 10 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.skill_ids", body.SkillIds, len(body.SkillIds), 10, false))
+	}
+	for _, e := range body.SkillIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.skill_ids[*]", e, goa.FormatUUID))
 	}
 	return
 }

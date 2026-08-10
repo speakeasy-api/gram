@@ -81,6 +81,32 @@ func (s *Service) claimHookIdempotency(ctx context.Context, token string, replay
 	return claimed
 }
 
+func (s *Service) claimBlockedPromptTelemetry(ctx context.Context, payload *gen.ClaudePayload) bool {
+	if payload == nil || payload.SessionID == nil || payload.Prompt == nil {
+		return true
+	}
+	sessionID := strings.TrimSpace(*payload.SessionID)
+	prompt := strings.TrimSpace(*payload.Prompt)
+	if sessionID == "" || prompt == "" {
+		return true
+	}
+
+	claimed, err := s.cache.Add(context.WithoutCancel(ctx), blockedPromptTelemetryCacheKey("claude", sessionID, prompt), hookIdempotencyTTL)
+	if err != nil {
+		s.logger.WarnContext(ctx, "blocked prompt telemetry guard failed; persisting anyway",
+			attr.SlogEvent("blocked_prompt_telemetry_guard_failed"),
+			attr.SlogError(err),
+		)
+		return true
+	}
+	if !claimed {
+		s.logger.InfoContext(ctx, "skipping duplicate blocked prompt telemetry",
+			attr.SlogEvent("blocked_prompt_telemetry_duplicate"),
+		)
+	}
+	return claimed
+}
+
 // bufferHook stores a hook payload in Redis for later processing using atomic RPUSH
 func (s *Service) bufferHook(ctx context.Context, sessionID string, payload *gen.ClaudePayload) error {
 	// Use atomic RPUSH operation to append to the list
@@ -134,21 +160,10 @@ func (s *Service) persistToolCallEvent(ctx context.Context, payload *gen.ClaudeP
 		return fmt.Errorf("invalid project ID in session metadata: %w", err)
 	}
 
-	// Build ToolInfo
-	toolInfo := telemetry.ToolInfo{
-		Name:           toolName,
-		OrganizationID: metadata.GramOrgID,
-		ProjectID:      projectID.String(),
-		ID:             "",
-		URN:            "",
-		DeploymentID:   "",
-		FunctionID:     nil,
-	}
-
 	if s.telemetryLogger != nil {
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
 			Timestamp:  time.Now(),
-			ToolInfo:   toolInfo,
+			ToolInfo:   telemetryToolInfo(metadata, projectID, toolName),
 			UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
 			Attributes: attrs,
 		})
@@ -179,18 +194,10 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 		toolName = *payload.ToolName
 	}
 
-	hookSource := "claude"
-	if metadata.ServiceName != "" {
-		hookSource = metadata.ServiceName
-	}
-	// Cowork runs the same claude-code binary and reports the same OTEL
-	// service.name, so ServiceName can't distinguish it — it lands on the
-	// "claude"/"claude-code" default. SessionStart stamps the agent variant
-	// into the cache, so prefer that when it identifies a cowork session, so
-	// per-tool-call tool logs are labelled "cowork" and stay filterable.
-	if s.sessionAgentVariant(ctx, metadata.SessionID) == agentVariantCowork {
-		hookSource = agentVariantCowork
-	}
+	// The resolved product surface (OTEL service.name first, SessionStart
+	// variant fallback) labels per-tool-call rows so cowork sessions stay
+	// filterable in tool logs.
+	hookSource := conv.Default(s.claudeSessionSurface(ctx, metadata), "claude")
 
 	attrs := map[attr.Key]any{
 		attr.EventSourceKey:    string(telemetry.EventSourceHook),
@@ -276,6 +283,22 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 	}
 
 	return attrs
+}
+
+// telemetryToolInfo builds the ToolInfo shared by every telemetry.LogParams
+// write in this file. Name is the only field that varies by caller — tool
+// events pass the resolved tool name, conversation events pass "" since
+// there's no tool involved.
+func telemetryToolInfo(metadata *SessionMetadata, projectID uuid.UUID, toolName string) telemetry.ToolInfo {
+	return telemetry.ToolInfo{
+		Name:           toolName,
+		OrganizationID: metadata.GramOrgID,
+		ProjectID:      projectID.String(),
+		ID:             "",
+		URN:            "",
+		DeploymentID:   "",
+		FunctionID:     nil,
+	}
 }
 
 func applyHookHostnameAttr(attrs map[attr.Key]any, hostname *string) {
@@ -380,6 +403,19 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 			}
 		}
 		stampAccountAttribution(attrs, sessionMeta)
+		// Cost/token metric rows carry the session's resolved surface (OTEL
+		// service.name first, SessionStart agent variant fallback for older
+		// cowork builds whose OTEL reports "claude-code") so cowork and Claude
+		// Code Desktop spend is not misfiled under claude-code. The variant
+		// fallback rides sessionMeta's SessionID, which is only populated once
+		// the tenant check above validated the cached metadata — the variant
+		// cache is keyed by session id alone, and an unvalidated id must not
+		// pull another tenant's surface label. Until then (metrics beating the
+		// logs path, or a rejected id) rows keep the claude-code default and
+		// self-heal on the session's later batches.
+		if surface := claudeSurfaceFromServiceName(s.claudeSessionSurface(ctx, &sessionMeta)); surface != "" {
+			attrs[attr.HookSourceKey] = surface
+		}
 
 		// Only include non-zero values
 		if m.InputTokens > 0 {

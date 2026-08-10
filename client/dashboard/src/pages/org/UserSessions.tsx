@@ -12,24 +12,24 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { useOrgRoutes } from "@/routes";
 import { RevokeSessionsDialog } from "@/components/sessions/RevokeSessionsDialog";
 import { SessionTableRow } from "@/components/sessions/SessionTableRow";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { DotTable } from "@/components/ui/dot-table";
+import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { DotTable } from "@/components/ui/DotTable";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { sessionStatus, subjectLabel } from "@/lib/user-session-status";
 import { useUserSessionFacets } from "@gram/client/react-query/userSessionFacets.js";
 import { useUserSessionsInfinite } from "@gram/client/react-query/userSessions.js";
-import type { ListUserSessionsQueryParamStatus } from "@gram/client/models/operations/listusersessions.js";
+import type { QueryParamStatus as ListUserSessionsQueryParamStatus } from "@gram/client/models/operations/listusersessions.js";
 
 const USER_SESSION_FILTERS = defineFilters([
   { id: "status", label: "Status", kind: "select", pinned: true },
@@ -205,14 +205,21 @@ function UserSessionsInner(): JSX.Element {
     listBody = (
       <div className="flex items-center justify-between gap-3">
         <p className="text-destructive text-sm">Couldn&apos;t load sessions.</p>
-        <Button variant="ghost" size="sm" onClick={() => void refetch()}>
+        <Button variant="tertiary" size="sm" onClick={() => void refetch()}>
           Retry
         </Button>
       </div>
     );
   } else if (sessions.length === 0) {
     listBody = (
-      <p className="text-muted-foreground text-sm">No sessions found</p>
+      <div className="flex flex-col items-center justify-center border border-dashed px-8 py-16">
+        <Text variant="subheading" className="mb-1">
+          No connections yet
+        </Text>
+        <Text small muted className="max-w-md text-center">
+          Connections agents establish with your MCP servers will appear here.
+        </Text>
+      </div>
     );
   } else if (filteredSessions.length === 0) {
     listBody = (
@@ -267,9 +274,9 @@ function UserSessionsInner(): JSX.Element {
       <Page.Section.Body>
         <div className="space-y-4">
           <div className="flex flex-col gap-1.5">
-            <Type small muted>
+            <Text small muted>
               Project
-            </Type>
+            </Text>
             <Select value={projectSlug} onValueChange={handleProjectChange}>
               <SelectTrigger size="sm" className="bg-background w-[260px]">
                 <SelectValue placeholder="Select project" />
@@ -312,18 +319,18 @@ function UserSessionsInner(): JSX.Element {
           </Page.Toolbar>
 
           {selectionEnabled && selectedIds.length > 0 && (
-            <div className="border-border bg-muted/30 flex items-center justify-between gap-3 rounded-md border px-3 py-2">
-              <Type small>{selectedIds.length} selected</Type>
+            <div className="border-border bg-muted/30 flex items-center justify-between gap-3 border px-3 py-2">
+              <Text small>{selectedIds.length} selected</Text>
               <div className="flex items-center gap-2">
                 <Button
-                  variant="ghost"
+                  variant="tertiary"
                   size="sm"
                   onClick={() => setSelected(new Set())}
                 >
                   Clear
                 </Button>
                 <Button
-                  variant="destructive"
+                  variant="destructive-primary"
                   size="sm"
                   onClick={() => setBulkConfirmOpen(true)}
                 >
@@ -338,7 +345,7 @@ function UserSessionsInner(): JSX.Element {
           {hasNextPage && (
             <div className="flex justify-center">
               <Button
-                variant="ghost"
+                variant="tertiary"
                 size="sm"
                 disabled={isFetchingNextPage}
                 onClick={() => void fetchNextPage()}

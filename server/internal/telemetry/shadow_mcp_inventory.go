@@ -66,8 +66,11 @@ func (l *Logger) UpsertShadowMCPInventoryURLs(ctx context.Context, inventoryURLs
 		return nil
 	}
 
-	chRepo := repo.New(l.chConn)
-	if err := chRepo.UpsertShadowMCPInventoryURLs(l.shutdownCtx(), params); err != nil {
+	// This currently issues one ClickHouse point-SELECT per URL plus the
+	// final insert (see repo.UpsertShadowMCPInventoryURLs); each call gets
+	// its own connection-level span and duration sample (DNO-606/DNO-602).
+	err := repo.New(l.chConn).UpsertShadowMCPInventoryURLs(l.detachedWriteContext(ctx), params)
+	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "upsert shadow mcp inventory urls")
 	}
 

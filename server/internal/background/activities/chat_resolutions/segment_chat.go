@@ -192,6 +192,7 @@ There are %d messages total (indices 0-%d).%s`, conversationText, numMessages, n
 			ExternalUserID: "",
 			UserEmail:      "",
 			HTTPMetadata:   nil,
+			Reasoning:      nil,
 		},
 	)
 	if err != nil {

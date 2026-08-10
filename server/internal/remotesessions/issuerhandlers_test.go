@@ -1,13 +1,16 @@
 package remotesessions_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
@@ -16,7 +19,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // newIssuerPayload returns a CreateRemoteSessionIssuerPayload with a fresh
@@ -259,6 +265,253 @@ func TestGetRemoteSessionIssuer_BothIDAndSlug(t *testing.T) {
 	})
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+// getByIssuerURL is the lookup automatic setup performs before deciding whether
+// to create an identity provider for a freshly discovered upstream.
+func getByIssuerURL(issuerURL string) *gen.GetRemoteSessionIssuerPayload {
+	return &gen.GetRemoteSessionIssuerPayload{
+		ID:               nil,
+		Slug:             nil,
+		Issuer:           &issuerURL,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	}
+}
+
+func projectAndOrgID(t *testing.T, ctx context.Context) (uuid.UUID, string) {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	return *authCtx.ProjectID, authCtx.ActiveOrganizationID
+}
+
+// A miss is the normal path for a new upstream, not an error condition: the
+// caller reads the 404 as "nothing describes this URL yet" and creates one.
+func TestGetRemoteSessionIssuerByURL_NotFoundWhenNothingMatches(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	_, err := ti.service.GetRemoteSessionIssuer(ctx, getByIssuerURL("https://miss.example.com"))
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestGetRemoteSessionIssuerByURL_FindsProjectIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	projectID, orgID := projectAndOrgID(t, ctx)
+
+	existing := seedRemoteIssuerWithURL(t, ctx, ti.conn, conv.ToNullUUID(projectID), conv.ToPGText(orgID), "byurl-existing", "https://reuse.example.com")
+
+	found, err := ti.service.GetRemoteSessionIssuer(ctx, getByIssuerURL("https://reuse.example.com"))
+	require.NoError(t, err)
+	require.Equal(t, existing.String(), found.ID)
+	require.Equal(t, "byurl-existing", found.Slug)
+}
+
+// The canonical form collapses trailing slashes, the scheme's default port, and
+// host case, so a caller spelling the upstream any of these ways finds the same
+// stored row.
+func TestGetRemoteSessionIssuerByURL_MatchesEquivalentSpellings(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	projectID, orgID := projectAndOrgID(t, ctx)
+
+	existing := seedRemoteIssuerWithURL(t, ctx, ti.conn, conv.ToNullUUID(projectID), conv.ToPGText(orgID), "byurl-spelling", "https://spelling.example.com/oauth")
+
+	for _, spelling := range []string{
+		"https://spelling.example.com/oauth",
+		"https://spelling.example.com/oauth/",
+		"https://spelling.example.com:443/oauth",
+		"https://SPELLING.example.com/oauth",
+		"  https://spelling.example.com/oauth  ",
+	} {
+		found, err := ti.service.GetRemoteSessionIssuer(ctx, getByIssuerURL(spelling))
+		require.NoError(t, err, spelling)
+		require.Equal(t, existing.String(), found.ID, spelling)
+	}
+}
+
+// http and https on one host are different upstreams and must not be equated.
+func TestGetRemoteSessionIssuerByURL_DoesNotMatchAcrossSchemes(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	projectID, orgID := projectAndOrgID(t, ctx)
+
+	seedRemoteIssuerWithURL(t, ctx, ti.conn, conv.ToNullUUID(projectID), conv.ToPGText(orgID), "byurl-https", "https://scheme.example.com")
+
+	_, err := ti.service.GetRemoteSessionIssuer(ctx, getByIssuerURL("http://scheme.example.com"))
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+// Precedence is project > organization > platform. All three tiers describe the
+// same upstream here, and the project's own issuer has to win.
+func TestGetRemoteSessionIssuerByURL_PrefersProjectOverInheritedTiers(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	projectID, orgID := projectAndOrgID(t, ctx)
+
+	const issuerURL = "https://tiers.example.com"
+
+	// Seeded platform-first so creation order is the opposite of tier order: if
+	// resolution ever fell back to row order this test would fail.
+	seedRemoteIssuerWithURL(t, ctx, ti.conn, uuid.NullUUID{}, pgtype.Text{String: "", Valid: false}, "tiers-platform", issuerURL)
+	seedRemoteIssuerWithURL(t, ctx, ti.conn, uuid.NullUUID{}, conv.ToPGText(orgID), "tiers-org", issuerURL)
+	projectIssuer := seedRemoteIssuerWithURL(t, ctx, ti.conn, conv.ToNullUUID(projectID), conv.ToPGText(orgID), "tiers-project", issuerURL)
+
+	found, err := ti.service.GetRemoteSessionIssuer(ctx, getByIssuerURL(issuerURL))
+	require.NoError(t, err)
+	require.Equal(t, projectIssuer.String(), found.ID)
+}
+
+func TestGetRemoteSessionIssuerByURL_PrefersOrganizationOverPlatform(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	_, orgID := projectAndOrgID(t, ctx)
+
+	const issuerURL = "https://orgwins.example.com"
+
+	seedRemoteIssuerWithURL(t, ctx, ti.conn, uuid.NullUUID{}, pgtype.Text{String: "", Valid: false}, "orgwins-platform", issuerURL)
+	orgIssuer := seedRemoteIssuerWithURL(t, ctx, ti.conn, uuid.NullUUID{}, conv.ToPGText(orgID), "orgwins-org", issuerURL)
+
+	found, err := ti.service.GetRemoteSessionIssuer(ctx, getByIssuerURL(issuerURL))
+	require.NoError(t, err)
+	require.Equal(t, orgIssuer.String(), found.ID)
+}
+
+// The platform catalog is the point of the inheritance work: an install against
+// an upstream a platform admin already curated must find that issuer rather than
+// fork a tenant copy of it, and must then accept a tenant-owned client.
+func TestGetRemoteSessionIssuerByURL_FindsSeededPlatformIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	platformIssuer := seedGlobalRemoteIssuer(t, ctx, ti.conn, "platformseed")
+
+	found, err := ti.service.GetRemoteSessionIssuer(ctx, getByIssuerURL("https://platformseed.example.com"))
+	require.NoError(t, err)
+	require.Equal(t, platformIssuer.String(), found.ID)
+	require.Empty(t, found.ProjectID)
+	require.Empty(t, found.OrganizationID)
+
+	requirePlatformIssuerUnchanged(t, ctx, ti.conn, platformIssuer)
+
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "platformseed-usi")
+	clientID := createRemoteClient(t, ctx, ti, platformIssuer.String(), userIssuerID.String(), "platformseed-client")
+	require.NotEmpty(t, clientID)
+}
+
+// Several project-tier rows on one URL are normal, because the manual attach
+// form creates unconditionally. The answer has to be deterministic anyway.
+func TestGetRemoteSessionIssuerByURL_BreaksIntraTierTiesByOldest(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	projectID, orgID := projectAndOrgID(t, ctx)
+
+	const issuerURL = "https://tiebreak.example.com"
+
+	oldest := seedRemoteIssuerWithURL(t, ctx, ti.conn, conv.ToNullUUID(projectID), conv.ToPGText(orgID), "tiebreak-first", issuerURL)
+	seedRemoteIssuerWithURL(t, ctx, ti.conn, conv.ToNullUUID(projectID), conv.ToPGText(orgID), "tiebreak-second", issuerURL)
+	seedRemoteIssuerWithURL(t, ctx, ti.conn, conv.ToNullUUID(projectID), conv.ToPGText(orgID), "tiebreak-third", issuerURL)
+
+	// Repeated because a non-deterministic pick would still agree with the
+	// expected answer some of the time.
+	for range 5 {
+		found, err := ti.service.GetRemoteSessionIssuer(ctx, getByIssuerURL(issuerURL))
+		require.NoError(t, err)
+		require.Equal(t, oldest.String(), found.ID)
+	}
+}
+
+// Another organization's issuer for the same upstream must stay invisible.
+func TestGetRemoteSessionIssuerByURL_IgnoresOtherOrganizations(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	otherOrgID := createOrganization(t, ctx, ti.conn, "byurl-other-org")
+	seedRemoteIssuerWithURL(t, ctx, ti.conn, uuid.NullUUID{}, conv.ToPGText(otherOrgID), "byurl-foreign", "https://foreign.example.com")
+
+	_, err := ti.service.GetRemoteSessionIssuer(ctx, getByIssuerURL("https://foreign.example.com"))
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestGetRemoteSessionIssuerByURL_RejectsInvalidIssuerURL(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	for _, issuerURL := range []string{
+		"idp.example.com",
+		"ftp://idp.example.com",
+		"https://idp.example.com?tenant=acme",
+		"https://idp.example.com#fragment",
+	} {
+		_, err := ti.service.GetRemoteSessionIssuer(ctx, getByIssuerURL(issuerURL))
+		require.Error(t, err, issuerURL)
+		requireOopsCode(t, err, oops.CodeBadRequest)
+	}
+}
+
+// The three selectors are mutually exclusive, and a blank issuer counts as
+// absent so it cannot silently become a fourth "match everything" mode.
+func TestGetRemoteSessionIssuerByURL_RejectsAmbiguousSelectors(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	projectID, orgID := projectAndOrgID(t, ctx)
+
+	existing := seedRemoteIssuerWithURL(t, ctx, ti.conn, conv.ToNullUUID(projectID), conv.ToPGText(orgID), "byurl-ambiguous", "https://ambiguous.example.com")
+
+	id := existing.String()
+	slug := "byurl-ambiguous"
+	issuerURL := "https://ambiguous.example.com"
+	blank := "   "
+
+	for _, payload := range []*gen.GetRemoteSessionIssuerPayload{
+		{ID: &id, Slug: nil, Issuer: &issuerURL, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil},
+		{ID: nil, Slug: &slug, Issuer: &issuerURL, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil},
+		{ID: &id, Slug: &slug, Issuer: &issuerURL, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil},
+		{ID: nil, Slug: nil, Issuer: nil, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil},
+		{ID: nil, Slug: nil, Issuer: &blank, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil},
+	} {
+		_, err := ti.service.GetRemoteSessionIssuer(ctx, payload)
+		require.Error(t, err)
+		requireOopsCode(t, err, oops.CodeBadRequest)
+	}
+}
+
+// A lookup is a read, so project:read is enough. This is the scope that lets a
+// read-only principal answer "does an issuer for this URL exist?".
+func TestGetRemoteSessionIssuerByURL_AllowsProjectRead(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	projectID, orgID := projectAndOrgID(t, ctx)
+
+	existing := seedRemoteIssuerWithURL(t, ctx, ti.conn, conv.ToNullUUID(projectID), conv.ToPGText(orgID), "byurl-readonly", "https://readonly.example.com")
+
+	readOnlyCtx := withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeProjectRead,
+		Selector: authz.NewSelector(authz.ScopeProjectRead, projectID.String()),
+	})
+
+	found, err := ti.service.GetRemoteSessionIssuer(readOnlyCtx, getByIssuerURL("https://readonly.example.com"))
+	require.NoError(t, err)
+	require.Equal(t, existing.String(), found.ID)
 }
 
 func TestListRemoteSessionIssuers(t *testing.T) {
@@ -649,6 +902,52 @@ func TestDeleteRemoteSessionIssuer(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
+// TestDeleteRemoteSessionIssuer_SerializedAgainstClientBinding proves the
+// delete takes the client-binding advisory lock before its count-then-delete.
+// Nothing else serializes the two: the delete only rewrites deleted_at, so its
+// row lock never conflicts with the one a client insert's foreign key takes,
+// and a create committing between the count and the delete would strand a live
+// client on a deleted issuer. Holding the lock from another transaction (which
+// is what every client writer does) must therefore block the delete until that
+// transaction ends.
+func TestDeleteRemoteSessionIssuer_SerializedAgainstClientBinding(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayload("idp-delete-lock"))
+	require.NoError(t, err)
+
+	issuerID, err := uuid.Parse(created.ID)
+	require.NoError(t, err)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, repo.New(tx).LockRemoteSessionIssuerForClientBinding(ctx, issuerID))
+
+	done := make(chan error, 1)
+	go func() {
+		done <- ti.service.DeleteRemoteSessionIssuer(ctx, &gen.DeleteRemoteSessionIssuerPayload{
+			ID:               created.ID,
+			SessionToken:     nil,
+			ApikeyToken:      nil,
+			ProjectSlugInput: nil,
+		})
+	}()
+
+	require.Never(t, func() bool { return len(done) > 0 }, 500*time.Millisecond, 25*time.Millisecond,
+		"delete completed while another transaction held the client-binding lock")
+
+	require.NoError(t, tx.Rollback(ctx))
+
+	require.Eventually(t, func() bool { return len(done) > 0 }, 30*time.Second, 25*time.Millisecond,
+		"delete did not complete after the client-binding lock was released")
+	require.NoError(t, <-done)
+}
+
+// TestDeleteRemoteSessionIssuer_NotFound proves deleting an issuer the project
+// does not own returns NotFound. The ownership pre-read makes a missing id and a
+// non-owned id (another tenant's, or a platform issuer) indistinguishable, so
+// the endpoint is no longer an existence oracle. No audit entry is written.
 func TestDeleteRemoteSessionIssuer_NotFound(t *testing.T) {
 	t.Parallel()
 
@@ -663,7 +962,7 @@ func TestDeleteRemoteSessionIssuer_NotFound(t *testing.T) {
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 	})
-	require.NoError(t, err, "delete is idempotent: missing issuer returns success")
+	requireOopsCode(t, err, oops.CodeNotFound)
 
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerDelete)
 	require.NoError(t, err)
@@ -702,13 +1001,13 @@ func fakeIssuerServer(t *testing.T, mutate func(doc map[string]any)) *httptest.S
 	return server
 }
 
-func TestDiscoverRemoteSessionIssuer_HappyPath(t *testing.T) {
+func TestFetchRemoteSessionIssuerMetadata_HappyPath(t *testing.T) {
 	t.Parallel()
 
 	idp := devidptest.Launch(t, devidptest.LaunchOpts{})
 	ctx, ti := newTestService(t)
 
-	draft, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           idp.OAuth21URL,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
@@ -724,7 +1023,7 @@ func TestDiscoverRemoteSessionIssuer_HappyPath(t *testing.T) {
 	require.Empty(t, draft.DiscoveryWarnings)
 }
 
-func TestDiscoverRemoteSessionIssuer_WithWarnings(t *testing.T) {
+func TestFetchRemoteSessionIssuerMetadata_WithWarnings(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -735,7 +1034,7 @@ func TestDiscoverRemoteSessionIssuer_WithWarnings(t *testing.T) {
 		delete(doc, "token_endpoint")
 	})
 
-	draft, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           server.URL,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
@@ -747,35 +1046,12 @@ func TestDiscoverRemoteSessionIssuer_WithWarnings(t *testing.T) {
 	require.Nil(t, draft.TokenEndpoint)
 }
 
-func TestDiscoverRemoteSessionIssuer_RBACForbidden(t *testing.T) {
+func TestFetchRemoteSessionIssuerMetadata_BadURL(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
-		Scope:    authz.ScopeProjectRead,
-		Selector: authz.NewSelector(authz.ScopeProjectRead, authCtx.ProjectID.String()),
-	})
-
-	_, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
-		Issuer:           "https://idp.example.com",
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-	})
-	require.Error(t, err)
-	requireOopsCode(t, err, oops.CodeForbidden)
-}
-
-func TestDiscoverRemoteSessionIssuer_BadURL(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-
-	_, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+	_, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           "ftp://not-http",
 		SessionToken:     nil,
 		ApikeyToken:      nil,
@@ -787,7 +1063,7 @@ func TestDiscoverRemoteSessionIssuer_BadURL(t *testing.T) {
 
 // statusOnlyServer returns an httptest.Server that responds to the well-known
 // path with the supplied HTTP status and no body. Use it to exercise the
-// discoveryFailure → UserMessage path in DiscoverRemoteSessionIssuer.
+// discoveryFailure → UserMessage path in FetchRemoteSessionIssuerMetadata.
 func statusOnlyServer(t *testing.T, status int) *httptest.Server {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -801,43 +1077,43 @@ func statusOnlyServer(t *testing.T, status int) *httptest.Server {
 	return server
 }
 
-func TestDiscoverRemoteSessionIssuer_NotFoundSurfacesWellKnownURL(t *testing.T) {
+func TestFetchRemoteSessionIssuerMetadata_NotFoundSurfacesWellKnownURL(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	server := statusOnlyServer(t, http.StatusNotFound)
 
-	_, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+	_, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           server.URL,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 	})
 	require.Error(t, err)
-	requireOopsCode(t, err, oops.CodeGatewayError)
+	requireOopsCode(t, err, oops.CodeBadRequest)
 	require.Contains(t, err.Error(), "OAuth metadata not found at")
 	require.Contains(t, err.Error(), "/.well-known/oauth-authorization-server")
 }
 
-func TestDiscoverRemoteSessionIssuer_UnexpectedStatusSurfacesCode(t *testing.T) {
+func TestFetchRemoteSessionIssuerMetadata_UnexpectedStatusSurfacesCode(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 	server := statusOnlyServer(t, http.StatusServiceUnavailable)
 
-	_, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+	_, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           server.URL,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 	})
 	require.Error(t, err)
-	requireOopsCode(t, err, oops.CodeGatewayError)
+	requireOopsCode(t, err, oops.CodeBadRequest)
 	require.Contains(t, err.Error(), "Unexpected HTTP 503")
 	require.Contains(t, err.Error(), "/.well-known/oauth-authorization-server")
 }
 
-func TestDiscoverRemoteSessionIssuer_OpenIDConfigurationFallback(t *testing.T) {
+func TestFetchRemoteSessionIssuerMetadata_OpenIDConfigurationFallback(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -864,7 +1140,7 @@ func TestDiscoverRemoteSessionIssuer_OpenIDConfigurationFallback(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	draft, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           server.URL,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
@@ -879,7 +1155,7 @@ func TestDiscoverRemoteSessionIssuer_OpenIDConfigurationFallback(t *testing.T) {
 	}, probedPaths, "oauth-authorization-server first, then openid-configuration")
 }
 
-func TestDiscoverRemoteSessionIssuer_OriginStyleFallbackStripsPath(t *testing.T) {
+func TestFetchRemoteSessionIssuerMetadata_OriginStyleFallbackStripsPath(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -907,7 +1183,7 @@ func TestDiscoverRemoteSessionIssuer_OriginStyleFallbackStripsPath(t *testing.T)
 	}))
 	t.Cleanup(server.Close)
 
-	draft, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           server.URL + "/tenant",
 		SessionToken:     nil,
 		ApikeyToken:      nil,
@@ -923,7 +1199,7 @@ func TestDiscoverRemoteSessionIssuer_OriginStyleFallbackStripsPath(t *testing.T)
 	}, probedPaths, "path-aware candidates 404, fall back to origin-style")
 }
 
-func TestDiscoverRemoteSessionIssuer_SkipsCatchAll200WithoutEndpoints(t *testing.T) {
+func TestFetchRemoteSessionIssuerMetadata_SkipsCatchAll200WithoutEndpoints(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -952,7 +1228,7 @@ func TestDiscoverRemoteSessionIssuer_SkipsCatchAll200WithoutEndpoints(t *testing
 	}))
 	t.Cleanup(server.Close)
 
-	draft, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           server.URL + "/tenant",
 		SessionToken:     nil,
 		ApikeyToken:      nil,
@@ -969,7 +1245,7 @@ func TestDiscoverRemoteSessionIssuer_SkipsCatchAll200WithoutEndpoints(t *testing
 	}, probedPaths, "incomplete catch-all 200s skipped until the real document")
 }
 
-func TestDiscoverRemoteSessionIssuer_IncompleteDocReturnedAsLastResort(t *testing.T) {
+func TestFetchRemoteSessionIssuerMetadata_IncompleteDocReturnedAsLastResort(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -986,7 +1262,7 @@ func TestDiscoverRemoteSessionIssuer_IncompleteDocReturnedAsLastResort(t *testin
 	}))
 	t.Cleanup(server.Close)
 
-	draft, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           server.URL + "/tenant",
 		SessionToken:     nil,
 		ApikeyToken:      nil,
@@ -999,7 +1275,7 @@ func TestDiscoverRemoteSessionIssuer_IncompleteDocReturnedAsLastResort(t *testin
 	require.Len(t, probedPaths, 5, "all candidates probed before falling back to the incomplete document")
 }
 
-func TestDiscoverRemoteSessionIssuer_IngestsDocumentationURLs(t *testing.T) {
+func TestFetchRemoteSessionIssuerMetadata_IngestsDocumentationURLs(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -1010,7 +1286,7 @@ func TestDiscoverRemoteSessionIssuer_IngestsDocumentationURLs(t *testing.T) {
 		doc["op_tos_uri"] = "https://idp.example.com/tos"
 	})
 
-	draft, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           server.URL,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
@@ -1027,14 +1303,14 @@ func TestDiscoverRemoteSessionIssuer_IngestsDocumentationURLs(t *testing.T) {
 
 // An issuer that advertises no documentation metadata yields nil draft fields
 // rather than empty strings.
-func TestDiscoverRemoteSessionIssuer_AbsentDocumentationURLs(t *testing.T) {
+func TestFetchRemoteSessionIssuerMetadata_AbsentDocumentationURLs(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
 
 	server := fakeIssuerServer(t, nil)
 
-	draft, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           server.URL,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
@@ -1049,7 +1325,7 @@ func TestDiscoverRemoteSessionIssuer_AbsentDocumentationURLs(t *testing.T) {
 // An upstream issuer controls these values, and downstream surfaces render them
 // as links. Anything that is not an absolute http(s) URL is dropped at parse
 // time so it never reaches the create form.
-func TestDiscoverRemoteSessionIssuer_DropsNonHTTPDocumentationURLs(t *testing.T) {
+func TestFetchRemoteSessionIssuerMetadata_DropsNonHTTPDocumentationURLs(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -1060,7 +1336,7 @@ func TestDiscoverRemoteSessionIssuer_DropsNonHTTPDocumentationURLs(t *testing.T)
 		doc["op_tos_uri"] = "mailto:legal@idp.example.com"
 	})
 
-	draft, err := ti.service.DiscoverRemoteSessionIssuer(ctx, &gen.DiscoverRemoteSessionIssuerPayload{
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{
 		Issuer:           server.URL,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
@@ -1217,4 +1493,140 @@ func TestUpdateRemoteSessionIssuer_RejectsNonHTTPDocumentationURL(t *testing.T) 
 	})
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+// TestListRemoteSessionIssuers_InheritsPlatformIssuer proves the project-scoped
+// listing surfaces a platform (global) issuer once the caller opts in.
+func TestListRemoteSessionIssuers_InheritsPlatformIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	platformID := seedGlobalRemoteIssuer(t, ctx, ti.conn, "inherit-platform-list")
+
+	result, err := ti.service.ListRemoteSessionIssuers(ctx, &gen.ListRemoteSessionIssuersPayload{
+		Cursor:           nil,
+		Limit:            nil,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	found := false
+	for _, item := range result.Items {
+		if item.ID == platformID.String() {
+			found = true
+			require.Empty(t, item.ProjectID, "platform issuer carries no project")
+			require.Empty(t, item.OrganizationID, "platform issuer carries no organization")
+		}
+	}
+	require.True(t, found, "platform issuer should be inherited into the project listing")
+}
+
+// TestGetRemoteSessionIssuer_ResolvesPlatformIssuerByID proves a project-scoped
+// get-by-id resolves a platform issuer.
+func TestGetRemoteSessionIssuer_ResolvesPlatformIssuerByID(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	platformID := seedGlobalRemoteIssuer(t, ctx, ti.conn, "inherit-platform-get")
+	idStr := platformID.String()
+
+	fetched, err := ti.service.GetRemoteSessionIssuer(ctx, &gen.GetRemoteSessionIssuerPayload{
+		ID:               &idStr,
+		Slug:             nil,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, idStr, fetched.ID)
+	require.Empty(t, fetched.ProjectID)
+	require.Empty(t, fetched.OrganizationID)
+}
+
+// TestGetRemoteSessionIssuer_BySlugDoesNotResolvePlatform proves slug lookups
+// stay strictly project-scoped: a platform issuer is not slug-addressable from a
+// tenant context, even though it is now resolvable by id.
+func TestGetRemoteSessionIssuer_BySlugDoesNotResolvePlatform(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	seedGlobalRemoteIssuer(t, ctx, ti.conn, "inherit-platform-slug")
+	slug := "inherit-platform-slug"
+
+	_, err := ti.service.GetRemoteSessionIssuer(ctx, &gen.GetRemoteSessionIssuerPayload{
+		ID:               nil,
+		Slug:             &slug,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+// TestUpdateRemoteSessionIssuer_CannotMutatePlatformIssuer proves a project
+// admin cannot edit a platform issuer through the project-scoped update.
+func TestUpdateRemoteSessionIssuer_CannotMutatePlatformIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	platformID := seedGlobalRemoteIssuer(t, ctx, ti.conn, "refuse-proj-update")
+	renamed := "Hijacked"
+
+	_, err := ti.service.UpdateRemoteSessionIssuer(ctx, &gen.UpdateRemoteSessionIssuerPayload{
+		ID:                                platformID.String(),
+		Slug:                              nil,
+		Issuer:                            nil,
+		Name:                              &renamed,
+		LogoAssetID:                       nil,
+		ClientSetupDocumentationURL:       nil,
+		AuthorizationEndpoint:             nil,
+		TokenEndpoint:                     nil,
+		RegistrationEndpoint:              nil,
+		JwksURI:                           nil,
+		ServiceDocumentation:              nil,
+		OpPolicyURI:                       nil,
+		OpTosURI:                          nil,
+		ScopesSupported:                   nil,
+		GrantTypesSupported:               nil,
+		ResponseTypesSupported:            nil,
+		TokenEndpointAuthMethodsSupported: nil,
+		ClientIDMetadataDocumentSupported: nil,
+		Oidc:                              nil,
+		Passthrough:                       nil,
+		SessionToken:                      nil,
+		ApikeyToken:                       nil,
+		ProjectSlugInput:                  nil,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	requirePlatformIssuerUnchanged(t, ctx, ti.conn, platformID)
+}
+
+// TestDeleteRemoteSessionIssuer_CannotDeletePlatformIssuer proves a project
+// admin deleting a platform issuer gets a clean NotFound and the row survives.
+// Without the ownership pre-read this returned a silent success (the
+// project-scoped delete matched nothing and the handler swallowed ErrNoRows).
+func TestDeleteRemoteSessionIssuer_CannotDeletePlatformIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	platformID := seedGlobalRemoteIssuer(t, ctx, ti.conn, "refuse-proj-delete")
+
+	err := ti.service.DeleteRemoteSessionIssuer(ctx, &gen.DeleteRemoteSessionIssuerPayload{
+		ID:               platformID.String(),
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	requirePlatformIssuerUnchanged(t, ctx, ti.conn, platformID)
 }

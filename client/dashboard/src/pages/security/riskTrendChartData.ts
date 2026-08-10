@@ -1,4 +1,10 @@
 import { formatChartLabel } from "@/components/chart/chartUtils";
+import {
+  ACCENT_RED,
+  OTHER_SERIES,
+  SERIES,
+  SEVERITY,
+} from "@/components/chart/palette";
 import type { ChartDataset } from "chart.js";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
 
@@ -7,28 +13,37 @@ type TimestampedLineDataset = ChartDataset<
   Array<{ x: number; y: number }>
 >;
 
-const RISK_CATEGORY_CHART_COLORS = [
-  { category: "secrets", color: "#60a5fa" },
-  { category: "financial", color: "#34d399" },
-  { category: "pii", color: "#f87171" },
-  { category: "government_ids", color: "#a78bfa" },
-  { category: "healthcare", color: "#facc15" },
-  { category: "prompt_policy", color: "#38bdf8" },
-  { category: "prompt_injection", color: "#22d3ee" },
-  { category: "off_policy", color: "#f472b6" },
-  { category: "shadow_mcp", color: "#a3e635" },
-  { category: "destructive_tool", color: "#818cf8" },
-  { category: "cli_destructive", color: "#fb7185" },
-  { category: "account_identity", color: "#fb923c" },
-  { category: "custom", color: "#94a3b8" },
-] satisfies ReadonlyArray<{ category: RuleCategory; color: string }>;
+// Editorial severity-first ramp from the shared chart palette: the worst
+// category (secrets) takes the one red accent, the next tiers take the
+// severity oranges, the rest walk the neutral ink ramp (lightness repeats are
+// fine — lines read by legend label, not hue), and "custom" recedes to the
+// Other neutral.
+function riskCategoryChartColors(
+  series: readonly string[],
+): Array<{ category: RuleCategory; color: string }> {
+  return [
+    { category: "secrets", color: ACCENT_RED },
+    { category: "financial", color: SEVERITY.high },
+    { category: "pii", color: SEVERITY.medium },
+    { category: "government_ids", color: series[0]! },
+    { category: "healthcare", color: series[1]! },
+    { category: "prompt_policy", color: series[2]! },
+    { category: "prompt_injection", color: series[3]! },
+    { category: "off_policy", color: series[4]! },
+    { category: "shadow_mcp", color: series[5]! },
+    { category: "destructive_tool", color: series[1]! },
+    { category: "cli_destructive", color: series[2]! },
+    { category: "account_identity", color: series[3]! },
+    { category: "custom", color: OTHER_SERIES },
+  ];
+}
 
-const RISK_CATEGORY_CHART_COLOR_BY_CATEGORY = new Map<RuleCategory, string>(
-  RISK_CATEGORY_CHART_COLORS.map(({ category, color }) => [category, color]),
-);
-
+// Category ordering is color-independent, so it is derived once.
 const RISK_CATEGORY_CHART_ORDER = new Map<RuleCategory, number>(
-  RISK_CATEGORY_CHART_COLORS.map(({ category }, index) => [category, index]),
+  riskCategoryChartColors(SERIES).map(({ category }, index) => [
+    category,
+    index,
+  ]),
 );
 
 export type TrendPoint = {
@@ -37,14 +52,13 @@ export type TrendPoint = {
   findings: number;
 };
 
-function getRiskCategoryChartColor(category: string) {
-  return RISK_CATEGORY_CHART_COLOR_BY_CATEGORY.get(category as RuleCategory);
-}
-
 export function buildRiskTrendChartData(
   points: TrendPoint[],
   from: Date,
   to: Date,
+  // Theme-resolved series ramp; component callers pass seriesForTheme(isDark)
+  // so dark mode lifts the near-black entries. Defaults to the light ramp.
+  seriesColors: readonly string[] = SERIES,
 ): {
   timestamps: number[];
   labels: string[];
@@ -54,6 +68,11 @@ export function buildRiskTrendChartData(
   if (points.length === 0) {
     return { timestamps: [], labels: [], tooltipLabels: [], datasets: [] };
   }
+
+  const categoryColors = riskCategoryChartColors(seriesColors);
+  const colorByCategory = new Map<RuleCategory, string>(
+    categoryColors.map(({ category, color }) => [category, color]),
+  );
 
   const timeRangeMs = to.getTime() - from.getTime();
   const dateMap = new Map<number, Date>();
@@ -93,9 +112,8 @@ export function buildRiskTrendChartData(
     })
     .map(([category, series], index): TimestampedLineDataset => {
       const color =
-        getRiskCategoryChartColor(category) ??
-        RISK_CATEGORY_CHART_COLORS[index % RISK_CATEGORY_CHART_COLORS.length]!
-          .color;
+        colorByCategory.get(category as RuleCategory) ??
+        categoryColors[index % categoryColors.length]!.color;
       const meta = RULE_CATEGORY_META[category as RuleCategory];
       return {
         label: meta?.label ?? category,
@@ -104,7 +122,8 @@ export function buildRiskTrendChartData(
           y: series.get(timestamp) ?? 0,
         })),
         borderColor: color,
-        backgroundColor: `${color}1a`,
+        // No alpha area wash — the editorial style keeps line charts flat.
+        backgroundColor: "transparent",
         pointBackgroundColor: color,
         fill: false,
         tension: 0.45,

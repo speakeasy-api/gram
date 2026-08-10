@@ -4,20 +4,20 @@ import {
   FieldDescription,
   FieldError,
   FieldLabel,
-} from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+} from "@/components/ui/Field";
+import { Input } from "@/components/ui/Input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/Select";
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { useUpdateUserSessionIssuerMutation } from "@gram/client/react-query/updateUserSessionIssuer.js";
 import { invalidateAllUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -107,16 +107,12 @@ export function UserSessionDurationField({
     setDurationNumber(Number.isFinite(parsed) && parsed >= 0 ? parsed : 0);
   };
 
-  const handleUnitChange = (value: string) => {
-    setDurationUnit(value as DurationUnit);
-  };
-
   return (
     <Field data-invalid={update.isError ? true : undefined}>
       <FieldLabel htmlFor="mcp-auth-session-duration">
-        Session Duration
+        Maximum Session Duration
       </FieldLabel>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <Input
           id="mcp-auth-session-duration"
           type="number"
@@ -125,7 +121,10 @@ export function UserSessionDurationField({
           onChange={handleNumberChange}
           className="w-[100px]"
         />
-        <Select value={durationUnit} onValueChange={handleUnitChange}>
+        <Select
+          value={durationUnit}
+          onValueChange={(value) => setDurationUnit(value as DurationUnit)}
+        >
           <SelectTrigger className="w-[120px]">
             <SelectValue />
           </SelectTrigger>
@@ -149,8 +148,9 @@ export function UserSessionDurationField({
         </RequireScope>
       </div>
       <FieldDescription>
-        Users authenticate with Speakeasy before using this server. Choose how
-        long issued sessions stay valid before re-authentication.
+        Users authenticate with Speakeasy before using this server. Sessions can
+        never outlive this duration; the consent screen lets users pick any
+        shorter length.
       </FieldDescription>
       {update.isError && <FieldError>{update.error.message}</FieldError>}
     </Field>

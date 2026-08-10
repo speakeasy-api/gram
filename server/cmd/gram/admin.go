@@ -205,11 +205,6 @@ func newAdminCommand() *cli.Command {
 			meterProvider := otel.GetMeterProvider()
 			slog.SetDefault(logger)
 
-			guardianPolicy, err := newGuardianPolicy(c, logger, tracerProvider, meterProvider)
-			if err != nil {
-				return err
-			}
-
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
 			})
@@ -230,6 +225,11 @@ func newAdminCommand() *cli.Command {
 			})
 			if err != nil {
 				return fmt.Errorf("failed to connect to redis: %w", err)
+			}
+
+			guardianPolicy, err := newGuardianPolicy(c, logger, tracerProvider, meterProvider, redisClient)
+			if err != nil {
+				return err
 			}
 
 			adminEncryption, err := encryption.New(c.String("admin-encryption-key"))

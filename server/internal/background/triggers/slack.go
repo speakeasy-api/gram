@@ -608,6 +608,7 @@ func newSlackDefinition() Definition {
 			TimestampSkew:   300 * time.Second,
 		},
 		SupportedEventTypes: supportedSlackEventTypes,
+		Authenticate:        nil,
 		PreVerify: func(body []byte, _ http.Header) (bool, error) {
 			// Slack's URL verification handshake must echo the challenge before
 			// any signing secret has necessarily been configured. Allow it

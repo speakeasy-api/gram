@@ -1,11 +1,11 @@
-import { MiniCard } from "@/components/ui/card-mini";
-import { Heading } from "@/components/ui/heading";
+import { Card } from "@/components/ui/Card";
+import { MoreActions } from "@/components/ui/MoreActions";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
@@ -14,7 +14,8 @@ import { DeploymentFunctions } from "@gram/client/models/components/deploymentfu
 import { OpenAPIv3DeploymentAsset } from "@gram/client/models/components/openapiv3deploymentasset.js";
 import { buildDeploymentQuery } from "@gram/client/react-query/deployment.js";
 import { buildListToolsQuery } from "@gram/client/react-query/listTools.js";
-import { Badge, Stack } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Stack } from "@/components/ui/Stack";
 import { useSuspenseQueries } from "@tanstack/react-query";
 import { FileCodeIcon, SquareFunctionIcon } from "lucide-react";
 import React from "react";
@@ -51,8 +52,8 @@ export const AssetsTabContent = (): React.JSX.Element => {
       {errAll.length > 0 && (
         <div>
           <Stack gap={2} className="mb-6">
-            <Heading variant="h2">Invalid Assets</Heading>
-            <Type variant="small">
+            <h2 className="text-eyebrow">Invalid Assets</h2>
+            <Text variant="small">
               The following assets caused this deployment to fail. Correct these
               errors by managing assets in the{" "}
               <routes.mcp.Link className="text-link hover:cursor-pointer">
@@ -68,7 +69,7 @@ export const AssetsTabContent = (): React.JSX.Element => {
                 deployment logs
               </a>
               .
-            </Type>
+            </Text>
           </Stack>
 
           <ul className="flex flex-col flex-wrap gap-4">
@@ -85,9 +86,7 @@ export const AssetsTabContent = (): React.JSX.Element => {
 
       {okFunctions.length > 0 ? (
         <div>
-          <Heading variant="h2" className="mb-6">
-            Functions
-          </Heading>
+          <h2 className="text-eyebrow mb-6">Functions</h2>
 
           <ul className="flex flex-col flex-wrap gap-4">
             {okFunctions.map((asset) => {
@@ -103,9 +102,7 @@ export const AssetsTabContent = (): React.JSX.Element => {
 
       {okOpenAPI.length > 0 ? (
         <div>
-          <Heading variant="h2" className="mb-6">
-            OpenAPI
-          </Heading>
+          <h2 className="text-eyebrow mb-6">OpenAPI</h2>
           <ul className="flex flex-col flex-wrap gap-4">
             {okOpenAPI.map((asset) => {
               return (
@@ -143,9 +140,9 @@ const AssetItem = ({ asset }: AssetItemProps) => {
   }
 
   return (
-    <MiniCard className="bg-surface-secondary-default border-neutral-softest w-full max-w-full p-6">
-      <MiniCard.Title>
-        <div className="flex w-full items-center gap-4">
+    <Card className="bg-card border-border h-auto w-full max-w-full">
+      <div className="flex w-full items-center justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-4">
           {icon}
           <div className="flex flex-col">
             <span className="text-base leading-7">{asset.name}</span>
@@ -155,17 +152,17 @@ const AssetItem = ({ asset }: AssetItemProps) => {
             </div>
           </div>
         </div>
-      </MiniCard.Title>
-      <MiniCard.Actions
-        actions={[
-          {
-            label: "Download",
-            icon: "download",
-            onClick: () => handleDownload(asset.assetId, asset.name),
-          },
-        ]}
-      />
-    </MiniCard>
+        <MoreActions
+          actions={[
+            {
+              label: "Download",
+              icon: "download",
+              onClick: () => handleDownload(asset.assetId, asset.name),
+            },
+          ]}
+        />
+      </div>
+    </Card>
   );
 };
 

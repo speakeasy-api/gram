@@ -1474,6 +1474,7 @@ func unmarshalMcpEndpointResponseBodyToTypesMcpEndpoint(v *McpEndpointResponseBo
 		CustomDomainID: v.CustomDomainID,
 		McpServerID:    *v.McpServerID,
 		Slug:           types.McpEndpointSlug(*v.Slug),
+		IsDomainRoot:   *v.IsDomainRoot,
 		CreatedAt:      *v.CreatedAt,
 		UpdatedAt:      *v.UpdatedAt,
 	}

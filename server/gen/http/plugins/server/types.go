@@ -112,6 +112,9 @@ type GetPluginResponseBody struct {
 	SkillCount *int64 `form:"skill_count,omitempty" json:"skill_count,omitempty" xml:"skill_count,omitempty"`
 	// Number of role/user assignments.
 	AssignmentCount *int64 `form:"assignment_count,omitempty" json:"assignment_count,omitempty" xml:"assignment_count,omitempty"`
+	// Whether the plugin's complete current intended state can be published as an
+	// Agent Plugins 1.0 package.
+	AgentPluginsV1Compatible bool `form:"agent_plugins_v1_compatible" json:"agent_plugins_v1_compatible" xml:"agent_plugins_v1_compatible"`
 	// Servers included in this plugin.
 	Servers []*PluginServerResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
 	// Role/user assignments.
@@ -139,6 +142,9 @@ type CreatePluginResponseBody struct {
 	SkillCount *int64 `form:"skill_count,omitempty" json:"skill_count,omitempty" xml:"skill_count,omitempty"`
 	// Number of role/user assignments.
 	AssignmentCount *int64 `form:"assignment_count,omitempty" json:"assignment_count,omitempty" xml:"assignment_count,omitempty"`
+	// Whether the plugin's complete current intended state can be published as an
+	// Agent Plugins 1.0 package.
+	AgentPluginsV1Compatible bool `form:"agent_plugins_v1_compatible" json:"agent_plugins_v1_compatible" xml:"agent_plugins_v1_compatible"`
 	// Servers included in this plugin.
 	Servers []*PluginServerResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
 	// Role/user assignments.
@@ -166,6 +172,9 @@ type UpdatePluginResponseBody struct {
 	SkillCount *int64 `form:"skill_count,omitempty" json:"skill_count,omitempty" xml:"skill_count,omitempty"`
 	// Number of role/user assignments.
 	AssignmentCount *int64 `form:"assignment_count,omitempty" json:"assignment_count,omitempty" xml:"assignment_count,omitempty"`
+	// Whether the plugin's complete current intended state can be published as an
+	// Agent Plugins 1.0 package.
+	AgentPluginsV1Compatible bool `form:"agent_plugins_v1_compatible" json:"agent_plugins_v1_compatible" xml:"agent_plugins_v1_compatible"`
 	// Servers included in this plugin.
 	Servers []*PluginServerResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
 	// Role/user assignments.
@@ -1948,6 +1957,25 @@ type SetPluginAssignmentsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// DownloadPluginPackageFailedPreconditionResponseBody is the type of the
+// "plugins" service "downloadPluginPackage" endpoint HTTP response body for
+// the "failed_precondition" error.
+type DownloadPluginPackageFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DownloadPluginPackageUnauthorizedResponseBody is the type of the "plugins"
 // service "downloadPluginPackage" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -3282,6 +3310,9 @@ type PluginResponseBody struct {
 	SkillCount *int64 `form:"skill_count,omitempty" json:"skill_count,omitempty" xml:"skill_count,omitempty"`
 	// Number of role/user assignments.
 	AssignmentCount *int64 `form:"assignment_count,omitempty" json:"assignment_count,omitempty" xml:"assignment_count,omitempty"`
+	// Whether the plugin's complete current intended state can be published as an
+	// Agent Plugins 1.0 package.
+	AgentPluginsV1Compatible bool `form:"agent_plugins_v1_compatible" json:"agent_plugins_v1_compatible" xml:"agent_plugins_v1_compatible"`
 	// Servers included in this plugin.
 	Servers []*PluginServerResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
 	// Role/user assignments.
@@ -3354,16 +3385,17 @@ func NewListPluginsResponseBody(res *plugins.ListPluginsResult) *ListPluginsResp
 // the "getPlugin" endpoint of the "plugins" service.
 func NewGetPluginResponseBody(res *plugins.Plugin) *GetPluginResponseBody {
 	body := &GetPluginResponseBody{
-		ID:              res.ID,
-		Name:            res.Name,
-		Slug:            res.Slug,
-		Description:     res.Description,
-		IsDefault:       res.IsDefault,
-		ServerCount:     res.ServerCount,
-		SkillCount:      res.SkillCount,
-		AssignmentCount: res.AssignmentCount,
-		CreatedAt:       res.CreatedAt,
-		UpdatedAt:       res.UpdatedAt,
+		ID:                       res.ID,
+		Name:                     res.Name,
+		Slug:                     res.Slug,
+		Description:              res.Description,
+		IsDefault:                res.IsDefault,
+		ServerCount:              res.ServerCount,
+		SkillCount:               res.SkillCount,
+		AssignmentCount:          res.AssignmentCount,
+		AgentPluginsV1Compatible: res.AgentPluginsV1Compatible,
+		CreatedAt:                res.CreatedAt,
+		UpdatedAt:                res.UpdatedAt,
 	}
 	if res.Servers != nil {
 		body.Servers = make([]*PluginServerResponseBody, len(res.Servers))
@@ -3392,16 +3424,17 @@ func NewGetPluginResponseBody(res *plugins.Plugin) *GetPluginResponseBody {
 // the "createPlugin" endpoint of the "plugins" service.
 func NewCreatePluginResponseBody(res *plugins.Plugin) *CreatePluginResponseBody {
 	body := &CreatePluginResponseBody{
-		ID:              res.ID,
-		Name:            res.Name,
-		Slug:            res.Slug,
-		Description:     res.Description,
-		IsDefault:       res.IsDefault,
-		ServerCount:     res.ServerCount,
-		SkillCount:      res.SkillCount,
-		AssignmentCount: res.AssignmentCount,
-		CreatedAt:       res.CreatedAt,
-		UpdatedAt:       res.UpdatedAt,
+		ID:                       res.ID,
+		Name:                     res.Name,
+		Slug:                     res.Slug,
+		Description:              res.Description,
+		IsDefault:                res.IsDefault,
+		ServerCount:              res.ServerCount,
+		SkillCount:               res.SkillCount,
+		AssignmentCount:          res.AssignmentCount,
+		AgentPluginsV1Compatible: res.AgentPluginsV1Compatible,
+		CreatedAt:                res.CreatedAt,
+		UpdatedAt:                res.UpdatedAt,
 	}
 	if res.Servers != nil {
 		body.Servers = make([]*PluginServerResponseBody, len(res.Servers))
@@ -3430,16 +3463,17 @@ func NewCreatePluginResponseBody(res *plugins.Plugin) *CreatePluginResponseBody 
 // the "updatePlugin" endpoint of the "plugins" service.
 func NewUpdatePluginResponseBody(res *plugins.Plugin) *UpdatePluginResponseBody {
 	body := &UpdatePluginResponseBody{
-		ID:              res.ID,
-		Name:            res.Name,
-		Slug:            res.Slug,
-		Description:     res.Description,
-		IsDefault:       res.IsDefault,
-		ServerCount:     res.ServerCount,
-		SkillCount:      res.SkillCount,
-		AssignmentCount: res.AssignmentCount,
-		CreatedAt:       res.CreatedAt,
-		UpdatedAt:       res.UpdatedAt,
+		ID:                       res.ID,
+		Name:                     res.Name,
+		Slug:                     res.Slug,
+		Description:              res.Description,
+		IsDefault:                res.IsDefault,
+		ServerCount:              res.ServerCount,
+		SkillCount:               res.SkillCount,
+		AssignmentCount:          res.AssignmentCount,
+		AgentPluginsV1Compatible: res.AgentPluginsV1Compatible,
+		CreatedAt:                res.CreatedAt,
+		UpdatedAt:                res.UpdatedAt,
 	}
 	if res.Servers != nil {
 		body.Servers = make([]*PluginServerResponseBody, len(res.Servers))
@@ -4842,6 +4876,21 @@ func NewSetPluginAssignmentsUnexpectedResponseBody(res *goa.ServiceError) *SetPl
 // service.
 func NewSetPluginAssignmentsGatewayErrorResponseBody(res *goa.ServiceError) *SetPluginAssignmentsGatewayErrorResponseBody {
 	body := &SetPluginAssignmentsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadPluginPackageFailedPreconditionResponseBody builds the HTTP
+// response body from the result of the "downloadPluginPackage" endpoint of the
+// "plugins" service.
+func NewDownloadPluginPackageFailedPreconditionResponseBody(res *goa.ServiceError) *DownloadPluginPackageFailedPreconditionResponseBody {
+	body := &DownloadPluginPackageFailedPreconditionResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

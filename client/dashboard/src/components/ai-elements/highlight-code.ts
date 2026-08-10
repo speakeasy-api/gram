@@ -1,9 +1,8 @@
-import type { Element } from "hast";
 import { type BundledLanguage, codeToHtml, type ShikiTransformer } from "shiki";
 
 const lineNumberTransformer: ShikiTransformer = {
   name: "line-numbers",
-  line(node: Element, line: number) {
+  line(node, line) {
     node.children.unshift({
       type: "element",
       tagName: "span",

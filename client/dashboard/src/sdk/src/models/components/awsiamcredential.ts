@@ -12,14 +12,16 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * The cloud provider of the credential.
  */
-export const Provider = {
+export const AwsIamCredentialProvider = {
   AwsIam: "aws_iam",
   GcpIam: "gcp_iam",
 } as const;
 /**
  * The cloud provider of the credential.
  */
-export type Provider = ClosedEnum<typeof Provider>;
+export type AwsIamCredentialProvider = ClosedEnum<
+  typeof AwsIamCredentialProvider
+>;
 
 /**
  * An AWS IAM external credential.
@@ -60,7 +62,7 @@ export type AwsIamCredential = {
   /**
    * The cloud provider of the credential.
    */
-  provider: Provider;
+  provider: AwsIamCredentialProvider;
   /**
    * Optional STS region override.
    */
@@ -72,9 +74,9 @@ export type AwsIamCredential = {
 };
 
 /** @internal */
-export const Provider$inboundSchema: z.ZodMiniEnum<typeof Provider> = z.enum(
-  Provider,
-);
+export const AwsIamCredentialProvider$inboundSchema: z.ZodMiniEnum<
+  typeof AwsIamCredentialProvider
+> = z.enum(AwsIamCredentialProvider);
 
 /** @internal */
 export const AwsIamCredential$inboundSchema: z.ZodMiniType<
@@ -93,7 +95,7 @@ export const AwsIamCredential$inboundSchema: z.ZodMiniType<
     oidc_audience: z.optional(z.string()),
     oidc_subject: z.optional(z.string()),
     organization_id: z.string(),
-    provider: Provider$inboundSchema,
+    provider: AwsIamCredentialProvider$inboundSchema,
     sts_region: z.optional(z.string()),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),

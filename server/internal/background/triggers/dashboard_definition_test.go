@@ -30,6 +30,12 @@ func TestDashboardDefinitionBuildDirectEvent(t *testing.T) {
 	require.NotEmpty(t, envelope.EventID)
 	require.Equal(t, receivedAt, envelope.ReceivedAt)
 
+	withSkill, err := def.BuildDirectEvent(instance, dashboardTriggerConfig{}, []byte(`{"text":"use it","user_id":"user-1","correlation_id":"conv-1","idempotency_key":"skill-key","skill_context":[{"name":"incident-analysis","content":"verbatim"}]}`), receivedAt)
+	require.NoError(t, err)
+	skillEvent, ok := withSkill.Event.(dashboardTriggerEvent)
+	require.True(t, ok)
+	require.JSONEq(t, `[{"name":"incident-analysis","content":"verbatim"}]`, string(skillEvent.SkillContext))
+
 	// Event id is derived from instance + idempotency key so retries dedupe.
 	retry, err := def.BuildDirectEvent(instance, dashboardTriggerConfig{}, []byte(`{"text":"top errors?","user_id":"user-1","correlation_id":"conv-1","idempotency_key":"key-1"}`), receivedAt.Add(time.Minute))
 	require.NoError(t, err)

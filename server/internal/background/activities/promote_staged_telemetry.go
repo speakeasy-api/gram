@@ -60,20 +60,22 @@ const promoteStagedTelemetryTimeout = 30 * time.Minute
 const promoteStagedTelemetryClaimTTL = 5 * time.Minute
 
 type PromoteStagedTelemetry struct {
-	logger    *slog.Logger
-	telemetry *telemetryrepo.Queries
-	cache     cache.Cache
-	timeout   time.Duration
-	now       func() time.Time
+	logger       *slog.Logger
+	telemetry    *telemetryrepo.Queries
+	cache        cache.Cache
+	logPublisher *telemetry.LogPublisher
+	timeout      time.Duration
+	now          func() time.Time
 }
 
-func NewPromoteStagedTelemetry(logger *slog.Logger, chConn clickhouse.Conn, cacheAdapter cache.Cache) *PromoteStagedTelemetry {
+func NewPromoteStagedTelemetry(logger *slog.Logger, chConn clickhouse.Conn, cacheAdapter cache.Cache, logPublisher *telemetry.LogPublisher) *PromoteStagedTelemetry {
 	return &PromoteStagedTelemetry{
-		logger:    logger.With(attr.SlogComponent("promote_staged_telemetry")),
-		telemetry: telemetryrepo.New(chConn),
-		cache:     cacheAdapter,
-		timeout:   promoteStagedTelemetryTimeout,
-		now:       time.Now,
+		logger:       logger.With(attr.SlogComponent("promote_staged_telemetry")),
+		telemetry:    telemetryrepo.New(chConn),
+		cache:        cacheAdapter,
+		logPublisher: logPublisher,
+		timeout:      promoteStagedTelemetryTimeout,
+		now:          time.Now,
 	}
 }
 
@@ -264,6 +266,11 @@ func (p *PromoteStagedTelemetry) Do(ctx context.Context, args PromoteStagedTelem
 			cancel()
 			return nil, fmt.Errorf("insert promoted telemetry logs: %w", err)
 		}
+		// Shadow dual-write of the promoted rows, keeping their staged ids so
+		// the Pub/Sub stream stays id-faithful to telemetry_logs. Best-effort:
+		// a crash between insert and publish loses the shadow copy, and an
+		// activity retry can duplicate messages (consumers dedupe by id).
+		p.logPublisher.PublishLogs(ctx, insert)
 		deleteIDs = append(deleteIDs, claimedIDs...)
 	}
 

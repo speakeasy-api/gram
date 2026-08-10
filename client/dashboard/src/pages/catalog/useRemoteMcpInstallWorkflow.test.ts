@@ -8,6 +8,8 @@ const mockDiscoverProtectedResourceMetadata = vi.fn();
 const mockMcpServersCreate = vi.fn();
 const mockMcpEndpointsCreate = vi.fn();
 const mockAuthedFetch = vi.fn();
+const mockUnproxiedCreateServer = vi.fn();
+const mockUnproxiedDeleteServer = vi.fn();
 
 // Return a stable client reference to avoid re-render loops from useCallback deps
 const mockClient = {
@@ -22,6 +24,10 @@ const mockClient = {
   },
   mcpEndpoints: {
     create: mockMcpEndpointsCreate,
+  },
+  unproxiedMcp: {
+    createServer: mockUnproxiedCreateServer,
+    deleteServer: mockUnproxiedDeleteServer,
   },
 };
 
@@ -41,6 +47,10 @@ vi.mock("sonner", () => ({
 vi.mock("@gram/client/react-query/remoteMcpServers.js", () => ({
   useRemoteMcpServers: vi.fn(() => ({ data: undefined })),
   invalidateAllRemoteMcpServers: vi.fn(() => Promise.resolve()),
+}));
+vi.mock("@gram/client/react-query/unproxiedMcpServers.js", () => ({
+  useUnproxiedMcpServers: vi.fn(() => ({ data: undefined })),
+  invalidateAllUnproxiedMcpServers: vi.fn(() => Promise.resolve()),
 }));
 vi.mock("@gram/client/react-query/remoteMcpServerHeaders.js", () => ({
   invalidateAllRemoteMcpServerHeaders: vi.fn(() => Promise.resolve()),
@@ -133,6 +143,13 @@ describe("useRemoteMcpInstallWorkflow", () => {
       slug: "test-org-abc123",
     });
     mockDeleteServer.mockResolvedValue(undefined);
+    mockUnproxiedCreateServer.mockResolvedValue({
+      id: "unproxied-1",
+      slug: "unproxied-slug",
+      url: "https://mcp.figma.com/mcp",
+      name: "Figma",
+    });
+    mockUnproxiedDeleteServer.mockResolvedValue(undefined);
   });
 
   // -------------------------------------------------------------------------
@@ -334,6 +351,47 @@ describe("useRemoteMcpInstallWorkflow", () => {
       mcpServerParam: "mcp-server-slug",
     });
     expect(state.statuses[0]!.mcpEndpointUrl).toContain("/mcp/test-org-abc123");
+  });
+
+  it("creates an unproxied MCP server for Figma instead of a remote one", async () => {
+    const servers = [
+      makeServer({
+        title: "Figma",
+        registrySpecifier: "com.figma.mcp/mcp",
+        remotes: [remote("https://mcp.figma.com/mcp")],
+      }),
+    ];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers }),
+    );
+
+    await startInstall(result);
+
+    await waitFor(() => expect(result.current.phase).toBe("complete"));
+    expect(mockUnproxiedCreateServer).toHaveBeenCalledWith(
+      {
+        createUnproxiedMcpServerForm: {
+          name: "Figma",
+          url: "https://mcp.figma.com/mcp",
+          description: "A test server",
+        },
+      },
+      undefined,
+      undefined,
+    );
+    expect(mockCreateServer).not.toHaveBeenCalled();
+    expect(mockMcpServersCreate).toHaveBeenCalledWith(
+      {
+        createMcpServerForm: expect.objectContaining({
+          name: "Figma",
+          unproxiedMcpServerId: "unproxied-1",
+          visibility: "public",
+        }),
+      },
+      undefined,
+      undefined,
+    );
+    expect(mockMcpEndpointsCreate).not.toHaveBeenCalled();
   });
 
   it("sends gram-project request options for cross-project installs", async () => {

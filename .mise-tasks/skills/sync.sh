@@ -5,6 +5,12 @@
 
 set -euo pipefail
 
+# Opted-in via ./zero (persisted in mise.local.toml): install/update the
+# SHA-pinned external skill set before linking, so sync keeps it current.
+if [ "${USE_RECOMMENDED_SKILLS:-false}" = "true" ] && [ -f ".agents/recommended-skills.json" ]; then
+  mise run skills:recommended --yes
+fi
+
 SOURCE_DIR=".agents/skills"
 TARGETS=(
   ".claude/skills"
@@ -43,6 +49,10 @@ for target in "${TARGETS[@]}"; do
         continue
       fi
       rm "$link_path"
+    elif [ -e "$link_path" ]; then
+      # Real directory (harness-specific skill, e.g. .claude/skills/datadog-insights)
+      # shadows the shared name; linking into it would nest a stray symlink inside.
+      continue
     fi
 
     ln -s "$rel_target" "$link_path"

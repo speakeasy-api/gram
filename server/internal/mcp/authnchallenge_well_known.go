@@ -21,6 +21,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/httpcache"
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -29,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 )
 
 // metadataCacheMaxAgeSeconds is the Cache-Control max-age for public well-known
@@ -59,16 +61,36 @@ type oauthProtectedResourceMetadata struct {
 // the legacy package's wellknown.OAuthServerMetadata for the same reason as
 // above.
 type oauthAuthorizationServerMetadata struct {
-	Issuer                            string   `json:"issuer"`
-	AuthorizationEndpoint             string   `json:"authorization_endpoint"`
-	TokenEndpoint                     string   `json:"token_endpoint"`
-	RegistrationEndpoint              string   `json:"registration_endpoint"`
-	RevocationEndpoint                string   `json:"revocation_endpoint"`
-	ScopesSupported                   []string `json:"scopes_supported,omitempty"`
-	ResponseTypesSupported            []string `json:"response_types_supported"`
-	GrantTypesSupported               []string `json:"grant_types_supported"`
-	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
-	CodeChallengeMethodsSupported     []string `json:"code_challenge_methods_supported"`
+	Issuer                               string   `json:"issuer"`
+	AuthorizationEndpoint                string   `json:"authorization_endpoint"`
+	TokenEndpoint                        string   `json:"token_endpoint"`
+	RegistrationEndpoint                 string   `json:"registration_endpoint"`
+	RevocationEndpoint                   string   `json:"revocation_endpoint"`
+	ScopesSupported                      []string `json:"scopes_supported,omitempty"`
+	ResponseTypesSupported               []string `json:"response_types_supported"`
+	GrantTypesSupported                  []string `json:"grant_types_supported"`
+	TokenEndpointAuthMethodsSupported    []string `json:"token_endpoint_auth_methods_supported"`
+	CodeChallengeMethodsSupported        []string `json:"code_challenge_methods_supported"`
+	RefreshTokenExpirationTypesSupported []string `json:"refresh_token_expiration_types_supported"`
+
+	// AuthorizationResponseIssParameterSupported advertises RFC 9207 §3. Always
+	// true: every authorization response on this surface carries `iss`
+	// (RFC 9207 §2), and an omitted field means false to a client, so the
+	// value tracks a property of the surface rather than any configuration.
+	//
+	// The coupling with emission is asymmetric. A client seeing `iss` without
+	// the flag compares it anyway, which is what lets this document lag behind
+	// the responses it describes by up to the cache TTL below. A client seeing
+	// the flag without `iss` rejects the response outright, which is what
+	// makes turning this off — or serving it from a build whose response paths
+	// omit `iss` — a client-visible break.
+	AuthorizationResponseIssParameterSupported bool `json:"authorization_response_iss_parameter_supported"`
+
+	// ClientIDMetadataDocumentSupported advertises inbound CIMD support
+	// (draft-ietf-oauth-client-id-metadata-document-02 §6). Emitted as true
+	// only when the issuer organization's gram-user-session-cimd flag is
+	// on; omitted otherwise.
+	ClientIDMetadataDocumentSupported *bool `json:"client_id_metadata_document_supported,omitempty"`
 }
 
 // HandleGetProtectedResource serves RFC 9728 protected-resource metadata at
@@ -176,8 +198,14 @@ func (s *Service) HandleGetAuthorizationServer(w http.ResponseWriter, r *http.Re
 	}
 
 	// The legacy /mcp OAuth machinery is keyed on the toolset's mcp_slug,
-	// which equals the requested slug on this fallback path.
-	return s.serveLegacyToolsetAuthorizationServer(ctx, w, r, logger, toolset, mcpSlug)
+	// which equals the requested slug on this fallback path. The resource URL
+	// mirrors HandleGetProtectedResource so the served issuer matches the
+	// protected-resource metadata's authorization_servers entry.
+	resourceURL, err := url.JoinPath(s.BaseURLForRequest(r), "mcp", mcpSlug)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build legacy resource URL").LogError(ctx, s.logger)
+	}
+	return s.serveLegacyToolsetAuthorizationServer(ctx, w, r, logger, toolset, mcpSlug, resourceURL)
 }
 
 // ServeWellKnownProtectedResourceForServer serves RFC 9728 protected-resource
@@ -200,6 +228,12 @@ func (s *Service) ServeWellKnownProtectedResourceForServer(
 	routeBase string,
 ) error {
 	ctx := r.Context()
+
+	// Public tunneled servers are anonymous: no OAuth metadata exists for
+	// them despite the populated issuer column.
+	if isTunneledPublic(mcpServer) {
+		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
+	}
 
 	if mcpServer.UserSessionIssuerID.Valid {
 		endpoint, err := s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, routeBase)
@@ -243,6 +277,10 @@ func (s *Service) ServeWellKnownAuthorizationServerForServer(
 ) error {
 	ctx := r.Context()
 
+	if isTunneledPublic(mcpServer) {
+		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
+	}
+
 	if mcpServer.UserSessionIssuerID.Valid {
 		endpoint, err := s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, routeBase)
 		if err != nil {
@@ -268,7 +306,14 @@ func (s *Service) ServeWellKnownAuthorizationServerForServer(
 		if oauthSlug == "" {
 			return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found")
 		}
-		return s.serveLegacyToolsetAuthorizationServer(ctx, w, r, logger, toolset, oauthSlug)
+		// The resource URL mirrors ServeWellKnownProtectedResourceForServer
+		// (routeBase + mcp_endpoints.slug) so the served issuer matches the
+		// protected-resource metadata's authorization_servers entry.
+		resourceURL, err := url.JoinPath(s.BaseURLForRequest(r), routeBase, mcpEndpoint.Slug)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "build resource URL").LogError(ctx, logger)
+		}
+		return s.serveLegacyToolsetAuthorizationServer(ctx, w, r, logger, toolset, oauthSlug, resourceURL)
 	default:
 		return oops.E(oops.CodeUnexpected, nil, "mcp server has no backend configured").LogError(ctx, logger)
 	}
@@ -313,8 +358,8 @@ func (s *Service) serveLegacyToolsetProtectedResource(ctx context.Context, w htt
 // result means the toolset carries no OAuth configuration — 404. oauthSlug
 // keys the emitted issuer / endpoint URLs onto the legacy /oauth/{slug}
 // surface.
-func (s *Service) serveLegacyToolsetAuthorizationServer(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, toolset *toolsets_repo.Toolset, oauthSlug string) error {
-	result, err := wellknown.ResolveOAuthServerMetadataFromToolset(ctx, logger, s.db, s.oauthRepo, &s.toolsetCache, toolset, s.BaseURLForRequest(r), oauthSlug)
+func (s *Service) serveLegacyToolsetAuthorizationServer(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, toolset *toolsets_repo.Toolset, oauthSlug, resourceURL string) error {
+	result, err := wellknown.ResolveOAuthServerMetadataFromToolset(ctx, logger, s.db, s.oauthRepo, &s.toolsetCache, toolset, s.BaseURLForRequest(r), oauthSlug, resourceURL)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to resolve OAuth server metadata").LogError(ctx, logger)
 	}
@@ -380,17 +425,43 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build OAuth server URLs").LogError(ctx, s.logger)
 	}
+	// Advertised only when the rollout flag is on AND the issuer admits at
+	// least some CIMD client. A `disabled` issuer omits the field: claiming
+	// support while admitting nothing would steer spec-compliant clients
+	// into a guaranteed-failure flow instead of letting them fall back to
+	// dynamic client registration, which is still open on this issuer.
+	//
+	// This is advisory, not a control. The response carries cache headers
+	// (writeJSONMetadata), and clients typically cache authorization-server
+	// metadata for their whole process lifetime, so a mode flip reaches them
+	// well after the fact — some will keep attempting CIMD regardless.
+	// /authorize enforcement is the actual gate.
+	var cimdSupported *bool
+	mode, recognized := admission.ResolveMode(endpoint.CIMDAdmissionModeRaw.String, endpoint.CIMDAdmissionModeRaw.Valid)
+	if !recognized {
+		s.logger.ErrorContext(ctx, "unrecognized cimd admission mode stored on issuer, failing closed",
+			attr.SlogCIMDAdmissionMode(endpoint.CIMDAdmissionModeRaw.String),
+		)
+	}
+	if mode != admission.ModeDisabled && s.userSessionCIMDEnabled(ctx, s.logger, endpoint) {
+		cimdSupported = conv.PtrEmpty(true)
+	}
 	return writeJSONMetadata(ctx, w, r, s.logger, oauthAuthorizationServerMetadata{
-		Issuer:                            urls.Issuer,
-		AuthorizationEndpoint:             urls.Authorize,
-		TokenEndpoint:                     urls.Token,
+		AuthorizationEndpoint:                      urls.Authorize,
+		AuthorizationResponseIssParameterSupported: true,
+		ClientIDMetadataDocumentSupported:          cimdSupported,
+		CodeChallengeMethodsSupported:              usersessions.SupportedCodeChallengeMethods,
+		GrantTypesSupported:                        usersessions.SupportedGrantTypes,
+		Issuer:                                     urls.Issuer,
+		RefreshTokenExpirationTypesSupported: []string{
+			"authorization",
+		},
 		RegistrationEndpoint:              urls.Register,
+		ResponseTypesSupported:            usersessions.SupportedResponseTypes,
 		RevocationEndpoint:                urls.Revoke,
 		ScopesSupported:                   nil,
-		ResponseTypesSupported:            usersessions.SupportedResponseTypes,
-		GrantTypesSupported:               usersessions.SupportedGrantTypes,
+		TokenEndpoint:                     urls.Token,
 		TokenEndpointAuthMethodsSupported: usersessions.SupportedAuthMethods,
-		CodeChallengeMethodsSupported:     usersessions.SupportedCodeChallengeMethods,
 	})
 }
 

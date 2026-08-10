@@ -9,6 +9,48 @@ import (
 	"context"
 )
 
+// iteratorForCreateChatContentPart implements pgx.CopyFromSource.
+type iteratorForCreateChatContentPart struct {
+	rows                 []CreateChatContentPartParams
+	skippedFirstNextCall bool
+}
+
+func (r *iteratorForCreateChatContentPart) Next() bool {
+	if len(r.rows) == 0 {
+		return false
+	}
+	if !r.skippedFirstNextCall {
+		r.skippedFirstNextCall = true
+		return true
+	}
+	r.rows = r.rows[1:]
+	return len(r.rows) > 0
+}
+
+func (r iteratorForCreateChatContentPart) Values() ([]interface{}, error) {
+	return []interface{}{
+		r.rows[0].ChatID,
+		r.rows[0].ProjectID,
+		r.rows[0].Kind,
+		r.rows[0].ContentAssetUrl,
+		r.rows[0].ExternalID,
+		r.rows[0].ParentChatMessageID,
+		r.rows[0].Version,
+		r.rows[0].Source,
+		r.rows[0].Metadata,
+		r.rows[0].RiskAnalyzedAt,
+		r.rows[0].CreatedAt,
+	}, nil
+}
+
+func (r iteratorForCreateChatContentPart) Err() error {
+	return nil
+}
+
+func (q *Queries) CreateChatContentPart(ctx context.Context, arg []CreateChatContentPartParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"chat_content_parts"}, []string{"chat_id", "project_id", "kind", "content_asset_url", "external_id", "parent_chat_message_id", "version", "source", "metadata", "risk_analyzed_at", "created_at"}, &iteratorForCreateChatContentPart{rows: arg})
+}
+
 // iteratorForCreateChatMessage implements pgx.CopyFromSource.
 type iteratorForCreateChatMessage struct {
 	rows                 []CreateChatMessageParams

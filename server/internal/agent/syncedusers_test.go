@@ -15,24 +15,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-// withRBACGrants puts the caller on an enterprise account (so RBAC is enforced)
-// and attaches the given grants, mirroring the access service's test helper.
+// withRBACGrants attaches the given grants, mirroring the access service's test
+// helper.
 func withRBACGrants(t *testing.T, ctx context.Context, grants ...authz.Grant) context.Context {
 	t.Helper()
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	authCtx.AccountType = "enterprise"
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
-	for i := range grants {
-		if grants[i].Effect == "" {
-			grants[i].Effect = authz.PolicyEffectAllow
-		}
-	}
 	return authz.GrantsToContext(ctx, grants)
 }
 
 // withOrgAdmin grants the caller org-admin over their active org. Without it,
-// ListSyncedUsers is denied on an enterprise account.
+// ListSyncedUsers is denied when RBAC is active.
 func withOrgAdmin(t *testing.T, ctx context.Context) context.Context {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -100,7 +91,7 @@ func TestListSyncedUsers_AllowsOrgAdmin(t *testing.T) {
 func TestListSyncedUsers_ForbiddenWithoutOrgAdmin(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)
-	ctx = withRBACGrants(t, ctx) // enterprise account, no admin grant
+	ctx = withRBACGrants(t, ctx) // RBAC active, no admin grant
 
 	_, err := ti.service.ListSyncedUsers(ctx, &gen.ListSyncedUsersPayload{})
 	var oopsErr *oops.ShareableError

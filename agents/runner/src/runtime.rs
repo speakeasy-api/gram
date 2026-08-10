@@ -74,7 +74,7 @@ pub struct RuntimeHost {
     pub threads: DashMap<String, Arc<OnceCell<Arc<ConfiguredThread>>>>,
     pub gram_client: GramBootstrapClient,
     pub thread_idle_ttl: Duration,
-    pub http_client: reqwest::Client,
+    pub mcp_http_client: reqwest::Client,
     pub spill_root: PathBuf,
     /// Fallback bearer used only when `/threads/turn` arrives with no
     /// `auth_token` so the bootstrap fetch still has a credential.
@@ -140,8 +140,16 @@ pub async fn build_host(
     );
     let http_client = reqwest::Client::builder()
         .user_agent(concat!("gram-assistant-runner/", env!("CARGO_PKG_VERSION")))
+        .default_headers(default_headers.clone())
+        .connect_timeout(HTTP_CONNECT_TIMEOUT)
+        .build()?;
+    // MCP servers are externally configured endpoints. Never follow redirects so
+    // per-server headers and bearer tokens only ever go to the configured origin.
+    let mcp_http_client = reqwest::Client::builder()
+        .user_agent(concat!("gram-assistant-runner/", env!("CARGO_PKG_VERSION")))
         .default_headers(default_headers)
         .connect_timeout(HTTP_CONNECT_TIMEOUT)
+        .redirect(reqwest::redirect::Policy::none())
         .build()?;
 
     let spill_root = PathBuf::from(ASSISTANT_WORKDIR).join(TOOL_RESULT_SPILL_DIR);
@@ -155,7 +163,7 @@ pub async fn build_host(
         threads: DashMap::new(),
         gram_client,
         thread_idle_ttl,
-        http_client,
+        mcp_http_client,
         spill_root,
         initial_token,
     });
@@ -505,7 +513,7 @@ async fn build_thread_mcp(
     let configured: BTreeSet<String> = servers.iter().map(|s| s.id.clone()).collect();
 
     for server in servers {
-        let config = build_mcp_server_config(server, &host.http_client, tokens)?;
+        let config = build_mcp_server_config(server, &host.mcp_http_client, tokens)?;
         manager.register_server_with_options(
             config,
             McpServerOptions::new().with_timeout(MCP_HANDSHAKE_TIMEOUT),
@@ -625,7 +633,7 @@ async fn reconcile_servers(
         if ctx.known.contains(&server.id) {
             continue;
         }
-        let config = match build_mcp_server_config(server, &ctx.host.http_client, &ctx.tokens) {
+        let config = match build_mcp_server_config(server, &ctx.host.mcp_http_client, &ctx.tokens) {
             Ok(cfg) => cfg,
             Err(err) => {
                 tracing::warn!(
@@ -982,7 +990,10 @@ mod tests {
             threads: DashMap::new(),
             gram_client,
             thread_idle_ttl: Duration::from_secs(60 * 30),
-            http_client,
+            mcp_http_client: reqwest::Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .expect("MCP HTTP client should build"),
             spill_root: PathBuf::from("/tmp/runtime-test-spill"),
             initial_token: String::new(),
         })

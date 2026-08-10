@@ -27,8 +27,8 @@ const (
 	anthropicComplianceActivityCreated = "claude_chat_created"
 	anthropicComplianceActivityUpdated = "claude_chat_updated"
 
-	anthropicComplianceSourceWeb     = "Claude Chat Web"
-	anthropicComplianceSourceDesktop = "Claude Chat Desktop"
+	anthropicComplianceSourceWeb     = "claude-chat-web"
+	anthropicComplianceSourceDesktop = "claude"
 
 	anthropicCompliancePageLimit          = 1000
 	anthropicComplianceActivityPageLimit  = 100
@@ -225,6 +225,7 @@ func (s *ComplianceImportService) writeMessagePages(ctx context.Context, cfg Con
 				if err := chatrepo.New(s.db).UpdateAIIntegrationConfigChatCursor(ctx, chatrepo.UpdateAIIntegrationConfigChatCursorParams{
 					LastCursorID: conv.ToPGText(batch.lastID),
 					ChatID:       batch.chatID,
+					ProjectID:    cfg.ProjectID,
 				}); err != nil {
 					return oops.E(oops.CodeUnexpected, err, "record anthropic compliance chat cursor")
 				}
@@ -240,6 +241,7 @@ func (s *ComplianceImportService) writeMessagePages(ctx context.Context, cfg Con
 			if err := repo.New(s.db).AdvanceUsagePollCursor(ctx, repo.AdvanceUsagePollCursorParams{
 				LastCursorID:          conv.ToPGText(batch.activitiesCursor),
 				AiIntegrationConfigID: cfg.ID,
+				Schedule:              ScheduleAnthropicCompliance,
 			}); err != nil {
 				return oops.E(oops.CodeUnexpected, err, "advance anthropic compliance activities cursor")
 			}
@@ -410,14 +412,18 @@ func (s *ComplianceImportService) upsertActivityChat(ctx context.Context, cfg Co
 		ID:             uuid.New(),
 		ProjectID:      cfg.ProjectID,
 		OrganizationID: cfg.OrganizationID,
-		UserID:         conv.ToPGText(userID),
-		ExternalUserID: conv.ToPGText(activity.Actor.UserID),
+		// NULL when unresolved so the upsert's COALESCE preserves a user
+		// resolved by an earlier activity or the message-page enrichment.
+		UserID:         conv.ToPGTextEmpty(userID),
+		ExternalUserID: conv.ToPGTextEmpty(activity.Actor.UserID),
 		ExternalChatID: conv.ToPGText(activity.ClaudeChatID),
 		// NULL so the upsert's COALESCE never clobbers the real title set by
 		// the one-time enrichment from the chat's first message page.
 		Title:     pgtype.Text{String: "", Valid: false},
 		CreatedAt: conv.ToPGTimestamptz(createdAt),
 		UpdatedAt: conv.ToPGTimestamptz(createdAt),
+		// Feed titles are authoritative: newest non-null title wins.
+		PreferStoredTitle: false,
 	})
 	if err != nil {
 		return uuid.Nil, "", oops.E(oops.CodeUnexpected, err, "upsert anthropic compliance chat")
@@ -425,6 +431,7 @@ func (s *ComplianceImportService) upsertActivityChat(ctx context.Context, cfg Co
 	messagesCursor, err := chatrepo.New(s.db).LinkAIIntegrationConfigChat(ctx, chatrepo.LinkAIIntegrationConfigChatParams{
 		AiIntegrationConfigID: cfg.ID,
 		ChatID:                chatID,
+		ProjectID:             cfg.ProjectID,
 	})
 	if err != nil {
 		return uuid.Nil, "", oops.E(oops.CodeUnexpected, err, "link anthropic compliance chat")
@@ -500,12 +507,16 @@ func (s *ComplianceImportService) upsertMessagePageChat(ctx context.Context, cfg
 		ID:             chatID,
 		ProjectID:      cfg.ProjectID,
 		OrganizationID: cfg.OrganizationID,
-		UserID:         conv.ToPGText(userID),
-		ExternalUserID: conv.ToPGText(page.User.ID),
+		// NULL when unresolved so the upsert's COALESCE preserves a user
+		// resolved from a prior sync.
+		UserID:         conv.ToPGTextEmpty(userID),
+		ExternalUserID: conv.ToPGTextEmpty(page.User.ID),
 		ExternalChatID: conv.ToPGText(page.ID),
 		Title:          conv.ToPGText(page.Name),
 		CreatedAt:      conv.ToPGTimestamptz(createdAt),
 		UpdatedAt:      conv.ToPGTimestamptz(updatedAt),
+		// Feed titles are authoritative: newest non-null title wins.
+		PreferStoredTitle: false,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "upsert anthropic compliance chat metadata")
@@ -633,8 +644,10 @@ func renderComplianceContent(raw json.RawMessage) string {
 
 // connectedUserResolver lazily maps actor emails to connected user ids
 // within the organization, caching lookups (including misses) for the
-// duration of one sync run. It is only used from the fetch goroutine and
-// is not safe for concurrent use.
+// duration of one sync run. It is not safe for concurrent use: each import
+// run constructs its own resolver and must call it from a single goroutine
+// (the Anthropic import's fetch goroutine, the ChatGPT import's ProcessPage
+// consumer).
 type connectedUserResolver struct {
 	users *usersrepo.Queries
 	orgID string
@@ -665,7 +678,7 @@ func (r *connectedUserResolver) resolve(ctx context.Context, email string) (stri
 		OrganizationID: r.orgID,
 	})
 	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "hydrate anthropic compliance user")
+		return "", oops.E(oops.CodeUnexpected, err, "hydrate compliance connected user")
 	}
 
 	r.cache[email] = ""

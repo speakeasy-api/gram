@@ -1,4 +1,4 @@
-import { Type } from "@/components/ui/type";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 
 interface MCPStatusIndicatorProps {
@@ -14,21 +14,21 @@ function getStatusConfig(
 ) {
   if (!mcpEnabled) {
     return {
-      color: "bg-red-500",
-      pulseColor: "bg-red-400",
+      color: "bg-destructive",
+      pulseColor: "bg-destructive/60",
       label: "Disabled",
     };
   }
   if (!mcpIsPublic) {
     return {
-      color: "bg-blue-400",
-      pulseColor: "bg-blue-400",
+      color: "bg-muted-foreground/60",
+      pulseColor: "bg-muted-foreground/40",
       label: "Private",
     };
   }
   return {
-    color: "bg-green-500",
-    pulseColor: "bg-green-400",
+    color: "bg-success-default",
+    pulseColor: "bg-success-default",
     label: "Public",
   };
 }
@@ -61,9 +61,9 @@ export function MCPStatusIndicator({
           )}
         />
       </div>
-      <Type variant="small" muted>
+      <Text variant="small" muted>
         {status.label}
-      </Type>
+      </Text>
     </div>
   );
 }

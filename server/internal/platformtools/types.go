@@ -15,6 +15,7 @@ import (
 const (
 	SourceLogs                     = "logs"
 	SourceMemory                   = "memory"
+	SourcePlatform                 = "platform"
 	SourceSlack                    = "slack"
 	SourceTriggers                 = "triggers"
 	ToolNameSearchLogs             = "platform_search_logs"
@@ -38,10 +39,17 @@ const (
 	ToolNameListEmoji              = "platform_slack_list_emoji"
 	ToolNameListUserSessions       = "platform_list_user_sessions"
 	ToolNameGetUserSession         = "platform_get_user_session"
+	ToolNameGetPlatformContext     = "platform_get_platform_context"
+	ToolNameListProjects           = "platform_list_projects"
+	ToolNameListProjectMCPs        = "platform_list_project_mcps"
+	ToolNameGetMCP                 = "platform_get_mcp"
 )
 
-// ToolNameSkillsLoad is externally specified by the skills RFC without the platform_ prefix.
-const ToolNameSkillsLoad = "skills_load"
+// Skill tool names are externally specified by the skills RFC.
+const (
+	ToolNameSkillsLoad            = "skills_load"
+	ToolNamePlatformSkillFeedback = "platform_skill_feedback"
+)
 
 type Dependencies struct {
 	Logger           *slog.Logger

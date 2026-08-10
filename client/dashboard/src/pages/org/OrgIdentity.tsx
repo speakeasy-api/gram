@@ -1,14 +1,16 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+import { Heading } from "@/components/ui/Heading";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
 import { useOrganization, useSessionData } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { useOrgRoutes } from "@/routes";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { FolderSync, Loader2, Lock } from "lucide-react";
 import { toast } from "sonner";
 
@@ -112,8 +114,11 @@ function SSOConfigureButton() {
       },
       {
         onSuccess: (data) => {
-          window.open(data.url, "_blank", "noopener,noreferrer");
-          toast.info("Continue setup in the WorkOS portal");
+          if (openSafeExternalUrl(data.url)) {
+            toast.info("Continue setup in the WorkOS portal");
+          } else {
+            toast.error("Unable to open the WorkOS portal");
+          }
         },
       },
     );
@@ -161,8 +166,11 @@ function DirectorySyncConfigureButton() {
       },
       {
         onSuccess: (data) => {
-          window.open(data.url, "_blank", "noopener,noreferrer");
-          toast.info("Continue setup in the WorkOS portal");
+          if (openSafeExternalUrl(data.url)) {
+            toast.info("Continue setup in the WorkOS portal");
+          } else {
+            toast.error("Unable to open the WorkOS portal");
+          }
         },
       },
     );
@@ -239,21 +247,21 @@ function IdentitySection({
         <Heading variant="h5" className="mb-1">
           {heading}
         </Heading>
-        <Type as="div" muted small className="mb-4">
+        <Text as="div" muted small className="mb-4">
           {description}
-        </Type>
-        <div className="border-border overflow-hidden rounded-lg border">
+        </Text>
+        <div className="border-border overflow-hidden border">
           <div className="flex items-center gap-4 p-4">
             <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center rounded-full">
               {providerIcon}
             </div>
             <div className="min-w-0 flex-1">
-              <Type variant="body" className="font-medium">
+              <Text variant="body" className="font-medium">
                 {providerTitle}
-              </Type>
-              <Type muted small>
+              </Text>
+              <Text muted small>
                 {providerSubtitle}
-              </Type>
+              </Text>
               {active && (
                 <Badge variant="success" className="mt-1.5">
                   <Badge.Text>Connected</Badge.Text>
@@ -302,67 +310,69 @@ function OrgIdentityInner() {
   const scimActive = organization.scimEnabled === true;
 
   return (
-    <div className="flex flex-col gap-6">
-      <Heading variant="h4">Identity</Heading>
-      <div className="flex flex-col gap-6">
-        <IdentitySection
-          sectionId="sso"
-          heading="Single Sign-On"
-          description="Set up Single Sign-On (SSO) to allow your team to sign in to Speakeasy with your identity provider."
-          providerIcon={<Lock className="text-muted-foreground h-5 w-5" />}
-          providerTitle="SSO"
-          providerSubtitle={
-            ssoActive
-              ? "Your identity provider is connected."
-              : "Choose an identity provider to get started."
-          }
-          learnMoreText="Learn more about SSO"
-          learnMoreHref="https://www.speakeasy.com/docs"
-          active={ssoActive}
-          configureButton={
-            <SSOConfigureControl
-              featureEnabled={ssoFeatureEnabled}
-              active={ssoActive}
-            />
-          }
-        />
+    <Page.Section>
+      <Page.Section.Title>Identity</Page.Section.Title>
+      <Page.Section.Body>
+        <div className="flex flex-col gap-6">
+          <IdentitySection
+            sectionId="sso"
+            heading="Single Sign-On"
+            description="Set up Single Sign-On (SSO) to allow your team to sign in to Speakeasy with your identity provider."
+            providerIcon={<Lock className="text-muted-foreground h-5 w-5" />}
+            providerTitle="SSO"
+            providerSubtitle={
+              ssoActive
+                ? "Your identity provider is connected."
+                : "Choose an identity provider to get started."
+            }
+            learnMoreText="Learn more about SSO"
+            learnMoreHref="https://www.speakeasy.com/docs"
+            active={ssoActive}
+            configureButton={
+              <SSOConfigureControl
+                featureEnabled={ssoFeatureEnabled}
+                active={ssoActive}
+              />
+            }
+          />
 
-        <IdentitySection
-          sectionId="directory_sync"
-          heading="Directory Sync"
-          description={
-            <>
-              Sync members and roles directly from your identity provider:
-              <ul className="mt-1.5 list-disc space-y-0.5 pl-5">
-                <li>
-                  Members are provisioned automatically from your directory
-                </li>
-                <li>Roles are assigned from your IDP group mappings</li>
-                <li>Members can&apos;t be invited manually</li>
-                <li>Roles can&apos;t be assigned to members manually</li>
-              </ul>
-            </>
-          }
-          providerIcon={
-            <FolderSync className="text-muted-foreground h-5 w-5" />
-          }
-          providerTitle="SCIM"
-          providerSubtitle={
-            scimActive
-              ? "Your directory provider is connected."
-              : "Choose an identity provider to get started."
-          }
-          learnMoreText="Learn more about SCIM Directory Sync"
-          learnMoreHref="https://www.speakeasy.com/docs"
-          active={scimActive}
-          configureButton={
-            <DirectorySyncConfigureControl
-              featureEnabled={scimFeatureEnabled}
-              active={scimActive}
-            />
-          }
-        />
-      </div>
-    </div>
+          <IdentitySection
+            sectionId="directory_sync"
+            heading="Directory Sync"
+            description={
+              <>
+                Sync members and roles directly from your identity provider:
+                <ul className="mt-1.5 list-disc space-y-0.5 pl-5">
+                  <li>
+                    Members are provisioned automatically from your directory
+                  </li>
+                  <li>Roles are assigned from your IDP group mappings</li>
+                  <li>Members can&apos;t be invited manually</li>
+                  <li>Roles can&apos;t be assigned to members manually</li>
+                </ul>
+              </>
+            }
+            providerIcon={
+              <FolderSync className="text-muted-foreground h-5 w-5" />
+            }
+            providerTitle="SCIM"
+            providerSubtitle={
+              scimActive
+                ? "Your directory provider is connected."
+                : "Choose an identity provider to get started."
+            }
+            learnMoreText="Learn more about SCIM Directory Sync"
+            learnMoreHref="https://www.speakeasy.com/docs"
+            active={scimActive}
+            configureButton={
+              <DirectorySyncConfigureControl
+                featureEnabled={scimFeatureEnabled}
+                active={scimActive}
+              />
+            }
+          />
+        </div>
+      </Page.Section.Body>
+    </Page.Section>
   );
 }

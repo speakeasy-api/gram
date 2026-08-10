@@ -2,13 +2,15 @@
 // surface. Defines the RFC 6749 §4.1.3 (authorization_code) and §6
 // (refresh_token) request shapes and the validation rules
 // /mcp/{slug}/token enforces on each. Errors are reported as the shared
-// *OAuthError (oautherror.go); the HTTP handler writes them as RFC 6749
+// *oauthwire.Error; the HTTP handler writes them as RFC 6749
 // §5.2 JSON.
 
 package usersessions
 
 import (
 	"net/url"
+
+	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 // AuthCodeTokenRequest is the RFC 6749 §4.1.3 token request issued by a
@@ -37,18 +39,18 @@ func AuthCodeTokenRequestFromForm(form url.Values) *AuthCodeTokenRequest {
 func (r *AuthCodeTokenRequest) SetDefaults() {}
 
 // Validate checks the presence of each required field. Returns an
-// *OAuthError on rejection. The redirect_uri match against the
+// *oauthwire.Error on rejection. The redirect_uri match against the
 // authorization grant and the PKCE verifier match against the stored
 // code_challenge live in the handler (they require grant-side state).
 func (r *AuthCodeTokenRequest) Validate() error {
 	if r.Code == "" {
-		return &OAuthError{Code: "invalid_request", Description: "code is required"}
+		return &oauthwire.Error{Code: "invalid_request", Description: "code is required"}
 	}
 	if r.RedirectURI == "" {
-		return &OAuthError{Code: "invalid_request", Description: "redirect_uri is required"}
+		return &oauthwire.Error{Code: "invalid_request", Description: "redirect_uri is required"}
 	}
 	if r.CodeVerifier == "" {
-		return &OAuthError{Code: "invalid_request", Description: "code_verifier is required"}
+		return &oauthwire.Error{Code: "invalid_request", Description: "code_verifier is required"}
 	}
 	return nil
 }
@@ -73,12 +75,12 @@ func RefreshTokenRequestFromForm(form url.Values) *RefreshTokenRequest {
 // with the other request types.
 func (r *RefreshTokenRequest) SetDefaults() {}
 
-// Validate checks the presence of refresh_token. Returns an *OAuthError
+// Validate checks the presence of refresh_token. Returns an *oauthwire.Error
 // on rejection. Hash lookup + client-binding verification + expiry check
 // live in the handler since they require database state.
 func (r *RefreshTokenRequest) Validate() error {
 	if r.RefreshToken == "" {
-		return &OAuthError{Code: "invalid_request", Description: "refresh_token is required"}
+		return &oauthwire.Error{Code: "invalid_request", Description: "refresh_token is required"}
 	}
 	return nil
 }

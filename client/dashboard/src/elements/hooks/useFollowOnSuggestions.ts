@@ -1,6 +1,6 @@
 import { useReplayContext } from "@/elements/contexts/ReplayContext";
 import { useAuiState } from "@assistant-ui/react";
-import { generateObject } from "ai";
+import { generateText, Output } from "ai";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { useAuth } from "./useAuth";
@@ -106,9 +106,9 @@ export function useFollowOnSuggestions(): {
       // Check if the assistant is asking a question
       if (lastAssistantMessage) {
         try {
-          const checkResult = await generateObject({
+          const checkResult = await generateText({
             model,
-            schema: questionCheckSchema,
+            output: Output.object({ schema: questionCheckSchema }),
             prompt: `Does this message end by asking the user a question that requires their input or response?
 
 Message:
@@ -116,7 +116,7 @@ ${lastAssistantMessage}`,
             abortSignal: controller.signal,
           });
 
-          if (checkResult.object.isQuestion) {
+          if (checkResult.output.isQuestion) {
             // Don't generate suggestions if assistant is asking a question
             if (abortControllerRef.current === controller) {
               setSuggestions([]);
@@ -153,9 +153,9 @@ Rules:
 - No numbering or bullet points
 - One question per line, nothing else`;
 
-      const result = await generateObject({
+      const result = await generateText({
         model,
-        schema: suggestionsSchema,
+        output: Output.object({ schema: suggestionsSchema }),
         prompt: `${systemPrompt}
 
 Conversation:
@@ -166,7 +166,7 @@ ${conversation}`,
       // Only update state if this request is still the current one
       if (abortControllerRef.current === controller) {
         setSuggestions(
-          result.object.suggestions.slice(0, count).map((prompt) => ({
+          result.output.suggestions.slice(0, count).map((prompt) => ({
             id: crypto.randomUUID(),
             prompt,
           })),

@@ -1440,11 +1440,17 @@ func TestResourceProxy_ReadResource(t *testing.T) {
 type mockToolCaller struct {
 	serverURL string
 	onCall    func(uuid.UUID)
+	// onRequest receives the whole runner request, for assertions on fields
+	// the mock payload below does not reproduce.
+	onRequest func(functions.RunnerToolCallRequest)
 }
 
 func (m *mockToolCaller) ToolCall(ctx context.Context, req functions.RunnerToolCallRequest) (*http.Request, error) {
 	if m.onCall != nil {
 		m.onCall(req.InvocationID)
+	}
+	if m.onRequest != nil {
+		m.onRequest(req)
 	}
 
 	// Create request payload with environment variables

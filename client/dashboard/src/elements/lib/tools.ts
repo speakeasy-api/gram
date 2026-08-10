@@ -4,7 +4,7 @@ import {
   Tool,
   makeAssistantTool,
 } from "@assistant-ui/react";
-import { JSONSchema7, ToolSet, type ToolCallOptions } from "ai";
+import { JSONSchema7, ToolSet, type ToolExecutionOptions } from "ai";
 import { FC } from "react";
 import z from "zod";
 
@@ -275,7 +275,10 @@ export function wrapToolsWithByteCap(
         name,
         {
           ...tool,
-          execute: async (args: unknown, options?: ToolCallOptions) => {
+          execute: async (
+            args: unknown,
+            options?: ToolExecutionOptions<unknown>,
+          ) => {
             const result = await originalExecute(
               args,
               options as Parameters<typeof originalExecute>[1],
@@ -325,7 +328,10 @@ export function wrapToolsWithApproval(
         name,
         {
           ...tool,
-          execute: async (args: unknown, options?: ToolCallOptions) => {
+          execute: async (
+            args: unknown,
+            options?: ToolExecutionOptions<unknown>,
+          ) => {
             const opts = (options ?? {}) as Parameters<
               typeof originalExecute
             >[1];

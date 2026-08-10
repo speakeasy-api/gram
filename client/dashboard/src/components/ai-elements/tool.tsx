@@ -1,11 +1,11 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/Badge";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+} from "@/components/ui/Collapsible";
 import { cn } from "@/lib/utils";
 import type { ToolUIPart } from "ai";
 import {
@@ -24,7 +24,7 @@ export type ToolProps = ComponentProps<typeof Collapsible>;
 
 export const Tool = ({ className, ...props }: ToolProps): ReactElement => (
   <Collapsible
-    className={cn("not-prose mb-4 w-full rounded-md border", className)}
+    className={cn("not-prose mb-4 w-full border", className)}
     {...props}
   />
 );
@@ -67,7 +67,7 @@ const getStatusBadge = (status: ToolUIPart["state"]) => {
   };
 
   return (
-    <Badge className="gap-1.5 rounded-full text-xs" variant="secondary">
+    <Badge className="gap-1.5 rounded-full text-xs" variant="neutral">
       {icons[status]}
       {labels[status]}
     </Badge>
@@ -96,7 +96,7 @@ export const ToolHeader = ({
       </span>
       {getStatusBadge(state)}
       {annotations?.readOnlyHint && (
-        <Badge className="gap-1 rounded-full text-xs" variant="outline">
+        <Badge className="gap-1 rounded-full text-xs" variant="neutral">
           Read-only
         </Badge>
       )}
@@ -106,7 +106,7 @@ export const ToolHeader = ({
         </Badge>
       )}
       {annotations?.idempotentHint && !annotations?.readOnlyHint && (
-        <Badge className="gap-1 rounded-full text-xs" variant="outline">
+        <Badge className="gap-1 rounded-full text-xs" variant="neutral">
           Idempotent
         </Badge>
       )}
@@ -143,7 +143,7 @@ export const ToolInput = ({
     <h4 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
       Parameters
     </h4>
-    <div className="bg-muted/50 overflow-auto rounded-md">
+    <div className="bg-muted/50 overflow-auto">
       <CodeBlock code={JSON.stringify(input, null, 2)} language="json" />
     </div>
   </div>
@@ -181,7 +181,7 @@ export const ToolOutput = ({
       </h4>
       <div
         className={cn(
-          "overflow-x-auto rounded-md text-xs [&_table]:w-full",
+          "overflow-x-auto text-xs [&_table]:w-full",
           errorText
             ? "bg-destructive/10 text-destructive"
             : "bg-muted/50 text-foreground",

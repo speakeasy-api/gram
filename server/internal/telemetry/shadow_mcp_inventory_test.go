@@ -50,6 +50,13 @@ func TestShadowMCPInventoryURLs_UpsertAndList(t *testing.T) {
 			ServerName:         "Other",
 			SeenAt:             lastSeen.Add(time.Hour),
 		},
+		{
+			GramProjectID:      otherProjectID,
+			CanonicalServerURL: "https://other.example.com/mcp",
+			URLHost:            "other.example.com",
+			ServerName:         "Other Only",
+			SeenAt:             lastSeen.Add(time.Hour),
+		},
 	}))
 
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
@@ -66,6 +73,17 @@ func TestShadowMCPInventoryURLs_UpsertAndList(t *testing.T) {
 	require.Equal(t, "Speakeasy", rows[0].ServerName)
 	require.Equal(t, firstSeen, rows[0].FirstSeen)
 	require.Equal(t, lastSeen, rows[0].LastSeen)
+
+	existingURLs, err := ti.chClient.ListExistingShadowMCPInventoryURLs(ctx, telemetryRepo.ListExistingShadowMCPInventoryURLsParams{
+		GramProjectID: projectID,
+		CanonicalServerURLs: []string{
+			"https://mcp.speakeasy.com/mcp",
+			"https://other.example.com/mcp",
+			"https://missing.example.com/mcp",
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"https://mcp.speakeasy.com/mcp"}, existingURLs)
 }
 
 func TestShadowMCPInventoryURLs_NameOverrideSurvivesLaterObservation(t *testing.T) {
@@ -161,6 +179,95 @@ func TestShadowMCPInventoryURLs_NameOverrideCanBeCleared(t *testing.T) {
 	require.Empty(t, rows[0].ServerNameOverride)
 }
 
+// Regression test for the flake in
+// TestService_UpdateShadowMCPInventoryServerName_ClearsOverrideAndFallsBackToLatestObservedName:
+// every write below carries an updated_at at or before the state it read, the
+// way tied wall-clock stamps (or a clock regression) produced tied
+// ReplacingMergeTree versions and let argMax resolve the name against a stale
+// row. Causally-later writes must still win.
+func TestShadowMCPInventoryURLs_NameOverrideClearDominatesRegressingClock(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	projectID := uuid.NewString()
+	serverURL := "https://github.example.com/mcp"
+	seenAt := time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC)
+
+	require.NoError(t, ti.chClient.UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{{
+		GramProjectID:      projectID,
+		CanonicalServerURL: serverURL,
+		URLHost:            "github.example.com",
+		ServerName:         "GitHub MCP",
+		SeenAt:             seenAt,
+		UpdatedAt:          seenAt,
+	}}))
+
+	updated, err := ti.chClient.UpdateShadowMCPInventoryURLNameOverride(ctx, telemetryRepo.UpdateShadowMCPInventoryURLNameOverrideParams{
+		GramProjectID:      projectID,
+		CanonicalServerURL: serverURL,
+		ServerNameOverride: "Engineering GitHub",
+		UpdatedAt:          seenAt,
+	})
+	require.NoError(t, err)
+	require.True(t, updated)
+
+	require.NoError(t, ti.chClient.UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{{
+		GramProjectID:      projectID,
+		CanonicalServerURL: serverURL,
+		URLHost:            "github.example.com",
+		ServerName:         "GitHub Enterprise MCP",
+		SeenAt:             seenAt.Add(time.Minute),
+		UpdatedAt:          seenAt.Add(-time.Second),
+	}}))
+
+	updated, err = ti.chClient.UpdateShadowMCPInventoryURLNameOverride(ctx, telemetryRepo.UpdateShadowMCPInventoryURLNameOverrideParams{
+		GramProjectID:      projectID,
+		CanonicalServerURL: serverURL,
+		ServerNameOverride: "",
+		UpdatedAt:          seenAt.Add(-time.Second),
+	})
+	require.NoError(t, err)
+	require.True(t, updated)
+
+	row, err := ti.chClient.GetShadowMCPInventoryURL(ctx, telemetryRepo.GetShadowMCPInventoryURLParams{
+		GramProjectID:      projectID,
+		CanonicalServerURL: serverURL,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, row)
+	require.Equal(t, "GitHub Enterprise MCP", row.ServerName)
+	require.Empty(t, row.ServerNameOverride)
+	require.True(t, row.UpdatedAt.After(seenAt), "read-merge-write must stamp a version above the state it read")
+}
+
+func TestShadowMCPInventoryURLs_UpdatedAtNanosecondRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	projectID := uuid.NewString()
+	serverURL := "https://github.example.com/mcp"
+	seenAt := time.Date(2026, 7, 14, 12, 30, 45, 123456789, time.UTC)
+
+	require.NoError(t, ti.chClient.UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{{
+		GramProjectID:      projectID,
+		CanonicalServerURL: serverURL,
+		URLHost:            "github.example.com",
+		ServerName:         "GitHub MCP",
+		SeenAt:             seenAt,
+		UpdatedAt:          seenAt,
+	}}))
+
+	row, err := ti.chClient.GetShadowMCPInventoryURL(ctx, telemetryRepo.GetShadowMCPInventoryURLParams{
+		GramProjectID:      projectID,
+		CanonicalServerURL: serverURL,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, row)
+	require.Equal(t, seenAt.UnixNano(), row.UpdatedAt.UnixNano())
+	require.Equal(t, seenAt.UnixNano(), row.LastSeen.UnixNano())
+	require.Equal(t, seenAt.UnixNano(), row.FirstSeen.UnixNano())
+}
+
 func TestShadowMCPInventoryURLs_ListBySlugHash(t *testing.T) {
 	t.Parallel()
 
@@ -231,7 +338,9 @@ func TestShadowMCPInventoryURLs_PaginatesLastSeen(t *testing.T) {
 
 	ctx, ti := newTestLogsService(t)
 	projectID := uuid.NewString()
-	base := time.Date(2026, 6, 29, 12, 30, 0, 0, time.UTC)
+	// Nonzero nanoseconds: the cursor's last_seen equality tie-break only
+	// works if sub-second precision survives the round trip.
+	base := time.Date(2026, 6, 29, 12, 30, 0, 123456789, time.UTC)
 
 	require.NoError(t, ti.chClient.UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{
 		{GramProjectID: projectID, CanonicalServerURL: "https://gamma.example.com/mcp", URLHost: "gamma.example.com", ServerName: "Gamma", SeenAt: base.Add(3 * time.Minute), FirstSeen: time.Time{}, LastSeen: time.Time{}, UpdatedAt: time.Time{}},
@@ -275,7 +384,7 @@ func TestShadowMCPInventoryURLs_PaginatesLastCalledThenLastSeen(t *testing.T) {
 
 	ctx, ti := newTestLogsService(t)
 	projectID := uuid.NewString()
-	base := time.Date(2026, 6, 29, 12, 45, 0, 0, time.UTC)
+	base := time.Date(2026, 6, 29, 12, 45, 0, 987654321, time.UTC)
 
 	require.NoError(t, ti.chClient.UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{
 		{GramProjectID: projectID, CanonicalServerURL: "https://never-called.example.com/mcp", URLHost: "never-called.example.com", ServerName: "Never Called", SeenAt: base.Add(5 * time.Minute), FirstSeen: time.Time{}, LastSeen: time.Time{}, UpdatedAt: time.Time{}},
@@ -642,8 +751,6 @@ func TestBackfillShadowMCPInventoryURLs_CanonicalizesAndUpserts(t *testing.T) {
 		ObservedAt: observedAt.Add(time.Hour),
 	})
 
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
-
 	result, err := ti.service.BackfillShadowMCPInventoryURLs(ctx, telemetry.BackfillShadowMCPInventoryURLsParams{
 		GramProjectID:      projectID,
 		Limit:              50,
@@ -660,8 +767,6 @@ func TestBackfillShadowMCPInventoryURLs_CanonicalizesAndUpserts(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, 1, result.InventoryURLCount)
-
-	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	rows, err := ti.chClient.ListShadowMCPInventoryURLs(ctx, telemetryRepo.ListShadowMCPInventoryURLsParams{
 		GramProjectID: projectID,
@@ -761,7 +866,10 @@ func insertHistoricalShadowMCPCall(t *testing.T, ctx context.Context, ti *testIn
 
 	spanID := uuid.New().String()[:16]
 	traceID := strings.ReplaceAll(uuid.NewString(), "-", "")
-	err = ti.chClient.InsertTelemetryLog(ctx, telemetryRepo.InsertTelemetryLogParams{
+	// Promotion writes live telemetry synchronously, including attached
+	// materialized views, so tests can read trace_summaries without a global
+	// async-insert queue flush.
+	err = ti.chClient.InsertPromotedTelemetryLogs(ctx, []telemetryRepo.InsertTelemetryLogParams{{
 		ID:                   uuid.NewString(),
 		TimeUnixNano:         p.ObservedAt.UnixNano(),
 		ObservedTimeUnixNano: p.ObservedAt.UnixNano(),
@@ -778,9 +886,10 @@ func insertHistoricalShadowMCPCall(t *testing.T, ctx context.Context, ti *testIn
 		ServiceName:          "gram-hooks",
 		ServiceVersion:       nil,
 		GramChatID:           nil,
-	})
+	}})
 	require.NoError(t, err)
 }
+
 func inventoryURLRows(rows []telemetryRepo.ShadowMCPInventoryURLRow) []string {
 	urls := make([]string, 0, len(rows))
 	for _, row := range rows {

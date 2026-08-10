@@ -1705,6 +1705,7 @@ func unmarshalTunneledMcpServerResponseBodyToTypesTunneledMcpServer(v *TunneledM
 		KeyPrefix:                  *v.KeyPrefix,
 		Status:                     types.TunneledMcpLifecycleStatus(*v.Status),
 		ConnectionStatus:           types.TunneledMcpConnectionStatus(*v.ConnectionStatus),
+		AllowPublic:                *v.AllowPublic,
 		AgentVersion:               v.AgentVersion,
 		LastSeenAt:                 v.LastSeenAt,
 		ActiveConnectionCount:      *v.ActiveConnectionCount,

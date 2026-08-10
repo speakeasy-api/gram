@@ -55,6 +55,20 @@ vi.mock("@gram/client/react-query/resolveShadowMCPInventoryRequest.js", () => ({
     mocks.resolveInventoryRequestMutation,
 }));
 
+vi.mock("@gram/client/react-query/blockShadowMCPInventoryServer.js", () => ({
+  useBlockShadowMCPInventoryServerMutation: () => ({
+    isPending: false,
+    mutateAsync: vi.fn(),
+  }),
+}));
+
+vi.mock("@gram/client/react-query/unblockShadowMCPInventoryServer.js", () => ({
+  useUnblockShadowMCPInventoryServerMutation: () => ({
+    isPending: false,
+    mutateAsync: vi.fn(),
+  }),
+}));
+
 vi.mock("@/components/page-layout", () => {
   const Toolbar = Object.assign(
     ({ children }: { children: ReactNode }) => (
@@ -82,7 +96,7 @@ vi.mock("@/components/page-layout", () => {
   return { Page: { Toolbar } };
 });
 
-vi.mock("@speakeasy-api/moonshine", () => ({
+vi.mock("@/components/ui/Badge", () => ({
   Badge: Object.assign(
     ({ children }: { children: ReactNode }) => <span>{children}</span>,
     {
@@ -92,6 +106,9 @@ vi.mock("@speakeasy-api/moonshine", () => ({
       Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
     },
   ),
+}));
+
+vi.mock("@/components/ui/Button", () => ({
   Button: Object.assign(
     ({
       children,
@@ -114,12 +131,16 @@ vi.mock("@speakeasy-api/moonshine", () => ({
       </button>
     ),
     {
+      Icon: ({ children }: { children: ReactNode }) => <span>{children}</span>,
       LeftIcon: ({ children }: { children: ReactNode }) => (
         <span>{children}</span>
       ),
       Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
     },
   ),
+}));
+
+vi.mock("@/components/ui/Dropdown", () => ({
   DropdownMenu: ({
     children,
     modal,
@@ -173,9 +194,15 @@ vi.mock("@speakeasy-api/moonshine", () => ({
 
     return <>{children}</>;
   },
+}));
+
+vi.mock("@/components/ui/Icon", () => ({
   Icon: ({ className }: { className?: string; name: string }) => (
     <span className={className} />
   ),
+}));
+
+vi.mock("@/components/ui/Table", () => ({
   Table: Object.assign(
     ({ children }: { children: ReactNode }) => <table>{children}</table>,
     {
@@ -273,6 +300,9 @@ vi.mock("@speakeasy-api/moonshine", () => ({
       ),
     },
   ),
+}));
+
+vi.mock("@/components/ui/Table/sorting", () => ({
   sortTableData: (
     data: ShadowMCPInventoryServer[],
     columns: Array<{
@@ -298,7 +328,7 @@ vi.mock("@speakeasy-api/moonshine", () => ({
   },
 }));
 
-vi.mock("@/components/ui/tooltip", () => ({
+vi.mock("@/components/ui/Tooltip", () => ({
   Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
   TooltipContent: ({ children }: { children: ReactNode }) => (
     <span>{children}</span>
@@ -320,7 +350,7 @@ vi.mock("@/components/ui/tooltip", () => ({
   },
 }));
 
-vi.mock("@/components/ui/checkbox", () => ({
+vi.mock("@/components/ui/Checkbox", () => ({
   Checkbox: ({
     checked,
     disabled,
@@ -339,7 +369,7 @@ vi.mock("@/components/ui/checkbox", () => ({
   ),
 }));
 
-vi.mock("@/components/ui/radio-group", () => ({
+vi.mock("@/components/ui/RadioGroup", () => ({
   RadioGroup: ({
     children,
     onValueChange,
@@ -361,7 +391,7 @@ vi.mock("@/components/ui/radio-group", () => ({
   ),
 }));
 
-vi.mock("@/components/ui/sheet", () => ({
+vi.mock("@/components/ui/Sheet", () => ({
   Sheet: ({
     children,
     onOpenChange,
@@ -398,6 +428,7 @@ function inventoryServer(
   return {
     access: "none",
     allowedPolicyIds: [],
+    blockedPolicyIds: [],
     canonicalServerUrl,
     firstSeen: new Date("2026-01-01T10:00:00Z"),
     lastCalled: undefined,
@@ -1418,6 +1449,81 @@ describe("ShadowMCPInventoryTable", () => {
           resolveShadowMCPInventoryRequestForm: {
             decision: "allow",
             policyIds: ["policy-1"],
+            projectId: "project-id-1",
+            serverUrl: "https://requested.example.com/mcp",
+          },
+        },
+      });
+    });
+  });
+
+  it("disables add when no allow-rule policy is eligible", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          canonicalServerUrl: "https://observed.example.com/mcp",
+          serverName: "Observed MCP",
+        }),
+      ],
+    });
+
+    renderInventoryTable("project-id-1", "flagging", []);
+
+    const addButton = await screen.findByRole("button", {
+      name: /Add Allow Rule/,
+    });
+    expect((addButton as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      screen.getByText("An enabled blocking Shadow MCP policy is required."),
+    ).toBeTruthy();
+  });
+
+  it("allows denying a request when no allow-rule policy is eligible", async () => {
+    const resolveInventoryRequest = vi.fn().mockResolvedValue({});
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          access: "blocked",
+          canonicalServerUrl: "https://requested.example.com/mcp",
+          latestRequest: {
+            id: "request-1",
+            policyId: "inactive-policy",
+            requestedAt: new Date("2026-01-04T11:30:00Z"),
+            requesterEmail: "requester@example.com",
+            requesterUserId: "user-1",
+          },
+          requestCount: 1,
+          serverName: "Requested MCP",
+        }),
+      ],
+    });
+    mocks.resolveInventoryRequestMutation.mockReturnValue({
+      isPending: false,
+      mutateAsync: resolveInventoryRequest,
+    });
+
+    renderInventoryTable("project-id-1", "flagging", []);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Review Request" }),
+    );
+
+    const sheet = within(await screen.findByTestId("shadow-mcp-action-sheet"));
+    expect(
+      (
+        sheet.getByRole("button", {
+          name: "Approve Request",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    fireEvent.click(sheet.getByRole("radio", { name: /Deny/ }));
+    fireEvent.click(sheet.getByRole("button", { name: "Deny Request" }));
+
+    await waitFor(() => {
+      expect(resolveInventoryRequest).toHaveBeenCalledWith({
+        request: {
+          resolveShadowMCPInventoryRequestForm: {
+            decision: "deny",
+            policyIds: undefined,
             projectId: "project-id-1",
             serverUrl: "https://requested.example.com/mcp",
           },

@@ -29,6 +29,10 @@ type Service interface {
 	// Feature-first unified endpoint for hook events from supported coding
 	// assistants.
 	Ingest(context.Context, *IngestPayload) (res *IngestHookResult, err error)
+	// Uploads skill manifest content requested by the unified hook ingest endpoint.
+	UploadSkillContent(context.Context, *UploadSkillContentPayload) (err error)
+	// Records agent-volunteered feedback about a distributed skill.
+	SkillFeedback(context.Context, *SkillFeedbackPayload) (err error)
 	// Endpoint to receive OTEL logs data from Claude Code. Requires API key
 	// authentication.
 	Logs(context.Context, *LogsPayload) (err error)
@@ -57,7 +61,7 @@ const ServiceName = "hooks"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"claude", "cursor", "codex", "ingest", "logs", "metrics"}
+var MethodNames = [8]string{"claude", "cursor", "codex", "ingest", "uploadSkillContent", "skillFeedback", "logs", "metrics"}
 
 // ClaudeHookResult is the result type of the hooks service claude method.
 type ClaudeHookResult struct {
@@ -276,12 +280,22 @@ type HookIngestData struct {
 	// Configured MCP server snapshot captured at session start or configuration
 	// change. Transport credentials must be redacted by the sender.
 	McpInventory []*HookMCPData
-	Usage        *HookUsageData
-	Message      *HookMessageData
-	Skill        *HookSkillData
-	Notification *HookNotificationData
+	// Whether the sender was able to read the agent's MCP server list for this
+	// session. True with an empty mcp_inventory means the agent genuinely has no
+	// servers configured; absent or false means the list could not be read (no
+	// agent binary, a failed probe) and the inventory says nothing about what the
+	// session can reach. Enforcement that treats a missing inventory as proof of
+	// absence must consult this first.
+	McpInventoryCollected *bool
+	Usage                 *HookUsageData
+	Message               *HookMessageData
+	Skill                 *HookSkillData
+	Notification          *HookNotificationData
 	// Transcript-derived per-request MCP attribution (Claude Stop/SubagentStop).
 	McpAttribution []*HookMCPAttributionEntry
+	// Transcript-derived prompt attachment content (Claude
+	// Stop/SubagentStop/SessionEnd).
+	PromptAttachments []*HookPromptAttachmentEntry
 }
 
 // Canonical Gram feature event.
@@ -369,6 +383,35 @@ type HookNotificationData struct {
 	Message *string
 }
 
+// Transcript-derived content that a provider attached to a submitted prompt,
+// such as Claude Code @file and @directory mentions.
+type HookPromptAttachmentEntry struct {
+	// Provider transcript entry UUID. Used as the stable attachment identifier.
+	EntryUUID string
+	// Prompt identifier of the user turn this attachment belongs to, when the
+	// transcript parent chain resolves.
+	PromptID *string
+	// Lowercase hex SHA-256 of the trimmed prompt text stored for the parent user
+	// message, when available.
+	PromptSha256 *string
+	// Absolute provider-reported file or directory path, when available.
+	FilePath *string
+	// Provider display path for the attachment, when available.
+	DisplayPath *string
+	// Provider attachment kind, such as file or directory.
+	AttachmentKind string
+	// Attachment text visible to the model.
+	Content string
+	// Number of lines included in the attachment window, when reported.
+	NumLines *int
+	// Total source file lines, when reported.
+	TotalLines *int
+	// First one-based source line included in the attachment window, when reported.
+	StartLine *int
+	// Provider transcript timestamp for this attachment, when available.
+	Timestamp *string
+}
+
 // Prompt feature payload.
 type HookPromptData struct {
 	// User prompt text.
@@ -381,6 +424,12 @@ type HookSkillData struct {
 	Name string
 	// Skill source or namespace, if available.
 	Source *string
+	// Scope where the skill was resolved, if available.
+	SourceLevel *string
+	// Local path where the skill was resolved, if available.
+	SourcePath *string
+	// SHA-256 of the raw skill manifest, if available.
+	RawSha256 *string
 }
 
 // Tool call feature payload.
@@ -622,6 +671,35 @@ type OTELSum struct {
 	IsMonotonic *bool
 	// Data points
 	DataPoints []*OTELNumberDataPoint
+}
+
+// SkillFeedbackPayload is the payload type of the hooks service skillFeedback
+// method.
+type SkillFeedbackPayload struct {
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// Contract version.
+	SchemaVersion string
+	// Canonical name of the skill that was used.
+	Skill string
+	// How the skill affected the task.
+	Outcome string
+	// Optional concise context about the outcome.
+	Note *string
+}
+
+// UploadSkillContentPayload is the payload type of the hooks service
+// uploadSkillContent method.
+type UploadSkillContentPayload struct {
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// Contract version.
+	SchemaVersion string
+	// Lowercase SHA-256 of the raw content.
+	RawSha256 string
+	// Raw UTF-8 skill manifest content. The server rejects content whose UTF-8
+	// encoding exceeds 65,536 bytes.
+	Content string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

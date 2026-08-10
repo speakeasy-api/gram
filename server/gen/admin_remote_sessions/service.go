@@ -24,14 +24,25 @@ type Service interface {
 	// NULL). Requires platform admin.
 	CreateGlobalIssuer(context.Context, *CreateGlobalIssuerPayload) (res *types.RemoteSessionIssuer, err error)
 	// List global remote_session_issuers. Requires platform admin.
-	ListGlobalIssuers(context.Context, *ListGlobalIssuersPayload) (res *ListRemoteSessionIssuersResult, err error)
+	ListGlobalIssuers(context.Context, *ListGlobalIssuersPayload) (res *ListGlobalRemoteSessionIssuersResult, err error)
 	// Get a global remote_session_issuer by id. Requires platform admin.
-	GetGlobalIssuer(context.Context, *GetGlobalIssuerPayload) (res *types.RemoteSessionIssuer, err error)
+	GetGlobalIssuer(context.Context, *GetGlobalIssuerPayload) (res *GlobalRemoteSessionIssuer, err error)
 	// Update a global remote_session_issuer. Requires platform admin.
 	UpdateGlobalIssuer(context.Context, *UpdateGlobalIssuerPayload) (res *types.RemoteSessionIssuer, err error)
 	// Soft-delete a global remote_session_issuer. Blocked when any global
 	// remote_session_clients still reference it. Requires platform admin.
 	DeleteGlobalIssuer(context.Context, *DeleteGlobalIssuerPayload) (err error)
+	// Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server
+	// document and return a draft suitable for createGlobalIssuer. Keyed by issuer
+	// URL; no record need exist and nothing is persisted. Requires platform admin.
+	FetchGlobalIssuerMetadata(context.Context, *FetchGlobalIssuerMetadataPayload) (res *types.RemoteSessionIssuerDraft, err error)
+	// Re-fetch an existing global remote_session_issuer's RFC 8414 metadata
+	// document and persist the discovered values. Keyed by issuer id. Only RFC
+	// 8414-derived columns are written — endpoints, the *_supported arrays,
+	// client_id_metadata_document_supported, and the documentation URLs. Gram
+	// behavior and display fields (oidc, passthrough, name, slug, logo, client
+	// setup documentation) are left alone. Requires platform admin.
+	RefreshGlobalIssuerMetadata(context.Context, *RefreshGlobalIssuerMetadataPayload) (res *types.RemoteSessionIssuerRefresh, err error)
 	// Register a global remote_session_client under an existing global
 	// remote_session_issuer. Caller supplies client_id and optional client_secret
 	// obtained out-of-band from the upstream issuer. Requires platform admin.
@@ -47,6 +58,29 @@ type Service interface {
 	// Soft-delete a global remote_session_client. Cascades to the remote_sessions
 	// minted against it. Requires platform admin.
 	DeleteGlobalClient(context.Context, *DeleteGlobalClientPayload) (err error)
+	// List the organization- and project-level remote_session_issuers that
+	// describe the same upstream authorization server as a given global issuer,
+	// and so could be consolidated onto it. Matching is by canonical issuer URL,
+	// collapsing trailing-slash and default-port spellings. Each candidate carries
+	// its owning organization, the number of clients that would move, and the
+	// metadata differences that would block or accompany the migration. Requires
+	// platform admin.
+	ListGlobalIssuerConvergenceCandidates(context.Context, *ListGlobalIssuerConvergenceCandidatesPayload) (res *ListIssuerConvergenceCandidatesResult, err error)
+	// Authoritative impact summary for consolidating a tenant
+	// remote_session_issuer onto a global one: the clients that would move, the
+	// affected MCP servers, and every blocker (endpoint mismatches, conflicting
+	// MCP-server bindings). Also reports how many tenant-owned clients the target
+	// already carries, since those permanently block deleting it. Requires
+	// platform admin.
+	GetGlobalIssuerMigratePreflight(context.Context, *GetGlobalIssuerMigratePreflightPayload) (res *IssuerMigratePreflight, err error)
+	// Consolidate an organization- or project-level remote_session_issuer onto a
+	// global one: re-point every client from the source issuer onto the target,
+	// then soft-delete the source. Existing remote sessions are preserved, so no
+	// user re-authenticates. The source may belong to any organization; the target
+	// must be a global issuer. Both must agree on issuer (compared canonically),
+	// token_endpoint, and authorization_endpoint. One source per call. Requires
+	// platform admin.
+	MigrateToGlobalIssuer(context.Context, *MigrateToGlobalIssuerPayload) (res *MigrateRemoteSessionIssuerResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -69,7 +103,7 @@ const ServiceName = "adminRemoteSessions"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [10]string{"createGlobalIssuer", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "createGlobalClient", "listGlobalClients", "getGlobalClient", "updateGlobalClient", "deleteGlobalClient"}
+var MethodNames = [15]string{"createGlobalIssuer", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "createGlobalClient", "listGlobalClients", "getGlobalClient", "updateGlobalClient", "deleteGlobalClient", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer"}
 
 // CreateGlobalClientPayload is the payload type of the adminRemoteSessions
 // service createGlobalClient method.
@@ -161,11 +195,30 @@ type DeleteGlobalIssuerPayload struct {
 	SessionToken *string
 }
 
+// FetchGlobalIssuerMetadataPayload is the payload type of the
+// adminRemoteSessions service fetchGlobalIssuerMetadata method.
+type FetchGlobalIssuerMetadataPayload struct {
+	// Issuer URL to fetch metadata for (e.g. https://login.linear.com).
+	Issuer       string
+	SessionToken *string
+}
+
 // GetGlobalClientPayload is the payload type of the adminRemoteSessions
 // service getGlobalClient method.
 type GetGlobalClientPayload struct {
 	// The remote_session_client id.
 	ID           string
+	SessionToken *string
+}
+
+// GetGlobalIssuerMigratePreflightPayload is the payload type of the
+// adminRemoteSessions service getGlobalIssuerMigratePreflight method.
+type GetGlobalIssuerMigratePreflightPayload struct {
+	// The organization- or project-level remote_session_issuer to migrate away
+	// from.
+	SourceID string
+	// The global remote_session_issuer to migrate onto.
+	TargetID     string
 	SessionToken *string
 }
 
@@ -177,11 +230,91 @@ type GetGlobalIssuerPayload struct {
 	SessionToken *string
 }
 
+// GlobalRemoteSessionIssuer is the result type of the adminRemoteSessions
+// service getGlobalIssuer method.
+type GlobalRemoteSessionIssuer struct {
+	// The remote_session_issuer record.
+	Issuer *types.RemoteSessionIssuer
+	// Number of non-deleted global remote_session_clients (project_id NULL,
+	// organization_id NULL) registered with this issuer. These block a delete and
+	// the platform admin can remove them here.
+	GlobalClientCount int
+	// Number of non-deleted remote_session_clients owned by an organization or
+	// project that are registered with this issuer. These block a delete but only
+	// their owning organization can remove them.
+	TenantClientCount int
+}
+
+// An organization- or project-level remote_session_issuer that names the same
+// upstream authorization server as a global issuer, and so could be
+// consolidated onto it.
+type IssuerConvergenceCandidate struct {
+	// The candidate tenant remote_session_issuer.
+	Issuer *types.RemoteSessionIssuer
+	// The organization that owns the candidate. Empty for a legacy project-scoped
+	// issuer written before this column existed.
+	OrganizationID string
+	// Display name of the owning organization. Empty when the organization has no
+	// synced metadata.
+	OrganizationName string
+	// Number of non-deleted remote_session_clients that would move onto the target
+	// issuer.
+	ClientCount int
+	// Names of the authorization-server metadata fields (issuer, token_endpoint,
+	// authorization_endpoint) that differ from the target. Non-empty blocks the
+	// migration.
+	EndpointMismatches []string
+	// Non-blocking divergences (oidc, passthrough, scopes_supported). The target
+	// issuer's values become authoritative for the migrated clients.
+	Warnings []string
+}
+
+// IssuerMigratePreflight is the result type of the adminRemoteSessions service
+// getGlobalIssuerMigratePreflight method.
+type IssuerMigratePreflight struct {
+	// Number of non-deleted remote_session_clients that would be re-pointed from
+	// the source issuer to the target issuer.
+	ClientCount int
+	// Display names of MCP servers attached to the source issuer's clients.
+	McpServerNames []string
+	// Names of the authorization-server metadata fields (issuer, token_endpoint,
+	// authorization_endpoint) that differ between source and target. Non-empty
+	// blocks the migration.
+	EndpointMismatches []string
+	// Display names of MCP servers where both the source and the target issuer
+	// already have a client bound. Non-empty blocks the migration; detach one
+	// client per listed server and retry.
+	ConflictingMcpServerNames []string
+	// Non-blocking divergences (oidc, passthrough, scopes_supported). The target
+	// issuer's values become authoritative for the migrated clients.
+	Warnings []string
+	// TRUE when the migration would succeed: no endpoint mismatches and no
+	// conflicting MCP-server bindings.
+	CanMigrate bool
+	// Number of tenant-owned remote_session_clients already registered with the
+	// target issuer, BEFORE this migration. Any non-zero value blocks deleting the
+	// target issuer, and only the owning organizations can clear it, so a
+	// successful migration is effectively one-way.
+	TargetTenantClientCount int
+}
+
 // ListGlobalClientsPayload is the payload type of the adminRemoteSessions
 // service listGlobalClients method.
 type ListGlobalClientsPayload struct {
 	// The global remote_session_issuer id to list clients for.
 	RemoteSessionIssuerID string
+	// Pagination cursor.
+	Cursor *string
+	// Page size (default 50, max 100).
+	Limit        *int
+	SessionToken *string
+}
+
+// ListGlobalIssuerConvergenceCandidatesPayload is the payload type of the
+// adminRemoteSessions service listGlobalIssuerConvergenceCandidates method.
+type ListGlobalIssuerConvergenceCandidatesPayload struct {
+	// The global remote_session_issuer that candidates would be consolidated onto.
+	TargetID string
 	// Pagination cursor.
 	Cursor *string
 	// Page size (default 50, max 100).
@@ -199,6 +332,22 @@ type ListGlobalIssuersPayload struct {
 	SessionToken *string
 }
 
+// ListGlobalRemoteSessionIssuersResult is the result type of the
+// adminRemoteSessions service listGlobalIssuers method.
+type ListGlobalRemoteSessionIssuersResult struct {
+	Items []*GlobalRemoteSessionIssuer
+	// Cursor for the next page; empty when exhausted.
+	NextCursor *string
+}
+
+// ListIssuerConvergenceCandidatesResult is the result type of the
+// adminRemoteSessions service listGlobalIssuerConvergenceCandidates method.
+type ListIssuerConvergenceCandidatesResult struct {
+	Items []*IssuerConvergenceCandidate
+	// Cursor for the next page; empty when exhausted.
+	NextCursor *string
+}
+
 // ListRemoteSessionClientsResult is the result type of the adminRemoteSessions
 // service listGlobalClients method.
 type ListRemoteSessionClientsResult struct {
@@ -207,12 +356,36 @@ type ListRemoteSessionClientsResult struct {
 	NextCursor *string
 }
 
-// ListRemoteSessionIssuersResult is the result type of the adminRemoteSessions
-// service listGlobalIssuers method.
-type ListRemoteSessionIssuersResult struct {
-	Items []*types.RemoteSessionIssuer
-	// Cursor for the next page; empty when exhausted.
-	NextCursor *string
+// MigrateRemoteSessionIssuerResult is the result type of the
+// adminRemoteSessions service migrateToGlobalIssuer method.
+type MigrateRemoteSessionIssuerResult struct {
+	// The surviving target global remote_session_issuer.
+	Issuer *types.RemoteSessionIssuer
+	// Number of remote_session_clients re-pointed from the source issuer to the
+	// target issuer. Zero when the source had no active clients.
+	ClientsMigrated int
+	// TRUE when the source issuer was soft-deleted.
+	SourceDeleted bool
+}
+
+// MigrateToGlobalIssuerPayload is the payload type of the adminRemoteSessions
+// service migrateToGlobalIssuer method.
+type MigrateToGlobalIssuerPayload struct {
+	// The organization- or project-level remote_session_issuer to migrate away
+	// from; soft-deleted on success.
+	SourceID string
+	// The global remote_session_issuer to migrate onto; survives and adopts the
+	// source's clients.
+	TargetID     string
+	SessionToken *string
+}
+
+// RefreshGlobalIssuerMetadataPayload is the payload type of the
+// adminRemoteSessions service refreshGlobalIssuerMetadata method.
+type RefreshGlobalIssuerMetadataPayload struct {
+	// The remote_session_issuer id.
+	ID           string
+	SessionToken *string
 }
 
 // UpdateGlobalClientPayload is the payload type of the adminRemoteSessions

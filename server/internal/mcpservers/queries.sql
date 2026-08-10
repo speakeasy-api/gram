@@ -9,6 +9,7 @@ INSERT INTO mcp_servers (
     remote_mcp_server_id,
     tunneled_mcp_server_id,
     toolset_id,
+    unproxied_mcp_server_id,
     tool_variations_group_id,
     visibility
 )
@@ -22,6 +23,7 @@ VALUES (
     @remote_mcp_server_id,
     @tunneled_mcp_server_id,
     @toolset_id,
+    @unproxied_mcp_server_id,
     @tool_variations_group_id,
     @visibility
 )
@@ -31,6 +33,21 @@ RETURNING *;
 SELECT *
 FROM mcp_servers
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+
+-- name: LockMCPServerByIDAndProjectID :one
+SELECT *
+FROM mcp_servers
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: LockMCPServersByIDs :many
+SELECT *
+FROM mcp_servers
+WHERE project_id = @project_id
+  AND id = ANY(@ids::uuid[])
+  AND deleted IS FALSE
+ORDER BY id
+FOR UPDATE;
 
 -- name: GetMCPServerByIDAndOrganizationID :one
 -- Fetch an MCP server by id scoped to an organization via its project's
@@ -56,6 +73,7 @@ WHERE project_id = @project_id
   AND (sqlc.narg('remote_mcp_server_id')::uuid IS NULL OR remote_mcp_server_id = sqlc.narg('remote_mcp_server_id')::uuid)
   AND (sqlc.narg('tunneled_mcp_server_id')::uuid IS NULL OR tunneled_mcp_server_id = sqlc.narg('tunneled_mcp_server_id')::uuid)
   AND (sqlc.narg('toolset_id')::uuid IS NULL OR toolset_id = sqlc.narg('toolset_id')::uuid)
+  AND (sqlc.narg('unproxied_mcp_server_id')::uuid IS NULL OR unproxied_mcp_server_id = sqlc.narg('unproxied_mcp_server_id')::uuid)
 ORDER BY created_at DESC;
 
 -- name: ListMCPServersByOrganizationID :many
@@ -69,6 +87,37 @@ WHERE p.organization_id = @organization_id
   AND m.deleted IS FALSE
   AND p.deleted IS FALSE
 ORDER BY m.created_at DESC;
+
+-- name: ListMCPServersByProjectIDLimited :many
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
+FROM mcp_servers
+WHERE project_id = @project_id
+  AND deleted IS FALSE
+ORDER BY id ASC
+LIMIT @limit_value;
+
+-- name: ListMCPServersByLiveProjectForOrganizationLimited :many
+SELECT m.*
+FROM mcp_servers AS m
+JOIN projects AS p
+  ON p.id = m.project_id
+ AND p.organization_id = @organization_id
+ AND p.deleted IS FALSE
+WHERE m.project_id = @project_id
+  AND m.deleted IS FALSE
+ORDER BY m.id ASC
+LIMIT @limit_value;
+
+-- name: GetMCPServerByLiveProjectForOrganization :one
+SELECT m.*
+FROM mcp_servers AS m
+JOIN projects AS p
+  ON p.id = m.project_id
+ AND p.organization_id = @organization_id
+ AND p.deleted IS FALSE
+WHERE m.id = @id
+  AND m.project_id = @project_id
+  AND m.deleted IS FALSE;
 
 -- name: ListMCPServersForTelemetryByProjectID :many
 -- Includes soft-deleted servers so tool-usage telemetry can classify historical
@@ -93,6 +142,7 @@ SET
     remote_mcp_server_id = @remote_mcp_server_id,
     tunneled_mcp_server_id = @tunneled_mcp_server_id,
     toolset_id = @toolset_id,
+    unproxied_mcp_server_id = @unproxied_mcp_server_id,
     tool_variations_group_id = @tool_variations_group_id,
     visibility = @visibility,
     updated_at = clock_timestamp()
@@ -103,4 +153,166 @@ RETURNING *;
 UPDATE mcp_servers
 SET deleted_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+RETURNING *;
+
+-- name: LockMCPServerToolMetadataWrite :exec
+-- Acquire a transaction-scoped advisory lock keyed on the MCP server ID so
+-- tool metadata mutations on the same server serialize across processes.
+--
+-- Two things depend on this. The authoritative write touches an unbounded set
+-- of rows in two branches, so competing full syncs with different tool sets can
+-- take row locks in opposing orders and deadlock. And every mutation reads the
+-- collection before and after itself to build its audit snapshots, which under
+-- READ COMMITTED would otherwise straddle another transaction's commit and
+-- record a transition that never happened.
+SELECT pg_advisory_xact_lock(hashtextextended(@mcp_server_id::text, 0));
+
+-- name: SetMCPServerToolMetadata :many
+-- Authoritative write of an MCP server's tool metadata collection: every tool in
+-- @tools is upserted and every stored tool absent from @tools is soft-deleted, in a
+-- single statement. The two branches touch disjoint rows (partitioned by
+-- tool_name), so neither observes the other's writes.
+--
+-- The conflict target is the partial unique index on (mcp_server_id, tool_name)
+-- WHERE deleted IS FALSE, so re-adding a soft-deleted tool inserts a fresh row
+-- rather than resurrecting the tombstoned one. A tool_name repeated within
+-- @tools trips the ON CONFLICT cardinality check (SQLSTATE 21000), aborting the
+-- statement rather than silently applying one of the duplicates.
+-- The input CTE unpacks each element with ->> rather than jsonb_to_recordset:
+-- sqlc's static analyzer never learns a column-definition list, so a
+-- recordset alias leaves every input.<column> reference unresolvable (and
+-- crashes sqlc outright under the managed analyzer). Selecting from
+-- jsonb_array_elements references only the element itself, and the per-column
+-- names below are ordinary select-list aliases, which sqlc does understand.
+-- ->> yields NULL for both an absent key and a JSON null, which is exactly the
+-- "hint unset" case these nullable columns encode.
+WITH input AS (
+    SELECT
+        elem->>'tool_name' AS tool_name,
+        elem->>'title' AS title,
+        (elem->>'read_only_hint')::boolean AS read_only_hint,
+        (elem->>'destructive_hint')::boolean AS destructive_hint,
+        (elem->>'idempotent_hint')::boolean AS idempotent_hint,
+        (elem->>'open_world_hint')::boolean AS open_world_hint
+    FROM jsonb_array_elements(@tools::jsonb) AS elem
+),
+upserted AS (
+    INSERT INTO mcp_server_tool_metadata (
+        project_id,
+        mcp_server_id,
+        tool_name,
+        title,
+        read_only_hint,
+        destructive_hint,
+        idempotent_hint,
+        open_world_hint
+    )
+    SELECT
+        @project_id,
+        @mcp_server_id,
+        input.tool_name,
+        input.title,
+        input.read_only_hint,
+        input.destructive_hint,
+        input.idempotent_hint,
+        input.open_world_hint
+    FROM input
+    ON CONFLICT (mcp_server_id, tool_name) WHERE deleted IS FALSE
+    DO UPDATE SET
+        title = EXCLUDED.title,
+        read_only_hint = EXCLUDED.read_only_hint,
+        destructive_hint = EXCLUDED.destructive_hint,
+        idempotent_hint = EXCLUDED.idempotent_hint,
+        open_world_hint = EXCLUDED.open_world_hint,
+        updated_at = clock_timestamp()
+    WHERE mcp_server_tool_metadata.project_id = @project_id
+    RETURNING *
+),
+removed AS (
+    UPDATE mcp_server_tool_metadata
+    SET deleted_at = clock_timestamp()
+    WHERE mcp_server_id = @mcp_server_id
+      AND project_id = @project_id
+      AND deleted IS FALSE
+      AND NOT EXISTS (
+          SELECT 1 FROM input WHERE input.tool_name = mcp_server_tool_metadata.tool_name
+      )
+    RETURNING *
+)
+SELECT
+    id, project_id, mcp_server_id, tool_name, title,
+    read_only_hint, destructive_hint, idempotent_hint, open_world_hint,
+    created_at, updated_at, deleted_at, deleted,
+    false AS was_deleted
+FROM upserted
+UNION ALL
+SELECT
+    id, project_id, mcp_server_id, tool_name, title,
+    read_only_hint, destructive_hint, idempotent_hint, open_world_hint,
+    created_at, updated_at, deleted_at, deleted,
+    true AS was_deleted
+FROM removed
+ORDER BY tool_name;
+
+-- name: AddMCPServerToolMetadata :many
+-- Strictly additive counterpart to SetMCPServerToolMetadata. There is
+-- deliberately no ON CONFLICT clause: a tool that already holds a live stored
+-- entry must abort the whole statement with a unique violation (SQLSTATE 23505)
+-- rather than being silently updated or skipped, so a caller working from a
+-- stale view of stored state is told so. The partial unique index covers only
+-- live rows, so a tool whose sole prior row is a tombstone inserts fresh.
+--
+-- See SetMCPServerToolMetadata above for why the payload is unpacked with ->>
+-- rather than jsonb_to_recordset.
+INSERT INTO mcp_server_tool_metadata (
+    project_id,
+    mcp_server_id,
+    tool_name,
+    title,
+    read_only_hint,
+    destructive_hint,
+    idempotent_hint,
+    open_world_hint
+)
+SELECT
+    @project_id,
+    @mcp_server_id,
+    elem->>'tool_name',
+    elem->>'title',
+    (elem->>'read_only_hint')::boolean,
+    (elem->>'destructive_hint')::boolean,
+    (elem->>'idempotent_hint')::boolean,
+    (elem->>'open_world_hint')::boolean
+FROM jsonb_array_elements(@tools::jsonb) AS elem
+RETURNING *;
+
+-- name: ListMCPServerToolMetadata :many
+SELECT *
+FROM mcp_server_tool_metadata
+WHERE mcp_server_id = @mcp_server_id
+  AND project_id = @project_id
+  AND (@include_deleted::boolean OR deleted IS FALSE)
+ORDER BY tool_name, created_at;
+
+-- name: UpdateMCPServerToolMetadata :one
+UPDATE mcp_server_tool_metadata
+SET title = @title,
+    read_only_hint = @read_only_hint,
+    destructive_hint = @destructive_hint,
+    idempotent_hint = @idempotent_hint,
+    open_world_hint = @open_world_hint,
+    updated_at = clock_timestamp()
+WHERE mcp_server_id = @mcp_server_id
+  AND project_id = @project_id
+  AND tool_name = @tool_name
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: DeleteMCPServerToolMetadata :one
+UPDATE mcp_server_tool_metadata
+SET deleted_at = clock_timestamp()
+WHERE mcp_server_id = @mcp_server_id
+  AND project_id = @project_id
+  AND tool_name = @tool_name
+  AND deleted IS FALSE
 RETURNING *;

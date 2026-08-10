@@ -5,37 +5,35 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
 
-var (
-	// claudeSessionNamespace is the UUIDv5 namespace for Claude Code session IDs.
-	// This ensures deterministic UUID generation from session ID strings.
-	claudeSessionNamespace = uuid.MustParse("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
-
-	// ErrChatNotFound indicates the chat (conversation) does not exist.
-	ErrChatNotFound = errors.New("chat not found")
-)
+// ErrChatNotFound indicates the chat (conversation) does not exist.
+var ErrChatNotFound = errors.New("chat not found")
 
 // isForeignKeyViolation checks if the error is a PostgreSQL foreign key constraint violation.
 // This indicates that the referenced chat does not exist.
 func isForeignKeyViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
-		// 23503 is PostgreSQL's foreign_key_violation error code
-		return pgErr.Code == "23503"
+		return pgErr.Code == pgerrcode.ForeignKeyViolation
 	}
 	return false
 }
@@ -51,20 +49,111 @@ func isConversationEvent(eventName string) bool {
 }
 
 // defaultChatTitleForSession picks the default chat title based on the
-// session's agent variant stamped by SessionStart. If the variant is
-// unknown (no SessionStart cached yet, or stamped with an unrecognized
-// value) we fall back to the ambiguous "Claude Session" title rather than
-// assuming claude-code — the title generator will replace it with a real
-// one once enough conversation is on file.
-func (s *Service) defaultChatTitleForSession(ctx context.Context, sessionID string) string {
-	switch s.sessionAgentVariant(ctx, sessionID) {
+// session's resolved product surface. If the surface is unknown (no OTEL
+// service.name or SessionStart variant on file yet) we fall back to the
+// ambiguous "Claude Session" title rather than assuming claude-code — the
+// title generator will replace it with a real one once enough conversation
+// is on file.
+func (s *Service) defaultChatTitleForSession(ctx context.Context, metadata *SessionMetadata) string {
+	switch s.claudeSessionSurface(ctx, metadata) {
 	case agentVariantCowork:
 		return activities.DefaultCoworkChatTitle
-	case agentVariantClaudeCode:
+	case agentVariantClaudeCode, surfaceClaudeCodeDesktop:
 		return activities.DefaultClaudeChatTitle
 	default:
 		return activities.DefaultClaudeAmbiguous
 	}
+}
+
+// claudeSurfaceFromServiceName maps a reported service name or hook adapter
+// slug to the canonical Claude product surface: "cowork", "claude-code-desktop"
+// (CCD), or "claude-code" (the CLI). The OTEL resource service.name is the
+// source of truth where it disambiguates: cowork self-identifies on it, while
+// the CLI and CCD both report "claude-code" — CCD is identified by the desktop
+// hook client's adapter slug instead. Returns "" when the value identifies no
+// Claude surface (Cursor, Codex, unknown adapters).
+func claudeSurfaceFromServiceName(name string) string {
+	switch n := strings.ToLower(strings.TrimSpace(name)); {
+	case strings.Contains(n, "cowork"):
+		return agentVariantCowork
+	case n == surfaceClaudeCodeDesktop:
+		return surfaceClaudeCodeDesktop
+	case n == "claude-code" || n == "claudecode":
+		return agentVariantClaudeCode
+	default:
+		return ""
+	}
+}
+
+// claudeServiceNameSpecificity ranks how precisely a service name or adapter
+// slug identifies the product surface. "cowork" is unambiguous; the desktop
+// adapter slug narrows to CCD; "claude-code" is the OTEL name shared by the
+// CLI and CCD; the bare "claude" adapter slug the hooks binary sends for
+// Claude Code marks a Claude-family sender with no surface information at
+// all. Non-Claude values rank zero.
+func claudeServiceNameSpecificity(name string) int {
+	switch claudeSurfaceFromServiceName(name) {
+	case agentVariantCowork:
+		return 4
+	case surfaceClaudeCodeDesktop:
+		return 3
+	case agentVariantClaudeCode:
+		return 2
+	}
+	if strings.ToLower(strings.TrimSpace(name)) == "claude" {
+		return 1
+	}
+	return 0
+}
+
+// preferClaudeServiceName merges a freshly reported service name (or adapter
+// slug) with the session's previously cached one, keeping whichever identifies
+// the Claude product surface more precisely. This is what lets the two signals
+// compose: the OTEL stream's "cowork" upgrades a cached desktop adapter slug,
+// while a cached "claude-code-desktop" survives OTEL batches that only report
+// the ambiguous "claude-code", and an OTEL-cached "claude-code" survives hook
+// events carrying only the bare "claude" adapter slug. Ties keep the fresh
+// value. A non-empty incoming value that identifies no Claude sender at all
+// (Cursor, Codex, unknown adapters) always wins: non-Claude senders keep their
+// reported name instead of being overwritten by a Claude value cached under
+// the same session id.
+func preferClaudeServiceName(incoming, cached string) string {
+	if incoming == "" {
+		return cached
+	}
+	specificity := claudeServiceNameSpecificity(incoming)
+	if specificity == 0 {
+		return incoming
+	}
+	if claudeServiceNameSpecificity(cached) > specificity {
+		return cached
+	}
+	return incoming
+}
+
+// claudeSessionSurface resolves the product surface for a session from the
+// service name carried on SessionMetadata (the OTEL service.name once the
+// session's log stream has been seen, the hook adapter slug before then) with
+// the inventory-shape variant stamped at SessionStart as fallback — it covers
+// cowork builds that predate the cowork service.name and sessions whose OTEL
+// stream has not arrived yet. Values that identify no Claude surface pass
+// through unchanged so non-Claude senders keep their reported name.
+func (s *Service) claudeSessionSurface(ctx context.Context, metadata *SessionMetadata) string {
+	surface := claudeSurfaceFromServiceName(metadata.ServiceName)
+	if surface == agentVariantCowork {
+		return surface
+	}
+	variant := s.sessionAgentVariant(ctx, metadata.SessionID)
+	if variant == agentVariantCowork {
+		return agentVariantCowork
+	}
+	if surface != "" {
+		return surface
+	}
+	if variant != "" {
+		return variant
+	}
+	return metadata.ServiceName
 }
 
 // sessionAgentVariant returns the agent variant ("cowork" or "claude-code")
@@ -82,18 +171,12 @@ func (s *Service) sessionAgentVariant(ctx context.Context, sessionID string) str
 	return variant
 }
 
-// sessionIDToUUID converts a Claude Code session_id string to a UUID.
-// The session_id is expected to already be a valid UUID string.
-// If parsing fails, falls back to generating a deterministic UUIDv5 from the session_id.
+// sessionIDToUUID converts an agent session_id string to the chat id its
+// transcript is persisted under. Every hook capture path goes through here, and
+// the mapping itself lives in the chat package so consumers that read sessions
+// back — efficacy scoring, telemetry — resolve the same chat.
 func sessionIDToUUID(sessionID string) uuid.UUID {
-	// Try to parse the session ID as a UUID directly
-	parsedUUID, err := uuid.Parse(sessionID)
-	if err == nil {
-		return parsedUUID
-	}
-
-	// Fallback: generate a deterministic UUIDv5 from the session ID string
-	return uuid.NewSHA1(claudeSessionNamespace, []byte(sessionID))
+	return chat.SessionIDToChatID(sessionID)
 }
 
 // makeHookResult creates a ClaudeHookResult, attaching HookSpecificOutput only
@@ -190,6 +273,17 @@ func (s *Service) handleUserPromptSubmit(ctx context.Context, ev *hookevents.Use
 	if payload == nil {
 		return makeHookResult(ev.RawEventType), nil
 	}
+	// Spend gate runs before any risk-policy evaluation: an over-budget user
+	// is denied outright.
+	if block := s.checkSpendGate(ctx, ev.Event); block != nil {
+		reason := spendBlockReason("prompt", block)
+		if payload.SessionID != nil && s.claimBlockedPromptTelemetry(ctx, payload) {
+			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
+				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, reason)
+			}
+		}
+		return constructBlockResponse(payload.HookEventName, reason), nil
+	}
 	if s.riskScanner != nil && ev.Prompt != "" && ev.ConversationID != "" {
 		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil {
 			// Warn (challenge) defers to the tool call: Claude Code can only show
@@ -203,8 +297,11 @@ func (s *Service) handleUserPromptSubmit(ctx context.Context, ev *hookevents.Use
 			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
 			// ClickHouse always gets the technical reason; the user_message
 			// override only changes what the agent / end user sees.
-			if metadata, err := s.getSessionMetadata(ctx, *payload.SessionID); err == nil {
-				s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
+			if s.claimBlockedPromptTelemetry(ctx, payload) {
+				metadata, err := s.getSessionMetadata(ctx, conv.PtrValOr(payload.SessionID, ""))
+				if err == nil {
+					s.writeClaudeBlockToClickHouse(ctx, payload, &metadata, auditReason)
+				}
 			}
 			return constructBlockResponse(payload.HookEventName, userReason), nil
 		}
@@ -219,8 +316,10 @@ func (s *Service) handleStop(ctx context.Context, ev *hookevents.Stop) (*gen.Cla
 	return makeHookResult(ev.RawEventType), nil
 }
 
-// handleSessionEnd finalizes the session by updating the timestamp.
-func (s *Service) handleSessionEnd(ctx context.Context, ev *hookevents.SessionEnd) (*gen.ClaudeHookResult, error) {
+// handleSessionEnd returns the native hook response. Efficacy is woken by
+// durable observation and message writes rather than this event, which has no
+// durable transcript-completion barrier.
+func (s *Service) handleSessionEnd(_ context.Context, ev *hookevents.SessionEnd) (*gen.ClaudeHookResult, error) {
 	return makeHookResult(ev.RawEventType), nil
 }
 
@@ -307,13 +406,6 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 		role = "user"
 		content = conv.PtrValOr(payload.Prompt, "")
 	case "Stop":
-		if err := s.backfillLastUserPromptID(ctx, chatID, projectID, payload); err != nil {
-			s.logger.WarnContext(ctx, "failed to backfill Claude user prompt ID",
-				attr.SlogError(err),
-				attr.SlogGenAIConversationID(conv.PtrValOr(payload.SessionID, "")),
-				attr.SlogProjectID(metadata.ProjectID),
-			)
-		}
 		role = "assistant"
 		content = conv.PtrValOr(payload.LastAssistantMessage, "")
 		model = conv.ToPGTextEmpty(conv.PtrValOr(payload.Model, ""))
@@ -331,6 +423,11 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 		return nil
 	}
 
+	// persistToolCallEvent mirrors this write into ClickHouse for tool calls;
+	// conversation events previously only landed in Postgres, so ClickHouse
+	// hook consumers (e.g. onboarding's "Confirm traffic" feed) never saw them.
+	s.logConversationTelemetry(ctx, payload, metadata, projectID)
+
 	msgParams := chatRepo.CreateChatMessageParams{
 		Replayed:         false,
 		CreatedAt:        conv.PtrToPGTimestamptz(nil),
@@ -340,7 +437,7 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 		Content:          content,
 		Model:            model,
 		UserID:           conv.ToPGTextEmpty(metadata.UserID),
-		Source:           conv.ToPGText(metadata.ServiceName),
+		Source:           conv.ToPGText(s.claudeSessionSurface(ctx, metadata)),
 		PromptTokens:     0,
 		CompletionTokens: 0,
 		TotalTokens:      0,
@@ -359,7 +456,7 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 		Generation:       0,
 	}
 
-	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, s.defaultChatTitleForSession(ctx, conv.PtrValOr(payload.SessionID, ""))); err != nil {
+	if err := s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, s.defaultChatTitleForSession(ctx, metadata)); err != nil {
 		return err
 	}
 
@@ -378,31 +475,21 @@ func (s *Service) persistConversationEvent(ctx context.Context, payload *gen.Cla
 	return nil
 }
 
-func (s *Service) backfillLastUserPromptID(ctx context.Context, chatID uuid.UUID, projectID uuid.UUID, payload *gen.ClaudePayload) error {
-	lastUserPromptID := claudeLastUserPromptIDFromAdditionalData(payload.AdditionalData)
-	if lastUserPromptID == "" {
-		return nil
+// logConversationTelemetry writes a UserPromptSubmit/Stop conversation event
+// to ClickHouse, using the same attribute-building and event_source="hook"
+// shape as persistToolCallEvent. projectID is the value persistConversationEvent
+// already parsed, so this never re-parses it.
+func (s *Service) logConversationTelemetry(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata, projectID uuid.UUID) {
+	if s.telemetryLogger == nil {
+		return
 	}
 
-	_, err := s.repo.BackfillLatestClaudeUserMessagePromptID(ctx, repo.BackfillLatestClaudeUserMessagePromptIDParams{
-		ChatID:    chatID,
-		ProjectID: projectID,
-		MessageID: conv.ToPGText(lastUserPromptID),
+	s.telemetryLogger.Log(ctx, telemetry.LogParams{
+		Timestamp:  time.Now(),
+		ToolInfo:   telemetryToolInfo(metadata, projectID, ""),
+		UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
+		Attributes: s.buildTelemetryAttributesWithMetadata(ctx, payload, metadata),
 	})
-	if err != nil {
-		return fmt.Errorf("backfill latest Claude user message prompt ID: %w", err)
-	}
-	return nil
-}
-
-func claudeLastUserPromptIDFromAdditionalData(additionalData map[string]any) string {
-	if additionalData == nil {
-		return ""
-	}
-	if v, ok := additionalData["LastUserPromptID"].(string); ok {
-		return v
-	}
-	return ""
 }
 
 // writeToolCallRequestToPG writes an assistant message with tool_calls to PostgreSQL.
@@ -438,7 +525,7 @@ func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.Cla
 		Content:          "", // Tool call requests typically have empty content
 		Model:            conv.ToPGTextEmpty(conv.PtrValOr(payload.Model, "")),
 		UserID:           conv.ToPGTextEmpty(metadata.UserID),
-		Source:           conv.ToPGText(metadata.ServiceName),
+		Source:           conv.ToPGText(s.claudeSessionSurface(ctx, metadata)),
 		ToolCalls:        toolCallsJSON,
 		FinishReason:     conv.ToPGText("tool_calls"),
 		PromptTokens:     0,
@@ -457,7 +544,7 @@ func (s *Service) writeToolCallRequestToPG(ctx context.Context, payload *gen.Cla
 		Generation:       0,
 	}
 
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, s.defaultChatTitleForSession(ctx, conv.PtrValOr(payload.SessionID, "")))
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, s.defaultChatTitleForSession(ctx, metadata))
 }
 
 // writeToolCallResultToPG writes a tool result message to PostgreSQL.
@@ -490,7 +577,7 @@ func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.Clau
 		Role:             "tool",
 		Content:          content,
 		UserID:           conv.ToPGTextEmpty(metadata.UserID),
-		Source:           conv.ToPGText(metadata.ServiceName),
+		Source:           conv.ToPGText(s.claudeSessionSurface(ctx, metadata)),
 		ToolCallID:       conv.ToPGTextEmpty(conv.PtrValOr(payload.ToolUseID, "")),
 		PromptTokens:     0,
 		CompletionTokens: 0,
@@ -513,7 +600,7 @@ func (s *Service) writeToolCallResultToPG(ctx context.Context, payload *gen.Clau
 	// If this was an error, we could optionally set tool_outcome based on isError
 	_ = isError
 
-	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, s.defaultChatTitleForSession(ctx, conv.PtrValOr(payload.SessionID, "")))
+	return s.insertMessageWithFallbackUpsert(ctx, metadata, chatID, projectID, msgParams, s.defaultChatTitleForSession(ctx, metadata))
 }
 
 // marshalToJSON converts any value to a JSON string.

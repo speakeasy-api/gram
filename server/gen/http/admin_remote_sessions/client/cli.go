@@ -243,6 +243,60 @@ func BuildDeleteGlobalIssuerPayload(adminRemoteSessionsDeleteGlobalIssuerID stri
 	return v, nil
 }
 
+// BuildFetchGlobalIssuerMetadataPayload builds the payload for the
+// adminRemoteSessions fetchGlobalIssuerMetadata endpoint from CLI flags.
+func BuildFetchGlobalIssuerMetadataPayload(adminRemoteSessionsFetchGlobalIssuerMetadataBody string, adminRemoteSessionsFetchGlobalIssuerMetadataSessionToken string) (*adminremotesessions.FetchGlobalIssuerMetadataPayload, error) {
+	var err error
+	var body FetchGlobalIssuerMetadataRequestBody
+	{
+		err = json.Unmarshal([]byte(adminRemoteSessionsFetchGlobalIssuerMetadataBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"issuer\": \"abc123\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if adminRemoteSessionsFetchGlobalIssuerMetadataSessionToken != "" {
+			sessionToken = &adminRemoteSessionsFetchGlobalIssuerMetadataSessionToken
+		}
+	}
+	v := &adminremotesessions.FetchGlobalIssuerMetadataPayload{
+		Issuer: body.Issuer,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildRefreshGlobalIssuerMetadataPayload builds the payload for the
+// adminRemoteSessions refreshGlobalIssuerMetadata endpoint from CLI flags.
+func BuildRefreshGlobalIssuerMetadataPayload(adminRemoteSessionsRefreshGlobalIssuerMetadataBody string, adminRemoteSessionsRefreshGlobalIssuerMetadataSessionToken string) (*adminremotesessions.RefreshGlobalIssuerMetadataPayload, error) {
+	var err error
+	var body RefreshGlobalIssuerMetadataRequestBody
+	{
+		err = json.Unmarshal([]byte(adminRemoteSessionsRefreshGlobalIssuerMetadataBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if adminRemoteSessionsRefreshGlobalIssuerMetadataSessionToken != "" {
+			sessionToken = &adminRemoteSessionsRefreshGlobalIssuerMetadataSessionToken
+		}
+	}
+	v := &adminremotesessions.RefreshGlobalIssuerMetadataPayload{
+		ID: body.ID,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildCreateGlobalClientPayload builds the payload for the
 // adminRemoteSessions createGlobalClient endpoint from CLI flags.
 func BuildCreateGlobalClientPayload(adminRemoteSessionsCreateGlobalClientBody string, adminRemoteSessionsCreateGlobalClientSessionToken string) (*adminremotesessions.CreateGlobalClientPayload, error) {
@@ -448,6 +502,117 @@ func BuildDeleteGlobalClientPayload(adminRemoteSessionsDeleteGlobalClientID stri
 	}
 	v := &adminremotesessions.DeleteGlobalClientPayload{}
 	v.ID = id
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildListGlobalIssuerConvergenceCandidatesPayload builds the payload for the
+// adminRemoteSessions listGlobalIssuerConvergenceCandidates endpoint from CLI
+// flags.
+func BuildListGlobalIssuerConvergenceCandidatesPayload(adminRemoteSessionsListGlobalIssuerConvergenceCandidatesTargetID string, adminRemoteSessionsListGlobalIssuerConvergenceCandidatesCursor string, adminRemoteSessionsListGlobalIssuerConvergenceCandidatesLimit string, adminRemoteSessionsListGlobalIssuerConvergenceCandidatesSessionToken string) (*adminremotesessions.ListGlobalIssuerConvergenceCandidatesPayload, error) {
+	var err error
+	var targetID string
+	{
+		targetID = adminRemoteSessionsListGlobalIssuerConvergenceCandidatesTargetID
+		err = goa.MergeErrors(err, goa.ValidateFormat("target_id", targetID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var cursor *string
+	{
+		if adminRemoteSessionsListGlobalIssuerConvergenceCandidatesCursor != "" {
+			cursor = &adminRemoteSessionsListGlobalIssuerConvergenceCandidatesCursor
+		}
+	}
+	var limit *int
+	{
+		if adminRemoteSessionsListGlobalIssuerConvergenceCandidatesLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminRemoteSessionsListGlobalIssuerConvergenceCandidatesLimit, 10, strconv.IntSize)
+			val := int(v)
+			limit = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if adminRemoteSessionsListGlobalIssuerConvergenceCandidatesSessionToken != "" {
+			sessionToken = &adminRemoteSessionsListGlobalIssuerConvergenceCandidatesSessionToken
+		}
+	}
+	v := &adminremotesessions.ListGlobalIssuerConvergenceCandidatesPayload{}
+	v.TargetID = targetID
+	v.Cursor = cursor
+	v.Limit = limit
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildGetGlobalIssuerMigratePreflightPayload builds the payload for the
+// adminRemoteSessions getGlobalIssuerMigratePreflight endpoint from CLI flags.
+func BuildGetGlobalIssuerMigratePreflightPayload(adminRemoteSessionsGetGlobalIssuerMigratePreflightSourceID string, adminRemoteSessionsGetGlobalIssuerMigratePreflightTargetID string, adminRemoteSessionsGetGlobalIssuerMigratePreflightSessionToken string) (*adminremotesessions.GetGlobalIssuerMigratePreflightPayload, error) {
+	var err error
+	var sourceID string
+	{
+		sourceID = adminRemoteSessionsGetGlobalIssuerMigratePreflightSourceID
+		err = goa.MergeErrors(err, goa.ValidateFormat("source_id", sourceID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var targetID string
+	{
+		targetID = adminRemoteSessionsGetGlobalIssuerMigratePreflightTargetID
+		err = goa.MergeErrors(err, goa.ValidateFormat("target_id", targetID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if adminRemoteSessionsGetGlobalIssuerMigratePreflightSessionToken != "" {
+			sessionToken = &adminRemoteSessionsGetGlobalIssuerMigratePreflightSessionToken
+		}
+	}
+	v := &adminremotesessions.GetGlobalIssuerMigratePreflightPayload{}
+	v.SourceID = sourceID
+	v.TargetID = targetID
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildMigrateToGlobalIssuerPayload builds the payload for the
+// adminRemoteSessions migrateToGlobalIssuer endpoint from CLI flags.
+func BuildMigrateToGlobalIssuerPayload(adminRemoteSessionsMigrateToGlobalIssuerBody string, adminRemoteSessionsMigrateToGlobalIssuerSessionToken string) (*adminremotesessions.MigrateToGlobalIssuerPayload, error) {
+	var err error
+	var body MigrateToGlobalIssuerRequestBody
+	{
+		err = json.Unmarshal([]byte(adminRemoteSessionsMigrateToGlobalIssuerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"source_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"target_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.source_id", body.SourceID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.target_id", body.TargetID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if adminRemoteSessionsMigrateToGlobalIssuerSessionToken != "" {
+			sessionToken = &adminRemoteSessionsMigrateToGlobalIssuerSessionToken
+		}
+	}
+	v := &adminremotesessions.MigrateToGlobalIssuerPayload{
+		SourceID: body.SourceID,
+		TargetID: body.TargetID,
+	}
 	v.SessionToken = sessionToken
 
 	return v, nil

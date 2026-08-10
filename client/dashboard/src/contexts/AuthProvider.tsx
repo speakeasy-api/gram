@@ -9,8 +9,8 @@ import {
   SidebarHeader,
   SidebarInset,
   SidebarProvider,
-} from "@/components/ui/sidebar";
-import { Skeleton } from "@/components/ui/skeleton";
+} from "@/components/ui/Sidebar";
+import { Skeleton } from "@/components/ui/Skeleton";
 import BookDemo from "@/pages/demo/BookDemo";
 import SwitchOrg from "@/pages/demo/SwitchOrg";
 import { useQueryClient } from "@tanstack/react-query";
@@ -25,6 +25,7 @@ import {
   useSearchParams,
 } from "react-router";
 import { orgRoutePaths } from "@/routes";
+import { safeRedirectPath, UNAUTHENTICATED_PATHS } from "@/lib/session-expired";
 import { useSlugs } from "./Sdk";
 import {
   useCaptureUserAuthorizationEvent,
@@ -46,22 +47,14 @@ import type { ProjectEntry } from "@gram/client/models/components/projectentry.j
 
 const PREFERRED_PROJECT_KEY = "preferredProject";
 
-const UNAUTHENTICATED_PATHS = [
-  "/login",
-  "/register",
-  "/invite",
-  "/book-demo",
-  "/shadow-mcp/request",
-  "/risk-policy-bypass/request",
-  "/blocks",
-];
-
 const SLUG_EXEMPT_PATHS = [
   "/switch-org",
+  "/explore-demo",
   "/shadow-mcp/request",
   "/risk-policy-bypass/request",
   "/risk-policy-challenge/acknowledge",
   "/blocks",
+  "/shared",
 ];
 
 export const AuthProvider = ({
@@ -99,12 +92,14 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     // Don't show the authenticated app skeleton on routes that always redirect
     // (root "/" and unauthenticated pages like /login). This avoids a jarring
     // skeleton flash for logged-out users before the redirect to /login fires.
+    // A minimal centered pending state (not a blank viewport) covers the
+    // seconds the session check can take before login paints.
     if (
       location.pathname === "/" ||
       UNAUTHENTICATED_PATHS.some((p) => location.pathname.startsWith(p)) ||
       location.pathname.endsWith("/setup")
     ) {
-      return null;
+      return <AuthPendingScreen />;
     }
     return <AppLoadingShell />;
   }
@@ -119,7 +114,16 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
 
   // Show book demo page if organization is not whitelisted
   // Check this before the no-org fallback so non-whitelisted orgs are blocked before reaching the normal app flow
-  if (session.activeOrganizationId && !session.whitelisted) {
+  // /explore-demo stays reachable: it's the gate page's own escape hatch into
+  // the shared demo org (which is whitelisted). Exact match only — a prefix
+  // match would let deeper paths (e.g. /explore-demo/projects/x) through the
+  // gate.
+  if (
+    session.activeOrganizationId &&
+    !session.whitelisted &&
+    location.pathname !== "/explore-demo" &&
+    location.pathname !== "/explore-demo/"
+  ) {
     if (session.organizations.length > 1) {
       return <SwitchOrg gate />;
     }
@@ -166,8 +170,10 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     return <Navigate to={newPath + location.search + location.hash} replace />;
   }
 
-  // Handle initial navigation
-  const redirectParam = searchParams.get("redirect");
+  // Handle initial navigation. The param is attacker-controllable, so only
+  // same-origin paths are honored — a protocol-relative value would send the
+  // freshly authenticated user to a foreign origin.
+  const redirectParam = safeRedirectPath(searchParams.get("redirect"));
   if (redirectParam) {
     return <Navigate to={redirectParam} replace />;
   } else if (isSlugExempt) {
@@ -283,6 +289,18 @@ export const ProjectProvider = ({
     <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>
   );
 };
+
+/**
+ * Minimal centered pending state shown while the session check resolves on
+ * routes that always redirect (root "/", /login, setup). Mirrors the
+ * thin-serif treatment CliCallback uses; the copy stays a neutral "Loading…"
+ * because on /login itself no redirect is coming.
+ */
+const AuthPendingScreen = () => (
+  <div className="flex h-screen items-center justify-center">
+    <h1 className="text-display-sm font-thin">Loading…</h1>
+  </div>
+);
 
 /**
  * Lightweight shell that mirrors the real AppLayout structure,

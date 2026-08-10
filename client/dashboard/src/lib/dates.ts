@@ -29,6 +29,23 @@ export const HumanizeDateTime = React.memo(
   },
 );
 
+const MINUTE = 60_000;
+
+// Compact "5m ago" / "3h ago" / "2d ago" label for sync recency columns.
+// Floors at every unit so a 90-minute-old sync reads "1h ago", not "2h ago" —
+// recency labels must never claim more elapsed time than actually passed.
+export function formatRelativeTime(date: Date | null): string | null {
+  if (!date) return null;
+  const diffMs = Date.now() - date.getTime();
+  const mins = Math.max(0, Math.floor(diffMs / MINUTE));
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
 export const dateTimeFormatters = {
   humanize: function humanize(
     date: Date,

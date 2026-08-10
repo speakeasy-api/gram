@@ -1,5 +1,5 @@
 import { getLogger, type Logger } from "@logtape/logtape";
-import archiver from "archiver";
+import { ZipArchive } from "archiver";
 import esbuild from "esbuild";
 import { existsSync } from "node:fs";
 import { mkdir, open, readFile, stat, writeFile } from "node:fs/promises";
@@ -153,14 +153,14 @@ async function bundleFunction(
   );
 }
 
-async function createZipArchive(
+export async function createZipArchive(
   logger: Logger,
   artifacts: Artifacts,
 ): Promise<void> {
   const { zipFilename, funcFilename, manifestFilename } = artifacts;
   logger.info(`Creating ZIP archive of function in ${zipFilename}`);
 
-  const archive = archiver("zip", { zlib: { level: 9 } });
+  const archive = new ZipArchive({ zlib: { level: 9 } });
   const { promise, resolve: res, reject: rej } = Promise.withResolvers<void>();
   archive.on("error", rej);
   archive.on("close", res);

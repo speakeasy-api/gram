@@ -74,7 +74,7 @@ func newTUMTestService(t *testing.T, orgID string) (*Service, *pgxpool.Pool, dri
 	require.NoError(t, err)
 	projectID := project.ID
 
-	authzEngine := authz.NewEngine(logger, db, chConn, rbacDisabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, db, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	svc := &Service{
 		tracer:        tp.Tracer("test"),
@@ -169,7 +169,18 @@ func insertRetainedGramAggregateRow(t *testing.T, conn driver.Conn, projectID st
 	t.Helper()
 
 	err := conn.Exec(t.Context(), `
-		INSERT INTO attribute_metrics_summaries
+		INSERT INTO attribute_metrics_summaries (
+			gram_project_id, time_bucket,
+			department_name, job_title, employee_type, division_name, cost_center_name,
+			user_email, model, hook_source, roles, groups,
+			total_chats, total_input_tokens, total_output_tokens, total_tokens,
+			cache_read_input_tokens, cache_creation_input_tokens, total_cost,
+			total_tool_calls, unique_tool_calls,
+			account_type, provider, billing_mode,
+			query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name,
+			generation, is_active, hook_hostname,
+			total_work_units, scored_cost, scored_tokens
+		)
 		SELECT
 			toUUID(?) AS gram_project_id,
 			toStartOfHour(fromUnixTimestamp64Nano(?)) AS time_bucket,
@@ -189,7 +200,11 @@ func insertRetainedGramAggregateRow(t *testing.T, conn driver.Conn, projectID st
 			'' AS account_type, '' AS provider, '' AS billing_mode,
 			'' AS query_source, '' AS skill_name, '' AS agent_name,
 			'' AS mcp_server_name, '' AS mcp_tool_name,
-			toUInt8(0) AS generation, toUInt8(1) AS is_active
+			toUInt8(0) AS generation, toUInt8(1) AS is_active,
+			'' AS hook_hostname,
+			sumIfState(toFloat64(0), toUInt8(0)) AS total_work_units,
+			sumIfState(toFloat64(0), toUInt8(0)) AS scored_cost,
+			sumIfState(toInt64(0), toUInt8(0)) AS scored_tokens
 	`, projectID, timestamp.UnixNano(), hookSource, tokens, tokens)
 	require.NoError(t, err)
 }
@@ -205,7 +220,18 @@ func insertObservedClaudeAggregateRow(t *testing.T, conn driver.Conn, projectID 
 	t.Helper()
 
 	err := conn.Exec(t.Context(), `
-		INSERT INTO attribute_metrics_summaries
+		INSERT INTO attribute_metrics_summaries (
+			gram_project_id, time_bucket,
+			department_name, job_title, employee_type, division_name, cost_center_name,
+			user_email, model, hook_source, roles, groups,
+			total_chats, total_input_tokens, total_output_tokens, total_tokens,
+			cache_read_input_tokens, cache_creation_input_tokens, total_cost,
+			total_tool_calls, unique_tool_calls,
+			account_type, provider, billing_mode,
+			query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name,
+			generation, is_active, hook_hostname,
+			total_work_units, scored_cost, scored_tokens
+		)
 		SELECT
 			toUUID(?) AS gram_project_id,
 			toStartOfHour(fromUnixTimestamp64Nano(?)) AS time_bucket,
@@ -225,7 +251,11 @@ func insertObservedClaudeAggregateRow(t *testing.T, conn driver.Conn, projectID 
 			'' AS account_type, '' AS provider, '' AS billing_mode,
 			'' AS query_source, '' AS skill_name, '' AS agent_name,
 			'' AS mcp_server_name, '' AS mcp_tool_name,
-			toUInt8(0) AS generation, toUInt8(1) AS is_active
+			toUInt8(0) AS generation, toUInt8(1) AS is_active,
+			'' AS hook_hostname,
+			sumIfState(toFloat64(0), toUInt8(0)) AS total_work_units,
+			sumIfState(toFloat64(0), toUInt8(0)) AS scored_cost,
+			sumIfState(toInt64(0), toUInt8(0)) AS scored_tokens
 	`, projectID, timestamp.UnixNano(), tokens, tokens)
 	require.NoError(t, err)
 }
@@ -277,6 +307,60 @@ func sumTumBuckets(buckets []telemetryrepo.TumDayBucket) int64 {
 		total += b.Tokens
 	}
 	return total
+}
+
+func TestGetTokensUnderManagementQuery_CountsClaudeChatAnalyticsUsage(t *testing.T) {
+	t.Parallel()
+
+	_, _, chConn, projectID := newTUMTestService(t, "org-tum-claude-chat-analytics")
+
+	now := attributeMetricsPostCutoff
+	dayStart := now.Truncate(24 * time.Hour)
+	windowStart := dayStart.Add(-2 * 24 * time.Hour)
+	windowEnd := dayStart.Add(24 * time.Hour)
+
+	// A Claude Chat (web/desktop) usage row polled from the Anthropic Admin
+	// Analytics API — sessionless usage (no conversation id) carrying
+	// gen_ai.usage.* token fields, the shape emitted by
+	// aiintegrations.AnalyticsPollService. TUM counts input + output + cache
+	// writes and excludes cache reads.
+	insertTelemetryRow(t, chConn, projectID.String(), now, "claude_chat:usage:metrics", map[string]any{
+		"gen_ai.usage.input_tokens":                100,
+		"gen_ai.usage.output_tokens":               50,
+		"gen_ai.usage.cache_read.input_tokens":     100000,
+		"gen_ai.usage.cache_creation.input_tokens": 25,
+		"gen_ai.response.model":                    "claude-opus-4-8",
+		"gram.hook.source":                         "claude-chat",
+	})
+
+	// The matching spend arrives as a separate cost row: admitted by the MV
+	// (its cost sums into total_cost) but contributing zero tokens to TUM.
+	insertTelemetryRow(t, chConn, projectID.String(), now, "claude_chat:cost:metrics", map[string]any{
+		"gen_ai.usage.cost":     1.5,
+		"gen_ai.response.model": "claude-opus-4-8",
+		"gram.hook.source":      "claude-chat",
+	})
+
+	// claude-code:usage metric rows stay excluded from the MV — they
+	// duplicate the OTEL api_request stream.
+	insertTelemetryRow(t, chConn, projectID.String(), now, "claude-code:usage:metrics", map[string]any{
+		"gen_ai.usage.input_tokens": 9000,
+		"gen_ai.usage.total_tokens": 9000,
+		"gram.hook.source":          "claude-code",
+	})
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		res, err := telemetryrepo.New(chConn).GetTokensUnderManagementByDay(t.Context(), telemetryrepo.GetTokensUnderManagementParams{
+			ProjectIDs:          []string{projectID.String()},
+			StartUnixNano:       windowStart.UnixNano(),
+			EndUnixNano:         windowEnd.UnixNano(),
+			ExcludedHookSources: nil,
+		})
+		if !assert.NoError(c, err) {
+			return
+		}
+		assert.Equal(c, int64(175), sumTumBuckets(res), "claude_chat usage counts input + output + cache writes; cost rows add no tokens; claude-code:usage rows stay excluded")
+	}, 10*time.Second, 200*time.Millisecond)
 }
 
 func TestGetTokensUnderManagementQuery_DailyBreakdown(t *testing.T) {

@@ -163,7 +163,7 @@ func TestListPluginSkillsForProjectResolvesContent(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	rows, err := pluginsrepo.New(ti.conn).ListPluginSkillsForProject(ctx, projectID)
+	rows, err := pluginsrepo.New(ti.conn).ListPluginSkillsForProject(ctx, pluginsrepo.ListPluginSkillsForProjectParams{ProjectID: projectID, PluginIds: nil})
 	require.NoError(t, err)
 	require.Len(t, rows, 2)
 	require.Equal(t, "pinned", rows[0].SkillName)

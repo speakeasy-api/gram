@@ -48,7 +48,7 @@ export function SortHeader({
       type="button"
       onClick={onClick}
       className={cn(
-        "group hover:text-foreground inline-flex items-center gap-1 whitespace-nowrap transition-colors",
+        "group hover:text-foreground inline-flex items-center gap-1 whitespace-nowrap uppercase transition-colors",
         active && "text-foreground",
       )}
     >

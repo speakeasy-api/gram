@@ -81,7 +81,7 @@ func TestSlackHandleWebhookChallenge(t *testing.T) {
 	body := []byte(`{"type":"url_verification","challenge":"abc123"}`)
 	headers := signedSlackHeaders(t, body, "secret")
 
-	err = definition.AuthenticateWebhook(body, headers, map[string]string{
+	err = definition.AuthenticateWebhook(t.Context(), body, headers, map[string]string{
 		"SLACK_SIGNING_SECRET": "secret",
 	}, config)
 	require.NoError(t, err)
@@ -256,7 +256,7 @@ func TestSlackHandleWebhookBlockActionsRoutesToThread(t *testing.T) {
 	headers := signedSlackHeaders(t, body, "secret")
 	headers.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	require.NoError(t, definition.AuthenticateWebhook(body, headers, map[string]string{
+	require.NoError(t, definition.AuthenticateWebhook(t.Context(), body, headers, map[string]string{
 		"SLACK_SIGNING_SECRET": "secret",
 	}, config))
 
@@ -362,7 +362,7 @@ func TestSlackHandleWebhookEventTopLevelMessageKeysOnEventTs(t *testing.T) {
 	body := []byte(`{"type":"event_callback","team_id":"T1","event_id":"Ev1","event":{"type":"message","channel":"C1","user":"U1","text":"hello","ts":"1700000050.000900"}}`)
 	headers := signedSlackHeaders(t, body, "secret")
 
-	require.NoError(t, definition.AuthenticateWebhook(body, headers, map[string]string{
+	require.NoError(t, definition.AuthenticateWebhook(t.Context(), body, headers, map[string]string{
 		"SLACK_SIGNING_SECRET": "secret",
 	}, config))
 
@@ -485,7 +485,7 @@ func TestSlackSignatureRejectionOnBadSecret(t *testing.T) {
 	body := []byte(`{"type":"event_callback","event":{"type":"message","channel":"C1","user":"U1","ts":"1.0"}}`)
 	headers := signedSlackHeaders(t, body, "correct-secret")
 
-	err = definition.AuthenticateWebhook(body, headers, map[string]string{
+	err = definition.AuthenticateWebhook(t.Context(), body, headers, map[string]string{
 		"SLACK_SIGNING_SECRET": "wrong-secret",
 	}, config)
 	require.Error(t, err)

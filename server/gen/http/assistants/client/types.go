@@ -70,6 +70,8 @@ type SendMessageRequestBody struct {
 	// Stable key the client mints once per message so retries dedupe instead of
 	// enqueuing twice. A new key is generated server-side when omitted.
 	IdempotencyKey *string `form:"idempotency_key,omitempty" json:"idempotency_key,omitempty" xml:"idempotency_key,omitempty"`
+	// Project skills to make available for this turn.
+	SkillIds []string `form:"skill_ids,omitempty" json:"skill_ids,omitempty" xml:"skill_ids,omitempty"`
 }
 
 // ListAssistantsResponseBody is the type of the "assistants" service
@@ -1910,6 +1912,12 @@ func NewSendMessageRequestBody(p *assistants.SendMessagePayload) *SendMessageReq
 		Message:        p.Message,
 		ChatID:         p.ChatID,
 		IdempotencyKey: p.IdempotencyKey,
+	}
+	if p.SkillIds != nil {
+		body.SkillIds = make([]string, len(p.SkillIds))
+		for i, val := range p.SkillIds {
+			body.SkillIds[i] = val
+		}
 	}
 	return body
 }

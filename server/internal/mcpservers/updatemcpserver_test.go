@@ -448,6 +448,127 @@ func TestUpdateMcpServer_EnableAttachesToDefaultPlugin(t *testing.T) {
 	require.Equal(t, beforeCount+1, afterCount)
 }
 
+func TestUpdateMcpServer_RenameUpdatesPublishedPluginName(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	pluginsQueries := pluginsrepo.New(ti.conn)
+	_, err := pluginsQueries.CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	created, remoteServerID := createDisabledRemoteServer(t, ctx, ti, *authCtx.ProjectID, "Original Server Name")
+	seedEndpointFor(t, ctx, ti.conn, *authCtx.ProjectID, created.ID)
+
+	_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		ID:                created.ID,
+		Name:              nil,
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &remoteServerID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("public"),
+	})
+	require.NoError(t, err)
+
+	publishRows, err := pluginsQueries.ListPluginsWithMcpServersForProject(ctx, pluginsrepo.ListPluginsWithMcpServersForProjectParams{ProjectID: *authCtx.ProjectID, PluginIds: nil})
+	require.NoError(t, err)
+	require.Len(t, publishRows, 1)
+	require.Equal(t, "Original Server Name", publishRows[0].ServerDisplayName)
+
+	renamed := "Renamed Server"
+	_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		ID:                created.ID,
+		Name:              &renamed,
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &remoteServerID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("public"),
+	})
+	require.NoError(t, err)
+
+	publishRows, err = pluginsQueries.ListPluginsWithMcpServersForProject(ctx, pluginsrepo.ListPluginsWithMcpServersForProjectParams{ProjectID: *authCtx.ProjectID, PluginIds: nil})
+	require.NoError(t, err)
+	require.Len(t, publishRows, 1)
+	require.Equal(t, renamed, publishRows[0].ServerDisplayName)
+}
+
+func TestUpdateMcpServer_RenamePreservesCustomizedPluginName(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	pluginsQueries := pluginsrepo.New(ti.conn)
+	defaultPlugin, err := pluginsQueries.CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	created, remoteServerID := createDisabledRemoteServer(t, ctx, ti, *authCtx.ProjectID, "Original Server Name")
+	seedEndpointFor(t, ctx, ti.conn, *authCtx.ProjectID, created.ID)
+
+	_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		ID:                created.ID,
+		Name:              nil,
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &remoteServerID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("public"),
+	})
+	require.NoError(t, err)
+
+	pluginServers, err := pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
+	require.NoError(t, err)
+	require.Len(t, pluginServers, 1)
+
+	const customName = "Custom Plugin Name"
+	_, err = pluginsQueries.UpdatePluginServer(ctx, pluginsrepo.UpdatePluginServerParams{
+		DisplayName: customName,
+		Policy:      pluginServers[0].Policy,
+		SortOrder:   pluginServers[0].SortOrder,
+		ID:          pluginServers[0].ID,
+		PluginID:    defaultPlugin.ID,
+	})
+	require.NoError(t, err)
+
+	renamed := "Renamed Server"
+	_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		ID:                created.ID,
+		Name:              &renamed,
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &remoteServerID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("public"),
+	})
+	require.NoError(t, err)
+
+	publishRows, err := pluginsQueries.ListPluginsWithMcpServersForProject(ctx, pluginsrepo.ListPluginsWithMcpServersForProjectParams{ProjectID: *authCtx.ProjectID, PluginIds: nil})
+	require.NoError(t, err)
+	require.Len(t, publishRows, 1)
+	require.Equal(t, customName, publishRows[0].ServerDisplayName)
+}
+
 func TestUpdateMcpServer_EnableWithoutEndpointDoesNotAttach(t *testing.T) {
 	t.Parallel()
 
@@ -630,4 +751,111 @@ func TestUpdateMcpServer_AlreadyEnabledUpdateDoesNotAttach(t *testing.T) {
 	servers, err := pluginsQueries.ListPluginServers(ctx, defaultPlugin.ID)
 	require.NoError(t, err)
 	require.Empty(t, servers)
+}
+
+func TestUpdateMcpServer_TunneledMcpPublicAllowedWithConsent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	tunneledServerID := seedTunneledMcpServer(t, ctx, ti.conn, *authCtx.ProjectID)
+	tunneledServerIDStr := tunneledServerID.String()
+
+	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		Name:                "private tunneled mcp server pending consent",
+		EnvironmentID:       nil,
+		TunneledMcpServerID: &tunneledServerIDStr,
+		ToolsetID:           nil,
+		Visibility:          types.McpServerVisibility("private"),
+	})
+	require.NoError(t, err)
+
+	enableTunneledPublicConsent(t, ctx, ti.conn, *authCtx.ProjectID, tunneledServerID)
+
+	updated, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		ID:                  created.ID,
+		Name:                nil,
+		EnvironmentID:       nil,
+		TunneledMcpServerID: &tunneledServerIDStr,
+		ToolsetID:           nil,
+		Visibility:          types.McpServerVisibility("public"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, types.McpServerVisibility("public"), updated.Visibility)
+}
+
+func TestUpdateMcpServer_AttachingUnproxiedBackendRejectsNonStaff(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	created, _ := createDisabledRemoteServer(t, ctx, ti, *authCtx.ProjectID, "test mcp server")
+	unproxiedServerID := seedUnproxiedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+
+	_, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		ID:                   created.ID,
+		EnvironmentID:        nil,
+		UnproxiedMcpServerID: &unproxiedServerID,
+		ToolsetID:            nil,
+		Visibility:           types.McpServerVisibility("private"),
+	})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+func TestUpdateMcpServer_AlreadyUnproxiedAllowsNonStaffRename(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	unproxiedServerID := seedUnproxiedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+
+	staffCtx := withStaffEmail(t, ctx)
+	created, err := ti.service.CreateMcpServer(staffCtx, &gen.CreateMcpServerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Name:                 "vendor server",
+		EnvironmentID:        nil,
+		UnproxiedMcpServerID: &unproxiedServerID,
+		ToolsetID:            nil,
+		Visibility:           types.McpServerVisibility("private"),
+	})
+	require.NoError(t, err)
+
+	// A non-staff project member with write access can still manage a server
+	// staff already attached to an unproxied backend, as long as the backend
+	// reference itself isn't changing.
+	newName := "renamed vendor server"
+	updated, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		ID:                   created.ID,
+		Name:                 &newName,
+		EnvironmentID:        nil,
+		UnproxiedMcpServerID: &unproxiedServerID,
+		ToolsetID:            nil,
+		Visibility:           types.McpServerVisibility("private"),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.Name)
+	require.Equal(t, newName, *updated.Name)
 }

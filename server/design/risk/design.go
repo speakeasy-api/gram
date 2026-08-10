@@ -35,6 +35,7 @@ var _ = Service("risk", func() {
 			})
 			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline.")
 			Attribute("approved_email_domains", ArrayOf(String), "For the account_identity source: corporate email domains considered approved. Sessions whose AI-account email domain is not listed are flagged. Empty/omitted leaves the domain rule inert.")
+			Attribute("detection_scopes", ArrayOf(shared.RiskDetectionScope), "Per-category detection scopes. Each specified category replaces its centrally recommended scope; a scope with both predicates empty scans every message surface. Empty/omitted = all recommendations apply unchanged.")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding.")
 			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. When empty or omitted, the policy scans all supported types.")
@@ -50,6 +51,15 @@ var _ = Service("risk", func() {
 				Default("everyone")
 			})
 			Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs this policy applies to. For audience_type=everyone, the server stores user:all.")
+			Attribute("shadow_mcp_allowed_urls", ArrayOf(String), "Complete desired canonical URL allow set for this policy. Omit or send empty to create no URL-specific allow decisions.", func() {
+				Meta("struct:tag:json", "shadow_mcp_allowed_urls")
+			})
+			Attribute("shadow_mcp_disposition", String, "Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.", func() {
+				shared.RiskPolicyShadowMCPDispositionEnum()
+			})
+			Attribute("shadow_mcp_blocked_urls", ArrayOf(String), "For allow_all policies: complete desired canonical URL block set. Omit or send empty to block nothing. Only valid when shadow_mcp_disposition is allow_all.", func() {
+				Meta("struct:tag:json", "shadow_mcp_blocked_urls")
+			})
 			Attribute("auto_name", Boolean, "Whether the policy name should be auto-generated.")
 			Attribute("user_message", String, "Optional message shown to end users when this policy blocks an action or surfaces a flagged finding.")
 			Attribute("prompt", String, "For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Required when policy_type is prompt_based.")
@@ -177,6 +187,7 @@ var _ = Service("risk", func() {
 			})
 			Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids to enable in addition to the heuristic baseline.")
 			Attribute("approved_email_domains", ArrayOf(String), "For the account_identity source: corporate email domains considered approved. Omit to preserve the current list; send an empty array to clear it.")
+			Attribute("detection_scopes", ArrayOf(shared.RiskDetectionScope), "Per-category detection scopes. Each specified category replaces its centrally recommended scope; a scope with both predicates empty scans every message surface. Omit to preserve the current value; send empty to clear.")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.")
 			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. Omit to preserve the current selection; send an empty array to apply to all types.")
@@ -190,6 +201,15 @@ var _ = Service("risk", func() {
 				shared.RiskPolicyAudienceTypeEnum()
 			})
 			Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs this policy applies to. Omit to preserve the current target principals.")
+			Attribute("shadow_mcp_allowed_urls", ArrayOf(String), "Complete desired canonical URL allow set for this policy. Omit to preserve; send empty to clear.", func() {
+				Meta("struct:tag:json", "shadow_mcp_allowed_urls")
+			})
+			Attribute("shadow_mcp_disposition", String, "The policy's shadow MCP disposition. Immutable: omit, or send the current value unchanged; any other value is rejected. Switching posture requires delete + recreate.", func() {
+				shared.RiskPolicyShadowMCPDispositionEnum()
+			})
+			Attribute("shadow_mcp_blocked_urls", ArrayOf(String), "For allow_all policies: complete desired canonical URL block set. Omit to preserve; send empty to clear.", func() {
+				Meta("struct:tag:json", "shadow_mcp_blocked_urls")
+			})
 			Attribute("auto_name", Boolean, "Whether the policy name should be auto-generated.")
 			Attribute("user_message", String, "Optional message shown to end users when this policy blocks an action or surfaces a flagged finding. Send an empty string to clear.")
 			Attribute("prompt", String, "For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Omit to preserve the current value.")
@@ -431,6 +451,95 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-group", "risk.results")
 		Meta("openapi:extension:x-speakeasy-name-override", "byChat")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListResultsByChat"}`)
+	})
+
+	Method("markRiskResultsFalsePositive", func() {
+		Description("Mark one or more risk results as manually-reviewed false positives. Distinct from exclusions: this suppresses the specific results picked, not future findings matching a rule.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("result_ids", ArrayOf(String), "IDs of the risk results to mark as false positive.", func() {
+				MinLength(1)
+				MaxLength(500)
+			})
+			Attribute("reason", String, "Optional free-text reason for the dismissal.")
+			Required("result_ids")
+		})
+
+		HTTP(func() {
+			POST("/rpc/risk.markResultsFalsePositive")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "markRiskResultsFalsePositive")
+		Meta("openapi:extension:x-speakeasy-group", "risk.results")
+		Meta("openapi:extension:x-speakeasy-name-override", "markFalsePositive")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskMarkResultsFalsePositive", "type": "mutation"}`)
+	})
+
+	Method("unmarkRiskResultsFalsePositive", func() {
+		Description("Undo a false-positive dismissal for one or more risk results.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("result_ids", ArrayOf(String), "IDs of the risk results to restore.", func() {
+				MinLength(1)
+				MaxLength(500)
+			})
+			Required("result_ids")
+		})
+
+		HTTP(func() {
+			POST("/rpc/risk.unmarkResultsFalsePositive")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "unmarkRiskResultsFalsePositive")
+		Meta("openapi:extension:x-speakeasy-group", "risk.results")
+		Meta("openapi:extension:x-speakeasy-name-override", "unmarkFalsePositive")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskUnmarkResultsFalsePositive", "type": "mutation"}`)
+	})
+
+	Method("listDismissedRiskResults", func() {
+		Description("List risk results manually marked as false positive for the current project (the Dismissed tab). Kept separate from listRiskResults, which never returns dismissed results.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("cursor", String, "Cursor to fetch the next page of results.")
+			Attribute("limit", Int, "Maximum number of results to return per page.", func() {
+				Minimum(1)
+				Maximum(200)
+			})
+		})
+
+		Result(ListRiskResultsResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.listDismissedResults")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("cursor")
+			Param("limit")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listDismissedRiskResults")
+		Meta("openapi:extension:x-speakeasy-group", "risk.results")
+		Meta("openapi:extension:x-speakeasy-name-override", "listDismissed")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListDismissedResults", "type": "query"}`)
 	})
 
 	Method("getRiskOverview", func() {
@@ -1280,18 +1389,20 @@ var _ = Service("risk", func() {
 	})
 
 	Method("suggestExclusion", func() {
-		Description("Suggest a risk exclusion (match_type, match_value, filters) from a natural-language prompt describing findings an operator wants to stop flagging. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create exclusion form.")
+		Description("Suggest a risk exclusion (match_type, match_value, filters) from a natural-language prompt, a batch of example findings, or both. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create exclusion form. At least one of prompt or finding_ids is required.")
 
 		Payload(func() {
 			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
-			Attribute("prompt", String, "Natural-language description of the findings to stop flagging.", func() {
+			Attribute("prompt", String, "Natural-language description of the findings to stop flagging. Optional when finding_ids is provided.", func() {
 				MinLength(3)
 				MaxLength(500)
 			})
 			Attribute("known_rule_ids", ArrayOf(String), "Built-in and custom rule ids the suggestion may reference in rule_id filters.")
-			Required("prompt")
+			Attribute("finding_ids", ArrayOf(String), "IDs of example findings (e.g. a multiselect batch) to derive a suggestion from. Looked up server-side rather than trusted from the client, but only rule_id/source cross into the suggestion — a finding's matched value (a detected secret/PII value the caller hasn't reviewed) is never read for this, so batch-derived suggestions are rule_id/source scoped rather than exact-value. Optional when prompt is provided.", func() {
+				MaxLength(50)
+			})
 		})
 
 		Result(SuggestExclusionResult)
@@ -1360,7 +1471,7 @@ var _ = Service("risk", func() {
 				MaxLength(10000)
 			})
 			Attribute("model_config", shared.RiskPolicyModelConfig, "Optional per-policy LLM-judge model configuration. Omit for the default judge model.")
-			Attribute("message_types", ArrayOf(String), "Message types to judge (user_message, assistant_message, tool_request, tool_response), matching a policy's message_types. When empty or omitted, judges all supported types.")
+			Attribute("message_types", ArrayOf(String), "Message types to judge (user_message, assistant_message, tool_request, tool_response, prompt_attachment), matching a policy's message_types. When empty or omitted, judges all supported types.")
 			Attribute("scope_include", String, "CEL scope predicate: the replay judges a message only when this boolean expression is true (in addition to message_types). Omit/empty means all messages are in scope.")
 			Attribute("scope_exempt", String, "CEL exemption predicate: the replay skips a message when this boolean expression is true. Omit/empty means no inline exemption.")
 			Required("chat_id", "prompt")
@@ -1495,7 +1606,7 @@ var PromptGuardrailMessageVerdict = Type("PromptGuardrailMessageVerdict", func()
 		Format(FormatUUID)
 	})
 	Attribute("seq", Int64, "Message sequence within the chat generation, ascending.")
-	Attribute("message_type", String, "The judged message type (user_message, assistant_message, tool_request, tool_response).")
+	Attribute("message_type", String, "The judged message type (user_message, assistant_message, tool_request, tool_response, prompt_attachment).")
 	Attribute("tool_name", String, "Tool name for a single-call tool_request message; empty otherwise.")
 	Attribute("matched", Boolean, "True when the guardrail flagged this message.")
 	Attribute("confidence", Float64, "Judge confidence in [0,1]; 0 when not matched.")
@@ -1664,16 +1775,21 @@ var RiskCategoryDefinition = Type("RiskCategoryDefinition", func() {
 	Attribute("source", String, "When non-empty, findings whose source equals this value belong to this category.")
 	Attribute("rule_ids", ArrayOf(String), "When non-empty, findings whose rule_id is in this exact list belong to this category. Checked before rule_id_prefix.")
 	Attribute("rule_id_prefix", String, "When non-empty, findings whose rule_id starts with this prefix belong to this category. The catch-all for a family (e.g. 'pii.').")
+	Attribute("recommended_scope_include", String, "Centrally recommended CEL scope predicate for this category; empty = no include restriction.")
+	Attribute("recommended_scope_exempt", String, "Centrally recommended CEL exemption predicate; empty = no exemption.")
+	Attribute("recommended_scope_rationale", String, "User-facing explanation of the recommended scope and the consequences of disabling it. Empty when the category has no recommendation.")
+	Attribute("recommended_scope_applicable", Boolean, "False when the category is session-scoped and message scoping does not apply (e.g. account_identity).")
 
-	Required("key", "label", "description", "icon", "source", "rule_ids", "rule_id_prefix")
+	Required("key", "label", "description", "icon", "source", "rule_ids", "rule_id_prefix", "recommended_scope_include", "recommended_scope_exempt", "recommended_scope_rationale", "recommended_scope_applicable")
 })
 
 var RiskCategoriesResult = Type("RiskCategoriesResult", func() {
 	Description("Canonical risk category definitions used to classify findings, in classification-priority order. Consumers should iterate in order and pick the first match.")
 
 	Attribute("categories", ArrayOf(RiskCategoryDefinition), "Categories in classification-priority order. The last entry is the 'custom' fallback for findings that match none of the others.")
+	Attribute("recommended_scopes_version", Int64, "Version of the recommended-scope registry; bumps when any recommendation changes.")
 
-	Required("categories")
+	Required("categories", "recommended_scopes_version")
 })
 
 var ExprCompileResult = Type("ExprCompileResult", func() {

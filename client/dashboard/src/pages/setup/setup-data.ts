@@ -1,3 +1,4 @@
+import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
 import type { AgentPlatform } from "./types";
 
 export const AGENT_PLATFORMS: AgentPlatform[] = [
@@ -124,8 +125,7 @@ export const AGENT_PLATFORMS: AgentPlatform[] = [
       },
       {
         title: "Mark the observability plugin as Required",
-        description:
-          "After the repo syncs, your plugins appear in a table on Claude.ai. Find the observability plugin row (slug below), open its Default access dropdown, and set it to Required. That pre-installs it for every org member and prevents them from disabling it — so tool events flow to Speakeasy without per-user opt-in.",
+        description: `After the repo syncs, your plugins appear in a table on Claude.ai. Find the observability plugin row (slug below), open its Default access dropdown, and set it to Required. That pre-installs it for every org member and prevents them from disabling it — so tool events flow to Speakeasy without per-user opt-in. ${PERSONAL_ACCOUNT_GOVERNANCE_NOTE}`,
         screenshot: {
           src: "/setup/claude-cowork-set-required.png",
           alt: "Claude.ai plugin access dropdown showing four options (Available to install, Installed by default, Not available, Required) with Required selected",
@@ -140,42 +140,35 @@ export const AGENT_PLATFORMS: AgentPlatform[] = [
   {
     id: "codex",
     name: "OpenAI Codex",
-    description: "OpenAI CLI agent",
+    description: "Codex CLI & Codex mode in the ChatGPT app",
     icon: "codex",
     connected: false,
-    available: false,
     setupSteps: [
       {
-        title: "Register the Speakeasy plugin marketplace",
+        title: "Deploy the Speakeasy device agent via MDM",
         description:
-          "Register your org's private marketplace with Codex. The repo URL points at the GitHub repository Speakeasy just published for you.",
-        code: `codex plugin marketplace add {{GRAM_MARKETPLACE_URL}}`,
-        language: "bash",
+          "Codex is instrumented centrally by the Speakeasy device agent — this covers the Codex CLI and Codex mode in the ChatGPT desktop app, which OpenAI merged the standalone Codex app into. Chat and Work modes in that same app are not covered here; they are captured through the OpenAI Compliance API integration instead. Roll the agent out through your MDM (Jamf, Iru (formerly Kandji), Intune, ...) using the Fleet (MDM) path, then select Codex as a managed platform so its configuration is applied to every developer with no per-user setup.",
         helpLink: {
-          url: "https://developers.openai.com/codex/plugins/build",
-          linkLabel: "Codex Plugin docs",
-          sentence: "See {LINK} for how marketplaces work in Codex",
+          url: "{{GRAM_DEVICE_AGENT_URL}}",
+          linkLabel: "device agent setup",
+          sentence:
+            "Follow the Fleet (MDM) walkthrough on the {LINK} page, then hand the profile to your MDM admin.",
         },
       },
       {
-        title: "Enable hooks and the plugin in ~/.codex/config.toml",
+        title: "Forward Codex OpenTelemetry logs to Speakeasy",
         description:
-          "Hooks live behind a feature flag and the plugin must be explicitly enabled. Add the following to ~/.codex/config.toml — the plugin and marketplace names are filled in from your published repo.",
-        code: `features.hooks = true
-features.plugin_hooks = true
-
-[plugins."{{GRAM_CODEX_PLUGIN_NAME}}@{{GRAM_MARKETPLACE_NAME}}"]
-enabled = true`,
+          "Codex exports OpenTelemetry logs for every turn, tool call, and approval. Point its OTLP exporter at Speakeasy so Codex activity lands in your dashboard alongside your other agents. Add the block below to ~/.codex/config.toml, or push it fleet-wide from your MDM by dropping it in /etc/codex/managed_config.toml (com.openai.codex on macOS).",
+        code: `[otel]
+environment = "prod"
+exporter = { otlp-http = { endpoint = "https://app.getgram.ai/rpc/hooks.otel/v1/logs", protocol = "json", headers = { "Gram-Project" = "default", "Gram-Key" = "{{GRAM_API_KEY}}" } } }`,
         language: "toml",
-      },
-      {
-        title: "Approve hooks in Codex",
-        description:
-          "After restarting Codex, open Settings → Hooks and enable each hook listed under the observability plugin. Codex requires manual approval for each hook event before it will fire.",
+        requiresApiKey: true,
         helpLink: {
-          url: "https://developers.openai.com/codex/hooks",
-          linkLabel: "Codex Hooks docs",
-          sentence: "See {LINK} for details on hook approval",
+          url: "https://learn.chatgpt.com/docs/config-file/config-reference",
+          linkLabel: "Codex OTEL config reference",
+          sentence:
+            "See the {LINK} for every OpenTelemetry option and managed-config precedence.",
         },
       },
     ],
@@ -214,6 +207,31 @@ enabled = true`,
     ],
   },
   {
+    id: "opencode",
+    name: "opencode",
+    description: "Open-source terminal coding agent",
+    icon: "opencode",
+    connected: false,
+    setupSteps: [
+      {
+        title: "Install the speakeasy-hooks binary",
+        description:
+          "opencode has no plugin marketplace, so the observability plugin is rendered straight into your repo by the speakeasy-hooks CLI. Install the binary first.",
+        code: `curl -fsSL https://raw.githubusercontent.com/speakeasy-api/gram/main/hooks/install.sh | sh`,
+        language: "bash",
+      },
+      {
+        title: "Render the plugin into your repo",
+        description:
+          "Run this from the repo you use opencode in. It writes .opencode/plugin/agenthooks.ts and speakeasy.json, which map opencode's events to Speakeasy's dashboard.",
+        code: `GRAM_HOOKS_ORG_KEY="{{GRAM_API_KEY}}" \\
+speakeasy-hooks install --provider=opencode --dir=. --project=<your-project-slug>`,
+        language: "bash",
+        requiresApiKey: true,
+      },
+    ],
+  },
+  {
     id: "copilot",
     name: "GitHub Copilot",
     description: "Microsoft / GitHub AI pair programmer",
@@ -241,10 +259,19 @@ enabled = true`,
     setupSteps: [],
   },
   {
-    id: "bedrock",
-    name: "AWS Bedrock",
-    description: "Amazon foundation-model gateway",
-    icon: "bedrock",
+    id: "devin",
+    name: "Devin",
+    description: "Cognition's autonomous software engineer",
+    icon: "devin",
+    connected: false,
+    available: false,
+    setupSteps: [],
+  },
+  {
+    id: "mistral",
+    name: "Mistral",
+    description: "Mistral AI coding assistant",
+    icon: "mistral",
     connected: false,
     available: false,
     setupSteps: [],

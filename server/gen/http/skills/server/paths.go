@@ -17,14 +17,69 @@ func AddVersionSkillsPath() string {
 	return "/rpc/skills.addVersion"
 }
 
+// RestoreVersionSkillsPath returns the URL path to the skills service restoreVersion HTTP endpoint.
+func RestoreVersionSkillsPath() string {
+	return "/rpc/skills.restoreVersion"
+}
+
+// UpdateSkillsPath returns the URL path to the skills service update HTTP endpoint.
+func UpdateSkillsPath() string {
+	return "/rpc/skills.update"
+}
+
 // ListSkillsPath returns the URL path to the skills service list HTTP endpoint.
 func ListSkillsPath() string {
 	return "/rpc/skills.list"
 }
 
+// ListTagsSkillsPath returns the URL path to the skills service listTags HTTP endpoint.
+func ListTagsSkillsPath() string {
+	return "/rpc/skills.listTags"
+}
+
+// ListSuggestionsSkillsPath returns the URL path to the skills service listSuggestions HTTP endpoint.
+func ListSuggestionsSkillsPath() string {
+	return "/rpc/skills.listSuggestions"
+}
+
+// ListFeedbackSkillsPath returns the URL path to the skills service listFeedback HTTP endpoint.
+func ListFeedbackSkillsPath() string {
+	return "/rpc/skills.listFeedback"
+}
+
+// TriggerSuggestionSkillsPath returns the URL path to the skills service triggerSuggestion HTTP endpoint.
+func TriggerSuggestionSkillsPath() string {
+	return "/rpc/skills.triggerSuggestion"
+}
+
+// ApproveSuggestionSkillsPath returns the URL path to the skills service approveSuggestion HTTP endpoint.
+func ApproveSuggestionSkillsPath() string {
+	return "/rpc/skills.approveSuggestion"
+}
+
+// DismissSuggestionSkillsPath returns the URL path to the skills service dismissSuggestion HTTP endpoint.
+func DismissSuggestionSkillsPath() string {
+	return "/rpc/skills.dismissSuggestion"
+}
+
+// ListSuggestionFeedbackSkillsPath returns the URL path to the skills service listSuggestionFeedback HTTP endpoint.
+func ListSuggestionFeedbackSkillsPath() string {
+	return "/rpc/skills.listSuggestionFeedback"
+}
+
+// ApproveAllSuggestionsSkillsPath returns the URL path to the skills service approveAllSuggestions HTTP endpoint.
+func ApproveAllSuggestionsSkillsPath() string {
+	return "/rpc/skills.approveAllSuggestions"
+}
+
 // GetSkillsPath returns the URL path to the skills service get HTTP endpoint.
 func GetSkillsPath() string {
 	return "/rpc/skills.get"
+}
+
+// ListUnknownActivationsSkillsPath returns the URL path to the skills service listUnknownActivations HTTP endpoint.
+func ListUnknownActivationsSkillsPath() string {
+	return "/rpc/skills.listUnknownActivations"
 }
 
 // ListVersionsSkillsPath returns the URL path to the skills service listVersions HTTP endpoint.
@@ -45,6 +100,21 @@ func DistributeSkillsPath() string {
 // UndistributeSkillsPath returns the URL path to the skills service undistribute HTTP endpoint.
 func UndistributeSkillsPath() string {
 	return "/rpc/skills.undistribute"
+}
+
+// ShareSkillsPath returns the URL path to the skills service share HTTP endpoint.
+func ShareSkillsPath() string {
+	return "/rpc/skills.share"
+}
+
+// UnshareSkillsPath returns the URL path to the skills service unshare HTTP endpoint.
+func UnshareSkillsPath() string {
+	return "/rpc/skills.unshare"
+}
+
+// GetSharedSkillsPath returns the URL path to the skills service getShared HTTP endpoint.
+func GetSharedSkillsPath() string {
+	return "/rpc/skills.getShared"
 }
 
 // ListDistributionsSkillsPath returns the URL path to the skills service listDistributions HTTP endpoint.

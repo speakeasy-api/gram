@@ -1,4 +1,5 @@
 import type { ChatMessage } from "@gram/client/models/components/chatmessage.js";
+import type { ChatContentPart } from "@gram/client/models/components/chatcontentpart.js";
 import {
   getTraceEntryType,
   parseToolCalls,
@@ -50,7 +51,10 @@ export function argsToString(
   args: string | object | undefined,
 ): string | undefined {
   if (args === undefined) return undefined;
-  return typeof args === "string" ? args : JSON.stringify(args, null, 2);
+  if (typeof args === "string") {
+    return args.trim().length > 0 ? args : undefined;
+  }
+  return JSON.stringify(args, null, 2);
 }
 
 /** Case-insensitive, non-overlapping occurrences of `query` in `text`. The one
@@ -81,7 +85,16 @@ export interface MessageRow {
   id: string;
   entryType: MessageEntryType;
   message: ChatMessage;
+  attachments: PromptAttachment[];
   generation: number;
+}
+
+export interface PromptAttachment {
+  id: string;
+  content: string;
+  displayPath: string;
+  kind: string;
+  isRisk: boolean;
 }
 
 /** A tool invocation, pairing the assistant's tool_call with its tool result. */
@@ -95,6 +108,76 @@ export interface ToolRow {
 }
 
 export type TranscriptRow = MessageRow | ToolRow;
+
+function attachmentMetadata(part: ChatContentPart): {
+  displayPath?: string;
+  kind?: string;
+} {
+  const metadata = part.metadata;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return {};
+  }
+  const record = metadata as Record<string, unknown>;
+  return {
+    displayPath:
+      typeof record.display_path === "string" ? record.display_path : undefined,
+    kind: typeof record.kind === "string" ? record.kind : undefined,
+  };
+}
+
+function promptAttachmentFromContentPart(
+  part: ChatContentPart,
+): PromptAttachment {
+  const metadata = attachmentMetadata(part);
+  return {
+    id: part.id,
+    content: part.content,
+    displayPath: metadata.displayPath ?? "Attachment",
+    kind: metadata.kind ?? "attachment",
+    isRisk: part.isRisk,
+  };
+}
+
+function nearestUserMessage(
+  attachment: ChatContentPart,
+  users: ChatMessage[],
+): ChatMessage | undefined {
+  const attachmentTime = attachment.createdAt.getTime();
+  let nearest: ChatMessage | undefined;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  for (const user of users) {
+    const distance = Math.abs(
+      new Date(user.createdAt).getTime() - attachmentTime,
+    );
+    if (distance < nearestDistance) {
+      nearest = user;
+      nearestDistance = distance;
+    }
+  }
+  return nearest;
+}
+
+function groupPromptAttachments(
+  messages: ChatMessage[],
+  contentParts: ChatContentPart[],
+): Map<string, PromptAttachment[]> {
+  const users = messages.filter((m) => m.role === "user");
+  const userByID = new Map(users.map((user) => [user.id, user]));
+
+  const byUserMessageID = new Map<string, PromptAttachment[]>();
+  for (const attachment of contentParts.filter(
+    (part) => part.kind === "prompt_attachment",
+  )) {
+    const parent = attachment.parentChatMessageId
+      ? userByID.get(attachment.parentChatMessageId)
+      : nearestUserMessage(attachment, users);
+    if (!parent) continue;
+    const group = byUserMessageID.get(parent.id) ?? [];
+    group.push(promptAttachmentFromContentPart(attachment));
+    byUserMessageID.set(parent.id, group);
+  }
+  return byUserMessageID;
+}
 
 function hasTextContent(content: unknown): boolean {
   if (typeof content === "string") return content.trim().length > 0;
@@ -130,7 +213,14 @@ function hasNoVisibleText(content: unknown): boolean {
  * result, so the two render as a single elements `<ToolUI>` (request + output)
  * instead of two disconnected entries.
  */
-export function buildTranscript(messages: ChatMessage[]): TranscriptRow[] {
+export function buildTranscript(
+  messages: ChatMessage[],
+  contentParts: ChatContentPart[] = [],
+): TranscriptRow[] {
+  const attachmentsByUserMessageID = groupPromptAttachments(
+    messages,
+    contentParts,
+  );
   const resultByToolCallId = new Map<string, ChatMessage>();
   for (const m of messages) {
     if (m.role === "tool" && m.toolCallId) {
@@ -164,6 +254,7 @@ export function buildTranscript(messages: ChatMessage[]): TranscriptRow[] {
           id: `${m.id}:text`,
           entryType: "assistant",
           message: m,
+          attachments: [],
           generation: m.generation,
         });
       }
@@ -192,6 +283,7 @@ export function buildTranscript(messages: ChatMessage[]): TranscriptRow[] {
       id: m.id,
       entryType: entryType as MessageEntryType,
       message: m,
+      attachments: attachmentsByUserMessageID.get(m.id) ?? [],
       generation: m.generation,
     });
   }
@@ -202,7 +294,9 @@ export function buildTranscript(messages: ChatMessage[]): TranscriptRow[] {
 /** Chat-message ids backing a row — used for risk lookups (one row can span an
  * assistant tool_call message and its tool-result message). */
 function rowMessageIds(row: TranscriptRow): string[] {
-  if (row.kind === "message") return [row.message.id];
+  if (row.kind === "message") {
+    return [row.message.id, ...row.attachments.map((a) => a.id)];
+  }
   const ids: string[] = [];
   if (row.callMessage) ids.push(row.callMessage.id);
   if (row.resultMessage) ids.push(row.resultMessage.id);
@@ -213,6 +307,12 @@ export function rowIsFlagged(
   row: TranscriptRow,
   riskResultsByMessage: ReadonlyMap<string, readonly unknown[]>,
 ): boolean {
+  if (
+    row.kind === "message" &&
+    row.attachments.some((attachment) => attachment.isRisk)
+  ) {
+    return true;
+  }
   return rowMessageIds(row).some(
     (id) => (riskResultsByMessage.get(id)?.length ?? 0) > 0,
   );
@@ -224,14 +324,19 @@ export function rowIsFlagged(
  * neither per-message risk results (the org-admin-only risk.results.list) nor
  * any exposed seq. */
 export function rowHasRiskFlag(row: TranscriptRow): boolean {
-  if (row.kind === "message") return row.message.isRisk === true;
+  if (row.kind === "message") {
+    return (
+      row.message.isRisk === true ||
+      row.attachments.some((attachment) => attachment.isRisk)
+    );
+  }
   return row.callMessage?.isRisk === true || row.resultMessage?.isRisk === true;
 }
 
 /** A query-highlighted field within a row, in render order. A plain message has
  * one "text" field; a tool spans "name" (header), "args" (Arguments), and
  * "output" (Output). */
-export type SearchFieldKey = "text" | "name" | "args" | "output";
+export type SearchFieldKey = "text" | "attachment" | "name" | "args" | "output";
 
 export interface RowSearchField {
   key: SearchFieldKey;
@@ -256,11 +361,21 @@ export function rowSearchFields(
     (riskResultsByMessage.get(id)?.length ?? 0) > 0;
 
   if (row.kind === "message") {
-    // System rows render a collapsed <details> without query highlighting, and
-    // flagged rows render the risk highlighter — neither contributes occurrences.
-    if (row.entryType === "system" || flagged(row.message.id)) return [];
-    const count = findQueryRanges(messageText(row.message.content), q).length;
-    return count > 0 ? [{ key: "text", count }] : [];
+    // System rows render a collapsed <details> without query highlighting.
+    if (row.entryType === "system") return [];
+    const fields: RowSearchField[] = [];
+    if (!flagged(row.message.id)) {
+      const count = findQueryRanges(messageText(row.message.content), q).length;
+      if (count > 0) fields.push({ key: "text", count });
+    }
+    const attachmentCount = row.attachments.reduce((count, attachment) => {
+      if (attachment.isRisk || flagged(attachment.id)) return count;
+      return count + findQueryRanges(messageText(attachment.content), q).length;
+    }, 0);
+    if (attachmentCount > 0) {
+      fields.push({ key: "attachment", count: attachmentCount });
+    }
+    return fields;
   }
 
   const fields: RowSearchField[] = [];
@@ -339,6 +454,19 @@ export function displayItemRows(item: DisplayItem): TranscriptRow[] {
   if (item.type === "row") return [item.row];
   if (item.type === "toolGroup") return item.rows;
   return [];
+}
+
+/** Whether a rendered item contains the raw chat message being targeted. A
+ * tool group can contain several rows and each tool row can span its assistant
+ * call plus tool-result messages, so callers should use this instead of
+ * comparing display item IDs directly. */
+export function displayItemContainsMessage(
+  item: DisplayItem,
+  messageId: string,
+): boolean {
+  return displayItemRows(item).some((row) =>
+    rowMessageIds(row).includes(messageId),
+  );
 }
 
 /** Below this, a run of consecutive tool rows stays as individual rows — a lone

@@ -1,5 +1,5 @@
-import { SkeletonTable } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
 import { Page } from "@/components/page-layout";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
@@ -11,14 +11,12 @@ import {
   useShadowMCPInventory,
 } from "@gram/client/react-query/shadowMCPInventory.js";
 import { useUpsertShadowMCPInventoryPolicyBypassMutation } from "@gram/client/react-query/upsertShadowMCPInventoryPolicyBypass.js";
-import {
-  Badge,
-  type Column,
-  Icon,
-  type SortDescriptor,
-  Table,
-  sortTableData,
-} from "@speakeasy-api/moonshine";
+import { useBlockShadowMCPInventoryServerMutation } from "@gram/client/react-query/blockShadowMCPInventoryServer.js";
+import { useUnblockShadowMCPInventoryServerMutation } from "@gram/client/react-query/unblockShadowMCPInventoryServer.js";
+import { Badge } from "@/components/ui/Badge";
+import { Icon } from "@/components/ui/Icon";
+import { type Column, type SortDescriptor, Table } from "@/components/ui/Table";
+import { sortTableData } from "@/components/ui/Table/sorting";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -32,12 +30,18 @@ import {
   ShadowMCPInventoryActionSheet,
   type ShadowMCPPolicy,
 } from "./ShadowMCPInventoryActions";
+import {
+  ShadowMCPInventoryServerCell,
+  ShadowMCPInventoryUsageCell,
+} from "./ShadowMCPInventoryCells";
 import { shadowMCPInventoryActions } from "./shadowMCPInventoryActionItems";
 import {
+  shadowMCPBlockingPolicyDisposition,
   shadowMCPInventoryStatus,
   shadowMCPInventoryStatusBadgeVariant,
   shadowMCPInventoryStatusDescription,
   shadowMCPInventoryStatusLabel,
+  type ShadowMCPPolicyDisposition,
   type ShadowMCPPolicyState,
 } from "./shadowMCPInventoryStatus";
 
@@ -52,46 +56,12 @@ type InventoryPage = {
 
 const EMPTY_INVENTORY_PAGES: InventoryPage[] = [];
 
-function usageCountLabel(count: number) {
-  return `${count} ${count === 1 ? "call" : "calls"}`;
-}
-
-function userCountLabel(count: number) {
-  return `${count} ${count === 1 ? "user" : "users"}`;
-}
-
-function InventoryServerCell({ server }: { server: ShadowMCPInventoryServer }) {
-  const label = server.serverName || server.urlHost;
-
-  return (
-    <div className="min-w-0 space-y-1">
-      <div className="flex gap-2 items-center">
-        <Type variant="small" className="truncate font-medium">
-          {label}
-        </Type>
-        {server.requestCount > 0 && (
-          <Badge variant="warning" size="sm" background={false}>
-            <Badge.LeftIcon>
-              <Icon name="shield-alert" />
-            </Badge.LeftIcon>
-            <Badge.Text>
-              {server.requestCount} Access Request
-              {server.requestCount > 1 && "s"}
-            </Badge.Text>
-          </Badge>
-        )}
-      </div>
-      <Type variant="small" className="text-muted-foreground truncate text-xs">
-        {server.canonicalServerUrl}
-      </Type>
-    </div>
-  );
-}
-
 function InventoryStatusCell({
+  disposition,
   policyState,
   server,
 }: {
+  disposition: ShadowMCPPolicyDisposition | null;
   policyState: ShadowMCPPolicyState;
   server: ShadowMCPInventoryServer;
 }) {
@@ -102,37 +72,26 @@ function InventoryStatusCell({
       <Badge variant={shadowMCPInventoryStatusBadgeVariant(status)}>
         <Badge.Text>{shadowMCPInventoryStatusLabel(status)}</Badge.Text>
       </Badge>
-      <Type variant="small" className="text-muted-foreground text-xs">
-        {shadowMCPInventoryStatusDescription(server, policyState)}
-      </Type>
-    </div>
-  );
-}
-
-function UsageCell({ server }: { server: ShadowMCPInventoryServer }) {
-  return (
-    <div className="space-y-1">
-      <Type variant="small">{usageCountLabel(server.observedUseCount)}</Type>
-      <Type variant="small" className="text-muted-foreground text-xs">
-        {userCountLabel(server.userCount)}
-      </Type>
+      <Text variant="small" className="text-muted-foreground text-xs">
+        {shadowMCPInventoryStatusDescription(server, policyState, disposition)}
+      </Text>
     </div>
   );
 }
 
 function InventoryEmptyState() {
   return (
-    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16 text-center">
+    <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16 text-center">
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
         <Icon name="shield-check" className="text-muted-foreground h-6 w-6" />
       </div>
-      <Type variant="subheading" className="mb-1">
+      <Text variant="subheading" className="mb-1">
         No Shadow MCP servers
-      </Type>
-      <Type small muted className="mb-4 max-w-md">
+      </Text>
+      <Text small muted className="mb-4 max-w-md">
         Inventory URLs will appear here after hook startup captures configured
         Shadow MCP servers.
-      </Type>
+      </Text>
     </div>
   );
 }
@@ -177,6 +136,8 @@ export function ShadowMCPInventoryTable({
   const upsertPolicyBypass = useUpsertShadowMCPInventoryPolicyBypassMutation();
   const deletePolicyBypass = useDeleteShadowMCPInventoryPolicyBypassMutation();
   const resolveInventoryRequest = useResolveShadowMCPInventoryRequestMutation();
+  const blockInventoryServer = useBlockShadowMCPInventoryServerMutation();
+  const unblockInventoryServer = useUnblockShadowMCPInventoryServerMutation();
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortDescriptor | null>({
     id: "lastCalled",
@@ -189,8 +150,18 @@ export function ShadowMCPInventoryTable({
     isSubmittingAction ||
     upsertPolicyBypass.isPending ||
     deletePolicyBypass.isPending ||
-    resolveInventoryRequest.isPending;
+    resolveInventoryRequest.isPending ||
+    blockInventoryServer.isPending ||
+    unblockInventoryServer.isPending;
   const isActionPending = isSubmitting || activeAction !== null;
+  const canManageAllowRules = shadowMCPPolicies.length > 0;
+  const disposition = shadowMCPBlockingPolicyDisposition(shadowMCPPolicies);
+  const allowAllPolicy =
+    disposition === "allow_all"
+      ? (shadowMCPPolicies.find(
+          (policy) => policy.shadowMcpDisposition === "allow_all",
+        ) ?? null)
+      : null;
 
   useEffect(() => {
     setPaginationScope(inventoryScope);
@@ -283,7 +254,28 @@ export function ShadowMCPInventoryTable({
     const label = action.server.serverName ?? action.server.canonicalServerUrl;
     setIsSubmittingAction(true);
     try {
-      if (action.mode === "delete") {
+      if (action.mode === "block" || action.mode === "unblock") {
+        if (!allowAllPolicy) {
+          throw new Error("no allow_all shadow MCP policy available");
+        }
+        const target = {
+          projectId: projectID,
+          serverUrl: action.server.canonicalServerUrl,
+          policyId: allowAllPolicy.id,
+        };
+        if (action.mode === "block") {
+          await blockInventoryServer.mutateAsync({
+            request: { blockShadowMCPInventoryServerRequestBody: target },
+          });
+        } else {
+          await unblockInventoryServer.mutateAsync({ request: target });
+        }
+        toast.success(
+          action.mode === "block"
+            ? `Blocked server: ${label}`
+            : `Unblocked server: ${label}`,
+        );
+      } else if (action.mode === "delete") {
         await deletePolicyBypass.mutateAsync({
           request: {
             projectId: projectID,
@@ -322,7 +314,11 @@ export function ShadowMCPInventoryTable({
       await refreshInventory();
       setActiveAction(null);
     } catch {
-      toast.error(`Unable to update allow rule for: ${label}`);
+      const failureLabel =
+        action.mode === "block" || action.mode === "unblock"
+          ? "block rule"
+          : "allow rule";
+      toast.error(`Unable to update ${failureLabel} for: ${label}`);
     } finally {
       setIsSubmittingAction(false);
     }
@@ -331,7 +327,9 @@ export function ShadowMCPInventoryTable({
   const renderActionsCell = (server: ShadowMCPInventoryServer) => {
     return (
       <ShadowMCPInventoryActionMenu
+        canManageAllowRules={canManageAllowRules}
         disabled={isActionPending}
+        disposition={disposition}
         onOpenAction={(mode, selectedServer) =>
           setActiveAction({ mode, server: selectedServer })
         }
@@ -350,7 +348,7 @@ export function ShadowMCPInventoryTable({
           .trim()
           .toLowerCase(),
       width: "2fr",
-      render: (server) => <InventoryServerCell server={server} />,
+      render: (server) => <ShadowMCPInventoryServerCell server={server} />,
     },
     {
       key: "status",
@@ -362,7 +360,11 @@ export function ShadowMCPInventoryTable({
         ),
       width: "0.9fr",
       render: (server) => (
-        <InventoryStatusCell policyState={policyState} server={server} />
+        <InventoryStatusCell
+          disposition={disposition}
+          policyState={policyState}
+          server={server}
+        />
       ),
     },
     {
@@ -372,7 +374,7 @@ export function ShadowMCPInventoryTable({
       sortValue: (server) => server.lastCalled?.getTime() ?? 0,
       width: "0.7fr",
       render: (server) => (
-        <Type variant="small">{formatShortDate(server.lastCalled)}</Type>
+        <Text variant="small">{formatShortDate(server.lastCalled)}</Text>
       ),
     },
     {
@@ -382,7 +384,7 @@ export function ShadowMCPInventoryTable({
       sortValue: (server) => server.lastSeen.getTime(),
       width: "0.7fr",
       render: (server) => (
-        <Type variant="small">{formatShortDate(server.lastSeen)}</Type>
+        <Text variant="small">{formatShortDate(server.lastSeen)}</Text>
       ),
     },
     {
@@ -391,7 +393,7 @@ export function ShadowMCPInventoryTable({
       sortable: true,
       sortValue: (server) => server.observedUseCount,
       width: "0.5fr",
-      render: (server) => <UsageCell server={server} />,
+      render: (server) => <ShadowMCPInventoryUsageCell server={server} />,
     },
     {
       key: "actions",
@@ -437,12 +439,12 @@ export function ShadowMCPInventoryTable({
   if (isInitialError) {
     return (
       <div className="bg-background flex min-h-32 flex-col items-center justify-center gap-1 px-4 py-8 text-center">
-        <Type variant="body" className="font-medium">
+        <Text variant="body" className="font-medium">
           Shadow MCP inventory could not be loaded
-        </Type>
-        <Type muted small className="max-w-md">
+        </Text>
+        <Text muted small className="max-w-md">
           Refresh the page or try again later.
-        </Type>
+        </Text>
       </div>
     );
   }
@@ -460,6 +462,7 @@ export function ShadowMCPInventoryTable({
     >
       <ShadowMCPInventoryActionSheet
         action={activeAction}
+        disposition={disposition}
         isSubmitting={isSubmitting}
         members={members}
         onOpenChange={(open) => {
@@ -498,7 +501,9 @@ export function ShadowMCPInventoryTable({
             <TableRowContextMenu
               key={row.canonicalServerUrl}
               actions={shadowMCPInventoryActions(row, {
+                canManageAllowRules,
                 disabled: isActionPending,
+                disposition,
                 onOpenAction: (mode, selectedServer) =>
                   setActiveAction({ mode, server: selectedServer }),
               })}

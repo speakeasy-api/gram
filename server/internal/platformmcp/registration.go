@@ -1,0 +1,733 @@
+//nolint:exhaustruct // Generated repository parameter types intentionally use documented zero-value optional fields.
+package platformmcp
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"net/url"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
+)
+
+const (
+	operationRegisterCatalogMCP  = "register_catalog_mcp"
+	receiptStatusPending         = "pending"
+	receiptStatusSucceeded       = "succeeded"
+	receiptResultRegistered      = "registered"
+	receiptResultActiveCap       = "conflict:active_registration_cap"
+	registrationStatusPending    = "pending"
+	registrationStatusRegistered = "registered"
+	receiptLifetime              = 24 * time.Hour
+	platformMCPIssuerLifetime    = 14 * 24 * time.Hour
+	maxMCPEndpointSlugLength     = 128
+)
+
+var (
+	ErrRegistrationConflict = errors.New("platform mcp registration idempotency conflict")
+	ErrRegistrationCap      = errors.New("platform mcp active registration cap reached")
+	ErrRegistrationInvalid  = errors.New("invalid platform mcp registration input")
+	ErrTargetIneligible     = errors.New("platform mcp registration target is ineligible")
+)
+
+// CatalogRegistrationRequest is the normalized desired state behind one
+// register_catalog_mcp call. The caller resolves catalog details before passing
+// this value to persistence; display metadata is deliberately not identity.
+type CatalogRegistrationRequest struct {
+	ProjectSlug      string
+	SourceKind       string
+	CatalogProvider  string
+	CatalogReference string
+	IdempotencyKey   string
+	InputHash        string
+}
+
+type ResolvedProject struct {
+	ID   uuid.UUID
+	Name string
+	Slug string
+}
+
+type OperationReceipt struct {
+	ID                   uuid.UUID
+	RegistrationID       uuid.NullUUID
+	Status               string
+	ResultCode           string
+	InputHash            string
+	ExpiresAt            time.Time
+	Replayed             bool
+	ConnectionID         uuid.UUID
+	ConnectionGeneration uuid.UUID
+}
+
+// RegistrationStoreConfig carries values whose production defaults require
+// explicit review before Platform catalog registration can be composed.
+type RegistrationStoreConfig struct {
+	ActiveRegistrationCap int64
+}
+
+// RegistrationStore owns the tenant-qualified receipt and desired-state
+// persistence boundary. It does not fetch catalog data, call providers, or
+// create project components.
+type RegistrationStore struct {
+	db                    *pgxpool.Pool
+	activeRegistrationCap int64
+}
+
+func NewRegistrationStore(db *pgxpool.Pool, config RegistrationStoreConfig) (*RegistrationStore, error) {
+	if db == nil || config.ActiveRegistrationCap <= 0 {
+		return nil, ErrRegistrationInvalid
+	}
+	return &RegistrationStore{db: db, activeRegistrationCap: config.ActiveRegistrationCap}, nil
+}
+
+func (s *RegistrationStore) ResolveProject(ctx context.Context, organizationID, projectSlug string) (ResolvedProject, error) {
+	if s == nil || s.db == nil || organizationID == "" || projectSlug == "" {
+		return ResolvedProject{}, ErrRegistrationInvalid
+	}
+	row, err := platformrepo.New(s.db).ResolvePlatformMCPProjectBySlug(ctx, platformrepo.ResolvePlatformMCPProjectBySlugParams{
+		OrganizationID: organizationID,
+		Slug:           projectSlug,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ResolvedProject{}, ErrRegistrationInvalid
+	}
+	if err != nil {
+		return ResolvedProject{}, fmt.Errorf("resolve platform mcp registration project: %w", err)
+	}
+	return ResolvedProject{ID: row.ID, Name: row.Name, Slug: row.Slug}, nil
+}
+
+func (s *RegistrationStore) EligibleCatalogRegistrationTarget(ctx context.Context, organizationID string, project ResolvedProject) (bool, error) {
+	if s == nil || s.db == nil || organizationID == "" || project.ID == uuid.Nil || project.Slug == "" {
+		return false, ErrTargetIneligible
+	}
+	eligible, err := platformrepo.New(s.db).IsPlatformMCPCatalogRegistrationTargetEligible(ctx, platformrepo.IsPlatformMCPCatalogRegistrationTargetEligibleParams{
+		ProjectID:      project.ID,
+		OrganizationID: organizationID,
+	})
+	if err != nil {
+		return false, fmt.Errorf("check platform mcp catalog registration target eligibility: %w", err)
+	}
+	return eligible, nil
+}
+
+// BeginReceipt atomically establishes the 24-hour idempotency boundary. It
+// never creates a registration: callers first resolve catalog data outside a
+// transaction, then use ConvergeRegistration to create or reuse the desired
+// registration state.
+func (s *RegistrationStore) BeginReceipt(ctx context.Context, principal Principal, project ResolvedProject, request CatalogRegistrationRequest, now time.Time) (OperationReceipt, error) {
+	if s == nil || s.db == nil {
+		return OperationReceipt{}, ErrUnavailable
+	}
+	if err := validateCatalogRegistrationRequest(principal, project, request); err != nil {
+		return OperationReceipt{}, err
+	}
+
+	connectionID, generation, err := principalConnection(principal)
+	if err != nil {
+		return OperationReceipt{}, err
+	}
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return OperationReceipt{}, fmt.Errorf("begin platform mcp registration receipt: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	q := platformrepo.New(tx)
+	lock := platformrepo.LockPlatformMCPOperationReceiptParams{
+		OrganizationID: principal.OrganizationID,
+		SubjectUrn:     userSubjectURN(principal.UserID),
+		ProjectID:      project.ID.String(),
+		Operation:      operationRegisterCatalogMCP,
+		IdempotencyKey: request.IdempotencyKey,
+	}
+	if err := q.LockPlatformMCPOperationReceipt(ctx, lock); err != nil {
+		return OperationReceipt{}, fmt.Errorf("lock platform mcp registration receipt: %w", err)
+	}
+	receiptLookup := platformrepo.GetPlatformMCPOperationReceiptParams{
+		OrganizationID: principal.OrganizationID,
+		SubjectUrn:     userSubjectURN(principal.UserID),
+		ProjectID:      project.ID,
+		Operation:      operationRegisterCatalogMCP,
+		IdempotencyKey: request.IdempotencyKey,
+	}
+	if _, err := q.DeleteExpiredPlatformMCPOperationReceipt(ctx, platformrepo.DeleteExpiredPlatformMCPOperationReceiptParams(receiptLookup)); err != nil {
+		return OperationReceipt{}, fmt.Errorf("reclaim expired platform mcp registration receipt: %w", err)
+	}
+
+	receipt, err := q.GetPlatformMCPOperationReceipt(ctx, receiptLookup)
+	switch {
+	case err == nil:
+		if receipt.InputHash != request.InputHash {
+			return OperationReceipt{}, ErrRegistrationConflict
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return OperationReceipt{}, fmt.Errorf("commit platform mcp registration receipt replay: %w", err)
+		}
+		return operationReceiptFromRow(receipt, true), nil
+	case !errors.Is(err, pgx.ErrNoRows):
+		return OperationReceipt{}, fmt.Errorf("load platform mcp registration receipt: %w", err)
+	}
+
+	receipt, err = q.CreatePlatformMCPOperationReceipt(ctx, platformrepo.CreatePlatformMCPOperationReceiptParams{
+		OrganizationID:       principal.OrganizationID,
+		ProjectID:            project.ID,
+		RegistrationID:       uuid.NullUUID{},
+		ConnectionID:         connectionID,
+		ConnectionGeneration: generation,
+		Operation:            operationRegisterCatalogMCP,
+		IdempotencyKey:       request.IdempotencyKey,
+		InputHash:            request.InputHash,
+		Status:               receiptStatusPending,
+		ResultCode:           pgtype.Text{},
+		ExpiresAt:            timestamp(now.Add(receiptLifetime)),
+	})
+	if err != nil {
+		return OperationReceipt{}, fmt.Errorf("create platform mcp registration receipt: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return OperationReceipt{}, fmt.Errorf("commit platform mcp registration receipt: %w", err)
+	}
+	return operationReceiptFromRow(receipt, false), nil
+}
+
+// ConvergeRegistration creates or reuses the active desired-state registration
+// in one transaction. It intentionally leaves the receipt pending: only the
+// later private-component convergence can complete the receipt and record the
+// registration_succeeded milestone.
+func (s *RegistrationStore) ConvergeRegistration(ctx context.Context, principal Principal, project ResolvedProject, request CatalogRegistrationRequest, receipt OperationReceipt) (OperationReceipt, error) {
+	if s == nil || s.db == nil {
+		return OperationReceipt{}, ErrUnavailable
+	}
+	if err := validateCatalogRegistrationRequest(principal, project, request); err != nil {
+		return OperationReceipt{}, err
+	}
+	if receipt.ID == uuid.Nil {
+		return OperationReceipt{}, ErrRegistrationInvalid
+	}
+	connectionID, generation, err := principalConnection(principal)
+	if err != nil {
+		return OperationReceipt{}, err
+	}
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return OperationReceipt{}, fmt.Errorf("begin platform mcp registration convergence: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	q := platformrepo.New(tx)
+	receiptLock := platformrepo.LockPlatformMCPOperationReceiptParams{
+		OrganizationID: principal.OrganizationID,
+		SubjectUrn:     userSubjectURN(principal.UserID),
+		ProjectID:      project.ID.String(),
+		Operation:      operationRegisterCatalogMCP,
+		IdempotencyKey: request.IdempotencyKey,
+	}
+	if err := q.LockPlatformMCPOperationReceipt(ctx, receiptLock); err != nil {
+		return OperationReceipt{}, fmt.Errorf("lock platform mcp registration convergence receipt: %w", err)
+	}
+	storedReceipt, err := q.GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{
+		OrganizationID: receiptLock.OrganizationID,
+		SubjectUrn:     receiptLock.SubjectUrn,
+		ProjectID:      project.ID,
+		Operation:      receiptLock.Operation,
+		IdempotencyKey: receiptLock.IdempotencyKey,
+	})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return OperationReceipt{}, fmt.Errorf("load platform mcp registration convergence receipt: %w", err)
+	}
+	if errors.Is(err, pgx.ErrNoRows) || storedReceipt.ID != receipt.ID || storedReceipt.InputHash != request.InputHash {
+		return OperationReceipt{}, ErrRegistrationInvalid
+	}
+	if storedReceipt.Status == receiptStatusSucceeded {
+		if err := tx.Commit(ctx); err != nil {
+			return OperationReceipt{}, fmt.Errorf("commit platform mcp registration convergence replay: %w", err)
+		}
+		if storedReceipt.ResultCode.String == receiptResultActiveCap {
+			return operationReceiptFromRow(storedReceipt, true), ErrRegistrationCap
+		}
+		return operationReceiptFromRow(storedReceipt, true), nil
+	}
+	if storedReceipt.Status != receiptStatusPending {
+		return OperationReceipt{}, ErrRegistrationInvalid
+	}
+	if _, err := q.LockLivePlatformMCPProjectForRegistration(ctx, platformrepo.LockLivePlatformMCPProjectForRegistrationParams{
+		ProjectID:      project.ID,
+		OrganizationID: principal.OrganizationID,
+	}); errors.Is(err, pgx.ErrNoRows) {
+		return OperationReceipt{}, ErrTargetIneligible
+	} else if err != nil {
+		return OperationReceipt{}, fmt.Errorf("lock live platform mcp registration project: %w", err)
+	}
+	if err := q.LockPlatformMCPProjectRegistrationQuota(ctx, platformrepo.LockPlatformMCPProjectRegistrationQuotaParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      project.ID.String(),
+	}); err != nil {
+		return OperationReceipt{}, fmt.Errorf("lock platform mcp registration quota: %w", err)
+	}
+	if err := q.LockPlatformMCPCatalogRegistration(ctx, platformrepo.LockPlatformMCPCatalogRegistrationParams{
+		OrganizationID:   principal.OrganizationID,
+		ProjectID:        project.ID.String(),
+		SourceKind:       request.SourceKind,
+		CatalogProvider:  request.CatalogProvider,
+		CatalogReference: request.CatalogReference,
+	}); err != nil {
+		return OperationReceipt{}, fmt.Errorf("lock platform mcp catalog registration: %w", err)
+	}
+	eligible, err := q.IsPlatformMCPCatalogRegistrationTargetEligible(ctx, platformrepo.IsPlatformMCPCatalogRegistrationTargetEligibleParams{
+		ProjectID:      project.ID,
+		OrganizationID: principal.OrganizationID,
+	})
+	if err != nil {
+		return OperationReceipt{}, fmt.Errorf("recheck platform mcp registration target eligibility: %w", err)
+	}
+	if !eligible {
+		return OperationReceipt{}, ErrTargetIneligible
+	}
+
+	registration, err := q.GetActivePlatformMCPCatalogRegistration(ctx, platformrepo.GetActivePlatformMCPCatalogRegistrationParams{
+		OrganizationID:   principal.OrganizationID,
+		ProjectID:        project.ID,
+		SourceKind:       request.SourceKind,
+		CatalogProvider:  request.CatalogProvider,
+		CatalogReference: request.CatalogReference,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		activeRegistrations, err := q.CountActiveRegisteredPlatformMCPCatalogRegistrations(ctx, platformrepo.CountActiveRegisteredPlatformMCPCatalogRegistrationsParams{
+			OrganizationID: principal.OrganizationID,
+			ProjectID:      project.ID,
+		})
+		if err != nil {
+			return OperationReceipt{}, fmt.Errorf("count active platform mcp catalog registrations: %w", err)
+		}
+		if activeRegistrations >= s.activeRegistrationCap {
+			deniedReceipt, err := q.CompletePlatformMCPOperationReceipt(ctx, platformrepo.CompletePlatformMCPOperationReceiptParams{
+				RegistrationID: uuid.NullUUID{},
+				Status:         receiptStatusSucceeded,
+				ResultCode:     optionalText(receiptResultActiveCap),
+				ID:             storedReceipt.ID,
+				OrganizationID: principal.OrganizationID,
+			})
+			if err != nil {
+				return OperationReceipt{}, fmt.Errorf("complete platform mcp registration cap receipt: %w", err)
+			}
+			if err := tx.Commit(ctx); err != nil {
+				return OperationReceipt{}, fmt.Errorf("commit platform mcp registration cap receipt: %w", err)
+			}
+			return operationReceiptFromRow(deniedReceipt, receipt.Replayed), ErrRegistrationCap
+		}
+		registration, err = q.CreatePlatformMCPCatalogRegistration(ctx, platformrepo.CreatePlatformMCPCatalogRegistrationParams{
+			OrganizationID:       principal.OrganizationID,
+			ProjectID:            project.ID,
+			SourceKind:           request.SourceKind,
+			CatalogProvider:      request.CatalogProvider,
+			CatalogReference:     request.CatalogReference,
+			Status:               registrationStatusPending,
+			ConnectionID:         connectionID,
+			ConnectionGeneration: generation,
+		})
+		if err != nil {
+			return OperationReceipt{}, fmt.Errorf("create platform mcp catalog registration: %w", err)
+		}
+	} else if err != nil {
+		return OperationReceipt{}, fmt.Errorf("get active platform mcp catalog registration: %w", err)
+	}
+	ownedRegistration, err := lifecycleRegistration(ctx, q, principal, project.ID, registration.ID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return OperationReceipt{}, ErrRegistrationInvalid
+	}
+	if err != nil {
+		return OperationReceipt{}, fmt.Errorf("authorize platform mcp registration convergence: %w", err)
+	}
+	if ownedRegistration.ID != registration.ID {
+		return OperationReceipt{}, ErrRegistrationInvalid
+	}
+
+	attachedReceipt, err := q.AttachPlatformMCPOperationReceiptRegistration(ctx, platformrepo.AttachPlatformMCPOperationReceiptRegistrationParams{
+		RegistrationID: uuid.NullUUID{UUID: registration.ID, Valid: true},
+		ID:             storedReceipt.ID,
+		OrganizationID: principal.OrganizationID,
+	})
+	if err != nil {
+		return OperationReceipt{}, fmt.Errorf("attach platform mcp registration receipt: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return OperationReceipt{}, fmt.Errorf("commit platform mcp registration convergence: %w", err)
+	}
+	return operationReceiptFromRow(attachedReceipt, receipt.Replayed), nil
+}
+
+// CompleteRegistration creates the local, private component stack only after a
+// reviewed catalog adapter has validated the remote endpoint. It does not call
+// management handlers, create plugin rows, or publish packages.
+func (s *RegistrationStore) CompleteRegistration(ctx context.Context, principal Principal, project ResolvedProject, request CatalogRegistrationRequest, receipt OperationReceipt, remoteURL string) (OperationReceipt, error) {
+	if s == nil || s.db == nil {
+		return OperationReceipt{}, ErrUnavailable
+	}
+	if err := validateCatalogRegistrationRequest(principal, project, request); err != nil || receipt.ID == uuid.Nil || !receipt.RegistrationID.Valid || !validRegistrationRemoteURL(remoteURL) {
+		return OperationReceipt{}, ErrRegistrationInvalid
+	}
+	connectionID, generation, err := principalConnection(principal)
+	if err != nil {
+		return OperationReceipt{}, err
+	}
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return OperationReceipt{}, fmt.Errorf("begin platform mcp component convergence: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	q := platformrepo.New(tx)
+	receiptLock := platformrepo.LockPlatformMCPOperationReceiptParams{
+		OrganizationID: principal.OrganizationID,
+		SubjectUrn:     userSubjectURN(principal.UserID),
+		ProjectID:      project.ID.String(),
+		Operation:      operationRegisterCatalogMCP,
+		IdempotencyKey: request.IdempotencyKey,
+	}
+	if err := q.LockPlatformMCPOperationReceipt(ctx, receiptLock); err != nil {
+		return OperationReceipt{}, fmt.Errorf("lock platform mcp component receipt: %w", err)
+	}
+	storedReceipt, err := q.GetPlatformMCPOperationReceipt(ctx, platformrepo.GetPlatformMCPOperationReceiptParams{
+		OrganizationID: receiptLock.OrganizationID,
+		SubjectUrn:     receiptLock.SubjectUrn,
+		ProjectID:      project.ID,
+		Operation:      receiptLock.Operation,
+		IdempotencyKey: receiptLock.IdempotencyKey,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return OperationReceipt{}, ErrRegistrationInvalid
+		}
+		return OperationReceipt{}, fmt.Errorf("load platform mcp component receipt: %w", err)
+	}
+	if storedReceipt.ID != receipt.ID || storedReceipt.InputHash != request.InputHash || !storedReceipt.RegistrationID.Valid || storedReceipt.RegistrationID.UUID != receipt.RegistrationID.UUID {
+		return OperationReceipt{}, ErrRegistrationInvalid
+	}
+	if storedReceipt.Status == receiptStatusSucceeded {
+		if err := tx.Commit(ctx); err != nil {
+			return OperationReceipt{}, fmt.Errorf("commit platform mcp component replay: %w", err)
+		}
+		return operationReceiptFromRow(storedReceipt, true), nil
+	}
+	if storedReceipt.Status != receiptStatusPending {
+		return OperationReceipt{}, ErrRegistrationInvalid
+	}
+	if _, err := q.LockLivePlatformMCPProjectForRegistration(ctx, platformrepo.LockLivePlatformMCPProjectForRegistrationParams{
+		ProjectID:      project.ID,
+		OrganizationID: principal.OrganizationID,
+	}); errors.Is(err, pgx.ErrNoRows) {
+		return OperationReceipt{}, ErrTargetIneligible
+	} else if err != nil {
+		return OperationReceipt{}, fmt.Errorf("lock live platform mcp component project: %w", err)
+	}
+	if err := q.LockPlatformMCPProjectRegistrationQuota(ctx, platformrepo.LockPlatformMCPProjectRegistrationQuotaParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      project.ID.String(),
+	}); err != nil {
+		return OperationReceipt{}, fmt.Errorf("lock platform mcp component quota: %w", err)
+	}
+	if err := q.LockPlatformMCPCatalogRegistration(ctx, platformrepo.LockPlatformMCPCatalogRegistrationParams{
+		OrganizationID:   principal.OrganizationID,
+		ProjectID:        project.ID.String(),
+		SourceKind:       request.SourceKind,
+		CatalogProvider:  request.CatalogProvider,
+		CatalogReference: request.CatalogReference,
+	}); err != nil {
+		return OperationReceipt{}, fmt.Errorf("lock platform mcp component registration: %w", err)
+	}
+	eligible, err := q.IsPlatformMCPCatalogRegistrationTargetEligible(ctx, platformrepo.IsPlatformMCPCatalogRegistrationTargetEligibleParams{
+		ProjectID:      project.ID,
+		OrganizationID: principal.OrganizationID,
+	})
+	if err != nil {
+		return OperationReceipt{}, fmt.Errorf("recheck platform mcp registration target eligibility: %w", err)
+	}
+	if !eligible {
+		return OperationReceipt{}, ErrTargetIneligible
+	}
+	registration, err := q.GetActivePlatformMCPCatalogRegistration(ctx, platformrepo.GetActivePlatformMCPCatalogRegistrationParams{
+		OrganizationID:   principal.OrganizationID,
+		ProjectID:        project.ID,
+		SourceKind:       request.SourceKind,
+		CatalogProvider:  request.CatalogProvider,
+		CatalogReference: request.CatalogReference,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return OperationReceipt{}, ErrRegistrationInvalid
+		}
+		return OperationReceipt{}, fmt.Errorf("load platform mcp component registration: %w", err)
+	}
+	if registration.ID != storedReceipt.RegistrationID.UUID {
+		return OperationReceipt{}, ErrRegistrationInvalid
+	}
+	ownedRegistration, err := lifecycleRegistration(ctx, q, principal, project.ID, registration.ID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return OperationReceipt{}, ErrRegistrationInvalid
+	}
+	if err != nil {
+		return OperationReceipt{}, fmt.Errorf("authorize platform mcp component convergence: %w", err)
+	}
+	if ownedRegistration.ID != registration.ID {
+		return OperationReceipt{}, ErrRegistrationInvalid
+	}
+	activeRegistrations, err := q.CountActiveRegisteredPlatformMCPCatalogRegistrations(ctx, platformrepo.CountActiveRegisteredPlatformMCPCatalogRegistrationsParams{
+		OrganizationID: principal.OrganizationID,
+		ProjectID:      project.ID,
+	})
+	if err != nil {
+		return OperationReceipt{}, fmt.Errorf("count active platform mcp registrations before completion: %w", err)
+	}
+	if activeRegistrations >= s.activeRegistrationCap && !registrationComponentsComplete(registration) {
+		if err := q.SoftDeletePendingPlatformMCPCatalogRegistration(ctx, platformrepo.SoftDeletePendingPlatformMCPCatalogRegistrationParams{
+			RegistrationID: storedReceipt.RegistrationID.UUID,
+			OrganizationID: principal.OrganizationID,
+			ProjectID:      project.ID,
+		}); err != nil {
+			return OperationReceipt{}, fmt.Errorf("soft delete capped platform mcp registration: %w", err)
+		}
+		deniedReceipt, err := q.CompletePlatformMCPOperationReceipt(ctx, platformrepo.CompletePlatformMCPOperationReceiptParams{
+			RegistrationID: uuid.NullUUID{},
+			Status:         receiptStatusSucceeded,
+			ResultCode:     optionalText(receiptResultActiveCap),
+			ID:             storedReceipt.ID,
+			OrganizationID: principal.OrganizationID,
+		})
+		if err != nil {
+			return OperationReceipt{}, fmt.Errorf("complete capped platform mcp receipt: %w", err)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return OperationReceipt{}, fmt.Errorf("commit capped platform mcp receipt: %w", err)
+		}
+		return operationReceiptFromRow(deniedReceipt, receipt.Replayed), ErrRegistrationCap
+	}
+
+	componentsCreated := false
+	if registrationComponentsComplete(registration) {
+		if registration.Status != registrationStatusRegistered {
+			return OperationReceipt{}, ErrRegistrationInvalid
+		}
+	} else if registrationComponentsEmpty(registration) && registration.Status == registrationStatusPending {
+		registration, err = s.createPrivateRegistrationComponents(ctx, tx, project, registration, remoteURL)
+		if err != nil {
+			return OperationReceipt{}, err
+		}
+		componentsCreated = true
+	} else {
+		return OperationReceipt{}, ErrRegistrationInvalid
+	}
+
+	completedReceipt, err := q.CompletePlatformMCPOperationReceipt(ctx, platformrepo.CompletePlatformMCPOperationReceiptParams{
+		RegistrationID: storedReceipt.RegistrationID,
+		Status:         receiptStatusSucceeded,
+		ResultCode:     optionalText(receiptResultRegistered),
+		ID:             storedReceipt.ID,
+		OrganizationID: principal.OrganizationID,
+	})
+	if err != nil {
+		return OperationReceipt{}, fmt.Errorf("complete platform mcp component receipt: %w", err)
+	}
+	if err := q.RecordPlatformMCPRegistrationSucceeded(ctx, platformrepo.RecordPlatformMCPRegistrationSucceededParams{
+		OrganizationID:       principal.OrganizationID,
+		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: generation, Valid: true},
+		ProjectID:            uuid.NullUUID{UUID: project.ID, Valid: true},
+		McpKey:               registration.CatalogProvider + ":" + registration.CatalogReference,
+		AttemptID:            uuid.NullUUID{UUID: registration.ID, Valid: true},
+	}); err != nil {
+		return OperationReceipt{}, fmt.Errorf("record platform mcp registration milestone: %w", err)
+	}
+	if componentsCreated {
+		if err := audit.NewLogger().LogPlatformMcpRegistrationCreate(ctx, tx, audit.LogPlatformMcpRegistrationCreateEvent{
+			OrganizationID:             principal.OrganizationID,
+			ProjectID:                  project.ID,
+			Actor:                      urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
+			PlatformMcpRegistrationURN: urn.NewPlatformMcpRegistration(registration.ID),
+			CatalogProvider:            registration.CatalogProvider,
+			CatalogReference:           registration.CatalogReference,
+			RemoteMcpServerURN:         urn.NewRemoteMcpServer(registration.RemoteMcpServerID.UUID),
+			UserSessionIssuerURN:       urn.NewUserSessionIssuer(registration.UserSessionIssuerID.UUID),
+			McpServerURN:               urn.NewMcpServer(registration.McpServerID.UUID),
+			McpEndpointURN:             urn.NewMcpEndpoint(registration.McpEndpointID.UUID),
+		}); err != nil {
+			return OperationReceipt{}, fmt.Errorf("record platform mcp component convergence audit event: %w", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return OperationReceipt{}, fmt.Errorf("commit platform mcp component convergence: %w", err)
+	}
+	return operationReceiptFromRow(completedReceipt, receipt.Replayed), nil
+}
+
+func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Context, tx pgx.Tx, project ResolvedProject, registration platformrepo.PlatformMcpCatalogRegistration, remoteURL string) (platformrepo.PlatformMcpCatalogRegistration, error) {
+	remoteID, err := uuid.NewV7()
+	if err != nil {
+		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("generate platform mcp remote source id: %w", err)
+	}
+	serverID, err := uuid.NewV7()
+	if err != nil {
+		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("generate platform mcp server id: %w", err)
+	}
+	suffix, err := newRegistrationComponentSuffix()
+	if err != nil {
+		return platformrepo.PlatformMcpCatalogRegistration{}, err
+	}
+	organization, err := organizationsrepo.New(tx).GetOrganizationMetadata(ctx, registration.OrganizationID)
+	if err != nil {
+		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("load platform mcp component organization: %w", err)
+	}
+	remoteSlug := "platform-mcp-remote-" + suffix
+	serverSlug := "platform-mcp-" + suffix
+	remote, err := remotemcprepo.New(tx).CreateServer(ctx, remotemcprepo.CreateServerParams{
+		ID:            remoteID,
+		ProjectID:     project.ID,
+		Name:          optionalText("Platform MCP catalog source"),
+		Slug:          optionalText(remoteSlug),
+		TransportType: "streamable-http",
+		Url:           remoteURL,
+	})
+	if err != nil {
+		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("create platform mcp remote source: %w", err)
+	}
+	issuer, err := usersessionsrepo.New(tx).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID:          project.ID,
+		Slug:               "platform-mcp-issuer-" + suffix,
+		AuthnChallengeMode: "interactive",
+		SessionDuration: pgtype.Interval{
+			Microseconds: platformMCPIssuerLifetime.Microseconds(),
+			Valid:        true,
+		},
+	})
+	if err != nil {
+		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("create platform mcp session issuer: %w", err)
+	}
+	server, err := mcpserversrepo.New(tx).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                  serverID,
+		ProjectID:           project.ID,
+		Name:                optionalText("Platform MCP catalog server"),
+		Slug:                optionalText(serverSlug),
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
+		RemoteMcpServerID:   uuid.NullUUID{UUID: remote.ID, Valid: true},
+		Visibility:          "private",
+	})
+	if err != nil {
+		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("create platform mcp server: %w", err)
+	}
+	endpoint, err := mcpendpointsrepo.New(tx).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+		ProjectID:   project.ID,
+		McpServerID: server.ID,
+		Slug:        platformMCPEndpointSlug(organization.Slug, suffix),
+	})
+	if err != nil {
+		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("create platform mcp endpoint: %w", err)
+	}
+	updatedRegistration, err := platformrepo.New(tx).UpdatePlatformMCPCatalogRegistrationComponents(ctx, platformrepo.UpdatePlatformMCPCatalogRegistrationComponentsParams{
+		Status:                 registrationStatusRegistered,
+		RemoteMcpServerID:      uuid.NullUUID{UUID: remote.ID, Valid: true},
+		RemoteMcpServerOwned:   true,
+		UserSessionIssuerID:    uuid.NullUUID{UUID: issuer.ID, Valid: true},
+		UserSessionIssuerOwned: true,
+		McpServerID:            uuid.NullUUID{UUID: server.ID, Valid: true},
+		McpServerOwned:         true,
+		McpEndpointID:          uuid.NullUUID{UUID: endpoint.ID, Valid: true},
+		McpEndpointOwned:       true,
+		ID:                     registration.ID,
+		OrganizationID:         registration.OrganizationID,
+		ProjectID:              project.ID,
+	})
+	if err != nil {
+		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("update platform mcp registration components: %w", err)
+	}
+	return updatedRegistration, nil
+}
+
+func validRegistrationRemoteURL(rawURL string) bool {
+	parsed, err := url.Parse(rawURL)
+	return err == nil && parsed.Scheme == "https" && parsed.Hostname() != "" && parsed.User == nil && parsed.Fragment == "" && !hasUnresolvedRemoteTemplate(rawURL)
+}
+
+func platformMCPEndpointSlug(organizationSlug, suffix string) string {
+	suffixRunes := []rune("-platform-mcp-endpoint-" + suffix)
+	organizationRunes := []rune(organizationSlug)
+	return string(organizationRunes[:min(len(organizationRunes), maxMCPEndpointSlugLength-len(suffixRunes))]) + string(suffixRunes)
+}
+
+func newRegistrationComponentSuffix() (string, error) {
+	value := make([]byte, 8)
+	if _, err := rand.Read(value); err != nil {
+		return "", fmt.Errorf("generate platform mcp component suffix: %w", err)
+	}
+	return hex.EncodeToString(value), nil
+}
+
+func registrationComponentsEmpty(registration platformrepo.PlatformMcpCatalogRegistration) bool {
+	return !registration.RemoteMcpServerID.Valid && !registration.UserSessionIssuerID.Valid && !registration.McpServerID.Valid && !registration.McpEndpointID.Valid
+}
+
+func registrationComponentsComplete(registration platformrepo.PlatformMcpCatalogRegistration) bool {
+	return registration.RemoteMcpServerID.Valid && registration.UserSessionIssuerID.Valid && registration.McpServerID.Valid && registration.McpEndpointID.Valid
+}
+
+func validateCatalogRegistrationRequest(principal Principal, project ResolvedProject, request CatalogRegistrationRequest) error {
+	if principal.UserID == "" || principal.OrganizationID == "" || project.ID == uuid.Nil || project.Slug == "" || request.ProjectSlug == "" || request.ProjectSlug != project.Slug || request.SourceKind == "" || request.CatalogProvider == "" || request.CatalogReference == "" || request.IdempotencyKey == "" || len(request.IdempotencyKey) > 128 || request.InputHash == "" || request.InputHash != catalogRegistrationInputHash(request.ProjectSlug, request.SourceKind, request.CatalogProvider, request.CatalogReference) {
+		return ErrRegistrationInvalid
+	}
+	return nil
+}
+
+func principalConnection(principal Principal) (uuid.UUID, uuid.UUID, error) {
+	connectionID, err := uuid.Parse(principal.ConnectionID)
+	if err != nil {
+		return uuid.Nil, uuid.Nil, fmt.Errorf("parse platform mcp registration connection: %w", err)
+	}
+	generation, err := uuid.Parse(principal.Generation)
+	if err != nil {
+		return uuid.Nil, uuid.Nil, fmt.Errorf("parse platform mcp registration generation: %w", err)
+	}
+	return connectionID, generation, nil
+}
+
+func userSubjectURN(userID string) string {
+	return urn.NewUserSubject(userID).String()
+}
+
+func operationReceiptFromRow(row platformrepo.PlatformMcpOperationReceipt, replayed bool) OperationReceipt {
+	return OperationReceipt{
+		ID:                   row.ID,
+		RegistrationID:       row.RegistrationID,
+		Status:               row.Status,
+		ResultCode:           row.ResultCode.String,
+		InputHash:            row.InputHash,
+		ExpiresAt:            row.ExpiresAt.Time,
+		Replayed:             replayed,
+		ConnectionID:         row.ConnectionID,
+		ConnectionGeneration: row.ConnectionGeneration,
+	}
+}
+
+func catalogRegistrationInputHash(projectSlug, sourceKind, catalogProvider, catalogReference string) string {
+	payload := projectSlug + "\x00" + sourceKind + "\x00" + catalogProvider + "\x00" + catalogReference
+	digest := sha256.Sum256([]byte(payload))
+	return hex.EncodeToString(digest[:])
+}

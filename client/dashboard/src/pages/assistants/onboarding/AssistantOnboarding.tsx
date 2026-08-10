@@ -1,6 +1,7 @@
 import { Page } from "@/components/page-layout";
 import { useHideInsightsDock } from "@/components/insights-context";
 import { useProject, useSession } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
 import { internalMcpUrl } from "@/hooks/useToolsetUrl";
 import { DEFAULT_ASSISTANT_MODEL } from "@/lib/models";
 import { getServerURL } from "@/lib/utils";
@@ -12,7 +13,8 @@ import {
 } from "@/elements";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useChatSessionsCreateMutation } from "@gram/client/react-query/chatSessionsCreate.js";
-import { ResizablePanel, useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
+import { ResizablePanel } from "@/components/ui/ResizablePanel";
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useParams, useSearchParams } from "react-router";
@@ -120,6 +122,10 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
   const project = useProject();
   const draft = useAssistantDraft();
   const createSessionMutation = useChatSessionsCreateMutation();
+  const { hasScope } = useRBAC();
+  const skillsEnabled = hasScope("skill:read", project.id);
+  const skillMutationsEnabled =
+    skillsEnabled && hasScope("project:write", project.id);
   const { theme: resolvedTheme } = useMoonshineConfig();
   const [searchParams] = useSearchParams();
 
@@ -165,8 +171,10 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
     for (const ref of draft.assistant?.toolsets ?? []) {
       const toolset = toolsetBySlug.get(ref.toolsetSlug);
       if (!toolset) continue;
+      const url = internalMcpUrl({ slug: project.slug }, toolset);
+      if (!url) continue;
       entries.push({
-        url: internalMcpUrl({ slug: project.slug }, toolset),
+        url,
         name: capMcpEntryName(toolset.slug),
         environment: ref.environmentSlug ?? fallbackEnv,
       });
@@ -238,6 +246,10 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
         slug: m.mcpServerSlug,
         environmentSlug: m.environmentSlug ?? null,
       })),
+      skills: draft.assistant.skills.map((skill) => ({
+        id: skill.skillId,
+        pinnedVersionId: skill.pinnedVersionId ?? null,
+      })),
     };
   }
   const snapshot = snapshotRef.current;
@@ -246,8 +258,13 @@ function ChatPane({ mode }: { mode: "create" | "edit" }) {
 
   const systemPrompt = useMemo(() => {
     if (!ready) return null;
-    return buildSystemPrompt({ mode, snapshot: snapshot ?? undefined });
-  }, [mode, ready, snapshot]);
+    return buildSystemPrompt({
+      mode,
+      snapshot: snapshot ?? undefined,
+      skillsEnabled,
+      skillMutationsEnabled,
+    });
+  }, [mode, ready, snapshot, skillsEnabled, skillMutationsEnabled]);
 
   const welcome = useMemo(
     () =>

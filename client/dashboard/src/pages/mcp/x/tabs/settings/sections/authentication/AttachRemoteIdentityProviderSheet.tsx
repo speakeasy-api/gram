@@ -1,20 +1,20 @@
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/Select";
 import {
   Sheet,
   SheetContent,
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { Text } from "@/components/ui/Text";
 import { useFetcher } from "@/contexts/Fetcher";
 import { useSdkClient } from "@/contexts/Sdk";
 import {
@@ -31,7 +31,8 @@ import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/clie
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
-import { Alert, Button, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -50,6 +51,7 @@ import {
   parseScopes,
   pickPreferredAuthMethod,
 } from "./issuerFormUtils";
+import { IdentityProviderAttachmentErrorAlert } from "./IdentityProviderAttachmentErrorAlert";
 import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
 import { useIssuerDiscovery } from "./useIssuerDiscovery";
 
@@ -62,6 +64,7 @@ export function AttachRemoteIdentityProviderSheet({
   userSessionIssuer,
   selectableIssuers,
   initialIssuerUrl,
+  initialScopes,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -79,6 +82,9 @@ export function AttachRemoteIdentityProviderSheet({
   // in "new" mode and runs RFC 8414 discovery against this URL to prefill the
   // upstream endpoints.
   initialIssuerUrl?: string;
+  // RFC 9728 protected-resource scopes. Some providers advertise these only
+  // on the protected resource, not in authorization-server metadata.
+  initialScopes?: string[];
 }): JSX.Element {
   const client = useSdkClient();
   const { fetch: authedFetch } = useFetcher();
@@ -220,7 +226,7 @@ export function AttachRemoteIdentityProviderSheet({
     }> => {
       // Step 1: ensure a user_session_issuer exists. First-add auto-creates
       // one with the conservative interactive challenge mode and a 2-week
-      // session lifetime — these match the wire-user-session-issuer defaults.
+      // session lifetime.
       let issuerId = userSessionIssuer?.id;
       if (!issuerId) {
         const created = await client.userSessionIssuers.create({
@@ -408,11 +414,6 @@ export function AttachRemoteIdentityProviderSheet({
   });
 
   const submitting = attachMutation.isPending;
-  const submitError = attachMutation.error
-    ? attachMutation.error instanceof Error && attachMutation.error.message
-      ? attachMutation.error.message
-      : "An unexpected error occurred. Please try again."
-    : null;
   const { reset: resetAttachMutation } = attachMutation;
 
   // Reset transient state whenever the sheet is reopened. The target slug
@@ -439,7 +440,7 @@ export function AttachRemoteIdentityProviderSheet({
     setClientId("");
     setClientSecret("");
     setTokenEndpointAuthMethod("");
-    setScopeOverride("");
+    setScopeOverride(initialScopes?.join(", ") ?? "");
     setAudienceOverride("");
     setClientMode("select");
     setSelectedClientId("");
@@ -448,6 +449,7 @@ export function AttachRemoteIdentityProviderSheet({
     open,
     target.slug,
     initialIssuerUrl,
+    initialScopes,
     hasSelectable,
     setIssuerUrl,
     resetEndpointState,
@@ -532,9 +534,9 @@ export function AttachRemoteIdentityProviderSheet({
   let clientSectionBody: JSX.Element;
   if (mode === "select" && selectedIssuerId && isLoadingIssuerClients) {
     clientSectionBody = (
-      <Type muted small>
+      <Text muted small>
         Loading clients…
-      </Type>
+      </Text>
     );
   } else if (effectiveClientMode === "select") {
     clientSectionBody = (
@@ -652,10 +654,10 @@ export function AttachRemoteIdentityProviderSheet({
                     }}
                     placeholder="my-identity-provider"
                   />
-                  <Type muted small>
+                  <Text muted small>
                     Project-unique identifier for this identity provider.
                     Auto-derived from the Issuer URL until you edit it.
-                  </Type>
+                  </Text>
                 </Stack>
 
                 <Stack gap={2}>
@@ -670,11 +672,11 @@ export function AttachRemoteIdentityProviderSheet({
                     }}
                     placeholder="My Identity Provider"
                   />
-                  <Type muted small>
+                  <Text muted small>
                     Friendly label shown in the dashboard. Auto-derived from the
                     Issuer URL until you edit it; falls back to the Issuer URL
                     when left blank.
-                  </Type>
+                  </Text>
                 </Stack>
 
                 <EndpointsFields
@@ -711,11 +713,7 @@ export function AttachRemoteIdentityProviderSheet({
             </Stack>
           )}
 
-          {submitError && (
-            <Alert variant="error" dismissible={false}>
-              {submitError}
-            </Alert>
-          )}
+          <IdentityProviderAttachmentErrorAlert error={attachMutation.error} />
         </div>
 
         <SheetFooter className="flex-row items-center justify-end gap-2 border-t px-6 py-4">
@@ -753,9 +751,9 @@ function SectionHeading({
   return (
     <Stack gap={1}>
       <Label className="text-sm font-medium">{title}</Label>
-      <Type muted small>
+      <Text muted small>
         {description}
-      </Type>
+      </Text>
     </Stack>
   );
 }
@@ -809,10 +807,10 @@ function SelectExistingFields({
           ))}
         </SelectContent>
       </Select>
-      <Type muted small>
+      <Text muted small>
         Pick an organization-level or project identity provider already
         configured on this project.
-      </Type>
+      </Text>
     </Stack>
   );
 }
@@ -844,10 +842,10 @@ function SelectExistingClientFields({
             ))}
           </SelectContent>
         </Select>
-        <Type muted small>
+        <Text muted small>
           Bind an existing client of this provider to this MCP server. The
           client's stored configuration is reused as-is.
-        </Type>
+        </Text>
       </Stack>
 
       {selectedClient && <SelectedClientDetails client={selectedClient} />}
@@ -884,9 +882,9 @@ function SelectedClientDetails({
       {rows.map((row) => (
         <Stack key={row.label} gap={1}>
           <Label className="text-muted-foreground text-xs">{row.label}</Label>
-          <Type small mono={row.mono} className="break-all">
+          <Text small mono={row.mono} className="break-all">
             {row.value}
-          </Type>
+          </Text>
         </Stack>
       ))}
     </Stack>

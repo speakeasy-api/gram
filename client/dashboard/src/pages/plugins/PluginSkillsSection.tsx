@@ -1,27 +1,35 @@
 import { RequireScope } from "@/components/require-scope";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Button as UiButton } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
-import { DotCard } from "@/components/ui/dot-card";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Button as UiButton } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { DotRow } from "@/components/ui/DotRow";
+import { DotTable } from "@/components/ui/DotTable";
+import { SearchBar } from "@/components/ui/SearchBar";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
+import type { ViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { useProject } from "@/contexts/Auth";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { useRoutes } from "@/routes";
 import type { SkillDistribution } from "@gram/client/models/components/skilldistribution.js";
-import { useDistributeSkillMutation } from "@gram/client/react-query/distributeSkill.js";
 import {
   invalidateAllSkillDistributions,
   useSkillDistributionsInfinite,
 } from "@gram/client/react-query/skillDistributions.js";
-import { useSkillsInfinite } from "@gram/client/react-query/skills.js";
 import { useUndistributeSkillMutation } from "@gram/client/react-query/undistributeSkill.js";
-import { Badge, Button, Icon } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { useQueryClient } from "@tanstack/react-query";
 import { Sparkles, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
+import { SettingsSection } from "@/pages/mcp/x/tabs/settings/SettingsSection";
+import {
+  SkillPickerDialog,
+  type SkillPickerResult,
+} from "../skills/SkillPickerDialog";
 import { SectionEmptyState } from "./SectionEmptyState";
 
 /**
@@ -31,18 +39,19 @@ import { SectionEmptyState } from "./SectionEmptyState";
  */
 export function PluginSkillsSection({
   pluginId,
-  searchQuery,
+  viewMode,
   onMutated,
 }: {
   pluginId: string;
-  /** Page-level search query; narrows the listed skill distributions. */
-  searchQuery: string;
+  /** Page-level entry layout shared with the server section. */
+  viewMode: ViewMode;
   /** Invoked after a successful change, e.g. to offer a marketplace publish. */
   onMutated: (message: string) => void;
 }): JSX.Element {
   const project = useProject();
   const queryClient = useQueryClient();
   const [isAddSkillOpen, setIsAddSkillOpen] = useState(false);
+  const [search, setSearch] = useState("");
 
   const distributionsQuery = useSkillDistributionsInfinite(
     { pluginId, limit: 50 },
@@ -64,7 +73,7 @@ export function PluginSkillsSection({
 
   // Case-insensitive match on the card's visible labels: the skill display
   // name and its mono slug-style name.
-  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const normalizedSearch = search.trim().toLowerCase();
   const filteredDistributions = useMemo(() => {
     if (!normalizedSearch) return distributions;
     return distributions.filter(
@@ -74,40 +83,27 @@ export function PluginSkillsSection({
     );
   }, [distributions, normalizedSearch]);
 
-  const skillsQuery = useSkillsInfinite({ limit: 200 }, undefined, {
-    throwOnError: false,
-    enabled: isAddSkillOpen,
-  });
-  useDrainInfiniteQuery(skillsQuery, isAddSkillOpen);
-  const isSkillListLoading = skillsQuery.isPending || skillsQuery.hasNextPage;
-  const availableSkills = useMemo(() => {
-    const distributedSkillIds = new Set(distributions.map((d) => d.skillId));
-    return (
-      skillsQuery.data?.pages.flatMap((page) => page.result.skills) ?? []
-    ).filter((skill) => !distributedSkillIds.has(skill.id));
-  }, [distributions, skillsQuery.data?.pages]);
-
-  const distribute = useDistributeSkillMutation();
   const undistribute = useUndistributeSkillMutation();
 
-  const handleAddSkill: React.FormEventHandler<HTMLFormElement> = (e) => {
-    e.preventDefault();
-    const skillId = new FormData(e.currentTarget).get("skillId") as string;
-    if (!skillId) return;
-    distribute.mutate(
-      {
-        request: { distributeSkillRequestBody: { id: skillId, pluginId } },
-      },
-      {
-        onSuccess: () => {
-          setIsAddSkillOpen(false);
-          void invalidateAllSkillDistributions(queryClient);
-          onMutated("Skill added to plugin");
-        },
-        onError: () => {
-          toast.error("Unable to add skill to plugin");
-        },
-      },
+  const handleAddSkillsComplete = async ({
+    addedCount,
+    failedCount,
+  }: SkillPickerResult) => {
+    // Some mutations may succeed even when others fail, so always refresh the
+    // cache before offering a failed-only retry.
+    await invalidateAllSkillDistributions(queryClient);
+    if (failedCount === 0) {
+      onMutated(
+        addedCount > 1
+          ? `${addedCount} skills added to plugin`
+          : "Skill added to plugin",
+      );
+      return;
+    }
+    toast.error(
+      addedCount > 0
+        ? `Added ${addedCount} skill${addedCount > 1 ? "s" : ""}, ${failedCount} failed`
+        : `Unable to add skill${failedCount > 1 ? "s" : ""} to plugin`,
     );
   };
 
@@ -144,7 +140,7 @@ export function PluginSkillsSection({
       />
     );
   } else if (!isMembershipLoaded) {
-    listContent = <Skeleton className="h-24 w-full rounded-xl" />;
+    listContent = <Skeleton className="h-24 w-full" />;
   } else if (distributions.length === 0) {
     listContent = (
       <SectionEmptyState
@@ -154,6 +150,26 @@ export function PluginSkillsSection({
     );
   } else if (filteredDistributions.length === 0) {
     listContent = <SectionEmptyState title="No skills match your search" />;
+  } else if (viewMode === "table") {
+    listContent = (
+      <DotTable
+        headers={[
+          { label: "Name" },
+          { label: "Identifier" },
+          { label: "Version" },
+          { label: "", className: "text-right" },
+        ]}
+      >
+        {filteredDistributions.map((distribution) => (
+          <PluginSkillTableRow
+            key={distribution.id}
+            distribution={distribution}
+            isRemoving={undistribute.isPending}
+            onRemove={() => handleRemoveSkill(distribution)}
+          />
+        ))}
+      </DotTable>
+    );
   } else {
     listContent = (
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -170,107 +186,66 @@ export function PluginSkillsSection({
   }
 
   return (
-    <>
-      <div className="mb-3 flex items-center gap-3">
-        <div className="border-border flex-1 border-t" />
-        <div className="flex shrink-0 items-center gap-2">
-          <Type
-            small
-            muted
-            className="font-mono text-xs tracking-wide uppercase"
-          >
-            Skills
-          </Type>
+    <SettingsSection>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <SettingsSection.Header>
+          <div className="flex items-center gap-2">
+            <SettingsSection.Title>Skills</SettingsSection.Title>
+            {/* The query drains page by page, so a count shown mid-drain would
+                read as the total and then jump. Wait for the full membership. */}
+            {isMembershipLoaded && distributions.length > 0 && (
+              <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums">
+                {distributions.length}
+              </span>
+            )}
+          </div>
+          <SettingsSection.Description>
+            Skills distributed to this plugin ship inside the plugin package and
+            reach everyone who installs it.
+          </SettingsSection.Description>
+        </SettingsSection.Header>
+        <div className="flex items-center gap-2">
           {distributions.length > 0 && (
-            <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-xs font-medium tabular-nums">
-              {distributions.length}
-            </span>
+            <SearchBar
+              value={search}
+              onChange={setSearch}
+              placeholder="Search skills"
+              className="h-9 w-56"
+            />
           )}
-        </div>
-        <div className="border-border flex-1 border-t" />
-      </div>
-      <div className="mb-3 flex items-center justify-between gap-4">
-        <Type small muted className="max-w-md">
-          Skills distributed to this plugin ship inside the plugin package and
-          reach everyone who installs it.
-        </Type>
-        <RequireScope
-          scope="skill:write"
-          resourceId={project.id}
-          level="component"
-        >
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={!isMembershipLoaded}
-            onClick={() => setIsAddSkillOpen(true)}
+          <RequireScope
+            scope="skill:write"
+            resourceId={project.id}
+            level="component"
           >
-            <Button.LeftIcon>
-              <Icon name="plus" className="h-4 w-4" />
-            </Button.LeftIcon>
-            <Button.Text>Add Skill</Button.Text>
-          </Button>
-        </RequireScope>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!isMembershipLoaded}
+              onClick={() => setIsAddSkillOpen(true)}
+            >
+              <Button.LeftIcon>
+                <Icon name="plus" className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>Add Skill</Button.Text>
+            </Button>
+          </RequireScope>
+        </div>
       </div>
-      <div className="mb-8">{listContent}</div>
+      {listContent}
 
-      {/* Add Skill Dialog */}
-      <Dialog open={isAddSkillOpen} onOpenChange={setIsAddSkillOpen}>
-        <Dialog.Content>
-          <Dialog.Header>
-            <Dialog.Title>Add Skill</Dialog.Title>
-            <Dialog.Description>
-              Distribute a project skill to this plugin bundle.
-            </Dialog.Description>
-          </Dialog.Header>
-          <form onSubmit={handleAddSkill} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium">Skill</label>
-              {isSkillListLoading ? (
-                <Skeleton className="h-9 w-full" />
-              ) : availableSkills.length > 0 ? (
-                <select
-                  name="skillId"
-                  className="bg-background rounded-md border px-3 py-2 text-sm"
-                  required
-                >
-                  <option value="">Select a skill</option>
-                  {availableSkills.map((skill) => (
-                    <option key={skill.id} value={skill.id}>
-                      {skill.displayName}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <Type muted small>
-                  No skills available to add. Record a skill in this project
-                  first.
-                </Type>
-              )}
-            </div>
-            <Dialog.Footer>
-              <Button
-                variant="secondary"
-                onClick={() => setIsAddSkillOpen(false)}
-                type="button"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={
-                  distribute.isPending ||
-                  isSkillListLoading ||
-                  availableSkills.length === 0
-                }
-              >
-                Add
-              </Button>
-            </Dialog.Footer>
-          </form>
-        </Dialog.Content>
-      </Dialog>
-    </>
+      <SkillPickerDialog
+        open={isAddSkillOpen}
+        onOpenChange={setIsAddSkillOpen}
+        excludedSkillIds={distributions.map((item) => item.skillId)}
+        target={{ pluginId }}
+        title="Add Skills"
+        description="Distribute project skills to this plugin bundle."
+        actionLabel="Add"
+        emptyMessage="No skills available to add. Record a skill in this project first."
+        onBatchComplete={handleAddSkillsComplete}
+      />
+    </SettingsSection>
   );
 }
 
@@ -288,7 +263,7 @@ function PluginSkillCard({
   const navigate = useNavigate();
 
   return (
-    <DotCard
+    <Card.Entity
       className="cursor-pointer"
       onClick={() => {
         void navigate(routes.skills.detail.href(distribution.skillId));
@@ -296,7 +271,7 @@ function PluginSkillCard({
       icon={<Sparkles className="text-muted-foreground h-8 w-8" />}
     >
       <div className="mb-2 flex items-start justify-between gap-2">
-        <Type
+        <Text
           variant="subheading"
           as="div"
           className="text-md group-hover:text-primary flex-1 truncate transition-colors"
@@ -308,24 +283,12 @@ function PluginSkillCard({
           >
             {distribution.skillDisplayName}
           </Link>
-        </Type>
-        {distribution.pinnedVersionId ? (
-          <Badge
-            variant="neutral"
-            className="text-xs"
-            title={distribution.pinnedVersionId}
-          >
-            Pinned
-          </Badge>
-        ) : (
-          <Badge variant="information" className="text-xs">
-            Latest
-          </Badge>
-        )}
+        </Text>
+        <SkillVersionBadge distribution={distribution} />
       </div>
-      <Type small muted className="truncate font-mono">
+      <Text small muted className="truncate font-mono">
         {distribution.skillName}
-      </Type>
+      </Text>
 
       <div className="mt-auto flex items-center justify-end gap-2 pt-2">
         <RequireScope
@@ -335,8 +298,8 @@ function PluginSkillCard({
         >
           <UiButton
             type="button"
-            variant="ghost"
-            size="icon-sm"
+            variant="tertiary"
+            size="sm"
             tooltip="Remove skill"
             aria-label="Remove skill"
             className="hover:text-destructive"
@@ -350,6 +313,96 @@ function PluginSkillCard({
           </UiButton>
         </RequireScope>
       </div>
-    </DotCard>
+    </Card.Entity>
+  );
+}
+
+function PluginSkillTableRow({
+  distribution,
+  isRemoving,
+  onRemove,
+}: {
+  distribution: SkillDistribution;
+  isRemoving: boolean;
+  onRemove: () => void;
+}): JSX.Element {
+  const project = useProject();
+  const routes = useRoutes();
+  const href = routes.skills.detail.href(distribution.skillId);
+
+  return (
+    <DotRow
+      icon={<Sparkles className="text-muted-foreground h-5 w-5" />}
+      href={href}
+      ariaLabel={`View skill ${distribution.skillDisplayName}`}
+    >
+      <td className="px-3 py-3">
+        <Text
+          variant="subheading"
+          as="div"
+          className="group-hover:text-primary truncate text-sm transition-colors"
+          title={distribution.skillDisplayName}
+        >
+          {distribution.skillDisplayName}
+        </Text>
+      </td>
+      <td className="px-3 py-3">
+        <Text small muted className="truncate font-mono">
+          {distribution.skillName}
+        </Text>
+      </td>
+      <td className="px-3 py-3">
+        <SkillVersionBadge distribution={distribution} />
+      </td>
+      <td className="px-3 py-3">
+        <RequireScope
+          scope="skill:write"
+          resourceId={project.id}
+          level="component"
+        >
+          <div
+            className="relative z-20 flex items-center justify-end"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <UiButton
+              type="button"
+              variant="tertiary"
+              size="sm"
+              tooltip="Remove skill"
+              aria-label={`Remove skill ${distribution.skillDisplayName}`}
+              className="hover:text-destructive"
+              disabled={isRemoving}
+              onClick={onRemove}
+            >
+              <Trash2 className="h-4 w-4" />
+            </UiButton>
+          </div>
+        </RequireScope>
+      </td>
+    </DotRow>
+  );
+}
+
+function SkillVersionBadge({
+  distribution,
+}: {
+  distribution: SkillDistribution;
+}): JSX.Element {
+  if (distribution.pinnedVersionId) {
+    return (
+      <Badge
+        variant="neutral"
+        className="text-xs"
+        title={distribution.pinnedVersionId}
+      >
+        Pinned
+      </Badge>
+    );
+  }
+
+  return (
+    <Badge variant="information" className="text-xs">
+      Latest
+    </Badge>
   );
 }

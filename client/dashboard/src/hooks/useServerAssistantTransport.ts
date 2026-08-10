@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useAssistantsGetManaged } from "@gram/client/react-query/assistantsGetManaged.js";
 import { useEnsureManagedAssistantMutation } from "@gram/client/react-query/ensureManagedAssistant.js";
-import { useOrganization } from "@/contexts/Auth";
+import { useOrganization, useSession } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
+import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { isNotFoundError } from "@/lib/route-errors";
 import { createServerAssistantTransport } from "@/lib/ServerAssistantTransport";
 import type { ElementsTransportFactory } from "@/elements";
@@ -31,6 +32,11 @@ export interface UseServerAssistantTransportResult {
   needsAdmin: boolean;
 }
 
+interface UseServerAssistantTransportOptions {
+  getSkillIds?: () => string[];
+  onSkillIdsSent?: (skillIds: string[]) => void;
+}
+
 /**
  * Resolves the project's server-side Project Assistant and exposes a transport
  * factory wired to it. The conversation id, history, and conversation list are
@@ -46,9 +52,15 @@ export interface UseServerAssistantTransportResult {
 export function useServerAssistantTransport(
   projectSlug: string,
   enabled: boolean,
+  options: UseServerAssistantTransportOptions = {},
 ): UseServerAssistantTransportResult {
   const client = useGramContext();
   const organization = useOrganization();
+  const { session } = useSession();
+  // The transport outlives any single session value, so it reads through a ref
+  // instead of closing over one.
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
   const { hasScope, isLoading: rbacLoading } = useRBAC();
 
   // The hook can be called with a projectSlug that differs from the URL-active
@@ -58,8 +70,13 @@ export function useServerAssistantTransport(
   // active one — still gets the writer path.
   const targetProjectId =
     organization.projects.find((p) => p.slug === projectSlug)?.id ?? "";
+  // The demo org advertises the full scope set so pages are browsable, but
+  // enforcement is read-only — never auto-fire the write-scoped provisioning
+  // path there (it would 403 and toast on every page load).
   const canCreate =
-    !!targetProjectId && hasScope("project:write", targetProjectId);
+    !!targetProjectId &&
+    organization.slug !== DEMO_ORG_SLUG &&
+    hasScope("project:write", targetProjectId);
 
   // The fetcher reads the project from the X-Gram-Project header, but react-
   // query only differentiates by query key — pass projectSlug into the request
@@ -139,8 +156,23 @@ export function useServerAssistantTransport(
 
   const transport = useMemo<ElementsTransportFactory | undefined>(() => {
     if (!ready) return undefined;
-    return createServerAssistantTransport({ client, assistantId, projectSlug });
-  }, [ready, client, assistantId, projectSlug]);
+    return createServerAssistantTransport({
+      client,
+      assistantId,
+      projectSlug,
+      getSkillIds: options.getSkillIds,
+      onSkillIdsSent: options.onSkillIdsSent,
+      // The turn stream authenticates from headers, not cookies.
+      getSessionToken: () => sessionRef.current,
+    });
+  }, [
+    ready,
+    client,
+    assistantId,
+    projectSlug,
+    options.getSkillIds,
+    options.onSkillIdsSent,
+  ]);
 
   return { transport, assistantId, ready, error, needsAdmin };
 }

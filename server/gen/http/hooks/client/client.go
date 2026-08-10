@@ -29,6 +29,14 @@ type Client struct {
 	// Ingest Doer is the HTTP client used to make requests to the ingest endpoint.
 	IngestDoer goahttp.Doer
 
+	// UploadSkillContent Doer is the HTTP client used to make requests to the
+	// uploadSkillContent endpoint.
+	UploadSkillContentDoer goahttp.Doer
+
+	// SkillFeedback Doer is the HTTP client used to make requests to the
+	// skillFeedback endpoint.
+	SkillFeedbackDoer goahttp.Doer
+
 	// Logs Doer is the HTTP client used to make requests to the logs endpoint.
 	LogsDoer goahttp.Doer
 
@@ -56,17 +64,19 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ClaudeDoer:          doer,
-		CursorDoer:          doer,
-		CodexDoer:           doer,
-		IngestDoer:          doer,
-		LogsDoer:            doer,
-		MetricsDoer:         doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		ClaudeDoer:             doer,
+		CursorDoer:             doer,
+		CodexDoer:              doer,
+		IngestDoer:             doer,
+		UploadSkillContentDoer: doer,
+		SkillFeedbackDoer:      doer,
+		LogsDoer:               doer,
+		MetricsDoer:            doer,
+		RestoreResponseBody:    restoreBody,
+		scheme:                 scheme,
+		host:                   host,
+		decoder:                dec,
+		encoder:                enc,
 	}
 }
 
@@ -161,6 +171,54 @@ func (c *Client) Ingest() goa.Endpoint {
 		resp, err := c.IngestDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("hooks", "ingest", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UploadSkillContent returns an endpoint that makes HTTP requests to the hooks
+// service uploadSkillContent server.
+func (c *Client) UploadSkillContent() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUploadSkillContentRequest(c.encoder)
+		decodeResponse = DecodeUploadSkillContentResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUploadSkillContentRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UploadSkillContentDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("hooks", "uploadSkillContent", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SkillFeedback returns an endpoint that makes HTTP requests to the hooks
+// service skillFeedback server.
+func (c *Client) SkillFeedback() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSkillFeedbackRequest(c.encoder)
+		decodeResponse = DecodeSkillFeedbackResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSkillFeedbackRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SkillFeedbackDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("hooks", "skillFeedback", err)
 		}
 		return decodeResponse(resp)
 	}

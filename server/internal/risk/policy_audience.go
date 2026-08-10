@@ -83,7 +83,6 @@ func syncRiskPolicyAudienceGrants(ctx context.Context, db repo.DBTX, organizatio
 			Scope:          authz.ScopeRiskPolicyEvaluate,
 			ResourceID:     policyID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: principals,
 		Selector:   authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policyID),
 	}); err != nil {
@@ -100,7 +99,6 @@ func clearRiskPolicyAudienceGrants(ctx context.Context, db repo.DBTX, organizati
 			Scope:          authz.ScopeRiskPolicyEvaluate,
 			ResourceID:     policyID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: nil,
 		Selector:   authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policyID),
 	}); err != nil {
@@ -122,9 +120,6 @@ func riskPolicyAudiencePrincipalURNs(ctx context.Context, db repo.DBTX, organiza
 
 	principalURNs := make([]string, 0, len(grants))
 	for _, grant := range grants {
-		if grant.Effect != authz.PolicyEffectAllow {
-			continue
-		}
 		if !maps.Equal(grant.Selector, authz.NewSelector(authz.ScopeRiskPolicyEvaluate, policyID)) {
 			continue
 		}
@@ -149,9 +144,6 @@ func riskPolicyAudienceURNsByPolicy(ctx context.Context, db repo.DBTX, organizat
 
 	byPolicy := make(map[string][]string)
 	for _, grant := range grants {
-		if grant.Effect != authz.PolicyEffectAllow {
-			continue
-		}
 		// Attribute the grant to its policy via the selector's resource_id, then
 		// re-check against the canonical selector so grants carrying extra keys
 		// (or wildcards) are excluded exactly as the single-policy path does.

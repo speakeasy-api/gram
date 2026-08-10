@@ -1,8 +1,7 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
-import { Heading } from "@/components/ui/heading";
-import type { Action } from "@/components/ui/more-actions";
+import type { Action } from "@/components/ui/MoreActions";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useRoutes } from "@/routes";
 import { useListDeploymentsSuspense } from "@gram/client/react-query/listDeployments.js";
@@ -11,17 +10,16 @@ import {
   type RedeployDeploymentMutationVariables,
 } from "@gram/client/react-query/redeployDeployment.js";
 import { useMutationState } from "@tanstack/react-query";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import {
-  Badge,
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
-  Table,
-  TableProps,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Icon } from "@/components/ui/Icon";
+import { Table, TableProps } from "@/components/ui/Table";
 import { Suspense, useState } from "react";
 import { Outlet } from "react-router";
 import { DeploymentsEmptyState } from "./DeploymentsEmptyState";
@@ -220,31 +218,24 @@ function DeploymentsTable({
     {
       key: "status",
       header: "",
-      width: "50px",
+      width: "90px",
       render: (row) => {
-        switch (row.status) {
-          case "completed":
-            return (
-              <div className="bg-success flex items-center justify-center rounded-full p-1">
-                <Icon name="check" className="text-success-foreground" />
-              </div>
-            );
-          case "failed":
-            return (
-              <div className="bg-destructive/20 flex items-center justify-center rounded-full p-1">
-                <Icon name="x" className="text-destructive-foreground" />
-              </div>
-            );
-          default:
-            return (
-              <div className="bg-warning flex items-center justify-center rounded-full p-1">
-                <Icon
-                  name="circle-dashed"
-                  className="text-warning-foreground"
-                />
-              </div>
-            );
-        }
+        // Mono status word: muted green for success, red for failed,
+        // neutral ink for everything in flight.
+        const tone =
+          row.status === "completed"
+            ? "text-default-success"
+            : row.status === "failed"
+              ? "text-default-destructive"
+              : "text-muted-foreground";
+        const word = row.status === "completed" ? "ok" : row.status;
+        return (
+          <span
+            className={`font-mono text-[11px] tracking-wide uppercase ${tone}`}
+          >
+            {word}
+          </span>
+        );
       },
     },
     {
@@ -305,8 +296,9 @@ function DeploymentsTable({
     <>
       {showHeader && (
         <>
+          <Page.Eyebrow className="mb-2" />
           <div className="mb-2 flex items-center justify-between">
-            <Heading variant="h2">Recent Deployments</Heading>
+            <h2 className="text-display-sm font-thin">Recent Deployments</h2>
             {activeDeployment && (
               <routes.deployments.deployment.Link
                 params={[activeDeployment.id]}
@@ -321,7 +313,7 @@ function DeploymentsTable({
             )}
           </div>
 
-          <div className="bg-secondary mb-6 space-y-2 rounded-lg p-6">
+          <div className="bg-card border-border mb-6 space-y-2 border p-6">
             <p className="text-muted-foreground text-sm">
               Each time you add a new source or update an existing source a new
               deployment is created.

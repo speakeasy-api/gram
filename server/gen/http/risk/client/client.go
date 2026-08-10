@@ -57,6 +57,18 @@ type Client struct {
 	// listRiskResultsByChat endpoint.
 	ListRiskResultsByChatDoer goahttp.Doer
 
+	// MarkRiskResultsFalsePositive Doer is the HTTP client used to make requests
+	// to the markRiskResultsFalsePositive endpoint.
+	MarkRiskResultsFalsePositiveDoer goahttp.Doer
+
+	// UnmarkRiskResultsFalsePositive Doer is the HTTP client used to make requests
+	// to the unmarkRiskResultsFalsePositive endpoint.
+	UnmarkRiskResultsFalsePositiveDoer goahttp.Doer
+
+	// ListDismissedRiskResults Doer is the HTTP client used to make requests to
+	// the listDismissedRiskResults endpoint.
+	ListDismissedRiskResultsDoer goahttp.Doer
+
 	// GetRiskOverview Doer is the HTTP client used to make requests to the
 	// getRiskOverview endpoint.
 	GetRiskOverviewDoer goahttp.Doer
@@ -219,6 +231,9 @@ func NewClient(
 		ListRiskResultsForAgentDoer:        doer,
 		UnmaskRiskResultDoer:               doer,
 		ListRiskResultsByChatDoer:          doer,
+		MarkRiskResultsFalsePositiveDoer:   doer,
+		UnmarkRiskResultsFalsePositiveDoer: doer,
+		ListDismissedRiskResultsDoer:       doer,
 		GetRiskOverviewDoer:                doer,
 		ListRiskCategoriesDoer:             doer,
 		CompileExprDoer:                    doer,
@@ -495,6 +510,78 @@ func (c *Client) ListRiskResultsByChat() goa.Endpoint {
 		resp, err := c.ListRiskResultsByChatDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "listRiskResultsByChat", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// MarkRiskResultsFalsePositive returns an endpoint that makes HTTP requests to
+// the risk service markRiskResultsFalsePositive server.
+func (c *Client) MarkRiskResultsFalsePositive() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeMarkRiskResultsFalsePositiveRequest(c.encoder)
+		decodeResponse = DecodeMarkRiskResultsFalsePositiveResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildMarkRiskResultsFalsePositiveRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.MarkRiskResultsFalsePositiveDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "markRiskResultsFalsePositive", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UnmarkRiskResultsFalsePositive returns an endpoint that makes HTTP requests
+// to the risk service unmarkRiskResultsFalsePositive server.
+func (c *Client) UnmarkRiskResultsFalsePositive() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUnmarkRiskResultsFalsePositiveRequest(c.encoder)
+		decodeResponse = DecodeUnmarkRiskResultsFalsePositiveResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUnmarkRiskResultsFalsePositiveRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UnmarkRiskResultsFalsePositiveDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "unmarkRiskResultsFalsePositive", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListDismissedRiskResults returns an endpoint that makes HTTP requests to the
+// risk service listDismissedRiskResults server.
+func (c *Client) ListDismissedRiskResults() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListDismissedRiskResultsRequest(c.encoder)
+		decodeResponse = DecodeListDismissedRiskResultsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListDismissedRiskResultsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListDismissedRiskResultsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "listDismissedRiskResults", err)
 		}
 		return decodeResponse(resp)
 	}

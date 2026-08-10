@@ -16,7 +16,7 @@ export type EvaluatePromptGuardrailRequestBody = {
    */
   chatId: string;
   /**
-   * Message types to judge (user_message, assistant_message, tool_request, tool_response), matching a policy's message_types. When empty or omitted, judges all supported types.
+   * Message types to judge (user_message, assistant_message, tool_request, tool_response, prompt_attachment), matching a policy's message_types. When empty or omitted, judges all supported types.
    */
   messageTypes?: Array<string> | undefined;
   modelConfig?: RiskPolicyModelConfig | undefined;

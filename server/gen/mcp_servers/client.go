@@ -22,11 +22,16 @@ type Client struct {
 	ListMcpServersForOrgEndpoint goa.Endpoint
 	UpdateMcpServerEndpoint      goa.Endpoint
 	ListToolFiltersEndpoint      goa.Endpoint
+	SetToolMetadataBatchEndpoint goa.Endpoint
+	AddToolMetadataBatchEndpoint goa.Endpoint
+	ListToolMetadataEndpoint     goa.Endpoint
+	SetToolMetadataEndpoint      goa.Endpoint
+	DeleteToolMetadataEndpoint   goa.Endpoint
 	DeleteMcpServerEndpoint      goa.Endpoint
 }
 
 // NewClient initializes a "mcpServers" service client given the endpoints.
-func NewClient(createMcpServer, getMcpServer, listMcpServers, listMcpServersForOrg, updateMcpServer, listToolFilters, deleteMcpServer goa.Endpoint) *Client {
+func NewClient(createMcpServer, getMcpServer, listMcpServers, listMcpServersForOrg, updateMcpServer, listToolFilters, setToolMetadataBatch, addToolMetadataBatch, listToolMetadata, setToolMetadata, deleteToolMetadata, deleteMcpServer goa.Endpoint) *Client {
 	return &Client{
 		CreateMcpServerEndpoint:      createMcpServer,
 		GetMcpServerEndpoint:         getMcpServer,
@@ -34,6 +39,11 @@ func NewClient(createMcpServer, getMcpServer, listMcpServers, listMcpServersForO
 		ListMcpServersForOrgEndpoint: listMcpServersForOrg,
 		UpdateMcpServerEndpoint:      updateMcpServer,
 		ListToolFiltersEndpoint:      listToolFilters,
+		SetToolMetadataBatchEndpoint: setToolMetadataBatch,
+		AddToolMetadataBatchEndpoint: addToolMetadataBatch,
+		ListToolMetadataEndpoint:     listToolMetadata,
+		SetToolMetadataEndpoint:      setToolMetadata,
+		DeleteToolMetadataEndpoint:   deleteToolMetadata,
 		DeleteMcpServerEndpoint:      deleteMcpServer,
 	}
 }
@@ -173,6 +183,117 @@ func (c *Client) ListToolFilters(ctx context.Context, p *ListToolFiltersPayload)
 		return
 	}
 	return ires.(*types.ListToolFiltersResult), nil
+}
+
+// SetToolMetadataBatch calls the "setToolMetadataBatch" endpoint of the
+// "mcpServers" service.
+// SetToolMetadataBatch may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetToolMetadataBatch(ctx context.Context, p *SetToolMetadataBatchPayload) (res *SetToolMetadataBatchResult, err error) {
+	var ires any
+	ires, err = c.SetToolMetadataBatchEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*SetToolMetadataBatchResult), nil
+}
+
+// AddToolMetadataBatch calls the "addToolMetadataBatch" endpoint of the
+// "mcpServers" service.
+// AddToolMetadataBatch may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) AddToolMetadataBatch(ctx context.Context, p *AddToolMetadataBatchPayload) (res *AddToolMetadataBatchResult, err error) {
+	var ires any
+	ires, err = c.AddToolMetadataBatchEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AddToolMetadataBatchResult), nil
+}
+
+// ListToolMetadata calls the "listToolMetadata" endpoint of the "mcpServers"
+// service.
+// ListToolMetadata may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListToolMetadata(ctx context.Context, p *ListToolMetadataPayload) (res *ListToolMetadataResult, err error) {
+	var ires any
+	ires, err = c.ListToolMetadataEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListToolMetadataResult), nil
+}
+
+// SetToolMetadata calls the "setToolMetadata" endpoint of the "mcpServers"
+// service.
+// SetToolMetadata may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetToolMetadata(ctx context.Context, p *SetToolMetadataPayload) (res *types.ToolMetadata, err error) {
+	var ires any
+	ires, err = c.SetToolMetadataEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.ToolMetadata), nil
+}
+
+// DeleteToolMetadata calls the "deleteToolMetadata" endpoint of the
+// "mcpServers" service.
+// DeleteToolMetadata may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DeleteToolMetadata(ctx context.Context, p *DeleteToolMetadataPayload) (err error) {
+	_, err = c.DeleteToolMetadataEndpoint(ctx, p)
+	return
 }
 
 // DeleteMcpServer calls the "deleteMcpServer" endpoint of the "mcpServers"

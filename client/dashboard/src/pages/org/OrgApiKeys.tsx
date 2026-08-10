@@ -1,12 +1,13 @@
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
+import { PageEyebrow } from "@/components/page-eyebrow";
 import { Page } from "@/components/page-layout";
-import { Dialog } from "@/components/ui/dialog";
-import { Heading } from "@/components/ui/heading";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { SearchBar } from "@/components/ui/search-bar";
-import { Type } from "@/components/ui/type";
+import { Dialog } from "@/components/ui/Dialog";
+import { Heading } from "@/components/ui/Heading";
+import { Label } from "@/components/ui/Label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
+import { SearchBar } from "@/components/ui/SearchBar";
+import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
 import { assert } from "@/lib/utils";
 import { Key } from "@gram/client/models/components/key.js";
@@ -16,7 +17,10 @@ import {
   useListAPIKeysSuspense,
 } from "@gram/client/react-query/listAPIKeys";
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
-import { Button, Column, Icon, Stack, Table } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
+import { Column, Table } from "@/components/ui/Table";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Copy } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -133,19 +137,19 @@ function OrgApiKeysInner() {
       key: "name",
       header: "Name",
       width: "1fr",
-      render: (key: Key) => <Type variant="body">{key.name}</Type>,
+      render: (key: Key) => <Text variant="body">{key.name}</Text>,
     },
     {
       key: "key",
       header: "Key",
       width: "1fr",
-      render: (key: Key) => <Type variant="body">{key.keyPrefix}</Type>,
+      render: (key: Key) => <Text variant="body">{key.keyPrefix}</Text>,
     },
     {
       key: "scopes",
       header: "Scopes",
       width: "1fr",
-      render: (key: Key) => <Type variant="body">{key.scopes.join(", ")}</Type>,
+      render: (key: Key) => <Text variant="body">{key.scopes.join(", ")}</Text>,
     },
     {
       key: "createdAt",
@@ -186,14 +190,17 @@ function OrgApiKeysInner() {
 
   return (
     <>
-      <Heading variant="h4" className="mb-2">
-        API Keys
-      </Heading>
-      <Type muted small className="mb-6">
-        Create and manage API keys to authenticate programmatic access to
-        platform services, including MCP service deployments, tool management,
-        and other connections.
-      </Type>
+      <div className="mb-6">
+        <PageEyebrow className="mb-2" />
+        <Heading variant="h4" className="mb-2 text-display-sm font-thin">
+          API Keys
+        </Heading>
+        <Text muted small className="mt-1">
+          Create and manage API keys to authenticate programmatic access to
+          platform services, including MCP service deployments, tool management,
+          and other connections.
+        </Text>
+      </div>
       <Stack
         direction="horizontal"
         justify="space-between"
@@ -212,38 +219,37 @@ function OrgApiKeysInner() {
           </Button>
         </RequireScope>
       </Stack>
-      <Table
-        columns={apiKeyColumns}
-        data={filteredKeys}
-        rowKey={(row) => row.id}
-        className="max-h-[500px] overflow-y-auto"
-        noResultsMessage={
-          <Stack
-            gap={2}
-            className="bg-background h-full gap-4 p-4 py-6"
-            align="center"
-            justify="center"
-          >
-            <Type variant="body">
-              {apiKeySearch ? "No matching API keys" : "No API keys yet"}
-            </Type>
-            {!apiKeySearch && (
-              <RequireScope scope="org:admin" level="component">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => setIsCreateDialogOpen(true)}
-                >
-                  <Button.LeftIcon>
-                    <Icon name="key-round" className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>Create Key</Button.Text>
-                </Button>
-              </RequireScope>
-            )}
-          </Stack>
-        }
-      />
+      {filteredKeys.length > 0 ? (
+        <Table
+          columns={apiKeyColumns}
+          data={filteredKeys}
+          rowKey={(row) => row.id}
+          className="max-h-[500px] overflow-y-auto"
+        />
+      ) : (
+        <div
+          role="status"
+          className="border-border bg-background flex min-h-32 flex-col items-center justify-center gap-4 border p-6"
+        >
+          <Text variant="body">
+            {apiKeySearch ? "No matching API keys" : "No API keys yet"}
+          </Text>
+          {!apiKeySearch && (
+            <RequireScope scope="org:admin" level="component">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setIsCreateDialogOpen(true)}
+              >
+                <Button.LeftIcon>
+                  <Icon name="key-round" className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>Create Key</Button.Text>
+              </Button>
+            </RequireScope>
+          )}
+        </div>
+      )}
 
       <Dialog open={isCreateDialogOpen} onOpenChange={handleCloseCreateDialog}>
         <Dialog.Content>
@@ -254,23 +260,26 @@ function OrgApiKeysInner() {
           </Dialog.Header>
           {newlyCreatedKey ? (
             <div className="space-y-4 py-4">
-              <div className="text-foreground rounded-lg border border-yellow-500/50 bg-yellow-600/50 p-4 text-sm">
+              <div className="text-foreground border border-yellow-500/50 bg-yellow-600/50 p-4 text-sm">
                 You will not be able to see this token value again once you
                 close this dialog. Copy it now and store it securely.
               </div>
-              <div className="bg-muted flex items-center space-x-2 rounded-md p-3">
+              <div className="bg-muted flex items-center space-x-2 p-3">
                 <code className="flex-1 break-all">{newlyCreatedKey.key}</code>
                 <Button
+                  aria-label={isCopied ? "API key copied" : "Copy API key"}
                   variant="tertiary"
                   size="sm"
                   onClick={() => void handleCopyToken()}
                   className="shrink-0"
                 >
-                  {isCopied ? (
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
+                  <Button.Icon>
+                    {isCopied ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button.Icon>
                 </Button>
               </div>
               <div className="flex justify-end">
@@ -306,8 +315,9 @@ function OrgApiKeysInner() {
                         <RadioGroupItem value="producer" id="r2" />
                         <Label className="leading-normal" htmlFor="r2">
                           Producer: can upload OpenAPI documents, trigger
-                          deployments, query/modify toolsets, read data and
-                          access MCP servers.
+                          deployments, query/modify toolsets, read data
+                          (including exporting chat transcripts), and access MCP
+                          servers.
                         </Label>
                       </div>
                       <div className="flex items-center gap-3">
@@ -319,8 +329,8 @@ function OrgApiKeysInner() {
                       <div className="flex items-center gap-3">
                         <RadioGroupItem value="hooks" id="r4" />
                         <Label className="leading-normal" htmlFor="r4">
-                          Hooks: can send hook events and OTEL logs from agent
-                          integrations.
+                          Hooks: can ingest authenticated AI traffic, including
+                          hook events and OpenTelemetry data.
                         </Label>
                       </div>
                       <div className="flex items-center gap-3">
@@ -364,11 +374,11 @@ function OrgApiKeysInner() {
             <Dialog.Title>Revoke API Key</Dialog.Title>
           </Dialog.Header>
           <div className="space-y-4 py-4">
-            <Type variant="body">
+            <Text variant="body">
               Are you sure you want to revoke the API key{" "}
               <span className="font-bold italic">{keyToRevoke?.name}</span>?
               This action cannot be undone.
-            </Type>
+            </Text>
             <div className="flex justify-end space-x-2">
               <Button variant="secondary" onClick={() => setKeyToRevoke(null)}>
                 Cancel

@@ -2,15 +2,23 @@ package skills
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
+	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
@@ -36,7 +44,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-const maxSkillsRequestBodyBytes = 512 * 1024
+const (
+	maxSkillsRequestBodyBytes = 512 * 1024
+	maxSkillDisplayNameRunes  = 256
+	maxSkillSummaryRunes      = 1024
+	maxSkillTags              = 40
+	maxSkillTagRunes          = 64
+)
 
 type Service struct {
 	tracer   trace.Tracer
@@ -46,6 +60,8 @@ type Service struct {
 	authz    *authz.Engine
 	features *productfeatures.Client
 	audit    *audit.Logger
+	signaler ManualSuggestionSignaler
+	siteURL  *url.URL
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -59,6 +75,8 @@ func NewService(
 	authzEngine *authz.Engine,
 	features *productfeatures.Client,
 	auditLogger *audit.Logger,
+	signaler ManualSuggestionSignaler,
+	siteURL *url.URL,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("skills"))
 
@@ -70,6 +88,8 @@ func NewService(
 		authz:    authzEngine,
 		features: features,
 		audit:    auditLogger,
+		signaler: signaler,
+		siteURL:  siteURL,
 	}
 }
 
@@ -81,9 +101,17 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		mux,
 		srv.New(endpoints, mux, skillsRequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
+	// Public share pages, served outside Goa like the MCP install pages so
+	// they resolve on custom domains (which point at this server, not at the
+	// dashboard host).
+	o11y.AttachHandler(mux, http.MethodGet, "/shared/skills/{token}", oops.ErrHandle(service.logger, service.ServeSharedSkillPage).ServeHTTP)
+	o11y.AttachHandler(mux, http.MethodGet, "/shared/skills/{token}/SKILL.md", oops.ErrHandle(service.logger, service.ServeSharedSkillMarkdown).ServeHTTP)
 }
 
 func skillsRequestDecoder(r *http.Request) goahttp.Decoder {
+	if r.URL.Path == srv.ApproveAllSuggestionsSkillsPath() && (r.Body == nil || r.Body == http.NoBody) {
+		r.Body = io.NopCloser(strings.NewReader("{}"))
+	}
 	if r.Body != nil {
 		r.Body = http.MaxBytesReader(nil, r.Body, maxSkillsRequestBodyBytes)
 	}
@@ -151,16 +179,16 @@ func manifestErrorMessage(err error) string {
 	}
 }
 
-func loadDerivedSkillState(ctx context.Context, queries *repo.Queries, projectID, skillID uuid.UUID) (uuid.UUID, int64, error) {
+func loadDerivedSkillState(ctx context.Context, queries *repo.Queries, projectID, skillID uuid.UUID) (repo.GetSkillStateRow, error) {
 	state, err := queries.GetSkillState(ctx, repo.GetSkillStateParams{
 		ProjectID: projectID,
 		SkillID:   skillID,
 	})
 	if err != nil {
-		return uuid.Nil, 0, fmt.Errorf("get skill state: %w", err)
+		return repo.GetSkillStateRow{LatestVersionID: uuid.Nil, VersionCount: 0, HasValidVersion: false}, fmt.Errorf("get skill state: %w", err)
 	}
 
-	return state.LatestVersionID, state.VersionCount, nil
+	return state, nil
 }
 
 func buildSkillAuditSnapshot(skill repo.Skill, latestVersionID uuid.UUID, versionCount int64) *audit.SkillSnapshot {
@@ -177,12 +205,46 @@ func buildSkillAuditSnapshot(skill repo.Skill, latestVersionID uuid.UUID, versio
 		DisplayName:     skill.DisplayName,
 		SourceKind:      skill.SourceKind,
 		Classification:  skill.Classification,
+		Tags:            skillTagsOrEmpty(skill.Tags),
 		LatestVersionID: latestVersionID.String(),
 		VersionCount:    versionCount,
 		CreatedAt:       conv.FromPGTimestamptz(skill.CreatedAt),
 		UpdatedAt:       conv.FromPGTimestamptz(skill.UpdatedAt),
 		ArchivedAt:      archivedAt,
 	}
+}
+
+func skillTagsOrEmpty(tags []string) []string {
+	if tags == nil {
+		return []string{}
+	}
+	return tags
+}
+
+func normalizeSkillTags(tags []string) ([]string, error) {
+	if len(tags) == 0 {
+		return []string{}, nil
+	}
+	normalized := make([]string, 0, len(tags))
+	seen := make(map[string]struct{}, len(tags))
+	for _, raw := range tags {
+		tag := strings.TrimSpace(raw)
+		if tag == "" {
+			return nil, oops.E(oops.CodeBadRequest, nil, "skill tags must not be empty")
+		}
+		if utf8.RuneCountInString(tag) > maxSkillTagRunes {
+			return nil, oops.E(oops.CodeBadRequest, nil, "skill tags must be at most 64 Unicode code points")
+		}
+		if _, ok := seen[tag]; ok {
+			continue
+		}
+		seen[tag] = struct{}{}
+		normalized = append(normalized, tag)
+	}
+	if len(normalized) > maxSkillTags {
+		return nil, oops.E(oops.CodeBadRequest, nil, "skills may have at most 40 tags")
+	}
+	return normalized, nil
 }
 
 func buildSkillDistributionAuditSnapshot(distribution repo.SkillDistribution, resolvedVersionID uuid.UUID) *audit.SkillDistributionSnapshot {
@@ -200,6 +262,27 @@ func buildSkillDistributionAuditSnapshot(distribution repo.SkillDistribution, re
 		CreatedAt:         conv.FromPGTimestamptz(distribution.CreatedAt),
 		UpdatedAt:         conv.FromPGTimestamptz(distribution.UpdatedAt),
 	}
+}
+
+func resolveDerivedFromVersion(ctx context.Context, queries *repo.Queries, projectID uuid.UUID, value *string) (uuid.NullUUID, uuid.NullUUID, error) {
+	if value == nil {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
+	}
+	versionID, err := uuid.Parse(*value)
+	if err != nil {
+		return uuid.NullUUID{}, uuid.NullUUID{}, oops.E(oops.CodeBadRequest, err, "invalid derived-from version id")
+	}
+	version, err := queries.GetProjectSkillVersion(ctx, repo.GetProjectSkillVersionParams{
+		ProjectID:      projectID,
+		SkillVersionID: versionID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return uuid.NullUUID{}, uuid.NullUUID{}, oops.E(oops.CodeNotFound, err, "derived-from version not found")
+		}
+		return uuid.NullUUID{}, uuid.NullUUID{}, oops.E(oops.CodeUnexpected, err, "resolve derived-from version")
+	}
+	return uuid.NullUUID{UUID: versionID, Valid: true}, uuid.NullUUID{UUID: version.SkillID, Valid: true}, nil
 }
 
 type distributionTarget struct {
@@ -242,6 +325,8 @@ func (s *Service) recordVersion(
 	skill repo.Skill,
 	parsed parsedSkillManifest,
 	createdSkill bool,
+	createAudit bool,
+	derivedFromVersionID uuid.NullUUID,
 ) (*gen.RecordSkillResult, error) {
 	metadataJSON, err := json.Marshal(parsed.Metadata)
 	if err != nil {
@@ -254,11 +339,13 @@ func (s *Service) recordVersion(
 
 	var beforeSnapshot *audit.SkillSnapshot
 	if !createdSkill {
-		latestBeforeID, countBefore, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
-		if err != nil {
+		stateBefore, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeUnexpected, err, "load skill state before adding version").LogError(ctx, logger)
 		}
-		beforeSnapshot = buildSkillAuditSnapshot(skill, latestBeforeID, countBefore)
+		if err == nil {
+			beforeSnapshot = buildSkillAuditSnapshot(skill, stateBefore.LatestVersionID, stateBefore.VersionCount)
+		}
 	}
 
 	version, err := queries.CreateSkillVersion(ctx, repo.CreateSkillVersionParams{
@@ -282,18 +369,36 @@ func (s *Service) recordVersion(
 		if getErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, getErr, "resolve existing skill version after insert no-op").LogError(ctx, logger)
 		}
+		if deleteErr := queries.DeleteSkillVersionOrigin(ctx, repo.DeleteSkillVersionOriginParams{
+			ProjectID:      *authCtx.ProjectID,
+			SkillID:        skill.ID,
+			SkillVersionID: matched.ID,
+		}); deleteErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, deleteErr, "promote captured skill version to manual").LogError(ctx, logger)
+		}
+		if replayErr := ReplayOpenSuggestionOntoBase(ctx, queries, *authCtx.ProjectID, skill.ID); replayErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, replayErr, "replay open skill suggestion").LogError(ctx, logger)
+		}
 
-		latestID, count, stateErr := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
+		state, stateErr := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
 		if stateErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, stateErr, "load current skill state after version no-op").LogError(ctx, logger)
 		}
-		matchedView, viewErr := mv.BuildSkillVersionView(matched, manifestFrontmatter(matched.Content))
+		matchedDetails, getErr := queries.GetSkillVersionDetails(ctx, repo.GetSkillVersionDetailsParams{
+			ProjectID: *authCtx.ProjectID, SkillID: skill.ID, SkillVersionID: matched.ID,
+		})
+		if getErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, getErr, "load existing skill version details").LogError(ctx, logger)
+		}
+		matchedView, viewErr := mv.BuildSkillVersionView(matchedDetails.SkillVersion, matchedDetails.DerivedFromVersionID, manifestFrontmatter(matchedDetails.SkillVersion.Content), mv.SkillVersionSightingStats{
+			FirstSeenAt: matchedDetails.FirstSeenAt, LastSeenAt: matchedDetails.LastSeenAt, SeenCount: matchedDetails.SeenCount,
+		})
 		if viewErr != nil {
 			return nil, oops.E(oops.CodeUnexpected, viewErr, "build existing skill version").LogError(ctx, logger)
 		}
 
 		return &gen.RecordSkillResult{
-			Skill:          mv.BuildSkillView(skill, latestID, count),
+			Skill:          mv.BuildSkillView(skill, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}),
 			Version:        matchedView,
 			CreatedSkill:   false,
 			CreatedVersion: false,
@@ -302,29 +407,47 @@ func (s *Service) recordVersion(
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create skill version").LogError(ctx, logger)
 	}
+	if derivedFromVersionID.Valid {
+		if err := queries.CreateSkillVersionLineage(ctx, repo.CreateSkillVersionLineageParams{
+			ProjectID:            *authCtx.ProjectID,
+			SkillID:              skill.ID,
+			SkillVersionID:       version.ID,
+			DerivedFromVersionID: derivedFromVersionID.UUID,
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "create skill version lineage").LogError(ctx, logger)
+		}
+	}
 
-	updated, err := queries.UpdateSkill(ctx, repo.UpdateSkillParams{
-		DisplayName: parsed.DisplayName,
-		Summary:     conv.PtrToPGText(parsed.Description),
-		ProjectID:   *authCtx.ProjectID,
-		ID:          skill.ID,
+	// The new version becomes the skill's current version, so the registry
+	// summary follows its manifest description.
+	updated, err := queries.SyncSkillSummary(ctx, repo.SyncSkillSummaryParams{
+		ProjectID: *authCtx.ProjectID,
+		ID:        skill.ID,
+		Summary:   conv.PtrToPGText(parsed.Description),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update skill after adding version").LogError(ctx, logger)
 	}
+	if err := ReplayOpenSuggestionOntoBase(ctx, queries, *authCtx.ProjectID, skill.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "replay open skill suggestion").LogError(ctx, logger)
+	}
 
-	latestID, count, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
+	state, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load skill state after adding version").LogError(ctx, logger)
 	}
-	afterView := mv.BuildSkillView(updated, latestID, count)
-	versionView, err := mv.BuildSkillVersionView(version, manifestFrontmatter(version.Content))
+	afterView := mv.BuildSkillView(updated, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false})
+	versionView, err := mv.BuildSkillVersionView(version, derivedFromVersionID, manifestFrontmatter(version.Content), mv.SkillVersionSightingStats{
+		FirstSeenAt: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		LastSeenAt:  pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		SeenCount:   0,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "build created skill version").LogError(ctx, logger)
 	}
 
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
-	if createdSkill {
+	if createAudit {
 		err = s.audit.LogSkillCreate(ctx, dbtx, audit.LogSkillCreateEvent{
 			OrganizationID:   authCtx.ActiveOrganizationID,
 			ProjectID:        *authCtx.ProjectID,
@@ -336,7 +459,7 @@ func (s *Service) recordVersion(
 			SkillDisplayName: updated.DisplayName,
 		})
 	} else {
-		afterSnapshot := buildSkillAuditSnapshot(updated, latestID, count)
+		afterSnapshot := buildSkillAuditSnapshot(updated, state.LatestVersionID, state.VersionCount)
 		err = s.audit.LogSkillAddVersion(ctx, dbtx, audit.LogSkillAddVersionEvent{
 			OrganizationID:      authCtx.ActiveOrganizationID,
 			ProjectID:           *authCtx.ProjectID,
@@ -392,6 +515,7 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 		Name:      parsed.Name,
 	})
 	createdSkill := false
+	createAudit := false
 	if errors.Is(err, pgx.ErrNoRows) {
 		skill, err = queries.CreateSkill(ctx, repo.CreateSkillParams{
 			ProjectID:   *authCtx.ProjectID,
@@ -406,13 +530,30 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 			})
 		} else if err == nil {
 			createdSkill = true
+			createAudit = true
 		}
 	}
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve skill by manifest name").LogError(ctx, logger)
 	}
+	if !createdSkill && skill.SourceKind == "captured" {
+		observedState, stateErr := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
+		switch {
+		case stateErr == nil && observedState.VersionCount == 0, errors.Is(stateErr, pgx.ErrNoRows):
+			skill, err = queries.PromoteObservedSkillToManual(ctx, repo.PromoteObservedSkillToManualParams{
+				ProjectID: *authCtx.ProjectID,
+				ID:        skill.ID,
+			})
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "promote observed skill to manual").LogError(ctx, logger)
+			}
+			createAudit = true
+		case stateErr != nil:
+			return nil, oops.E(oops.CodeUnexpected, stateErr, "load observed skill state").LogError(ctx, logger)
+		}
+	}
 
-	result, err := s.recordVersion(ctx, dbtx, queries, authCtx, logger, skill, parsed, createdSkill)
+	result, err := s.recordVersion(ctx, dbtx, queries, authCtx, logger, skill, parsed, createdSkill, createAudit, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 	if err != nil {
 		return nil, err
 	}
@@ -444,6 +585,10 @@ func (s *Service) AddVersion(ctx context.Context, payload *gen.AddVersionPayload
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	queries := repo.New(dbtx)
+	derivedFromVersionID, parentSkillID, err := resolveDerivedFromVersion(ctx, queries, *authCtx.ProjectID, payload.DerivedFromVersionID)
+	if err != nil {
+		return nil, err
+	}
 
 	if err := queries.LockSkillName(ctx, repo.LockSkillNameParams{
 		ProjectID: *authCtx.ProjectID,
@@ -462,11 +607,14 @@ func (s *Service) AddVersion(ctx context.Context, payload *gen.AddVersionPayload
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "get skill for version update").LogError(ctx, logger)
 	}
-	if skill.Name != parsed.Name {
+	if parentSkillID.Valid && parentSkillID.UUID != skill.ID {
+		return nil, oops.E(oops.CodeInvalid, nil, "derived-from version must belong to the skill")
+	}
+	if skill.Name != parsed.Name && !parentSkillID.Valid {
 		return nil, oops.E(oops.CodeInvalid, nil, "manifest name does not match the skill")
 	}
 
-	result, err := s.recordVersion(ctx, dbtx, queries, authCtx, logger, skill, parsed, false)
+	result, err := s.recordVersion(ctx, dbtx, queries, authCtx, logger, skill, parsed, false, false, derivedFromVersionID)
 	if err != nil {
 		return nil, err
 	}
@@ -477,25 +625,232 @@ func (s *Service) AddVersion(ctx context.Context, payload *gen.AddVersionPayload
 	return result, nil
 }
 
+func (s *Service) RestoreVersion(ctx context.Context, payload *gen.RestoreVersionPayload) (*gen.RecordSkillResult, error) {
+	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
+	if err != nil {
+		return nil, err
+	}
+	skillID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid skill id")
+	}
+	versionID, err := uuid.Parse(payload.VersionID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid skill version id")
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin restore skill version transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	queries := repo.New(dbtx)
+	skill, err := queries.GetSkillForUpdate(ctx, repo.GetSkillForUpdateParams{ProjectID: *authCtx.ProjectID, ID: skillID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "skill not found")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "lock skill for version restore").LogError(ctx, logger)
+	}
+	skillBefore := skill
+	stateBefore, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load skill state before version restore").LogError(ctx, logger)
+	}
+	if _, err := queries.GetValidSkillVersion(ctx, repo.GetValidSkillVersionParams{ProjectID: *authCtx.ProjectID, SkillID: skill.ID, VersionID: versionID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeBadRequest, err, "skill version is not a valid version of the skill")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "validate skill version restore target").LogError(ctx, logger)
+	}
+	targetOrigin, err := queries.GetSkillVersionOrigin(ctx, repo.GetSkillVersionOriginParams{
+		ProjectID: *authCtx.ProjectID, SkillID: skill.ID, SkillVersionID: versionID,
+	})
+	capturedTarget := err == nil && targetOrigin.Origin == "captured"
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve skill version restore target origin").LogError(ctx, logger)
+	}
+	restoring := stateBefore.LatestVersionID != versionID || capturedTarget
+	if restoring {
+		version, promoteErr := queries.PromoteSkillVersion(ctx, repo.PromoteSkillVersionParams{ProjectID: *authCtx.ProjectID, SkillID: skill.ID, SkillVersionID: versionID})
+		if promoteErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, promoteErr, "restore skill version").LogError(ctx, logger)
+		}
+		if err := queries.DeleteSkillVersionOrigin(ctx, repo.DeleteSkillVersionOriginParams{ProjectID: *authCtx.ProjectID, SkillID: skill.ID, SkillVersionID: versionID}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "promote restored skill version to manual").LogError(ctx, logger)
+		}
+		skill, err = queries.SyncSkillSummary(ctx, repo.SyncSkillSummaryParams{ProjectID: *authCtx.ProjectID, ID: skill.ID, Summary: version.Description})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "sync restored skill summary").LogError(ctx, logger)
+		}
+		if err := ReplayOpenSuggestionOntoBase(ctx, queries, *authCtx.ProjectID, skill.ID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "replay open skill suggestion").LogError(ctx, logger)
+		}
+	}
+
+	stateAfter, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load skill state after version restore").LogError(ctx, logger)
+	}
+	details, err := queries.GetSkillVersionDetails(ctx, repo.GetSkillVersionDetailsParams{ProjectID: *authCtx.ProjectID, SkillID: skill.ID, SkillVersionID: versionID})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load restored skill version").LogError(ctx, logger)
+	}
+	versionView, err := mv.BuildSkillVersionView(details.SkillVersion, details.DerivedFromVersionID, manifestFrontmatter(details.SkillVersion.Content), mv.SkillVersionSightingStats{
+		FirstSeenAt: details.FirstSeenAt, LastSeenAt: details.LastSeenAt, SeenCount: details.SeenCount,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "build restored skill version").LogError(ctx, logger)
+	}
+	if restoring {
+		if err := s.audit.LogSkillRestoreVersion(ctx, dbtx, audit.LogSkillRestoreVersionEvent{
+			OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
+			Actor: urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ActorDisplayName: authCtx.Email, ActorSlug: nil,
+			SkillURN: urn.NewSkill(skill.ID), SkillName: skill.Name, SkillDisplayName: skill.DisplayName,
+			SkillSnapshotBefore: buildSkillAuditSnapshot(skillBefore, stateBefore.LatestVersionID, stateBefore.VersionCount),
+			SkillSnapshotAfter:  buildSkillAuditSnapshot(skill, stateAfter.LatestVersionID, stateAfter.VersionCount),
+		}); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "log skill version restore").LogError(ctx, logger)
+		}
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit restore skill version transaction").LogError(ctx, logger)
+	}
+	return &gen.RecordSkillResult{
+		Skill:   mv.BuildSkillView(skill, stateAfter.LatestVersionID, stateAfter.VersionCount, stateAfter.HasValidVersion, pgtype.Text{String: "", Valid: false}),
+		Version: versionView, CreatedSkill: false, CreatedVersion: false,
+	}, nil
+}
+
+func (s *Service) Update(ctx context.Context, payload *gen.UpdatePayload) (*types.Skill, error) {
+	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
+	if err != nil {
+		return nil, err
+	}
+	skillID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid skill id")
+	}
+	name, err := normalizeSkillName(strings.TrimSpace(payload.Name))
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid skill name")
+	}
+	displayName := strings.TrimSpace(payload.DisplayName)
+	if displayName == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "skill display name is required")
+	}
+	if utf8.RuneCountInString(displayName) > maxSkillDisplayNameRunes {
+		return nil, oops.E(oops.CodeBadRequest, nil, "skill display name must be at most 256 Unicode code points")
+	}
+	var summary *string
+	if payload.Summary != nil {
+		summary = conv.PtrEmpty(strings.TrimSpace(*payload.Summary))
+		if summary != nil && utf8.RuneCountInString(*summary) > maxSkillSummaryRunes {
+			return nil, oops.E(oops.CodeBadRequest, nil, "skill summary must be at most 1024 Unicode code points")
+		}
+	}
+	tags, err := normalizeSkillTags(payload.Tags)
+	if err != nil {
+		return nil, err
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin update skill transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	queries := repo.New(dbtx)
+	skill, err := queries.GetSkillForUpdate(ctx, repo.GetSkillForUpdateParams{ProjectID: *authCtx.ProjectID, ID: skillID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "skill not found")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "get skill for update").LogError(ctx, logger)
+	}
+	state, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load skill state before update").LogError(ctx, logger)
+	}
+
+	updated, err := queries.UpdateSkillDetails(ctx, repo.UpdateSkillDetailsParams{
+		Name:        name,
+		DisplayName: displayName,
+		Summary:     conv.PtrToPGText(summary),
+		Tags:        tags,
+		ProjectID:   *authCtx.ProjectID,
+		ID:          skill.ID,
+	})
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, oops.E(oops.CodeConflict, err, "an active skill already uses this name")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "update skill").LogError(ctx, logger)
+	}
+
+	if err := s.audit.LogSkillUpdate(ctx, dbtx, audit.LogSkillUpdateEvent{
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		ProjectID:           *authCtx.ProjectID,
+		Actor:               urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:    authCtx.Email,
+		ActorSlug:           nil,
+		SkillURN:            urn.NewSkill(updated.ID),
+		SkillName:           updated.Name,
+		SkillDisplayName:    updated.DisplayName,
+		SkillSnapshotBefore: buildSkillAuditSnapshot(skill, state.LatestVersionID, state.VersionCount),
+		SkillSnapshotAfter:  buildSkillAuditSnapshot(updated, state.LatestVersionID, state.VersionCount),
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log skill update").LogError(ctx, logger)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit update skill transaction").LogError(ctx, logger)
+	}
+
+	return mv.BuildSkillView(updated, state.LatestVersionID, state.VersionCount, state.HasValidVersion, pgtype.Text{String: "", Valid: false}), nil
+}
+
 func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.ListSkillsResult, error) {
 	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillRead)
 	if err != nil {
 		return nil, err
 	}
 
+	sortOrder := payload.Sort
+	if sortOrder == "" {
+		sortOrder = "name"
+	}
 	cursorName := pgtype.Text{String: "", Valid: false}
+	cursorUpdatedAt := pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
+	cursorID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	if payload.Cursor != nil {
-		name, decodeErr := decodeSkillCursor(*payload.Cursor)
-		if decodeErr != nil {
-			return nil, oops.E(oops.CodeBadRequest, nil, "invalid skill cursor")
+		if sortOrder == "updated" {
+			updatedAt, id, decodeErr := decodeCreatedAtIDCursor(*payload.Cursor)
+			if decodeErr != nil {
+				return nil, oops.E(oops.CodeBadRequest, nil, "invalid skill cursor")
+			}
+			cursorUpdatedAt = conv.ToPGTimestamptz(updatedAt)
+			cursorID = uuid.NullUUID{UUID: id, Valid: true}
+		} else {
+			name, decodeErr := decodeSkillCursor(*payload.Cursor)
+			if decodeErr != nil {
+				return nil, oops.E(oops.CodeBadRequest, nil, "invalid skill cursor")
+			}
+			cursorName = conv.ToPGText(name)
 		}
-		cursorName = conv.ToPGText(name)
 	}
 
-	rows, err := repo.New(s.db).ListSkills(ctx, repo.ListSkillsParams{
-		ProjectID:  *authCtx.ProjectID,
-		CursorName: cursorName,
-		PageLimit:  conv.SafeInt32(payload.Limit + 1),
+	queries := repo.New(s.db)
+	rows, err := queries.ListSkills(ctx, repo.ListSkillsParams{
+		ProjectID:       *authCtx.ProjectID,
+		Search:          conv.PtrToPGTextEmpty(payload.Search),
+		SourceKinds:     payload.SourceKinds,
+		Classifications: payload.Classifications,
+		Tags:            payload.Tags,
+		SortOrder:       sortOrder,
+		CursorName:      cursorName,
+		CursorUpdatedAt: cursorUpdatedAt,
+		CursorID:        cursorID,
+		PageLimit:       conv.SafeInt32(payload.Limit + 1),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list skills").LogError(ctx, logger)
@@ -507,14 +862,161 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 	}
 	var nextCursor *string
 	if hasMore {
-		encoded := encodeSkillCursor(rows[len(rows)-1].Skill.Name)
+		last := rows[len(rows)-1].Skill
+		encoded := encodeSkillCursor(last.Name)
+		if sortOrder == "updated" {
+			encoded = encodeCreatedAtIDCursor(last.UpdatedAt.Time, last.ID)
+		}
 		nextCursor = &encoded
+	}
+	totalCount := int64(0)
+	if len(rows) > 0 {
+		totalCount = rows[0].TotalCount
+	} else {
+		totalCount, err = queries.CountSkills(ctx, repo.CountSkillsParams{
+			ProjectID:       *authCtx.ProjectID,
+			Search:          conv.PtrToPGTextEmpty(payload.Search),
+			SourceKinds:     payload.SourceKinds,
+			Classifications: payload.Classifications,
+			Tags:            payload.Tags,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "count skills").LogError(ctx, logger)
+		}
 	}
 
 	return &gen.ListSkillsResult{
 		Skills:     mv.BuildSkillListView(rows),
+		TotalCount: totalCount,
 		NextCursor: nextCursor,
 	}, nil
+}
+
+func (s *Service) ListTags(ctx context.Context, _ *gen.ListTagsPayload) (*gen.ListSkillTagsResult, error) {
+	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillRead)
+	if err != nil {
+		return nil, err
+	}
+
+	tags, err := repo.New(s.db).ListDistinctSkillTags(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list skill tags").LogError(ctx, logger)
+	}
+	if tags == nil {
+		tags = []string{}
+	}
+
+	return &gen.ListSkillTagsResult{Tags: tags}, nil
+}
+
+func (s *Service) ListFeedback(ctx context.Context, payload *gen.ListFeedbackPayload) (*gen.ListSkillFeedbackResult, error) {
+	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillRead)
+	if err != nil {
+		return nil, err
+	}
+	if payload.Limit < 1 || payload.Limit > 50 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "skill feedback limit must be between 1 and 50")
+	}
+	skillID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid skill id")
+	}
+	cursorCreatedAt := pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
+	cursorID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if payload.Cursor != nil {
+		createdAt, id, decodeErr := decodeCreatedAtIDCursor(*payload.Cursor)
+		if decodeErr != nil {
+			return nil, oops.E(oops.CodeBadRequest, decodeErr, "invalid skill feedback cursor")
+		}
+		cursorCreatedAt = conv.ToPGTimestamptz(createdAt)
+		cursorID = uuid.NullUUID{UUID: id, Valid: true}
+	}
+	queries := repo.New(s.db)
+	if _, err := queries.GetSkill(ctx, repo.GetSkillParams{ProjectID: *authCtx.ProjectID, ID: skillID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "skill not found")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get skill for feedback").LogError(ctx, logger)
+	}
+	counts, err := queries.CountSkillFeedbackOutcomes(ctx, repo.CountSkillFeedbackOutcomesParams{ProjectID: *authCtx.ProjectID, SkillID: uuid.NullUUID{UUID: skillID, Valid: true}})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count skill feedback").LogError(ctx, logger)
+	}
+	windowEnd := time.Now().UTC()
+	windowStart := windowEnd.Truncate(24 * time.Hour).Add(-29 * 24 * time.Hour)
+	metrics, err := queries.GetSkillFeedbackMetrics(ctx, repo.GetSkillFeedbackMetricsParams{
+		ProjectID: *authCtx.ProjectID, SkillID: uuid.NullUUID{UUID: skillID, Valid: true},
+		WindowStart: conv.ToPGTimestamptz(windowStart), WindowEnd: conv.ToPGTimestamptz(windowEnd),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get skill feedback metrics").LogError(ctx, logger)
+	}
+	timelineRows, err := queries.ListSkillFeedbackTimeline(ctx, repo.ListSkillFeedbackTimelineParams{
+		ProjectID: *authCtx.ProjectID, SkillID: uuid.NullUUID{UUID: skillID, Valid: true},
+		WindowStart: conv.ToPGTimestamptz(windowStart), WindowEnd: conv.ToPGTimestamptz(windowEnd),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list skill feedback timeline").LogError(ctx, logger)
+	}
+	rows, err := queries.ListSkillFeedbackByID(ctx, repo.ListSkillFeedbackByIDParams{
+		ProjectID: *authCtx.ProjectID, SkillID: uuid.NullUUID{UUID: skillID, Valid: true},
+		CursorCreatedAt: cursorCreatedAt, CursorID: cursorID, PageLimit: conv.SafeInt32(payload.Limit + 1),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list skill feedback").LogError(ctx, logger)
+	}
+	hasMore := len(rows) > payload.Limit
+	if hasMore {
+		rows = rows[:payload.Limit]
+	}
+	var nextCursor *string
+	if hasMore {
+		last := rows[len(rows)-1]
+		encoded := encodeCreatedAtIDCursor(last.CreatedAt.Time, last.ID)
+		nextCursor = &encoded
+	}
+	timeline := make([]*gen.SkillFeedbackTimelinePoint, len(timelineRows))
+	for i, point := range timelineRows {
+		timeline[i] = &gen.SkillFeedbackTimelinePoint{
+			BucketStart:   conv.FromPGTimestamptz(point.BucketStart),
+			FeedbackCount: point.FeedbackCount,
+		}
+	}
+	return &gen.ListSkillFeedbackResult{
+		Counts: &gen.SkillFeedbackCounts{
+			Total: counts.Total, Helped: counts.Helped, PartiallyHelped: counts.PartiallyHelped,
+			DidNotHelp: counts.DidNotHelp, Misleading: counts.Misleading, Harmful: counts.Harmful,
+		},
+		Metrics: &gen.SkillFeedbackMetrics{
+			WindowStart: windowStart.Format(time.RFC3339), WindowEnd: windowEnd.Format(time.RFC3339),
+			FeedbackInWindow: metrics.FeedbackInWindow, ActivationsInWindow: metrics.ActivationsInWindow,
+			FeedbackActivationsInWindow: metrics.FeedbackActivationsInWindow,
+			Unreviewed:                  metrics.Unreviewed,
+			Converted:                   metrics.Converted,
+		},
+		Timeline: timeline, Feedback: mv.BuildSkillFeedbackListView(rows), NextCursor: nextCursor,
+	}, nil
+}
+
+func (s *Service) TriggerSuggestion(ctx context.Context, payload *gen.TriggerSuggestionPayload) error {
+	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
+	if err != nil {
+		return err
+	}
+	skillID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "invalid skill id")
+	}
+	if _, err := repo.New(s.db).GetSkill(ctx, repo.GetSkillParams{ProjectID: *authCtx.ProjectID, ID: skillID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, err, "skill not found")
+		}
+		return oops.E(oops.CodeUnexpected, err, "get skill for suggestion analysis").LogError(ctx, logger)
+	}
+	if err := s.signaler.SignalManual(ctx, *authCtx.ProjectID, skillID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "trigger skill suggestion analysis").LogError(ctx, logger)
+	}
+	return nil
 }
 
 func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSkillResult, error) {
@@ -527,7 +1029,8 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSki
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid skill id")
 	}
-	details, err := repo.New(s.db).GetSkillDetails(ctx, repo.GetSkillDetailsParams{
+	queries := repo.New(s.db)
+	details, err := queries.GetSkillDetails(ctx, repo.GetSkillDetailsParams{
 		ProjectID: *authCtx.ProjectID,
 		SkillID:   skillID,
 	})
@@ -538,16 +1041,142 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.GetSki
 		return nil, oops.E(oops.CodeUnexpected, err, "get skill details").LogError(ctx, logger)
 	}
 
-	latestView, err := mv.BuildSkillVersionView(details.SkillVersion, manifestFrontmatter(details.SkillVersion.Content))
+	var latestView *types.SkillVersion
+	if details.LatestVersionID != uuid.Nil {
+		latest, latestErr := queries.GetSkillVersionDetails(ctx, repo.GetSkillVersionDetailsParams{
+			ProjectID: *authCtx.ProjectID, SkillID: skillID, SkillVersionID: details.LatestVersionID,
+		})
+		if latestErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, latestErr, "get latest skill version details").LogError(ctx, logger)
+		}
+		latestView, latestErr = mv.BuildSkillVersionView(latest.SkillVersion, latest.DerivedFromVersionID, manifestFrontmatter(latest.SkillVersion.Content), mv.SkillVersionSightingStats{
+			FirstSeenAt: latest.FirstSeenAt, LastSeenAt: latest.LastSeenAt, SeenCount: latest.SeenCount,
+		})
+		if latestErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, latestErr, "build latest skill version").LogError(ctx, logger)
+		}
+	}
+
+	windowEnd := time.Now().UTC().Truncate(time.Second)
+	windowStart := windowEnd.Add(-30 * 24 * time.Hour)
+	adoption, err := queries.GetSkillAdoptionStats(ctx, repo.GetSkillAdoptionStatsParams{
+		WindowStart: conv.ToPGTimestamptz(windowStart), WindowEnd: conv.ToPGTimestamptz(windowEnd),
+		ProjectID: *authCtx.ProjectID, SkillID: skillID,
+	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "build latest skill version").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "get skill adoption stats").LogError(ctx, logger)
+	}
+	timelineRows, err := queries.ListSkillSightingTimeline(ctx, repo.ListSkillSightingTimelineParams{
+		ProjectID: *authCtx.ProjectID, SkillID: skillID,
+		WindowStart: conv.ToPGTimestamptz(windowStart), WindowEnd: conv.ToPGTimestamptz(windowEnd),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list skill sighting timeline").LogError(ctx, logger)
+	}
+	machineRows, err := queries.ListActiveMachineLatestVersions(ctx, repo.ListActiveMachineLatestVersionsParams{
+		ProjectID: *authCtx.ProjectID, SkillID: skillID,
+		WindowStart: conv.ToPGTimestamptz(windowStart), WindowEnd: conv.ToPGTimestamptz(windowEnd),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list active skill machines").LogError(ctx, logger)
+	}
+	targetVersions, err := queries.ListSkillDistributionTargetVersions(ctx, repo.ListSkillDistributionTargetVersionsParams{
+		ProjectID: *authCtx.ProjectID, SkillID: skillID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list skill distribution targets").LogError(ctx, logger)
+	}
+
+	timeline := make([]*gen.SkillSightingTimelinePoint, len(timelineRows))
+	for i, row := range timelineRows {
+		timeline[i] = &gen.SkillSightingTimelinePoint{
+			BucketStart:     conv.FromPGTimestamptz(row.BucketStart),
+			SkillVersionID:  conv.FromNullableUUID(row.SkillVersionID),
+			ActivationCount: row.ActivationCount,
+		}
+	}
+	targetVersionIDs := make([]string, len(targetVersions))
+	for i, targetVersionID := range targetVersions {
+		targetVersionIDs[i] = targetVersionID.String()
+	}
+	targetState := "ambiguous"
+	if len(targetVersions) == 0 {
+		targetState = "not_distributed"
+	} else if len(targetVersions) == 1 {
+		targetState = "single"
+	}
+	var activeMachines, onTargetMachines, driftedMachines, indeterminateMachines int64
+	for _, row := range machineRows {
+		activeMachines += row.MachineCount
+		if targetState != "single" || !row.SkillVersionID.Valid {
+			indeterminateMachines += row.MachineCount
+		} else if row.SkillVersionID.UUID == targetVersions[0] {
+			onTargetMachines += row.MachineCount
+		} else {
+			driftedMachines += row.MachineCount
+		}
 	}
 
 	return &gen.GetSkillResult{
-		Skill:          mv.BuildSkillView(details.Skill, details.SkillVersion.ID, details.VersionCount),
+		Skill:          mv.BuildSkillView(details.Skill, details.LatestVersionID, details.VersionCount, details.HasValidVersion, details.ShareToken),
 		LatestVersion:  latestView,
 		AssistantCount: details.AssistantCount,
+		Adoption: &gen.SkillAdoption{
+			WindowStart: windowStart.Format(time.RFC3339), WindowEnd: windowEnd.Format(time.RFC3339),
+			DistinctHostnames: adoption.DistinctHostnames, ActivationsInWindow: adoption.ActivationsInWindow,
+		},
+		SightingTimeline: timeline,
+		Drift: &gen.SkillDrift{
+			WindowStart: windowStart.Format(time.RFC3339), WindowEnd: windowEnd.Format(time.RFC3339),
+			TargetState: targetState, TargetVersionIds: targetVersionIDs, ActiveMachines: activeMachines,
+			OnTargetMachines: onTargetMachines, DriftedMachines: driftedMachines, IndeterminateMachines: indeterminateMachines,
+		},
 	}, nil
+}
+
+func (s *Service) ListUnknownActivations(ctx context.Context, payload *gen.ListUnknownActivationsPayload) (*gen.ListUnknownSkillActivationsResult, error) {
+	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillRead)
+	if err != nil {
+		return nil, err
+	}
+
+	cursorSeenAt := pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
+	cursorID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if payload.Cursor != nil {
+		seenAt, id, decodeErr := decodeCreatedAtIDCursor(*payload.Cursor)
+		if decodeErr != nil {
+			return nil, oops.E(oops.CodeBadRequest, nil, "invalid unknown activation cursor")
+		}
+		cursorSeenAt = conv.ToPGTimestamptz(seenAt)
+		cursorID = conv.ToNullUUID(id)
+	}
+
+	rows, err := repo.New(s.db).ListUnknownSkillActivations(ctx, repo.ListUnknownSkillActivationsParams{
+		ProjectID: *authCtx.ProjectID, CursorSeenAt: cursorSeenAt, CursorID: cursorID,
+		PageLimit: conv.SafeInt32(payload.Limit + 1),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list unknown skill activations").LogError(ctx, logger)
+	}
+	hasMore := len(rows) > payload.Limit
+	if hasMore {
+		rows = rows[:payload.Limit]
+	}
+	activations := make([]*gen.UnknownSkillActivation, len(rows))
+	for i, row := range rows {
+		activations[i] = &gen.UnknownSkillActivation{
+			ID: row.ID.String(), SkillName: row.SkillName, Provider: row.Provider,
+			Source: conv.FromPGText[string](row.Source), SourceLevel: conv.FromPGText[string](row.SourceLevel),
+			SeenAt: conv.FromPGTimestamptz(row.SeenAt), Reason: row.ReconcileErrorCode.String,
+		}
+	}
+	var nextCursor *string
+	if hasMore {
+		last := rows[len(rows)-1]
+		encoded := encodeCreatedAtIDCursor(last.SeenAt.Time, last.ID)
+		nextCursor = &encoded
+	}
+	return &gen.ListUnknownSkillActivationsResult{Activations: activations, NextCursor: nextCursor}, nil
 }
 
 func (s *Service) ListVersions(ctx context.Context, payload *gen.ListVersionsPayload) (*gen.ListSkillVersionsResult, error) {
@@ -605,7 +1234,7 @@ func (s *Service) ListVersions(ctx context.Context, payload *gen.ListVersionsPay
 	var nextCursor *string
 	if hasMore {
 		last := rows[len(rows)-1]
-		encoded := encodeCreatedAtIDCursor(last.CreatedAt.Time, last.ID)
+		encoded := encodeCreatedAtIDCursor(last.SkillVersion.CreatedAt.Time, last.SkillVersion.ID)
 		nextCursor = &encoded
 	}
 
@@ -916,6 +1545,201 @@ func (s *Service) ListDistributions(ctx context.Context, payload *gen.ListDistri
 	}, nil
 }
 
+// newShareToken returns a 256-bit random token encoded with unpadded
+// URL-safe base64, which always yields 43 characters.
+func newShareToken() (string, error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", fmt.Errorf("generate share token: %w", err)
+	}
+
+	return base64.RawURLEncoding.EncodeToString(buf), nil
+}
+
+func (s *Service) Share(ctx context.Context, payload *gen.SharePayload) (*types.SkillShareLink, error) {
+	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
+	if err != nil {
+		return nil, err
+	}
+	if authCtx.UserID == "" {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "sharing a skill requires a user identity")
+	}
+
+	skillID, err := uuid.Parse(payload.SkillID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid skill id")
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin share skill transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	queries := repo.New(dbtx)
+
+	skill, err := queries.GetSkillForUpdate(ctx, repo.GetSkillForUpdateParams{
+		ProjectID: *authCtx.ProjectID,
+		ID:        skillID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, nil, "skill not found")
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "lock skill for sharing").LogError(ctx, logger)
+	}
+
+	existing, err := queries.GetActiveSkillShareLink(ctx, repo.GetActiveSkillShareLinkParams{
+		ProjectID: *authCtx.ProjectID,
+		SkillID:   skill.ID,
+	})
+	if err == nil {
+		if err := dbtx.Commit(ctx); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "commit existing skill share link transaction").LogError(ctx, logger)
+		}
+		return &types.SkillShareLink{
+			Token:     existing.Token,
+			CreatedAt: conv.FromPGTimestamptz(existing.CreatedAt),
+		}, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeUnexpected, err, "get active skill share link").LogError(ctx, logger)
+	}
+
+	// The skill row is locked above, so only a global token collision can make
+	// the insert return no rows. One retry with a fresh token covers it.
+	var link repo.SkillShareLink
+	for attempt := range 2 {
+		token, tokenErr := newShareToken()
+		if tokenErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, tokenErr, "generate skill share token").LogError(ctx, logger)
+		}
+		link, err = queries.InsertSkillShareLink(ctx, repo.InsertSkillShareLinkParams{
+			Token:           token,
+			CreatedByUserID: authCtx.UserID,
+			ProjectID:       *authCtx.ProjectID,
+			SkillID:         skill.ID,
+		})
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, pgx.ErrNoRows) || attempt == 1 {
+			return nil, oops.E(oops.CodeUnexpected, err, "create skill share link").LogError(ctx, logger)
+		}
+	}
+
+	if err := s.audit.LogSkillShareLinkCreate(ctx, dbtx, audit.LogSkillShareLinkCreateEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		SkillURN:         urn.NewSkill(skill.ID),
+		SkillName:        skill.Name,
+		SkillDisplayName: skill.DisplayName,
+		ShareLinkURN:     urn.NewSkillShareLink(link.ID),
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log skill share link create").LogError(ctx, logger)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit share skill transaction").LogError(ctx, logger)
+	}
+
+	return &types.SkillShareLink{
+		Token:     link.Token,
+		CreatedAt: conv.FromPGTimestamptz(link.CreatedAt),
+	}, nil
+}
+
+func (s *Service) Unshare(ctx context.Context, payload *gen.UnsharePayload) error {
+	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
+	if err != nil {
+		return err
+	}
+	if authCtx.UserID == "" {
+		return oops.E(oops.CodeUnauthorized, nil, "unsharing a skill requires a user identity")
+	}
+
+	skillID, err := uuid.Parse(payload.SkillID)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, nil, "invalid skill id")
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "begin unshare skill transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	queries := repo.New(dbtx)
+
+	skill, err := queries.GetSkillForUpdate(ctx, repo.GetSkillForUpdateParams{
+		ProjectID: *authCtx.ProjectID,
+		ID:        skillID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		if err := dbtx.Commit(ctx); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "commit missing skill unshare transaction").LogError(ctx, logger)
+		}
+		return nil
+	}
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock skill for unsharing").LogError(ctx, logger)
+	}
+
+	revoked, err := queries.RevokeSkillShareLink(ctx, repo.RevokeSkillShareLinkParams{
+		ProjectID: *authCtx.ProjectID,
+		SkillID:   skill.ID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		if err := dbtx.Commit(ctx); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "commit no-op unshare skill transaction").LogError(ctx, logger)
+		}
+		return nil
+	}
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "revoke skill share link").LogError(ctx, logger)
+	}
+
+	if err := s.audit.LogSkillShareLinkRevoke(ctx, dbtx, audit.LogSkillShareLinkRevokeEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        *authCtx.ProjectID,
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+		SkillURN:         urn.NewSkill(skill.ID),
+		SkillName:        skill.Name,
+		SkillDisplayName: skill.DisplayName,
+		ShareLinkURN:     urn.NewSkillShareLink(revoked.ID),
+	}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "log skill share link revoke").LogError(ctx, logger)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit unshare skill transaction").LogError(ctx, logger)
+	}
+
+	return nil
+}
+
+func (s *Service) GetShared(ctx context.Context, payload *gen.GetSharedPayload) (*gen.SharedSkill, error) {
+	row, err := repo.New(s.db).GetSharedSkillByToken(ctx, payload.Token)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeNotFound, nil, "link not found or no longer available")
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get shared skill").LogError(ctx, s.logger)
+	}
+
+	return &gen.SharedSkill{
+		Name:           row.Name,
+		DisplayName:    row.DisplayName,
+		Summary:        conv.FromPGText[string](row.Summary),
+		Content:        row.Content,
+		UpdatedAt:      conv.FromPGTimestamptz(row.VersionCreatedAt),
+		CacheControl:   conv.PtrEmpty("private, max-age=300"),
+		XRobotsTag:     conv.PtrEmpty("noindex, nofollow"),
+		ReferrerPolicy: conv.PtrEmpty("no-referrer"),
+	}, nil
+}
+
 func (s *Service) Archive(ctx context.Context, payload *gen.ArchivePayload) error {
 	authCtx, logger, err := s.requireAccess(ctx, authz.ScopeSkillWrite)
 	if err != nil {
@@ -967,11 +1791,11 @@ func (s *Service) Archive(ctx context.Context, payload *gen.ArchivePayload) erro
 		return oops.E(oops.CodeUnexpected, err, "get skill for archive").LogError(ctx, logger)
 	}
 
-	latestID, count, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
+	state, err := loadDerivedSkillState(ctx, queries, *authCtx.ProjectID, skill.ID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "load skill state before archive").LogError(ctx, logger)
 	}
-	beforeSnapshot := buildSkillAuditSnapshot(skill, latestID, count)
+	beforeSnapshot := buildSkillAuditSnapshot(skill, state.LatestVersionID, state.VersionCount)
 
 	revokedDistributions, err := queries.RevokeAllSkillDistributionsBySkill(ctx, repo.RevokeAllSkillDistributionsBySkillParams{
 		ProjectID: *authCtx.ProjectID,
@@ -1000,6 +1824,29 @@ func (s *Service) Archive(ctx context.Context, payload *gen.ArchivePayload) erro
 		}
 	}
 
+	revokedLink, err := queries.RevokeSkillShareLink(ctx, repo.RevokeSkillShareLinkParams{
+		ProjectID: *authCtx.ProjectID,
+		SkillID:   skill.ID,
+	})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return oops.E(oops.CodeUnexpected, err, "revoke skill share link during archive").LogError(ctx, logger)
+	}
+	if err == nil {
+		if auditErr := s.audit.LogSkillShareLinkRevoke(ctx, dbtx, audit.LogSkillShareLinkRevokeEvent{
+			OrganizationID:   authCtx.ActiveOrganizationID,
+			ProjectID:        *authCtx.ProjectID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+			ActorDisplayName: authCtx.Email,
+			ActorSlug:        nil,
+			SkillURN:         urn.NewSkill(skill.ID),
+			SkillName:        skill.Name,
+			SkillDisplayName: skill.DisplayName,
+			ShareLinkURN:     urn.NewSkillShareLink(revokedLink.ID),
+		}); auditErr != nil {
+			return oops.E(oops.CodeUnexpected, auditErr, "log archived skill share link revoke").LogError(ctx, logger)
+		}
+	}
+
 	archived, err := queries.ArchiveSkill(ctx, repo.ArchiveSkillParams{
 		ProjectID: *authCtx.ProjectID,
 		ID:        skill.ID,
@@ -1007,7 +1854,7 @@ func (s *Service) Archive(ctx context.Context, payload *gen.ArchivePayload) erro
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "archive skill").LogError(ctx, logger)
 	}
-	afterSnapshot := buildSkillAuditSnapshot(archived, latestID, count)
+	afterSnapshot := buildSkillAuditSnapshot(archived, state.LatestVersionID, state.VersionCount)
 
 	if err := s.audit.LogSkillArchive(ctx, dbtx, audit.LogSkillArchiveEvent{
 		OrganizationID:      authCtx.ActiveOrganizationID,

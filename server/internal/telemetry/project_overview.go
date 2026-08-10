@@ -6,8 +6,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -39,7 +37,6 @@ type projectOverviewClickHouseResult struct {
 
 func fetchProjectOverviewClickHouse(
 	ctx context.Context,
-	tracer trace.Tracer,
 	reader projectOverviewClickHouseReader,
 	params projectOverviewClickHouseParams,
 ) (projectOverviewClickHouseResult, error) {
@@ -49,78 +46,89 @@ func fetchProjectOverviewClickHouse(
 	eg, egCtx := errgroup.WithContext(ctx)
 
 	eg.Go(func() error {
-		return traceProjectOverviewQuery(egCtx, tracer, "telemetry.getProjectOverview.clickhouse.overview.current", func(queryCtx context.Context) error {
-			var queryErr error
-			result.toolMetrics, queryErr = reader.GetOverviewSummary(queryCtx, repo.GetOverviewSummaryParams{
-				GramProjectID:     params.projectID,
-				TimeStart:         params.timeStart,
-				TimeEnd:           params.timeEnd,
-				UserID:            "",
-				ExternalUserID:    "",
-				APIKeyID:          "",
-				ToolsetSlug:       "",
-				RemoteMCPServerID: "",
-				MCPServerID:       "",
-				EventSource:       "",
-				HookSource:        "",
-				AccountType:       "",
-				ExternalOrgID:     "",
-			})
-			if queryErr != nil {
-				return oops.E(oops.CodeUnexpected, queryErr, "error retrieving tool call metrics")
-			}
-			return nil
+		var queryErr error
+		result.toolMetrics, queryErr = reader.GetOverviewSummary(egCtx, repo.GetOverviewSummaryParams{
+			GramProjectID:     params.projectID,
+			TimeStart:         params.timeStart,
+			TimeEnd:           params.timeEnd,
+			UserID:            "",
+			ExternalUserID:    "",
+			APIKeyID:          "",
+			ToolsetSlug:       "",
+			RemoteMCPServerID: "",
+			MCPServerID:       "",
+			EventSource:       "",
+			HookSource:        "",
+			AccountType:       "",
+			ExternalOrgID:     "",
 		})
+		if queryErr != nil {
+			return oops.E(oops.CodeUnexpected, queryErr, "error retrieving tool call metrics")
+		}
+		return nil
 	})
 
 	eg.Go(func() error {
-		return traceProjectOverviewQuery(egCtx, tracer, "telemetry.getProjectOverview.clickhouse.overview.comparison", func(queryCtx context.Context) error {
-			var queryErr error
-			result.toolMetricsComparison, queryErr = reader.GetOverviewSummary(queryCtx, repo.GetOverviewSummaryParams{
-				GramProjectID:     params.projectID,
-				TimeStart:         params.comparisonStart,
-				TimeEnd:           params.comparisonEnd,
-				UserID:            "",
-				ExternalUserID:    "",
-				APIKeyID:          "",
-				ToolsetSlug:       "",
-				RemoteMCPServerID: "",
-				MCPServerID:       "",
-				EventSource:       "",
-				HookSource:        "",
-				AccountType:       "",
-				ExternalOrgID:     "",
-			})
-			if queryErr != nil {
-				return oops.E(oops.CodeUnexpected, queryErr, "error retrieving comparison tool call metrics")
-			}
-			return nil
+		var queryErr error
+		result.toolMetricsComparison, queryErr = reader.GetOverviewSummary(egCtx, repo.GetOverviewSummaryParams{
+			GramProjectID:     params.projectID,
+			TimeStart:         params.comparisonStart,
+			TimeEnd:           params.comparisonEnd,
+			UserID:            "",
+			ExternalUserID:    "",
+			APIKeyID:          "",
+			ToolsetSlug:       "",
+			RemoteMCPServerID: "",
+			MCPServerID:       "",
+			EventSource:       "",
+			HookSource:        "",
+			AccountType:       "",
+			ExternalOrgID:     "",
 		})
+		if queryErr != nil {
+			return oops.E(oops.CodeUnexpected, queryErr, "error retrieving comparison tool call metrics")
+		}
+		return nil
 	})
 
 	eg.Go(func() error {
-		return traceProjectOverviewQuery(egCtx, tracer, "telemetry.getProjectOverview.clickhouse.activeCounts", func(queryCtx context.Context) error {
-			var queryErr error
-			result.activeCounts, queryErr = reader.GetActiveCounts(queryCtx, repo.GetActiveCountsParams{
-				GramProjectID:  params.projectID,
-				TimeStart:      params.timeStart,
-				TimeEnd:        params.timeEnd,
-				ExternalUserID: "",
-				APIKeyID:       "",
-				ToolsetSlug:    "",
-				SessionMode:    params.sessionMode,
-			})
-			if queryErr != nil {
-				return oops.E(oops.CodeUnexpected, queryErr, "error retrieving active server counts")
-			}
-			return nil
+		var queryErr error
+		result.activeCounts, queryErr = reader.GetActiveCounts(egCtx, repo.GetActiveCountsParams{
+			GramProjectID:  params.projectID,
+			TimeStart:      params.timeStart,
+			TimeEnd:        params.timeEnd,
+			ExternalUserID: "",
+			APIKeyID:       "",
+			ToolsetSlug:    "",
+			SessionMode:    params.sessionMode,
 		})
+		if queryErr != nil {
+			return oops.E(oops.CodeUnexpected, queryErr, "error retrieving active server counts")
+		}
+		return nil
 	})
 
 	eg.Go(func() error {
-		return traceProjectOverviewQuery(egCtx, tracer, "telemetry.getProjectOverview.clickhouse.topServers", func(queryCtx context.Context) error {
+		var queryErr error
+		result.topServers, queryErr = reader.GetTopServers(egCtx, repo.GetTopServersParams{
+			GramProjectID:  params.projectID,
+			TimeStart:      params.timeStart,
+			TimeEnd:        params.timeEnd,
+			ExternalUserID: "",
+			APIKeyID:       "",
+			ToolsetSlug:    "",
+			Limit:          10,
+		})
+		if queryErr != nil {
+			return oops.E(oops.CodeUnexpected, queryErr, "error retrieving top servers")
+		}
+		return nil
+	})
+
+	if !params.sessionMode {
+		eg.Go(func() error {
 			var queryErr error
-			result.topServers, queryErr = reader.GetTopServers(queryCtx, repo.GetTopServersParams{
+			result.topUsers, queryErr = reader.GetTopUsers(egCtx, repo.GetTopUsersParams{
 				GramProjectID:  params.projectID,
 				TimeStart:      params.timeStart,
 				TimeEnd:        params.timeEnd,
@@ -128,52 +136,29 @@ func fetchProjectOverviewClickHouse(
 				APIKeyID:       "",
 				ToolsetSlug:    "",
 				Limit:          10,
+				SessionMode:    false,
 			})
 			if queryErr != nil {
-				return oops.E(oops.CodeUnexpected, queryErr, "error retrieving top servers")
+				return oops.E(oops.CodeUnexpected, queryErr, "error retrieving top users from CH")
 			}
 			return nil
 		})
-	})
-
-	if !params.sessionMode {
-		eg.Go(func() error {
-			return traceProjectOverviewQuery(egCtx, tracer, "telemetry.getProjectOverview.clickhouse.topUsers", func(queryCtx context.Context) error {
-				var queryErr error
-				result.topUsers, queryErr = reader.GetTopUsers(queryCtx, repo.GetTopUsersParams{
-					GramProjectID:  params.projectID,
-					TimeStart:      params.timeStart,
-					TimeEnd:        params.timeEnd,
-					ExternalUserID: "",
-					APIKeyID:       "",
-					ToolsetSlug:    "",
-					Limit:          10,
-					SessionMode:    false,
-				})
-				if queryErr != nil {
-					return oops.E(oops.CodeUnexpected, queryErr, "error retrieving top users from CH")
-				}
-				return nil
-			})
-		})
 
 		eg.Go(func() error {
-			return traceProjectOverviewQuery(egCtx, tracer, "telemetry.getProjectOverview.clickhouse.llmClientBreakdown", func(queryCtx context.Context) error {
-				var queryErr error
-				result.llmClients, queryErr = reader.GetLLMClientBreakdown(queryCtx, repo.GetLLMClientBreakdownParams{
-					GramProjectID:  params.projectID,
-					TimeStart:      params.timeStart,
-					TimeEnd:        params.timeEnd,
-					ExternalUserID: "",
-					APIKeyID:       "",
-					ToolsetSlug:    "",
-					SessionMode:    false,
-				})
-				if queryErr != nil {
-					return oops.E(oops.CodeUnexpected, queryErr, "error retrieving LLM client breakdown from CH")
-				}
-				return nil
+			var queryErr error
+			result.llmClients, queryErr = reader.GetLLMClientBreakdown(egCtx, repo.GetLLMClientBreakdownParams{
+				GramProjectID:  params.projectID,
+				TimeStart:      params.timeStart,
+				TimeEnd:        params.timeEnd,
+				ExternalUserID: "",
+				APIKeyID:       "",
+				ToolsetSlug:    "",
+				SessionMode:    false,
 			})
+			if queryErr != nil {
+				return oops.E(oops.CodeUnexpected, queryErr, "error retrieving LLM client breakdown from CH")
+			}
+			return nil
 		})
 	}
 
@@ -182,17 +167,4 @@ func fetchProjectOverviewClickHouse(
 	}
 
 	return result, nil
-}
-
-func traceProjectOverviewQuery(ctx context.Context, tracer trace.Tracer, name string, query func(context.Context) error) error {
-	queryCtx, span := tracer.Start(ctx, name)
-	defer span.End()
-
-	err := query(queryCtx)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-	}
-
-	return err
 }

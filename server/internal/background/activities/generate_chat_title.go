@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"regexp"
 	"strings"
 	"time"
 
@@ -66,9 +65,14 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 		return fmt.Errorf("invalid chat ID: %w", err)
 	}
 
-	chat, err := g.repo.GetChat(ctx, chatID)
+	projectID, err := uuid.Parse(args.ProjectID)
+	if err != nil {
+		return fmt.Errorf("invalid project ID: %w", err)
+	}
+
+	chat, err := g.repo.GetChat(ctx, repo.GetChatParams{ID: chatID, ProjectID: projectID})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil // chat was deleted, nothing to do
+		return nil // chat was deleted or is not in this project, nothing to do
 	}
 	if err != nil {
 		return fmt.Errorf("get chat: %w", err)
@@ -108,39 +112,15 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 	// UpdateChatTitle only writes when title_manually_set is still false, so a
 	// manual rename that raced this generation wins and is left untouched.
 	err = g.repo.UpdateChatTitle(ctx, repo.UpdateChatTitleParams{
-		ID:    chatID,
-		Title: conv.ToPGText(title),
+		ID:        chatID,
+		ProjectID: projectID,
+		Title:     conv.ToPGText(title),
 	})
 	if err != nil {
 		return fmt.Errorf("update chat title: %w", err)
 	}
 
 	return nil
-}
-
-// leadingEnvelopeRE matches one or more leading "envelope" blocks that agent
-// harnesses prepend to a turn to steer the assistant toward the right channel —
-// e.g. <message-context>…</message-context> from our assistant runtime (which
-// source/surface the turn came from, MCP auth events) or
-// <notification>…</notification> from Claude Code background tasks. The harness
-// needs the block, but it is noise for title generation — left in, the title
-// model fixates on the structured boilerplate and every thread ends up with the
-// same generic title.
-//
-// The tag is an allowlist of envelopes we know about rather than any
-// <tag>…</tag>: a fully-generic match would also eat legitimate leading user
-// markup (a message that starts with <details> or a pasted code block), which
-// distorts the title. Add new harnesses as another `<tag>…</tag>` alternative.
-// Each alternative pairs an open tag with its own close tag (RE2 has no
-// backreferences), so a mismatched `<message-context>…</notification>` is left
-// alone. Anchored to the start, so a tag a user types mid-message is preserved;
-// the non-greedy body stops at the first close tag.
-var leadingEnvelopeRE = regexp.MustCompile(`(?s)^(?:\s*<message-context>.*?</message-context>\s*|\s*<notification>.*?</notification>\s*)+`)
-
-// stripLeadingEnvelopes removes any leading harness framing so the title model
-// sees only the human-authored turn text.
-func stripLeadingEnvelopes(s string) string {
-	return strings.TrimSpace(leadingEnvelopeRE.ReplaceAllString(s, ""))
 }
 
 // buildTitleContext concatenates the last few user/assistant messages into a
@@ -150,7 +130,7 @@ func buildTitleContext(messages []repo.ChatMessage) string {
 	count := 0
 	for i := len(messages) - 1; i >= 0; i-- { // Start from the last message and work backwards to make sure we capture the most recent messages
 		msg := messages[i]
-		content := stripLeadingEnvelopes(msg.Content)
+		content := chat.StripLeadingEnvelopes(msg.Content)
 		if (msg.Role != "user" && msg.Role != "assistant") || content == "" {
 			continue
 		}

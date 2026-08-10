@@ -4,9 +4,14 @@
 
 import { aiIntegrationsDeleteConfig } from "../funcs/aiIntegrationsDeleteConfig.js";
 import { aiIntegrationsGetConfig } from "../funcs/aiIntegrationsGetConfig.js";
+import { aiIntegrationsListSchedules } from "../funcs/aiIntegrationsListSchedules.js";
+import { aiIntegrationsRetrySchedule } from "../funcs/aiIntegrationsRetrySchedule.js";
+import { aiIntegrationsSetScheduleEnabled } from "../funcs/aiIntegrationsSetScheduleEnabled.js";
 import { aiIntegrationsUpsertConfig } from "../funcs/aiIntegrationsUpsertConfig.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AIIntegrationConfig } from "../models/components/aiintegrationconfig.js";
+import { AIIntegrationScheduleState } from "../models/components/aiintegrationschedulestate.js";
+import { ListAIIntegrationSchedulesResult } from "../models/components/listaiintegrationschedulesresult.js";
 import {
   DeleteAIIntegrationConfigRequest,
   DeleteAIIntegrationConfigSecurity,
@@ -15,6 +20,18 @@ import {
   GetAIIntegrationConfigRequest,
   GetAIIntegrationConfigSecurity,
 } from "../models/operations/getaiintegrationconfig.js";
+import {
+  ListAIIntegrationSchedulesRequest,
+  ListAIIntegrationSchedulesSecurity,
+} from "../models/operations/listaiintegrationschedules.js";
+import {
+  RetryAIIntegrationScheduleRequest,
+  RetryAIIntegrationScheduleSecurity,
+} from "../models/operations/retryaiintegrationschedule.js";
+import {
+  SetAIIntegrationScheduleEnabledRequest,
+  SetAIIntegrationScheduleEnabledSecurity,
+} from "../models/operations/setaiintegrationscheduleenabled.js";
 import {
   UpsertAIIntegrationConfigRequest,
   UpsertAIIntegrationConfigSecurity,
@@ -53,6 +70,63 @@ export class AiIntegrations extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AIIntegrationConfig> {
     return unwrapAsync(aiIntegrationsGetConfig(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listSchedules aiIntegrations
+   *
+   * @remarks
+   * List the sync schedules and their scheduler state for a provider's org-wide AI integration config. Returns an empty list when no config is set.
+   */
+  async listSchedules(
+    request: ListAIIntegrationSchedulesRequest,
+    security?: ListAIIntegrationSchedulesSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListAIIntegrationSchedulesResult> {
+    return unwrapAsync(aiIntegrationsListSchedules(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * retrySchedule aiIntegrations
+   *
+   * @remarks
+   * Make one sync schedule due immediately, lifting any automatic pause and resetting its failure streak. The scheduler picks it up on its next tick.
+   */
+  async retrySchedule(
+    request: RetryAIIntegrationScheduleRequest,
+    security?: RetryAIIntegrationScheduleSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<AIIntegrationScheduleState> {
+    return unwrapAsync(aiIntegrationsRetrySchedule(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setScheduleEnabled aiIntegrations
+   *
+   * @remarks
+   * Enable or disable one sync schedule of a provider's org-wide AI integration config. Disabled schedules are skipped by the poller until re-enabled.
+   */
+  async setScheduleEnabled(
+    request: SetAIIntegrationScheduleEnabledRequest,
+    security?: SetAIIntegrationScheduleEnabledSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<AIIntegrationScheduleState> {
+    return unwrapAsync(aiIntegrationsSetScheduleEnabled(
       this,
       request,
       security,

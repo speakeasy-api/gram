@@ -1,10 +1,9 @@
 import { useSessionData } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { Link } from "react-router";
 import { useCaptureEnterpriseGateViewed } from "@/contexts/Telemetry";
-import { AuthLayout } from "@/pages/login/components/login-section";
-import { JourneyDemo } from "@/pages/login/components/journey-demo";
+import { AuthShell } from "@/pages/login/components/auth-shell";
 import { DemoBookingFlow } from "@/pages/demo/components/DemoBookingFlow";
-import { LogOutIcon } from "lucide-react";
 
 export default function BookDemo(): JSX.Element {
   const client = useSdkClient();
@@ -23,23 +22,30 @@ export default function BookDemo(): JSX.Element {
   };
 
   return (
-    <main className="flex min-h-screen flex-col md:flex-row">
-      <JourneyDemo />
-
-      <AuthLayout
-        contentClassName="max-w-2xl"
-        topRight={
-          <button
-            onClick={() => void handleLogout()}
-            className="flex items-center gap-1.5 text-xs text-[#8B8684] transition-colors hover:text-slate-600"
-          >
-            <LogOutIcon className="h-3.5 w-3.5" />
-            Log out
-          </button>
-        }
-      >
-        <DemoBookingFlow />
-      </AuthLayout>
-    </main>
+    <AuthShell
+      page="Book a demo"
+      contentClassName="max-w-[560px]"
+      // The card carries its own prefill footnote instead ("2E Book a demo").
+      showTerms={false}
+      headerAction={
+        <button
+          type="button"
+          onClick={() => void handleLogout()}
+          className="auth-mono text-[12px] text-[var(--muted)] transition-colors hover:text-black"
+        >
+          Log out
+        </button>
+      }
+    >
+      <DemoBookingFlow />
+      <div className="mt-6 text-center">
+        <Link
+          to="/explore-demo"
+          className="auth-mono text-[12px] text-[var(--muted)] underline underline-offset-4 transition-colors hover:text-black"
+        >
+          Or explore a live demo org →
+        </Link>
+      </div>
+    </AuthShell>
   );
 }

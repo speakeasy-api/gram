@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { LinkIcon, TerminalIcon, UploadIcon } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { FullWidthUpload } from "@/components/upload";
-import { Spinner } from "@/components/ui/spinner";
+import { Spinner } from "@/components/ui/Spinner";
 import { useMutation } from "@tanstack/react-query";
 import { useSdkClient } from "@/contexts/Sdk";
 import { UploadOpenAPIv3Result } from "@gram/client/models/components/uploadopenapiv3result.js";
@@ -116,7 +117,7 @@ export function OpenApiSourceInput({
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder="https://example.com/openapi.yaml"
-              className="border-input bg-background focus:ring-ring w-full rounded-md border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
+              className="border-input bg-background focus:ring-ring w-full border px-3 py-2 text-sm focus:ring-2 focus:outline-none"
               disabled={fetchMutation.isPending}
               required
             />
@@ -125,8 +126,14 @@ export function OpenApiSourceInput({
               disabled={!url.trim() || fetchMutation.isPending}
               className="w-full"
             >
-              {fetchMutation.isPending && <Spinner className="mr-2 size-4" />}
-              {fetchMutation.isPending ? "Loading..." : "Load OpenAPI Spec"}
+              {fetchMutation.isPending && (
+                <Button.LeftIcon>
+                  <Spinner className="size-4" />
+                </Button.LeftIcon>
+              )}
+              <Button.Text>
+                {fetchMutation.isPending ? "Loading..." : "Load OpenAPI Spec"}
+              </Button.Text>
             </Button>
           </Stack>
         </form>
@@ -137,10 +144,7 @@ export function OpenApiSourceInput({
             <p className="text-muted-foreground mb-1.5 text-xs">
               Direct upload
             </p>
-            <CodeBlock
-              language="bash"
-              className="!bg-muted/50 !rounded-lg !border-0"
-            >
+            <CodeBlock language="bash" className="!bg-muted/50 !border-0">
               {`gram upload --type openapiv3 \\\n  --slug ${documentSlug} \\\n  --name "${documentSlug}" \\\n  --location ./path/to/spec.yaml`}
             </CodeBlock>
           </div>
@@ -148,10 +152,7 @@ export function OpenApiSourceInput({
             <p className="text-muted-foreground mb-1.5 text-xs">
               Or stage and push (useful for CI/CD)
             </p>
-            <CodeBlock
-              language="bash"
-              className="!bg-muted/50 !rounded-lg !border-0"
-            >
+            <CodeBlock language="bash" className="!bg-muted/50 !border-0">
               {`gram stage openapi \\\n  --slug ${documentSlug} \\\n  --location ./path/to/spec.yaml\n\ngram push`}
             </CodeBlock>
           </div>

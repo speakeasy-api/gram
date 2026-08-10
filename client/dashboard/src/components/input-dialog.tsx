@@ -1,10 +1,10 @@
-import { Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@/components/ui/Stack";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Button } from "./ui/button";
-import { Dialog } from "./ui/dialog";
-import { Input } from "./ui/input";
-import { Label } from "./ui/label";
+import { Button } from "./ui/Button";
+import { Dialog } from "./ui/Dialog";
+import { Input } from "./ui/Input";
+import { Label } from "@/components/ui/Label";
 import { ImageUpload } from "./upload";
 
 type InputProps =
@@ -39,6 +39,7 @@ export function InputDialog({
   description,
   inputs,
   submitButtonText = "Submit",
+  cancelButtonText = "Cancel",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -47,6 +48,7 @@ export function InputDialog({
   inputs: InputProps[] | InputProps;
   description?: string;
   submitButtonText?: string;
+  cancelButtonText?: string;
 }): JSX.Element {
   const inputsArray = Array.isArray(inputs) ? inputs : [inputs];
   inputsArray.sort((a, b) => (a.optional ? 1 : b.optional ? -1 : 0));
@@ -133,11 +135,11 @@ export function InputDialog({
         </Stack>
         <Dialog.Footer>
           <Button
-            variant="ghost"
+            variant="tertiary"
             onClick={() => onOpenChange(false)}
             disabled={pending}
           >
-            Back
+            {cancelButtonText}
           </Button>
           <Button
             onClick={() => void submit()}

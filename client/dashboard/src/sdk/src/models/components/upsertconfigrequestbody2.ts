@@ -3,51 +3,44 @@
  */
 
 import * as z from "zod/v4-mini";
-import { remap as remap$ } from "../../lib/primitives.js";
-import {
-  OtelForwardingHeaderInput,
-  OtelForwardingHeaderInput$Outbound,
-  OtelForwardingHeaderInput$outboundSchema,
-} from "./otelforwardingheaderinput.js";
 
 export type UpsertConfigRequestBody2 = {
   /**
-   * Whether forwarding should be active.
+   * Secret credential values keyed by field key. Stored encrypted; never returned on reads. Omit to keep the existing secrets.
+   */
+  credentials?: { [k: string]: string } | undefined;
+  /**
+   * Whether the integration should be active.
    */
   enabled: boolean;
   /**
-   * URL to forward OTEL payloads to.
+   * Provider identifier (e.g. jamf, kandji, drata, vanta).
    */
-  endpointUrl: string;
+  provider: string;
   /**
-   * Full set of headers to attach. Replaces any existing headers.
+   * Non-secret settings values keyed by field key. Merged per key with the stored settings: omitted keys keep their stored values.
    */
-  headers?: Array<OtelForwardingHeaderInput> | undefined;
+  settings?: { [k: string]: string } | undefined;
 };
 
 /** @internal */
 export type UpsertConfigRequestBody2$Outbound = {
+  credentials?: { [k: string]: string } | undefined;
   enabled: boolean;
-  endpoint_url: string;
-  headers?: Array<OtelForwardingHeaderInput$Outbound> | undefined;
+  provider: string;
+  settings?: { [k: string]: string } | undefined;
 };
 
 /** @internal */
 export const UpsertConfigRequestBody2$outboundSchema: z.ZodMiniType<
   UpsertConfigRequestBody2$Outbound,
   UpsertConfigRequestBody2
-> = z.pipe(
-  z.object({
-    enabled: z.boolean(),
-    endpointUrl: z.string(),
-    headers: z.optional(z.array(OtelForwardingHeaderInput$outboundSchema)),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      endpointUrl: "endpoint_url",
-    });
-  }),
-);
+> = z.object({
+  credentials: z.optional(z.record(z.string(), z.string())),
+  enabled: z.boolean(),
+  provider: z.string(),
+  settings: z.optional(z.record(z.string(), z.string())),
+});
 
 export function upsertConfigRequestBody2ToJSON(
   upsertConfigRequestBody2: UpsertConfigRequestBody2,

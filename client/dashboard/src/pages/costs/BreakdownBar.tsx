@@ -3,31 +3,28 @@ import {
   SEGMENT_BASE,
   SEGMENT_INACTIVE,
   SegmentedControl,
-} from "@/components/ui/segmented-control";
+} from "@/components/ui/SegmentedControl";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "@/components/ui/Select";
 import { cn } from "@/lib/utils";
-import { Info } from "lucide-react";
-import type { ReactNode } from "react";
 
-// The header for the breakdown table: what this cut is (title), what it's doing
-// to the user's own numbers (caption), and the axes to re-cut it by (the track).
+// The breakdown section's control strip: the axes to re-cut the chart and
+// table by (the track), and the free-text search that narrows the table's
+// rows. It sits directly above the chart/table — not in the page-scope bar
+// under the headline stats — so the controls that reshape this section read
+// as belonging to it.
 //
-// This replaced a bare "Breakdown by <select>": users didn't find the dropdown,
-// and the word "breakdown" reads as jargon until you've watched it re-cut the
-// same spend. So the axes are promoted to visible segments, and the title states
-// the current cut ("Cost by Model") rather than naming the mechanism — pairing a
-// lit segment with a title that echoes it teaches the idea on the first click.
+// The axis track replaced a bare "Breakdown by <select>": users didn't find
+// the dropdown, and the word "breakdown" reads as jargon until you've watched
+// it re-cut the same spend. So the axes are promoted to visible segments, and
+// the section title above states the current cut ("Cost by Model") rather than
+// naming the mechanism — pairing a lit segment with a title that echoes it
+// teaches the idea on the first click.
 
 export type AxisOption = { value: string; label: string };
 
@@ -56,36 +53,21 @@ function partitionAxes(
 }
 
 export function BreakdownBar({
-  title,
-  caption,
   axisValue,
   axisOptions,
-  axisHint,
   onAxisChange,
   searchValue,
   onSearchChange,
   searchPlaceholder,
-  actions,
 }: {
-  // The current cut, stated plainly (e.g. "Cost by Model") — the caption's
-  // parent, so the prose under it isn't an orphaned third line.
-  title: string;
-  // Prose naming what the cut is doing in the user's own numbers.
-  caption: string;
   axisValue: string;
   axisOptions: AxisOption[];
-  // Optional caveat for the current axis, appended to the explainer tooltip
-  // (e.g. the root Skill cut excludes subagent-run skills).
-  axisHint?: string;
   onAxisChange: (value: string) => void;
   // Free-text filter over the table's rows, rendered as the standard toolbar
   // search box. Client-side: it narrows the already-loaded rows, never the query.
   searchValue: string;
   onSearchChange: (value: string) => void;
   searchPlaceholder: string;
-  // Controls that belong to the table below (e.g. CSV export), rendered beside
-  // the axis track.
-  actions?: ReactNode;
 }): JSX.Element {
   const { segments, overflow } = partitionAxes(axisOptions, axisValue);
 
@@ -99,7 +81,7 @@ export function BreakdownBar({
         className={cn(
           SEGMENT_BASE,
           SEGMENT_INACTIVE,
-          "data-[state=open]:text-foreground w-auto cursor-pointer gap-1 bg-transparent shadow-none focus-visible:ring-0",
+          "data-[state=open]:text-foreground w-auto cursor-pointer gap-1 border-0 bg-transparent shadow-none focus-visible:ring-0",
         )}
       >
         <SelectValue placeholder="More" />
@@ -115,52 +97,31 @@ export function BreakdownBar({
   );
 
   return (
-    <div className="mb-3 flex flex-col gap-3">
-      <div className="flex flex-col gap-0.5">
-        <h2 className="flex items-center gap-1.5 text-sm font-semibold">
-          {title}
-          {/* No general "what is a breakdown" note — defining it in the abstract
-              read as jargon, and the caption below says it against the slice
-              actually on screen. The icon is left for axes that carry a real
-              caveat, so its presence means something. */}
-          {axisHint && (
-            <Tooltip>
-              <TooltipTrigger
-                aria-label={axisHint}
-                className="text-muted-foreground inline-flex cursor-help"
-              >
-                <Info className="size-3.5" />
-              </TooltipTrigger>
-              <TooltipContent className="max-w-64">{axisHint}</TooltipContent>
-            </Tooltip>
-          )}
-        </h2>
-        <p className="text-muted-foreground text-xs">{caption}</p>
-      </div>
-      {/* The standard list-page control strip: search narrows the rows on the
-          left; the preset axis track (re-cut, not narrow) and table actions
-          keep their place on the right. */}
-      <Page.Toolbar>
+    // Axis track on the left, row search on the right — one Page.Toolbar row
+    // that spans the breakdown section. A lone axis is no choice at all (at a
+    // session leaf "Sessions" is the only option), and a track you can't move
+    // reads as a broken toggle; the section title already names the cut, so
+    // the track is omitted in that case and search keeps the full row.
+    <Page.Toolbar>
+      {axisOptions.length > 1 && (
+        <Page.Toolbar.Leading>
+          <SegmentedControl
+            value={axisValue}
+            onChange={onAxisChange}
+            options={segments}
+            trailing={more}
+          />
+        </Page.Toolbar.Leading>
+      )}
+      {/* Wrapped in Actions so the search anchors right — the left column
+          belongs to the axis track. */}
+      <Page.Toolbar.Actions>
         <Page.Toolbar.Search
           value={searchValue}
           onChange={onSearchChange}
           placeholder={searchPlaceholder}
         />
-        <Page.Toolbar.Actions>
-          {/* A lone axis is no choice at all — at a session leaf (Agent, Model)
-              "Sessions" is the only option, and a track you can't move reads as
-              a broken toggle. The title already names the cut. */}
-          {axisOptions.length > 1 && (
-            <SegmentedControl
-              value={axisValue}
-              onChange={onAxisChange}
-              options={segments}
-              trailing={more}
-            />
-          )}
-          {actions}
-        </Page.Toolbar.Actions>
-      </Page.Toolbar>
-    </div>
+      </Page.Toolbar.Actions>
+    </Page.Toolbar>
   );
 }
