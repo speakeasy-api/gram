@@ -394,11 +394,6 @@ const ROUTE_STRUCTURE = {
     component: MCPRoot,
     indexComponent: MCPPage,
     subPages: {
-      approvalRequest: {
-        title: "Access request",
-        url: "mcp-approvals/:requestId",
-        component: MCPApprovalDetail,
-      },
       builtIn: {
         title: "Built-in MCP",
         url: "built-in/:builtInSlug",
@@ -659,6 +654,11 @@ const ROUTE_STRUCTURE = {
     component: ShadowMCPRoot,
     indexComponent: ShadowMCP,
     subPages: {
+      request: {
+        title: "Access request",
+        url: "requests/:requestId",
+        component: MCPApprovalDetail,
+      },
       detail: {
         title: "Shadow MCP Server",
         url: ":serverSlug",

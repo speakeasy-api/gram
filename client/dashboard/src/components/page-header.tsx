@@ -79,18 +79,17 @@ const breadcrumbSubstitutions = {
   "api-keys": "API Keys",
   "mdm-integrations": "MDM Integrations",
   rbac: "RBAC Override",
-  "mcp-approvals": "mcp-approvals",
   jamf: "Jamf Pro",
   slack: "Assistants",
 };
 
 // Segments that appear in crumb trails but are not routable pages themselves.
 // Their crumb links to the surface that owns them instead of a dead path —
-// e.g. MCP access requests render as a tab on the MCP page, so the
-// mcp-approvals segment (present only in request-detail URLs) points at that
-// tab rather than at a 404.
+// e.g. MCP access requests render as a tab on the Shadow MCP page, so the
+// requests segment (present only in request-detail URLs) points at that tab
+// rather than at a 404.
 const breadcrumbUrlSubstitutions: Record<string, string> = {
-  "/mcp/mcp-approvals": "/mcp?tab=requests",
+  "/shadow-mcp/requests": "/shadow-mcp?tab=requests",
 };
 
 // One rendered crumb. Pending crumbs (substitution key present, value not yet

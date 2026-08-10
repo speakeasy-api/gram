@@ -153,7 +153,7 @@ export function ApprovalQueue(): JSX.Element {
         data={requests}
         rowKey={(row) => row.id}
         onRowClick={(row) =>
-          void navigate(routes.mcp.approvalRequest.href(row.id))
+          void navigate(routes.shadowMCP.request.href(row.id))
         }
         noResultsMessage={<span>No matching requests.</span>}
       />
