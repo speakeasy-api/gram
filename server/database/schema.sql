@@ -1588,6 +1588,10 @@ CREATE TABLE IF NOT EXISTS remote_session_issuers (
   issuer TEXT NOT NULL,
   authorization_endpoint TEXT,
   token_endpoint TEXT,
+  -- RFC 7009 revocation endpoint. NULL when the issuer advertises none, which
+  -- is common and not an error: revoking a Remote Session then stays a local
+  -- soft-delete with no upstream call.
+  revocation_endpoint TEXT,
   registration_endpoint TEXT,
   jwks_uri TEXT,
   service_documentation TEXT,
