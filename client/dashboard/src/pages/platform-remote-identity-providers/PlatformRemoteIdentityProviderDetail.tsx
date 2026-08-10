@@ -18,6 +18,7 @@ import { issuerDisplayName } from "../remote-identity-providers/issuerDisplay";
 import { activeDetailTab } from "../remote-identity-providers/tabs";
 import { OverviewTab } from "../remote-identity-providers/tabs/issuer/OverviewTab";
 import { PlatformAdminOnly } from "./PlatformAdminOnly";
+import { PlatformConvergenceTab } from "./PlatformConvergenceTab";
 import { PlatformSettingsTab } from "./PlatformSettingsTab";
 
 // The catalog detail has no Clients tab. Global remote_session_clients exist in
@@ -25,7 +26,7 @@ import { PlatformSettingsTab } from "./PlatformSettingsTab";
 // client to a session by project or organization, and a global client has
 // neither — so there is nothing to manage them for yet. Tenant clients on a
 // platform issuer belong to their organizations and are managed there.
-const PLATFORM_ISSUER_TABS = ["overview", "settings"] as const;
+const PLATFORM_ISSUER_TABS = ["overview", "convergence", "settings"] as const;
 type PlatformIssuerTab = (typeof PLATFORM_ISSUER_TABS)[number];
 
 export default function PlatformRemoteIdentityProviderDetail(): JSX.Element {
@@ -122,6 +123,9 @@ function PlatformIssuerDetail({
               <PageTabsTrigger value="overview" asChild>
                 <Link to={tabHref("overview")}>Overview</Link>
               </PageTabsTrigger>
+              <PageTabsTrigger value="convergence" asChild>
+                <Link to={tabHref("convergence")}>Convergence</Link>
+              </PageTabsTrigger>
               <PageTabsTrigger value="settings" asChild>
                 <Link to={tabHref("settings")}>Settings</Link>
               </PageTabsTrigger>
@@ -132,6 +136,10 @@ function PlatformIssuerDetail({
         <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
           <TabsContent value="overview" className="mt-0">
             {issuer && <OverviewTab issuer={issuer} />}
+            {isLoading && <Text muted>Loading…</Text>}
+          </TabsContent>
+          <TabsContent value="convergence" className="mt-0">
+            {issuer && <PlatformConvergenceTab issuer={issuer} />}
             {isLoading && <Text muted>Loading…</Text>}
           </TabsContent>
           <TabsContent value="settings" className="mt-0">

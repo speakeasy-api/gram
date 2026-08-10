@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net/url"
 	"os"
 	"slices"
 	"sync"
@@ -26,11 +25,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -101,28 +97,8 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker) 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
-	enc := testenv.NewEncryptionClient(t)
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
-	serverURL, err := url.Parse("http://0.0.0.0")
-	require.NoError(t, err)
-
-	// usersessions reaches the legacy gram registration migration through a
-	// remotesessions.Service; construct one over the same test database.
-	remoteSessionsService := remotesessions.NewService(
-		logger,
-		tracerProvider,
-		conn,
-		sessionManager,
-		authzEngine,
-		enc,
-		environments.NewEnvironmentEntries(logger, conn, enc, mcpmetadatarepo.New(conn)),
-		guardianPolicy,
-		audit.NewLogger(),
-		serverURL,
-		cache.NewRedisCacheAdapter(redisClient),
-		remotesessions.NewRefreshService(logger, conn, enc, guardianPolicy, cache.NewRedisCacheAdapter(redisClient)),
-	)
 
 	var tokenRevoker usersessions.TokenRevoker = chatSessionsManager
 	if revoker != nil {
@@ -141,7 +117,6 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker) 
 		guardianPolicy,
 		usersessions.NewSigner("test-jwt-secret"),
 		"http://0.0.0.0",
-		remoteSessionsService,
 	)
 
 	return ctx, &testInstance{

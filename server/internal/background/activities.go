@@ -157,6 +157,7 @@ type Activities struct {
 	skillSuggestionAnalyzer         *activities.SkillSuggestionAnalyzer
 	chatAnalysisScorer              *activities.ChatAnalysisScorer
 	remoteSessionRefresh            *activities.RemoteSessionRefresh
+	demoteExpiredTrials             *activities.DemoteExpiredTrials
 }
 
 func NewActivities(
@@ -342,6 +343,7 @@ func NewActivities(
 		publishOutbox:                   publish_outbox.New(logger, tracerProvider, meterProvider, db, publishers.Outbox),
 		pluginPublisher:                 activities.NewPluginPublisher(logger, db, pluginPublisher),
 		listSpendRuleOrgs:               spend_rules.NewListOrgs(logger, db),
+		demoteExpiredTrials:             activities.NewDemoteExpiredTrials(logger, db, openrouterProvisioner, auditLogger),
 		evaluateOrgSpendRules:           spend_rules.NewEvaluateOrg(logger, tracerProvider, db, spendRulesCH, cacheAdapter, features),
 		// The judge draws on the same per-(org, model) bucket and the same
 		// completion client as every other platform judge, so efficacy scoring
@@ -822,4 +824,19 @@ func (a *Activities) RefreshRemoteSession(ctx context.Context, input activities.
 		return activities.RefreshRemoteSessionResult{RateLimited: false}, fmt.Errorf("refresh remote session: %w", err)
 	}
 	return result, nil
+}
+
+func (a *Activities) ListExpiredTrials(ctx context.Context) ([]string, error) {
+	orgs, err := a.demoteExpiredTrials.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list expired trials: %w", err)
+	}
+	return orgs, nil
+}
+
+func (a *Activities) DemoteExpiredTrial(ctx context.Context, args activities.DemoteExpiredTrialArgs) error {
+	if err := a.demoteExpiredTrials.Demote(ctx, args); err != nil {
+		return fmt.Errorf("demote expired trial: %w", err)
+	}
+	return nil
 }

@@ -305,6 +305,19 @@ func (q *Queries) InsertTelemetryLogs(ctx context.Context, args []InsertTelemetr
 	return q.insertTelemetryLogsInto(ctx, "telemetry_logs", args)
 }
 
+// InsertTelemetryLogsSync writes the same rows as InsertTelemetryLogs but
+// commits them before returning (async_insert=0). It exists for the usage
+// importers, whose dedupe is a read-merge-write cycle: each page checks
+// telemetry_logs for fingerprints it is about to insert, so the previous
+// page's rows must be queryable by the time that check runs. Under the async
+// buffer they are not, and repeats spanning pages would slip through.
+func (q *Queries) InsertTelemetryLogsSync(ctx context.Context, args []InsertTelemetryLogParams) error {
+	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
+		"async_insert": 0,
+	}))
+	return q.insertTelemetryLogsInto(ctx, "telemetry_logs", args)
+}
+
 type UpsertShadowMCPInventoryURLParams struct {
 	GramProjectID      string
 	CanonicalServerURL string
@@ -1940,9 +1953,11 @@ func (q *Queries) ListToolTraces(ctx context.Context, arg ListToolTracesParams) 
 		havingParts = append(havingParts, "event_source = ?")
 		havingArgs = append(havingArgs, arg.EventSource)
 	} else {
-		// Exclude hooks logs by default when no event_source filter is specified
-		havingParts = append(havingParts, "event_source != ?")
-		havingArgs = append(havingArgs, "hook")
+		// Exclude hook logs and trigger delivery logs by default when no
+		// event_source filter is specified. Trigger delivery rows carry a
+		// tool_name (trigger:<slug>) and a trace id but are not tool calls.
+		havingParts = append(havingParts, "event_source NOT IN (?, ?)")
+		havingArgs = append(havingArgs, "hook", "trigger")
 	}
 
 	// Combine all HAVING conditions with explicit AND to ensure proper filtering
