@@ -7,16 +7,40 @@ export const BRAND_MESH_SURFACE_CLASS =
 /**
  * Brand-rainbow mesh treatment shared by the project home assistant card and
  * the /chat landing: the full tech-color rainbow (--gradient-brand-primary in
- * base.css) run along a diagonal, then masked so it only breathes in from the
- * top-right corner — an accent on the surface's edge, not a background. The
- * host surface itself stays a neutral theme-following gradient.
+ * base.css) run along a diagonal, then masked so it only breathes in from an
+ * edge — an accent on the surface, not a background. The host surface itself
+ * stays a neutral theme-following gradient.
  */
-const RAINBOW_EDGE_GRADIENT =
-  "linear-gradient(230deg, #99c2ff 0%, #2874d7 7%, #00143d 14%, #002414 21%, #59824f 28%, #d3dd92 35%, #fb8841 42%, #c83228 49%, #330f1f 56%, rgba(51,15,31,0) 70%)";
+const RAINBOW_EDGE_STOPS =
+  "#99c2ff 0%, #2874d7 7%, #00143d 14%, #002414 21%, #59824f 28%, #d3dd92 35%, #fb8841 42%, #c83228 49%, #330f1f 56%, rgba(51,15,31,0) 70%";
 
-/** Confines the rainbow to the top-right corner, dissolving inward. */
-const RAINBOW_EDGE_MASK =
-  "radial-gradient(85% 120% at 100% 0%, #000 0%, rgba(0,0,0,0.6) 40%, transparent 72%)";
+const MESH_VARIATIONS = [
+  { angle: 230, focalPoint: "100% 0%" },
+  { angle: 130, focalPoint: "0% 0%" },
+  { angle: 310, focalPoint: "100% 100%" },
+  { angle: 50, focalPoint: "0% 100%" },
+  { angle: 255, focalPoint: "100% 35%" },
+  { angle: 105, focalPoint: "0% 35%" },
+  { angle: 285, focalPoint: "80% 100%" },
+  { angle: 75, focalPoint: "20% 100%" },
+] as const;
+
+function hashSeed(seed: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < seed.length; index++) {
+    hash ^= seed.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function meshVariation(seed: string | undefined) {
+  if (!seed) return MESH_VARIATIONS[0];
+  return (
+    MESH_VARIATIONS[hashSeed(seed) % MESH_VARIATIONS.length] ??
+    MESH_VARIATIONS[0]
+  );
+}
 
 /**
  * Film grain laid over the mesh — an inline SVG turbulence tile, so no
@@ -33,16 +57,20 @@ const GRAIN_TEXTURE_URL =
  * `overflow-hidden` (which would clip popovers like the composer's slash
  * menu).
  */
-export function BrandMeshLayers(): ReactElement {
+export function BrandMeshLayers({ seed }: { seed?: string }): ReactElement {
+  const variation = meshVariation(seed);
+  const gradient = `linear-gradient(${variation.angle}deg, ${RAINBOW_EDGE_STOPS})`;
+  const mask = `radial-gradient(85% 120% at ${variation.focalPoint}, #000 0%, rgba(0,0,0,0.6) 40%, transparent 72%)`;
+
   return (
     <>
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 -z-10 overflow-hidden opacity-60 saturate-[0.65]"
         style={{
-          background: RAINBOW_EDGE_GRADIENT,
-          maskImage: RAINBOW_EDGE_MASK,
-          WebkitMaskImage: RAINBOW_EDGE_MASK,
+          background: gradient,
+          maskImage: mask,
+          WebkitMaskImage: mask,
         }}
       />
       <div
