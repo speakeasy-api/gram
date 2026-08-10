@@ -1677,10 +1677,15 @@ WHERE u.id = ANY(@ids::text[]);
 
 -- name: GetChatMessageAttribution :many
 -- Resolves the denormalized attribution (chat id, user ids, message event
--- time, assistant link) the ClickHouse finding writer stamps on risk_findings
--- rows at ingest. Message-level ids win over chat-level ids; both empty and
--- NULL collapse to ''. The assistant id is the chat's most recent live
--- assistant_threads link, or the nil UUID when the chat has no assistant.
+-- time, assistant link, source surface, directory team) the ClickHouse finding
+-- writer stamps on risk_findings rows at ingest. Message-level ids win over
+-- chat-level ids; both empty and NULL collapse to ''. The assistant id is the
+-- chat's most recent live assistant_threads link, or the nil UUID when the
+-- chat has no assistant. The team is the resolved user's WorkOS directory
+-- department, preferring an explicit user link over an email match (same
+-- precedence as the spend-rules directory lookup) so a stale email row cannot
+-- shadow the linked profile; empty when the org has no directory or the user
+-- has no profile.
 SELECT
     cm.id
   , cm.chat_id
@@ -1688,6 +1693,9 @@ SELECT
   , COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::text AS user_id
   , COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::text AS external_user_id
   , COALESCE(thread.assistant_id, '00000000-0000-0000-0000-000000000000'::uuid) AS assistant_id
+  , COALESCE(cm.source, '')::text AS chat_source
+  , COALESCE(dir.department_name, '')::text AS team
+  , COALESCE(u.email, '')::text AS user_email
 FROM chat_messages cm
 LEFT JOIN chats c
   ON c.id = cm.chat_id
@@ -1700,6 +1708,18 @@ LEFT JOIN LATERAL (
   ORDER BY at.created_at DESC
   LIMIT 1
 ) thread ON TRUE
+LEFT JOIN users u
+  ON u.id = COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''))
+LEFT JOIN LATERAL (
+  SELECT d.attributes->>'department_name' AS department_name
+  FROM directory_users d
+  WHERE d.organization_id = c.organization_id
+    AND d.deleted IS FALSE
+    AND d.workos_deleted IS FALSE
+    AND (d.user_id = u.id OR LOWER(d.email) = LOWER(u.email))
+  ORDER BY (d.user_id = u.id) DESC, d.workos_updated_at DESC
+  LIMIT 1
+) dir ON TRUE
 WHERE cm.id = ANY(@ids::uuid[]);
 
 -- name: GetChatContentPartAttribution :many
@@ -1716,6 +1736,9 @@ SELECT
   , ccp.project_id
   , COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::text AS user_id
   , COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::text AS external_user_id
+  , COALESCE(cm.source, '')::text AS chat_source
+  , COALESCE(dir.department_name, '')::text AS team
+  , COALESCE(u.email, '')::text AS user_email
 FROM chat_content_parts ccp
 -- The parent must sit in the part's own chat. Unconstrained, a stale or forged
 -- parent_chat_message_id would hand another tenant's user ids to this row.
@@ -1725,6 +1748,18 @@ LEFT JOIN chat_messages cm
 LEFT JOIN chats c
   ON c.id = ccp.chat_id
   AND c.deleted IS FALSE
+LEFT JOIN users u
+  ON u.id = COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''))
+LEFT JOIN LATERAL (
+  SELECT d.attributes->>'department_name' AS department_name
+  FROM directory_users d
+  WHERE d.organization_id = c.organization_id
+    AND d.deleted IS FALSE
+    AND d.workos_deleted IS FALSE
+    AND (d.user_id = u.id OR LOWER(d.email) = LOWER(u.email))
+  ORDER BY (d.user_id = u.id) DESC, d.workos_updated_at DESC
+  LIMIT 1
+) dir ON TRUE
 WHERE ccp.id = ANY(@ids::uuid[])
   AND ccp.project_id = ANY(@project_ids::uuid[])
   AND ccp.deleted IS FALSE

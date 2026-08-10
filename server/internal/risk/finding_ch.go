@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
@@ -170,13 +171,16 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 		// message_created_at falls back to the finding's own scan time so the
 		// listing sort key is never zero, mirroring the column's DEFAULT for
 		// pre-column rows.
-		var chatID, userID, externalUserID, assistantID string
+		var chatID, userID, externalUserID, assistantID, chatSource, team, userEmail string
 		messageCreatedAt := createdAt.UTC()
 		if msgID, err := uuid.Parse(chatMessageID); err == nil {
 			if a, ok := messageAttribution[msgID]; ok {
 				chatID = a.ChatID.String()
 				userID = a.UserID
 				externalUserID = a.ExternalUserID
+				chatSource = chat.CanonicalSource(a.ChatSource)
+				team = a.Team
+				userEmail = a.UserEmail
 				if a.AssistantID != uuid.Nil {
 					assistantID = a.AssistantID.String()
 				}
@@ -195,6 +199,9 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 				chatID = a.ChatID.String()
 				userID = a.UserID
 				externalUserID = a.ExternalUserID
+				chatSource = chat.CanonicalSource(a.ChatSource)
+				team = a.Team
+				userEmail = a.UserEmail
 			}
 		}
 
@@ -257,6 +264,9 @@ func (w *FindingCHWriter) HandleBatch(ctx context.Context, messages []*riskv1.Fi
 			FalsePositiveAt:          falsePositiveAt,
 			MessageCreatedAt:         messageCreatedAt,
 			AssistantID:              assistantID,
+			ChatSource:               chatSource,
+			Team:                     team,
+			UserEmail:                userEmail,
 			Surface:                  message.GetSurface(),
 			Field:                    message.GetField(),
 			Path:                     message.GetPath(),
