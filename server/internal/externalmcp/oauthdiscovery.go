@@ -292,17 +292,30 @@ func buildWellKnownSuffixURL(baseURL, suffix string) string {
 }
 
 // fetchJSON fetches JSON from a URL and decodes it into the target.
-func fetchJSON[T any](ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, url string) (*T, error) {
+func fetchJSON[T any](ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, rawURL string) (*T, error) {
+	if err := validateOAuthEndpoint(rawURL); err != nil {
+		return nil, fmt.Errorf("invalid metadata URL: %w", err)
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
 
-	client := guardianPolicy.Client(guardian.WithDefaultRetryConfig())
+	client := guardianPolicy.Client()
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return fmt.Errorf("stopped after 10 redirects")
+		}
+		if err := validateOAuthEndpoint(req.URL.String()); err != nil {
+			return fmt.Errorf("invalid metadata redirect URL: %w", err)
+		}
+		return nil
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("fetch: %w", err)
@@ -367,8 +380,14 @@ func fetchAdvertisedAuthServerMetadata(
 	guardianPolicy *guardian.Policy,
 	issuers []string,
 ) (*authServerMetadata, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	var errs []error
 	for _, issuer := range issuers {
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("authorization server metadata discovery deadline: %w", errors.Join(append(errs, err)...))
+		}
 		metadata, err := fetchAuthServerMetadata(ctx, logger, guardianPolicy, buildWellKnownURL(issuer), issuer)
 		if err == nil {
 			return metadata, nil

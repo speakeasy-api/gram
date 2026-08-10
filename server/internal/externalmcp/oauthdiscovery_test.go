@@ -1,6 +1,7 @@
 package externalmcp
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -195,6 +196,47 @@ func TestDiscoverOAuthMetadataUsesLaterAdvertisedAuthorizationServer(t *testing.
 	require.Equal(t, OAuthVersion21, result.Version)
 	require.Equal(t, server.URL+"/valid", result.Issuer)
 	require.Equal(t, []string{"resource.read"}, result.ScopesSupported)
+}
+
+func TestDiscoverOAuthMetadataRejectsInsecureMetadataURL(t *testing.T) {
+	t.Parallel()
+
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	result, err := DiscoverOAuthMetadata(
+		ctx,
+		testenv.NewLogger(t),
+		policy,
+		`Bearer auth_server_metadata="http://auth.example.com/.well-known/oauth-authorization-server"`,
+		"https://mcp.example.com",
+	)
+	require.ErrorContains(t, err, "must use HTTPS")
+	require.Nil(t, result)
+}
+
+func TestDiscoverOAuthMetadataRejectsInsecureMetadataRedirect(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://auth.example.com/.well-known/oauth-authorization-server", http.StatusFound)
+	}))
+	t.Cleanup(server.Close)
+
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+
+	result, err := DiscoverOAuthMetadata(
+		t.Context(),
+		testenv.NewLogger(t),
+		policy,
+		`Bearer auth_server_metadata="`+server.URL+`"`,
+		"https://mcp.example.com",
+	)
+	require.ErrorContains(t, err, "must use HTTPS")
+	require.Nil(t, result)
 }
 
 func TestValidateOAuthIssuerRequiresHTTPS(t *testing.T) {
