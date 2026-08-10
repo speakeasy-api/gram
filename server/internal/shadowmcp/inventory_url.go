@@ -1,9 +1,13 @@
 package shadowmcp
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"net"
 	"net/url"
 	"strings"
+
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 type InventoryURL struct {
@@ -60,4 +64,23 @@ func AccessEvidenceForInventoryURL(value InventoryURL) AccessEvidence {
 		URLHost:        value.URLHost,
 		ServerIdentity: "",
 	}
+}
+
+// ServerSlug is the URL-safe page identifier for one inventory server: a
+// readable prefix from the canonical URL plus an eight-character hash suffix
+// that survives prefix collisions. The inventory pages and the approval
+// workflow both derive it from the same canonical URL, which is what lets a
+// request link to the server page it describes.
+func ServerSlug(canonicalURL string) string {
+	hash := sha256.Sum256([]byte(canonicalURL))
+	hashSuffix := hex.EncodeToString(hash[:])[:8]
+
+	label := strings.TrimPrefix(canonicalURL, "https://")
+	label = strings.TrimPrefix(label, "http://")
+	prefix := conv.URLToSlug(label)
+	if prefix == "" {
+		prefix = "server"
+	}
+
+	return prefix + "-" + hashSuffix
 }

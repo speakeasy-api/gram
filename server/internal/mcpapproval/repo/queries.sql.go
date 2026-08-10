@@ -444,6 +444,66 @@ func (q *Queries) ListApprovalRequests(ctx context.Context, arg ListApprovalRequ
 	return items, nil
 }
 
+const listApprovalRequestsByTargetKeys = `-- name: ListApprovalRequestsByTargetKeys :many
+SELECT
+  r.id
+  , r.target_key
+  , r.status
+  , (
+      SELECT count(*)
+      FROM mcp_approval_request_requesters req
+      WHERE req.mcp_approval_request_id = r.id
+        AND req.project_id = r.project_id
+        AND req.deleted IS FALSE
+    ) AS requester_count
+FROM mcp_approval_requests r
+WHERE r.project_id = $1
+  AND r.target_kind = 'server_url'
+  AND r.target_key = ANY ($2::text[])
+  AND r.deleted IS FALSE
+`
+
+type ListApprovalRequestsByTargetKeysParams struct {
+	ProjectID  uuid.UUID
+	TargetKeys []string
+}
+
+type ListApprovalRequestsByTargetKeysRow struct {
+	ID             uuid.UUID
+	TargetKey      string
+	Status         string
+	RequesterCount int64
+}
+
+// Resolves the approval request tracking each of a set of canonical server
+// URLs, so the Shadow MCP inventory can join approval state onto its rows.
+// target_key is unique per (project, kind), so this returns at most one row
+// per key.
+func (q *Queries) ListApprovalRequestsByTargetKeys(ctx context.Context, arg ListApprovalRequestsByTargetKeysParams) ([]ListApprovalRequestsByTargetKeysRow, error) {
+	rows, err := q.db.Query(ctx, listApprovalRequestsByTargetKeys, arg.ProjectID, arg.TargetKeys)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListApprovalRequestsByTargetKeysRow
+	for rows.Next() {
+		var i ListApprovalRequestsByTargetKeysRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TargetKey,
+			&i.Status,
+			&i.RequesterCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDecisionsForApprovalRequest = `-- name: ListDecisionsForApprovalRequest :many
 SELECT id, organization_id, project_id, mcp_approval_request_id, decision, decided_by, rationale, evidence_snapshot, evidence_version, mcp_research_report_id, granted_principal_urns, decided_at, created_at, updated_at, deleted_at, deleted
 FROM mcp_approval_decisions

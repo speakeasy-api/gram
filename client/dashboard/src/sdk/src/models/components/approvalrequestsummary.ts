@@ -29,6 +29,10 @@ export type ApprovalRequestSummary = {
    */
   requesterCount: number;
   /**
+   * The Shadow MCP inventory page slug for a server_url target — the same identifier the inventory derives from the canonical URL, so a request links to the server page it describes. Absent for stdio targets.
+   */
+  serverSlug?: string | undefined;
+  /**
    * The request's current status.
    */
   status: string;
@@ -63,6 +67,7 @@ export const ApprovalRequestSummary$inboundSchema: z.ZodMiniType<
     ),
     id: z.string(),
     requester_count: z.int(),
+    server_slug: z.optional(z.string()),
     status: z.string(),
     target_kind: z.string(),
     target_raw: z.string(),
@@ -77,6 +82,7 @@ export const ApprovalRequestSummary$inboundSchema: z.ZodMiniType<
       "artifact_ref": "artifactRef",
       "created_at": "createdAt",
       "requester_count": "requesterCount",
+      "server_slug": "serverSlug",
       "target_kind": "targetKind",
       "target_raw": "targetRaw",
       "updated_at": "updatedAt",
