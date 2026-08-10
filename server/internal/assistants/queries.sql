@@ -1376,7 +1376,7 @@ SELECT
       AND client_secret_expires_at IS NOT NULL
       AND client_secret_expires_at <= @usable_after
     )
-    OR redirect_uri <> @redirect_uri
+    OR (client_id IS NOT NULL AND redirect_uri <> @redirect_uri)
   ) AS claimable
 FROM assistant_mcp_oauth_clients
 WHERE project_id = @project_id
@@ -1420,7 +1420,10 @@ WHERE
     AND clients.client_secret_expires_at IS NOT NULL
     AND clients.client_secret_expires_at <= @usable_after
   )
-  OR clients.redirect_uri <> EXCLUDED.redirect_uri;
+  OR (
+    clients.client_id IS NOT NULL
+    AND clients.redirect_uri <> EXCLUDED.redirect_uri
+  );
 
 -- name: CompleteAssistantMCPOAuthClientRegistration :execrows
 UPDATE assistant_mcp_oauth_clients

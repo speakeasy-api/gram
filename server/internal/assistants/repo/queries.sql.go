@@ -233,7 +233,10 @@ WHERE
     AND clients.client_secret_expires_at IS NOT NULL
     AND clients.client_secret_expires_at <= $7
   )
-  OR clients.redirect_uri <> EXCLUDED.redirect_uri
+  OR (
+    clients.client_id IS NOT NULL
+    AND clients.redirect_uri <> EXCLUDED.redirect_uri
+  )
 `
 
 type ClaimAssistantMCPOAuthClientRegistrationParams struct {
@@ -1048,7 +1051,7 @@ SELECT
       AND client_secret_expires_at IS NOT NULL
       AND client_secret_expires_at <= $2
     )
-    OR redirect_uri <> $1
+    OR (client_id IS NOT NULL AND redirect_uri <> $1)
   ) AS claimable
 FROM assistant_mcp_oauth_clients
 WHERE project_id = $4
