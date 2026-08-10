@@ -2403,3 +2403,41 @@ func TestMCPFingerprintsChangeWithDistributedSkills(t *testing.T) {
 	require.NotEqual(t, withSkill["plugin-a"], withNewVersion["plugin-a"], "a new resolved skill version must change the plugin's fingerprint")
 	require.Equal(t, base["plugin-b"], withSkill["plugin-b"], "plugins not carrying the skill must be untouched")
 }
+
+// Desktop and MDM-launched sessions hand hooks a minimal PATH. The binary
+// shells out to `claude mcp list` to identify which MCP server a tool call
+// reached, and a lookup that fails leaves the call reported as shadow MCP —
+// so the bootstrap must restore the CLI before exec'ing the binary.
+func TestHooksBootstrapRestoresClaudeOnPath(t *testing.T) {
+	t.Parallel()
+
+	// Everything up to the first exec — running further would download the
+	// pinned binary.
+	head, _, ok := strings.Cut(string(renderHooksBootstrap(GenerateConfig{})), "if cache_valid; then")
+	require.True(t, ok, "bootstrap must reach its cache check")
+
+	home := t.TempDir()
+	binDir := filepath.Join(home, ".local", "bin")
+	require.NoError(t, os.MkdirAll(binDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "claude"), []byte("#!/bin/sh\n"), 0o755))
+
+	run := func(extraPath string) string {
+		t.Helper()
+		cmd := exec.Command("bash", "-c", head+"\ncommand -v claude || echo MISSING")
+		cmd.Env = []string{"HOME=" + home, "PATH=" + extraPath}
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, string(out))
+		return strings.TrimSpace(string(out))
+	}
+
+	require.Equal(t, filepath.Join(binDir, "claude"), run("/usr/bin:/bin"),
+		"a minimal PATH must be repaired from the documented install locations")
+
+	// An unfindable CLI must not abort the hook: reporting without MCP
+	// attribution beats not reporting at all.
+	cmd := exec.Command("bash", "-c", head+"\ncommand -v claude || echo MISSING")
+	cmd.Env = []string{"HOME=" + t.TempDir(), "PATH=/usr/bin:/bin"}
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(out))
+	require.Equal(t, "MISSING", strings.TrimSpace(string(out)))
+}
