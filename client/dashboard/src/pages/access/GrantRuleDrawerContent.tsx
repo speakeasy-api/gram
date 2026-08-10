@@ -43,6 +43,7 @@ import {
   type ServerGroup,
 } from "./serverMerge";
 import { toolMetadataToServerTools } from "./remoteToolMetadata";
+import { ToolCapabilityBadge } from "@/components/tool-list/ToolCapabilityBadge";
 
 interface GrantRuleDrawerContentProps {
   /** The resource type determines which resource list to show */
@@ -1191,7 +1192,11 @@ function ServerToolRow({
                   <HighlightMatch
                     text={tool.name}
                     query={q}
-                    className="truncate"
+                    className="min-w-0 flex-1 truncate text-left"
+                  />
+                  <ToolCapabilityBadge
+                    annotations={tool.annotations}
+                    className="shrink-0"
                   />
                 </button>
               );
