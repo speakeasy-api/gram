@@ -319,7 +319,7 @@ func (r *PostgresReader) ListProjectMCPs(ctx context.Context, principal Principa
 	}
 
 	limit := boundedLimit(input.Limit)
-	rows, err := r.reader.ListMCPServersLimited(ctx, project.ID, int32(limit+1)) // #nosec G115 -- boundedLimit caps the value at 100.
+	rows, err := r.reader.ListMCPServersLimited(ctx, project.ID, principal.OrganizationID, int32(limit+1)) // #nosec G115 -- boundedLimit caps the value at 100.
 	if err != nil {
 		return ListProjectMCPsOutput{}, fmt.Errorf("list platform mcp servers: %w", err)
 	}
@@ -350,7 +350,7 @@ func (r *PostgresReader) GetMCP(ctx context.Context, principal Principal, input 
 		}
 		return MCP{}, fmt.Errorf("get project for platform mcp server: %w", err)
 	}
-	row, err := r.reader.GetMCPServer(ctx, mcpID, projectID)
+	row, err := r.reader.GetMCPServer(ctx, mcpID, projectID, principal.OrganizationID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return MCP{}, ErrForbidden

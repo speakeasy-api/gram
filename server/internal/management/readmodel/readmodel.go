@@ -66,24 +66,26 @@ func (r *Reader) ListMCPServers(ctx context.Context, projectID uuid.UUID, filter
 	return servers, nil
 }
 
-func (r *Reader) ListMCPServersLimited(ctx context.Context, projectID uuid.UUID, limit int32) ([]mcpserversrepo.McpServer, error) {
-	servers, err := r.mcpServers.ListMCPServersByProjectIDLimited(ctx, mcpserversrepo.ListMCPServersByProjectIDLimitedParams{
-		ProjectID:  projectID,
-		LimitValue: limit,
+func (r *Reader) ListMCPServersLimited(ctx context.Context, projectID uuid.UUID, organizationID string, limit int32) ([]mcpserversrepo.McpServer, error) {
+	servers, err := r.mcpServers.ListMCPServersByLiveProjectForOrganizationLimited(ctx, mcpserversrepo.ListMCPServersByLiveProjectForOrganizationLimitedParams{
+		ProjectID:      projectID,
+		OrganizationID: organizationID,
+		LimitValue:     limit,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("list limited mcp servers by project: %w", err)
+		return nil, fmt.Errorf("list limited mcp servers by live project: %w", err)
 	}
 	return servers, nil
 }
 
-func (r *Reader) GetMCPServer(ctx context.Context, mcpServerID, projectID uuid.UUID) (mcpserversrepo.McpServer, error) {
-	server, err := r.mcpServers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
-		ID:        mcpServerID,
-		ProjectID: projectID,
+func (r *Reader) GetMCPServer(ctx context.Context, mcpServerID, projectID uuid.UUID, organizationID string) (mcpserversrepo.McpServer, error) {
+	server, err := r.mcpServers.GetMCPServerByLiveProjectForOrganization(ctx, mcpserversrepo.GetMCPServerByLiveProjectForOrganizationParams{
+		ID:             mcpServerID,
+		ProjectID:      projectID,
+		OrganizationID: organizationID,
 	})
 	if err != nil {
-		return mcpserversrepo.McpServer{}, fmt.Errorf("get mcp server by project: %w", err)
+		return mcpserversrepo.McpServer{}, fmt.Errorf("get mcp server by live project: %w", err)
 	}
 	return server, nil
 }

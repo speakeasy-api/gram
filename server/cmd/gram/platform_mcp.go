@@ -31,6 +31,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 )
 
+var platformMCPLocalFixtureLoopbackCIDRBlocks = []string{"127.0.0.0/8", "::1/128"}
+
 type platformMCPConfig struct {
 	Logger                 *slog.Logger
 	MeterProvider          metric.MeterProvider
@@ -91,7 +93,8 @@ func configurePlatformMCP(ctx context.Context, config platformMCPConfig) error {
 		}
 		fixtureOAuth := localfixture.NewOAuthHTTP(fixtureConfig)
 		fixtureMCP := localfixture.NewMCPHTTP(fixtureOAuth)
-		catalog = platformmcp.NewRegistryCatalog(config.Registry, []platformmcp.CatalogDescriptor{fixtureConfig.CatalogDescriptor()})
+		fixtureRegistry := config.Registry.WithAllowedCIDRBlocks(platformMCPLocalFixtureLoopbackCIDRBlocks...)
+		catalog = platformmcp.NewRegistryCatalog(fixtureRegistry, []platformmcp.CatalogDescriptor{fixtureConfig.CatalogDescriptor()})
 		setupResources = fixtureConfig.SetupResources()
 		store, err := platformmcp.NewRegistrationStore(config.DB, platformmcp.RegistrationStoreConfig{ActiveRegistrationCap: 5})
 		if err != nil {
@@ -107,7 +110,7 @@ func configurePlatformMCP(ctx context.Context, config platformMCPConfig) error {
 				StreamableHTTPURL:          fixtureConfig.RemoteURL(),
 				ProviderSetupCompletionURL: oauth.ProviderSetupCompletionURL(),
 				Resource:                   fixtureConfig.RemoteURL(),
-				TestOnlyAllowedCIDRBlocks:  nil,
+				TestOnlyAllowedCIDRBlocks:  platformMCPLocalFixtureLoopbackCIDRBlocks,
 			},
 			localfixture.NewClientConfigurator(fixtureConfig, fixtureOAuth, config.DB, config.GuardianPolicy),
 		)
