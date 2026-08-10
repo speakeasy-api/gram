@@ -165,12 +165,6 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	payload := buildEnvelope(typed, hostname())
 	resolvedSkill := resolveActivatedSkill(typed, &payload)
 	if resolvedSkill != nil {
-		if resolvedSkill.sourceLevel != "" {
-			payload.Data.Skill.SourceLevel = new(resolvedSkill.sourceLevel)
-		}
-		if resolvedSkill.sourcePath != "" {
-			payload.Data.Skill.SourcePath = new(resolvedSkill.sourcePath)
-		}
 		if resolvedSkill.rawSHA256 != "" {
 			payload.Data.Skill.RawSha256 = new(resolvedSkill.rawSHA256)
 		}
@@ -235,11 +229,11 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	// kept for replay, a healthy exchange flushes any backlog, and a
 	// definitive 4xx does neither — the server answered, and would reject a
 	// replay identically.
-	r.finishExchange(idemKey, payload, res, resolvedSkill)
+	r.finishExchange(idemKey, payload, res)
 	if res.accepted() || res.unsent() {
 		commitPromptAttachmentHighWater(promptAttachmentAdvance)
 	}
-	if err := startSkillContentUpload(finalCreds, res, resolvedSkill); err != nil {
+	if err := uploadSkillContent(ctx, finalCreds, res, resolvedSkill); err != nil {
 		r.debugf("skill upload: %v", err)
 	}
 	return res, state

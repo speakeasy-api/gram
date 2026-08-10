@@ -47,8 +47,6 @@ func main() {
 			// successful send, and by the device agent when its downtime
 			// detector sees the control plane recover.
 			os.Exit(relay.RunDrain(context.Background(), os.Stdout))
-		case "upload-skill":
-			os.Exit(relay.RunSkillUpload(context.Background(), os.Args[2:], os.Stdin))
 		case "skill-feedback":
 			// Serves the speakeasy-skill-feedback MCP server over stdio.
 			// Generated plugin .mcp.json entries invoke this through the
