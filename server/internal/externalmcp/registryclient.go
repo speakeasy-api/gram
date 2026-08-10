@@ -31,6 +31,7 @@ type RegistryBackend interface {
 
 // RegistryClient handles communication with external MCP registries.
 type RegistryClient struct {
+	policy       *guardian.Policy
 	httpClient   *guardian.HTTPClient
 	logger       *slog.Logger
 	backend      RegistryBackend
@@ -42,6 +43,7 @@ type RegistryClient struct {
 // NewRegistryClient creates a new registry client.
 func NewRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, backend RegistryBackend, cacheImpl cache.Cache) *RegistryClient {
 	return &RegistryClient{
+		policy:     guardianPolicy,
 		httpClient: guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig()),
 		logger:     logger.With(attr.SlogComponent("mcp_registry_client")),
 		backend:    backend,
@@ -56,6 +58,26 @@ func NewRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider,
 			cache.SuffixNone,
 		),
 		listFlight: singleflight.Group{},
+	}
+}
+
+// WithAllowedCIDRBlocks returns a client whose registry requests may reach the
+// supplied trusted CIDR blocks. Callers must use this only for code-defined,
+// non-user-controlled registries such as the local fixture.
+func (c *RegistryClient) WithAllowedCIDRBlocks(cidrs ...string) *RegistryClient {
+	if c == nil || c.policy == nil || len(cidrs) == 0 {
+		return c
+	}
+	return &RegistryClient{
+		policy:     c.policy,
+		httpClient: c.policy.PooledClient(guardian.WithDefaultRetryConfig(), guardian.WithAllowedCIDRBlocks(cidrs...)),
+		logger:     c.logger,
+		backend:    c.backend,
+		// Cache keys include the registry URL; share cache entries while changing
+		// only the trusted fixture client's egress policy.
+		listCache:    c.listCache,
+		detailsCache: c.detailsCache,
+		listFlight:   singleflight.Group{},
 	}
 }
 

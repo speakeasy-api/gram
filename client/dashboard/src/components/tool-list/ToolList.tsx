@@ -635,7 +635,7 @@ function ToolRow({
                 {tool.variation?.description &&
                   tool.variation?.description !==
                     tool.canonical?.description && (
-                    <Stack className="border-border/70 rounded-md border p-2">
+                    <Stack className="border-border/70 border p-2">
                       <Text small muted className="inline font-medium">
                         <Icon
                           name="layers-2"
@@ -1076,7 +1076,7 @@ export function ToolList({
     <div className="relative w-full">
       <div
         className={cn(
-          "border-neutral-softest w-full overflow-hidden rounded-lg border",
+          "border-neutral-softest w-full overflow-hidden border",
           className,
         )}
       >
@@ -1148,12 +1148,12 @@ export function ToolList({
 
       {hasChanges && !selectionMode && (
         <div className="sticky right-0 bottom-0 left-0 mt-4 flex justify-center">
-          <div className="border-neutral-softest bg-background flex items-center gap-4 rounded-lg border px-4 py-3 shadow-lg">
+          <div className="border-neutral-softest bg-background flex items-center gap-4 border px-4 py-3 shadow-lg">
             <p className="text-foreground text-sm">
               {selectedForRemoval.size} tool(s) selected
             </p>
             <div className="flex items-center gap-2">
-              <kbd className="border-neutral-softest bg-muted text-muted-foreground pointer-events-none inline-flex h-5 items-center gap-1 rounded border px-1.5 font-mono text-[10px] font-medium opacity-100 select-none">
+              <kbd className="border-neutral-softest bg-muted text-muted-foreground pointer-events-none inline-flex h-5 items-center gap-1 border px-1.5 font-mono text-[10px] font-medium opacity-100 select-none">
                 <span className="text-xs">⌘</span>K
               </kbd>
               <span className="text-muted-foreground text-sm">for actions</span>

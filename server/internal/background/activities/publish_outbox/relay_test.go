@@ -10,10 +10,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/reflect/protoreflect"
 
-	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/infra/pkg/topics"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -45,7 +45,7 @@ func TestDrain_DeletesPublishedRows(t *testing.T) {
 
 	published := inst.pub.messages()
 	require.Len(t, published, 1)
-	require.Equal(t, protoreflect.FullName(webhooksTopic), published[0].Topic)
+	require.Equal(t, webhooksTopic, published[0].Topic)
 	require.Equal(t, "audit_log.asset_event_v1", published[0].Attributes["event_type"],
 		"stored attributes must reach the publisher so subscription filters and trace context survive the database hop")
 
@@ -60,7 +60,7 @@ func TestDrain_TransientFailureSchedulesRetry(t *testing.T) {
 	orgID := seedOrg(t, inst.conn)
 	row := seedRow(t, inst.conn, orgID, seedOptions{})
 
-	inst.pub.failWith = func(protoreflect.FullName, int) error {
+	inst.pub.failWith = func(string, int) error {
 		return errors.New("pubsub unavailable")
 	}
 
@@ -97,7 +97,7 @@ func TestDrain_RetryingRowsRecordEachRowsOwnError(t *testing.T) {
 		seedRow(t, inst.conn, orgID, seedOptions{topic: "gram.beta.v1.Event"}),
 	}
 
-	inst.pub.failWith = func(protoreflect.FullName, int) error {
+	inst.pub.failWith = func(string, int) error {
 		return errors.New("pubsub unavailable")
 	}
 
@@ -139,7 +139,7 @@ func TestDrain_RetryBackoffFollowsEachRowsOwnAttemptCount(t *testing.T) {
 		aged = append(aged, seedRow(t, inst.conn, orgID, seedOptions{attempts: 8}))
 	}
 
-	inst.pub.failWith = func(protoreflect.FullName, int) error {
+	inst.pub.failWith = func(string, int) error {
 		return errors.New("pubsub unavailable")
 	}
 
@@ -183,38 +183,42 @@ func TestDrain_RetryBackoffFollowsEachRowsOwnAttemptCount(t *testing.T) {
 	require.Greater(t, len(windows), 1, "each retrying row must get its own jittered retry window")
 }
 
-func TestDrain_UnknownTopicDeadLetters(t *testing.T) {
+// TestDrain_UnknownTopicRetries pins the rolling-deploy contract: writers
+// validate names against the same registry, so a topic unknown to this drainer
+// was declared by a binary newer than it — a condition that clears when the
+// drainer is redeployed. Dead-lettering here would turn every deploy that adds
+// a topic into silent event loss for rows written during the skew window.
+func TestDrain_UnknownTopicRetries(t *testing.T) {
 	t.Parallel()
 
 	inst := newRelayTestInstance(t)
 	orgID := seedOrg(t, inst.conn)
-	row := seedRow(t, inst.conn, orgID, seedOptions{topic: "gram.nope.v1.Missing"})
+	row := seedRow(t, inst.conn, orgID, seedOptions{topic: "gram.newer.v1.Event"})
 
-	inst.pub.failWith = func(protoreflect.FullName, int) error {
-		return gcp.ErrUnknownTopic
+	inst.pub.failWith = func(string, int) error {
+		return topics.ErrUnknownTopic
 	}
 
 	result, err := inst.relay.Drain(t.Context())
 	require.NoError(t, err)
-	require.Equal(t, 1, result.DeadLettered)
-	require.Equal(t, 0, result.Retrying, "an unresolvable topic will not resolve itself on retry")
+	require.Equal(t, 0, result.DeadLettered, "a topic unknown to this binary may be known to the next one")
+	require.Equal(t, 1, result.Retrying)
 
-	require.Equal(t, int64(0), countRows(t, inst.conn))
+	require.Equal(t, int64(1), countRows(t, inst.conn))
 
-	dead, err := testrepo.New(inst.conn).GetPublishOutboxDeadLetter(t.Context(), row.PublicID)
+	stored, err := testrepo.New(inst.conn).GetPublishOutboxRow(t.Context(), row.ID)
 	require.NoError(t, err)
-	require.Equal(t, "gram.nope.v1.Missing", dead.Topic)
-	require.Contains(t, dead.LastError, "unknown pubsub topic")
-	require.True(t, dead.EnqueuedAt.Valid, "the original enqueue time must survive the move")
+	require.True(t, stored.RetryAfter.Valid, "the row must wait out the deploy, not fail out of it")
+	require.Contains(t, stored.LastError.String, "unknown pubsub topic")
 
 	require.Empty(t, inst.pub.messages(),
-		"an unresolvable topic never reaches Pub/Sub, so nothing was delivered")
+		"an unresolved topic never reaches Pub/Sub, so nothing was delivered")
 }
 
 // TestDrain_DeadLettersRecordEachRowsOwnError pins the recorded error to the
-// row it belongs to. One batch can hold an unregistered topic next to an
-// oversized payload, and the dead letter table is the only surviving account of
-// why a row was given up on — a row stamped with its neighbour's failure sends
+// row it belongs to. One batch can hold rows failing permanently for different
+// reasons, and the dead letter table is the only surviving account of why a
+// row was given up on — a row stamped with its neighbour's failure sends
 // whoever triages it after a problem that row does not have.
 func TestDrain_DeadLettersRecordEachRowsOwnError(t *testing.T) {
 	t.Parallel()
@@ -223,14 +227,14 @@ func TestDrain_DeadLettersRecordEachRowsOwnError(t *testing.T) {
 	orgID := seedOrg(t, inst.conn)
 
 	rows := []testrepo.SeedPublishOutboxRowRow{
-		seedRow(t, inst.conn, orgID, seedOptions{topic: "gram.alpha.v1.Missing"}),
-		seedRow(t, inst.conn, orgID, seedOptions{topic: "gram.beta.v1.Missing"}),
+		seedRow(t, inst.conn, orgID, seedOptions{topic: "gram.alpha.v1.Event"}),
+		seedRow(t, inst.conn, orgID, seedOptions{topic: "gram.beta.v1.Event"}),
 	}
 
 	// The relay names the topic it could not reach in the error it records, so
-	// two unresolvable topics in one batch produce two distinct messages.
-	inst.pub.failWith = func(protoreflect.FullName, int) error {
-		return gcp.ErrUnknownTopic
+	// two permanently failing rows in one batch produce two distinct messages.
+	inst.pub.failWith = func(string, int) error {
+		return oops.Permanent(errors.New("schema rejected"))
 	}
 
 	result, err := inst.relay.Drain(t.Context())
@@ -254,7 +258,7 @@ func TestDrain_ExhaustedAttemptsDeadLetters(t *testing.T) {
 	// last one the row gets.
 	row := seedRow(t, inst.conn, orgID, seedOptions{attempts: 9})
 
-	inst.pub.failWith = func(protoreflect.FullName, int) error {
+	inst.pub.failWith = func(string, int) error {
 		return errors.New("still unavailable")
 	}
 
@@ -281,7 +285,7 @@ func TestDrain_PartialBatchSettlesEachRowIndependently(t *testing.T) {
 
 	// Fail only the second publish. The other two must still be deleted — a
 	// batch that settles all-or-nothing would either lose or duplicate events.
-	inst.pub.failWith = func(_ protoreflect.FullName, call int) error {
+	inst.pub.failWith = func(_ string, call int) error {
 		if call == 1 {
 			return errors.New("transient")
 		}

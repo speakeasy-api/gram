@@ -4,8 +4,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
+	"net/url"
 	"path"
 	"slices"
 	"sort"
@@ -61,7 +63,8 @@ type PluginInfo struct {
 	Description string
 	Servers     []PluginServerInfo
 	// Skills are emitted into each platform plugin's skills/ directory.
-	Skills []PluginSkillInfo
+	Skills               []PluginSkillInfo
+	AgentPluginsV1Issues []string
 }
 
 // GenerateConfig holds org-level configuration for package generation.
@@ -96,6 +99,9 @@ type GenerateConfig struct {
 	// manifests as new and refresh installed copies. Empty pins deterministic
 	// defaults for tests, fingerprints, and the CI render diff.
 	Version string
+	// PlatformMCPEnabled adds the first-party organization-level Platform MCP
+	// package to the literal-default project's Claude marketplace only.
+	PlatformMCPEnabled bool
 	// MarketplaceName is the identifier users type into Claude Code or Codex
 	// (e.g. `<plugin>@<marketplace>`) and the `name` field in the generated
 	// marketplace.json. Empty falls back to DefaultMarketplaceName.
@@ -134,19 +140,20 @@ type GenerateConfig struct {
 // fields are fixed sentinels so only generator changes register, never data.
 func PublishedHooksFiles() (map[string][]byte, error) {
 	cfg := GenerateConfig{
-		OrgName:          "Hooks Check",
-		OrgEmail:         "hooks-check@example.com",
-		OrgID:            "org-hooks-check",
-		ServerURL:        "https://app.getgram.ai",
-		APIKey:           fingerprintAPIKeySentinel,
-		HooksAPIKey:      fingerprintHooksKeySentinel,
-		ProjectSlug:      "hooks-check",
-		IsDefaultProject: true,
-		Version:          "",
-		MarketplaceName:  "",
-		HooksOrgName:     "",
-		BrowserLogin:     false,
-		InstallFailOpen:  false,
+		OrgName:            "Hooks Check",
+		OrgEmail:           "hooks-check@example.com",
+		OrgID:              "org-hooks-check",
+		ServerURL:          "https://app.getgram.ai",
+		APIKey:             fingerprintAPIKeySentinel,
+		HooksAPIKey:        fingerprintHooksKeySentinel,
+		ProjectSlug:        "hooks-check",
+		IsDefaultProject:   true,
+		Version:            "",
+		MarketplaceName:    "",
+		HooksOrgName:       "",
+		BrowserLogin:       false,
+		InstallFailOpen:    false,
+		PlatformMCPEnabled: false,
 	}
 	out := make(map[string][]byte)
 	for _, mode := range []struct {
@@ -197,8 +204,9 @@ func DogfoodPluginFiles() (map[string][]byte, error) {
 		HooksOrgName:     "",
 		// The dogfood harness is how the browser flow itself gets exercised
 		// locally, so it stays on here regardless of the publish default.
-		BrowserLogin:    true,
-		InstallFailOpen: false,
+		BrowserLogin:       true,
+		InstallFailOpen:    false,
+		PlatformMCPEnabled: false,
 	}
 	files := make(map[string][]byte)
 	if err := generateClaudeObservabilityPluginInDir(files, "plugin-claude", cfg); err != nil {
@@ -355,7 +363,12 @@ func storedHooksConfigHash(stored []byte) string {
 // MCP plugins on the next run, even when a project's generated MCP output is
 // byte-identical — for generator changes that alter MCP behaviour in ways the
 // placeholder fingerprint pass can't observe.
-const mcpGeneratorVersion = "10"
+const mcpGeneratorVersion = "11"
+
+// platformMCPGeneratorVersion is independent from mcpGeneratorVersion so adding
+// or changing the first-party Platform MCP never triggers a fleet-wide customer
+// plugin republish.
+const platformMCPGeneratorVersion = "1"
 
 // hooksGeneratorVersion is the sole rollout signal for the observability (hooks)
 // plugin. It is stamped into the hooks plugin.json version (see
@@ -368,7 +381,7 @@ const mcpGeneratorVersion = "10"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "27"
+const hooksGeneratorVersion = "28"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -385,6 +398,14 @@ const (
 // and never collide with it. When per-plugin publishing lands, shared files will
 // be assembled per plugin and this reserved entry can be reworked away.
 const mcpSharedFingerprintKey = "__shared__"
+
+// mcpPlatformFingerprintKey is deliberately not a valid customer plugin slug.
+const mcpPlatformFingerprintKey = "__platform_mcp__"
+
+const (
+	platformMCPPluginName = "gram-platform-mcp"
+	platformMCPPluginRoot = "platform-mcp"
+)
 
 // MCPFingerprints returns per-plugin content fingerprints of the MCP (feature)
 // plugins that would be generated for the given plugins — a map of plugin slug ->
@@ -406,13 +427,20 @@ func MCPFingerprints(plugins []PluginInfo, cfg GenerateConfig) (map[string]strin
 	// entries are fingerprinted without rotating the hash on every publish.
 	cfg.HooksAPIKey = fingerprintHooksKeySentinel
 
-	out := make(map[string]string, len(plugins)+1)
+	out := make(map[string]string, len(plugins)+2)
 	for _, p := range plugins {
 		files, err := generateMCPFiles([]PluginInfo{p}, cfg)
 		if err != nil {
 			return nil, fmt.Errorf("generate mcp files for plugin %s fingerprint: %w", p.Slug, err)
 		}
 		out[p.Slug] = hashFiles(mcpGeneratorVersion, files)
+	}
+	if cfg.PlatformMCPEnabled {
+		files, err := generatePlatformMCPFiles(cfg)
+		if err != nil {
+			return nil, fmt.Errorf("generate Platform MCP files for fingerprint: %w", err)
+		}
+		out[mcpPlatformFingerprintKey] = hashFiles(platformMCPGeneratorVersion, files)
 	}
 
 	shared, err := generateSharedFiles(plugins, cfg)
@@ -535,6 +563,11 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 	if err != nil {
 		return nil, err
 	}
+	if cfg.PlatformMCPEnabled {
+		if err := generatePlatformMCPFilesInto(mcp, cfg); err != nil {
+			return nil, fmt.Errorf("generate Platform MCP package: %w", err)
+		}
+	}
 	shared, err := generateSharedFiles(plugins, cfg)
 	if err != nil {
 		return nil, err
@@ -597,6 +630,22 @@ func mcpFilePaths(plugins []PluginInfo, cfg GenerateConfig) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("enumerate mcp file paths: %w", err)
 	}
+	if cfg.PlatformMCPEnabled {
+		if err := generatePlatformMCPFilesInto(files, cfg); err != nil {
+			return nil, fmt.Errorf("enumerate Platform MCP file paths: %w", err)
+		}
+	}
+	return slices.Sorted(maps.Keys(files)), nil
+}
+
+// sharedFilePaths returns the deterministic marketplace manifests and README
+// paths that are regenerated on every publish. An indeterminate Platform MCP
+// admission must verify them before skipping so a partial repo is repaired.
+func sharedFilePaths(plugins []PluginInfo, cfg GenerateConfig) ([]string, error) {
+	files, err := generateSharedFiles(plugins, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("enumerate shared file paths: %w", err)
+	}
 	return slices.Sorted(maps.Keys(files)), nil
 }
 
@@ -616,6 +665,16 @@ func generateMCPFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][]by
 		}
 		if err := generateOpenCodePlugin(files, p, cfg); err != nil {
 			return nil, fmt.Errorf("generate opencode plugin %s: %w", p.Slug, err)
+		}
+		agentFiles, err := compileAgentPlugin(p, cfg, agentPluginCredentialsPackage)
+		if err != nil {
+			if errors.Is(err, ErrAgentPluginsV1Incompatible) {
+				continue
+			}
+			return nil, fmt.Errorf("generate Agent Plugins package %s: %w", p.Slug, err)
+		}
+		for filePath, content := range agentFiles {
+			files[path.Join(agentPluginRoot, p.Slug, filePath)] = content
 		}
 	}
 	return files, nil
@@ -660,6 +719,15 @@ func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][
 				Installation:   "INSTALLED_BY_DEFAULT",
 				Authentication: "ON_USE",
 			},
+		})
+	}
+
+	if cfg.PlatformMCPEnabled {
+		claudePlugins = append(claudePlugins, marketplaceEntry{
+			Name:        platformMCPPluginName,
+			DisplayName: "Gram Platform MCP",
+			Source:      "./" + platformMCPPluginRoot,
+			Description: "Read-only organization administration through the Gram Platform MCP.",
 		})
 	}
 
@@ -760,6 +828,11 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 		fmt.Fprintf(&b, "> **Required:** install the `%s` plugin alongside any feature plugins to enable Speakeasy observability. Without it, your team will install MCP servers but tool events will not be reported to your Speakeasy dashboard.\n\n", ClaudeObservabilitySlug(cfg))
 	}
 
+	if cfg.PlatformMCPEnabled {
+		b.WriteString("## Gram Platform MCP\n\n")
+		b.WriteString("The `gram-platform-mcp` plugin provides read-only organization administration through Gram OAuth. Install it in Claude Cowork to authorize a Platform MCP connection.\n\n")
+	}
+
 	if len(plugins) > 0 {
 		b.WriteString("## Plugins\n\n")
 		b.WriteString("| Plugin | Description | Servers |\n")
@@ -832,6 +905,8 @@ func GenerateSinglePluginPackage(plugin PluginInfo, cfg GenerateConfig, platform
 		if err := generateCodexPluginFlat(files, plugin, cfg); err != nil {
 			return nil, fmt.Errorf("generate codex plugin: %w", err)
 		}
+	case "agent-plugin":
+		return compileAgentPlugin(plugin, cfg, agentPluginCredentialsKeyless)
 	// ponytail: no "opencode" case — the downloadPluginPackage enum is
 	// claude|cursor|codex, so a flat per-plugin opencode package is unreachable.
 	// OpenCode ships via downloadObservabilityPlugin only; add here if per-plugin
@@ -1879,6 +1954,50 @@ echo "✓ Speakeasy observability plugin installed. Restart Codex to activate."
 `)
 
 	return []byte(b.String())
+}
+
+func generatePlatformMCPFiles(cfg GenerateConfig) (map[string][]byte, error) {
+	files := make(map[string][]byte)
+	if err := generatePlatformMCPFilesInto(files, cfg); err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+func generatePlatformMCPFilesInto(files map[string][]byte, cfg GenerateConfig) error {
+	platformURL, err := url.Parse(strings.TrimRight(cfg.ServerURL, "/") + "/platform-mcp")
+	if err != nil || platformURL.Host == "" || platformURL.User != nil || platformURL.RawQuery != "" || platformURL.Fragment != "" || (platformURL.Scheme != "http" && platformURL.Scheme != "https") {
+		return fmt.Errorf("invalid Platform MCP server URL %q", cfg.ServerURL)
+	}
+
+	meta, err := marshalJSON(claudePluginMeta{
+		Name:        platformMCPPluginName,
+		DisplayName: "Gram Platform MCP",
+		Description: "Read-only organization administration through the Gram Platform MCP.",
+		Version:     "0." + platformMCPGeneratorVersion + "." + conv.Default(cfg.Version, "0"),
+		Author:      pluginAuthor{Name: "Gram", URL: "https://getgram.ai"},
+		Homepage:    "https://getgram.ai",
+		UserConfig:  nil,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal Platform MCP plugin.json: %w", err)
+	}
+	files[path.Join(platformMCPPluginRoot, ".claude-plugin/plugin.json")] = meta
+
+	mcpConfig, err := marshalJSON(claudeMCPConfig{MCPServers: map[string]claudeMCPServer{
+		platformMCPPluginName: {
+			Type:    "http",
+			Command: "",
+			Args:    nil,
+			URL:     platformURL.String(),
+			Headers: nil,
+		},
+	}})
+	if err != nil {
+		return fmt.Errorf("marshal Platform MCP .mcp.json: %w", err)
+	}
+	files[path.Join(platformMCPPluginRoot, ".mcp.json")] = mcpConfig
+	return nil
 }
 
 func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginInfo, cfg GenerateConfig) error {

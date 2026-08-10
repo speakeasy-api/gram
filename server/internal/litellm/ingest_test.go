@@ -159,7 +159,6 @@ func unitService(t *testing.T, ingester HookIngester, authCtx *contextvalues.Aut
 		telemetry: nil,
 		instances: NewInstanceResolver(testenv.NewLogger(t), nil),
 		authz:     nil,
-		features:  nil,
 		audit:     nil,
 		keyPrefix: "",
 	}

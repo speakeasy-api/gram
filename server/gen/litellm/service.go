@@ -38,14 +38,6 @@ type Service interface {
 	// binary opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest with
 	// application/x-protobuf or application/protobuf. Content-Encoding may be gzip.
 	Traces(context.Context, *TracesPayload) (err error)
-	// Accepts LiteLLM OTLP metric exports. Send the standard OTLP JSON
-	// ExportMetricsServiceRequest shape shown here with application/json, or the
-	// binary opentelemetry.proto.collector.metrics.v1.ExportMetricsServiceRequest
-	// with application/x-protobuf or application/protobuf. Content-Encoding may be
-	// gzip. The canonical endpoint is /rpc/hooks.otel/v1/metrics, shared with
-	// harness telemetry and dispatched by key provenance; the litellm.otel route
-	// below is the internally registered fallback.
-	Metrics(context.Context, *MetricsPayload) (err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -68,7 +60,7 @@ const ServiceName = "litellm"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"createInstance", "listInstances", "rotateInstanceKey", "revokeInstance", "ingest", "traces", "metrics"}
+var MethodNames = [6]string{"createInstance", "listInstances", "rotateInstanceKey", "revokeInstance", "ingest", "traces"}
 
 // CreateInstancePayload is the payload type of the litellm service
 // createInstance method.
@@ -189,15 +181,6 @@ type LitellmIngestResult struct {
 type LitellmInstanceKeyResult struct {
 	Instance *LiteLLMInstance
 	Key      string
-}
-
-// MetricsPayload is the payload type of the litellm service metrics method.
-type MetricsPayload struct {
-	ApikeyToken      *string
-	ProjectSlugInput *string
-	// Standard OTLP ResourceMetrics objects. OTLP integer fields use their
-	// canonical decimal-string JSON representation.
-	ResourceMetrics []any
 }
 
 type ProjectEntry struct {

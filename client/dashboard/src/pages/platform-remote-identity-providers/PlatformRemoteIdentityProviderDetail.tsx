@@ -5,7 +5,7 @@ import {
   PageTabsTrigger,
   Tabs,
   TabsContent,
-  TabsList,
+  PageTabsList,
 } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
@@ -18,6 +18,7 @@ import { issuerDisplayName } from "../remote-identity-providers/issuerDisplay";
 import { activeDetailTab } from "../remote-identity-providers/tabs";
 import { OverviewTab } from "../remote-identity-providers/tabs/issuer/OverviewTab";
 import { PlatformAdminOnly } from "./PlatformAdminOnly";
+import { PlatformConvergenceTab } from "./PlatformConvergenceTab";
 import { PlatformSettingsTab } from "./PlatformSettingsTab";
 
 // The catalog detail has no Clients tab. Global remote_session_clients exist in
@@ -25,7 +26,7 @@ import { PlatformSettingsTab } from "./PlatformSettingsTab";
 // client to a session by project or organization, and a global client has
 // neither — so there is nothing to manage them for yet. Tenant clients on a
 // platform issuer belong to their organizations and are managed there.
-const PLATFORM_ISSUER_TABS = ["overview", "settings"] as const;
+const PLATFORM_ISSUER_TABS = ["overview", "convergence", "settings"] as const;
 type PlatformIssuerTab = (typeof PLATFORM_ISSUER_TABS)[number];
 
 export default function PlatformRemoteIdentityProviderDetail(): JSX.Element {
@@ -96,6 +97,7 @@ function PlatformIssuerDetail({
   return (
     <>
       <DetailHero>
+        <Page.Eyebrow />
         <div className="flex items-center gap-3">
           <Text small muted>
             Remote Identity Provider
@@ -117,20 +119,27 @@ function PlatformIssuerDetail({
       <Tabs value={activeTab} className="flex w-full flex-1 flex-col">
         <div className="shrink-0 border-b">
           <div className="mx-auto max-w-[1270px] px-8">
-            <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
+            <PageTabsList className="h-auto gap-6 bg-transparent p-0">
               <PageTabsTrigger value="overview" asChild>
                 <Link to={tabHref("overview")}>Overview</Link>
+              </PageTabsTrigger>
+              <PageTabsTrigger value="convergence" asChild>
+                <Link to={tabHref("convergence")}>Convergence</Link>
               </PageTabsTrigger>
               <PageTabsTrigger value="settings" asChild>
                 <Link to={tabHref("settings")}>Settings</Link>
               </PageTabsTrigger>
-            </TabsList>
+            </PageTabsList>
           </div>
         </div>
 
         <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
           <TabsContent value="overview" className="mt-0">
             {issuer && <OverviewTab issuer={issuer} />}
+            {isLoading && <Text muted>Loading…</Text>}
+          </TabsContent>
+          <TabsContent value="convergence" className="mt-0">
+            {issuer && <PlatformConvergenceTab issuer={issuer} />}
             {isLoading && <Text muted>Loading…</Text>}
           </TabsContent>
           <TabsContent value="settings" className="mt-0">

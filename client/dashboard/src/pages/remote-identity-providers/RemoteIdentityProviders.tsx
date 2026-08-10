@@ -34,6 +34,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
+import { Heading } from "@/components/ui/Heading";
 import { Icon } from "@/components/ui/Icon";
 import { Stack } from "@/components/ui/Stack";
 import { useQueryClient } from "@tanstack/react-query";
@@ -205,22 +206,76 @@ function RemoteIdentityProvidersOverview() {
         </Page.Section.Body>
       </Page.Section>
 
-      <Page.Section>
-        <Page.Section.Title>
-          Project-Specific Remote Identity Providers
-        </Page.Section.Title>
-        <Page.Section.Description className="max-w-2xl">
-          Identity providers within a single project in the organization. Prefer
-          creating clients on platform maintained providers when available
-          unless client setup documentation needs customization for your
-          organization workflows.
-        </Page.Section.Description>
-        <Page.Section.Body>
+      {/* The page header (eyebrow + display title) is rendered once by the
+          organizational section above; the remaining tiers are plain section
+          headings. */}
+      <Stack gap={6} className="mt-3 mb-6">
+        <div>
+          <Heading variant="h4" className="mb-2">
+            Project-Specific Remote Identity Providers
+          </Heading>
+          <Text muted small className="max-w-2xl">
+            Identity providers within a single project in the organization.
+            Prefer creating clients on platform maintained providers when
+            available unless client setup documentation needs customization for
+            your organization workflows.
+          </Text>
+        </div>
+        <IssuerTable
+          items={projectSpecific}
+          isLoading={isLoading}
+          showProject
+          emptyMessage="No project-specific identity providers yet."
+          onDelete={setDeleteTarget}
+          onMakeOrganizational={handleMakeOrganizational}
+          onMoveToProject={setMoveTarget}
+          onConsolidate={setMigrateSource}
+          onRefreshMetadata={handleRefreshMetadata}
+          refreshPending={refreshMetadata.isPending}
+        />
+      </Stack>
+
+      {platform.length > 0 && (
+        <Stack gap={6} className="mt-3 mb-6">
+          <Stack
+            direction="horizontal"
+            justify="space-between"
+            align="center"
+            gap={4}
+          >
+            <div className="min-w-0">
+              <Heading variant="h4" className="mb-2">
+                Platform Remote Identity Providers
+              </Heading>
+              <Text muted small className="max-w-2xl">
+                Common identity providers maintained by the platform
+                administrators for configuring your own clients. Prefer using
+                these over creating duplicate providers unless the client setup
+                documentation needs to be customized when creating MCP Servers.
+              </Text>
+            </div>
+            {/* Platform admins curate these on their own page. The CTA is the
+                only platform-admin-aware chrome on this tenant surface, and it
+                is a link — it grants nothing that the catalog page does not
+                gate again on its own. */}
+            {isPlatformAdmin ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                className="shrink-0"
+                onClick={() => orgRoutes.platformRemoteIdentityProviders.goTo()}
+              >
+                <Button.Text>Manage Platform Providers</Button.Text>
+              </Button>
+            ) : null}
+          </Stack>
           <IssuerTable
-            items={projectSpecific}
+            items={platform}
             isLoading={isLoading}
-            showProject
-            emptyMessage="No project-specific identity providers yet."
+            showProject={false}
+            readOnly
+            onAddClient={setAddClientTarget}
+            emptyMessage="No platform identity providers available."
             onDelete={setDeleteTarget}
             onMakeOrganizational={handleMakeOrganizational}
             onMoveToProject={setMoveTarget}
@@ -228,53 +283,7 @@ function RemoteIdentityProvidersOverview() {
             onRefreshMetadata={handleRefreshMetadata}
             refreshPending={refreshMetadata.isPending}
           />
-        </Page.Section.Body>
-      </Page.Section>
-
-      {platform.length > 0 && (
-        <Page.Section>
-          <Page.Section.Title>
-            Platform Remote Identity Providers
-          </Page.Section.Title>
-          {/* Platform admins curate these on their own page. The CTA is the
-              only platform-admin-aware chrome on this tenant surface, and it is
-              a link — it grants nothing that the catalog page does not gate
-              again on its own. Page.Section types its children, so the
-              condition lives inside the CTA rather than around it. */}
-          <Page.Section.CTA>
-            {isPlatformAdmin ? (
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => orgRoutes.platformRemoteIdentityProviders.goTo()}
-              >
-                <Button.Text>Manage Platform Providers</Button.Text>
-              </Button>
-            ) : null}
-          </Page.Section.CTA>
-          <Page.Section.Description className="max-w-2xl">
-            Common identity providers maintained by the platform administrators
-            for configuring your own clients. Prefer using these over creating
-            duplicate providers unless the client setup documentation needs to
-            be customized when creating MCP Servers.
-          </Page.Section.Description>
-          <Page.Section.Body>
-            <IssuerTable
-              items={platform}
-              isLoading={isLoading}
-              showProject={false}
-              readOnly
-              onAddClient={setAddClientTarget}
-              emptyMessage="No platform identity providers available."
-              onDelete={setDeleteTarget}
-              onMakeOrganizational={handleMakeOrganizational}
-              onMoveToProject={setMoveTarget}
-              onConsolidate={setMigrateSource}
-              onRefreshMetadata={handleRefreshMetadata}
-              refreshPending={refreshMetadata.isPending}
-            />
-          </Page.Section.Body>
-        </Page.Section>
+        </Stack>
       )}
 
       <CreateRemoteIdentityProviderSheet
@@ -369,9 +378,15 @@ function IssuerTable({
 
   if (!isLoading && items.length === 0) {
     return (
-      <Text muted className="py-8 text-center">
-        {emptyMessage}
-      </Text>
+      <Stack
+        className="border-border border py-8"
+        align="center"
+        justify="center"
+      >
+        <Text variant="body" muted>
+          {emptyMessage}
+        </Text>
+      </Stack>
     );
   }
 

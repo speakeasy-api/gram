@@ -76,7 +76,7 @@ export function AssistantSessionsList({
   return (
     <>
       <Stack gap={2}>
-        <div className="divide-border/60 overflow-hidden rounded-md border divide-y">
+        <div className="divide-border/60 overflow-hidden border divide-y">
           {chats.map((chat) => {
             const isSelected = selectedChatId === chat.id;
             const lastActivity = chat.lastMessageTimestamp ?? chat.createdAt;
@@ -121,7 +121,7 @@ export function AssistantSessionsList({
         {(data?.total ?? chats.length) > chats.length && (
           <routes.agentSessions.Link
             queryParams={{ assistantId }}
-            className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 self-start rounded-md px-1 py-1 text-xs no-underline transition-colors hover:no-underline"
+            className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 self-start px-1 py-1 text-xs no-underline transition-colors hover:no-underline"
           >
             View all sessions
             <Icon name="chevron-right" className="h-3 w-3" />

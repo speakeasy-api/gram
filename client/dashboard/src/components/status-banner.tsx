@@ -1,22 +1,19 @@
 import { cn } from "@/lib/utils";
 
-// A gradient can't be transitioned, so every tone is painted as its own layer
-// and the active one is faded in over the others. Banners whose tone changes in
-// place (a server going from unpublished to published) cross-fade rather than
-// snapping.
+// The tone is carried by a hairline left strip in the matching semantic
+// color; the surface itself stays flat. Banners whose tone changes in place
+// (a server going from unpublished to published) transition the strip color
+// rather than snapping.
 const BANNER_TONES = {
-  warning:
-    "bg-gradient-to-tr from-slate-50 via-slate-50 to-orange-100 dark:from-slate-950 dark:via-neutral-800 dark:to-amber-900/60",
-  success:
-    "bg-gradient-to-br from-slate-50/10 via-slate-50 to-emerald-100/50 dark:from-slate-950/60 dark:via-neutral-800 dark:to-emerald-900/30",
-  destructive:
-    "bg-gradient-to-tr from-slate-50 via-slate-50 to-red-100 dark:from-slate-950 dark:via-neutral-800 dark:to-red-900/60",
+  warning: "bg-warning-default",
+  success: "bg-success-default",
+  destructive: "bg-destructive-default",
 } as const;
 
 export type StatusBannerTone = keyof typeof BANNER_TONES;
 
 /**
- * Full-width banner heading a detail page, tinted to the state it reports.
+ * Full-width banner heading a detail page, marked with the state it reports.
  *
  * Supplies only the frame: callers lay out their own headline, copy and
  * actions inside it.
@@ -33,21 +30,17 @@ export function StatusBanner({
   return (
     <div
       className={cn(
-        "border-border/70 relative overflow-hidden rounded-xl border shadow-sm",
+        "border-border bg-card relative overflow-hidden border",
         className,
       )}
     >
-      {Object.entries(BANNER_TONES).map(([name, gradient]) => (
-        <div
-          key={name}
-          aria-hidden="true"
-          className={cn(
-            "absolute inset-0 transition-opacity duration-700 ease-in-out",
-            gradient,
-            name === tone ? "opacity-100" : "opacity-0",
-          )}
-        />
-      ))}
+      <div
+        aria-hidden="true"
+        className={cn(
+          "absolute inset-y-0 left-0 w-0.5 transition-colors duration-700 ease-in-out",
+          BANNER_TONES[tone],
+        )}
+      />
       <div className="relative flex flex-col">{children}</div>
     </div>
   );

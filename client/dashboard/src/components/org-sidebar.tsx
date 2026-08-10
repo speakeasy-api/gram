@@ -24,6 +24,7 @@ import { SidebarNavSkeleton } from "./sidebar-nav-skeleton";
 import { OnboardingResumeButton } from "./onboarding-resume-button";
 import { SidebarUserMenu } from "./sidebar-user-menu";
 import { WorkspaceSwitcher } from "./workspace-switcher";
+import { TrialStatusCard } from "./trial-status-card";
 
 /** Scopes that make an org-level nav item visible. */
 const orgReadOrAdmin: Scope[] = ["org:read", "org:admin"];
@@ -89,9 +90,13 @@ export function OrgSidebar({
     orgRoutes.remoteIdentityProviders,
   ].some((r) => r.active);
 
-  const platformAdminActive = [orgRoutes.platformRemoteIdentityProviders].some(
-    (r) => r.active,
-  );
+  const platformAdminActive = [
+    orgRoutes.platformAdminOverview,
+    orgRoutes.platformAdminRbac,
+    orgRoutes.platformAdminFeatures,
+    orgRoutes.platformAdminOnboarding,
+    orgRoutes.platformRemoteIdentityProviders,
+  ].some((r) => r.active);
 
   const activeGroup = settingsActive
     ? "Settings"
@@ -121,6 +126,10 @@ export function OrgSidebar({
     orgRoutes.userSessions,
     orgRoutes.identity,
     orgRoutes.remoteIdentityProviders,
+    orgRoutes.platformAdminOverview,
+    orgRoutes.platformAdminRbac,
+    orgRoutes.platformAdminFeatures,
+    orgRoutes.platformAdminOnboarding,
     orgRoutes.platformRemoteIdentityProviders,
   ];
   const activeRoute = allOrgNavRoutes.find((r) => r.active);
@@ -177,9 +186,7 @@ export function OrgSidebar({
                   { item: orgRoutes.apiKeys, scope: "org:admin" },
                   { item: orgRoutes.domains, scope: orgReadOrAdmin },
                   { item: orgRoutes.logs, scope: orgReadOrAdmin },
-                  ...(productFeatures?.skillsEnabled === true
-                    ? [{ item: orgRoutes.skills, scope: "org:admin" as Scope }]
-                    : []),
+                  { item: orgRoutes.skills, scope: "org:admin" },
                   { item: orgRoutes.aiIntegrations, scope: orgReadOrAdmin },
                   { item: orgRoutes.webhooks, scope: orgReadOrAdmin },
                   ...(productFeatures?.customerManagedEncryptionKeysEnabled ===
@@ -236,25 +243,53 @@ export function OrgSidebar({
               <ScopeGatedNavGroup
                 label="Platform Admin"
                 Icon={(p) => <Icon {...p} name="crown" />}
-                items={
-                  isPlatformAdmin
+                items={[
+                  // The admin pages also show in local dev regardless of the
+                  // admin flag, like the old floating Developer Toolkit: the
+                  // Overview page holds the impersonation toggle non-admin
+                  // developers need to turn platform admin on in the first
+                  // place. Remote Identity Providers stays strictly
+                  // admin-gated — it is real catalog management, not a local
+                  // developer aid.
+                  ...(isPlatformAdmin || import.meta.env.DEV
+                    ? [
+                        {
+                          // The group header already says "Platform Admin"; the
+                          // route titles keep the prefix for Recents and the
+                          // command palette, which have no header to lean on.
+                          item: orgRoutes.platformAdminOverview,
+                          label: "Overview",
+                        },
+                        {
+                          item: orgRoutes.platformAdminRbac,
+                          label: "RBAC Override",
+                        },
+                        {
+                          item: orgRoutes.platformAdminFeatures,
+                          label: "Features",
+                        },
+                        {
+                          item: orgRoutes.platformAdminOnboarding,
+                          label: "Onboarding",
+                        },
+                      ]
+                    : []),
+                  ...(isPlatformAdmin
                     ? [
                         {
                           item: orgRoutes.platformRemoteIdentityProviders,
-                          // The group header already says "Platform"; the route
-                          // title keeps it for Recents and the command palette,
-                          // which have no header to lean on.
                           label: "Remote Identity Providers",
                         },
                       ]
-                    : []
-                }
+                    : []),
+                ]}
               />
             </SidebarMenu>
           </NavGroupProvider>
         )}
       </SidebarContent>
       <SidebarFooter className="border-t">
+        <TrialStatusCard />
         <OnboardingResumeButton />
         <SidebarUserMenu />
       </SidebarFooter>

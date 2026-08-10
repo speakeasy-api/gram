@@ -42,21 +42,22 @@ function buildTraceFilters(
   return null;
 }
 
-// Uses design system tokens where available (destructive, warning, muted).
-// INFO has no semantic token — hardcoded Tailwind is intentional and matches
-// the deployment logs palette (PR #2167).
+// Editorial severity scale: info is neutral ink (never blue), debug a lighter
+// neutral, warn orange (feedback-orange token), error the red accent. Badges
+// are hairline-bordered mono words — no tinted fills.
 const severityColors = {
-  INFO: { dot: "bg-blue-500", text: "text-blue-700", bg: "bg-blue-50" },
-  WARN: { dot: "bg-warning", text: "text-warning", bg: "bg-warning/10" },
+  INFO: { dot: "bg-foreground", text: "text-muted-foreground" },
+  WARN: {
+    dot: "bg-[var(--color-feedback-orange-600)]",
+    text: "text-[var(--color-feedback-orange-600)] dark:text-[var(--color-feedback-orange-400)]",
+  },
   ERROR: {
     dot: "bg-destructive",
     text: "text-destructive",
-    bg: "bg-destructive/10",
   },
   DEBUG: {
-    dot: "bg-muted-foreground",
-    text: "text-muted-foreground",
-    bg: "bg-muted",
+    dot: "bg-muted-foreground/50",
+    text: "text-muted-foreground/70",
   },
 } as const;
 
@@ -127,7 +128,7 @@ export function TraceLogsList({
 
   if (traceFilters === null) {
     return (
-      <div className="text-muted-foreground bg-muted/30 flex items-center gap-3 px-5 py-2">
+      <div className="text-muted-foreground border-border flex items-center gap-3 border-b px-5 py-2">
         <div className="w-1.5 shrink-0" />
         <div className="w-[150px] shrink-0" />
         <div className="w-5 shrink-0" />
@@ -138,7 +139,7 @@ export function TraceLogsList({
 
   if (isPending) {
     return (
-      <div className="text-muted-foreground bg-muted/30 flex items-center gap-3 px-5 py-2">
+      <div className="text-muted-foreground border-border flex items-center gap-3 border-b px-5 py-2">
         <div className="w-1.5 shrink-0" />
         <div className="w-[150px] shrink-0" />
         <div className="flex w-5 shrink-0 justify-center">
@@ -151,7 +152,7 @@ export function TraceLogsList({
 
   if (error) {
     return (
-      <div className="bg-muted/30 flex items-center gap-3 px-5 py-2">
+      <div className="border-border flex items-center gap-3 border-b px-5 py-2">
         <div className="w-1.5 shrink-0" />
         <div className="w-[150px] shrink-0" />
         <div className="w-5 shrink-0" />
@@ -166,7 +167,7 @@ export function TraceLogsList({
 
   if (logs.length === 0) {
     return (
-      <div className="text-muted-foreground bg-muted/30 flex items-center gap-3 px-5 py-2">
+      <div className="text-muted-foreground border-border flex items-center gap-3 border-b px-5 py-2">
         <div className="w-1.5 shrink-0" />
         <div className="w-[150px] shrink-0" />
         <div className="w-5 shrink-0" />
@@ -176,7 +177,7 @@ export function TraceLogsList({
   }
 
   return (
-    <div className="bg-muted/30">
+    <div>
       {logs.map((log, index) => (
         <ChildLogRow
           key={log.id}
@@ -213,9 +214,9 @@ function ChildLogRow({
       className="hover:bg-background group flex cursor-pointer items-center gap-3 px-5 py-1.5 transition-colors"
       onClick={onClick}
     >
-      {/* Severity dot indicator for rapid left-edge scanning */}
+      {/* Severity indicator — a tiny square — for rapid left-edge scanning */}
       <span
-        className={cn("size-1.5 shrink-0 rounded-full", colors.dot)}
+        className={cn("size-1.5 shrink-0", colors.dot)}
         aria-hidden="true"
       />
 
@@ -239,8 +240,7 @@ function ChildLogRow({
       {/* Severity badge inline */}
       <span
         className={cn(
-          "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase",
-          colors.bg,
+          "border-border shrink-0 border px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase",
           colors.text,
         )}
       >

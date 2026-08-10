@@ -26,12 +26,24 @@ type UserSession struct {
 	UpdatedAt string
 	// Slug of the user_session_issuer that gated this session.
 	IssuerSlug string
+	// The user_session_client this session was issued through. Null for sessions
+	// with no bound client. Unlike client_name, this identifies the registration
+	// unambiguously, so it is what a per-client drill-down should match on.
+	UserSessionClientID *string
 	// Name of the MCP client that established the session, if known.
+	// Client-controlled and unverified; do not present it as an identity.
 	ClientName *string
+	// Set when the client that established this session was resolved from a Client
+	// ID Metadata Document (CIMD) hosted at this URL, rather than registered via
+	// RFC 7591 DCR. Null for DCR clients and for sessions with no bound client.
+	ClientIDMetadataURI *string
 	// Subject kind: 'user', 'apikey', or 'anonymous'.
 	SubjectType string
 	// Resolved human-readable name of the subject, if known.
 	SubjectDisplayName *string
+	// Avatar URL for the subject when it resolves to a Gram user with one. Null
+	// for API key and anonymous subjects, and for users who have no photo.
+	SubjectPhotoURL *string
 	// When the session was revoked, if it has been.
 	RevokedAt *string
 }

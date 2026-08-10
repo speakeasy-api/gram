@@ -34,7 +34,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 )
 
@@ -65,11 +64,6 @@ type Service struct {
 	// resolve attempt, and the volume (one per manual config change) is
 	// negligible against the OAuth surface.
 	cimdResolver *cimd.Resolver
-	// remoteSessions backs the migrateLegacyGramRegistrations handler: the
-	// legacy Redis-registration migration lives in remotesessions (alongside
-	// its custom-clone counterpart) and is reached directly here. Removed with
-	// the legacy OAuth proxy.
-	remoteSessions *remotesessions.Service
 }
 
 var (
@@ -91,21 +85,20 @@ var (
 // signer + serverURL drive mintUserSession; pass an empty serverURL to
 // disable that handler (it will 503 on call — used in tests that don't
 // need the surface).
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, chatSessionsManager TokenRevoker, authzEngine *authz.Engine, auditLogger *audit.Logger, guardianPolicy *guardian.Policy, signer *Signer, serverURL string, remoteSessions *remotesessions.Service) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, chatSessionsManager TokenRevoker, authzEngine *authz.Engine, auditLogger *audit.Logger, guardianPolicy *guardian.Policy, signer *Signer, serverURL string) *Service {
 	logger = logger.With(attr.SlogComponent("usersessions"))
 
 	return &Service{
-		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/usersessions"),
-		logger:         logger,
-		db:             db,
-		auth:           auth.New(logger, db, sessionManager, authzEngine),
-		authz:          authzEngine,
-		chatSessions:   chatSessionsManager,
-		audit:          auditLogger,
-		signer:         signer,
-		serverURL:      serverURL,
-		cimdResolver:   cimd.NewResolver(guardianPolicy, meterProvider, logger),
-		remoteSessions: remoteSessions,
+		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/usersessions"),
+		logger:       logger,
+		db:           db,
+		auth:         auth.New(logger, db, sessionManager, authzEngine),
+		authz:        authzEngine,
+		chatSessions: chatSessionsManager,
+		audit:        auditLogger,
+		signer:       signer,
+		serverURL:    serverURL,
+		cimdResolver: cimd.NewResolver(guardianPolicy, meterProvider, logger),
 	}
 }
 
@@ -147,6 +140,16 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		sessionEndpoints.Use(m)
 	}
 	sessionssrv.Mount(mux, sessionssrv.New(sessionEndpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
+
+	// Tombstone for the retired OAuth proxy token endpoint: answers
+	// invalid_grant so a client holding a proxy refresh token re-authorizes
+	// against the user_session_issuer these endpoints serve.
+	//
+	// Removable once no client still exchanges a pre-migration proxy refresh
+	// token here. Two sessions still rely on the signal as of 2026-08-07 and are
+	// expected to be resolved within the week; revisit and drop this after
+	// ~2026-08-14.
+	attachRetiredProxy(mux, service)
 }
 
 // APIKeyAuth implements goa Auther for every Goa service this package backs;

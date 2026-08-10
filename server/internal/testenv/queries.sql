@@ -16,6 +16,11 @@ UPDATE chat_messages
 SET created_at = @created_at
 WHERE id = @id;
 
+-- name: SetProjectSlugFixture :exec
+UPDATE projects
+SET slug = @slug
+WHERE id = @id;
+
 -- name: UpdateRiskResultCreatedAt :exec
 UPDATE risk_results
 SET created_at = @created_at
@@ -270,6 +275,19 @@ UPDATE device_integration_configs
 SET credentials_encrypted = 'not-a-valid-ciphertext'
 WHERE id = @id;
 
+-- name: InsertLegacyDenyPrincipalGrantFixture :exec
+-- Test-only fixture for exercising allow-only writes against legacy rows.
+INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
+VALUES (@organization_id, @principal_urn, @scope, 'deny', @selectors);
+
+-- name: GetPrincipalGrantEffectFixture :one
+SELECT effect
+FROM principal_grants
+WHERE organization_id = @organization_id
+  AND principal_urn = @principal_urn
+  AND scope = @scope
+  AND selectors = @selectors;
+
 -- name: InsertChatContentPartFixture :one
 -- Test-only fixture: seeds a minimal chat content part so tests can anchor a
 -- risk_results row to it.
@@ -289,3 +307,48 @@ INSERT INTO risk_results (
   @id, @project_id, @organization_id, @risk_policy_id, @risk_policy_version,
   @chat_content_part_id, @source, TRUE, @rule_id, @description, @match, @tags
 );
+
+-- name: GetPlatformMCPSetupHandoffHashFixture :one
+-- Test-only inspection of the one-way setup credential persisted by Platform MCP.
+SELECT handoff_hash
+FROM platform_mcp_setup_handoffs
+WHERE id = @id;
+
+-- name: ExpirePlatformMCPSetupHandoffFixture :exec
+-- Test-only fixture to verify expired setup handoffs cannot be redeemed.
+UPDATE platform_mcp_setup_handoffs
+SET expires_at = clock_timestamp() - interval '1 second'
+WHERE id = @id;
+
+-- name: GetPlatformMCPReadinessFingerprintFixture :one
+-- Test-only inspection of the non-secret identity fingerprint persisted by Platform MCP.
+SELECT provider_authorization_fingerprint
+FROM platform_mcp_readiness
+WHERE registration_id = @registration_id
+ORDER BY checked_at DESC, id DESC
+LIMIT 1;
+
+-- name: CountPlatformMCPSetupMilestoneFixture :one
+-- Test-only count for idempotent Platform MCP setup evidence.
+SELECT count(*)
+FROM platform_mcp_onboarding_milestones
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND mcp_key = @mcp_key
+  AND attempt_id = @attempt_id
+  AND milestone = @milestone;
+
+-- name: ExpireRemoteSessionAccessTokenFixture :exec
+-- Test-only fixture forcing the shared remote-session refresh path.
+UPDATE remote_sessions
+SET access_expires_at = clock_timestamp() - interval '1 minute'
+WHERE id = @id;
+
+-- name: GetToolCallBlockLinksFixture :one
+-- Test-only. The block page query deliberately does not expose the optional
+-- foreign keys, but asserting that the salvage cleared exactly the link the
+-- database rejected — and left the others alone — requires reading them off
+-- the row.
+SELECT chat_id, chat_message_id, risk_result_id, risk_policy_id
+FROM tool_call_blocks
+WHERE id = @id;

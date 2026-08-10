@@ -81,14 +81,14 @@ export function SkillDistributionsSection({
   return (
     <div className="space-y-3">
       {distributions.length === 0 ? (
-        <div className="border-border rounded-xl border border-dashed p-6">
+        <div className="border-border border border-dashed p-6">
           <Text small muted>
             Not distributed to any plugins yet. Use the banner above to
             distribute this skill.
           </Text>
         </div>
       ) : (
-        <ul className="border-border bg-card divide-y overflow-hidden rounded-xl border">
+        <ul className="border-border bg-card divide-y overflow-hidden border">
           {distributions.map((distribution) => (
             <li
               key={distribution.id}

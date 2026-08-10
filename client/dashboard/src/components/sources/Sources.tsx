@@ -414,10 +414,10 @@ export default function Sources(): JSX.Element {
                   <DropdownMenuContent align="end" className="w-[320px] p-1">
                     <DropdownMenuItem
                       onSelect={() => routes.sources.addOpenAPI.goTo()}
-                      className="flex cursor-pointer items-start gap-3 rounded-md p-2"
+                      className="flex cursor-pointer items-start gap-3 p-2"
                     >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 dark:bg-blue-500/20">
-                        <FileCode className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                      <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center">
+                        <FileCode className="text-foreground h-5 w-5" />
                       </div>
                       <div className="flex flex-col gap-0.5">
                         <span className="font-medium">From your API</span>
@@ -429,10 +429,10 @@ export default function Sources(): JSX.Element {
                     {isFunctionsEnabled && (
                       <DropdownMenuItem
                         onSelect={() => routes.sources.addFunction.goTo()}
-                        className="flex cursor-pointer items-start gap-3 rounded-md p-2"
+                        className="flex cursor-pointer items-start gap-3 p-2"
                       >
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20">
-                          <Code className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                        <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center">
+                          <Code className="text-foreground h-5 w-5" />
                         </div>
                         <div className="flex flex-col gap-0.5">
                           <span className="font-medium">Write custom code</span>
@@ -444,10 +444,10 @@ export default function Sources(): JSX.Element {
                     )}
                     <DropdownMenuItem
                       onSelect={() => routes.sources.addFromCatalog.goTo()}
-                      className="flex cursor-pointer items-start gap-3 rounded-md p-2"
+                      className="flex cursor-pointer items-start gap-3 p-2"
                     >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 dark:bg-violet-500/20">
-                        <Server className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+                      <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center">
+                        <Server className="text-foreground h-5 w-5" />
                       </div>
                       <div className="flex flex-col gap-0.5">
                         <span className="font-medium">3rd-party server</span>
@@ -458,10 +458,10 @@ export default function Sources(): JSX.Element {
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onSelect={() => routes.sources.addRemoteMcp.goTo()}
-                      className="flex cursor-pointer items-start gap-3 rounded-md p-2"
+                      className="flex cursor-pointer items-start gap-3 p-2"
                     >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 dark:bg-violet-500/20">
-                        <Network className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+                      <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center">
+                        <Network className="text-foreground h-5 w-5" />
                       </div>
                       <div className="flex flex-col gap-0.5">
                         <span className="font-medium">
@@ -475,10 +475,10 @@ export default function Sources(): JSX.Element {
                     {isTunneledMcpEnabled && (
                       <DropdownMenuItem
                         onSelect={() => routes.sources.addTunneledMcp.goTo()}
-                        className="flex cursor-pointer items-start gap-3 rounded-md p-2"
+                        className="flex cursor-pointer items-start gap-3 p-2"
                       >
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 dark:bg-cyan-500/20">
-                          <Network className="h-5 w-5 text-cyan-700 dark:text-cyan-300" />
+                        <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center">
+                          <Network className="text-foreground h-5 w-5" />
                         </div>
                         <div className="flex flex-col gap-0.5">
                           <span className="font-medium">
@@ -493,10 +493,10 @@ export default function Sources(): JSX.Element {
                     {isSpeakeasyStaff && (
                       <DropdownMenuItem
                         onSelect={() => routes.sources.addUnproxiedMcp.goTo()}
-                        className="flex cursor-pointer items-start gap-3 rounded-md p-2"
+                        className="flex cursor-pointer items-start gap-3 p-2"
                       >
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 dark:bg-amber-500/20">
-                          <Server className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                        <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center">
+                          <Server className="text-foreground h-5 w-5" />
                         </div>
                         <div className="flex flex-col gap-0.5">
                           <span className="font-medium">

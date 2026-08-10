@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const corruptDeviceIntegrationCredentialsFixture = `-- name: CorruptDeviceIntegrationCredentialsFixture :exec
@@ -54,6 +55,38 @@ WHERE attributes->>'event_type' = $1::text
 // itself is transport-agnostic.
 func (q *Queries) CountOutboxEntriesByEventType(ctx context.Context, eventType string) (int64, error) {
 	row := q.db.QueryRow(ctx, countOutboxEntriesByEventType, eventType)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countPlatformMCPSetupMilestoneFixture = `-- name: CountPlatformMCPSetupMilestoneFixture :one
+SELECT count(*)
+FROM platform_mcp_onboarding_milestones
+WHERE organization_id = $1
+  AND project_id = $2
+  AND mcp_key = $3
+  AND attempt_id = $4
+  AND milestone = $5
+`
+
+type CountPlatformMCPSetupMilestoneFixtureParams struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	McpKey         string
+	AttemptID      uuid.NullUUID
+	Milestone      string
+}
+
+// Test-only count for idempotent Platform MCP setup evidence.
+func (q *Queries) CountPlatformMCPSetupMilestoneFixture(ctx context.Context, arg CountPlatformMCPSetupMilestoneFixtureParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countPlatformMCPSetupMilestoneFixture,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.McpKey,
+		arg.AttemptID,
+		arg.Milestone,
+	)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -164,6 +197,30 @@ WHERE device_integration_config_id = $1
 
 func (q *Queries) DisableDeviceIntegrationSchedulesFixture(ctx context.Context, deviceIntegrationConfigID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, disableDeviceIntegrationSchedulesFixture, deviceIntegrationConfigID)
+	return err
+}
+
+const expirePlatformMCPSetupHandoffFixture = `-- name: ExpirePlatformMCPSetupHandoffFixture :exec
+UPDATE platform_mcp_setup_handoffs
+SET expires_at = clock_timestamp() - interval '1 second'
+WHERE id = $1
+`
+
+// Test-only fixture to verify expired setup handoffs cannot be redeemed.
+func (q *Queries) ExpirePlatformMCPSetupHandoffFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, expirePlatformMCPSetupHandoffFixture, id)
+	return err
+}
+
+const expireRemoteSessionAccessTokenFixture = `-- name: ExpireRemoteSessionAccessTokenFixture :exec
+UPDATE remote_sessions
+SET access_expires_at = clock_timestamp() - interval '1 minute'
+WHERE id = $1
+`
+
+// Test-only fixture forcing the shared remote-session refresh path.
+func (q *Queries) ExpireRemoteSessionAccessTokenFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, expireRemoteSessionAccessTokenFixture, id)
 	return err
 }
 
@@ -342,6 +399,64 @@ func (q *Queries) GetOutboxRelayState(ctx context.Context, outboxID int64) (GetO
 	return i, err
 }
 
+const getPlatformMCPReadinessFingerprintFixture = `-- name: GetPlatformMCPReadinessFingerprintFixture :one
+SELECT provider_authorization_fingerprint
+FROM platform_mcp_readiness
+WHERE registration_id = $1
+ORDER BY checked_at DESC, id DESC
+LIMIT 1
+`
+
+// Test-only inspection of the non-secret identity fingerprint persisted by Platform MCP.
+func (q *Queries) GetPlatformMCPReadinessFingerprintFixture(ctx context.Context, registrationID uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPReadinessFingerprintFixture, registrationID)
+	var provider_authorization_fingerprint string
+	err := row.Scan(&provider_authorization_fingerprint)
+	return provider_authorization_fingerprint, err
+}
+
+const getPlatformMCPSetupHandoffHashFixture = `-- name: GetPlatformMCPSetupHandoffHashFixture :one
+SELECT handoff_hash
+FROM platform_mcp_setup_handoffs
+WHERE id = $1
+`
+
+// Test-only inspection of the one-way setup credential persisted by Platform MCP.
+func (q *Queries) GetPlatformMCPSetupHandoffHashFixture(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPSetupHandoffHashFixture, id)
+	var handoff_hash string
+	err := row.Scan(&handoff_hash)
+	return handoff_hash, err
+}
+
+const getPrincipalGrantEffectFixture = `-- name: GetPrincipalGrantEffectFixture :one
+SELECT effect
+FROM principal_grants
+WHERE organization_id = $1
+  AND principal_urn = $2
+  AND scope = $3
+  AND selectors = $4
+`
+
+type GetPrincipalGrantEffectFixtureParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Selectors      []byte
+}
+
+func (q *Queries) GetPrincipalGrantEffectFixture(ctx context.Context, arg GetPrincipalGrantEffectFixtureParams) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, getPrincipalGrantEffectFixture,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+	)
+	var effect pgtype.Text
+	err := row.Scan(&effect)
+	return effect, err
+}
+
 const getPublishOutboxDeadLetter = `-- name: GetPublishOutboxDeadLetter :one
 SELECT id, public_id, organization_id, topic, message, attributes,
        attempts, last_error, enqueued_at, created_at
@@ -405,6 +520,35 @@ func (q *Queries) GetPublishOutboxRow(ctx context.Context, id int64) (GetPublish
 		&i.LockedUntil,
 		&i.LeaseToken,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getToolCallBlockLinksFixture = `-- name: GetToolCallBlockLinksFixture :one
+SELECT chat_id, chat_message_id, risk_result_id, risk_policy_id
+FROM tool_call_blocks
+WHERE id = $1
+`
+
+type GetToolCallBlockLinksFixtureRow struct {
+	ChatID        uuid.NullUUID
+	ChatMessageID uuid.NullUUID
+	RiskResultID  uuid.NullUUID
+	RiskPolicyID  uuid.NullUUID
+}
+
+// Test-only. The block page query deliberately does not expose the optional
+// foreign keys, but asserting that the salvage cleared exactly the link the
+// database rejected — and left the others alone — requires reading them off
+// the row.
+func (q *Queries) GetToolCallBlockLinksFixture(ctx context.Context, id uuid.UUID) (GetToolCallBlockLinksFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getToolCallBlockLinksFixture, id)
+	var i GetToolCallBlockLinksFixtureRow
+	err := row.Scan(
+		&i.ChatID,
+		&i.ChatMessageID,
+		&i.RiskResultID,
+		&i.RiskPolicyID,
 	)
 	return i, err
 }
@@ -543,6 +687,29 @@ type InsertDeviceAgentSyncFixtureParams struct {
 
 func (q *Queries) InsertDeviceAgentSyncFixture(ctx context.Context, arg InsertDeviceAgentSyncFixtureParams) error {
 	_, err := q.db.Exec(ctx, insertDeviceAgentSyncFixture, arg.OrganizationID, arg.Email, arg.SeenAt)
+	return err
+}
+
+const insertLegacyDenyPrincipalGrantFixture = `-- name: InsertLegacyDenyPrincipalGrantFixture :exec
+INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
+VALUES ($1, $2, $3, 'deny', $4)
+`
+
+type InsertLegacyDenyPrincipalGrantFixtureParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Selectors      []byte
+}
+
+// Test-only fixture for exercising allow-only writes against legacy rows.
+func (q *Queries) InsertLegacyDenyPrincipalGrantFixture(ctx context.Context, arg InsertLegacyDenyPrincipalGrantFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertLegacyDenyPrincipalGrantFixture,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+	)
 	return err
 }
 
@@ -1032,6 +1199,22 @@ type SetOrgWebhookConfigParams struct {
 // Sets the Svix app ID and webhooks_enabled flag on an organization.
 func (q *Queries) SetOrgWebhookConfig(ctx context.Context, arg SetOrgWebhookConfigParams) error {
 	_, err := q.db.Exec(ctx, setOrgWebhookConfig, arg.SvixAppID, arg.WebhooksEnabled, arg.OrganizationID)
+	return err
+}
+
+const setProjectSlugFixture = `-- name: SetProjectSlugFixture :exec
+UPDATE projects
+SET slug = $1
+WHERE id = $2
+`
+
+type SetProjectSlugFixtureParams struct {
+	Slug string
+	ID   uuid.UUID
+}
+
+func (q *Queries) SetProjectSlugFixture(ctx context.Context, arg SetProjectSlugFixtureParams) error {
+	_, err := q.db.Exec(ctx, setProjectSlugFixture, arg.Slug, arg.ID)
 	return err
 }
 

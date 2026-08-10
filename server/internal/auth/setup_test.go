@@ -17,6 +17,7 @@ import (
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -26,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -169,7 +171,7 @@ func newTestAuthServiceWithWorkOSClient(t *testing.T, userInfo *MockUserInfo, wo
 
 	nonceStore := cache.NewRedisCacheAdapter(redisClient)
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nonceStore, authzProvisioner)
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nonceStore, authzProvisioner, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger())
 	result := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
 	result.authorizer = auth.New(logger, conn, sessionManager, authzEngine)
 
@@ -236,7 +238,7 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 
 	nonceStore := cache.NewRedisCacheAdapter(redisClient)
 	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nonceStore, authzProvisioner)
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nonceStore, authzProvisioner, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger())
 	result := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
 	result.authorizer = auth.New(logger, conn, sessionManager, authzEngine)
 
@@ -281,6 +283,27 @@ func (ti *testInstance) stateWithNonce(ctx context.Context, t *testing.T, redire
 	stateJSON, err := json.Marshal(state)
 	require.NoError(t, err)
 	return auth.TestNonceBindingContext(ctx, testNonceBinding), base64.RawURLEncoding.EncodeToString(stateJSON)
+}
+
+// stateWithSignupIntent behaves like stateWithNonce and additionally seeds a
+// signup intent under the same nonce, simulating a login that came from the
+// sign-up page with a company name.
+//
+// The map key is "OrgName" — the Go field name, not the "org_name" JSON tag.
+// The nonce store round-trips values through msgpack (go-redis/cache v9),
+// which keys struct fields by their literal Go name unless a `msgpack` tag
+// says otherwise; it does not consult `json` tags. Since signupIntent (in
+// impl.go) carries no `msgpack` tag, that's the key production's own
+// Login->Callback round trip actually uses under the hood.
+func (ti *testInstance) stateWithSignupIntent(ctx context.Context, t *testing.T, redirectURL, orgName string) (context.Context, string) {
+	t.Helper()
+
+	ctx, stateParam := ti.stateWithNonce(ctx, t, redirectURL)
+	nonce := extractNonceFromState(t, stateParam)
+	require.NoError(t, ti.nonceStore.Set(ctx, "auth:signup_intent:"+nonce, map[string]string{
+		"OrgName": orgName,
+	}, 10*time.Minute))
+	return ctx, stateParam
 }
 
 // callbackWithNonce creates a CallbackPayload with a valid nonce and calls Callback.

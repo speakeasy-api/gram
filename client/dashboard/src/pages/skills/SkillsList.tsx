@@ -8,6 +8,7 @@ import { CopyButton } from "@/components/ui/CopyButton";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
+import { useCustomDomain } from "@/hooks/useToolsetUrl";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import type { Skill } from "@gram/client/models/components/skill.js";
 import type {
@@ -30,7 +31,7 @@ import { useQueryState } from "nuqs";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
 import { toast } from "sonner";
-import { skillShareUrl } from "./share-link";
+import { skillShareDomain, skillShareUrl } from "./share-link";
 import { SkillManifestDialog } from "./SkillManifestDialog";
 import {
   SKILL_CLASSIFICATION_OPTIONS,
@@ -208,6 +209,13 @@ export default function SkillsList(): JSX.Element {
     ? metricSkills
     : (pageQuery.data?.result.skills ?? EMPTY_SKILLS);
 
+  // Copied share links point at the org's custom domain when one is live.
+  // Only pay for the domains request when a listed skill is actually shared.
+  const { domain: customDomain } = useCustomDomain(
+    skills.some((skill) => !!skill.shareToken),
+  );
+  const shareDomain = skillShareDomain(customDomain);
+
   const columns: Column<Skill>[] = [
     {
       key: "name",
@@ -351,7 +359,7 @@ export default function SkillsList(): JSX.Element {
         skill.shareToken ? (
           <CopyButton
             size="sm"
-            text={skillShareUrl(skill.shareToken)}
+            text={skillShareUrl(skill.shareToken, shareDomain)}
             tooltip="Copy public link"
             onCopy={() => {
               toast.success("Public link copied");
@@ -648,7 +656,7 @@ function AddSkillButton({ onClick }: { onClick: () => void }): JSX.Element {
       reason="You need write access to add skills."
     >
       <Button icon="plus" onClick={onClick}>
-        Add skill
+        Add Skill
       </Button>
     </RequireScope>
   );
@@ -656,8 +664,8 @@ function AddSkillButton({ onClick }: { onClick: () => void }): JSX.Element {
 
 function SkillsEmptyState({ onAdd }: { onAdd: () => void }): JSX.Element {
   return (
-    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
-      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+    <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16">
+      <div className="border-border mb-4 flex h-12 w-12 items-center justify-center border">
         <Icon name="terminal" className="text-muted-foreground h-6 w-6" />
       </div>
       <Text variant="subheading" className="mb-1">
@@ -674,7 +682,7 @@ function SkillsEmptyState({ onAdd }: { onAdd: () => void }): JSX.Element {
 
 function LoadMoreError({ onRetry }: { onRetry: () => void }): JSX.Element {
   return (
-    <div className="border-destructive/40 bg-destructive/5 flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
+    <div className="border-destructive/40 bg-destructive/5 flex flex-wrap items-center justify-between gap-3 border p-3">
       <Text small className="text-destructive">
         Unable to load more skills.
       </Text>

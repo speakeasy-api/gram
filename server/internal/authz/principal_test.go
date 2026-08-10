@@ -87,9 +87,8 @@ func TestResolveKnownUserPrincipals_allUsersGrantAuthorizesOrgMember(t *testing.
 	grants, err := LoadGrants(ctx, conn, organizationID, principals)
 	require.NoError(t, err)
 
-	allowGrant, _, denied := evaluateGrants(grants, Check{Scope: ScopeRiskPolicyEvaluate, ResourceKind: "", ResourceID: policyID, Dimensions: nil}.expand())
-	require.NotNil(t, allowGrant)
-	require.False(t, denied)
+	grant, _ := matchingGrant(grants, Check{Scope: ScopeRiskPolicyEvaluate, ResourceKind: "", ResourceID: policyID, Dimensions: nil}.expand())
+	require.NotNil(t, grant)
 }
 
 func TestValidatePrincipal(t *testing.T) {
