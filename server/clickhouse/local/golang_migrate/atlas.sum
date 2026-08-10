@@ -1,4 +1,4 @@
-h1:p5bp8ea5cyXBS/5XawIHBxyaHeNkWP5malxe4hW9E7U=
+h1:hj82rT4GwY/8s91jOfOT+KS9d4CQmkCJz41dnsp/Nb8=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -84,3 +84,5 @@ h1:p5bp8ea5cyXBS/5XawIHBxyaHeNkWP5malxe4hW9E7U=
 20260803163755_surface-chatgpt-usage-in-summaries.up.sql h1:bAU93tpzoFDRdQdsw/VRkeGIDikck9Q/jVnGNSJ/ACo=
 20260803191817_event-urn-span-kind-comment.up.sql h1:IlqREavCQJhNLT4ZhOcLpcT4AaDbcNajPqg+qfuz844=
 20260803192750_litellm-usage-in-summaries.up.sql h1:7L9bzpMEUz/JyjSe0uh+tQ3fvOhH3Ahm9Xavtl3xgZo=
+20260805105902_risk-findings-app-team-attribution.up.sql h1:UmQaEOmnP7ormKmGnaolNXAq2ogrRNVqxGj7EhfkGQ4=
+20260805161427_risk-findings-user-email.up.sql h1:2m9vZDNhLAZ2w5mVIS4vNtJtbTULtrHn+qZUU6ww3dE=

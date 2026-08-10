@@ -1,4 +1,4 @@
-h1:xOHmeQgoQfuEfB8Y8n3SCuAuakSoIjShS0VuxcHJY48=
+h1:Mq76XAULFPC58+uB8wBu3kO3XpxMHdIqhHv/CX1zADg=
 20251013090028_initial.sql h1:I90GAjfJN/3i4nLe4AThT5OW/Qgc0+5LOI2jZ6WQZME=
 20251028141444_add_indexes.sql h1:CDwn2EdBZ7Nrn9hx5vYguR1ljlP5hTxiOI6n/I25Cpk=
 20251029120230_add_other_indexes.sql h1:3EtD+3hW8+s5me23va+BdfiIKmfQKOdv4glrQ34fle4=
@@ -89,3 +89,5 @@ h1:xOHmeQgoQfuEfB8Y8n3SCuAuakSoIjShS0VuxcHJY48=
 20260803163750_surface-chatgpt-usage-in-summaries.sql h1:Fn6K/rFMTsYYxWwyxBnwBvU1OCwi0MwPRp9uoelAMB8=
 20260803191705_event-urn-span-kind-comment.sql h1:7IFQs0jGu092U3E6e/piSkAQ3Zd5SqIDMVOf8yA8Bwk=
 20260803192745_litellm-usage-in-summaries.sql h1:dMsZ2uPJxHOq8HL/Y0Eb0acbiPscYc9DMRdBZgKVYTo=
+20260805105857_risk-findings-app-team-attribution.sql h1:vfAJnjNr6OCXRxKCft2zjU02TZ6MjdfSMGqcLWchAos=
+20260805161421_risk-findings-user-email.sql h1:vIbFrSbYl1wNZ+j1o3GKTsE7s5yIFAQEcHhnqB2yW9Q=

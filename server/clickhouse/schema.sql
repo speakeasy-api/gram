@@ -1315,6 +1315,9 @@ CREATE TABLE IF NOT EXISTS risk_findings (
     -- traffic (scans follow messages within seconds).
     message_created_at DateTime64(9) DEFAULT created_at COMMENT 'Event time of the scanned chat message (chat_messages.created_at). Defaults to created_at (scan time) for rows written before the column existed or when attribution is unresolved.' CODEC(DoubleDelta, ZSTD),
     assistant_id String DEFAULT '' COMMENT 'Assistant linked to the finding chat via a live assistant_threads row at ingest. Empty when the chat has no assistant link or attribution is unresolved.' CODEC(ZSTD),
+    chat_source LowCardinality(String) DEFAULT '' COMMENT 'Canonical product surface the scanned message came from (chat_messages.source canonicalized at ingest, e.g. codex, cursor, claude-code). Empty for rows written before the column existed or when attribution is unresolved.',
+    team LowCardinality(String) DEFAULT '' COMMENT 'WorkOS directory department_name of the resolved user at ingest. Empty when the user has no directory profile or attribution is unresolved.',
+    user_email String DEFAULT '' COMMENT 'Email of the resolved internal user at ingest (users.email), letting the Watchdog display users without a Postgres lookup. Empty for external-only users or when attribution is unresolved.' CODEC(ZSTD),
 
     -- Reveal metadata. The raw match is reconstructed at reveal time by
     -- slicing the original chat data at start_pos and end_pos, then verified
