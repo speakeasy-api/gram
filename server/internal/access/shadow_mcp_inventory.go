@@ -180,7 +180,9 @@ func (s *Service) GetShadowMCPInventoryServer(ctx context.Context, payload *gen.
 		return nil, oops.E(oops.CodeUnexpected, err, "get shadow mcp inventory url by slug").LogError(ctx, s.logger)
 	}
 	if inventoryRow == nil {
-		return nil, oops.E(oops.CodeNotFound, nil, "shadow mcp inventory url not found").LogError(ctx, s.logger)
+		// A server can be known only through its approval request — asked
+		// for, never observed in traffic — and its page must still resolve.
+		return s.shadowMCPServerFromApprovalRequest(ctx, ac.ActiveOrganizationID, projectID, payload.ServerSlug)
 	}
 
 	usageRows, err := chRepo.ListShadowMCPInventoryUsage(ctx, telemetryrepo.ListShadowMCPInventoryUsageParams{
@@ -199,6 +201,53 @@ func (s *Service) GetShadowMCPInventoryServer(ctx context.Context, payload *gen.
 	}
 
 	return buildShadowMCPInventoryServer(*inventoryRow, usageByURL[inventoryRow.CanonicalServerURL], policyState.forURL(inventoryRow.CanonicalServerURL)), nil
+}
+
+// shadowMCPServerFromApprovalRequest resolves a server page slug against the
+// project's approval requests when telemetry has never seen the server. The
+// synthesized view carries the request's identity and timeline with zeroed
+// usage, so a requested-but-unobserved server still has the one page where
+// its review lives.
+func (s *Service) shadowMCPServerFromApprovalRequest(ctx context.Context, organizationID string, projectID uuid.UUID, serverSlug string) (*gen.ShadowMCPInventoryServer, error) {
+	requests, err := mcpapprovalrepo.New(s.db).ListServerURLApprovalRequests(ctx, projectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list server url approval requests").LogError(ctx, s.logger)
+	}
+
+	for _, request := range requests {
+		if shadowmcp.ServerSlug(request.TargetKey) != serverSlug {
+			continue
+		}
+
+		policyState, err := s.shadowMCPInventoryPolicyState(ctx, organizationID, projectID, []string{request.TargetKey})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "load shadow mcp inventory policy state").LogError(ctx, s.logger)
+		}
+
+		inventoryURL, _ := shadowmcp.CanonicalizeInventoryURL(request.TargetKey)
+		row := telemetryrepo.ShadowMCPInventoryURLRow{
+			CanonicalServerURL: request.TargetKey,
+			URLHost:            inventoryURL.URLHost,
+			ServerName:         "",
+			ServerNameOverride: "",
+			FirstSeen:          request.CreatedAt.Time,
+			LastSeen:           request.UpdatedAt.Time,
+			LastCalledUnixNano: 0,
+			UpdatedAt:          request.UpdatedAt.Time,
+		}
+		usage := telemetryrepo.ShadowMCPInventoryUsageRow{
+			CanonicalServerURL: request.TargetKey,
+			ServerName:         "",
+			FirstCalled:        nil,
+			LastCalled:         nil,
+			CallCount:          0,
+			UserCount:          0,
+			TopUsers:           []string{},
+		}
+		return buildShadowMCPInventoryServer(row, usage, policyState.forURL(request.TargetKey)), nil
+	}
+
+	return nil, oops.E(oops.CodeNotFound, nil, "shadow mcp inventory url not found").LogError(ctx, s.logger)
 }
 
 func (s *Service) UpdateShadowMCPInventoryServerName(ctx context.Context, payload *gen.UpdateShadowMCPInventoryServerNamePayload) error {

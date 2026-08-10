@@ -19,6 +19,7 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -1276,4 +1277,39 @@ func TestService_ShadowMCPInventory_JoinsApprovalRequestState(t *testing.T) {
 	require.NotNil(t, detail.ApprovalRequest)
 	require.Equal(t, request.ID.String(), detail.ApprovalRequest.ID)
 	require.Equal(t, 2, detail.ApprovalRequest.RequesterCount)
+}
+
+func TestService_GetShadowMCPInventoryServer_ResolvesRequestOnlyServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+
+	request := seedShadowMCPApprovalRequest(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "https://requested-only.example.com/mcp", "denied", 1)
+
+	server, err := ti.service.GetShadowMCPInventoryServer(ctx, &gen.GetShadowMCPInventoryServerPayload{
+		ProjectID:  authCtx.ProjectID.String(),
+		ServerSlug: shadowmcp.ServerSlug("https://requested-only.example.com/mcp"),
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, "https://requested-only.example.com/mcp", server.CanonicalServerURL)
+	require.Equal(t, "requested-only.example.com", server.URLHost)
+	require.Equal(t, 0, server.ObservedUseCount)
+	require.Equal(t, 0, server.UserCount)
+	require.Empty(t, server.TopUsers)
+	require.Nil(t, server.LastCalled)
+	require.NotNil(t, server.ApprovalRequest)
+	require.Equal(t, request.ID.String(), server.ApprovalRequest.ID)
+	require.Equal(t, "denied", server.ApprovalRequest.Status)
+	require.Equal(t, 1, server.ApprovalRequest.RequesterCount)
+
+	_, err = ti.service.GetShadowMCPInventoryServer(ctx, &gen.GetShadowMCPInventoryServerPayload{
+		ProjectID:  authCtx.ProjectID.String(),
+		ServerSlug: shadowmcp.ServerSlug("https://never-requested.example.com/mcp"),
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }

@@ -658,6 +658,65 @@ func (q *Queries) ListResearchReportsForApprovalRequest(ctx context.Context, arg
 	return items, nil
 }
 
+const listServerURLApprovalRequests = `-- name: ListServerURLApprovalRequests :many
+SELECT
+  r.id
+  , r.target_key
+  , r.status
+  , r.created_at
+  , r.updated_at
+  , (
+      SELECT count(*)
+      FROM mcp_approval_request_requesters req
+      WHERE req.mcp_approval_request_id = r.id
+        AND req.project_id = r.project_id
+        AND req.deleted IS FALSE
+    ) AS requester_count
+FROM mcp_approval_requests r
+WHERE r.project_id = $1
+  AND r.target_kind = 'server_url'
+  AND r.deleted IS FALSE
+`
+
+type ListServerURLApprovalRequestsRow struct {
+	ID             uuid.UUID
+	TargetKey      string
+	Status         string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	RequesterCount int64
+}
+
+// Every server_url review in a project, for resolving a server page slug to
+// the request tracking it. A server known only through a request has no
+// telemetry inventory row, so this is the page's fallback identity source.
+func (q *Queries) ListServerURLApprovalRequests(ctx context.Context, projectID uuid.UUID) ([]ListServerURLApprovalRequestsRow, error) {
+	rows, err := q.db.Query(ctx, listServerURLApprovalRequests, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListServerURLApprovalRequestsRow
+	for rows.Next() {
+		var i ListServerURLApprovalRequestsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TargetKey,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.RequesterCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setApprovalRequestEvidence = `-- name: SetApprovalRequestEvidence :exec
 UPDATE mcp_approval_requests
 SET current_evidence = $1
