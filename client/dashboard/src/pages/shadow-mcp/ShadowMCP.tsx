@@ -2,12 +2,12 @@ import { ApprovalQueue } from "@/components/mcp-approvals/ApprovalQueue";
 import { Page } from "@/components/page-layout";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { RequireScope } from "@/components/require-scope";
-import type { ShadowMCPPolicy } from "@/components/shadow-mcp/ShadowMCPInventoryActions";
 import { ShadowMCPInventoryTable } from "@/components/shadow-mcp/ShadowMCPInventoryTable";
 import { ShadowMCPPolicyStatus } from "@/components/shadow-mcp/ShadowMCPPolicyStatus";
 import {
   eligibleShadowMCPAllowRulePolicies,
   shadowMCPBlockingPolicyDisposition,
+  type ShadowMCPPolicy,
   shadowMCPPolicyState,
 } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
 import { SkeletonTable } from "@/components/ui/Skeleton";

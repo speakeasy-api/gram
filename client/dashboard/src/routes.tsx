@@ -101,7 +101,6 @@ import SecurityOverview, {
   RiskOverviewRoot,
 } from "./pages/security/SecurityOverview";
 import RiskEventsPage from "./pages/security/RiskEventsPage";
-import MCPApprovalDetail from "./pages/security/mcp-approvals/MCPApprovalDetail";
 import ShadowMCP, { ShadowMCPRoot } from "./pages/shadow-mcp/ShadowMCP";
 import ShadowMCPServerDetail from "./pages/shadow-mcp/ShadowMCPServerDetail";
 import RiskOverviewCategoriesIndex from "./pages/security/RiskOverviewCategoriesIndex";
@@ -647,11 +646,6 @@ const ROUTE_STRUCTURE = {
     component: ShadowMCPRoot,
     indexComponent: ShadowMCP,
     subPages: {
-      request: {
-        title: "Access request",
-        url: "requests/:requestId",
-        component: MCPApprovalDetail,
-      },
       detail: {
         title: "Shadow MCP Server",
         url: ":serverSlug",

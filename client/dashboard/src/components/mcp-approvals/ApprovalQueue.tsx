@@ -8,6 +8,7 @@ import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
 import type { ApprovalRequestSummary } from "@gram/client/models/components/approvalrequestsummary.js";
 import { useListMcpApprovalRequests } from "@gram/client/react-query/listMcpApprovalRequests.js";
+import { ReviewRequestSheet } from "@/components/mcp-approvals/ReviewRequestSheet";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 
@@ -57,6 +58,8 @@ export function ApprovalQueue(): JSX.Element {
   const routes = useRoutes();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
+  const [reviewRequest, setReviewRequest] =
+    useState<ApprovalRequestSummary | null>(null);
   const { values, setValue, clearValue, clearAll } = useFilterState(FILTERS);
   const status = values.status;
 
@@ -132,6 +135,15 @@ export function ApprovalQueue(): JSX.Element {
 
   return (
     <>
+      <ReviewRequestSheet
+        request={reviewRequest}
+        open={reviewRequest !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setReviewRequest(null);
+          }
+        }}
+      />
       <Page.Toolbar>
         <Page.Toolbar.Search
           value={search}
@@ -152,9 +164,13 @@ export function ApprovalQueue(): JSX.Element {
         columns={columns}
         data={requests}
         rowKey={(row) => row.id}
-        onRowClick={(row) =>
-          void navigate(routes.shadowMCP.request.href(row.id))
-        }
+        onRowClick={(row) => {
+          if (row.serverSlug) {
+            void navigate(routes.shadowMCP.detail.href(row.serverSlug));
+            return;
+          }
+          setReviewRequest(row);
+        }}
         noResultsMessage={<span>No matching requests.</span>}
       />
       {(listQuery.data?.requests.length ?? 0) >= QUEUE_LIMIT && (

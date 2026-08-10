@@ -4,33 +4,46 @@ import {
   StatusBadge,
 } from "@/components/mcp-approvals/EvidencePanel";
 import { parseEvidenceDocument } from "@/components/mcp-approvals/evidence";
-import { Page } from "@/components/page-layout";
-import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { useProject } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
+import type { ShadowMCPPolicyDisposition } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
+import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { ApprovalDecision } from "@gram/client/models/components/approvaldecision.js";
 import type { ApprovalRequester } from "@gram/client/models/components/approvalrequester.js";
 import type { ResearchReport } from "@gram/client/models/components/researchreport.js";
-import { invalidateGetMcpApprovalRequest } from "@gram/client/react-query/getMcpApprovalRequest.js";
-import { useGetMcpApprovalRequest } from "@gram/client/react-query/getMcpApprovalRequest.js";
+import type { Role } from "@gram/client/models/components/role.js";
+import {
+  invalidateGetMcpApprovalRequest,
+  useGetMcpApprovalRequest,
+} from "@gram/client/react-query/getMcpApprovalRequest.js";
 import { invalidateAllListMcpApprovalRequests } from "@gram/client/react-query/listMcpApprovalRequests.js";
 import { useRefreshMcpApprovalEvidenceMutation } from "@gram/client/react-query/refreshMcpApprovalEvidence.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
-import { useParams } from "react-router";
 import { toast } from "sonner";
 
 /**
- * One approval request: the evidence, everyone who asked, every prior
- * decision, and the decision form. The page's job is to make one decision
- * fast and defensible — and never to let an absence of evidence read as
- * evidence of safety.
+ * One approval review: the evidence, everyone who asked, every prior
+ * decision, and the decision form. Rendered wherever a server is reviewed —
+ * the Shadow MCP server page for URL targets, the standalone request page for
+ * stdio targets — so both surfaces decide through the same flow. Its job is
+ * to make one decision fast and defensible, and never to let an absence of
+ * evidence read as evidence of safety.
  */
-export default function MCPApprovalDetail(): JSX.Element {
-  const { requestId = "" } = useParams<{ requestId: string }>();
+export function ApprovalReview({
+  requestId,
+  audience,
+}: {
+  requestId: string;
+  audience?: {
+    members: AccessMember[];
+    roles: Role[];
+    disposition: ShadowMCPPolicyDisposition | null;
+  };
+}): JSX.Element {
   const project = useProject();
 
   const detailQuery = useGetMcpApprovalRequest(
@@ -45,66 +58,39 @@ export default function MCPApprovalDetail(): JSX.Element {
     [detail],
   );
 
+  if (!detail) {
+    return <SkeletonTable />;
+  }
+
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope="mcp_approval:read" level="page">
-          <Page.Section>
-            <Page.Section.Title stage="preview" area="MCP access request">
-              {detail?.request.targetRaw ?? "Access request"}
-            </Page.Section.Title>
-            <Page.Section.CTA>
-              <RefreshEvidenceButton
-                requestId={requestId}
-                projectSlug={project.slug}
-                ready={detail !== undefined}
-              />
-            </Page.Section.CTA>
-            <Page.Section.Description>
-              {detail
-                ? `Requested by ${detail.request.requesterCount} ${detail.request.requesterCount === 1 ? "person" : "people"}.`
-                : "Loading request."}
-            </Page.Section.Description>
-            <Page.Section.Body>
-              {!detail ? (
-                <SkeletonTable />
-              ) : (
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
-                  <div className="space-y-6">
-                    <EvidencePanel
-                      document={document}
-                      collectedAt={detail.evidenceCollectedAt}
-                    />
-                    <ResearchReports reports={detail.researchReports} />
-                  </div>
-                  <aside className="space-y-5">
-                    <RequestSummary
-                      status={detail.request.status}
-                      createdAt={detail.request.createdAt}
-                      versionPinned={detail.request.versionPinned}
-                    />
-                    <Requesters requesters={detail.requesters} />
-                    <PriorDecisions decisions={detail.decisions} />
-                    {detail.request.status === "requested" && (
-                      <section className="space-y-2">
-                        <h3 className="text-eyebrow">Decide</h3>
-                        <DecisionForm
-                          requestId={detail.request.id}
-                          projectSlug={project.slug}
-                        />
-                      </section>
-                    )}
-                  </aside>
-                </div>
-              )}
-            </Page.Section.Body>
-          </Page.Section>
-        </RequireScope>
-      </Page.Body>
-    </Page>
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
+      <div className="space-y-6">
+        <EvidencePanel
+          document={document}
+          collectedAt={detail.evidenceCollectedAt}
+        />
+        <ResearchReports reports={detail.researchReports} />
+      </div>
+      <aside className="space-y-5">
+        <RequestSummary
+          status={detail.request.status}
+          createdAt={detail.request.createdAt}
+          versionPinned={detail.request.versionPinned}
+        />
+        <Requesters requesters={detail.requesters} />
+        <PriorDecisions decisions={detail.decisions} />
+        {detail.request.status === "requested" && (
+          <section className="space-y-2">
+            <h3 className="text-eyebrow">Decide</h3>
+            <DecisionForm
+              requestId={detail.request.id}
+              projectSlug={project.slug}
+              audience={audience}
+            />
+          </section>
+        )}
+      </aside>
+    </div>
   );
 }
 
@@ -113,7 +99,7 @@ export default function MCPApprovalDetail(): JSX.Element {
  * freeze their own snapshots, so refreshing never rewrites what a prior
  * reviewer saw.
  */
-function RefreshEvidenceButton({
+export function RefreshEvidenceButton({
   requestId,
   projectSlug,
   ready,

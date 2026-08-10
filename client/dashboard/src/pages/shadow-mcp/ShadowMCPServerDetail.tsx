@@ -4,18 +4,18 @@ import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Icon } from "@/components/ui/Icon";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import {
-  type ActiveInventoryAction,
-  type InventoryActionMode,
-  type ReviewDecision,
-  ShadowMCPInventoryActionSheet,
-  type ShadowMCPPolicy,
-} from "@/components/shadow-mcp/ShadowMCPInventoryActions";
+  ApprovalReview,
+  RefreshEvidenceButton,
+} from "@/components/mcp-approvals/ApprovalReview";
+import {
+  type DecideAccessTarget,
+  DecideAccessSheet,
+} from "@/components/mcp-approvals/DecideAccessSheet";
 import {
   eligibleShadowMCPAllowRulePolicies,
   shadowMCPBlockingPolicyDisposition,
@@ -24,10 +24,10 @@ import {
   shadowMCPInventoryStatusDescription,
   shadowMCPInventoryStatusLabel,
   shadowMCPPolicyState,
+  type ShadowMCPPolicy,
   type ShadowMCPPolicyDisposition,
   type ShadowMCPPolicyState,
 } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
-import { ALLOW_RULE_POLICY_REQUIRED } from "@/components/shadow-mcp/shadowMCPInventoryActionItems";
 import { useProject } from "@/contexts/Auth";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { encodeCrumb } from "@/pages/costs/taxonomy";
@@ -37,12 +37,8 @@ import type { ShadowMCPInventoryServer } from "@gram/client/models/components/sh
 import type { ShadowMCPInventoryUser } from "@gram/client/models/components/shadowmcpinventoryuser.js";
 import type { ShadowMCPInventoryUserSource } from "@gram/client/models/components/shadowmcpinventoryusersource.js";
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
-import { useDeleteShadowMCPInventoryPolicyBypassMutation } from "@gram/client/react-query/deleteShadowMCPInventoryPolicyBypass.js";
 import { useMembers } from "@gram/client/react-query/members.js";
-import { useResolveShadowMCPInventoryRequestMutation } from "@gram/client/react-query/resolveShadowMCPInventoryRequest.js";
 import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
-import { useBlockShadowMCPInventoryServerMutation } from "@gram/client/react-query/blockShadowMCPInventoryServer.js";
-import { useUnblockShadowMCPInventoryServerMutation } from "@gram/client/react-query/unblockShadowMCPInventoryServer.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { invalidateAllShadowMCPInventory } from "@gram/client/react-query/shadowMCPInventory.js";
 import {
@@ -50,11 +46,7 @@ import {
   useShadowMCPInventoryServer,
 } from "@gram/client/react-query/shadowMCPInventoryServer.js";
 import { useUpdateShadowMCPInventoryServerNameMutation } from "@gram/client/react-query/updateShadowMCPInventoryServerName.js";
-import {
-  invalidateAllShadowMCPInventoryUsers,
-  useShadowMCPInventoryUsers,
-} from "@gram/client/react-query/shadowMCPInventoryUsers.js";
-import { useUpsertShadowMCPInventoryPolicyBypassMutation } from "@gram/client/react-query/upsertShadowMCPInventoryPolicyBypass.js";
+import { useShadowMCPInventoryUsers } from "@gram/client/react-query/shadowMCPInventoryUsers.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
@@ -108,35 +100,6 @@ function UserSources({
   );
 }
 
-function actionModeForServer(
-  server: ShadowMCPInventoryServer,
-  disposition: ShadowMCPPolicyDisposition | null,
-): InventoryActionMode {
-  if (server.requestCount > 0) return "review";
-  if (disposition === "allow_all") {
-    return server.access === "blocked" ? "unblock" : "block";
-  }
-  if (server.access === "allowed") return "edit";
-  return "add";
-}
-
-function actionLabel(mode: InventoryActionMode) {
-  switch (mode) {
-    case "review":
-      return "Review Request";
-    case "add":
-      return "Add Allow Rule";
-    case "edit":
-      return "Edit Rule";
-    case "delete":
-      return "Delete Rule";
-    case "block":
-      return "Block Server";
-    case "unblock":
-      return "Unblock Server";
-  }
-}
-
 function ServerStatus({
   disposition,
   policyState,
@@ -171,6 +134,29 @@ function MetaItem({ label, value }: { label: string; value: string }) {
   );
 }
 
+/**
+ * How many people are waiting on a decision. The approval request is the
+ * source of truth; the legacy bypass-request count only fills in while old
+ * pre-approval rows drain.
+ */
+function pendingRequesterCount(server: ShadowMCPInventoryServer): number {
+  if (server.approvalRequest) {
+    return server.approvalRequest.status === "requested"
+      ? server.approvalRequest.requesterCount
+      : 0;
+  }
+  return server.requestCount;
+}
+
+function requestsMetricDescription(server: ShadowMCPInventoryServer): string {
+  if (server.approvalRequest && server.approvalRequest.status !== "requested") {
+    return server.approvalRequest.status === "approved" ? "approved" : "denied";
+  }
+  return pendingRequesterCount(server) === 1
+    ? "person waiting"
+    : "people waiting";
+}
+
 function ServerSummary({
   disposition,
   policyState,
@@ -186,11 +172,9 @@ function ServerSummary({
         <MetricCard
           size="sm"
           label="Requests"
-          value={server.requestCount}
-          tone={server.requestCount > 0 ? "destructive" : "neutral"}
-          description={
-            server.requestCount === 1 ? "pending request" : "pending requests"
-          }
+          value={pendingRequesterCount(server)}
+          tone={pendingRequesterCount(server) > 0 ? "destructive" : "neutral"}
+          description={requestsMetricDescription(server)}
         />
         <MetricCard
           size="sm"
@@ -318,68 +302,36 @@ function TopUsersTable({
 }
 
 function DetailActionButtons({
-  allowRuleUnavailableMessage,
-  canManageAllowRules,
   disabled,
-  disposition,
-  onOpenAction,
+  onOpenDecide,
   server,
+  projectSlug,
 }: {
-  allowRuleUnavailableMessage: string;
-  canManageAllowRules: boolean;
   disabled: boolean;
-  disposition: ShadowMCPPolicyDisposition | null;
-  onOpenAction: (mode: InventoryActionMode) => void;
+  onOpenDecide: () => void;
   server: ShadowMCPInventoryServer;
+  projectSlug: string;
 }) {
-  const primaryMode = actionModeForServer(server, disposition);
-  const isAllowAll = disposition === "allow_all";
-  const primaryRequiresAllowRule =
-    !isAllowAll && (primaryMode === "add" || primaryMode === "edit");
-  const hasVisibleAllowRuleAction =
-    primaryRequiresAllowRule || (!isAllowAll && server.access === "allowed");
-  const primaryDisabled =
-    disabled || (primaryRequiresAllowRule && !canManageAllowRules);
+  const pendingReview = server.approvalRequest?.status === "requested";
 
   return (
-    <div className="flex flex-col items-end gap-1">
-      <div className="flex items-center gap-2">
-        <Button
-          disabled={primaryDisabled}
-          onClick={() => onOpenAction(primaryMode)}
-          variant={primaryMode === "block" ? "destructive-primary" : "primary"}
-        >
-          <Button.Text>{actionLabel(primaryMode)}</Button.Text>
-        </Button>
-        {!isAllowAll &&
-          server.access === "allowed" &&
-          primaryMode !== "edit" && (
-            <Button
-              disabled={disabled || !canManageAllowRules}
-              onClick={() => onOpenAction("edit")}
-              variant="tertiary"
-            >
-              <Button.Text>{actionLabel("edit")}</Button.Text>
-            </Button>
-          )}
-        {!isAllowAll && server.access === "allowed" && (
-          <Button
-            disabled={disabled}
-            onClick={() => onOpenAction("delete")}
-            variant="tertiary"
-          >
-            <Button.LeftIcon>
-              <Icon name="trash-2" />
-            </Button.LeftIcon>
-            <Button.Text>Delete Rule</Button.Text>
-          </Button>
-        )}
-      </div>
-      {hasVisibleAllowRuleAction && !canManageAllowRules && (
-        <Text muted small>
-          {allowRuleUnavailableMessage}
-        </Text>
+    <div className="flex items-center gap-2">
+      {server.approvalRequest && (
+        <RefreshEvidenceButton
+          requestId={server.approvalRequest.id}
+          projectSlug={projectSlug}
+          ready={!disabled}
+        />
       )}
+      <Button
+        disabled={disabled}
+        onClick={onOpenDecide}
+        variant={pendingReview ? "primary" : "secondary"}
+      >
+        <Button.Text>
+          {pendingReview ? "Review Request" : "Decide Access"}
+        </Button.Text>
+      </Button>
     </div>
   );
 }
@@ -403,15 +355,6 @@ export default function ShadowMCPServerDetail(): JSX.Element {
     );
   }
   const disposition = shadowMCPBlockingPolicyDisposition(shadowMCPPolicies);
-  const allowAllPolicy =
-    disposition === "allow_all"
-      ? (shadowMCPPolicies.find(
-          (policy) => policy.shadowMcpDisposition === "allow_all",
-        ) ?? null)
-      : null;
-  const allowRuleUnavailableMessage = policiesQuery.isError
-    ? "Policy status is unavailable. Refresh the page to try again."
-    : ALLOW_RULE_POLICY_REQUIRED;
   const queryEnabled = project.id.length > 0 && serverSlug.length > 0;
   const [usersCursor, setUsersCursor] = useState<string | undefined>(undefined);
   const [userPages, setUserPages] = useState<UsersPage[]>([]);
@@ -446,22 +389,10 @@ export default function ShadowMCPServerDetail(): JSX.Element {
   const usersQuery = useShadowMCPInventoryUsers(usersRequest, undefined, {
     enabled: usersQueryEnabled,
   });
-  const upsertPolicyBypass = useUpsertShadowMCPInventoryPolicyBypassMutation();
-  const blockInventoryServer = useBlockShadowMCPInventoryServerMutation();
-  const unblockInventoryServer = useUnblockShadowMCPInventoryServerMutation();
-  const deletePolicyBypass = useDeleteShadowMCPInventoryPolicyBypassMutation();
-  const resolveInventoryRequest = useResolveShadowMCPInventoryRequestMutation();
   const updateServerName = useUpdateShadowMCPInventoryServerNameMutation();
-  const [activeAction, setActiveAction] =
-    useState<ActiveInventoryAction | null>(null);
-  const [isSubmittingAction, setIsSubmittingAction] = useState(false);
-  const isSubmitting =
-    isSubmittingAction ||
-    upsertPolicyBypass.isPending ||
-    deletePolicyBypass.isPending ||
-    resolveInventoryRequest.isPending ||
-    blockInventoryServer.isPending ||
-    unblockInventoryServer.isPending;
+  const [decideTarget, setDecideTarget] = useState<DecideAccessTarget | null>(
+    null,
+  );
   const pageLoading =
     policiesQuery.isLoading ||
     membersQuery.isLoading ||
@@ -539,94 +470,6 @@ export default function ShadowMCPServerDetail(): JSX.Element {
     setUsersCursor(nextUsersCursor);
   };
 
-  const refreshInventory = async () => {
-    await Promise.all([
-      invalidateAllShadowMCPInventory(queryClient),
-      invalidateAllShadowMCPInventoryServer(queryClient),
-      invalidateAllShadowMCPInventoryUsers(queryClient),
-    ]);
-    setUsersCursor(undefined);
-    setUserPages([]);
-  };
-
-  const submitInventoryAction = async ({
-    action,
-    decision,
-    policyIDs,
-  }: {
-    action: ActiveInventoryAction;
-    decision: ReviewDecision;
-    policyIDs: string[];
-  }) => {
-    const label = action.server.serverName ?? action.server.canonicalServerUrl;
-    setIsSubmittingAction(true);
-    try {
-      if (action.mode === "block" || action.mode === "unblock") {
-        if (!allowAllPolicy) {
-          throw new Error("no allow_all shadow MCP policy available");
-        }
-        const target = {
-          projectId: project.id,
-          serverUrl: action.server.canonicalServerUrl,
-          policyId: allowAllPolicy.id,
-        };
-        if (action.mode === "block") {
-          await blockInventoryServer.mutateAsync({
-            request: { blockShadowMCPInventoryServerRequestBody: target },
-          });
-        } else {
-          await unblockInventoryServer.mutateAsync({ request: target });
-        }
-        toast.success(
-          action.mode === "block"
-            ? `Blocked server: ${label}`
-            : `Unblocked server: ${label}`,
-        );
-      } else if (action.mode === "delete") {
-        await deletePolicyBypass.mutateAsync({
-          request: {
-            projectId: project.id,
-            serverUrl: action.server.canonicalServerUrl,
-          },
-        });
-        toast.success(`Removed allow rule for: ${label}`);
-      } else if (action.mode === "review") {
-        await resolveInventoryRequest.mutateAsync({
-          request: {
-            resolveShadowMCPInventoryRequestForm: {
-              decision,
-              policyIds: decision === "allow" ? policyIDs : undefined,
-              projectId: project.id,
-              serverUrl: action.server.canonicalServerUrl,
-            },
-          },
-        });
-        toast.success(
-          decision === "allow"
-            ? `Request approved for: ${label}`
-            : `Request denied for: ${label}`,
-        );
-      } else {
-        await upsertPolicyBypass.mutateAsync({
-          request: {
-            shadowMCPInventoryPolicyBypassForm: {
-              policyIds: policyIDs,
-              projectId: project.id,
-              serverUrl: action.server.canonicalServerUrl,
-            },
-          },
-        });
-        toast.success(`Allow rule saved for: ${label}`);
-      }
-      await refreshInventory();
-      setActiveAction(null);
-    } catch {
-      toast.error(`Unable to update allow rule for: ${label}`);
-    } finally {
-      setIsSubmittingAction(false);
-    }
-  };
-
   const saveServerName = async (name: string) => {
     if (!server) return false;
 
@@ -668,9 +511,13 @@ export default function ShadowMCPServerDetail(): JSX.Element {
     );
   }
 
-  const openAction = (mode: InventoryActionMode) => {
+  const openDecide = () => {
     if (!server) return;
-    setActiveAction({ mode, server });
+    setDecideTarget({
+      canonicalServerUrl: server.canonicalServerUrl,
+      displayName: serverDisplayName,
+      approvalRequestId: server.approvalRequest?.id,
+    });
   };
 
   return (
@@ -693,12 +540,10 @@ export default function ShadowMCPServerDetail(): JSX.Element {
             <Page.Section.CTA>
               {server && (
                 <DetailActionButtons
-                  allowRuleUnavailableMessage={allowRuleUnavailableMessage}
-                  canManageAllowRules={shadowMCPPolicies.length > 0}
-                  disabled={isSubmitting}
-                  disposition={disposition}
-                  onOpenAction={openAction}
+                  disabled={decideTarget !== null}
+                  onOpenDecide={openDecide}
                   server={server}
+                  projectSlug={project.slug}
                 />
               )}
             </Page.Section.CTA>
@@ -716,27 +561,53 @@ export default function ShadowMCPServerDetail(): JSX.Element {
                 </div>
               ) : (
                 <div className="flex min-h-0 flex-col gap-6">
-                  <ShadowMCPInventoryActionSheet
-                    action={activeAction}
-                    disposition={disposition}
-                    isSubmitting={isSubmitting}
-                    members={membersQuery.data?.members ?? []}
+                  <DecideAccessSheet
+                    target={decideTarget}
+                    open={decideTarget !== null}
                     onOpenChange={(open) => {
                       if (!open) {
-                        setActiveAction(null);
+                        setDecideTarget(null);
                       }
                     }}
-                    onSubmit={submitInventoryAction}
-                    open={activeAction !== null}
-                    policyUnavailableMessage={allowRuleUnavailableMessage}
+                    disposition={disposition}
+                    members={membersQuery.data?.members ?? []}
                     roles={rolesQuery.data?.roles ?? []}
-                    shadowMCPPolicies={shadowMCPPolicies}
                   />
                   <ServerSummary
                     disposition={disposition}
                     policyState={policyState}
                     server={server}
                   />
+                  <section className="space-y-3">
+                    <div>
+                      <Text variant="subheading">Access review</Text>
+                      <Text muted small>
+                        The evidence, requesters, and decision history for this
+                        server. Decisions here are what allow or block it.
+                      </Text>
+                    </div>
+                    {server.approvalRequest ? (
+                      <ApprovalReview
+                        requestId={server.approvalRequest.id}
+                        audience={{
+                          members: membersQuery.data?.members ?? [],
+                          roles: rolesQuery.data?.roles ?? [],
+                          disposition,
+                        }}
+                      />
+                    ) : (
+                      <div className="bg-muted/20 flex min-h-24 flex-col items-center justify-center border border-dashed px-6 py-8 text-center">
+                        <Text variant="body" className="font-medium">
+                          No review yet
+                        </Text>
+                        <Text muted small className="mt-1 max-w-md">
+                          No one has asked for this server and no decision has
+                          been recorded. Decide Access opens a review and
+                          gathers its evidence.
+                        </Text>
+                      </div>
+                    )}
+                  </section>
                   <section className="min-h-0 space-y-3">
                     <div>
                       <Text variant="subheading">Top users</Text>
