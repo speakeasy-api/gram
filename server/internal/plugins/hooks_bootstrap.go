@@ -423,7 +423,7 @@ func hooksBootstrapCommand(root, provider string, timeoutSeconds int, async bool
 // written sibling version directory. Only when neither exists does it fail,
 // and then with a message naming the root it looked under and the org's
 // install-failure exit code rather than bash's opaque 127.
-func codexHooksBootstrapCommand(timeoutSeconds int, async bool, failOpen bool) string {
+func codexHooksBootstrapCommand(timeoutSeconds int, async, failOpen bool) string {
 	args := fmt.Sprintf("agenthooks run --provider=codex --timeout=%ds", timeoutSeconds)
 	if async {
 		args += " --async"
