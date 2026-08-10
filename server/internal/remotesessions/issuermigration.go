@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"slices"
 	"sort"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
@@ -49,11 +51,9 @@ const (
 	// organization_id set), inherited by every project in the organization.
 	issuerScopeOrganization
 	// issuerScopeGlobal is a platform-level issuer (both NULL), visible to every
-	// organization. No org-admin surface can load or list one today — see
-	// GetGlobalRemoteSessionIssuerByID and ListGlobalRemoteSessionIssuers, which
-	// are reachable only from the platform-admin handlers — so migrateIssuer
-	// cannot currently target one. The rank exists so the deferred platform-admin
-	// migrate endpoint slots in without reworking the ladder.
+	// organization. Only the platform-admin migrate surface may name one: the
+	// org-admin surface loads both ends through org-scoped queries, so a global
+	// issuer is not addressable there at all.
 	issuerScopeGlobal
 )
 
@@ -149,10 +149,21 @@ func validateMigrationScope(source, target repo.RemoteSessionIssuer) error {
 // A field is equal when both sides are unset or both are set to the same value.
 // One side set and the other unset is a mismatch, not a match, so a target that
 // merely omits an endpoint the source declares cannot absorb its clients.
+//
+// The issuer identifier is compared canonically while the two endpoints are
+// compared literally. Only the issuer is an identity: RFC 8414 makes it the name
+// of the authorization server, and two spellings that differ solely by a
+// trailing slash or an explicit default port name the same one. Duplicates that
+// differ that way are the population consolidation exists to clean up, and
+// discovery finds candidates by the same canonical equality, so comparing the
+// issuer literally here would surface candidates this check could only ever
+// refuse. The endpoints are request targets rather than identities, so they stay
+// literal: an equivalent-but-differently-spelled endpoint changes nothing about
+// where tokens are exchanged, and leaving it strict keeps the guard narrow.
 func endpointMismatches(source, target repo.RemoteSessionIssuer) []string {
 	var mismatches []string
 
-	if source.Issuer != target.Issuer {
+	if !issuerURLsCanonicallyEqual(source.Issuer, target.Issuer) {
 		mismatches = append(mismatches, "issuer")
 	}
 	if !pgTextEqual(source.TokenEndpoint, target.TokenEndpoint) {
@@ -170,6 +181,31 @@ func pgTextEqual(a, b pgtype.Text) bool {
 		return false
 	}
 	return !a.Valid || a.String == b.String
+}
+
+// issuerURLsCanonicallyEqual reports whether two issuer identifiers name the
+// same upstream authorization server, collapsing the trailing-slash and
+// default-port spellings that parseCanonicalIssuerURL treats as equivalent.
+//
+// A value that does not parse as an issuer identifier is only ever equal to an
+// identical string. Migration must not widen an identity comparison on input it
+// could not understand, and rows predating validation can hold anything.
+func issuerURLsCanonicallyEqual(a, b string) bool {
+	if a == b {
+		return true
+	}
+
+	canonicalA, err := parseCanonicalIssuerURL(a)
+	if err != nil {
+		return false
+	}
+
+	canonicalB, err := parseCanonicalIssuerURL(b)
+	if err != nil {
+		return false
+	}
+
+	return canonicalA.String() == canonicalB.String()
 }
 
 // migrationWarnings names issuer fields that diverge without blocking the
@@ -277,4 +313,45 @@ func lockIssuersForMigration(ctx context.Context, r *repo.Queries, issuerIDs ...
 	}
 
 	return nil
+}
+
+// runIssuerMigration applies the guards every migration shares and then
+// re-points the source's clients onto the target, returning how many moved. It
+// is the whole of the operation apart from soft-deleting the source, which each
+// surface does with its own scoped delete query.
+//
+// The two guards are the reason this is shared rather than duplicated. Endpoint
+// parity is what keeps an already-authenticated session refreshing against the
+// authorization server it was established with, and the binding-conflict check
+// is the only thing enforcing the at-most-one-client-per-(user_session_issuer,
+// remote_session_issuer) invariant, which no database constraint expresses. A
+// surface that drifted on either would not merely behave differently, it would
+// be less safe.
+//
+// Callers must already hold the advisory locks from lockIssuersForMigration and
+// have re-read both issuers under a row lock, so that the rows validated here
+// cannot change before the transaction commits.
+func runIssuerMigration(ctx context.Context, r *repo.Queries, logger *slog.Logger, source, target repo.RemoteSessionIssuer) (int64, error) {
+	preflight, err := buildMigratePreflight(ctx, r, source, target)
+	if err != nil {
+		return 0, oops.E(oops.CodeUnexpected, err, "build remote session issuer migrate preflight").LogError(ctx, logger)
+	}
+
+	if len(preflight.endpointMismatches) > 0 {
+		return 0, oops.E(oops.CodeConflict, nil, "source and target issuers describe different authorization servers (%s differ); migration would break existing sessions", strings.Join(preflight.endpointMismatches, ", ")).LogError(ctx, logger)
+	}
+
+	if len(preflight.conflictingMcpServerNames) > 0 {
+		return 0, oops.E(oops.CodeConflict, nil, "both issuers already have a client bound to the same MCP server (%s); detach one client per server and retry", strings.Join(preflight.conflictingMcpServerNames, ", ")).LogError(ctx, logger)
+	}
+
+	clientsMigrated, err := r.UpdateRemoteSessionClientsToRemoteSessionIssuer(ctx, repo.UpdateRemoteSessionClientsToRemoteSessionIssuerParams{
+		TargetIssuerID: target.ID,
+		SourceIssuerID: source.ID,
+	})
+	if err != nil {
+		return 0, oops.E(oops.CodeUnexpected, err, "repoint remote session clients to target issuer").LogError(ctx, logger)
+	}
+
+	return clientsMigrated, nil
 }

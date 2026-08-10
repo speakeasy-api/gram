@@ -1,9 +1,12 @@
 package plugins_test
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"maps"
 	"strings"
 	"testing"
@@ -822,6 +825,252 @@ func TestPluginsService_DownloadPluginPackage(t *testing.T) {
 	require.NoError(t, body.Close())
 }
 
+func TestPluginsService_AgentPluginCompatibilityIsConsistent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+	created, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Portable Empty"})
+	require.NoError(t, err)
+	require.True(t, created.AgentPluginsV1Compatible)
+
+	fetched, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: created.ID})
+	require.NoError(t, err)
+	require.True(t, fetched.AgentPluginsV1Compatible)
+
+	updated, err := ti.service.UpdatePlugin(ctx, &gen.UpdatePluginPayload{ID: created.ID, Name: "Portable Empty", Slug: created.Slug})
+	require.NoError(t, err)
+	require.True(t, updated.AgentPluginsV1Compatible)
+
+	listed, err := ti.service.ListPlugins(ctx, &gen.ListPluginsPayload{})
+	require.NoError(t, err)
+	for _, plugin := range listed.Plugins {
+		if plugin.ID == created.ID {
+			require.True(t, plugin.AgentPluginsV1Compatible)
+			return
+		}
+	}
+	require.Fail(t, "created plugin missing from list")
+}
+
+func TestPluginsService_DownloadAgentPluginFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Private Download"})
+	require.NoError(t, err)
+	toolset := createTestToolset(t, ctx, ti.conn, "private-download")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(toolset.ID.String()), Policy: "required", SortOrder: 0})
+	require.NoError(t, err)
+
+	result, body, err := ti.service.DownloadPluginPackage(ctx, &gen.DownloadPluginPackagePayload{PluginID: plugin.ID, Platform: "agent-plugin"})
+	require.Error(t, err)
+	require.Nil(t, result)
+	require.Nil(t, body)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeFailedPrecondition, oopsErr.Code)
+	require.Equal(t, "plugin is not compatible with Agent Plugins 1.0", oopsErr.Error())
+}
+
+func TestPluginsService_DownloadAgentPluginIsFlatAndKeyless(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	keysBefore := countPluginHooksKeys(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Portable Download"})
+	require.NoError(t, err)
+	result, body, err := ti.service.DownloadPluginPackage(ctx, &gen.DownloadPluginPackagePayload{PluginID: plugin.ID, Platform: "agent-plugin"})
+	require.NoError(t, err)
+	require.Equal(t, "application/zip", result.ContentType)
+	archive, err := io.ReadAll(body)
+	require.NoError(t, err)
+	require.NoError(t, body.Close())
+	require.Equal(t, keysBefore, countPluginHooksKeys(t, ctx, ti.conn, authCtx.ActiveOrganizationID))
+
+	zr, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
+	require.NoError(t, err)
+	paths := make([]string, 0, len(zr.File))
+	var contents bytes.Buffer
+	for _, file := range zr.File {
+		paths = append(paths, file.Name)
+		entry, err := file.Open()
+		require.NoError(t, err)
+		_, err = io.Copy(&contents, entry)
+		require.NoError(t, err)
+		require.NoError(t, entry.Close())
+	}
+	require.Equal(t, []string{"mcp.json", "plugin.json"}, paths)
+	require.NotContains(t, contents.String(), "Authorization")
+	require.NotContains(t, contents.String(), "hooks_api_key")
+}
+
+func TestPluginsService_DirectToolsetUserConfigFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "User Config"})
+	require.NoError(t, err)
+	toolset := createTestToolset(t, ctx, ti.conn, "user-config")
+	require.NoError(t, toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolset.ID,
+		ProjectID:   toolset.ProjectID,
+	}))
+
+	metadata, err := mcpmetarepo.New(ti.conn).UpsertMetadata(ctx, mcpmetarepo.UpsertMetadataParams{
+		ToolsetID:                 uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		ProjectID:                 *authCtx.ProjectID,
+		ExternalDocumentationUrl:  pgtype.Text{},
+		ExternalDocumentationText: pgtype.Text{},
+		LogoID:                    uuid.NullUUID{},
+		Instructions:              pgtype.Text{},
+		DefaultEnvironmentID:      uuid.NullUUID{},
+		InstallationOverrideUrl:   pgtype.Text{},
+	})
+	require.NoError(t, err)
+	_, err = mcpmetarepo.New(ti.conn).UpsertEnvironmentConfig(ctx, mcpmetarepo.UpsertEnvironmentConfigParams{
+		ProjectID:         *authCtx.ProjectID,
+		McpMetadataID:     metadata.ID,
+		VariableName:      "USER_TOKEN",
+		HeaderDisplayName: pgtype.Text{},
+		ProvidedBy:        "user",
+	})
+	require.NoError(t, err)
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:  plugin.ID,
+		ToolsetID: conv.PtrEmpty(toolset.ID.String()),
+		Policy:    "required",
+		SortOrder: 0,
+	})
+	require.NoError(t, err)
+
+	plugin, err = ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
+	require.NoError(t, err)
+	require.False(t, plugin.AgentPluginsV1Compatible)
+}
+
+func TestPluginsService_TombstonedAttachmentIsNotIntended(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Removed Private Server"})
+	require.NoError(t, err)
+	toolset := createTestToolset(t, ctx, ti.conn, "removed-private-server")
+	server, err := ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(toolset.ID.String()), Policy: "required", SortOrder: 0})
+	require.NoError(t, err)
+
+	fetched, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
+	require.NoError(t, err)
+	require.False(t, fetched.AgentPluginsV1Compatible)
+
+	require.NoError(t, ti.service.RemovePluginServer(ctx, &gen.RemovePluginServerPayload{ID: server.ID, PluginID: plugin.ID}))
+	fetched, err = ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
+	require.NoError(t, err)
+	require.True(t, fetched.AgentPluginsV1Compatible)
+}
+
+func TestPluginsService_McpServerCompatibilityFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	privatePlugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Private MCP Server"})
+	require.NoError(t, err)
+	privateServer := createTestMcpServer(t, ctx, ti.conn, "Private MCP Server", mcpservers.VisibilityPrivate)
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: privatePlugin.ID, McpServerID: conv.PtrEmpty(privateServer.idStr), Policy: "required", SortOrder: 0})
+	require.NoError(t, err)
+	privatePlugin, err = ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: privatePlugin.ID})
+	require.NoError(t, err)
+	require.False(t, privatePlugin.AgentPluginsV1Compatible)
+
+	brokenPlugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Broken MCP Backing"})
+	require.NoError(t, err)
+	brokenServer := createTestMcpServer(t, ctx, ti.conn, "Broken MCP Backing", mcpservers.VisibilityPublic)
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: brokenPlugin.ID, McpServerID: conv.PtrEmpty(brokenServer.idStr), Policy: "required", SortOrder: 0})
+	require.NoError(t, err)
+	brokenPlugin, err = ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: brokenPlugin.ID})
+	require.NoError(t, err)
+	require.True(t, brokenPlugin.AgentPluginsV1Compatible)
+
+	_, err = toolsetsrepo.New(ti.conn).DeleteToolset(ctx, toolsetsrepo.DeleteToolsetParams{Slug: brokenServer.backingToolsetSlug, ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	brokenPlugin, err = ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: brokenPlugin.ID})
+	require.NoError(t, err)
+	require.False(t, brokenPlugin.AgentPluginsV1Compatible)
+}
+
+func TestPluginsService_PublishAgentPluginCompatibilityTransitions(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Portable Transition"})
+	require.NoError(t, err)
+	toolset := createTestToolset(t, ctx, ti.conn, "portable-transition")
+	err = toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: toolset.ID, ProjectID: toolset.ProjectID})
+	require.NoError(t, err)
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{PluginID: plugin.ID, ToolsetID: conv.PtrEmpty(toolset.ID.String()), Policy: "required", SortOrder: 0})
+	require.NoError(t, err)
+
+	assertSources := func(cursorSource, codexSource string, sharedPackage bool) {
+		t.Helper()
+		var cursor struct {
+			Plugins []struct {
+				Name   string `json:"name"`
+				Source string `json:"source"`
+			} `json:"plugins"`
+		}
+		require.NoError(t, json.Unmarshal(mock.lastPushedFiles[".cursor-plugin/marketplace.json"], &cursor))
+		var codex struct {
+			Plugins []struct {
+				Name   string `json:"name"`
+				Source struct {
+					Path string `json:"path"`
+				} `json:"source"`
+			} `json:"plugins"`
+		}
+		require.NoError(t, json.Unmarshal(mock.lastPushedFiles[".agents/plugins/marketplace.json"], &codex))
+		var actualCursorSource, actualCodexSource string
+		for _, entry := range cursor.Plugins {
+			if entry.Name == "portable-transition-cursor" {
+				actualCursorSource = entry.Source
+			}
+		}
+		for _, entry := range codex.Plugins {
+			if entry.Name == "portable-transition-codex" {
+				actualCodexSource = entry.Source.Path
+			}
+		}
+		require.Equal(t, cursorSource, actualCursorSource)
+		require.Equal(t, codexSource, actualCodexSource)
+		require.Equal(t, sharedPackage, len(filesWithPrefix(mock.lastPushedFiles, "agent-plugins/portable-transition/")) > 0)
+	}
+
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+	assertSources("portable-transition-cursor", "./portable-transition-codex", true)
+
+	err = toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: false, ID: toolset.ID, ProjectID: toolset.ProjectID})
+	require.NoError(t, err)
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+	assertSources("portable-transition-cursor", "./portable-transition-codex", false)
+
+	err = toolsetsrepo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: toolset.ID, ProjectID: toolset.ProjectID})
+	require.NoError(t, err)
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+	assertSources("portable-transition-cursor", "./portable-transition-codex", true)
+}
+
 func TestPluginsService_GetPublishStatus_NotConfigured(t *testing.T) {
 	t.Parallel()
 
@@ -1588,6 +1837,10 @@ func TestPluginsService_PublishPlugins_SkipsDisabledMCPToolsets(t *testing.T) {
 
 	require.Contains(t, cursorConfig.MCPServers, "Server enabled-toolset", "enabled toolset should appear in published config")
 	require.NotContains(t, cursorConfig.MCPServers, "Server disabled-toolset", "disabled toolset must be filtered out by ListPluginsWithServersForProject")
+	fetched, err := ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
+	require.NoError(t, err)
+	require.False(t, fetched.AgentPluginsV1Compatible, "an active attachment whose backing was disabled must fail closed")
+	require.NotContains(t, mock.lastPushedFiles, "agent-plugins/mixed/plugin.json")
 }
 
 // A public toolset with no mcp_metadata row should publish cleanly. The
@@ -2252,6 +2505,16 @@ func hooksFilesOf(files map[string][]byte) map[string]string {
 	return out
 }
 
+func filesWithPrefix(files map[string][]byte, prefix string) map[string]string {
+	out := make(map[string]string)
+	for p, content := range files {
+		if strings.HasPrefix(p, prefix) {
+			out[p] = string(content)
+		}
+	}
+	return out
+}
+
 // observabilityManifestVersion extracts the version stamped into the pushed
 // Claude observability plugin.json — the value platform marketplaces compare
 // to decide whether installed copies refresh.
@@ -2513,6 +2776,8 @@ func TestPluginsService_PublishProject_RegeneratesHooksOnBrowserLoginFlip(t *tes
 
 	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Flip Hooks"})
 	require.NoError(t, err)
+	_, err = ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Carry Agent Plugin"})
+	require.NoError(t, err)
 
 	toolset := createTestToolset(t, ctx, ti.conn, "flip-toolset")
 	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
@@ -2536,6 +2801,8 @@ func TestPluginsService_PublishProject_RegeneratesHooksOnBrowserLoginFlip(t *tes
 	require.False(t, first.Skipped)
 	hooksBefore := hooksFilesOf(mock.lastPushedFiles)
 	require.NotEmpty(t, hooksBefore)
+	agentPluginBefore := filesWithPrefix(mock.lastPushedFiles, "agent-plugins/carry-agent-plugin/")
+	require.NotEmpty(t, agentPluginBefore)
 	versionBefore := observabilityManifestVersion(t, mock.lastPushedFiles)
 
 	_, pfErr := productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
@@ -2552,6 +2819,8 @@ func TestPluginsService_PublishProject_RegeneratesHooksOnBrowserLoginFlip(t *tes
 		"hooks subtree must be regenerated, not carried, after a settings flip")
 	require.NotEqual(t, versionBefore, observabilityManifestVersion(t, mock.lastPushedFiles),
 		"the observability plugin.json version must move on a settings flip, or installed copies never refresh")
+	require.Equal(t, agentPluginBefore, filesWithPrefix(mock.lastPushedFiles, "agent-plugins/carry-agent-plugin/"),
+		"a hooks-only publish must carry the shared feature package byte-for-byte")
 
 	// The regenerated config is persisted, so the next unchanged rollout skips.
 	third, err := ti.service.PublishProject(ctx, input)

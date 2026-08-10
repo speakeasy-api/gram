@@ -136,10 +136,10 @@ func UsageCommands() []string {
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|list-servers|get-server|update-server|discover-protected-resource-metadata|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
 		"organization-remote-session-clients (list-clients|get-client|get-client-delete-preflight|list-client-mcp-servers|create-client|create-cimd-client|update-client|delete-client|remove-client-from-mcp-server)",
-		"remote-session-clients (create-remote-session-client|create-cimd|clone-client-fromoauth-proxy-provider|update-remote-session-client|attach-user-session-issuer|detach-user-session-issuer|list-remote-session-clients|get-remote-session-client|delete-remote-session-client)",
+		"remote-session-clients (create-remote-session-client|create-cimd|update-remote-session-client|attach-user-session-issuer|detach-user-session-issuer|list-remote-session-clients|get-remote-session-client|delete-remote-session-client)",
 		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|update-issuer|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|fetch-issuer-metadata|refresh-issuer-metadata)",
 		"remote-session-issuers (fetch-remote-session-issuer-metadata|refresh-remote-session-issuer-metadata|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|delete-remote-session-issuer)",
-		"admin-remote-sessions (create-global-issuer|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|create-global-client|list-global-clients|get-global-client|update-global-client|delete-global-client)",
+		"admin-remote-sessions (create-global-issuer|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|create-global-client|list-global-clients|get-global-client|update-global-client|delete-global-client|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer)",
 		"organization-remote-sessions (list-client-sessions|revoke-session|refresh-session|revoke-all-client-sessions)",
 		"remote-sessions (list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
@@ -151,14 +151,14 @@ func UsageCommands() []string {
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"token-exchange exchange",
 		"tools list-tools",
-		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|list-tool-filters|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server|addoauth-proxy-server|updateoauth-proxy-server|set-user-session-issuer|set-tool-variations-group)",
+		"toolsets (create-toolset|list-toolsets|list-toolsets-for-org|update-toolset|delete-toolset|get-toolset|list-tool-filters|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server|set-user-session-issuer|set-tool-variations-group)",
 		"triggers (list-trigger-definitions|list-trigger-instances|get-trigger-instance|create-trigger-instance|update-trigger-instance|delete-trigger-instance|pause-trigger-instance|resume-trigger-instance)",
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|list-tools|delete-server)",
 		"usage (get-period-usage|get-tokens-under-management|set-billing-metadata|get-usage-tiers|create-customer-session|create-checkout|create-top-up-checkout)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
-		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|delete-user-session-issuer|migrate-legacy-gram-registrations)",
+		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|delete-user-session-issuer)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
 		"user-sessions (list-user-sessions|list-facets|mint-user-session|revoke-user-session)",
 		"variations (upsert-global|delete-global|list-global|list-groups|create-global)",
@@ -1790,12 +1790,6 @@ func ParseEndpoint(
 		remoteSessionClientsCreateCimdApikeyTokenFlag      = remoteSessionClientsCreateCimdFlags.String("apikey-token", "", "")
 		remoteSessionClientsCreateCimdProjectSlugInputFlag = remoteSessionClientsCreateCimdFlags.String("project-slug-input", "", "")
 
-		remoteSessionClientsCloneClientFromOAuthProxyProviderFlags                = flag.NewFlagSet("clone-client-fromoauth-proxy-provider", flag.ExitOnError)
-		remoteSessionClientsCloneClientFromOAuthProxyProviderBodyFlag             = remoteSessionClientsCloneClientFromOAuthProxyProviderFlags.String("body", "REQUIRED", "")
-		remoteSessionClientsCloneClientFromOAuthProxyProviderSessionTokenFlag     = remoteSessionClientsCloneClientFromOAuthProxyProviderFlags.String("session-token", "", "")
-		remoteSessionClientsCloneClientFromOAuthProxyProviderApikeyTokenFlag      = remoteSessionClientsCloneClientFromOAuthProxyProviderFlags.String("apikey-token", "", "")
-		remoteSessionClientsCloneClientFromOAuthProxyProviderProjectSlugInputFlag = remoteSessionClientsCloneClientFromOAuthProxyProviderFlags.String("project-slug-input", "", "")
-
 		remoteSessionClientsUpdateRemoteSessionClientFlags                = flag.NewFlagSet("update-remote-session-client", flag.ExitOnError)
 		remoteSessionClientsUpdateRemoteSessionClientBodyFlag             = remoteSessionClientsUpdateRemoteSessionClientFlags.String("body", "REQUIRED", "")
 		remoteSessionClientsUpdateRemoteSessionClientSessionTokenFlag     = remoteSessionClientsUpdateRemoteSessionClientFlags.String("session-token", "", "")
@@ -1993,6 +1987,21 @@ func ParseEndpoint(
 		adminRemoteSessionsDeleteGlobalClientFlags            = flag.NewFlagSet("delete-global-client", flag.ExitOnError)
 		adminRemoteSessionsDeleteGlobalClientIDFlag           = adminRemoteSessionsDeleteGlobalClientFlags.String("id", "REQUIRED", "")
 		adminRemoteSessionsDeleteGlobalClientSessionTokenFlag = adminRemoteSessionsDeleteGlobalClientFlags.String("session-token", "", "")
+
+		adminRemoteSessionsListGlobalIssuerConvergenceCandidatesFlags            = flag.NewFlagSet("list-global-issuer-convergence-candidates", flag.ExitOnError)
+		adminRemoteSessionsListGlobalIssuerConvergenceCandidatesTargetIDFlag     = adminRemoteSessionsListGlobalIssuerConvergenceCandidatesFlags.String("target-id", "REQUIRED", "")
+		adminRemoteSessionsListGlobalIssuerConvergenceCandidatesCursorFlag       = adminRemoteSessionsListGlobalIssuerConvergenceCandidatesFlags.String("cursor", "", "")
+		adminRemoteSessionsListGlobalIssuerConvergenceCandidatesLimitFlag        = adminRemoteSessionsListGlobalIssuerConvergenceCandidatesFlags.String("limit", "", "")
+		adminRemoteSessionsListGlobalIssuerConvergenceCandidatesSessionTokenFlag = adminRemoteSessionsListGlobalIssuerConvergenceCandidatesFlags.String("session-token", "", "")
+
+		adminRemoteSessionsGetGlobalIssuerMigratePreflightFlags            = flag.NewFlagSet("get-global-issuer-migrate-preflight", flag.ExitOnError)
+		adminRemoteSessionsGetGlobalIssuerMigratePreflightSourceIDFlag     = adminRemoteSessionsGetGlobalIssuerMigratePreflightFlags.String("source-id", "REQUIRED", "")
+		adminRemoteSessionsGetGlobalIssuerMigratePreflightTargetIDFlag     = adminRemoteSessionsGetGlobalIssuerMigratePreflightFlags.String("target-id", "REQUIRED", "")
+		adminRemoteSessionsGetGlobalIssuerMigratePreflightSessionTokenFlag = adminRemoteSessionsGetGlobalIssuerMigratePreflightFlags.String("session-token", "", "")
+
+		adminRemoteSessionsMigrateToGlobalIssuerFlags            = flag.NewFlagSet("migrate-to-global-issuer", flag.ExitOnError)
+		adminRemoteSessionsMigrateToGlobalIssuerBodyFlag         = adminRemoteSessionsMigrateToGlobalIssuerFlags.String("body", "REQUIRED", "")
+		adminRemoteSessionsMigrateToGlobalIssuerSessionTokenFlag = adminRemoteSessionsMigrateToGlobalIssuerFlags.String("session-token", "", "")
 
 		organizationRemoteSessionsFlags = flag.NewFlagSet("organization-remote-sessions", flag.ContinueOnError)
 
@@ -2887,20 +2896,6 @@ func ParseEndpoint(
 		toolsetsRemoveOAuthServerApikeyTokenFlag      = toolsetsRemoveOAuthServerFlags.String("apikey-token", "", "")
 		toolsetsRemoveOAuthServerProjectSlugInputFlag = toolsetsRemoveOAuthServerFlags.String("project-slug-input", "", "")
 
-		toolsetsAddOAuthProxyServerFlags                = flag.NewFlagSet("addoauth-proxy-server", flag.ExitOnError)
-		toolsetsAddOAuthProxyServerBodyFlag             = toolsetsAddOAuthProxyServerFlags.String("body", "REQUIRED", "")
-		toolsetsAddOAuthProxyServerSlugFlag             = toolsetsAddOAuthProxyServerFlags.String("slug", "REQUIRED", "")
-		toolsetsAddOAuthProxyServerSessionTokenFlag     = toolsetsAddOAuthProxyServerFlags.String("session-token", "", "")
-		toolsetsAddOAuthProxyServerApikeyTokenFlag      = toolsetsAddOAuthProxyServerFlags.String("apikey-token", "", "")
-		toolsetsAddOAuthProxyServerProjectSlugInputFlag = toolsetsAddOAuthProxyServerFlags.String("project-slug-input", "", "")
-
-		toolsetsUpdateOAuthProxyServerFlags                = flag.NewFlagSet("updateoauth-proxy-server", flag.ExitOnError)
-		toolsetsUpdateOAuthProxyServerBodyFlag             = toolsetsUpdateOAuthProxyServerFlags.String("body", "REQUIRED", "")
-		toolsetsUpdateOAuthProxyServerSlugFlag             = toolsetsUpdateOAuthProxyServerFlags.String("slug", "REQUIRED", "")
-		toolsetsUpdateOAuthProxyServerSessionTokenFlag     = toolsetsUpdateOAuthProxyServerFlags.String("session-token", "", "")
-		toolsetsUpdateOAuthProxyServerApikeyTokenFlag      = toolsetsUpdateOAuthProxyServerFlags.String("apikey-token", "", "")
-		toolsetsUpdateOAuthProxyServerProjectSlugInputFlag = toolsetsUpdateOAuthProxyServerFlags.String("project-slug-input", "", "")
-
 		toolsetsSetUserSessionIssuerFlags                = flag.NewFlagSet("set-user-session-issuer", flag.ExitOnError)
 		toolsetsSetUserSessionIssuerBodyFlag             = toolsetsSetUserSessionIssuerFlags.String("body", "REQUIRED", "")
 		toolsetsSetUserSessionIssuerSlugFlag             = toolsetsSetUserSessionIssuerFlags.String("slug", "REQUIRED", "")
@@ -3126,12 +3121,6 @@ func ParseEndpoint(
 		userSessionIssuersDeleteUserSessionIssuerSessionTokenFlag     = userSessionIssuersDeleteUserSessionIssuerFlags.String("session-token", "", "")
 		userSessionIssuersDeleteUserSessionIssuerApikeyTokenFlag      = userSessionIssuersDeleteUserSessionIssuerFlags.String("apikey-token", "", "")
 		userSessionIssuersDeleteUserSessionIssuerProjectSlugInputFlag = userSessionIssuersDeleteUserSessionIssuerFlags.String("project-slug-input", "", "")
-
-		userSessionIssuersMigrateLegacyGramRegistrationsFlags                = flag.NewFlagSet("migrate-legacy-gram-registrations", flag.ExitOnError)
-		userSessionIssuersMigrateLegacyGramRegistrationsBodyFlag             = userSessionIssuersMigrateLegacyGramRegistrationsFlags.String("body", "REQUIRED", "")
-		userSessionIssuersMigrateLegacyGramRegistrationsSessionTokenFlag     = userSessionIssuersMigrateLegacyGramRegistrationsFlags.String("session-token", "", "")
-		userSessionIssuersMigrateLegacyGramRegistrationsApikeyTokenFlag      = userSessionIssuersMigrateLegacyGramRegistrationsFlags.String("apikey-token", "", "")
-		userSessionIssuersMigrateLegacyGramRegistrationsProjectSlugInputFlag = userSessionIssuersMigrateLegacyGramRegistrationsFlags.String("project-slug-input", "", "")
 
 		userSessionIssuersCimdClientsFlags = flag.NewFlagSet("user-session-issuers-cimd-clients", flag.ContinueOnError)
 
@@ -3609,7 +3598,6 @@ func ParseEndpoint(
 	remoteSessionClientsFlags.Usage = remoteSessionClientsUsage
 	remoteSessionClientsCreateRemoteSessionClientFlags.Usage = remoteSessionClientsCreateRemoteSessionClientUsage
 	remoteSessionClientsCreateCimdFlags.Usage = remoteSessionClientsCreateCimdUsage
-	remoteSessionClientsCloneClientFromOAuthProxyProviderFlags.Usage = remoteSessionClientsCloneClientFromOAuthProxyProviderUsage
 	remoteSessionClientsUpdateRemoteSessionClientFlags.Usage = remoteSessionClientsUpdateRemoteSessionClientUsage
 	remoteSessionClientsAttachUserSessionIssuerFlags.Usage = remoteSessionClientsAttachUserSessionIssuerUsage
 	remoteSessionClientsDetachUserSessionIssuerFlags.Usage = remoteSessionClientsDetachUserSessionIssuerUsage
@@ -3652,6 +3640,9 @@ func ParseEndpoint(
 	adminRemoteSessionsGetGlobalClientFlags.Usage = adminRemoteSessionsGetGlobalClientUsage
 	adminRemoteSessionsUpdateGlobalClientFlags.Usage = adminRemoteSessionsUpdateGlobalClientUsage
 	adminRemoteSessionsDeleteGlobalClientFlags.Usage = adminRemoteSessionsDeleteGlobalClientUsage
+	adminRemoteSessionsListGlobalIssuerConvergenceCandidatesFlags.Usage = adminRemoteSessionsListGlobalIssuerConvergenceCandidatesUsage
+	adminRemoteSessionsGetGlobalIssuerMigratePreflightFlags.Usage = adminRemoteSessionsGetGlobalIssuerMigratePreflightUsage
+	adminRemoteSessionsMigrateToGlobalIssuerFlags.Usage = adminRemoteSessionsMigrateToGlobalIssuerUsage
 
 	organizationRemoteSessionsFlags.Usage = organizationRemoteSessionsUsage
 	organizationRemoteSessionsListClientSessionsFlags.Usage = organizationRemoteSessionsListClientSessionsUsage
@@ -3816,8 +3807,6 @@ func ParseEndpoint(
 	toolsetsCloneToolsetFlags.Usage = toolsetsCloneToolsetUsage
 	toolsetsAddExternalOAuthServerFlags.Usage = toolsetsAddExternalOAuthServerUsage
 	toolsetsRemoveOAuthServerFlags.Usage = toolsetsRemoveOAuthServerUsage
-	toolsetsAddOAuthProxyServerFlags.Usage = toolsetsAddOAuthProxyServerUsage
-	toolsetsUpdateOAuthProxyServerFlags.Usage = toolsetsUpdateOAuthProxyServerUsage
 	toolsetsSetUserSessionIssuerFlags.Usage = toolsetsSetUserSessionIssuerUsage
 	toolsetsSetToolVariationsGroupFlags.Usage = toolsetsSetToolVariationsGroupUsage
 
@@ -3871,7 +3860,6 @@ func ParseEndpoint(
 	userSessionIssuersListUserSessionIssuersFlags.Usage = userSessionIssuersListUserSessionIssuersUsage
 	userSessionIssuersGetUserSessionIssuerFlags.Usage = userSessionIssuersGetUserSessionIssuerUsage
 	userSessionIssuersDeleteUserSessionIssuerFlags.Usage = userSessionIssuersDeleteUserSessionIssuerUsage
-	userSessionIssuersMigrateLegacyGramRegistrationsFlags.Usage = userSessionIssuersMigrateLegacyGramRegistrationsUsage
 
 	userSessionIssuersCimdClientsFlags.Usage = userSessionIssuersCimdClientsUsage
 	userSessionIssuersCimdClientsListPresetsFlags.Usage = userSessionIssuersCimdClientsListPresetsUsage
@@ -5129,9 +5117,6 @@ func ParseEndpoint(
 			case "create-cimd":
 				epf = remoteSessionClientsCreateCimdFlags
 
-			case "clone-client-fromoauth-proxy-provider":
-				epf = remoteSessionClientsCloneClientFromOAuthProxyProviderFlags
-
 			case "update-remote-session-client":
 				epf = remoteSessionClientsUpdateRemoteSessionClientFlags
 
@@ -5251,6 +5236,15 @@ func ParseEndpoint(
 
 			case "delete-global-client":
 				epf = adminRemoteSessionsDeleteGlobalClientFlags
+
+			case "list-global-issuer-convergence-candidates":
+				epf = adminRemoteSessionsListGlobalIssuerConvergenceCandidatesFlags
+
+			case "get-global-issuer-migrate-preflight":
+				epf = adminRemoteSessionsGetGlobalIssuerMigratePreflightFlags
+
+			case "migrate-to-global-issuer":
+				epf = adminRemoteSessionsMigrateToGlobalIssuerFlags
 
 			}
 
@@ -5720,12 +5714,6 @@ func ParseEndpoint(
 			case "removeoauth-server":
 				epf = toolsetsRemoveOAuthServerFlags
 
-			case "addoauth-proxy-server":
-				epf = toolsetsAddOAuthProxyServerFlags
-
-			case "updateoauth-proxy-server":
-				epf = toolsetsUpdateOAuthProxyServerFlags
-
 			case "set-user-session-issuer":
 				epf = toolsetsSetUserSessionIssuerFlags
 
@@ -5870,9 +5858,6 @@ func ParseEndpoint(
 
 			case "delete-user-session-issuer":
 				epf = userSessionIssuersDeleteUserSessionIssuerFlags
-
-			case "migrate-legacy-gram-registrations":
-				epf = userSessionIssuersMigrateLegacyGramRegistrationsFlags
 
 			}
 
@@ -7031,9 +7016,6 @@ func ParseEndpoint(
 			case "create-cimd":
 				endpoint = c.CreateCimd()
 				data, err = remotesessionclientsc.BuildCreateCimdPayload(*remoteSessionClientsCreateCimdBodyFlag, *remoteSessionClientsCreateCimdSessionTokenFlag, *remoteSessionClientsCreateCimdApikeyTokenFlag, *remoteSessionClientsCreateCimdProjectSlugInputFlag)
-			case "clone-client-fromoauth-proxy-provider":
-				endpoint = c.CloneClientFromOAuthProxyProvider()
-				data, err = remotesessionclientsc.BuildCloneClientFromOAuthProxyProviderPayload(*remoteSessionClientsCloneClientFromOAuthProxyProviderBodyFlag, *remoteSessionClientsCloneClientFromOAuthProxyProviderSessionTokenFlag, *remoteSessionClientsCloneClientFromOAuthProxyProviderApikeyTokenFlag, *remoteSessionClientsCloneClientFromOAuthProxyProviderProjectSlugInputFlag)
 			case "update-remote-session-client":
 				endpoint = c.UpdateRemoteSessionClient()
 				data, err = remotesessionclientsc.BuildUpdateRemoteSessionClientPayload(*remoteSessionClientsUpdateRemoteSessionClientBodyFlag, *remoteSessionClientsUpdateRemoteSessionClientSessionTokenFlag, *remoteSessionClientsUpdateRemoteSessionClientApikeyTokenFlag, *remoteSessionClientsUpdateRemoteSessionClientProjectSlugInputFlag)
@@ -7154,6 +7136,15 @@ func ParseEndpoint(
 			case "delete-global-client":
 				endpoint = c.DeleteGlobalClient()
 				data, err = adminremotesessionsc.BuildDeleteGlobalClientPayload(*adminRemoteSessionsDeleteGlobalClientIDFlag, *adminRemoteSessionsDeleteGlobalClientSessionTokenFlag)
+			case "list-global-issuer-convergence-candidates":
+				endpoint = c.ListGlobalIssuerConvergenceCandidates()
+				data, err = adminremotesessionsc.BuildListGlobalIssuerConvergenceCandidatesPayload(*adminRemoteSessionsListGlobalIssuerConvergenceCandidatesTargetIDFlag, *adminRemoteSessionsListGlobalIssuerConvergenceCandidatesCursorFlag, *adminRemoteSessionsListGlobalIssuerConvergenceCandidatesLimitFlag, *adminRemoteSessionsListGlobalIssuerConvergenceCandidatesSessionTokenFlag)
+			case "get-global-issuer-migrate-preflight":
+				endpoint = c.GetGlobalIssuerMigratePreflight()
+				data, err = adminremotesessionsc.BuildGetGlobalIssuerMigratePreflightPayload(*adminRemoteSessionsGetGlobalIssuerMigratePreflightSourceIDFlag, *adminRemoteSessionsGetGlobalIssuerMigratePreflightTargetIDFlag, *adminRemoteSessionsGetGlobalIssuerMigratePreflightSessionTokenFlag)
+			case "migrate-to-global-issuer":
+				endpoint = c.MigrateToGlobalIssuer()
+				data, err = adminremotesessionsc.BuildMigrateToGlobalIssuerPayload(*adminRemoteSessionsMigrateToGlobalIssuerBodyFlag, *adminRemoteSessionsMigrateToGlobalIssuerSessionTokenFlag)
 			}
 		case "organization-remote-sessions":
 			c := organizationremotesessionsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -7622,12 +7613,6 @@ func ParseEndpoint(
 			case "removeoauth-server":
 				endpoint = c.RemoveOAuthServer()
 				data, err = toolsetsc.BuildRemoveOAuthServerPayload(*toolsetsRemoveOAuthServerSlugFlag, *toolsetsRemoveOAuthServerSessionTokenFlag, *toolsetsRemoveOAuthServerApikeyTokenFlag, *toolsetsRemoveOAuthServerProjectSlugInputFlag)
-			case "addoauth-proxy-server":
-				endpoint = c.AddOAuthProxyServer()
-				data, err = toolsetsc.BuildAddOAuthProxyServerPayload(*toolsetsAddOAuthProxyServerBodyFlag, *toolsetsAddOAuthProxyServerSlugFlag, *toolsetsAddOAuthProxyServerSessionTokenFlag, *toolsetsAddOAuthProxyServerApikeyTokenFlag, *toolsetsAddOAuthProxyServerProjectSlugInputFlag)
-			case "updateoauth-proxy-server":
-				endpoint = c.UpdateOAuthProxyServer()
-				data, err = toolsetsc.BuildUpdateOAuthProxyServerPayload(*toolsetsUpdateOAuthProxyServerBodyFlag, *toolsetsUpdateOAuthProxyServerSlugFlag, *toolsetsUpdateOAuthProxyServerSessionTokenFlag, *toolsetsUpdateOAuthProxyServerApikeyTokenFlag, *toolsetsUpdateOAuthProxyServerProjectSlugInputFlag)
 			case "set-user-session-issuer":
 				endpoint = c.SetUserSessionIssuer()
 				data, err = toolsetsc.BuildSetUserSessionIssuerPayload(*toolsetsSetUserSessionIssuerBodyFlag, *toolsetsSetUserSessionIssuerSlugFlag, *toolsetsSetUserSessionIssuerSessionTokenFlag, *toolsetsSetUserSessionIssuerApikeyTokenFlag, *toolsetsSetUserSessionIssuerProjectSlugInputFlag)
@@ -7772,9 +7757,6 @@ func ParseEndpoint(
 			case "delete-user-session-issuer":
 				endpoint = c.DeleteUserSessionIssuer()
 				data, err = usersessionissuersc.BuildDeleteUserSessionIssuerPayload(*userSessionIssuersDeleteUserSessionIssuerIDFlag, *userSessionIssuersDeleteUserSessionIssuerSessionTokenFlag, *userSessionIssuersDeleteUserSessionIssuerApikeyTokenFlag, *userSessionIssuersDeleteUserSessionIssuerProjectSlugInputFlag)
-			case "migrate-legacy-gram-registrations":
-				endpoint = c.MigrateLegacyGramRegistrations()
-				data, err = usersessionissuersc.BuildMigrateLegacyGramRegistrationsPayload(*userSessionIssuersMigrateLegacyGramRegistrationsBodyFlag, *userSessionIssuersMigrateLegacyGramRegistrationsSessionTokenFlag, *userSessionIssuersMigrateLegacyGramRegistrationsApikeyTokenFlag, *userSessionIssuersMigrateLegacyGramRegistrationsProjectSlugInputFlag)
 			}
 		case "user-session-issuers-cimd-clients":
 			c := usersessionissuerscimdclientsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -15098,7 +15080,6 @@ func remoteSessionClientsUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create-remote-session-client: Register a remote_session_client by supplying a client_id and optional client_secret obtained out-of-band from the upstream issuer.`)
 	fmt.Fprintln(os.Stderr, `    create-cimd: Register a remote_session_client in Client ID Metadata Document (CIMD) mode. Gram generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the client carries no secret and authenticates with token_endpoint_auth_method=none. The owning issuer must advertise client_id_metadata_document_supported.`)
-	fmt.Fprintln(os.Stderr, `    clone-client-fromoauth-proxy-provider: Platform-admin-only. Clone the client_id / client_secret from an existing oauth_proxy_provider into a new remote_session_client paired with the supplied issuers. The upstream secret stays server-side: it is read from the proxy provider's stored secrets, re-encrypted, and persisted on the remote_session_client row without ever crossing the wire.`)
 	fmt.Fprintln(os.Stderr, `    update-remote-session-client: Rotate the client_secret or change the non-issuer settings on an existing remote_session_client. Issuer attachments are managed via attachUserSessionIssuer / detachUserSessionIssuer.`)
 	fmt.Fprintln(os.Stderr, `    attach-user-session-issuer: Attach a user_session_issuer to a remote_session_client by recording the binding in the join table. Rejected when another client is already bound to the same user_session_issuer for this client's remote_session_issuer.`)
 	fmt.Fprintln(os.Stderr, `    detach-user-session-issuer: Detach a user_session_issuer from a remote_session_client by removing the binding from the join table. A no-op when the binding does not exist.`)
@@ -15155,30 +15136,6 @@ func remoteSessionClientsCreateCimdUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients create-cimd --body '{\n      \"audience\": \"aaa\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"user_session_issuer_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func remoteSessionClientsCloneClientFromOAuthProxyProviderUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-clients clone-client-fromoauth-proxy-provider", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Platform-admin-only. Clone the client_id / client_secret from an existing oauth_proxy_provider into a new remote_session_client paired with the supplied issuers. The upstream secret stays server-side: it is read from the proxy provider's stored secrets, re-encrypted, and persisted on the remote_session_client row without ever crossing the wire.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients clone-client-fromoauth-proxy-provider --body '{\n      \"audience\": \"aaa\",\n      \"oauth_proxy_provider_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scope\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\",\n      \"user_session_issuer_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionClientsUpdateRemoteSessionClientUsage() {
@@ -15345,7 +15302,7 @@ func organizationRemoteSessionIssuersUsage() {
 	fmt.Fprintln(os.Stderr, `    delete-issuer: Soft-delete any remote_session_issuer (organizational or project-specific) in the caller's organization. Blocked when any remote_session_clients still reference it. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    move-issuer: Re-scope a remote_session_issuer in the caller's organization: provide a project_id (which must belong to the organization) to make it project-specific, or omit it to make it organization-level (project_id NULL, inherited by every project). Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    get-issuer-migrate-preflight: Authoritative impact summary for migrating a remote_session_issuer's clients onto another issuer: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Requires org:read.`)
-	fmt.Fprintln(os.Stderr, `    migrate-issuer: Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller's organization and agree on issuer, token_endpoint, and authorization_endpoint. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    migrate-issuer: Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller's organization and agree on issuer, token_endpoint, and authorization_endpoint. The issuer identifier is compared canonically, so two spellings differing only by a trailing slash or an explicit default port count as the same upstream; the two endpoints are compared literally. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    fetch-issuer-metadata: Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for organizationRemoteSessionIssuers.create. Keyed by issuer URL; no record need exist and nothing is persisted. The organization-scoped counterpart of remoteSessionIssuers.fetchMetadata, so creating an organization-level issuer no longer has to borrow an unrelated project's scope. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    refresh-issuer-metadata: Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id; serves both organizational and project-specific issuers in the caller's organization. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr)
@@ -15542,7 +15499,7 @@ func organizationRemoteSessionIssuersMigrateIssuerUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller's organization and agree on issuer, token_endpoint, and authorization_endpoint. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller's organization and agree on issuer, token_endpoint, and authorization_endpoint. The issuer identifier is compared canonically, so two spellings differing only by a trailing slash or an explicit default port count as the same upstream; the two endpoints are compared literally. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -15815,6 +15772,9 @@ func adminRemoteSessionsUsage() {
 	fmt.Fprintln(os.Stderr, `    get-global-client: Get a global remote_session_client by id. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    update-global-client: Rotate the client_secret or change non-issuer settings on a global remote_session_client. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    delete-global-client: Soft-delete a global remote_session_client. Cascades to the remote_sessions minted against it. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    list-global-issuer-convergence-candidates: List the organization- and project-level remote_session_issuers that describe the same upstream authorization server as a given global issuer, and so could be consolidated onto it. Matching is by canonical issuer URL, collapsing trailing-slash and default-port spellings. Each candidate carries its owning organization, the number of clients that would move, and the metadata differences that would block or accompany the migration. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    get-global-issuer-migrate-preflight: Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Also reports how many tenant-owned clients the target already carries, since those permanently block deleting it. Requires platform admin.`)
+	fmt.Fprintln(os.Stderr, `    migrate-to-global-issuer: Consolidate an organization- or project-level remote_session_issuer onto a global one: re-point every client from the source issuer onto the target, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. The source may belong to any organization; the target must be a global issuer. Both must agree on issuer (compared canonically), token_endpoint, and authorization_endpoint. One source per call. Requires platform admin.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s admin-remote-sessions COMMAND --help\n", os.Args[0])
@@ -16063,6 +16023,72 @@ func adminRemoteSessionsDeleteGlobalClientUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions delete-global-client --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func adminRemoteSessionsListGlobalIssuerConvergenceCandidatesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-remote-sessions list-global-issuer-convergence-candidates", os.Args[0])
+	fmt.Fprint(os.Stderr, " -target-id STRING")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the organization- and project-level remote_session_issuers that describe the same upstream authorization server as a given global issuer, and so could be consolidated onto it. Matching is by canonical issuer URL, collapsing trailing-slash and default-port spellings. Each candidate carries its owning organization, the number of clients that would move, and the metadata differences that would block or accompany the migration. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -target-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions list-global-issuer-convergence-candidates --target-id \"550e8400-e29b-41d4-a716-446655440000\" --cursor \"abc123\" --limit 1 --session-token \"abc123\"")
+}
+
+func adminRemoteSessionsGetGlobalIssuerMigratePreflightUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-remote-sessions get-global-issuer-migrate-preflight", os.Args[0])
+	fmt.Fprint(os.Stderr, " -source-id STRING")
+	fmt.Fprint(os.Stderr, " -target-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Also reports how many tenant-owned clients the target already carries, since those permanently block deleting it. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -source-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -target-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions get-global-issuer-migrate-preflight --source-id \"550e8400-e29b-41d4-a716-446655440000\" --target-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func adminRemoteSessionsMigrateToGlobalIssuerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin-remote-sessions migrate-to-global-issuer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Consolidate an organization- or project-level remote_session_issuer onto a global one: re-point every client from the source issuer onto the target, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. The source may belong to any organization; the target must be a global issuer. Both must agree on issuer (compared canonically), token_endpoint, and authorization_endpoint. One source per call. Requires platform admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin-remote-sessions migrate-to-global-issuer --body '{\n      \"source_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"target_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
 }
 
 // organizationRemoteSessionsUsage displays the usage of the
@@ -19473,8 +19499,6 @@ func toolsetsUsage() {
 	fmt.Fprintln(os.Stderr, `    clone-toolset: Clone an existing toolset with a new name`)
 	fmt.Fprintln(os.Stderr, `    add-externaloauth-server: Associate an external OAuth server with a toolset`)
 	fmt.Fprintln(os.Stderr, `    removeoauth-server: Remove OAuth server association from a toolset`)
-	fmt.Fprintln(os.Stderr, `    addoauth-proxy-server: Associate an OAuth proxy server with a toolset (admin only)`)
-	fmt.Fprintln(os.Stderr, `    updateoauth-proxy-server: Update an existing OAuth proxy server associated with a toolset`)
 	fmt.Fprintln(os.Stderr, `    set-user-session-issuer: Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.`)
 	fmt.Fprintln(os.Stderr, `    set-tool-variations-group: Assign a tool variations group to a toolset to enable MCP tool filtering (or pass null to disable). The group must already exist in the caller's project.`)
 	fmt.Fprintln(os.Stderr)
@@ -19741,58 +19765,6 @@ func toolsetsRemoveOAuthServerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets removeoauth-server --slug \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func toolsetsAddOAuthProxyServerUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] toolsets addoauth-proxy-server", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -slug STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Associate an OAuth proxy server with a toolset (admin only)`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -slug STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets addoauth-proxy-server --body '{\n      \"oauth_proxy_server\": {\n         \"audience\": \"abc123\",\n         \"authorization_endpoint\": \"abc123\",\n         \"environment_slug\": \"aaa\",\n         \"provider_type\": \"gram\",\n         \"scopes_supported\": [\n            \"abc123\"\n         ],\n         \"slug\": \"aaa\",\n         \"token_endpoint\": \"abc123\",\n         \"token_endpoint_auth_methods_supported\": [\n            \"abc123\"\n         ]\n      }\n   }' --slug \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func toolsetsUpdateOAuthProxyServerUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] toolsets updateoauth-proxy-server", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -slug STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Update an existing OAuth proxy server associated with a toolset`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -slug STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets updateoauth-proxy-server --body '{\n      \"oauth_proxy_server\": {\n         \"audience\": \"abc123\",\n         \"authorization_endpoint\": \"abc123\",\n         \"environment_slug\": \"aaa\",\n         \"scopes_supported\": [\n            \"abc123\"\n         ],\n         \"token_endpoint\": \"abc123\",\n         \"token_endpoint_auth_methods_supported\": [\n            \"abc123\"\n         ]\n      }\n   }' --slug \"aaa\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func toolsetsSetUserSessionIssuerUsage() {
@@ -20664,7 +20636,6 @@ func userSessionIssuersUsage() {
 	fmt.Fprintln(os.Stderr, `    list-user-session-issuers: List user_session_issuers in the caller's project.`)
 	fmt.Fprintln(os.Stderr, `    get-user-session-issuer: Get a user_session_issuer by id or by slug. Provide exactly one.`)
 	fmt.Fprintln(os.Stderr, `    delete-user-session-issuer: Soft-delete a user_session_issuer. Cascades to dependent user_sessions, user_session_consents, and remote_session_clients.`)
-	fmt.Fprintln(os.Stderr, `    migrate-legacy-gram-registrations: One-off migration: lift the legacy Redis dynamic-client registrations from a gram-type oauth_proxy_provider into user_session_clients on the given user_session_issuer, so migrated MCP clients skip re-registration and re-auth. Removed once the OAuth proxy is retired.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s user-session-issuers COMMAND --help\n", os.Args[0])
@@ -20791,30 +20762,6 @@ func userSessionIssuersDeleteUserSessionIssuerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-issuers delete-user-session-issuer --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
-}
-
-func userSessionIssuersMigrateLegacyGramRegistrationsUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] user-session-issuers migrate-legacy-gram-registrations", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
-	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `One-off migration: lift the legacy Redis dynamic-client registrations from a gram-type oauth_proxy_provider into user_session_clients on the given user_session_issuer, so migrated MCP clients skip re-registration and re-auth. Removed once the OAuth proxy is retired.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-session-issuers migrate-legacy-gram-registrations --body '{\n      \"oauth_proxy_provider_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // userSessionIssuersCimdClientsUsage displays the usage of the

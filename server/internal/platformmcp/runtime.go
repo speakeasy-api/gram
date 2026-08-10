@@ -63,14 +63,14 @@ type Runtime struct {
 	server               *mcp.Server
 }
 
-func NewRuntime(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL string, reader Reader, readiness ReadinessRecorder) *Runtime {
+func NewRuntime(logger *slog.Logger, authenticator Authenticator, gate Gate, authorizer Authorizer, protectedResourceURL, cursorKeyMaterial string, reader Reader, catalog Catalog, registrations *RegistrationService, readiness ReadinessRecorder, setupResources []SetupResource) *Runtime {
 	runtime := &Runtime{
 		authenticator:        authenticator,
 		gate:                 gate,
 		authorizer:           authorizer,
 		protectedResourceURL: protectedResourceURL,
 		readiness:            readiness,
-		server:               newServer(reader),
+		server:               newServer(reader, catalog, registrations, cursorKeyMaterial, setupResources),
 	}
 	if readiness != nil {
 		runtime.server.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {

@@ -27,6 +27,7 @@ import (
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
+	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
 const OpenRouterBaseURL = "https://openrouter.ai/api"
@@ -188,6 +189,15 @@ var creditsAccountTypeMap = map[string]int{
 	"enterprise": 100,
 	"":           5, // safety default
 }
+
+// trialCreditLimit caps each key an organization inside a trial holds, so its
+// total trial exposure is this amount multiplied by len(AllKeyTypes). A trial
+// is armed without verified intent and the credit-balance gate hard-stops the
+// free tier only, so these key limits are its only spend ceiling.
+//
+// The limit binds at mint time and nothing re-mints a key. AGE-3138 and
+// AGE-3141 cover the two lifecycle edges that leaves wrong.
+const trialCreditLimit = 50
 
 var specialLimitOrgs = []string{
 	"5a25158b-24dc-4d49-b03d-e85acfbea59c", // speakeasy-team
@@ -364,7 +374,7 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 		return "", oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
 	}
 
-	creditAmount := o.getLimitForOrg(org)
+	creditAmount := o.defaultLimitForOrg(ctx, dbtx, org)
 
 	// Cap the upstream call so guardian's retry backoff cannot stretch the
 	// advisory-lock hold to minutes during an OpenRouter outage; a burst of
@@ -426,7 +436,7 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyTy
 	if limit != nil {
 		keyLimit = *limit
 	} else {
-		keyLimit = o.getLimitForOrg(org)
+		keyLimit = o.defaultLimitForOrg(ctx, o.db, org)
 	}
 
 	creditLimit := float64(keyLimit)
@@ -509,17 +519,32 @@ type keyUsageResponse struct {
 }
 
 func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string, keyType KeyType) (float64, int, error) {
-	org, err := o.orgRepo.GetOrganizationMetadata(ctx, orgID)
-	if err != nil {
-		return 0, 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
-	}
-	limit := o.getLimitForOrg(org)
-
-	key, err := o.repo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+	// The key carries the ceiling the customer actually spends against, which a
+	// raise or a tier change can move away from the policy amount. Read it
+	// first: resolving the policy amount costs two more queries, and only a key
+	// minted before the column existed needs them.
+	key, keyErr := o.repo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
 		KeyType:        string(keyType.OrDefault()),
 	})
-	if err != nil {
+
+	limit := 0
+	if keyErr == nil {
+		limit = int(key.MonthlyCredits)
+	}
+
+	// A key with no recorded ceiling reports the policy amount rather than a
+	// ceiling of nothing.
+	if limit <= 0 {
+		org, err := o.orgRepo.GetOrganizationMetadata(ctx, orgID)
+		if err != nil {
+			return 0, 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
+		}
+
+		limit = o.defaultLimitForOrg(ctx, o.db, org)
+	}
+
+	if keyErr != nil {
 		return 0, limit, nil // the key doesn't exist yet
 	}
 
@@ -613,9 +638,33 @@ func (o *OpenRouter) ReconcileMonthlyCredits(ctx context.Context, orgID string, 
 	return newLimit, nil
 }
 
-func (o *OpenRouter) getLimitForOrg(org orgRepo.OrganizationMetadatum) int {
+// defaultLimitForOrg resolves the monthly credit ceiling an organization is
+// entitled to by policy. It answers what a key would be minted at today, not
+// what an existing key carries: an operator raise leaves the key above this
+// amount, and only the key row records that. The account type is the last
+// resort, after the special-org list and the trial row.
+//
+// dbtx arrives from the caller because the provisioning path runs inside a
+// transaction that already holds an advisory lock and a pool connection, so it
+// must read through that same transaction.
+func (o *OpenRouter) defaultLimitForOrg(ctx context.Context, dbtx trialsRepo.DBTX, org orgRepo.OrganizationMetadatum) int {
 	if slices.Contains(specialLimitOrgs, org.ID) {
 		return 500
+	}
+
+	// A trial runs on the real enterprise tier, so the account type on its own
+	// cannot tell a trial apart from a paying enterprise customer. A read
+	// failure falls through to the account type rather than capping a paying
+	// customer on a transient database error.
+	_, err := trialsRepo.New(dbtx).GetActiveTrial(ctx, org.ID)
+	switch {
+	case err == nil:
+		return trialCreditLimit
+	case !errors.Is(err, pgx.ErrNoRows):
+		o.logger.WarnContext(ctx, "error reading active trial; using the account type credit limit",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(org.ID),
+		)
 	}
 
 	return creditsAccountTypeMap[org.GramAccountType]

@@ -57,11 +57,13 @@ type Service interface {
 	// target issuer, then soft-delete the source. Existing remote sessions are
 	// preserved, so no user re-authenticates. Both issuers must belong to the
 	// caller's organization and agree on issuer, token_endpoint, and
-	// authorization_endpoint. The target may not be narrower in scope than the
-	// source: a project-specific issuer may migrate onto an issuer in the same
-	// project or onto an organization-level issuer, and an organization-level
-	// issuer may migrate onto another organization-level issuer. Requires
-	// org:admin.
+	// authorization_endpoint. The issuer identifier is compared canonically, so
+	// two spellings differing only by a trailing slash or an explicit default port
+	// count as the same upstream; the two endpoints are compared literally. The
+	// target may not be narrower in scope than the source: a project-specific
+	// issuer may migrate onto an issuer in the same project or onto an
+	// organization-level issuer, and an organization-level issuer may migrate onto
+	// another organization-level issuer. Requires org:admin.
 	MigrateIssuer(context.Context, *MigrateIssuerPayload) (res *MigrateOrganizationRemoteSessionIssuerResult, err error)
 	// Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server
 	// document and return a draft suitable for

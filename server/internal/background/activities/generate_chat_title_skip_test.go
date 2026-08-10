@@ -92,7 +92,7 @@ func TestGenerateChatTitle_SkipsManuallyTitledChat(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	chat, err := cr.GetChat(ctx, chatID)
+	chat, err := cr.GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: project.ID})
 	require.NoError(t, err)
 	require.Equal(t, "Human Picked", chat.Title.String)
 	require.True(t, chat.TitleManuallySet)
@@ -145,11 +145,12 @@ func TestGenerateChatTitle_WriteSkipsManuallyTitledChat(t *testing.T) {
 
 	// The activity's generated-title write races in afterwards — and must no-op.
 	require.NoError(t, cr.UpdateChatTitle(ctx, chatrepo.UpdateChatTitleParams{
-		ID:    chatID,
-		Title: pgtype.Text{String: "Auto Generated", Valid: true},
+		ID:        chatID,
+		ProjectID: project.ID,
+		Title:     pgtype.Text{String: "Auto Generated", Valid: true},
 	}))
 
-	chat, err := cr.GetChat(ctx, chatID)
+	chat, err := cr.GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: project.ID})
 	require.NoError(t, err)
 	require.Equal(t, "Human Picked", chat.Title.String)
 	require.True(t, chat.TitleManuallySet)

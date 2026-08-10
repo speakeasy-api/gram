@@ -125,6 +125,18 @@ func (s testOrganizationSelector) EligibleOrganizations(context.Context, string)
 	return s.organizations, nil
 }
 
+func TestOAuthHTTPProviderSetupCompletionDoesNotExposeState(t *testing.T) {
+	t.Parallel()
+
+	service := newTestOAuthHTTP(t)
+	response := httptest.NewRecorder()
+	service.ProviderSetupCompleteHandler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/platform-mcp/provider-setup-complete?state=secret", nil))
+
+	require.Equal(t, http.StatusOK, response.Code)
+	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+	require.NotContains(t, response.Body.String(), "secret")
+}
+
 func TestOAuthHTTPMetadataAndClientRegistration(t *testing.T) {
 	t.Parallel()
 

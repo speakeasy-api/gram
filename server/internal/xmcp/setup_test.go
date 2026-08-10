@@ -43,7 +43,6 @@ import (
 	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -139,7 +138,6 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	env := environments.NewEnvironmentEntries(logger, conn, enc, mcpMetadataRepo)
 	posthogClient := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
-	oauthService := oauth.NewService(logger, tracerProvider, meterProvider, conn, serverURL, cacheAdapter, enc, env, sessionManager, nil, guardianPolicy)
 	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
 	chatClient := openrouter.NewUnifiedClient(logger, guardianPolicy, devProvisioner, &openrouter.PlatformKeyResolver{Provisioner: devProvisioner}, nil, nil, nil, nil)
 	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)
@@ -160,7 +158,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	remoteChallengeMgr := remotesessions.NewChallengeManager(logger, conn, enc, guardianPolicy, cacheAdapter, serverURL)
 	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, guardianPolicy, authzEngine, posthogClient, telemLogger, billingClient, billingClient, mcpservers.NewToolDispositionCache(logger, conn, cacheAdapter))
 	features := &feature.InMemory{}
-	mcpService := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthogClient, features, serverURL, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingClient, billingClient, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, nil, nil, userSessionSigner, remoteChallengeMgr, remoteProxyManager, route.NewRouteTable(), "", nil, nil, mcp.TunnelPublicConfig{
+	mcpService := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthogClient, features, serverURL, serverURL, enc, cacheAdapter, guardianPolicy, funcs, billingClient, billingClient, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, nil, nil, userSessionSigner, remoteChallengeMgr, remoteProxyManager, route.NewRouteTable(), "", nil, nil, mcp.TunnelPublicConfig{
 		SessionTTL:         0,
 		LiveSessionCap:     0,
 		InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},

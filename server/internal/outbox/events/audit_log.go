@@ -47,6 +47,7 @@ var (
 	OrganizationInviteV1                   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_invite_event_v1", "Emitted when changes to organization invites are made")
 	OrganizationWebhooksV1                 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_webhooks_event_v1", "Emitted when changes to organization webhooks are made")
 	OtelForwardingV1                       = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.otel_forwarding_event_v1", "Emitted when changes to OTEL forwarding configs are made")
+	PlatformMcpRegistrationV1              = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.platform_mcp_registration_event_v1", "Emitted when Platform MCP catalog registrations converge private components")
 	UnproxiedMcpServerV1                   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.unproxied_mcp_server_event_v1", "Emitted when changes to unproxied MCP servers are made")
 	PluginV1                               = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.plugin_event_v1", "Emitted when changes to plugins are made")
 	ProjectV1                              = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.project_event_v1", "Emitted when changes to projects are made")

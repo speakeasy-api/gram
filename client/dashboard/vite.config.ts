@@ -127,7 +127,6 @@ export default defineConfig(({ command }) => {
         secure: false,
       }
     : undefined;
-
   // Two build-time constants, separated so MCP configs / callback URLs /
   // anything operator-facing always report the server's authoritative URL,
   // and only the playground (which needs same-origin cookie forwarding for
@@ -252,6 +251,7 @@ export default defineConfig(({ command }) => {
             "/oauth": devProxyTarget,
             "/oauth-external": devProxyTarget,
             "/.well-known": devProxyTarget,
+            "/platform-mcp": devProxyTarget,
             "/v1": devProxyTarget,
           }
         : undefined,

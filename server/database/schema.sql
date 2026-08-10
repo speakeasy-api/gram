@@ -1400,6 +1400,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_project_slug_key
 ON user_session_issuers (project_id, slug)
 WHERE deleted IS FALSE;
 
+CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_project_id_id_key
+ON user_session_issuers (project_id, id);
+
+
 -- At most one auto-provisioned project-default issuer per project.
 CREATE UNIQUE INDEX IF NOT EXISTS user_session_issuers_project_default_key
 ON user_session_issuers (project_id)
@@ -3831,6 +3835,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS remote_mcp_servers_project_id_slug_key
 ON remote_mcp_servers (project_id, slug)
 WHERE deleted IS FALSE;
 
+CREATE UNIQUE INDEX IF NOT EXISTS remote_mcp_servers_project_id_id_key
+ON remote_mcp_servers (project_id, id);
+
+
 -- Headers sent to a remote MCP server when proxying requests. Either value
 -- (a static/system-defined value) or value_from_request_header (pass-through
 -- from the incoming client request) is set, never both.
@@ -4041,6 +4049,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS mcp_servers_project_id_slug_key
 ON mcp_servers (project_id, slug)
 WHERE deleted IS FALSE;
 
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_servers_project_id_id_key
+ON mcp_servers (project_id, id);
+
+
 CREATE INDEX IF NOT EXISTS mcp_servers_remote_mcp_server_id_idx
 ON mcp_servers (remote_mcp_server_id)
 WHERE remote_mcp_server_id IS NOT NULL;
@@ -4172,6 +4184,10 @@ CREATE INDEX IF NOT EXISTS mcp_endpoints_mcp_server_id_idx
 ON mcp_endpoints (mcp_server_id)
 WHERE deleted IS FALSE;
 
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_endpoints_project_id_id_key
+ON mcp_endpoints (project_id, id);
+
+
 CREATE INDEX IF NOT EXISTS mcp_endpoints_custom_domain_id_idx
 ON mcp_endpoints (custom_domain_id)
 WHERE deleted IS FALSE;
@@ -4216,6 +4232,58 @@ CREATE TABLE IF NOT EXISTS assistant_mcp_servers (
 
 CREATE INDEX IF NOT EXISTS assistant_mcp_servers_mcp_server_id_idx ON assistant_mcp_servers (mcp_server_id);
 CREATE INDEX IF NOT EXISTS assistant_mcp_servers_project_id_idx ON assistant_mcp_servers (project_id);
+
+-- Reusable dynamic client registrations for assistant-initiated MCP OAuth flows.
+-- OAuth issuer identity lets one client serve MCP resources that share an
+-- authorization server, even if its endpoint paths change.
+CREATE TABLE IF NOT EXISTS assistant_mcp_oauth_clients (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  assistant_id uuid NOT NULL,
+  oauth_server_issuer TEXT NOT NULL,
+  redirect_uri TEXT NOT NULL,
+  -- Assistant MCP auth only registers confidential client_secret_basic clients.
+  client_id TEXT,
+  client_secret_encrypted TEXT,
+  client_secret_expires_at timestamptz,
+  registration_owner uuid,
+  registration_started_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT assistant_mcp_oauth_clients_pkey PRIMARY KEY (id),
+  CONSTRAINT assistant_mcp_oauth_clients_oauth_server_issuer_check CHECK (oauth_server_issuer <> '' AND CHAR_LENGTH(oauth_server_issuer) <= 500),
+  CONSTRAINT assistant_mcp_oauth_clients_registration_state_check CHECK (
+    (
+      client_id IS NOT NULL
+      AND client_secret_encrypted IS NOT NULL
+      AND registration_owner IS NULL
+      AND registration_started_at IS NULL
+    )
+    OR
+    (
+      client_id IS NULL
+      AND client_secret_encrypted IS NULL
+      AND client_secret_expires_at IS NULL
+      AND registration_owner IS NOT NULL
+      AND registration_started_at IS NOT NULL
+    )
+  ),
+  -- Intentional exception to the usual SET NULL policy: tenant and owner IDs
+  -- are required, and retaining orphaned encrypted credentials is unsafe.
+  CONSTRAINT assistant_mcp_oauth_clients_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT assistant_mcp_oauth_clients_project_id_assistant_id_fkey FOREIGN KEY (project_id, assistant_id) REFERENCES assistants (project_id, id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS assistant_mcp_oauth_clients_project_assistant_issuer_key
+ON assistant_mcp_oauth_clients (project_id, assistant_id, oauth_server_issuer)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS assistant_mcp_oauth_clients_project_id_assistant_id_idx
+ON assistant_mcp_oauth_clients (project_id, assistant_id);
 
 -- Admin-authoritative per-tool annotation metadata for an MCP server, read by
 -- the runtime proxy to fill the disposition dimension of RBAC checks.
@@ -5937,3 +6005,224 @@ WHERE project_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS platform_mcp_onboarding_milestones_organization_created_at_idx
 ON platform_mcp_onboarding_milestones (organization_id, created_at DESC);
+
+-- Catalog registrations persist the desired Platform-owned component stack for
+-- one canonical catalog entry. They do not store provider credentials, URLs,
+-- or arbitrary setup state.
+CREATE TABLE IF NOT EXISTS platform_mcp_catalog_registrations (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  source_kind TEXT NOT NULL,
+  catalog_provider TEXT NOT NULL,
+  catalog_reference TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  remote_mcp_server_id uuid,
+  remote_mcp_server_owned boolean NOT NULL DEFAULT FALSE,
+  user_session_issuer_id uuid,
+  user_session_issuer_owned boolean NOT NULL DEFAULT FALSE,
+  mcp_server_id uuid,
+  mcp_server_owned boolean NOT NULL DEFAULT FALSE,
+  mcp_endpoint_id uuid,
+  mcp_endpoint_owned boolean NOT NULL DEFAULT FALSE,
+  connection_id uuid NOT NULL,
+  connection_generation uuid NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT platform_mcp_catalog_registrations_pkey PRIMARY KEY (id),
+  CONSTRAINT platform_mcp_catalog_registrations_source_kind_check CHECK (source_kind <> ''),
+  CONSTRAINT platform_mcp_catalog_registrations_catalog_provider_check CHECK (catalog_provider <> ''),
+  CONSTRAINT platform_mcp_catalog_registrations_catalog_reference_check CHECK (catalog_reference <> ''),
+  CONSTRAINT platform_mcp_catalog_registrations_status_check CHECK (status <> ''),
+  CONSTRAINT platform_mcp_catalog_registrations_organization_id_fkey
+    FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT platform_mcp_catalog_registrations_organization_project_fkey
+    FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT platform_mcp_catalog_registrations_organization_connection_fkey
+    FOREIGN KEY (organization_id, connection_id) REFERENCES platform_mcp_connections (organization_id, id) ON DELETE CASCADE,
+  -- Components are normally soft-deleted. A hard delete must first detach the
+  -- registration so this composite FK preserves the project ownership boundary.
+  CONSTRAINT platform_mcp_catalog_registrations_remote_server_fkey
+    FOREIGN KEY (project_id, remote_mcp_server_id) REFERENCES remote_mcp_servers (project_id, id) ON DELETE NO ACTION,
+  CONSTRAINT platform_mcp_catalog_registrations_session_issuer_fkey
+    FOREIGN KEY (project_id, user_session_issuer_id) REFERENCES user_session_issuers (project_id, id) ON DELETE NO ACTION,
+  CONSTRAINT platform_mcp_catalog_registrations_mcp_server_fkey
+    FOREIGN KEY (project_id, mcp_server_id) REFERENCES mcp_servers (project_id, id) ON DELETE NO ACTION,
+  CONSTRAINT platform_mcp_catalog_registrations_mcp_endpoint_fkey
+    FOREIGN KEY (project_id, mcp_endpoint_id) REFERENCES mcp_endpoints (project_id, id) ON DELETE NO ACTION
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_catalog_registrations_active_identity_key
+ON platform_mcp_catalog_registrations (organization_id, project_id, source_kind, catalog_provider, catalog_reference)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_catalog_registrations_project_id_id_key
+ON platform_mcp_catalog_registrations (project_id, id);
+
+CREATE INDEX IF NOT EXISTS platform_mcp_catalog_registrations_organization_project_idx
+ON platform_mcp_catalog_registrations (organization_id, project_id);
+
+CREATE INDEX IF NOT EXISTS platform_mcp_catalog_registrations_org_connection_idx
+ON platform_mcp_catalog_registrations (organization_id, connection_id);
+
+CREATE INDEX IF NOT EXISTS platform_mcp_catalog_registrations_project_remote_server_idx
+ON platform_mcp_catalog_registrations (project_id, remote_mcp_server_id);
+
+CREATE INDEX IF NOT EXISTS platform_mcp_catalog_registrations_project_session_issuer_idx
+ON platform_mcp_catalog_registrations (project_id, user_session_issuer_id);
+
+CREATE INDEX IF NOT EXISTS platform_mcp_catalog_registrations_project_mcp_server_idx
+ON platform_mcp_catalog_registrations (project_id, mcp_server_id);
+
+CREATE INDEX IF NOT EXISTS platform_mcp_catalog_registrations_project_mcp_endpoint_idx
+ON platform_mcp_catalog_registrations (project_id, mcp_endpoint_id);
+
+CREATE INDEX IF NOT EXISTS platform_mcp_catalog_registrations_organization_connection_idx
+ON platform_mcp_catalog_registrations (organization_id, connection_id, connection_generation)
+WHERE deleted IS FALSE;
+
+-- Operation receipts retain a safe result projection for 24-hour idempotency.
+CREATE TABLE IF NOT EXISTS platform_mcp_operation_receipts (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  registration_id uuid,
+  connection_id uuid NOT NULL,
+  connection_generation uuid NOT NULL,
+  operation TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL,
+  input_hash TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  result_code TEXT,
+  expires_at timestamptz NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT platform_mcp_operation_receipts_pkey PRIMARY KEY (id),
+  CONSTRAINT platform_mcp_operation_receipts_operation_check CHECK (operation <> ''),
+  CONSTRAINT platform_mcp_operation_receipts_idempotency_key_check CHECK (idempotency_key <> ''),
+  CONSTRAINT platform_mcp_operation_receipts_input_hash_check CHECK (input_hash <> ''),
+  CONSTRAINT platform_mcp_operation_receipts_status_check CHECK (status <> ''),
+  CONSTRAINT platform_mcp_operation_receipts_organization_id_fkey
+    FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT platform_mcp_operation_receipts_organization_project_fkey
+    FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT platform_mcp_operation_receipts_organization_connection_fkey
+    FOREIGN KEY (organization_id, connection_id) REFERENCES platform_mcp_connections (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT platform_mcp_operation_receipts_project_registration_fkey
+    FOREIGN KEY (project_id, registration_id) REFERENCES platform_mcp_catalog_registrations (project_id, id) ON DELETE NO ACTION
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_operation_receipts_connection_operation_key
+ON platform_mcp_operation_receipts (organization_id, project_id, connection_id, operation, idempotency_key);
+
+CREATE INDEX IF NOT EXISTS platform_mcp_operation_receipts_expires_at_idx
+ON platform_mcp_operation_receipts (expires_at);
+
+CREATE INDEX IF NOT EXISTS platform_mcp_operation_receipts_organization_connection_idx
+ON platform_mcp_operation_receipts (organization_id, connection_id);
+
+CREATE INDEX IF NOT EXISTS platform_mcp_operation_receipts_project_registration_idx
+ON platform_mcp_operation_receipts (project_id, registration_id);
+
+-- Setup handoffs use an opaque hash. The authenticated dashboard rechecks all
+-- bound state before redeeming one; no bearer URL or provider secret is stored.
+CREATE TABLE IF NOT EXISTS platform_mcp_setup_handoffs (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  registration_id uuid NOT NULL,
+  connection_id uuid NOT NULL,
+  connection_generation uuid NOT NULL,
+  provider_key TEXT NOT NULL,
+  intent TEXT NOT NULL,
+  handoff_hash TEXT NOT NULL,
+  expires_at timestamptz NOT NULL,
+  redeemed_at timestamptz,
+  invalidated_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT platform_mcp_setup_handoffs_pkey PRIMARY KEY (id),
+  CONSTRAINT platform_mcp_setup_handoffs_provider_key_check CHECK (provider_key <> ''),
+  CONSTRAINT platform_mcp_setup_handoffs_intent_check CHECK (intent <> ''),
+  CONSTRAINT platform_mcp_setup_handoffs_handoff_hash_check CHECK (handoff_hash <> ''),
+  CONSTRAINT platform_mcp_setup_handoffs_organization_id_fkey
+    FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT platform_mcp_setup_handoffs_organization_project_fkey
+    FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT platform_mcp_setup_handoffs_organization_connection_fkey
+    FOREIGN KEY (organization_id, connection_id) REFERENCES platform_mcp_connections (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT platform_mcp_setup_handoffs_project_registration_fkey
+    FOREIGN KEY (project_id, registration_id) REFERENCES platform_mcp_catalog_registrations (project_id, id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_setup_handoffs_handoff_hash_key
+ON platform_mcp_setup_handoffs (handoff_hash);
+
+-- Issuers must invalidate an expired unredeemed handoff before issuing its
+-- replacement; a partial-index predicate cannot depend on clock time.
+CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_setup_handoffs_active_binding_key
+ON platform_mcp_setup_handoffs (registration_id, connection_id, connection_generation, intent)
+WHERE redeemed_at IS NULL AND invalidated_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS platform_mcp_setup_handoffs_expires_at_idx
+ON platform_mcp_setup_handoffs (expires_at);
+
+CREATE INDEX IF NOT EXISTS platform_mcp_setup_handoffs_organization_project_idx
+ON platform_mcp_setup_handoffs (organization_id, project_id);
+
+CREATE INDEX IF NOT EXISTS platform_mcp_setup_handoffs_organization_connection_idx
+ON platform_mcp_setup_handoffs (organization_id, connection_id);
+
+CREATE INDEX IF NOT EXISTS platform_mcp_setup_handoffs_project_registration_idx
+ON platform_mcp_setup_handoffs (project_id, registration_id);
+
+-- Readiness is mutable current evidence for one exact connection generation,
+-- registration, and opaque provider-authorization state.
+CREATE TABLE IF NOT EXISTS platform_mcp_readiness (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  registration_id uuid NOT NULL,
+  connection_id uuid NOT NULL,
+  connection_generation uuid NOT NULL,
+  provider_authorization_fingerprint TEXT NOT NULL,
+  state TEXT NOT NULL,
+  evidence_code TEXT,
+  checked_at timestamptz NOT NULL,
+  expires_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT platform_mcp_readiness_pkey PRIMARY KEY (id),
+  CONSTRAINT platform_mcp_readiness_provider_authorization_fingerprint_check CHECK (provider_authorization_fingerprint <> ''),
+  CONSTRAINT platform_mcp_readiness_state_check CHECK (state <> ''),
+  CONSTRAINT platform_mcp_readiness_organization_id_fkey
+    FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT platform_mcp_readiness_organization_project_fkey
+    FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT platform_mcp_readiness_organization_connection_fkey
+    FOREIGN KEY (organization_id, connection_id) REFERENCES platform_mcp_connections (organization_id, id) ON DELETE CASCADE,
+  CONSTRAINT platform_mcp_readiness_project_registration_fkey
+    FOREIGN KEY (project_id, registration_id) REFERENCES platform_mcp_catalog_registrations (project_id, id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS platform_mcp_readiness_binding_key
+ON platform_mcp_readiness (registration_id, connection_id, connection_generation, provider_authorization_fingerprint);
+
+CREATE INDEX IF NOT EXISTS platform_mcp_readiness_registration_checked_at_idx
+ON platform_mcp_readiness (registration_id, checked_at DESC);
+
+CREATE INDEX IF NOT EXISTS platform_mcp_readiness_expires_at_idx
+ON platform_mcp_readiness (expires_at)
+WHERE expires_at IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS platform_mcp_readiness_organization_project_idx
+ON platform_mcp_readiness (organization_id, project_id);
+
+CREATE INDEX IF NOT EXISTS platform_mcp_readiness_organization_connection_idx
+ON platform_mcp_readiness (organization_id, connection_id);

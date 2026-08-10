@@ -17,7 +17,7 @@ UPDATE chat_messages
 SET message_id = $1
 WHERE id = $2
   AND chat_id = $3
-  AND (project_id IS NULL OR project_id = $4)
+  AND project_id = $4
   AND role = 'user'
   AND (message_id IS NULL OR message_id = '')
 `
@@ -652,7 +652,7 @@ const listUnlinkedClaudeUserMessagesForCorrelation = `-- name: ListUnlinkedClaud
 SELECT id, seq, content, created_at
 FROM chat_messages
 WHERE chat_id = $1
-  AND (project_id IS NULL OR project_id = $2)
+  AND project_id = $2
   AND role = 'user'
   AND content != ''
   AND (message_id IS NULL OR message_id = '')

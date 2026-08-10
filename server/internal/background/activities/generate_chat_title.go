@@ -65,9 +65,14 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 		return fmt.Errorf("invalid chat ID: %w", err)
 	}
 
-	chat, err := g.repo.GetChat(ctx, chatID)
+	projectID, err := uuid.Parse(args.ProjectID)
+	if err != nil {
+		return fmt.Errorf("invalid project ID: %w", err)
+	}
+
+	chat, err := g.repo.GetChat(ctx, repo.GetChatParams{ID: chatID, ProjectID: projectID})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil // chat was deleted, nothing to do
+		return nil // chat was deleted or is not in this project, nothing to do
 	}
 	if err != nil {
 		return fmt.Errorf("get chat: %w", err)
@@ -107,8 +112,9 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 	// UpdateChatTitle only writes when title_manually_set is still false, so a
 	// manual rename that raced this generation wins and is left untouched.
 	err = g.repo.UpdateChatTitle(ctx, repo.UpdateChatTitleParams{
-		ID:    chatID,
-		Title: conv.ToPGText(title),
+		ID:        chatID,
+		ProjectID: projectID,
+		Title:     conv.ToPGText(title),
 	})
 	if err != nil {
 		return fmt.Errorf("update chat title: %w", err)

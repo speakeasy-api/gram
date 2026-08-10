@@ -3712,6 +3712,106 @@ paths:
       x-speakeasy-name-override: getGlobalIssuer
       x-speakeasy-react-hook:
         name: GlobalRemoteSessionIssuer
+  /rpc/adminRemoteSessions.getGlobalIssuerMigratePreflight:
+    get:
+      description: 'Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Also reports how many tenant-owned clients the target already carries, since those permanently block deleting it. Requires platform admin.'
+      operationId: getGlobalRemoteSessionIssuerMigratePreflight
+      parameters:
+        - allowEmptyValue: true
+          description: The organization- or project-level remote_session_issuer to migrate away from.
+          in: query
+          name: source_id
+          required: true
+          schema:
+            description: The organization- or project-level remote_session_issuer to migrate away from.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: The global remote_session_issuer to migrate onto.
+          in: query
+          name: target_id
+          required: true
+          schema:
+            description: The global remote_session_issuer to migrate onto.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IssuerMigratePreflight'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getGlobalIssuerMigratePreflight adminRemoteSessions
+      tags:
+        - adminRemoteSessions
+      x-speakeasy-name-override: getGlobalIssuerMigratePreflight
+      x-speakeasy-react-hook:
+        name: GlobalRemoteSessionIssuerMigratePreflight
   /rpc/adminRemoteSessions.listGlobalClients:
     get:
       description: List the global remote_session_clients registered with a global remote_session_issuer. Requires platform admin.
@@ -3826,6 +3926,120 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: GlobalRemoteSessionClients
+  /rpc/adminRemoteSessions.listGlobalIssuerConvergenceCandidates:
+    get:
+      description: List the organization- and project-level remote_session_issuers that describe the same upstream authorization server as a given global issuer, and so could be consolidated onto it. Matching is by canonical issuer URL, collapsing trailing-slash and default-port spellings. Each candidate carries its owning organization, the number of clients that would move, and the metadata differences that would block or accompany the migration. Requires platform admin.
+      operationId: listGlobalRemoteSessionIssuerConvergenceCandidates
+      parameters:
+        - allowEmptyValue: true
+          description: The global remote_session_issuer that candidates would be consolidated onto.
+          in: query
+          name: target_id
+          required: true
+          schema:
+            description: The global remote_session_issuer that candidates would be consolidated onto.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Pagination cursor.
+          in: query
+          name: cursor
+          schema:
+            description: Pagination cursor.
+            type: string
+        - allowEmptyValue: true
+          description: Page size (default 50, max 100).
+          in: query
+          name: limit
+          schema:
+            description: Page size (default 50, max 100).
+            format: int64
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListIssuerConvergenceCandidatesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listGlobalIssuerConvergenceCandidates adminRemoteSessions
+      tags:
+        - adminRemoteSessions
+      x-speakeasy-name-override: listGlobalIssuerConvergenceCandidates
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
+      x-speakeasy-react-hook:
+        name: GlobalRemoteSessionIssuerConvergenceCandidates
   /rpc/adminRemoteSessions.listGlobalIssuers:
     get:
       description: List global remote_session_issuers. Requires platform admin.
@@ -3931,6 +4145,94 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: GlobalRemoteSessionIssuers
+  /rpc/adminRemoteSessions.migrateToGlobalIssuer:
+    post:
+      description: 'Consolidate an organization- or project-level remote_session_issuer onto a global one: re-point every client from the source issuer onto the target, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. The source may belong to any organization; the target must be a global issuer. Both must agree on issuer (compared canonically), token_endpoint, and authorization_endpoint. One source per call. Requires platform admin.'
+      operationId: migrateToGlobalRemoteSessionIssuer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MigrateRemoteSessionIssuerRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MigrateRemoteSessionIssuerResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: migrateToGlobalIssuer adminRemoteSessions
+      tags:
+        - adminRemoteSessions
+      x-speakeasy-name-override: migrateToGlobalIssuer
+      x-speakeasy-react-hook:
+        name: MigrateToGlobalRemoteSessionIssuer
   /rpc/adminRemoteSessions.refreshGlobalIssuerMetadata:
     post:
       description: Re-fetch an existing global remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires platform admin.
@@ -23753,7 +24055,7 @@ paths:
         name: OrganizationRemoteSessionIssuers
   /rpc/organizationRemoteSessionIssuers.migrate:
     post:
-      description: 'Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller''s organization and agree on issuer, token_endpoint, and authorization_endpoint. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.'
+      description: 'Consolidate two remote_session_issuers that point at the same upstream authorization server: re-point every client from the source issuer onto the target issuer, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. Both issuers must belong to the caller''s organization and agree on issuer, token_endpoint, and authorization_endpoint. The issuer identifier is compared canonically, so two spellings differing only by a trailing slash or an explicit default port count as the same upstream; the two endpoints are compared literally. The target may not be narrower in scope than the source: a project-specific issuer may migrate onto an issuer in the same project or onto an organization-level issuer, and an organization-level issuer may migrate onto another organization-level issuer. Requires org:admin.'
       operationId: migrateOrganizationRemoteSessionIssuer
       parameters:
         - allowEmptyValue: true
@@ -27043,6 +27345,7 @@ paths:
               - claude
               - cursor
               - codex
+              - agent-plugin
             type: string
         - allowEmptyValue: true
           description: Session header
@@ -27103,6 +27406,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
         "415":
           content:
             application/json:
@@ -30399,111 +30708,6 @@ paths:
       x-speakeasy-name-override: attachUserSessionIssuer
       x-speakeasy-react-hook:
         name: AttachUserSessionIssuer
-  /rpc/remoteSessionClients.cloneClientFromOAuthProxyProvider:
-    post:
-      description: 'Platform-admin-only. Clone the client_id / client_secret from an existing oauth_proxy_provider into a new remote_session_client paired with the supplied issuers. The upstream secret stays server-side: it is read from the proxy provider''s stored secrets, re-encrypted, and persisted on the remote_session_client row without ever crossing the wire.'
-      operationId: cloneClientFromOAuthProxyProvider
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CloneClientFromOAuthProxyProviderForm'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RemoteSessionClient'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - {}
-      summary: cloneClientFromOAuthProxyProvider remoteSessionClients
-      tags:
-        - remoteSessionClients
-      x-speakeasy-name-override: cloneClientFromOAuthProxyProvider
-      x-speakeasy-react-hook:
-        name: CloneClientFromOAuthProxyProvider
   /rpc/remoteSessionClients.create:
     post:
       description: Register a remote_session_client by supplying a client_id and optional client_secret obtained out-of-band from the upstream issuer.
@@ -45807,121 +46011,6 @@ paths:
       x-speakeasy-name-override: addExternalOAuthServer
       x-speakeasy-react-hook:
         name: AddExternalOAuthServer
-  /rpc/toolsets.addOAuthProxyServer:
-    post:
-      description: Associate an OAuth proxy server with a toolset (admin only)
-      operationId: addOAuthProxyServer
-      parameters:
-        - allowEmptyValue: true
-          description: The slug of the toolset to update
-          in: query
-          name: slug
-          required: true
-          schema:
-            description: A short url-friendly label that uniquely identifies a resource.
-            maxLength: 40
-            pattern: ^[a-z0-9_-]{1,128}$
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AddOAuthProxyServerRequestBody'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Toolset'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - {}
-      summary: addOAuthProxyServer toolsets
-      tags:
-        - toolsets
-      x-speakeasy-name-override: addOAuthProxyServer
-      x-speakeasy-react-hook:
-        name: AddOAuthProxyServer
   /rpc/toolsets.checkMCPSlugAvailability:
     get:
       description: Check if a MCP slug is available
@@ -47204,121 +47293,6 @@ paths:
       x-speakeasy-name-override: updateBySlug
       x-speakeasy-react-hook:
         name: UpdateToolset
-  /rpc/toolsets.updateOAuthProxyServer:
-    post:
-      description: Update an existing OAuth proxy server associated with a toolset
-      operationId: updateOAuthProxyServer
-      parameters:
-        - allowEmptyValue: true
-          description: The slug of the toolset whose OAuth proxy server to update
-          in: query
-          name: slug
-          required: true
-          schema:
-            description: A short url-friendly label that uniquely identifies a resource.
-            maxLength: 40
-            pattern: ^[a-z0-9_-]{1,128}$
-            type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UpdateOAuthProxyServerRequestBody'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Toolset'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - {}
-      summary: updateOAuthProxyServer toolsets
-      tags:
-        - toolsets
-      x-speakeasy-name-override: updateOAuthProxyServer
-      x-speakeasy-react-hook:
-        name: UpdateOAuthProxyServer
   /rpc/triggers.create:
     post:
       description: Create a trigger instance.
@@ -50954,111 +50928,6 @@ paths:
         type: cursor
       x-speakeasy-react-hook:
         name: UserSessionIssuers
-  /rpc/userSessionIssuers.migrateLegacyGramRegistrations:
-    post:
-      description: 'One-off migration: lift the legacy Redis dynamic-client registrations from a gram-type oauth_proxy_provider into user_session_clients on the given user_session_issuer, so migrated MCP clients skip re-registration and re-auth. Removed once the OAuth proxy is retired.'
-      operationId: migrateLegacyGramRegistrations
-      parameters:
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
-        - allowEmptyValue: true
-          description: project header
-          in: header
-          name: Gram-Project
-          schema:
-            description: project header
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/MigrateLegacyGramRegistrationsForm'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MigrateLegacyGramRegistrationsResult'
-          description: OK response.
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'bad_request: request is invalid'
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unauthorized: unauthorized access'
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'forbidden: permission denied'
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'not_found: resource not found'
-        "409":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'conflict: resource already exists'
-        "415":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unsupported_media: unsupported media type'
-        "422":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'invalid: request contains one or more invalidation fields'
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'unexpected: an unexpected error occurred'
-        "502":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: 'gateway_error: an unexpected error occurred'
-      security:
-        - project_slug_header_Gram-Project: []
-          session_header_Gram-Session: []
-        - apikey_header_Gram-Key: []
-          project_slug_header_Gram-Project: []
-        - {}
-      summary: migrateLegacyGramRegistrations userSessionIssuers
-      tags:
-        - userSessionIssuers
-      x-speakeasy-name-override: migrateLegacyGramRegistrations
-      x-speakeasy-react-hook:
-        name: MigrateLegacyGramRegistrations
   /rpc/userSessionIssuers.update:
     post:
       description: Update fields on an existing user_session_issuer.
@@ -52977,28 +52846,6 @@ components:
         - name
         - slug
         - runtime
-    AddOAuthProxyServerForm:
-      type: object
-      properties:
-        oauth_proxy_server:
-          $ref: '#/components/schemas/OAuthProxyServerForm'
-        project_slug_input:
-          type: string
-        slug:
-          type: string
-          description: A short url-friendly label that uniquely identifies a resource.
-          pattern: ^[a-z0-9_-]{1,128}$
-          maxLength: 40
-      required:
-        - slug
-        - oauth_proxy_server
-    AddOAuthProxyServerRequestBody:
-      type: object
-      properties:
-        oauth_proxy_server:
-          $ref: '#/components/schemas/OAuthProxyServerForm'
-      required:
-        - oauth_proxy_server
     AddOpenAPIv3DeploymentAssetForm:
       type: object
       properties:
@@ -55142,46 +54989,6 @@ components:
         - cost_micros
         - models
         - query_sources
-    CloneClientFromOAuthProxyProviderForm:
-      type: object
-      properties:
-        audience:
-          type: string
-          description: Optional upstream OAuth audience to send on the authorize redirect and token exchange for the cloned client.
-          pattern: ^[!-~]+$
-          maxLength: 512
-        oauth_proxy_provider_id:
-          type: string
-          description: The oauth_proxy_provider to read client_id / client_secret from. Must live in the caller's project.
-          format: uuid
-        remote_session_issuer_id:
-          type: string
-          description: The remote_session_issuer the new client is registered with.
-          format: uuid
-        scope:
-          type: array
-          items:
-            type: string
-            pattern: ^[!#-[\]-~]+$
-            maxLength: 128
-          description: Explicit upstream OAuth scopes the dance should request for the cloned client. Omit to fall back to the issuer's scopes_supported.
-        token_endpoint_auth_method:
-          type: string
-          description: How the cloned client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.
-          enum:
-            - client_secret_basic
-            - client_secret_post
-            - none
-        user_session_issuer_ids:
-          type: array
-          items:
-            type: string
-            format: uuid
-          description: The user_session_issuers to attach the new client to via the join table. Omit or pass an empty array to clone a standalone client with no attachments.
-      description: Form for cloning an oauth_proxy_provider's client credentials into a new remote_session_client. The caller supplies the existing oauth_proxy_provider and the remote_session_issuer to register the new client with, plus zero or more user_session_issuers to attach it to.
-      required:
-        - oauth_proxy_provider_id
-        - remote_session_issuer_id
     CloneEnvironmentForm:
       type: object
       properties:
@@ -60731,6 +60538,82 @@ components:
       required:
         - version
         - created_at
+    IssuerConvergenceCandidate:
+      type: object
+      properties:
+        client_count:
+          type: integer
+          description: Number of non-deleted remote_session_clients that would move onto the target issuer.
+          format: int64
+        endpoint_mismatches:
+          type: array
+          items:
+            type: string
+          description: Names of the authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ from the target. Non-empty blocks the migration.
+        issuer:
+          $ref: '#/components/schemas/RemoteSessionIssuer'
+        organization_id:
+          type: string
+          description: The organization that owns the candidate. Empty for a legacy project-scoped issuer written before this column existed.
+        organization_name:
+          type: string
+          description: Display name of the owning organization. Empty when the organization has no synced metadata.
+        warnings:
+          type: array
+          items:
+            type: string
+          description: Non-blocking divergences (oidc, passthrough, scopes_supported). The target issuer's values become authoritative for the migrated clients.
+      description: An organization- or project-level remote_session_issuer that names the same upstream authorization server as a global issuer, and so could be consolidated onto it.
+      required:
+        - issuer
+        - organization_id
+        - organization_name
+        - client_count
+        - endpoint_mismatches
+        - warnings
+    IssuerMigratePreflight:
+      type: object
+      properties:
+        can_migrate:
+          type: boolean
+          description: 'TRUE when the migration would succeed: no endpoint mismatches and no conflicting MCP-server bindings.'
+        client_count:
+          type: integer
+          description: Number of non-deleted remote_session_clients that would be re-pointed from the source issuer to the target issuer.
+          format: int64
+        conflicting_mcp_server_names:
+          type: array
+          items:
+            type: string
+          description: Display names of MCP servers where both the source and the target issuer already have a client bound. Non-empty blocks the migration; detach one client per listed server and retry.
+        endpoint_mismatches:
+          type: array
+          items:
+            type: string
+          description: Names of the authorization-server metadata fields (issuer, token_endpoint, authorization_endpoint) that differ between source and target. Non-empty blocks the migration.
+        mcp_server_names:
+          type: array
+          items:
+            type: string
+          description: Display names of MCP servers attached to the source issuer's clients.
+        target_tenant_client_count:
+          type: integer
+          description: Number of tenant-owned remote_session_clients already registered with the target issuer, BEFORE this migration. Any non-zero value blocks deleting the target issuer, and only the owning organizations can clear it, so a successful migration is effectively one-way.
+          format: int64
+        warnings:
+          type: array
+          items:
+            type: string
+          description: Non-blocking divergences (oidc, passthrough, scopes_supported). The target issuer's values become authoritative for the migrated clients.
+      description: 'Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: how many clients move, which MCP servers are affected, every blocker that would make the migration fail, and how many tenant-owned clients the target already carries.'
+      required:
+        - client_count
+        - mcp_server_names
+        - endpoint_mismatches
+        - conflicting_mcp_server_names
+        - warnings
+        - can_migrate
+        - target_tenant_client_count
     Key:
       type: object
       properties:
@@ -61322,6 +61205,19 @@ components:
           description: Pending invitations for the organization only; accepted, expired, and revoked invitations are omitted.
       required:
         - invitations
+    ListIssuerConvergenceCandidatesResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/IssuerConvergenceCandidate'
+        next_cursor:
+          type: string
+          description: Cursor for the next page; empty when exhausted.
+      description: Result type for the platform-administrator convergence-candidate listing.
+      required:
+        - items
     ListKeysResponseBody:
       type: object
       properties:
@@ -61679,6 +61575,7 @@ components:
             - risk_policy:bypass
             - risk_policy:block
             - chat:read
+            - chat:write
         selectors:
           type: array
           items:
@@ -61715,6 +61612,7 @@ components:
               - risk_policy:bypass
               - risk_policy:block
               - chat:read
+              - chat:write
           description: The inherited scopes the primary scope grants.
       required:
         - scope
@@ -63156,31 +63054,6 @@ components:
       required:
         - source_id
         - target_id
-    MigrateLegacyGramRegistrationsForm:
-      type: object
-      properties:
-        oauth_proxy_provider_id:
-          type: string
-          description: The gram-type oauth_proxy_provider whose Redis registrations are migrated.
-          format: uuid
-        user_session_issuer_id:
-          type: string
-          description: The target user_session_issuer the migrated user_session_clients attach to.
-          format: uuid
-      description: Form for migrating legacy gram OAuth-proxy client registrations onto a user_session_issuer.
-      required:
-        - oauth_proxy_provider_id
-        - user_session_issuer_id
-    MigrateLegacyGramRegistrationsResult:
-      type: object
-      properties:
-        migrated_count:
-          type: integer
-          description: Number of user_session_clients newly inserted; already-migrated registrations count as zero.
-          format: int64
-      description: Result of a legacy gram registration migration.
-      required:
-        - migrated_count
     MigrateOrganizationRemoteSessionIssuerResult:
       type: object
       properties:
@@ -63194,6 +63067,37 @@ components:
           type: boolean
           description: TRUE when the source issuer was soft-deleted.
       description: 'Outcome of consolidating a source remote_session_issuer onto a target issuer: the surviving target issuer, how many clients were re-pointed, and whether the source was soft-deleted.'
+      required:
+        - issuer
+        - clients_migrated
+        - source_deleted
+    MigrateRemoteSessionIssuerRequestBody:
+      type: object
+      properties:
+        source_id:
+          type: string
+          description: The organization- or project-level remote_session_issuer to migrate away from; soft-deleted on success.
+          format: uuid
+        target_id:
+          type: string
+          description: The global remote_session_issuer to migrate onto; survives and adopts the source's clients.
+          format: uuid
+      required:
+        - source_id
+        - target_id
+    MigrateRemoteSessionIssuerResult:
+      type: object
+      properties:
+        clients_migrated:
+          type: integer
+          description: Number of remote_session_clients re-pointed from the source issuer to the target issuer. Zero when the source had no active clients.
+          format: int64
+        issuer:
+          $ref: '#/components/schemas/RemoteSessionIssuer'
+        source_deleted:
+          type: boolean
+          description: TRUE when the source issuer was soft-deleted.
+      description: 'Outcome of consolidating a tenant remote_session_issuer onto a global issuer: the surviving global issuer, how many clients were re-pointed, and whether the source was soft-deleted.'
       required:
         - issuer
         - clients_migrated
@@ -63302,169 +63206,6 @@ components:
           format: int64
       required:
         - oauth2_security_count
-    OAuthProxyProvider:
-      type: object
-      properties:
-        authorization_endpoint:
-          type: string
-          description: The authorization endpoint URL
-        created_at:
-          type: string
-          description: When the OAuth proxy provider was created.
-          format: date-time
-        environment_slug:
-          type: string
-          description: A short url-friendly label that uniquely identifies a resource.
-          pattern: ^[a-z0-9_-]{1,128}$
-          maxLength: 40
-        grant_types_supported:
-          type: array
-          items:
-            type: string
-          description: The grant types supported by this provider
-        id:
-          type: string
-          description: The ID of the OAuth proxy provider
-        provider_type:
-          type: string
-          description: The type of OAuth provider
-          enum:
-            - custom
-            - gram
-        scopes_supported:
-          type: array
-          items:
-            type: string
-          description: The OAuth scopes supported by this provider
-        slug:
-          type: string
-          description: A short url-friendly label that uniquely identifies a resource.
-          pattern: ^[a-z0-9_-]{1,128}$
-          maxLength: 40
-        token_endpoint:
-          type: string
-          description: The token endpoint URL
-        token_endpoint_auth_methods_supported:
-          type: array
-          items:
-            type: string
-          description: The token endpoint auth methods supported by this provider
-        updated_at:
-          type: string
-          description: When the OAuth proxy provider was last updated.
-          format: date-time
-      required:
-        - id
-        - slug
-        - provider_type
-        - authorization_endpoint
-        - token_endpoint
-        - created_at
-        - updated_at
-    OAuthProxyServer:
-      type: object
-      properties:
-        audience:
-          type: string
-          description: The audience parameter to send to the upstream OAuth provider
-        created_at:
-          type: string
-          description: When the OAuth proxy server was created.
-          format: date-time
-        id:
-          type: string
-          description: The ID of the OAuth proxy server
-        oauth_proxy_providers:
-          type: array
-          items:
-            $ref: '#/components/schemas/OAuthProxyProvider'
-          description: The OAuth proxy providers for this server
-        project_id:
-          type: string
-          description: The project ID this OAuth proxy server belongs to
-        slug:
-          type: string
-          description: A short url-friendly label that uniquely identifies a resource.
-          pattern: ^[a-z0-9_-]{1,128}$
-          maxLength: 40
-        updated_at:
-          type: string
-          description: When the OAuth proxy server was last updated.
-          format: date-time
-      required:
-        - id
-        - project_id
-        - slug
-        - created_at
-        - updated_at
-    OAuthProxyServerForm:
-      type: object
-      properties:
-        audience:
-          type: string
-          description: The audience parameter to send to the upstream OAuth provider
-        authorization_endpoint:
-          type: string
-          description: The authorization endpoint URL
-        environment_slug:
-          type: string
-          description: A short url-friendly label that uniquely identifies a resource.
-          pattern: ^[a-z0-9_-]{1,128}$
-          maxLength: 40
-        provider_type:
-          type: string
-          description: The type of OAuth provider
-          enum:
-            - custom
-            - gram
-        scopes_supported:
-          type: array
-          items:
-            type: string
-          description: OAuth scopes to request
-        slug:
-          type: string
-          description: A short url-friendly label that uniquely identifies a resource.
-          pattern: ^[a-z0-9_-]{1,128}$
-          maxLength: 40
-        token_endpoint:
-          type: string
-          description: The token endpoint URL
-        token_endpoint_auth_methods_supported:
-          type: array
-          items:
-            type: string
-          description: Auth methods (client_secret_basic or client_secret_post)
-      required:
-        - slug
-        - provider_type
-    OAuthProxyServerUpdateForm:
-      type: object
-      properties:
-        audience:
-          type: string
-          description: The audience parameter to send to the upstream OAuth provider
-        authorization_endpoint:
-          type: string
-          description: The authorization endpoint URL
-        environment_slug:
-          type: string
-          description: A short url-friendly label that uniquely identifies a resource.
-          pattern: ^[a-z0-9_-]{1,128}$
-          maxLength: 40
-        scopes_supported:
-          type: array
-          items:
-            type: string
-          description: OAuth scopes to request (omit = no change, empty array = clear)
-        token_endpoint:
-          type: string
-          description: The token endpoint URL
-        token_endpoint_auth_methods_supported:
-          type: array
-          items:
-            type: string
-          description: Auth methods (omit = no change, empty array = clear)
     OTELAttribute:
       type: object
       properties:
@@ -64406,6 +64147,9 @@ components:
     Plugin:
       type: object
       properties:
+        agent_plugins_v1_compatible:
+          type: boolean
+          description: Whether the plugin's complete current intended state can be published as an Agent Plugins 1.0 package.
         assignment_count:
           type: integer
           description: Number of role/user assignments.
@@ -64454,6 +64198,7 @@ components:
         - id
         - name
         - slug
+        - agent_plugins_v1_compatible
         - created_at
         - updated_at
     PluginAssignment:
@@ -66019,6 +65764,7 @@ components:
             - risk_policy:evaluate
             - risk_policy:bypass
             - chat:read
+            - chat:write
       description: Form for requesting access to a scope.
       required:
         - scope
@@ -67288,6 +67034,7 @@ components:
             - risk_policy:bypass
             - risk_policy:block
             - chat:read
+            - chat:write
         selectors:
           type: array
           items:
@@ -67450,6 +67197,7 @@ components:
             - risk_policy:bypass
             - risk_policy:block
             - chat:read
+            - chat:write
         visibility:
           type: string
           description: Whether this scope is a first-class permission or an internal storage/evaluation scope.
@@ -71695,8 +71443,6 @@ components:
           description: The name of the toolset
         oauth_enablement_metadata:
           $ref: '#/components/schemas/OAuthEnablementMetadata'
-        oauth_proxy_server:
-          $ref: '#/components/schemas/OAuthProxyServer'
         organization_id:
           type: string
           description: The organization ID this toolset belongs to
@@ -73051,28 +72797,6 @@ components:
       required:
         - user_id
         - role_ids
-    UpdateOAuthProxyServerForm:
-      type: object
-      properties:
-        oauth_proxy_server:
-          $ref: '#/components/schemas/OAuthProxyServerUpdateForm'
-        project_slug_input:
-          type: string
-        slug:
-          type: string
-          description: A short url-friendly label that uniquely identifies a resource.
-          pattern: ^[a-z0-9_-]{1,128}$
-          maxLength: 40
-      required:
-        - slug
-        - oauth_proxy_server
-    UpdateOAuthProxyServerRequestBody:
-      type: object
-      properties:
-        oauth_proxy_server:
-          $ref: '#/components/schemas/OAuthProxyServerUpdateForm'
-      required:
-        - oauth_proxy_server
     UpdateOrganizationRequestBody:
       type: object
       properties:
@@ -74318,6 +74042,9 @@ components:
         subject_display_name:
           type: string
           description: Resolved human-readable name of the subject, if known.
+        subject_photo_url:
+          type: string
+          description: Avatar URL for the subject when it resolves to a Gram user with one. Null for API key and anonymous subjects, and for users who have no photo.
         subject_type:
           type: string
           description: 'Subject kind: ''user'', ''apikey'', or ''anonymous''.'
@@ -74327,6 +74054,10 @@ components:
         updated_at:
           type: string
           format: date-time
+        user_session_client_id:
+          type: string
+          description: The user_session_client this session was issued through. Null for sessions with no bound client. Unlike client_name, this identifies the registration unambiguously, so it is what a per-client drill-down should match on.
+          format: uuid
         user_session_issuer_id:
           type: string
           description: The issuing user_session_issuer id.
@@ -74346,6 +74077,10 @@ components:
     UserSessionClient:
       type: object
       properties:
+        active_session_count:
+          type: integer
+          description: 'How many live user_sessions this client currently holds. Counted the same way the sessions listing''s active filter counts: not revoked, and the refresh token has not expired.'
+          format: int64
         client_id:
           type: string
           description: The client_id. Minted by Gram for a DCR registration; for a CIMD client it is the metadata document URL and equals client_id_metadata_uri.
@@ -74391,6 +74126,7 @@ components:
         - client_id_issued_at
         - created_at
         - updated_at
+        - active_session_count
     UserSessionConsent:
       type: object
       properties:

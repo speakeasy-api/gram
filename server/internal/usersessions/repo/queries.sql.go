@@ -13,6 +13,54 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const countActiveUserSessionsByClientIDs = `-- name: CountActiveUserSessionsByClientIDs :many
+SELECT s.user_session_client_id AS user_session_client_id, COUNT(*)::int AS active_count
+FROM user_sessions AS s
+WHERE s.user_session_client_id = ANY($1::uuid[])
+  AND s.deleted IS FALSE
+  AND s.refresh_expires_at > now()
+GROUP BY s.user_session_client_id
+`
+
+type CountActiveUserSessionsByClientIDsRow struct {
+	UserSessionClientID uuid.NullUUID
+	ActiveCount         int32
+}
+
+// Active-session tallies for a set of clients, so the clients listing can show
+// how many live sessions each registration holds without a round trip per row.
+// "Active" is defined exactly as the 'active' branch of
+// ListUserSessionsByProjectID defines it: not revoked, and keyed off
+// refresh_expires_at (the authorization deadline) rather than expires_at (the
+// ~1h access-token lifetime), so a live connection that has not refreshed
+// recently still counts.
+//
+// Project scoping is intentionally NOT applied: callers pass ids they already
+// resolved through a project-scoped client query, and re-joining issuers here
+// would only repeat that check.
+//
+// Clients with no active sessions are absent from the result rather than
+// returning zero; callers treat a missing id as zero.
+func (q *Queries) CountActiveUserSessionsByClientIDs(ctx context.Context, userSessionClientIds []uuid.UUID) ([]CountActiveUserSessionsByClientIDsRow, error) {
+	rows, err := q.db.Query(ctx, countActiveUserSessionsByClientIDs, userSessionClientIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountActiveUserSessionsByClientIDsRow
+	for rows.Next() {
+		var i CountActiveUserSessionsByClientIDsRow
+		if err := rows.Scan(&i.UserSessionClientID, &i.ActiveCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createUserSession = `-- name: CreateUserSession :one
 INSERT INTO user_sessions (
     project_id,
@@ -1127,6 +1175,7 @@ SELECT s.id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, 
        c.client_id_metadata_uri AS client_id_metadata_uri,
        u.display_name AS user_display_name,
        u.email AS user_email,
+       u.photo_url AS user_photo_url,
        k.name AS api_key_name
 FROM user_sessions AS s
 JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
@@ -1192,6 +1241,7 @@ type ListUserSessionsByProjectIDRow struct {
 	ClientIDMetadataUri pgtype.Text
 	UserDisplayName     pgtype.Text
 	UserEmail           pgtype.Text
+	UserPhotoUrl        pgtype.Text
 	ApiKeyName          pgtype.Text
 }
 
@@ -1232,6 +1282,7 @@ func (q *Queries) ListUserSessionsByProjectID(ctx context.Context, arg ListUserS
 			&i.ClientIDMetadataUri,
 			&i.UserDisplayName,
 			&i.UserEmail,
+			&i.UserPhotoUrl,
 			&i.ApiKeyName,
 		); err != nil {
 			return nil, err

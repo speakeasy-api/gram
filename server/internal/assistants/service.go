@@ -1445,6 +1445,12 @@ func (s *ServiceCore) DeleteAssistant(ctx context.Context, projectID uuid.UUID, 
 	if err != nil {
 		return fmt.Errorf("delete assistant: %w", err)
 	}
+	if err := queries.RetireAssistantMCPOAuthClients(ctx, assistantrepo.RetireAssistantMCPOAuthClientsParams{
+		AssistantID: assistantID,
+		ProjectID:   projectID,
+	}); err != nil {
+		return fmt.Errorf("retire assistant mcp oauth clients: %w", err)
+	}
 	if err := s.revokeAssistantSkillDistributions(ctx, tx, projectID, assistantID, actor, actorDisplayName); err != nil {
 		return err
 	}
@@ -1909,7 +1915,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 		ChatID:         chatID,
 		ProjectID:      assistant.ProjectID,
 		OrganizationID: assistant.OrganizationID,
-		UserID:         conv.ToPGTextEmpty(dashboardChatUserID(sourceKind, normalizedPayloadJSON)),
+		UserID:         conv.ToPGTextEmpty(assistantChatOwnerID(sourceKind, normalizedPayloadJSON, assistant.CreatedByUserID)),
 		Title:          conv.ToPGText(chat.DefaultChatTitle),
 	}); err != nil {
 		return EnqueueResult{}, fmt.Errorf("upsert assistant chat: %w", err)
@@ -1958,7 +1964,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 
 // dashboardChatUserID extracts the Gram user id from a dashboard turn payload
 // so UpsertAssistantChat can stamp it on the chats row. External-source turns
-// return empty — their chat rows are owner-less.
+// return empty — see assistantChatOwnerID for who owns those.
 func dashboardChatUserID(sourceKind string, normalizedPayloadJSON []byte) string {
 	if sourceKind != sourceKindDashboard {
 		return ""
@@ -1968,6 +1974,26 @@ func dashboardChatUserID(sourceKind string, normalizedPayloadJSON []byte) string
 		return ""
 	}
 	return dash.UserID
+}
+
+// assistantChatOwnerID picks the owner to stamp on an assistant's chat row: the
+// dashboard user who sent the turn, falling back to whoever created the
+// assistant.
+//
+// The fallback exists because externally-triggered turns (cron, Slack, warmup)
+// carry no user, which left those chats owner-less. Owner-less is not a neutral
+// state — chat access is decided by owner-matching first and an explicit
+// chat:read/chat:write grant otherwise, so a chat nobody owns is one nobody can
+// read, continue, rename or delete without a custom role. Attributing it to the
+// assistant's creator makes the session behave like one they started.
+//
+// Returns empty when the assistant has no creator either (older or
+// platform-managed assistants); the chat is then owner-less exactly as before.
+func assistantChatOwnerID(sourceKind string, normalizedPayloadJSON []byte, createdByUserID string) string {
+	if userID := dashboardChatUserID(sourceKind, normalizedPayloadJSON); userID != "" {
+		return userID
+	}
+	return createdByUserID
 }
 
 // CheckDashboardChatOwnership returns nil when callerUserID owns the chats row
@@ -2273,8 +2299,10 @@ func (s *ServiceCore) EnsureWarmupThread(ctx context.Context, assistantID uuid.U
 		ChatID:         chatID,
 		ProjectID:      assistant.ProjectID,
 		OrganizationID: assistant.OrganizationID,
-		UserID:         pgtype.Text{String: "", Valid: false},
-		Title:          conv.ToPGText(chat.DefaultChatTitle),
+		// Warmup turns have no user either, so the creator owns them for the
+		// same reason external-source turns do.
+		UserID: conv.ToPGTextEmpty(assistant.CreatedByUserID),
+		Title:  conv.ToPGText(chat.DefaultChatTitle),
 	}); err != nil {
 		return noop, fmt.Errorf("upsert warmup chat: %w", err)
 	}

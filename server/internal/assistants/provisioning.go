@@ -171,6 +171,12 @@ func (s *ServiceCore) DisableManagedAssistant(ctx context.Context, projectID uui
 	}); err != nil {
 		return fmt.Errorf("soft-delete managed assistant: %w", err)
 	}
+	if err := queries.RetireAssistantMCPOAuthClients(ctx, assistantrepo.RetireAssistantMCPOAuthClientsParams{
+		AssistantID: row.ID,
+		ProjectID:   projectID,
+	}); err != nil {
+		return fmt.Errorf("retire managed assistant mcp oauth clients: %w", err)
+	}
 	if err := s.revokeAssistantSkillDistributions(ctx, tx, projectID, row.ID, actor, actorDisplayName); err != nil {
 		return err
 	}

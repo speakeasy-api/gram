@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -93,6 +94,16 @@ var validOrgNameRegex = regexp.MustCompile(`^[a-zA-Z0-9 _-]+$`)
 // an unauthenticated endpoint that writes it to Redis.
 const maxOrgNameLength = 100
 
+// minOrgNameSlugChars is the floor on what survives slugification, mirroring
+// MIN_ORG_NAME_SLUG_CHARS in the sign-up form. Two rather than one: a single
+// alphanumeric such as "A-" still yields the one-character slug "a".
+const minOrgNameSlugChars = 2
+
+// shortOrgNameFormat matches the sign-up form's constraint and keeps the
+// server's established "organization name" terminology; the form calls it a
+// "Company name".
+const shortOrgNameFormat = "organization name must contain at least %d letters or numbers"
+
 // validateOrgName is the single org-name rule, shared by the authenticated
 // register endpoint and the unauthenticated signup parameter on login.
 func validateOrgName(name string) error {
@@ -106,6 +117,19 @@ func validateOrgName(name string) error {
 
 	if !validOrgNameRegex.MatchString(name) {
 		return oops.E(oops.CodeInvalid, errors.New("organization name contains invalid characters"), "organization name contains invalid characters")
+	}
+
+	// Measured on Slugify's own output rather than restating its character rule,
+	// so the two cannot drift. The character set above admits names made only of
+	// punctuation ("-----", "___", "- _ -"), which slugify to nothing and would
+	// otherwise create an org reachable at app.getgram.ai//.
+	if len(orgslug.Slugify(name)) < minOrgNameSlugChars {
+		return oops.E(
+			oops.CodeInvalid,
+			fmt.Errorf(shortOrgNameFormat, minOrgNameSlugChars),
+			shortOrgNameFormat,
+			minOrgNameSlugChars,
+		)
 	}
 
 	return nil

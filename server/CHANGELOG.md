@@ -1,5 +1,65 @@
 # server
 
+## 1.7.0
+
+### Minor Changes
+
+- 5027338: The MCP server Clients and Sessions tab now leads with active session and client counts, and renders both listings as searchable, filterable, sortable tables paginated ten rows at a time, with member avatars and creation dates on sessions. The clients table reports how many active sessions each client holds, backed by a new `active_session_count` field on the user session clients API, and clicking that count narrows both listings to that client behind a clear-filter bar.
+- 374394a: The user-session OAuth authorization server now emits the RFC 9207 `iss` parameter on every authorization response, success and error alike, and advertises `authorization_response_iss_parameter_supported` in its metadata document. This satisfies the MCP 2026-07-28 Authorization Response Validation requirement and lets MCP clients holding concurrent flows against several authorization servers detect a mix-up attack.
+
+### Patch Changes
+
+- 19ca2a8: Keep shadow MCP risk finding descriptions generic instead of naming the tool that was called.
+- 1fa0caf: Surface that Claude Cowork still needs its own manual setup step when Device
+  Agent is selected on the "Instrument agents" onboarding step — Device Agent
+  only covers coding assistants running on the developer's machine, not
+  Cowork's cloud sandbox. The new note links straight into the Manual Setup
+  flow for Cowork.
+
+  Also aligns MDM vendor wording with the Iru rebrand ("Iru (formerly Kandji)")
+  across the Device Agent setup page and Codex onboarding copy, matching the
+  naming already used on the MDM integrations page.
+
+  Conversation events (`UserPromptSubmit`/`Stop`) are now also written to
+  ClickHouse telemetry so the onboarding "Confirm traffic" feed shows prompts
+  and assistant replies, not only tool calls.
+
+## 1.6.0
+
+### Minor Changes
+
+- e136806: MCP server detail pages gain a Clients and Sessions tab, which lists the clients registered against the server's session issuer alongside its active sessions, and takes over the user-sessions listing that previously sat under authentication settings. CIMD-resolved OAuth clients are now distinguished from DCR-registered ones in the dashboard.
+- 44d50c3: Signing up for Gram now starts a 14-day enterprise trial. Your new organization opens on the enterprise tier with the full enterprise feature set enabled, and the trial window is recorded so the tier returns to free when it ends.
+- 46a645f: Platform admins can now consolidate an organization's remote identity provider onto the shared platform catalog entry for the same upstream. A new Convergence tab on a platform provider lists the organizations running their own provider for that upstream, along with how many clients would move and any metadata differences, and consolidating one re-points those clients without anyone having to sign in again. Providers whose issuer URL differs only by a trailing slash or an explicit default port now count as the same upstream, since those near-duplicates are the ones most worth folding together.
+- 6ff5ca0: Add user-opted-in automatic remote session token refresh and hide its organization settings until enabled.
+- 76592ef: Remove the legacy OAuth proxy provider system now that toolsets are migrated to user session issuers: the `/oauth/*` proxy serving path (its token endpoint now answers `invalid_grant` so clients holding proxy refresh tokens re-authorize against their user session issuer instead of exchanging stale tokens indefinitely, outside issuer consent, session duration and revocation; authorize and register are gone), the `oauth/providers` package, the proxy management endpoints (`toolsets.addOAuthProxyServer` / `updateOAuthProxyServer`), the throwaway migration enablement (`remoteSessionClients.cloneClientFromOAuthProxyProvider`, `userSessionIssuers.migrateLegacyGramRegistrations`), the `AdditionalCacheKeys` cache fan-out mechanism, and the OAuth-proxy audit _emit_ path (historical audit entries still render). `external_oauth_server_metadata` is unaffected. The `oauth_proxy_*` tables and the `toolsets.oauth_proxy_server_id` column are left in place for a later data-drop migration.
+- 740746e: Publish compatible Cursor and Codex plugins from a shared Agent Plugins 1.0 package and expose compatibility on plugin responses.
+- 16e3bf7: An organization that starts a Gram trial now receives $50 of chat credits instead of the full enterprise amount. Gram applies the same $50 ceiling to the inference it runs on the organization's behalf, such as chat titles and risk analysis. A trial that is already in progress keeps the credits it has.
+
+  The billing page now shows the credit ceiling that is set for your organization. An organization whose ceiling was raised sees that amount instead of the standard amount for its plan.
+
+- 535b669: Enterprise trials now close themselves. An hourly job finds each trial organization whose trial window ended without converting to a contract, returns it to the free plan, drops it from the whitelist, and disables its platform model key so it can no longer spend. Every demotion is written to the audit log under `organization:enterprise_trial_demoted`. A trial that converts before it expires is never touched, and a trial is demoted at most once.
+
+### Patch Changes
+
+- 622942f: Remove legacy deny-effect RBAC grants from the server. Authorization exceptions
+  continue to use explicit exclusion scopes, preserving existing dashboard rule
+  behavior while simplifying grant storage and evaluation to allow-only rows.
+- 1d42bb6: Stop double counting Codex/ChatGPT compliance COSTS events. The feed repeats
+  the same `event_id` across log files, and `telemetry_logs` has no uniqueness
+  constraint, so each repeat was imported as its own row and inflated every
+  token and cost aggregate downstream. The importer now checks the
+  `codex.compliance.event_hash` fingerprint it already stamps against rows
+  already ingested for the project and drops the repeats, which also makes
+  re-polling a window idempotent instead of doubling it.
+- 6110071: Support compressed Git upload-pack requests through marketplace URLs.
+- ea9a0e4: Serve the hooks@0.3.19 binary to hook installations. Previously pinned releases stay available so installations that have not regenerated their bootstrap script can still install.
+- 8e56f5a: Prevent organization-less login sessions from failing RBAC grant preparation.
+- b5b9a6a: Keep Cursor and Codex marketplace entries on their native package formats while publishing Agent Plugins packages additively.
+- aa981b7: Reject organization names that contain fewer than two letters or numbers. A name made up entirely of punctuation, such as `-----` or `___`, previously passed validation and produced an organization whose URL slug was empty. The rule is enforced by the shared name check, so it covers both the sign-up parameter on login and the register endpoint, including requests that skip the sign-up form. Existing organizations are unaffected.
+- 793abde: Public skill share links now use your custom domain when one is verified and activated. The share page (and a raw SKILL.md download) is served at `https://<your-domain>/shared/skills/<token>`, scoped so a domain can only ever serve skills belonging to its own organization, and the dashboard copies links with the custom domain automatically.
+- 80227fa: Trigger delivery telemetry logs now record a proper `trigger-instance:<uuid>` URN and the active trace context instead of a generic `urn:uuid:` identifier with empty trace and span ids.
+
 ## 1.5.0
 
 ### Minor Changes

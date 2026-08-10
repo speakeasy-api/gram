@@ -132,7 +132,7 @@ func TestChatGPTConversationProcessPageWritesChatAndMessagesIdempotently(t *test
 
 	chatID, ok := src.chatIDs["conv_1"]
 	require.True(t, ok, "conversation must be upserted")
-	chatRow, err := chatrepo.New(conn).GetChat(ctx, chatID)
+	chatRow, err := chatrepo.New(conn).GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: project.ID})
 	require.NoError(t, err)
 	// The first event predates title generation (empty title); the newest
 	// non-empty title in the file must win.
@@ -161,7 +161,7 @@ func TestChatGPTConversationProcessPageWritesChatAndMessagesIdempotently(t *test
 	require.NoError(t, err)
 	require.Len(t, messages, 2)
 	// The replay re-upserts with the same newest title, never a stale one.
-	chatRow, err = chatrepo.New(conn).GetChat(ctx, chatID)
+	chatRow, err = chatrepo.New(conn).GetChat(ctx, chatrepo.GetChatParams{ID: chatID, ProjectID: project.ID})
 	require.NoError(t, err)
 	require.Equal(t, "Refund policy", chatRow.Title.String)
 }

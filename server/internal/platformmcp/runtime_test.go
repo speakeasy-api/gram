@@ -18,7 +18,7 @@ func TestRuntimeHandlerRejectsMissingBearerToken(t *testing.T) {
 	t.Parallel()
 
 	authenticator := &testAuthenticator{principal: testPrincipal()}
-	handler := NewRuntime(testenv.NewLogger(t), authenticator, testGate{enabled: true}, &testAuthorizer{}, "https://gram.example/.well-known/oauth-protected-resource/platform-mcp", nil, nil).Handler()
+	handler := NewRuntime(testenv.NewLogger(t), authenticator, testGate{enabled: true}, &testAuthorizer{}, "https://gram.example/.well-known/oauth-protected-resource/platform-mcp", "test-cursor-key", nil, nil, nil, nil, nil).Handler()
 	req := httptest.NewRequest(http.MethodPost, Path, nil)
 	res := httptest.NewRecorder()
 
@@ -44,7 +44,7 @@ func TestRuntimeHandlerFailsClosedWhenGateIsDisabledOrErrors(t *testing.T) {
 			t.Parallel()
 
 			authorizer := &testAuthorizer{}
-			handler := NewRuntime(testenv.NewLogger(t), &testAuthenticator{principal: testPrincipal()}, tc.gate, authorizer, "", nil, nil).Handler()
+			handler := NewRuntime(testenv.NewLogger(t), &testAuthenticator{principal: testPrincipal()}, tc.gate, authorizer, "", "test-cursor-key", nil, nil, nil, nil, nil).Handler()
 			req := httptest.NewRequest(http.MethodPost, Path, nil)
 			req.Header.Set("Authorization", "Bearer access-token")
 			res := httptest.NewRecorder()
@@ -71,7 +71,7 @@ func TestRuntimeHandlerRequiresLiveOrganizationAdmin(t *testing.T) {
 			t.Parallel()
 
 			authorizer := &testAuthorizer{err: tc.err}
-			handler := NewRuntime(testenv.NewLogger(t), &testAuthenticator{principal: testPrincipal()}, testGate{enabled: true}, authorizer, "", nil, nil).Handler()
+			handler := NewRuntime(testenv.NewLogger(t), &testAuthenticator{principal: testPrincipal()}, testGate{enabled: true}, authorizer, "", "test-cursor-key", nil, nil, nil, nil, nil).Handler()
 			req := httptest.NewRequest(http.MethodPost, Path, nil)
 			req.Header.Set("Authorization", "Bearer access-token")
 			res := httptest.NewRecorder()
@@ -94,8 +94,12 @@ func TestRuntimeHandlerRecordsReadyAfterSuccessfulToolsList(t *testing.T) {
 		testGate{enabled: true},
 		&testAuthorizer{},
 		"",
+		"test-cursor-key",
+		nil,
+		nil,
 		nil,
 		recorder,
+		nil,
 	).Handler()
 	req := httptest.NewRequest(http.MethodPost, Path, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
 	req.Header.Set("Authorization", "Bearer access-token")
@@ -114,7 +118,7 @@ func TestRuntimeAuthenticateAcceptsCaseInsensitiveBearer(t *testing.T) {
 	t.Parallel()
 
 	authenticator := &testAuthenticator{principal: testPrincipal()}
-	runtime := NewRuntime(testenv.NewLogger(t), authenticator, testGate{enabled: true}, &testAuthorizer{}, "", nil, nil)
+	runtime := NewRuntime(testenv.NewLogger(t), authenticator, testGate{enabled: true}, &testAuthorizer{}, "", "test-cursor-key", nil, nil, nil, nil, nil)
 	req := httptest.NewRequest(http.MethodPost, Path, nil)
 	req.Header.Set("Authorization", "bearer  access-token  ")
 
@@ -128,7 +132,7 @@ func TestRuntimeAuthenticateAcceptsCaseInsensitiveBearer(t *testing.T) {
 func TestRuntimeAuthenticateRejectsIncompletePrincipal(t *testing.T) {
 	t.Parallel()
 
-	runtime := NewRuntime(testenv.NewLogger(t), &testAuthenticator{principal: Principal{UserID: "user"}}, testGate{enabled: true}, &testAuthorizer{}, "", nil, nil)
+	runtime := NewRuntime(testenv.NewLogger(t), &testAuthenticator{principal: Principal{UserID: "user"}}, testGate{enabled: true}, &testAuthorizer{}, "", "test-cursor-key", nil, nil, nil, nil, nil)
 	req := httptest.NewRequest(http.MethodPost, Path, nil)
 	req.Header.Set("Authorization", "Bearer access-token")
 

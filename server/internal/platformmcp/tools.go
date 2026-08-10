@@ -4,6 +4,7 @@ package platformmcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -67,7 +68,13 @@ type featureUnavailableResult struct {
 	Message string `json:"message"`
 }
 
-func newServer(reader Reader) *mcp.Server {
+type operationBudgetResult struct {
+	Code    string `json:"code"`
+	Reason  string `json:"reason,omitempty"`
+	Message string `json:"message"`
+}
+
+func newServer(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "gram-platform-mcp",
 		Title:   "Gram Platform MCP",
@@ -78,6 +85,29 @@ func newServer(reader Reader) *mcp.Server {
 	})
 
 	registerReadTools(server, reader)
+	registerSetupResources(server, setupResources)
+	if catalog == nil || registrations == nil || !registrations.budgets.Catalog.valid() {
+		registerUnavailableCatalogTools(server)
+	} else if cursorCodec, err := newCatalogCursorCodec(cursorKeyMaterial); err != nil {
+		registerUnavailableCatalogTools(server)
+	} else {
+		registerCatalogTools(server, catalog, registrations.budgets.Catalog, cursorCodec)
+	}
+	if registrations == nil || registrations.store == nil || !registrations.budgets.Registration.valid() {
+		registerUnavailableCatalogRegistrationTool(server)
+	} else {
+		registerCatalogRegistrationTool(server, registrations)
+	}
+	if registrations == nil || registrations.store == nil || !registrations.budgets.Handoff.valid() {
+		registerUnavailableSetupHandoffTool(server)
+	} else {
+		registerSetupHandoffTool(server, registrations)
+	}
+	if registrations == nil || registrations.readiness == nil || !registrations.budgets.Repair.valid() {
+		registerUnavailableReadinessTools(server)
+	} else {
+		registerReadinessTools(server, registrations.readiness)
+	}
 	registerUnavailableTools(server)
 	return server
 }
@@ -89,6 +119,40 @@ func registerReadTools(server *mcp.Server, reader Reader) {
 	registerGetMCPTool(server, reader)
 }
 
+func registerUnavailableCatalogTools(server *mcp.Server) {
+	for _, tool := range []struct {
+		name        string
+		title       string
+		description string
+	}{
+		{"search_mcp_catalog", "Search MCP Catalog", "Search reviewed catalog MCP candidates. Catalog access is not enabled in the current rollout."},
+		{"inspect_mcp_candidate", "Inspect MCP Candidate", "Inspect one reviewed catalog MCP candidate. Catalog access is not enabled in the current rollout."},
+	} {
+		mcp.AddTool(server, &mcp.Tool{
+			Name:        tool.name,
+			Title:       tool.title,
+			Description: tool.description,
+			Annotations: readOnlyAnnotations(),
+		}, unavailableTool("catalog"))
+	}
+}
+
+func registerUnavailableCatalogRegistrationTool(server *mcp.Server) {
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "register_catalog_mcp",
+		Title:       "Register Catalog MCP",
+		Description: "Register an approved catalog MCP in a project. Registration is not enabled in the current rollout.",
+	}, unavailableTool("catalog_registration"))
+}
+
+func registerUnavailableSetupHandoffTool(server *mcp.Server) {
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "get_setup_handoff",
+		Title:       "Get Setup Handoff",
+		Description: "Create a secure setup handoff. Provider handoffs are not enabled in the current rollout.",
+	}, unavailableTool("setup_handoff"))
+}
+
 func registerUnavailableTools(server *mcp.Server) {
 	for _, tool := range []struct {
 		name        string
@@ -96,14 +160,9 @@ func registerUnavailableTools(server *mcp.Server) {
 		description string
 		feature     string
 	}{
-		{"search_mcp_catalog", "Search MCP Catalog", "Search the approved MCP catalog. Catalog discovery is not enabled in the read-only rollout.", "catalog_discovery"},
-		{"inspect_mcp_candidate", "Inspect MCP Candidate", "Inspect an MCP catalog candidate. Candidate inspection is not enabled in the read-only rollout.", "catalog_discovery"},
-		{"register_catalog_mcp", "Register Catalog MCP", "Register an approved catalog MCP in a project. Registration is not enabled in the read-only rollout.", "catalog_registration"},
+
 		{"distribute_mcp_to_default_plugin", "Distribute MCP to Default Plugin", "Distribute a configured MCP to the default plugin. Distribution is not enabled in the read-only rollout.", "plugin_distribution"},
 		{"remove_mcp_from_default_plugin", "Remove MCP from Default Plugin", "Remove an MCP from the default plugin. Distribution changes are not enabled in the read-only rollout.", "plugin_distribution"},
-		{"get_mcp_readiness", "Get MCP Readiness", "Check configured MCP readiness. Readiness checks are not enabled in the read-only rollout.", "mcp_readiness"},
-		{"get_mcp_repair_plan", "Get MCP Repair Plan", "Get a safe MCP repair plan. Repair planning is not enabled in the read-only rollout.", "mcp_readiness"},
-		{"get_setup_handoff", "Get Setup Handoff", "Create a secure setup handoff. Provider handoffs are not enabled in the read-only rollout.", "setup_handoff"},
 	} {
 		mcp.AddTool(server, &mcp.Tool{
 			Name:        tool.name,
@@ -111,6 +170,47 @@ func registerUnavailableTools(server *mcp.Server) {
 			Description: tool.description,
 		}, unavailableTool(tool.feature))
 	}
+}
+
+func registerUnavailableReadinessTools(server *mcp.Server) {
+	for _, tool := range []struct {
+		name        string
+		title       string
+		description string
+	}{
+		{"get_mcp_readiness", "Get MCP Readiness", "Check configured MCP readiness. Readiness checks are not enabled in the current rollout."},
+		{"get_mcp_repair_plan", "Get MCP Repair Plan", "Get a safe MCP repair plan. Repair planning is not enabled in the current rollout."},
+	} {
+		mcp.AddTool(server, &mcp.Tool{
+			Name:        tool.name,
+			Title:       tool.title,
+			Description: tool.description,
+			Annotations: readOnlyAnnotations(),
+		}, unavailableTool("mcp_readiness"))
+	}
+}
+
+func operationBudgetToolResult(err error) (*mcp.CallToolResult, bool) {
+	var result operationBudgetResult
+	switch {
+	case errors.Is(err, ErrOperationRateLimited), errors.Is(err, ErrReadinessRateLimited):
+		result = operationBudgetResult{Code: "rate_limited", Message: "This Platform MCP operation is temporarily rate limited. Retry after a short delay."}
+	case errors.Is(err, ErrOperationBudgetUnavailable), errors.Is(err, ErrRegistrationUnavailable):
+		result = operationBudgetResult{Code: unavailableCode, Message: "This Platform MCP operation is temporarily unavailable."}
+	case errors.Is(err, ErrRegistrationCap):
+		result = operationBudgetResult{Code: "conflict", Reason: "active_registration_cap", Message: "This project has reached its active Platform MCP registration limit."}
+	case errors.Is(err, ErrRegistrationConflict):
+		result = operationBudgetResult{Code: "conflict", Message: "This Platform MCP registration conflicts with the current project state."}
+	case errors.Is(err, ErrTargetIneligible):
+		result = operationBudgetResult{Code: "ineligible_organization", Message: "This project is not eligible for Platform MCP registration."}
+	default:
+		return nil, false
+	}
+	content, marshalErr := json.Marshal(result)
+	if marshalErr != nil {
+		return nil, false
+	}
+	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}, true
 }
 
 func unavailableTool(feature string) mcp.ToolHandlerFor[map[string]any, featureUnavailableResult] {
