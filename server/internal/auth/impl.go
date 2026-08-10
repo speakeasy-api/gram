@@ -46,6 +46,7 @@ import (
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
@@ -118,6 +119,7 @@ type Service struct {
 	authzProvisioner    *authz.Provisioner
 	trialBundleSeeder   EnterpriseTrialBundleSeeder
 	auditLogger         *audit.Logger
+	trialNotifier       trialemails.Notifier
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -137,8 +139,12 @@ func NewService(
 	authzProvisioner *authz.Provisioner,
 	trialBundleSeeder EnterpriseTrialBundleSeeder,
 	auditLogger *audit.Logger,
+	trialNotifier trialemails.Notifier,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("auth"))
+	if trialNotifier == nil {
+		trialNotifier = trialemails.NoopNotifier{}
+	}
 
 	return &Service{
 		tracer:              tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth"),
@@ -158,6 +164,7 @@ func NewService(
 		authzProvisioner:    authzProvisioner,
 		trialBundleSeeder:   trialBundleSeeder,
 		auditLogger:         auditLogger,
+		trialNotifier:       trialNotifier,
 	}
 }
 
@@ -335,6 +342,10 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 			session.ActiveOrganizationID = org.ID
 			if err := s.sessions.StoreSession(ctx, session); err != nil {
 				return s.redirectSignupError(ctx, err)
+			}
+
+			if err := s.trialNotifier.TrialStarted(ctx, org.ID); err != nil {
+				s.logger.ErrorContext(ctx, "failed to notify trial started", attr.SlogError(err), attr.SlogOrganizationID(org.ID), attr.SlogUserID(userID))
 			}
 
 			s.captureSignupTelemetry(ctx, userInfo.Email, intent.OrgName, org)
