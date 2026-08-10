@@ -85,9 +85,13 @@ func codexSkillExists(name, cwd string) bool {
 		return false
 	}
 	home, _ := os.UserHomeDir()
-	roots := []string{"/etc/codex/skills", "/opt/codex/skills"}
+	roots := []string{
+		"/etc/codex/skills", filepath.Join("/etc/codex/skills", ".system"),
+		"/opt/codex/skills", filepath.Join("/opt/codex/skills", ".system"),
+	}
 	if home != "" {
-		roots = append(roots, filepath.Join(home, ".agents", "skills"))
+		personal := filepath.Join(home, ".agents", "skills")
+		roots = append(roots, personal, filepath.Join(personal, ".system"))
 	}
 	codexHome := strings.TrimSpace(os.Getenv("CODEX_HOME"))
 	if codexHome == "" && home != "" {

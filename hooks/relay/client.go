@@ -27,7 +27,11 @@ const perAttemptTime = 10 * time.Second
 // verdict.
 const sendBudget = 45 * time.Second
 
-const skillUploadBudget = 30 * time.Second
+// skillUploadBudget bounds the content upload that runs inline after a
+// delivered event. The upload is best-effort — the server re-requests the
+// content on the skill's next activation — so it gets a budget that keeps
+// sendBudget plus this stall under the provider's 60s hook timeout.
+const skillUploadBudget = 10 * time.Second
 
 // retryMaxElapsedMS caps the SDK's backoff budget for retryable statuses
 // (429/5xx). A var rather than a const so tests that script 5xx responses can
