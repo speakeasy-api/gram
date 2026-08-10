@@ -15,6 +15,7 @@ INSERT INTO remote_session_issuers (
     client_setup_documentation_url,
     authorization_endpoint,
     token_endpoint,
+    revocation_endpoint,
     registration_endpoint,
     jwks_uri,
     service_documentation,
@@ -38,6 +39,7 @@ VALUES (
     @client_setup_documentation_url,
     @authorization_endpoint,
     @token_endpoint,
+    @revocation_endpoint,
     @registration_endpoint,
     @jwks_uri,
     @service_documentation,
@@ -67,6 +69,7 @@ INSERT INTO remote_session_issuers (
     name,
     authorization_endpoint,
     token_endpoint,
+    revocation_endpoint,
     registration_endpoint,
     scopes_supported,
     grant_types_supported,
@@ -85,6 +88,7 @@ VALUES (
     @name,
     @authorization_endpoint,
     @token_endpoint,
+    @revocation_endpoint,
     @registration_endpoint,
     @scopes_supported,
     @grant_types_supported,
@@ -101,6 +105,7 @@ SET
     name = EXCLUDED.name,
     authorization_endpoint = EXCLUDED.authorization_endpoint,
     token_endpoint = EXCLUDED.token_endpoint,
+    revocation_endpoint = EXCLUDED.revocation_endpoint,
     registration_endpoint = EXCLUDED.registration_endpoint,
     scopes_supported = EXCLUDED.scopes_supported,
     grant_types_supported = EXCLUDED.grant_types_supported,
@@ -269,6 +274,10 @@ SET
         WHEN sqlc.narg('token_endpoint')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('token_endpoint'), token_endpoint)
     END,
+    revocation_endpoint = CASE
+        WHEN sqlc.narg('revocation_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('revocation_endpoint'), revocation_endpoint)
+    END,
     registration_endpoint = CASE
         WHEN sqlc.narg('registration_endpoint')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('registration_endpoint'), registration_endpoint)
@@ -343,6 +352,7 @@ UPDATE remote_session_issuers
 SET
     authorization_endpoint = CASE WHEN @authorization_endpoint::text = '' THEN NULL ELSE @authorization_endpoint::text END,
     token_endpoint = CASE WHEN @token_endpoint::text = '' THEN NULL ELSE @token_endpoint::text END,
+    revocation_endpoint = CASE WHEN @revocation_endpoint::text = '' THEN NULL ELSE @revocation_endpoint::text END,
     registration_endpoint = CASE WHEN @registration_endpoint::text = '' THEN NULL ELSE @registration_endpoint::text END,
     jwks_uri = CASE WHEN @jwks_uri::text = '' THEN NULL ELSE @jwks_uri::text END,
     service_documentation = CASE WHEN @service_documentation::text = '' THEN NULL ELSE @service_documentation::text END,
@@ -758,8 +768,9 @@ WHERE s.id = @id
 -- name: GetRemoteSessionClientWithIssuerByID :one
 -- Joined client + issuer view scoped to a single client_id. Used by
 -- the runtime token resolver to find the upstream token endpoint when
--- refreshing an expired access token. Callers establish that the
--- client belongs to the request's project upstream
+-- refreshing an expired access token, and by the post-commit upstream
+-- revoke to find the RFC 7009 revocation endpoint. Callers establish that
+-- the client belongs to the request's project upstream
 -- (ListRemoteSessionClientsForUserSessionIssuer); this lookup itself
 -- needs only the id since client ids are globally unique.
 SELECT
@@ -775,6 +786,7 @@ SELECT
     i.issuer                               AS issuer_url,
     i.authorization_endpoint               AS authorization_endpoint,
     i.token_endpoint                       AS token_endpoint,
+    i.revocation_endpoint                  AS revocation_endpoint,
     i.scopes_supported                     AS scopes_supported,
     i.passthrough                          AS passthrough,
     i.oidc                                 AS oidc
@@ -1094,6 +1106,10 @@ SET
     token_endpoint = CASE
         WHEN sqlc.narg('token_endpoint')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('token_endpoint'), token_endpoint)
+    END,
+    revocation_endpoint = CASE
+        WHEN sqlc.narg('revocation_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('revocation_endpoint'), revocation_endpoint)
     END,
     registration_endpoint = CASE
         WHEN sqlc.narg('registration_endpoint')::text = '' THEN NULL
@@ -1585,6 +1601,10 @@ SET
     token_endpoint = CASE
         WHEN sqlc.narg('token_endpoint')::text = '' THEN NULL
         ELSE COALESCE(sqlc.narg('token_endpoint'), token_endpoint)
+    END,
+    revocation_endpoint = CASE
+        WHEN sqlc.narg('revocation_endpoint')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('revocation_endpoint'), revocation_endpoint)
     END,
     registration_endpoint = CASE
         WHEN sqlc.narg('registration_endpoint')::text = '' THEN NULL

@@ -147,6 +147,14 @@ func (s *Service) RevokeSession(ctx context.Context, payload *orgsessionsgen.Rev
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
+	// Best-effort upstream revocation, post-commit. Same rationale as the
+	// project-scoped RevokeRemoteSession; see upstreamrevoke.go.
+	s.revoker.RevokeDetached(ctx, RevokedCredentials{
+		RemoteSessionClientID: revoked.RemoteSessionClientID,
+		AccessTokenEncrypted:  revoked.AccessTokenEncrypted,
+		RefreshTokenEncrypted: revoked.RefreshTokenEncrypted,
+	})
+
 	return nil
 }
 
