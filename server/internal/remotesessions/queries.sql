@@ -925,11 +925,39 @@ WHERE s.subject_urn = @subject_urn
   AND usi.deleted IS FALSE
   AND s.deleted IS FALSE;
 
--- name: SoftDeleteRemoteSessionBySubjectAndClient :execrows
+-- name: SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer :many
+-- Cascade for a revoked user session: tombstones every upstream grant the
+-- subject holds through one user session issuer and returns their stored
+-- credentials, so the caller can push RFC 7009 revocations once its
+-- transaction commits. Scoped through the issuer's project so the write
+-- cannot cross tenants.
+--
+-- A subject's grant is shared by every MCP client it authenticates, because
+-- remote_sessions is keyed on (subject_urn, remote_session_client_id) with no
+-- user-session-client column. Revoking one client's session therefore drops
+-- the provider link for all of them, which is the intended blast radius: a
+-- revoke that left the upstream tokens alive would not be a revoke.
+UPDATE remote_sessions AS s
+SET deleted_at = clock_timestamp()
+FROM user_session_issuers AS usi
+WHERE s.subject_urn = @subject_urn
+  AND s.user_session_issuer_id = @user_session_issuer_id
+  AND usi.id = s.user_session_issuer_id
+  AND usi.project_id = @project_id
+  AND usi.deleted IS FALSE
+  AND s.deleted IS FALSE
+RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted;
+
+-- name: SoftDeleteRemoteSessionBySubjectAndClient :many
 -- Consent-screen disconnect: soft-deletes the subject's own binding for one
 -- upstream client. Subject, client and issuer all derived server-side from
 -- the challenge state and the endpoint's bindings, never from the form;
 -- scoped through the issuer's project so the write cannot cross tenants.
+--
+-- Returns the stored credentials it tombstones so the caller can push an
+-- RFC 7009 revocation upstream once the write has committed. The row count
+-- callers read is the length of the result; the partial unique index on
+-- (subject_urn, remote_session_client_id) caps that at one.
 UPDATE remote_sessions AS s
 SET deleted_at = clock_timestamp()
 FROM user_session_issuers AS usi
@@ -939,7 +967,8 @@ WHERE s.subject_urn = @subject_urn
   AND usi.id = s.user_session_issuer_id
   AND usi.project_id = @project_id
   AND usi.deleted IS FALSE
-  AND s.deleted IS FALSE;
+  AND s.deleted IS FALSE
+RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted;
 
 -- Best-effort refresh-grant keepalive. Each hourly workflow chain drains
 -- cross-project batches. Claiming stamps an independent attempt clock before

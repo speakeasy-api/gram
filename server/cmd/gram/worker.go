@@ -709,6 +709,8 @@ func newWorkerCommand() *cli.Command {
 
 			remoteChallengeManager := remotesessions.NewChallengeManager(
 				logger,
+				tracerProvider,
+				meterProvider,
 				db,
 				encryptionClient,
 				guardianPolicy,

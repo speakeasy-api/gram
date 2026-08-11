@@ -3981,7 +3981,7 @@ func (q *Queries) SetRemoteSessionUpdatedAt(ctx context.Context, arg SetRemoteSe
 	return err
 }
 
-const softDeleteRemoteSessionBySubjectAndClient = `-- name: SoftDeleteRemoteSessionBySubjectAndClient :execrows
+const softDeleteRemoteSessionBySubjectAndClient = `-- name: SoftDeleteRemoteSessionBySubjectAndClient :many
 UPDATE remote_sessions AS s
 SET deleted_at = clock_timestamp()
 FROM user_session_issuers AS usi
@@ -3992,6 +3992,7 @@ WHERE s.subject_urn = $1
   AND usi.project_id = $4
   AND usi.deleted IS FALSE
   AND s.deleted IS FALSE
+RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted
 `
 
 type SoftDeleteRemoteSessionBySubjectAndClientParams struct {
@@ -4001,21 +4002,44 @@ type SoftDeleteRemoteSessionBySubjectAndClientParams struct {
 	ProjectID             uuid.UUID
 }
 
+type SoftDeleteRemoteSessionBySubjectAndClientRow struct {
+	RemoteSessionClientID uuid.UUID
+	AccessTokenEncrypted  string
+	RefreshTokenEncrypted pgtype.Text
+}
+
 // Consent-screen disconnect: soft-deletes the subject's own binding for one
 // upstream client. Subject, client and issuer all derived server-side from
 // the challenge state and the endpoint's bindings, never from the form;
 // scoped through the issuer's project so the write cannot cross tenants.
-func (q *Queries) SoftDeleteRemoteSessionBySubjectAndClient(ctx context.Context, arg SoftDeleteRemoteSessionBySubjectAndClientParams) (int64, error) {
-	result, err := q.db.Exec(ctx, softDeleteRemoteSessionBySubjectAndClient,
+//
+// Returns the stored credentials it tombstones so the caller can push an
+// RFC 7009 revocation upstream once the write has committed. The row count
+// callers read is the length of the result; the partial unique index on
+// (subject_urn, remote_session_client_id) caps that at one.
+func (q *Queries) SoftDeleteRemoteSessionBySubjectAndClient(ctx context.Context, arg SoftDeleteRemoteSessionBySubjectAndClientParams) ([]SoftDeleteRemoteSessionBySubjectAndClientRow, error) {
+	rows, err := q.db.Query(ctx, softDeleteRemoteSessionBySubjectAndClient,
 		arg.SubjectUrn,
 		arg.RemoteSessionClientID,
 		arg.UserSessionIssuerID,
 		arg.ProjectID,
 	)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected(), nil
+	defer rows.Close()
+	var items []SoftDeleteRemoteSessionBySubjectAndClientRow
+	for rows.Next() {
+		var i SoftDeleteRemoteSessionBySubjectAndClientRow
+		if err := rows.Scan(&i.RemoteSessionClientID, &i.AccessTokenEncrypted, &i.RefreshTokenEncrypted); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const softDeleteRemoteSessionsByClientID = `-- name: SoftDeleteRemoteSessionsByClientID :many
@@ -4043,6 +4067,62 @@ func (q *Queries) SoftDeleteRemoteSessionsByClientID(ctx context.Context, remote
 	var items []SoftDeleteRemoteSessionsByClientIDRow
 	for rows.Next() {
 		var i SoftDeleteRemoteSessionsByClientIDRow
+		if err := rows.Scan(&i.RemoteSessionClientID, &i.AccessTokenEncrypted, &i.RefreshTokenEncrypted); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const softDeleteRemoteSessionsBySubjectAndUserSessionIssuer = `-- name: SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer :many
+UPDATE remote_sessions AS s
+SET deleted_at = clock_timestamp()
+FROM user_session_issuers AS usi
+WHERE s.subject_urn = $1
+  AND s.user_session_issuer_id = $2
+  AND usi.id = s.user_session_issuer_id
+  AND usi.project_id = $3
+  AND usi.deleted IS FALSE
+  AND s.deleted IS FALSE
+RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted
+`
+
+type SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerParams struct {
+	SubjectUrn          urn.SessionSubject
+	UserSessionIssuerID uuid.UUID
+	ProjectID           uuid.UUID
+}
+
+type SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerRow struct {
+	RemoteSessionClientID uuid.UUID
+	AccessTokenEncrypted  string
+	RefreshTokenEncrypted pgtype.Text
+}
+
+// Cascade for a revoked user session: tombstones every upstream grant the
+// subject holds through one user session issuer and returns their stored
+// credentials, so the caller can push RFC 7009 revocations once its
+// transaction commits. Scoped through the issuer's project so the write
+// cannot cross tenants.
+//
+// A subject's grant is shared by every MCP client it authenticates, because
+// remote_sessions is keyed on (subject_urn, remote_session_client_id) with no
+// user-session-client column. Revoking one client's session therefore drops
+// the provider link for all of them, which is the intended blast radius: a
+// revoke that left the upstream tokens alive would not be a revoke.
+func (q *Queries) SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer(ctx context.Context, arg SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerParams) ([]SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerRow, error) {
+	rows, err := q.db.Query(ctx, softDeleteRemoteSessionsBySubjectAndUserSessionIssuer, arg.SubjectUrn, arg.UserSessionIssuerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerRow
+	for rows.Next() {
+		var i SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuerRow
 		if err := rows.Scan(&i.RemoteSessionClientID, &i.AccessTokenEncrypted, &i.RefreshTokenEncrypted); err != nil {
 			return nil, err
 		}

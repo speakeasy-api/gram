@@ -86,6 +86,8 @@ func setupRefreshFixture(t *testing.T, authMethod string, clientSecret string, s
 	require.NoError(t, err)
 	mgr := remotesessions.NewChallengeManager(
 		logger,
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
 		ti.conn,
 		enc,
 		policy,

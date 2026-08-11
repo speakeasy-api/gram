@@ -885,6 +885,8 @@ func newStartCommand() *cli.Command {
 
 			remoteChallengeManager := remotesessions.NewChallengeManager(
 				logger,
+				tracerProvider,
+				meterProvider,
 				db,
 				encryptionClient,
 				guardianPolicy,
@@ -1297,7 +1299,7 @@ func newStartCommand() *cli.Command {
 			mcpendpoints.Attach(mux, mcpendpoints.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil))
 			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
 			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, auditLogger, serverURL, remotesessions.NewRefreshService(logger, db, encryptionClient, guardianPolicy, remoteSessionsCache))
-			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, guardianPolicy, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String()))
+			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, guardianPolicy, encryptionClient, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String()))
 			tokenexchange.Attach(mux, tokenexchange.NewService(logger, tracerProvider, db, sessionManager, authzEngine, c.String("environment")))
 			remotesessions.Attach(mux, remoteSessionsService)
 			remotemcp.Attach(mux, remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger))

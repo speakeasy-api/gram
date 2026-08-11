@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -371,7 +372,7 @@ func buildChallengeManagerForTest(
 	policy, err := guardian.NewUnsafePolicy(ti.tracerProvider, []string{})
 	require.NoError(t, err)
 
-	mgr := remotesessions.NewChallengeManager(ti.logger, ti.conn, ti.enc, policy, ti.cacheAdapter, ti.serverURL)
+	mgr := remotesessions.NewChallengeManager(ti.logger, ti.tracerProvider, testenv.NewMeterProvider(t), ti.conn, ti.enc, policy, ti.cacheAdapter, ti.serverURL)
 	authnCache := cache.NewTypedObjectCache[mcp.AuthnChallengeState](
 		ti.logger.With(attr.SlogCacheNamespace("authn_challenge")),
 		ti.cacheAdapter,

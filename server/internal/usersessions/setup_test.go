@@ -115,6 +115,7 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker) 
 		authzEngine,
 		audit.NewLogger(),
 		guardianPolicy,
+		testenv.NewEncryptionClient(t),
 		usersessions.NewSigner("test-jwt-secret"),
 		"http://0.0.0.0",
 	)

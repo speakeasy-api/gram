@@ -94,7 +94,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		auditLogger:  auditLogger,
 		serverURL:    serverURL,
 		refresher:    refresher,
-		revoker:      NewUpstreamRevoker(logger, meterProvider, db, enc, policy),
+		revoker:      NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy),
 	}
 }
 

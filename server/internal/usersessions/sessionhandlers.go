@@ -175,9 +175,18 @@ func (s *Service) RevokeUserSession(ctx context.Context, payload *gen.RevokeUser
 		return oops.E(oops.CodeUnexpected, err, "log user session revocation").LogError(ctx, logger)
 	}
 
+	// Tombstone the subject's upstream grants in the same transaction; the
+	// RFC 7009 pushes wait until it commits.
+	revokedUpstream, err := s.revoker.SoftDeleteSubjectSessions(ctx, dbtx, revoked.SubjectUrn, revoked.UserSessionIssuerID, *authCtx.ProjectID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "revoke upstream remote sessions").LogError(ctx, logger)
+	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+
+	s.revoker.RevokeAllDetached(ctx, revokedUpstream)
 
 	// Push the jti into the revocation cache after the DB commit so a cached
 	// jti always corresponds to a soft-deleted row. Cache-write failure is

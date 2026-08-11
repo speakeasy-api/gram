@@ -32,8 +32,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 )
 
@@ -64,6 +66,11 @@ type Service struct {
 	// resolve attempt, and the volume (one per manual config change) is
 	// negligible against the OAuth surface.
 	cimdResolver *cimd.Resolver
+
+	// revoker cascades a user-session revoke into the subject's upstream
+	// grants. A revoked session whose provider tokens keep working is only
+	// half a revocation, so the two are driven together.
+	revoker *remotesessions.UpstreamRevoker
 }
 
 var (
@@ -85,7 +92,7 @@ var (
 // signer + serverURL drive mintUserSession; pass an empty serverURL to
 // disable that handler (it will 503 on call — used in tests that don't
 // need the surface).
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, chatSessionsManager TokenRevoker, authzEngine *authz.Engine, auditLogger *audit.Logger, guardianPolicy *guardian.Policy, signer *Signer, serverURL string) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, chatSessionsManager TokenRevoker, authzEngine *authz.Engine, auditLogger *audit.Logger, guardianPolicy *guardian.Policy, enc *encryption.Client, signer *Signer, serverURL string) *Service {
 	logger = logger.With(attr.SlogComponent("usersessions"))
 
 	return &Service{
@@ -99,6 +106,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		signer:       signer,
 		serverURL:    serverURL,
 		cimdResolver: cimd.NewResolver(guardianPolicy, meterProvider, logger),
+		revoker:      remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, guardianPolicy),
 	}
 }
 

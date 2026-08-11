@@ -29,8 +29,11 @@ import (
 	orgsessionsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_sessions"
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -128,6 +131,11 @@ type revokeFixture struct {
 	// refreshToken is "" when the fixture was seeded access-token-only.
 	refreshToken string
 	externalCID  string
+
+	// userIssuerID and projectID scope the consent-screen disconnect, which
+	// resolves its target from the challenge state rather than a session id.
+	userIssuerID uuid.UUID
+	projectID    uuid.UUID
 }
 
 // seedRevocableSession creates issuer → client → session with real ciphertext,
@@ -237,6 +245,8 @@ func seedRevocableSession(
 		accessToken:  accessToken,
 		refreshToken: refreshToken,
 		externalCID:  externalCID,
+		userIssuerID: userIssuer,
+		projectID:    *authCtx.ProjectID,
 	}
 }
 
@@ -335,6 +345,8 @@ func seedRevocableClient(
 			accessToken:  suffix + "-access",
 			refreshToken: refreshToken,
 			externalCID:  externalCID,
+			userIssuerID: userIssuer,
+			projectID:    *authCtx.ProjectID,
 		})
 	}
 
@@ -586,4 +598,95 @@ func TestDeleteRemoteSessionClient_RevokesCascadedSessionsUpstream(t *testing.T)
 	for _, fx := range fixtures {
 		requireSessionRevoked(t, ctx, ti, fx)
 	}
+}
+
+// newDisconnectChallengeManager builds the manager behind the consent screen
+// against the same pool and encryption key the fixtures were seeded with, so
+// the disconnect decrypts the very tokens it is expected to send upstream.
+func newDisconnectChallengeManager(t *testing.T, ti *testInstance) *remotesessions.ChallengeManager {
+	t.Helper()
+
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+
+	return remotesessions.NewChallengeManager(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		ti.conn,
+		testenv.NewEncryptionClient(t),
+		policy,
+		cache.NoopCache,
+		mustURL(t, "http://localhost"),
+	)
+}
+
+// The consent screen's per-provider "Disconnect" is the one session-ending path
+// an end user drives rather than an admin. Dropping the row while the provider
+// still honours the refresh grant is precisely what the user asked not to
+// happen, so this path revokes upstream like every admin-driven one.
+func TestDisconnectRemoteSession_RevokesUpstream(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	spy := &revocationSpy{}
+	upstream := newRevocationUpstream(t, spy)
+
+	fx := seedRevocableSession(t, ctx, ti, "disconnect-revokes", upstream.URL+"/revoke", "s3cret", true)
+
+	n, err := newDisconnectChallengeManager(t, ti).DisconnectRemoteSession(ctx, fx.subject, fx.projectID, fx.userIssuerID, fx.clientID)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), n)
+
+	calls, form, _ := spy.snapshot()
+	require.Equal(t, 1, calls, "exactly one RFC 7009 request")
+	require.Equal(t, fx.refreshToken, form.Get("token"))
+	require.Equal(t, "refresh_token", form.Get("token_type_hint"))
+	require.Equal(t, fx.externalCID, form.Get("client_id"))
+
+	requireSessionRevoked(t, ctx, ti, fx)
+}
+
+// Most upstreams advertise no revocation_endpoint, and a disconnect against one
+// of those must stay a silent local no-op rather than erroring or reaching for
+// some fallback URL.
+func TestDisconnectRemoteSession_NoRevocationEndpointSkipsUpstream(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	spy := &revocationSpy{}
+	// Stood up only to prove nothing reaches it: the issuer below is seeded
+	// with no revocation endpoint at all.
+	newRevocationUpstream(t, spy)
+
+	fx := seedRevocableSession(t, ctx, ti, "disconnect-no-endpoint", "", "s3cret", true)
+
+	n, err := newDisconnectChallengeManager(t, ti).DisconnectRemoteSession(ctx, fx.subject, fx.projectID, fx.userIssuerID, fx.clientID)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), n)
+
+	calls, _, _ := spy.snapshot()
+	require.Zero(t, calls, "no revocation endpoint means no upstream request")
+
+	requireSessionRevoked(t, ctx, ti, fx)
+}
+
+// An upstream that refuses the revocation must not turn a disconnect the user
+// already performed into a visible failure.
+func TestDisconnectRemoteSession_UpstreamErrorStillDisconnects(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(upstream.Close)
+
+	fx := seedRevocableSession(t, ctx, ti, "disconnect-upstream-500", upstream.URL+"/revoke", "s3cret", true)
+
+	n, err := newDisconnectChallengeManager(t, ti).DisconnectRemoteSession(ctx, fx.subject, fx.projectID, fx.userIssuerID, fx.clientID)
+	require.NoError(t, err, "an upstream failure must not surface to the consent screen")
+	require.Equal(t, int64(1), n)
+
+	requireSessionRevoked(t, ctx, ti, fx)
 }
