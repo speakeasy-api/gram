@@ -389,12 +389,12 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, cred RevokedCredential
 
 	// The endpoint is a URL a customer's identity provider handed us, so it is
 	// attacker-influenceable in the same way the token endpoint is. The guardian
-	// policy below is the actual SSRF control; this check only rejects values
-	// that are not absolute http(s) at all, which would otherwise reach the
-	// policy as a confusing parse failure.
-	if !urls.IsAbsoluteHTTP(endpoint) {
+	// policy below is the actual SSRF control; this check rejects values that
+	// are not absolute HTTPS URLs. Tokens are sensitive credentials that must
+	// not be transmitted in plaintext, so only https:// is accepted.
+	if !urls.IsAbsoluteHTTPS(endpoint) {
 		logger.WarnContext(ctx, "upstream revoke: issuer advertises an unusable revocation endpoint",
-			attr.SlogOAuthFailureReason("revocation_endpoint is not an absolute http(s) url"),
+			attr.SlogOAuthFailureReason("revocation_endpoint must be an absolute https url"),
 		)
 		return client.IssuerSlug, revokeOutcomeInternal
 	}

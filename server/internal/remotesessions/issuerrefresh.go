@@ -39,11 +39,10 @@ func buildIssuerDraft(doc rfc8414Document, issuerURL string, warnings []string) 
 		Issuer:                conv.Default(doc.Issuer, issuerURL),
 		AuthorizationEndpoint: conv.PtrEmpty(doc.AuthorizationEndpoint),
 		TokenEndpoint:         conv.PtrEmpty(doc.TokenEndpoint),
-		// Not filtered through urls.IsAbsoluteHTTP the way the documentation
-		// links below are: the endpoints are carried verbatim, and what makes an
-		// advertised revocation endpoint safe to POST to is the guardian policy
-		// the request goes out under, not a shape check at draft time.
-		RevocationEndpoint:   conv.PtrEmpty(doc.RevocationEndpoint),
+		// Revocation endpoints that are not HTTPS are filtered out: tokens are
+		// sensitive credentials that must not be transmitted in plaintext. Only
+		// https:// revocation endpoints are accepted.
+		RevocationEndpoint:   conv.PtrEmpty(conv.Ternary(urls.IsAbsoluteHTTPS(doc.RevocationEndpoint), doc.RevocationEndpoint, "")),
 		RegistrationEndpoint: conv.PtrEmpty(doc.RegistrationEndpoint),
 		JwksURI:              conv.PtrEmpty(doc.JwksURI),
 		// The issuer controls these and downstream surfaces render them as
@@ -189,7 +188,10 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 		// that the document is untrustworthy. It clears to NULL like any other
 		// endpoint the issuer has stopped advertising, and revoking a session
 		// against such an issuer stays a local soft-delete.
-		RevocationEndpoint:   doc.RevocationEndpoint,
+		//
+		// Revocation endpoints that are not HTTPS are filtered out: tokens are
+		// sensitive credentials that must not be transmitted in plaintext.
+		RevocationEndpoint:   conv.Ternary(urls.IsAbsoluteHTTPS(doc.RevocationEndpoint), doc.RevocationEndpoint, ""),
 		RegistrationEndpoint: doc.RegistrationEndpoint,
 		JwksUri:              doc.JwksURI,
 		// Downstream surfaces render these as links, so a value that is not an

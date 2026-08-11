@@ -20,3 +20,17 @@ func IsAbsoluteHTTP(raw string) bool {
 
 	return (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
 }
+
+// IsAbsoluteHTTPS reports whether raw is an absolute HTTPS URL carrying a host.
+//
+// Use this when a URL will carry sensitive data (tokens, credentials) that must
+// not be transmitted in plaintext. The stricter constraint rejects http://
+// schemes that IsAbsoluteHTTP would accept.
+func IsAbsoluteHTTPS(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+
+	return u.Scheme == "https" && u.Host != ""
+}
