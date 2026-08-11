@@ -241,6 +241,7 @@ function DetailActionButtons({
         disabled={disabled}
         onClick={onOpenDecide}
         variant={pendingReview ? "primary" : "secondary"}
+        size="sm"
       >
         <Button.Text>
           {pendingReview ? "Review Request" : "Decide Access"}

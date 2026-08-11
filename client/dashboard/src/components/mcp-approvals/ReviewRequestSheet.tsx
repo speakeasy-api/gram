@@ -57,7 +57,9 @@ export function ReviewRequestSheet({
               projectSlug={project.slug}
               ready
             />
-            <Button onClick={() => onDecide(request)}>Decide Access</Button>
+            <Button size="sm" onClick={() => onDecide(request)}>
+              Decide Access
+            </Button>
           </div>
           <ApprovalReview requestId={request.id} />
         </div>
