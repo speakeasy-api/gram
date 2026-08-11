@@ -141,7 +141,10 @@ export const AssistantModal: FC<AssistantModalProps> = ({ className }) => {
                 layout
                 layoutId="chat-container"
                 className={cn(
-                  "aui-modal-content flex flex-col overflow-hidden border bg-popover text-popover-foreground [&>.aui-thread-root]:bg-inherit",
+                  // Descendant, not child: the thread root sits inside the attachment
+                  // drop zone, so a direct-child selector would miss it and the
+                  // modal would lose its popover background.
+                  "aui-modal-content flex flex-col overflow-hidden border bg-popover text-popover-foreground [&_.aui-thread-root]:bg-inherit",
                   r("lg"),
                 )}
                 initial={false}

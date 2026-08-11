@@ -298,10 +298,35 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 		skillIDs = append(skillIDs, skillID)
 	}
 
-	result, err := s.core.SendDashboardMessage(ctx, *authCtx.ProjectID, assistantID, authCtx.UserID, chatID, payload.Message, idempotencyKey, skillIDs)
+	attachments := make([]DashboardAttachmentInput, 0, len(payload.Attachments))
+	for _, attachment := range payload.Attachments {
+		// A JSON `null` inside the array survives decoding as a nil element.
+		if attachment == nil {
+			return nil, oops.E(oops.CodeBadRequest, nil, "attachment entries cannot be null")
+		}
+		assetID, err := uuid.Parse(attachment.AssetID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid attachment asset id").LogError(ctx, s.logger)
+		}
+		name := ""
+		if attachment.Name != nil {
+			name = *attachment.Name
+		}
+		attachments = append(attachments, DashboardAttachmentInput{AssetID: assetID, Name: name})
+	}
+
+	// A turn must say something: empty text is only allowed when files carry it.
+	if payload.Message == "" && len(attachments) == 0 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "message text is required when no attachments are sent")
+	}
+
+	result, err := s.core.SendDashboardMessage(ctx, *authCtx.ProjectID, assistantID, authCtx.UserID, chatID, payload.Message, idempotencyKey, skillIDs, attachments)
 	if err != nil {
 		if errors.Is(err, ErrAssistantTurnSkillContextTooLarge) {
 			return nil, oops.E(oops.CodeBadRequest, err, "selected skill context is too large").LogError(ctx, s.logger)
+		}
+		if errors.Is(err, ErrAssistantTurnAttachmentUnavailable) {
+			return nil, oops.E(oops.CodeBadRequest, err, "one or more attachments are unavailable").LogError(ctx, s.logger)
 		}
 		if errors.Is(err, ErrAssistantTurnSkillUnavailable) {
 			return nil, oops.E(oops.CodeBadRequest, err, "one or more selected skills are unavailable").LogError(ctx, s.logger)

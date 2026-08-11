@@ -267,7 +267,10 @@ class GramThreadHistoryAdapter {
         console.error("Failed to load chat");
         return { messages: [], headId: null };
       }
-      return convertGramMessagesToExported(this.applyTransform(chat.messages));
+      return convertGramMessagesToExported(
+        this.applyTransform(chat.messages),
+        this.apiUrl,
+      );
     } catch (error) {
       console.error("Error loading chat:", error);
       return { messages: [], headId: null };
@@ -301,6 +304,7 @@ class GramThreadHistoryAdapter {
         }
         return convertGramMessagesToUIMessages(
           this.applyTransform(chat.messages),
+          this.apiUrl,
         );
 
         // // Filter out system messages (assistant-ui doesn't support them in the import path)

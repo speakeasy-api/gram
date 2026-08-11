@@ -1134,6 +1134,7 @@ trackedFiles:
   src/models/components/sendenterpriseadminonboardingemailrequestbody.ts: {}
   src/models/components/sendenterpriseadminonboardingemailresult.ts: {}
   src/models/components/sendinviterequestbody.ts: {}
+  src/models/components/sendmessageattachment.ts: {}
   src/models/components/sendmessagerequestbody.ts: {}
   src/models/components/sendmessageresult.ts: {}
   src/models/components/servernameoverride.ts: {}

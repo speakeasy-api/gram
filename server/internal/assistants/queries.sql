@@ -1497,3 +1497,13 @@ FROM assistant_mcp_oauth_clients
 WHERE project_id = @project_id
   AND assistant_id = @assistant_id
   AND oauth_server_issuer = @oauth_server_issuer;
+
+-- name: ListChatAttachmentAssets :many
+-- Resolves the chat attachments a dashboard turn carries, scoped to the
+-- project so a leaked asset id from another project cannot be attached.
+SELECT id, name, url, content_type, content_length
+FROM assets
+WHERE project_id = @project_id
+  AND id = ANY(@ids::uuid[])
+  AND kind = 'chat_attachment'
+  AND deleted IS FALSE;

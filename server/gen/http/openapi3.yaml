@@ -69404,6 +69404,19 @@ components:
                     description: Optional role ID for the invitee.
             required:
                 - email
+        SendMessageAttachment:
+            type: object
+            properties:
+                asset_id:
+                    type: string
+                    description: The chat attachment asset returned by assets.uploadChatAttachment.
+                    format: uuid
+                name:
+                    type: string
+                    description: The file name to show the assistant. Falls back to the stored asset name.
+                    maxLength: 255
+            required:
+                - asset_id
         SendMessageRequestBody:
             type: object
             properties:
@@ -69411,6 +69424,12 @@ components:
                     type: string
                     description: The assistant to send the message to.
                     format: uuid
+                attachments:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SendMessageAttachment'
+                    description: Files uploaded through assets.uploadChatAttachment that this turn carries.
+                    maxItems: 5
                 chat_id:
                     type: string
                     description: The conversation to continue (from listChats or a prior sendMessage). Omit to start a new conversation; the server mints and returns a fresh chat id.
@@ -69421,8 +69440,7 @@ components:
                     maxLength: 255
                 message:
                     type: string
-                    description: The user's message text.
-                    minLength: 1
+                    description: The user's message text. May be empty when the turn carries attachments.
                     maxLength: 10000
                 skill_ids:
                     type: array
