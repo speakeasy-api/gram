@@ -72,7 +72,7 @@ export type SignalGroup = {
  * most-affected user that has one (top users arrive sorted by finding count).
  * Empty when no top user carries a team.
  */
-export function dominantTeam(signal: RiskSignal): string {
+function dominantTeam(signal: RiskSignal): string {
   return signal.topUsers.find((user) => user.team)?.team ?? "";
 }
 
@@ -81,7 +81,7 @@ export function dominantTeam(signal: RiskSignal): string {
  * (sorted) observed apps. Empty when the signal's findings carry no app
  * attribution.
  */
-export function dominantApp(signal: RiskSignal): string {
+function dominantApp(signal: RiskSignal): string {
   return signal.apps[0] ?? "";
 }
 

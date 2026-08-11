@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Text } from "@/components/ui/Text";
 import { type RowSelection } from "@/hooks/useRowSelection";
+import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
 import { Sparkline } from "@/pages/costs/Sparkline";
 import type { RiskSignal } from "@gram/client/models/components/risksignal.js";
@@ -61,14 +62,6 @@ function pluralize(count: number, unit: string): string {
   return `${count} ${unit}${count === 1 ? "" : "s"}`;
 }
 
-/** "claude-code" -> "Claude Code" for the app swatch labels. */
-function appLabel(app: string): string {
-  return app
-    .split("-")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-}
-
 function groupLabel(group: SignalGroup, mode: SignalGroupMode): string {
   switch (mode) {
     case "severity":
@@ -97,37 +90,24 @@ function SignalRow({
     signal.teams > 0
       ? `${pluralize(signal.users, "user")} · ${pluralize(signal.teams, "team")}`
       : pluralize(signal.users, "user");
+  // The open action and the selection checkbox are sibling controls: nesting
+  // the checkbox inside a role="button" row would flatten it out of the
+  // accessibility tree (button descendants are presentational) and make it
+  // unreachable for keyboard/screen-reader users.
   return (
     <div
-      role="button"
-      tabIndex={0}
-      onClick={(e) => {
-        // The row hosts its own interactive control (the selection checkbox);
-        // a click on it must toggle selection only, not also open the drawer.
-        if ((e.target as HTMLElement).closest("button, a")) return;
-        onSelect(signal);
-      }}
-      onKeyDown={(e) => {
-        if (e.target !== e.currentTarget) return;
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onSelect(signal);
-        }
-      }}
       style={{ borderLeftColor: SEVERITY_ACCENT[rating] }}
       className={cn(
-        "bg-card hover:bg-muted/40 divide-border flex w-full cursor-pointer items-stretch divide-x border-l-4 text-left transition-colors",
+        "bg-card hover:bg-muted/40 divide-border flex w-full items-stretch divide-x border-l-2 transition-colors",
         active && "bg-muted/30",
       )}
     >
       <div
-        className="flex shrink-0 items-center px-3"
+        className="flex shrink-0 cursor-pointer items-center px-3"
         onClick={(e) => {
           // The whole checkbox cell is a selection target: clicks anywhere in
-          // it toggle the row instead of opening the drawer. The checkbox
-          // itself already toggles via onCheckedChange, so only the padding
-          // around it toggles here.
-          e.stopPropagation();
+          // it toggle the row. The checkbox itself already toggles via
+          // onCheckedChange, so only the padding around it toggles here.
           if ((e.target as HTMLElement).closest("button")) return;
           selection.toggle(signal.key);
         }}
@@ -138,59 +118,73 @@ function SignalRow({
           aria-label="Select signal"
         />
       </div>
-      <div className="flex w-28 shrink-0 flex-col items-start justify-center gap-1 px-4 py-3">
-        <span
-          className="font-display text-4xl leading-none font-thin"
-          style={{ color: SCORE_TEXT_COLOR[rating] }}
-        >
-          {signal.riskScore.toFixed(1)}
-        </span>
-        <span
-          className="font-mono text-[11px] tracking-wide uppercase"
-          style={{ color: SCORE_TEXT_COLOR[rating] }}
-        >
-          {signal.severity}
-        </span>
-      </div>
-      <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 px-4 py-3">
-        <Text className="font-semibold">
-          {getRuleTitleFallback(signal.ruleId)}
-        </Text>
-        {signal.description && (
-          <Text small muted className="line-clamp-2">
-            {signal.description}
-          </Text>
-        )}
-        <div className="flex flex-wrap items-center gap-3 pt-1">
-          <CategoryLabel
-            source={signal.detectionSources[0]}
-            ruleId={signal.ruleId}
-          />
-          {signal.apps.map((app) => (
-            <span
-              key={app}
-              className="text-muted-foreground inline-flex items-center gap-1.5 font-mono text-xs"
-            >
-              <span aria-hidden className="bg-foreground/70 size-2" />
-              {appLabel(app)}
-            </span>
-          ))}
-        </div>
-      </div>
-      <div className="flex w-54 shrink-0 flex-col justify-center gap-1 px-4 py-3">
-        <div className="flex items-baseline justify-between">
-          <span className="text-lg font-normal tabular-nums">
-            {signal.findings.toLocaleString()}
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label={`Open details for ${getRuleTitleFallback(signal.ruleId)}`}
+        onClick={() => onSelect(signal)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onSelect(signal);
+          }
+        }}
+        className="divide-border flex min-w-0 flex-1 cursor-pointer items-stretch divide-x text-left"
+      >
+        <div className="flex w-28 shrink-0 flex-col items-start justify-center gap-1 px-4 py-3">
+          <span
+            className="font-display text-4xl leading-none font-thin"
+            style={{ color: SCORE_TEXT_COLOR[rating] }}
+          >
+            {signal.riskScore.toFixed(1)}
           </span>
-          <SignalTrend
-            findings={signal.findings}
-            previousFindings={signal.previousFindings}
-          />
+          <span
+            className="font-mono text-[11px] tracking-wide uppercase"
+            style={{ color: SCORE_TEXT_COLOR[rating] }}
+          >
+            {signal.severity}
+          </span>
         </div>
-        <Sparkline values={signal.sparkline} width={184} height={28} />
-        <span className="text-muted-foreground font-mono text-xs">
-          {usersLine}
-        </span>
+        <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 px-4 py-3">
+          <Text className="font-semibold">
+            {getRuleTitleFallback(signal.ruleId)}
+          </Text>
+          {signal.description && (
+            <Text small muted className="line-clamp-2">
+              {signal.description}
+            </Text>
+          )}
+          <div className="flex flex-wrap items-center gap-3 pt-1">
+            <CategoryLabel
+              source={signal.detectionSources[0]}
+              ruleId={signal.ruleId}
+            />
+            {signal.apps.map((app) => (
+              <span
+                key={app}
+                className="text-muted-foreground inline-flex items-center gap-1.5 font-mono text-xs"
+              >
+                <span aria-hidden className="bg-foreground/70 size-2" />
+                {formatPlatform(app)}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="flex w-54 shrink-0 flex-col justify-center gap-1 px-4 py-3">
+          <div className="flex items-baseline justify-between">
+            <span className="text-lg font-normal tabular-nums">
+              {signal.findings.toLocaleString()}
+            </span>
+            <SignalTrend
+              findings={signal.findings}
+              previousFindings={signal.previousFindings}
+            />
+          </div>
+          <Sparkline values={signal.sparkline} width={184} height={28} />
+          <span className="text-muted-foreground font-mono text-xs">
+            {usersLine}
+          </span>
+        </div>
       </div>
     </div>
   );

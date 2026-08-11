@@ -284,14 +284,14 @@ function WatchdogContent(): JSX.Element {
         customRange={customRange}
         customRangeLabel={customRangeLabel}
         availablePresets={WATCHDOG_PRESETS}
-        onPresetChange={(preset) => {
-          setUrlParam("live", null);
-          setDateRangeParam(preset);
-        }}
-        onCustomRangeChange={(rangeFrom, rangeTo, label) => {
-          setUrlParam("live", null);
-          setCustomRangeParam(rangeFrom, rangeTo, label);
-        }}
+        // Picking a range exits Live mode. The `live` removal must ride the
+        // same search-param update as the range change: two setter calls in
+        // one handler would each start from the pre-click params, and the
+        // later one would resurrect live=1.
+        onPresetChange={(preset) => setDateRangeParam(preset, { live: null })}
+        onCustomRangeChange={(rangeFrom, rangeTo, label) =>
+          setCustomRangeParam(rangeFrom, rangeTo, label, { live: null })
+        }
         onClearCustomRange={clearCustomRange}
       />
     </span>

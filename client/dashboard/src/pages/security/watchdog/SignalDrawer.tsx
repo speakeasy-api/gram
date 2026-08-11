@@ -23,7 +23,10 @@ import { ExclusionEditor, type ExclusionSheetState } from "../exclusion-sheet";
 import { MaskedMatch, RevealAllProvider, RevealAllToggle } from "../risk-ui";
 import { getRuleTitleFallback, scoreToRating } from "../risk-utils";
 import { useDismissFinding } from "../useDismissFinding";
-import { collectFindingsForRules } from "./collect-findings";
+import {
+  collectFindingsForRules,
+  SIGNAL_DISMISS_CAP,
+} from "./collect-findings";
 import { SCORE_TEXT_COLOR } from "./signals-helpers";
 import { SignalTrend } from "./SignalsList";
 
@@ -163,9 +166,12 @@ function signalDescription(signal: RiskSignal, confirming: boolean): string {
  * visible behind it.
  */
 function FalsePositiveConfirm({
+  count,
   onConfirm,
   onCancel,
 }: {
+  /** Findings actually collected for dismissal (may have hit the cap). */
+  count: number;
   onConfirm: () => void;
   onCancel: () => void;
 }): JSX.Element {
@@ -180,12 +186,22 @@ function FalsePositiveConfirm({
           className="text-destructive mt-0.5 size-5 shrink-0"
         />
         <Text className="text-base">
-          This will mark the findings as false positive and they won't be
-          displayed in the watchdog view again.
+          {count === 0
+            ? "No findings to mark in the selected window."
+            : `This will mark ${count.toLocaleString()} ${
+                count === 1 ? "finding" : "findings"
+              } as false positive; they won't be displayed in the watchdog view again.`}
+          {count >= SIGNAL_DISMISS_CAP &&
+            " There are more findings than can be marked at once; run this again to continue."}
         </Text>
       </div>
       <div className="flex items-center gap-2">
-        <Button variant="primary" className="w-28" onClick={onConfirm}>
+        <Button
+          variant="primary"
+          className="w-28"
+          disabled={count === 0}
+          onClick={onConfirm}
+        >
           <Button.Text>OK</Button.Text>
         </Button>
         <Button variant="tertiary" className="w-28" onClick={onCancel}>
@@ -353,6 +369,7 @@ export function SignalDrawer({
                     detail stays visible; no modal, no view change. */}
                 {pendingDismissAll ? (
                   <FalsePositiveConfirm
+                    count={pendingDismissAll.length}
                     onConfirm={confirmDismissAll}
                     onCancel={() => setPendingDismissAll(null)}
                   />
@@ -472,11 +489,27 @@ export function SignalDrawer({
                           Loading evidence…
                         </Text>
                       )}
-                      {!evidenceQuery.isLoading && evidence.length === 0 && (
-                        <Text small muted>
-                          No evidence rows in this window.
-                        </Text>
+                      {evidenceQuery.isError && (
+                        <div className="flex items-center gap-2">
+                          <Text small muted>
+                            Failed to load evidence.
+                          </Text>
+                          <Button
+                            variant="tertiary"
+                            size="sm"
+                            onClick={() => void evidenceQuery.refetch()}
+                          >
+                            <Button.Text>Retry</Button.Text>
+                          </Button>
+                        </div>
                       )}
+                      {!evidenceQuery.isLoading &&
+                        !evidenceQuery.isError &&
+                        evidence.length === 0 && (
+                          <Text small muted>
+                            No evidence rows in this window.
+                          </Text>
+                        )}
                       <ExpandableList
                         key={`evidence-${signal.key}`}
                         items={evidence}
