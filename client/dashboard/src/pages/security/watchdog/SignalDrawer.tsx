@@ -312,37 +312,40 @@ export function SignalDrawer({
               no second sheet stacks on top, and the sheet's close (X)
               affordance only exists on the signal view. A light Back button
               sits beside Create in the footer and returns to the signal. */}
-          {signal && exclusionState && (
-            <>
-              <SheetHeader>
-                <SheetTitle>Create exclusion rule</SheetTitle>
-                <SheetDescription>
-                  Suppress matching findings retroactively and going forward.
-                  Does not re-run analysis.
-                </SheetDescription>
-              </SheetHeader>
-              {/* Flex column filling the sheet so the form's footer
+          {signal &&
+            exclusionState && (
+              // The same slide-in the Sheet itself uses when opening, so
+              // swapping to the editor reads as a drawer view transition.
+              <div className="animate-in slide-in-from-right flex min-h-0 flex-1 flex-col duration-300 ease-in-out">
+                <SheetHeader>
+                  <SheetTitle>Create exclusion rule</SheetTitle>
+                  <SheetDescription>
+                    Suppress matching findings retroactively and going forward.
+                    Does not re-run analysis.
+                  </SheetDescription>
+                </SheetHeader>
+                {/* Flex column filling the sheet so the form's footer
                   (mt-auto) pins Back/Create to the drawer's bottom edge. */}
-              <div className="flex min-h-0 flex-1 flex-col px-4 pb-6">
-                <ExclusionEditor
-                  state={exclusionState}
-                  onDone={() => setExclusionState(null)}
-                  embedded
-                  secondaryAction={
-                    <Button
-                      variant="tertiary"
-                      onClick={() => setExclusionState(null)}
-                    >
-                      <Button.LeftIcon>
-                        <Icon name="arrow-left" className="size-4" />
-                      </Button.LeftIcon>
-                      <Button.Text>Back</Button.Text>
-                    </Button>
-                  }
-                />
+                <div className="flex min-h-0 flex-1 flex-col px-4 pb-6">
+                  <ExclusionEditor
+                    state={exclusionState}
+                    onDone={() => setExclusionState(null)}
+                    embedded
+                    secondaryAction={
+                      <Button
+                        variant="tertiary"
+                        onClick={() => setExclusionState(null)}
+                      >
+                        <Button.LeftIcon>
+                          <Icon name="arrow-left" className="size-4" />
+                        </Button.LeftIcon>
+                        <Button.Text>Back</Button.Text>
+                      </Button>
+                    }
+                  />
+                </div>
               </div>
-            </>
-          )}
+            )}
           {signal && !exclusionState && (
             <RevealAllProvider>
               <SheetHeader>
