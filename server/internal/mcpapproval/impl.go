@@ -490,23 +490,23 @@ func (s *Service) refreshGappedEvidence(ctx context.Context, projectID uuid.UUID
 }
 
 // beginGapRetry reports whether a gap retry for this dossier may run now,
-// recording the attempt when it may. Entries past their cooldown are pruned
-// on the way through, so the map holds at most the gapped dossiers viewed
-// within the current window.
+// recording the attempt when it may. Every call prunes entries past their
+// cooldown — including calls that end up denied — so the map holds at most
+// the gapped dossiers viewed within the current window.
 func (s *Service) beginGapRetry(id uuid.UUID) bool {
 	now := time.Now()
 
 	s.gapRetryMu.Lock()
 	defer s.gapRetryMu.Unlock()
 
-	if last, seen := s.gapRetryAt[id]; seen && now.Sub(last) < gapRetryCooldown {
-		return false
-	}
-
 	for other, last := range s.gapRetryAt {
 		if now.Sub(last) >= gapRetryCooldown {
 			delete(s.gapRetryAt, other)
 		}
+	}
+
+	if _, seen := s.gapRetryAt[id]; seen {
+		return false
 	}
 
 	s.gapRetryAt[id] = now
