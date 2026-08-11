@@ -108,3 +108,11 @@ describe("formatSubjectLabel", () => {
     expect(formatSubjectLabel("ci-deploy", "api_key")).toBe("ci-deploy");
   });
 });
+
+describe("past-tense fallback inflection", () => {
+  it("inflects consonant-y verbs to -ied", () => {
+    expect(renderVerb(log({ action: "widget:retry" }))).toBe("retried widget");
+    expect(renderVerb(log({ action: "widget:deny" }))).toBe("denied widget");
+    expect(renderVerb(log({ action: "widget:relay" }))).toBe("relayed widget");
+  });
+});

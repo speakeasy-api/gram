@@ -68,7 +68,11 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
-import { getActorLabel, renderVerb } from "@/lib/audit-log-format";
+import {
+  formatSubjectLabel,
+  getActorLabel,
+  renderVerb,
+} from "@/lib/audit-log-format";
 
 import { ActionIconTile } from "@/components/auditlogs/feed";
 
@@ -304,6 +308,9 @@ function OrgHomeInner() {
                 padding so they do not collide with its border. */}
             <Card.Dashboard
               title="Projects"
+              // Not h-full: a single project row would otherwise stretch to
+              // whatever height the activity rail sets.
+              className="h-auto"
               // Grid keeps the card's side padding but drops the top, so the
               // first divider sits the same distance below the header as it
               // does in list mode, where the body is flush.
@@ -973,6 +980,17 @@ function RecentActivityCompact({ logs }: { logs: AuditLog[] }) {
                   <span className="text-muted-foreground">
                     {renderVerb(log)}
                   </span>
+                  {log.subjectDisplayName && (
+                    <>
+                      {" "}
+                      <span className="text-foreground font-medium">
+                        {formatSubjectLabel(
+                          log.subjectDisplayName,
+                          log.subjectType,
+                        )}
+                      </span>
+                    </>
+                  )}
                 </Text>
                 <Text
                   muted

@@ -62,60 +62,11 @@ function getSubjectLabel(log: AuditLog) {
   return log.subjectDisplayName || log.subjectSlug || log.subjectId;
 }
 
-function recordString(value: unknown, key: string): string | undefined {
-  if (value == null || typeof value !== "object") return undefined;
-  const field = (value as Record<string, unknown>)[key];
-  return typeof field === "string" && field !== "" ? field : undefined;
-}
-
-function formatRoleSlug(roleSlug: string) {
-  return roleSlug.replace(/[-_]/g, " ");
-}
-
-function inviteCreatedRole(log: AuditLog): string | undefined {
-  return recordString(log.metadata, "role_slug");
-}
-
-function inviteRoleBefore(log: AuditLog): string | undefined {
-  return (
-    recordString(log.beforeSnapshot, "RoleSlug") ??
-    recordString(log.beforeSnapshot, "role_slug")
-  );
-}
-
-function inviteRoleAfter(log: AuditLog): string | undefined {
-  return (
-    recordString(log.afterSnapshot, "RoleSlug") ??
-    recordString(log.afterSnapshot, "role_slug")
-  );
-}
-
+// renderVerb already names the role ("sent org admin invite to", "changed invite
+// role from x to y for"), so the subject is just the invitee. Repeating it here
+// rendered as "... invite to someone@example.com as org admin".
 function inviteSubjectText(log: AuditLog) {
-  const subject = getSubjectLabel(log);
-
-  if (log.action === "organization_invitation:create") {
-    const role = inviteCreatedRole(log);
-    return role ? `${subject} as ${formatRoleSlug(role)}` : subject;
-  }
-
-  if (log.action === "organization_invitation:update_role") {
-    const before = inviteRoleBefore(log);
-    const after = inviteRoleAfter(log);
-    let roleText = "";
-    if (before && after && before !== after) {
-      roleText = ` from ${formatRoleSlug(before)} to ${formatRoleSlug(after)}`;
-    } else if (after) {
-      roleText = ` to ${formatRoleSlug(after)}`;
-    }
-
-    return `${subject}${roleText}`;
-  }
-
-  return subject;
-}
-
-function renderInviteSubject(log: AuditLog, monoClass: string) {
-  return <span className={monoClass}>{inviteSubjectText(log)}</span>;
+  return getSubjectLabel(log);
 }
 
 function truncateMiddle(value: string, start = 18, end = 16) {
@@ -164,10 +115,6 @@ function subjectLinkText(log: AuditLog): string {
 
 function renderSubject(log: AuditLog, orgSlug: string) {
   const monoClass = SUBJECT_MONO_CLASS;
-
-  if (log.subjectType === "organization_invitation") {
-    return renderInviteSubject(log, monoClass);
-  }
 
   const href = subjectHref(log, orgSlug);
   if (href) {

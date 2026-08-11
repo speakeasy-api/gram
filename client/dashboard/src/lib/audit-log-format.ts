@@ -188,6 +188,9 @@ function pastTense(verb: string): string {
   if (irregular) return irregular;
   if (verb.endsWith("ed")) return verb;
   if (verb.endsWith("e")) return `${verb}d`;
+  // Consonant + y inflects to -ied ("retry" -> "retried"); a vowel before it
+  // does not ("relay" -> "relayed").
+  if (/[^aeiou]y$/.test(verb)) return `${verb.slice(0, -1)}ied`;
   return `${verb}ed`;
 }
 

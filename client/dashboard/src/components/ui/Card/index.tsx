@@ -302,6 +302,8 @@ type CardDashboardProps = {
   tooltip?: string;
   /** Body classes, e.g. `p-0` for content that should reach the card edges. */
   bodyClassName?: string;
+  /** Root classes, e.g. `h-auto` for a panel that should not stretch. */
+  className?: string;
 };
 
 /**
@@ -315,9 +317,15 @@ function CardDashboard({
   children,
   tooltip,
   bodyClassName,
+  className,
 }: CardDashboardProps): JSX.Element {
   return (
-    <div className="bg-card text-card-foreground relative flex h-full w-full flex-col border">
+    <div
+      className={cn(
+        "bg-card text-card-foreground relative flex h-full w-full flex-col border",
+        className,
+      )}
+    >
       <div className="flex w-full flex-row items-center justify-between gap-4 border-b px-6 py-4">
         <div className="flex items-center gap-1.5">
           <h3 className="text-eyebrow">{title}</h3>
