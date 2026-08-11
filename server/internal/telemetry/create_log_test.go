@@ -9,6 +9,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,8 +35,8 @@ func TestCreateLog_LogsCorrectly(t *testing.T) {
 		Attributes: attrs,
 	})
 
-	log := waitForLog(
-		t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
+	log := flushAndGetLog(
+		t, ctx, ti, toolInfo.ProjectID, toolInfo.URN, timestamp)
 
 	// logs tool info
 	require.Equal(t, toolInfo.ProjectID, log.GramProjectID)
@@ -73,7 +75,7 @@ func TestCreateLog_NilFunctionID(t *testing.T) {
 		Attributes: attrs,
 	})
 
-	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
+	log := flushAndGetLog(t, ctx, ti, toolInfo.ProjectID, toolInfo.URN, timestamp)
 
 	require.Nil(t, log.GramFunctionID)
 }
@@ -97,7 +99,7 @@ func TestCreateLog_NonNilFunctionID(t *testing.T) {
 		Attributes: attrs,
 	})
 
-	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
+	log := flushAndGetLog(t, ctx, ti, toolInfo.ProjectID, toolInfo.URN, timestamp)
 
 	require.NotNil(t, log.GramFunctionID)
 	require.Equal(t, funcID, *log.GramFunctionID)
@@ -134,7 +136,7 @@ func TestCreateLog_SeverityFromStatusCode(t *testing.T) {
 				Attributes: attrs,
 			})
 
-			log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
+			log := flushAndGetLog(t, ctx, ti, toolInfo.ProjectID, toolInfo.URN, timestamp)
 
 			require.NotNil(t, log.SeverityText)
 			require.Equal(t, tc.expectSeverity, *log.SeverityText)
@@ -159,7 +161,7 @@ func TestCreateLog_DefaultSeverityWithoutStatusCode(t *testing.T) {
 		Attributes: attrs,
 	})
 
-	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
+	log := flushAndGetLog(t, ctx, ti, toolInfo.ProjectID, toolInfo.URN, timestamp)
 
 	require.NotNil(t, log.SeverityText)
 	require.Equal(t, "INFO", *log.SeverityText)
@@ -186,7 +188,7 @@ func TestCreateLog_RequestHeaders(t *testing.T) {
 		Attributes: attrs,
 	})
 
-	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
+	log := flushAndGetLog(t, ctx, ti, toolInfo.ProjectID, toolInfo.URN, timestamp)
 
 	require.Contains(t, log.Attributes, "Content-Type")
 	require.Contains(t, log.Attributes, "application\\/json") // JSON escapes forward slashes
@@ -215,7 +217,7 @@ func TestCreateLog_ResponseHeaders(t *testing.T) {
 		Attributes: attrs,
 	})
 
-	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
+	log := flushAndGetLog(t, ctx, ti, toolInfo.ProjectID, toolInfo.URN, timestamp)
 
 	require.Contains(t, log.Attributes, "Content-Type")
 	require.Contains(t, log.Attributes, "Content-Length")
@@ -240,7 +242,7 @@ func TestCreateLog_LogMessageBody(t *testing.T) {
 		Attributes: attrs,
 	})
 
-	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
+	log := flushAndGetLog(t, ctx, ti, toolInfo.ProjectID, toolInfo.URN, timestamp)
 
 	require.Equal(t, "POST /api/test -> 200 (0.12s)", log.Body)
 }
@@ -264,7 +266,7 @@ func TestCreateLog_Timestamp(t *testing.T) {
 		Attributes: attrs,
 	})
 
-	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
+	log := flushAndGetLog(t, ctx, ti, toolInfo.ProjectID, toolInfo.URN, timestamp)
 
 	require.Equal(t, timestamp.UnixNano(), log.TimeUnixNano)
 }
@@ -322,7 +324,7 @@ func TestCreateLog_EmptyDeploymentIDNotInAttributes(t *testing.T) {
 		Attributes: attrs,
 	})
 
-	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
+	log := flushAndGetLog(t, ctx, ti, toolInfo.ProjectID, toolInfo.URN, timestamp)
 
 	require.Nil(t, log.GramDeploymentID)
 	// The deployment ID key should not appear in resource_attributes when empty
@@ -348,7 +350,7 @@ func TestCreateLog_ChatIDColumn(t *testing.T) {
 		Attributes: attrs,
 	})
 
-	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
+	log := flushAndGetLog(t, ctx, ti, toolInfo.ProjectID, toolInfo.URN, timestamp)
 
 	require.NotNil(t, log.GramChatID)
 	require.Equal(t, chatID, *log.GramChatID)
@@ -371,7 +373,7 @@ func TestCreateLog_NilChatIDWhenNotProvided(t *testing.T) {
 		Attributes: attrs,
 	})
 
-	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
+	log := flushAndGetLog(t, ctx, ti, toolInfo.ProjectID, toolInfo.URN, timestamp)
 
 	require.Nil(t, log.GramChatID)
 }
@@ -398,7 +400,7 @@ func TestCreateLog_TraceAndSpanIDColumns(t *testing.T) {
 		Attributes: attrs,
 	})
 
-	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
+	log := flushAndGetLog(t, ctx, ti, toolInfo.ProjectID, toolInfo.URN, timestamp)
 
 	require.NotNil(t, log.TraceID)
 	require.Equal(t, traceID, *log.TraceID)
@@ -428,7 +430,7 @@ func TestCreateLog_ToolIOBodyContent(t *testing.T) {
 		Attributes: attrs,
 	})
 
-	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
+	log := flushAndGetLog(t, ctx, ti, toolInfo.ProjectID, toolInfo.URN, timestamp)
 
 	require.Contains(t, log.Attributes, "listPets")
 	require.Contains(t, log.Attributes, "Fido")
@@ -456,7 +458,7 @@ func TestCreateLog_ToolIOBodyContentScrubbed(t *testing.T) {
 		Attributes: attrs,
 	})
 
-	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
+	log := flushAndGetLog(t, ctx, ti, toolInfo.ProjectID, toolInfo.URN, timestamp)
 
 	require.NotContains(t, log.Attributes, "gen_ai.tool.call.arguments")
 	require.NotContains(t, log.Attributes, "gen_ai.tool.call.result")
@@ -481,10 +483,61 @@ func TestCreateLog_ToolIOBodyContentNotPresentWhenNotRecorded(t *testing.T) {
 		Attributes: attrs,
 	})
 
-	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
+	log := flushAndGetLog(t, ctx, ti, toolInfo.ProjectID, toolInfo.URN, timestamp)
 
 	require.NotContains(t, log.Attributes, "gen_ai.tool.call.arguments")
 	require.NotContains(t, log.Attributes, "gen_ai.tool.call.result")
+}
+
+func TestCreateLog_StampsDerivedEventURN(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestLogsService(t)
+
+	attrs := telemetry.HTTPLogAttributes{
+		attr.EventSourceKey: string(telemetry.EventSourceToolCall),
+	}
+	attrs.RecordMethod("POST")
+	attrs.RecordStatusCode(200)
+
+	toolInfo := newTestToolInfo(ti.orgID)
+	timestamp := time.Now().UTC()
+
+	ti.telemLogger.Log(ctx, telemetry.LogParams{
+		Timestamp:  timestamp,
+		ToolInfo:   toolInfo,
+		Attributes: attrs,
+	})
+
+	log := flushAndGetLog(t, ctx, ti, toolInfo.ProjectID, toolInfo.URN, timestamp)
+
+	require.Contains(t, log.Attributes, "urn:telemetry:gram_service:log:tool_call")
+}
+
+func TestCreateLog_ExplicitEventURNWins(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestLogsService(t)
+
+	explicit := "urn:telemetry:gram_service:log:custom_type"
+	attrs := telemetry.HTTPLogAttributes{
+		attr.EventSourceKey: string(telemetry.EventSourceToolCall),
+		attr.EventURNKey:    explicit,
+	}
+	attrs.RecordMethod("POST")
+	attrs.RecordStatusCode(200)
+
+	toolInfo := newTestToolInfo(ti.orgID)
+	timestamp := time.Now().UTC()
+
+	ti.telemLogger.Log(ctx, telemetry.LogParams{
+		Timestamp:  timestamp,
+		ToolInfo:   toolInfo,
+		Attributes: attrs,
+	})
+
+	log := flushAndGetLog(t, ctx, ti, toolInfo.ProjectID, toolInfo.URN, timestamp)
+
+	require.Contains(t, log.Attributes, explicit)
+	require.NotContains(t, log.Attributes, "urn:telemetry:gram_service:log:tool_call")
 }
 
 func newTestToolInfo(orgID string) telemetry.ToolInfo {
@@ -498,13 +551,18 @@ func newTestToolInfo(orgID string) telemetry.ToolInfo {
 	}
 }
 
-func waitForLog(t *testing.T, ctx context.Context, client *repo.Queries, projectID, urn string, timestamp time.Time) repo.TelemetryLog {
+// flushAndGetLog drains ClickHouse's async insert queue, then polls the read.
+// Under full-suite load ClickHouse can acknowledge the flush just before the
+// row becomes queryable, so a single immediate read is occasionally empty.
+func flushAndGetLog(t *testing.T, ctx context.Context, ti *testInstance, projectID, urn string, timestamp time.Time) repo.TelemetryLog {
 	t.Helper()
 
 	var logs []repo.TelemetryLog
-	require.Eventually(t, func() bool {
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
 		var err error
-		logs, err = client.ListTelemetryLogs(ctx, repo.ListTelemetryLogsParams{
+		logs, err = ti.chClient.ListTelemetryLogs(ctx, repo.ListTelemetryLogsParams{
 			GramProjectID: projectID,
 			TimeStart:     timestamp.Add(-1 * time.Minute).UnixNano(),
 			TimeEnd:       timestamp.Add(1 * time.Minute).UnixNano(),
@@ -513,8 +571,9 @@ func waitForLog(t *testing.T, ctx context.Context, client *repo.Queries, project
 			Cursor:        "",
 			Limit:         10,
 		})
-		return err == nil && len(logs) == 1
-	}, 2*time.Second, 50*time.Millisecond, "expected 1 log in ClickHouse")
+		assert.NoError(c, err)
+		assert.Len(c, logs, 1, "expected 1 log in ClickHouse")
+	}, 10*time.Second, 50*time.Millisecond)
 
 	return logs[0]
 }

@@ -6,6 +6,11 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 import {
+  RiskDetectionScope,
+  RiskDetectionScope$Outbound,
+  RiskDetectionScope$outboundSchema,
+} from "./riskdetectionscope.js";
+import {
   RiskPolicyModelConfig,
   RiskPolicyModelConfig$Outbound,
   RiskPolicyModelConfig$outboundSchema,
@@ -40,6 +45,20 @@ export type UpdateRiskPolicyRequestBodyAudienceType = ClosedEnum<
   typeof UpdateRiskPolicyRequestBodyAudienceType
 >;
 
+/**
+ * The policy's shadow MCP disposition. Immutable: omit, or send the current value unchanged; any other value is rejected. Switching posture requires delete + recreate.
+ */
+export const UpdateRiskPolicyRequestBodyShadowMcpDisposition = {
+  BlockAll: "block_all",
+  AllowAll: "allow_all",
+} as const;
+/**
+ * The policy's shadow MCP disposition. Immutable: omit, or send the current value unchanged; any other value is rejected. Switching posture requires delete + recreate.
+ */
+export type UpdateRiskPolicyRequestBodyShadowMcpDisposition = ClosedEnum<
+  typeof UpdateRiskPolicyRequestBodyShadowMcpDisposition
+>;
+
 export type UpdateRiskPolicyRequestBody = {
   /**
    * Policy action: flag, warn (challenge), or block.
@@ -65,6 +84,10 @@ export type UpdateRiskPolicyRequestBody = {
    * Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.
    */
   customRuleIds?: Array<string> | undefined;
+  /**
+   * Per-category detection scopes. Each specified category replaces its centrally recommended scope; a scope with both predicates empty scans every message surface. Omit to preserve the current value; send empty to clear.
+   */
+  detectionScopes?: Array<RiskDetectionScope> | undefined;
   /**
    * Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.
    */
@@ -111,6 +134,24 @@ export type UpdateRiskPolicyRequestBody = {
    */
   scopeInclude?: string | undefined;
   /**
+   * CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit to preserve the current value.
+   */
+  score?: number | undefined;
+  /**
+   * Complete desired canonical URL allow set for this policy. Omit to preserve; send empty to clear.
+   */
+  shadowMcpAllowedUrls?: Array<string> | undefined;
+  /**
+   * For allow_all policies: complete desired canonical URL block set. Omit to preserve; send empty to clear.
+   */
+  shadowMcpBlockedUrls?: Array<string> | undefined;
+  /**
+   * The policy's shadow MCP disposition. Immutable: omit, or send the current value unchanged; any other value is rejected. Switching posture requires delete + recreate.
+   */
+  shadowMcpDisposition?:
+    | UpdateRiskPolicyRequestBodyShadowMcpDisposition
+    | undefined;
+  /**
    * Detection sources to enable.
    */
   sources?: Array<string> | undefined;
@@ -132,6 +173,11 @@ export const UpdateRiskPolicyRequestBodyAudienceType$outboundSchema:
   );
 
 /** @internal */
+export const UpdateRiskPolicyRequestBodyShadowMcpDisposition$outboundSchema:
+  z.ZodMiniEnum<typeof UpdateRiskPolicyRequestBodyShadowMcpDisposition> = z
+    .enum(UpdateRiskPolicyRequestBodyShadowMcpDisposition);
+
+/** @internal */
 export type UpdateRiskPolicyRequestBody$Outbound = {
   action?: string | undefined;
   approved_email_domains?: Array<string> | undefined;
@@ -139,6 +185,7 @@ export type UpdateRiskPolicyRequestBody$Outbound = {
   audience_type?: string | undefined;
   auto_name?: boolean | undefined;
   custom_rule_ids?: Array<string> | undefined;
+  detection_scopes?: Array<RiskDetectionScope$Outbound> | undefined;
   disabled_rules?: Array<string> | undefined;
   enabled?: boolean | undefined;
   id: string;
@@ -151,6 +198,10 @@ export type UpdateRiskPolicyRequestBody$Outbound = {
   prompt_injection_rules?: Array<string> | undefined;
   scope_exempt?: string | undefined;
   scope_include?: string | undefined;
+  score?: number | undefined;
+  shadow_mcp_allowed_urls?: Array<string> | undefined;
+  shadow_mcp_blocked_urls?: Array<string> | undefined;
+  shadow_mcp_disposition?: string | undefined;
   sources?: Array<string> | undefined;
   user_message?: string | undefined;
 };
@@ -169,6 +220,7 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     ),
     autoName: z.optional(z.boolean()),
     customRuleIds: z.optional(z.array(z.string())),
+    detectionScopes: z.optional(z.array(RiskDetectionScope$outboundSchema)),
     disabledRules: z.optional(z.array(z.string())),
     enabled: z.optional(z.boolean()),
     id: z.string(),
@@ -181,6 +233,12 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     promptInjectionRules: z.optional(z.array(z.string())),
     scopeExempt: z.optional(z.string()),
     scopeInclude: z.optional(z.string()),
+    score: z.optional(z.number()),
+    shadowMcpAllowedUrls: z.optional(z.array(z.string())),
+    shadowMcpBlockedUrls: z.optional(z.array(z.string())),
+    shadowMcpDisposition: z.optional(
+      UpdateRiskPolicyRequestBodyShadowMcpDisposition$outboundSchema,
+    ),
     sources: z.optional(z.array(z.string())),
     userMessage: z.optional(z.string()),
   }),
@@ -191,6 +249,7 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
       audienceType: "audience_type",
       autoName: "auto_name",
       customRuleIds: "custom_rule_ids",
+      detectionScopes: "detection_scopes",
       disabledRules: "disabled_rules",
       messageTypes: "message_types",
       modelConfig: "model_config",
@@ -199,6 +258,9 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
       promptInjectionRules: "prompt_injection_rules",
       scopeExempt: "scope_exempt",
       scopeInclude: "scope_include",
+      shadowMcpAllowedUrls: "shadow_mcp_allowed_urls",
+      shadowMcpBlockedUrls: "shadow_mcp_blocked_urls",
+      shadowMcpDisposition: "shadow_mcp_disposition",
       userMessage: "user_message",
     });
   }),

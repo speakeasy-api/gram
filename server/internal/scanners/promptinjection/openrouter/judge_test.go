@@ -13,6 +13,7 @@ import (
 	"github.com/OpenRouterTeam/go-sdk/optionalnullable"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -104,7 +105,7 @@ func TestClassifyFailsOpenOnClientError(t *testing.T) {
 	out, err := c.Classify(t.Context(), req("ignore previous instructions"))
 	require.NoError(t, err, "a judge error must not bubble up — it fails open")
 	require.Len(t, out, 1)
-	require.Equal(t, "SAFE", out[0].Label, "judge error fails open to SAFE")
+	require.Equal(t, promptinjection.LabelUnavailable, out[0].Label, "judge error fails open, but not as a clean judgement")
 	require.Equal(t, int64(1), client.calls.Load())
 }
 
@@ -116,7 +117,7 @@ func TestClassifyFailsOpenOnUnparseableVerdict(t *testing.T) {
 	out, err := c.Classify(t.Context(), req("ignore previous instructions"))
 	require.NoError(t, err)
 	require.Len(t, out, 1)
-	require.Equal(t, "SAFE", out[0].Label, "an unparseable verdict fails open to SAFE")
+	require.Equal(t, promptinjection.LabelUnavailable, out[0].Label, "an unparseable verdict fails open, but not as a clean judgement")
 }
 
 func TestClassifyEmptyTextsSkipTheClient(t *testing.T) {
@@ -179,20 +180,20 @@ func TestClassifyRateLimitedFailsOpen(t *testing.T) {
 		return `{"is_attack":true,"confidence":1,"rationale":"x"}`
 	}}
 	c := newEngine(t, client)
-	drainLimiter(t, c, "org-a")
+	drainLimiter(t, c)
 
 	out, err := c.Classify(t.Context(), req("ignore previous instructions"))
 	require.NoError(t, err)
 	require.Len(t, out, 1)
-	require.Equal(t, "SAFE", out[0].Label, "a throttled call fails open to SAFE")
+	require.Equal(t, promptinjection.LabelUnavailable, out[0].Label, "a throttled call fails open, but not as a clean judgement")
 	require.Zero(t, client.calls.Load(), "a throttled call must not reach the judge")
 }
 
-// drainLimiter exhausts the org+model token bucket so the next Classify is
+// drainLimiter exhausts the model token bucket so the next Classify is
 // throttled.
-func drainLimiter(t *testing.T, c *Engine, org string) {
+func drainLimiter(t *testing.T, c *Engine) {
 	t.Helper()
-	key := openrouter.JudgeRateLimitKey(org, defaultModel)
+	key := openrouter.JudgeRateLimitKey(openrouter.PlatformKey(), defaultModel)
 	for {
 		res, err := c.limiter.Allow(t.Context(), key)
 		require.NoError(t, err)
@@ -265,4 +266,8 @@ func (c *fakeCompletionClient) GetCompletionStream(_ context.Context, _ openrout
 
 func (c *fakeCompletionClient) CreateEmbeddings(_ context.Context, _ string, _ string, _ []string, _ ...openrouter.EmbeddingOption) ([][]float32, error) {
 	return nil, errors.New("not implemented")
+}
+
+func (c *fakeCompletionClient) ResolveKey(_ context.Context, _ string, _ string, _ billing.ModelUsageSource, _ openrouter.KeyType) (openrouter.ResolvedKey, error) {
+	return openrouter.PlatformKey(), nil
 }

@@ -99,6 +99,31 @@ func EnsureDefaultPlugin(ctx context.Context, tx pgx.Tx, organizationID string, 
 		return nil, fmt.Errorf("release savepoint: %w", err)
 	}
 
+	// Default a freshly-created Default plugin to the org wildcard so it delivers
+	// to every member — but only in the org's default project, the org-wide
+	// baseline. agent.getPlugins scopes delivery by assignment, and the default
+	// project's Default plugin (where enabled servers auto-attach) must reach
+	// everyone unless an admin narrows it. A non-default project's Default plugin
+	// starts with no assignments so enabling a server there doesn't auto-broadcast
+	// org-wide. Only the genuine-creation path seeds this; the race/promote
+	// recoveries above leave any existing assignments untouched.
+	isDefaultProject, err := q.IsDefaultProject(ctx, repo.IsDefaultProjectParams{
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("check default project: %w", err)
+	}
+	if isDefaultProject {
+		if _, err := q.AddPluginAssignment(ctx, repo.AddPluginAssignmentParams{
+			PluginID:       created.ID,
+			OrganizationID: organizationID,
+			PrincipalUrn:   urn.PrincipalWildcard,
+		}); err != nil {
+			return nil, fmt.Errorf("assign default plugin to org: %w", err)
+		}
+	}
+
 	return &EnsureDefaultPluginResult{Plugin: created, Created: true}, nil
 }
 
@@ -156,11 +181,21 @@ func AttachToDefaultPlugin(ctx context.Context, tx pgx.Tx, params AttachToDefaul
 		return nil, fmt.Errorf("check existing default plugin server: %w", err)
 	}
 
+	// A different attached server (a same-named toolset row, or a stale row
+	// from a deleted server) may already hold the display name, which the
+	// (plugin_id, display_name) unique index spans across backends. Blocking
+	// the attach — and with it the triggering action, e.g. enabling a server —
+	// over a marketplace display name is disproportionate, so uniquify instead.
+	displayName, err := availableDisplayName(ctx, q, ensured.Plugin.ID, params)
+	if err != nil {
+		return nil, err
+	}
+
 	server, err := q.AddPluginServer(ctx, repo.AddPluginServerParams{
 		PluginID:    ensured.Plugin.ID,
 		ToolsetID:   params.ToolsetID,
 		McpServerID: params.McpServerID,
-		DisplayName: params.DisplayName,
+		DisplayName: displayName,
 		Policy:      "required",
 		SortOrder:   0,
 	})
@@ -176,10 +211,10 @@ func AttachToDefaultPlugin(ctx context.Context, tx pgx.Tx, params AttachToDefaul
 				// check and no-ops cleanly.
 				return nil, nil
 			default:
-				// display_name collision with a different, already-attached
-				// server (or a manually-added one) is a real conflict, not
-				// "already attached" — surface it instead of silently
-				// dropping the server from the Default plugin.
+				// display_name still collided after the availability check —
+				// a concurrent attach of a same-named server won the race.
+				// The failed insert aborts the surrounding transaction; a
+				// retry sees the winner via the check above and uniquifies.
 			}
 		}
 		return nil, fmt.Errorf("attach server to default plugin: %w", err)
@@ -192,6 +227,59 @@ func AttachToDefaultPlugin(ctx context.Context, tx pgx.Tx, params AttachToDefaul
 		PluginCreated: ensured.Created,
 		Server:        server,
 	}, nil
+}
+
+// displayNameCandidates bounds how many names availableDisplayName probes
+// before giving up. Reaching the bound needs every candidate to be occupied,
+// which takes deliberately crafted names: the first suffixed candidate is
+// already specific to this backend.
+const displayNameCandidates = 8
+
+// availableDisplayName returns the first display name free on the plugin,
+// starting from the requested one. Display names are unique per plugin across
+// backends and are user-editable (UpdatePluginServer), so neither the
+// requested name nor any single derived candidate is guaranteed free —
+// probing a deterministic ladder keeps a marketplace label from failing the
+// caller's triggering action, e.g. enabling a server.
+func availableDisplayName(ctx context.Context, q *repo.Queries, pluginID uuid.UUID, params AttachToDefaultPluginParams) (string, error) {
+	suffix := backendIDSuffix(params)
+
+	for attempt := range displayNameCandidates {
+		candidate := params.DisplayName
+		switch {
+		case attempt == 1:
+			candidate = fmt.Sprintf("%s (%s)", params.DisplayName, suffix)
+		case attempt > 1:
+			candidate = fmt.Sprintf("%s (%s %d)", params.DisplayName, suffix, attempt)
+		}
+
+		taken, err := q.PluginServerDisplayNameExists(ctx, repo.PluginServerDisplayNameExistsParams{
+			PluginID:    pluginID,
+			ProjectID:   params.ProjectID,
+			DisplayName: candidate,
+		})
+		if err != nil {
+			return "", fmt.Errorf("check default plugin display name availability: %w", err)
+		}
+		if !taken {
+			return candidate, nil
+		}
+	}
+
+	return "", fmt.Errorf("no available display name derived from %q on plugin %s after %d candidates", params.DisplayName, pluginID, displayNameCandidates)
+}
+
+// backendIDSuffix returns the last hex characters of the backend id (the
+// toolset or mcp_server, exactly one of which is set) used to uniquify a
+// colliding display name — the same suffix mcpservers bakes into server slugs,
+// so the two stay recognizable as the same server.
+func backendIDSuffix(params AttachToDefaultPluginParams) string {
+	id := params.McpServerID.UUID
+	if params.ToolsetID.Valid {
+		id = params.ToolsetID.UUID
+	}
+	s := id.String()
+	return s[len(s)-4:]
 }
 
 // AttachToDefaultPluginAudited runs AttachToDefaultPlugin and records the

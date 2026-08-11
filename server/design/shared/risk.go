@@ -62,6 +62,19 @@ func RiskPolicyAudienceTypeEnum() {
 	Enum("everyone", "targeted")
 }
 
+// RiskPolicyShadowMCPDispositionEnum constrains the default disposition of a
+// shadow MCP blocking policy. `block_all` blocks every non-Gram-hosted server
+// unless explicitly allowed (the original behavior); `allow_all` permits every
+// server unless it appears on the policy's blocked-URL list. The disposition is
+// immutable after create — switching posture requires deleting and recreating
+// the policy.
+//
+// Must stay in sync with the Disposition* constants in
+// server/internal/shadowmcp/disposition.go.
+func RiskPolicyShadowMCPDispositionEnum() {
+	Enum("block_all", "allow_all")
+}
+
 // RiskPolicyEvalVerdictEnum constrains a policy-eval review verdict. It is the
 // reviewer's ground-truth judgment of a chat session under a prompt-based
 // policy: `correct` (guardrail agreed), `false_positive` (guardrail flagged a
@@ -102,6 +115,16 @@ var RiskPolicyEvalReview = Type("RiskPolicyEvalReview", func() {
 	Required("id", "policy_id", "policy_version", "chat_id", "verdict", "reviewed_by", "created_at", "updated_at")
 })
 
+var RiskDetectionScope = Type("RiskDetectionScope", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("category", String, "Risk category key this detection scope applies to.")
+	Attribute("scope_include", String, "CEL scope predicate: the category detects on a message only when this boolean expression is true. Empty means every message surface is included.")
+	Attribute("scope_exempt", String, "CEL exemption predicate: the category skips a message when this boolean expression is true. Empty means no exemption.")
+
+	Required("category")
+})
+
 var RiskPolicy = Type("RiskPolicy", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -125,9 +148,10 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	})
 	Attribute("prompt_injection_rules", ArrayOf(String), "Prompt-injection detection rule ids enabled in addition to the heuristic baseline. When empty, only heuristics run.")
 	Attribute("approved_email_domains", ArrayOf(String), "For the account_identity source: corporate email domains considered approved. Sessions whose AI-account email domain is not listed are flagged. Empty means the domain rule is inert.")
+	Attribute("detection_scopes", ArrayOf(RiskDetectionScope), "Per-category detection scopes specified for this policy. The scan surface merges these with the recommended scopes, the specified scope winning on category conflict. Empty means every recommendation applies unchanged.")
 	Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the policy author has unchecked within an otherwise-enabled category. Empty means every rule in the selected categories runs; matching findings are dropped at scan time.")
 	Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids attached as detectors: a match produces a finding. Custom rules are pure detectors.")
-	Attribute("message_types", ArrayOf(String), "Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message.")
+	Attribute("message_types", ArrayOf(String), "Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message, prompt_attachment.")
 	Attribute("scope_include", String, "CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Null/empty means all messages are in scope.")
 	Attribute("scope_exempt", String, "CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Null/empty means no inline exemption.")
 	Attribute("enabled", Boolean, "Whether the policy is active.")
@@ -140,10 +164,19 @@ var RiskPolicy = Type("RiskPolicy", func() {
 		Default("everyone")
 	})
 	Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs the policy applies to. Contains user:all when audience_type is everyone.")
+	Attribute("shadow_mcp_disposition", String, "Default disposition for shadow MCP blocking policies: block_all blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Blocked URLs are stored as risk_policy:block grants, not on the policy. Immutable after create. Only present on policies with the shadow_mcp source and block action.", func() {
+		RiskPolicyShadowMCPDispositionEnum()
+	})
 	Attribute("auto_name", Boolean, "Whether the policy name is auto-generated. When true, the name is regenerated on each update.")
 	Attribute("user_message", String, "Optional message shown to the end user when this policy blocks an action or surfaces a flagged finding. When unset, a default message is rendered.")
 	Attribute("prompt", String, "For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Null for standard policies.")
 	Attribute("model_config", RiskPolicyModelConfig, "For prompt_based policies: per-policy LLM-judge model configuration. Null for standard policies.")
+	Attribute("score", Float64, "CVSS-style severity (0.1-10) the author assigns to findings this policy produces. Descriptive only; changing it does not re-scan messages. Defaults to 5.", func() {
+		Minimum(0.1)
+		Maximum(10)
+		Default(5)
+		Example(5)
+	})
 	Attribute("version", Int64, "Policy version, incremented on each update.")
 	Attribute("created_at", String, "When the policy was created.", func() {
 		Format(FormatDateTime)
@@ -151,10 +184,10 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("updated_at", String, "When the policy was last updated.", func() {
 		Format(FormatDateTime)
 	})
-	Attribute("pending_messages", Int64, "Number of messages not yet analyzed at the current policy version.")
-	Attribute("total_messages", Int64, "Total number of messages in the project.")
+	Attribute("pending_messages", Int64, "Number of messages not yet analyzed at the current policy version. Populated on single-policy reads; omitted from list responses (use riskPoliciesStatus for progress).")
+	Attribute("total_messages", Int64, "Total number of messages in the project. Populated on single-policy reads; omitted from list responses.")
 
-	Required("id", "project_id", "name", "policy_type", "sources", "enabled", "action", "audience_type", "audience_principal_urns", "auto_name", "version", "created_at", "updated_at", "pending_messages", "total_messages")
+	Required("id", "project_id", "name", "policy_type", "sources", "enabled", "action", "audience_type", "audience_principal_urns", "auto_name", "score", "version", "created_at", "updated_at")
 })
 
 var RiskCustomDetectionRule = Type("RiskCustomDetectionRule", func() {
@@ -229,7 +262,10 @@ var RiskResult = Type("RiskResult", func() {
 	Attribute("block_id", String, "ID of the durable tool call block recorded for this finding's message, when one exists. Links to the block page at /blocks/:id.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("chat_message_id", String, "The chat message that was scanned.", func() {
+	Attribute("chat_message_id", String, "The chat message that was scanned, when the finding is anchored to a message.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("chat_content_part_id", String, "The chat content part that was scanned, when the finding is anchored to a content part.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("chat_id", String, "The chat session containing the message.", func() {
@@ -250,8 +286,11 @@ var RiskResult = Type("RiskResult", func() {
 	Attribute("created_at", String, "When this result was created.", func() {
 		Format(FormatDateTime)
 	})
+	Attribute("false_positive_at", String, "When this result was manually marked as a false positive. Null when not dismissed.", func() {
+		Format(FormatDateTime)
+	})
 
-	Required("id", "policy_id", "policy_version", "chat_message_id", "source", "created_at")
+	Required("id", "policy_id", "policy_version", "source", "created_at")
 })
 
 // RiskSpan is one matched span attributed to a finding.
@@ -300,7 +339,10 @@ var RiskResultRedacted = Type("RiskResultRedacted", func() {
 		Format(FormatUUID)
 	})
 	Attribute("policy_version", Int64, "Policy version when this result was produced.")
-	Attribute("chat_message_id", String, "The chat message that was scanned.", func() {
+	Attribute("chat_message_id", String, "The chat message that was scanned, when the finding is anchored to a message.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("chat_content_part_id", String, "The chat content part that was scanned, when the finding is anchored to a content part.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("chat_id", String, "The chat session containing the message.", func() {
@@ -320,7 +362,7 @@ var RiskResultRedacted = Type("RiskResultRedacted", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "policy_id", "policy_version", "chat_message_id", "source", "created_at", "match_redacted", "position_known")
+	Required("id", "policy_id", "policy_version", "source", "created_at", "match_redacted", "position_known")
 })
 
 var RiskChatSummary = Type("RiskChatSummary", func() {

@@ -16,6 +16,9 @@ import (
 
 const (
 	defaultBaseURL = "https://api.anthropic.com"
+	// apiVersion pins the Anthropic API version header sent on every request,
+	// as required by the Admin API (compliance and analytics endpoints alike).
+	apiVersion = "2023-06-01"
 )
 
 type Client struct {
@@ -63,11 +66,16 @@ func New(guardianPolicy *guardian.Policy, opts ...Option) *Client {
 	return c
 }
 
+// ListActivitiesParams filters and paginates the activities feed. The feed
+// is always sorted newest first: AfterID pages toward OLDER activities (a
+// backfill) while BeforeID pages toward NEWER activities (an incremental
+// tail read). At most one of AfterID and BeforeID may be set.
 type ListActivitiesParams struct {
 	ActivityTypes   []string
 	OrganizationIDs []string
 	CreatedAtGTE    time.Time
 	AfterID         string
+	BeforeID        string
 	Limit           int
 }
 
@@ -125,6 +133,9 @@ func (c *Client) ListActivities(ctx context.Context, params ListActivitiesParams
 	}
 	if params.AfterID != "" {
 		q.Set("after_id", params.AfterID)
+	}
+	if params.BeforeID != "" {
+		q.Set("before_id", params.BeforeID)
 	}
 	if params.Limit > 0 {
 		q.Set("limit", strconv.Itoa(params.Limit))
@@ -310,6 +321,7 @@ func (c *Client) endpoint(path string) (*url.URL, error) {
 func (c *Client) setHeaders(req *http.Request) {
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("x-api-key", c.apiKey)
+	req.Header.Set("anthropic-version", apiVersion)
 }
 
 func filenameFromContentDisposition(value string) string {

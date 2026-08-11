@@ -9,7 +9,6 @@ PORTS=(
   "8082:gram-worker-control"
   "35291:mock-idp"
   "5173:dashboard"
-  "6007:elements-storybook"
 )
 
 killed=0

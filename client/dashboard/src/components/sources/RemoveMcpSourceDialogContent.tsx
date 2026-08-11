@@ -1,8 +1,10 @@
-import { Input } from "@/components/ui/input";
-import { Type } from "@/components/ui/type";
+import { Input } from "@/components/ui/Input";
+import { Text } from "@/components/ui/Text";
 import { LinkedMcpServerRow } from "@/components/sources/LinkedMcpServerRow";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import { Alert, Button, Dialog } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -73,10 +75,10 @@ export function RemoveMcpSourceDialogContent({
 
       {linkedMcpServers.length > 0 && (
         <div className="space-y-3">
-          <Type small muted>
+          <Text small muted>
             The following will also be removed:
-          </Type>
-          <ul className="divide-border space-y-2 rounded-md border">
+          </Text>
+          <ul className="divide-border space-y-2 border">
             {linkedMcpServers.map((server) => (
               <LinkedMcpServerRow key={server.id} server={server} />
             ))}
@@ -85,9 +87,9 @@ export function RemoveMcpSourceDialogContent({
       )}
 
       <div className="grid gap-2">
-        <Type small>
+        <Text small>
           To confirm, type {confirmLabel}: <strong>{confirmValue}</strong>
-        </Type>
+        </Text>
         <Input
           value={confirmation}
           onChange={setConfirmation}
@@ -115,16 +117,12 @@ export function RemoveMcpSourceDialogContent({
           disabled={!inputMatches || isPending}
           onClick={() => void handleConfirm()}
         >
-          {isPending ? (
-            <>
-              <Button.LeftIcon>
-                <Loader2 className="size-4 animate-spin" />
-              </Button.LeftIcon>
-              <Button.Text>Deleting</Button.Text>
-            </>
-          ) : (
-            <Button.Text>Delete</Button.Text>
+          {isPending && (
+            <Button.LeftIcon>
+              <Loader2 className="size-4 animate-spin" />
+            </Button.LeftIcon>
           )}
+          <Button.Text>{isPending ? "Deleting" : "Delete"}</Button.Text>
         </Button>
       </Dialog.Footer>
     </>

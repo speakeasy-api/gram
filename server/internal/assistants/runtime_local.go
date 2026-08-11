@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
@@ -200,10 +199,6 @@ func (l *LocalRuntimeBackend) ServerURL() *url.URL { return l.config.ServerURL }
 
 func (l *LocalRuntimeBackend) ImageRef() string { return l.desiredImageRef() }
 
-// ReusesIdleRuntimes is true: Stop leaves the container and its workspace
-// volume in place, and the next admission restarts the same container.
-func (l *LocalRuntimeBackend) ReusesIdleRuntimes() bool { return true }
-
 func (l *LocalRuntimeBackend) desiredImageRef() string {
 	return runtimeImageRef(l.config.OCIImage, l.config.ImageTag)
 }
@@ -302,8 +297,7 @@ func (l *LocalRuntimeBackend) runnerBusy(ctx context.Context, info localContaine
 	if err != nil {
 		return true
 	}
-	idle := state.minThreadIdle()
-	return idle != nil && *idle == 0
+	return state.turnInFlight()
 }
 
 // startContainer converges the named container onto a running, healthy state
@@ -459,7 +453,7 @@ func (l *LocalRuntimeBackend) RecycleImage(ctx context.Context, runtime assistan
 	return RuntimeBackendRecycleResult{Recycled: true, BackendMetadataJSON: payload}, nil
 }
 
-func (l *LocalRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey string, authToken string, prompt string, mcpServers []runtimeMCPServer) error {
+func (l *LocalRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, turn runTurnRequest) error {
 	if err := validateRuntimeBackend(l, runtime.Backend); err != nil {
 		return err
 	}
@@ -471,7 +465,7 @@ func (l *LocalRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRunt
 		return fmt.Errorf("%w: local runtime host port is not available", ErrRuntimeUnhealthy)
 	}
 
-	return l.runner.turn(ctx, localRuntimeEndpoint(metadata.HostPort), runtime, threadID, idempotencyKey, authToken, prompt, mcpServers, localRuntimeTurnTimeout)
+	return l.runner.turn(ctx, localRuntimeEndpoint(metadata.HostPort), runtime, turn, localRuntimeTurnTimeout)
 }
 
 func (l *LocalRuntimeBackend) Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error) {
@@ -490,6 +484,24 @@ func (l *LocalRuntimeBackend) Status(ctx context.Context, runtime assistantRunti
 		return RuntimeBackendStatus{}, fmt.Errorf("load local runtime state: %w", err)
 	}
 	return RuntimeBackendStatus{Configured: true, IdleSeconds: state.minThreadIdle()}, nil
+}
+
+// RuntimeExists checks the container resource itself rather than the runner
+// endpoint. A stopped container still exists and remains reusable; only a
+// definitive not-found result means an active database row is orphaned.
+func (l *LocalRuntimeBackend) RuntimeExists(ctx context.Context, runtime assistantRuntimeRecord) (bool, error) {
+	if err := validateRuntimeBackend(l, runtime.Backend); err != nil {
+		return false, err
+	}
+	name := localContainerName(runtime)
+	_, err := l.engine.Inspect(ctx, name)
+	if errors.Is(err, errLocalContainerNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("inspect local runtime container %s: %w", name, err)
+	}
+	return true, nil
 }
 
 // Stop halts the container while keeping it and its workspace volume in place
@@ -547,3 +559,4 @@ func decodeLocalRuntimeMetadata(raw []byte) (localRuntimeMetadata, error) {
 }
 
 var _ RuntimeBackend = (*LocalRuntimeBackend)(nil)
+var _ runtimeLivenessChecker = (*LocalRuntimeBackend)(nil)

@@ -24,38 +24,19 @@ export type AuthTarget = {
    * no probeable upstream (tunneled, toolset-backed), leaving the probe idle.
    */
   remoteMcpServerId?: string;
-  /** Link a freshly created issuer to the target (first add). */
-  linkUserSessionIssuer: (userSessionIssuerId: string) => Promise<void>;
+  /** Link a freshly created issuer to the target (first add). Absent for
+   * targets that always have an issuer (mcp servers). */
+  linkUserSessionIssuer?: (userSessionIssuerId: string) => Promise<void>;
   /** Invalidate the target-specific queries that embed the link. */
   invalidate: (queryClient: QueryClient) => Promise<void>;
 };
 
 export function useMcpServerAuthTarget(mcpServer: McpServer): AuthTarget {
-  const client = useSdkClient();
-
   return useMemo(
     () => ({
       slug: mcpServer.slug ?? "mcp",
       userSessionIssuerId: mcpServer.userSessionIssuerId ?? null,
       remoteMcpServerId: mcpServer.remoteMcpServerId,
-      linkUserSessionIssuer: async (userSessionIssuerId: string) => {
-        // Point the server at the issuer and set visibility private so it
-        // serves traffic. update is a full-record replace, so re-send the
-        // existing UUID references alongside.
-        await client.mcpServers.update({
-          updateMcpServerForm: {
-            id: mcpServer.id,
-            name: mcpServer.name ?? undefined,
-            remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
-            tunneledMcpServerId: mcpServer.tunneledMcpServerId ?? undefined,
-            toolsetId: mcpServer.toolsetId ?? undefined,
-            environmentId: mcpServer.environmentId ?? undefined,
-            toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
-            visibility: "private",
-            userSessionIssuerId,
-          },
-        });
-      },
       invalidate: async (queryClient: QueryClient) => {
         await Promise.all([
           invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
@@ -63,7 +44,7 @@ export function useMcpServerAuthTarget(mcpServer: McpServer): AuthTarget {
         ]);
       },
     }),
-    [client, mcpServer],
+    [mcpServer],
   );
 }
 

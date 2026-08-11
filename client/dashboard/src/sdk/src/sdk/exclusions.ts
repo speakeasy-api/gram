@@ -6,11 +6,13 @@ import { riskExclusionsCreate } from "../funcs/riskExclusionsCreate.js";
 import { riskExclusionsDelete } from "../funcs/riskExclusionsDelete.js";
 import { riskExclusionsList } from "../funcs/riskExclusionsList.js";
 import { riskExclusionsListBuiltinExclusions } from "../funcs/riskExclusionsListBuiltinExclusions.js";
+import { riskExclusionsSuggest } from "../funcs/riskExclusionsSuggest.js";
 import { riskExclusionsUpdate } from "../funcs/riskExclusionsUpdate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { ListBuiltinExclusionsResult } from "../models/components/listbuiltinexclusionsresult.js";
 import { ListRiskExclusionsResult } from "../models/components/listriskexclusionsresult.js";
 import { RiskExclusion } from "../models/components/riskexclusion.js";
+import { SuggestExclusionResult } from "../models/components/suggestexclusionresult.js";
 import {
   CreateRiskExclusionRequest,
   CreateRiskExclusionSecurity,
@@ -27,6 +29,10 @@ import {
   ListRiskExclusionsRequest,
   ListRiskExclusionsSecurity,
 } from "../models/operations/listriskexclusions.js";
+import {
+  SuggestExclusionRequest,
+  SuggestExclusionSecurity,
+} from "../models/operations/suggestexclusion.js";
 import {
   UpdateRiskExclusionRequest,
   UpdateRiskExclusionSecurity,
@@ -103,6 +109,25 @@ export class Exclusions extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListRiskExclusionsResult> {
     return unwrapAsync(riskExclusionsList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * suggestExclusion risk
+   *
+   * @remarks
+   * Suggest a risk exclusion (match_type, match_value, filters) from a natural-language prompt, a batch of example findings, or both. Calls the configured LLM with a JSON-schema constrained response so the dashboard can prefill the create exclusion form. At least one of prompt or finding_ids is required.
+   */
+  async suggest(
+    request: SuggestExclusionRequest,
+    security?: SuggestExclusionSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<SuggestExclusionResult> {
+    return unwrapAsync(riskExclusionsSuggest(
       this,
       request,
       security,

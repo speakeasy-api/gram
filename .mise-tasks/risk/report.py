@@ -19,7 +19,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_METRICS_FILE = REPO_ROOT / "server" / "risk_accuracy_metrics.json"
 
@@ -408,7 +407,7 @@ def maybe_mode_by_name(modes: list[dict[str, Any]], name: str) -> dict[str, Any]
     return None
 
 
-def fmt(value: float | int | None) -> str:
+def fmt(value: float | None) -> str:
     if value is None:
         return "-"
     return str(round(float(value), 4)).rstrip("0").rstrip(".")

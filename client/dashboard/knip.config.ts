@@ -2,6 +2,8 @@ import type { KnipConfig } from "knip";
 
 const config: KnipConfig = {
   // Vite entry (index.html → src/main.tsx) is auto-detected.
+  // Emitted programmatically by themeInitPlugin, which Knip cannot infer.
+  entry: ["src/theme-init.ts"],
   // Vitest, ESLint, Tailwind, and TypeScript plugins are auto-enabled.
   ignoreBinaries: [
     // Invoked from the lint:format script; not on the dep tree.
@@ -14,11 +16,17 @@ const config: KnipConfig = {
     // re-export). No import sites by design.
     "src/lib.d.ts",
     "src/sdk/**/*",
-  ],
-  ignoreDependencies: [
-    // Consumed via CSS @import inside @speakeasy-api/moonshine; knip's
-    // CSS plugin only scans first-party files so it misses this.
-    "@tailwindcss/typography",
+    // Inlined Gram Elements library (formerly @gram-ai/elements). Its public
+    // surface is wider than what the dashboard consumes today.
+    "src/elements/**/*",
+    // Internalised design system. Same reasoning: a component library exposes
+    // its full API (Badge.Text, DropdownMenuSub, …) whether or not the app
+    // happens to use every part of it today.
+    "src/components/ui/**/*",
+    // Page-template layer + its composite widgets: a shared page-shape library
+    // (all templates + widgets) whose full API is exposed whether or not every
+    // page has migrated onto it yet — same rationale as components/ui above.
+    "src/components/page-templates/**/*",
   ],
 };
 

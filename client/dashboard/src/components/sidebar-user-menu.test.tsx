@@ -21,9 +21,7 @@ vi.mock("@/routes", () => ({
 vi.mock("react-router", () => ({
   useNavigate: () => vi.fn(),
 }));
-vi.mock("@speakeasy-api/moonshine", async (orig) => ({
-  ...(await orig<typeof import("@speakeasy-api/moonshine")>()),
-  ThemeSwitcher: () => <div data-testid="theme-switcher" />,
+vi.mock("@/components/ui/Dropdown", () => ({
   // Radix DropdownMenu requires pointerDown+click to open in happy-dom.
   // Stub the full primitive family so content is always rendered and
   // fireEvent.click on the trigger is sufficient.
@@ -61,6 +59,10 @@ vi.mock("@speakeasy-api/moonshine", async (orig) => ({
     ),
 }));
 
+vi.mock("@/components/ui/ThemeSwitcher", () => ({
+  ThemeSwitcher: () => <div data-testid="theme-switcher" />,
+}));
+
 import { SidebarUserMenu } from "./sidebar-user-menu";
 
 afterEach(cleanup);
@@ -80,13 +82,11 @@ describe("SidebarUserMenu", () => {
     expect(screen.queryByText(/Bug or Feature Request/)).toBeNull();
   });
 
-  it("links Platform Status to status.speakeasyapi.dev in a new tab", () => {
+  it("links Platform Status to status.speakeasy.com in a new tab", () => {
     render(<SidebarUserMenu />);
     fireEvent.click(screen.getByTestId("user-menu-trigger"));
     const status = screen.getByText("Platform Status").closest("a");
-    expect(status?.getAttribute("href")).toBe(
-      "https://status.speakeasyapi.dev/",
-    );
+    expect(status?.getAttribute("href")).toBe("https://status.speakeasy.com/");
     expect(status?.getAttribute("target")).toBe("_blank");
     expect(status?.getAttribute("rel")).toBe("noopener noreferrer");
   });

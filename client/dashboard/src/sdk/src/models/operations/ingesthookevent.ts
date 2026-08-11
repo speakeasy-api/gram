@@ -10,63 +10,32 @@ import {
   IngestRequestBody$outboundSchema,
 } from "../components/ingestrequestbody.js";
 
-export type IngestHookEventSecurity = {
-  apikeyHeaderGramKey?: string | undefined;
-  projectSlugHeaderGramProject?: string | undefined;
-};
-
 export type IngestHookEventRequest = {
   /**
-   * API Key header
+   * Optional API key for plugin-driven attribution.
    */
   gramKey?: string | undefined;
   /**
-   * project header
+   * Optional project slug for plugin-driven attribution.
    */
   gramProject?: string | undefined;
   /**
    * Optional per-invocation token reused across retries so the server stores a redelivered event exactly once.
    */
   idempotencyKey?: string | undefined;
+  /**
+   * Set when the event is redelivered from a device's offline spool after control-plane downtime, under its original Idempotency-Key and occurred_at.
+   */
+  xGramReplayed?: boolean | undefined;
   ingestRequestBody: IngestRequestBody;
 };
-
-/** @internal */
-export type IngestHookEventSecurity$Outbound = {
-  "apikey_header_Gram-Key"?: string | undefined;
-  "project_slug_header_Gram-Project"?: string | undefined;
-};
-
-/** @internal */
-export const IngestHookEventSecurity$outboundSchema: z.ZodMiniType<
-  IngestHookEventSecurity$Outbound,
-  IngestHookEventSecurity
-> = z.pipe(
-  z.object({
-    apikeyHeaderGramKey: z.optional(z.string()),
-    projectSlugHeaderGramProject: z.optional(z.string()),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      apikeyHeaderGramKey: "apikey_header_Gram-Key",
-      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    });
-  }),
-);
-
-export function ingestHookEventSecurityToJSON(
-  ingestHookEventSecurity: IngestHookEventSecurity,
-): string {
-  return JSON.stringify(
-    IngestHookEventSecurity$outboundSchema.parse(ingestHookEventSecurity),
-  );
-}
 
 /** @internal */
 export type IngestHookEventRequest$Outbound = {
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
   "Idempotency-Key"?: string | undefined;
+  "X-Gram-Replayed"?: boolean | undefined;
   IngestRequestBody: IngestRequestBody$Outbound;
 };
 
@@ -79,6 +48,7 @@ export const IngestHookEventRequest$outboundSchema: z.ZodMiniType<
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     idempotencyKey: z.optional(z.string()),
+    xGramReplayed: z.optional(z.boolean()),
     ingestRequestBody: IngestRequestBody$outboundSchema,
   }),
   z.transform((v) => {
@@ -86,6 +56,7 @@ export const IngestHookEventRequest$outboundSchema: z.ZodMiniType<
       gramKey: "Gram-Key",
       gramProject: "Gram-Project",
       idempotencyKey: "Idempotency-Key",
+      xGramReplayed: "X-Gram-Replayed",
       ingestRequestBody: "IngestRequestBody",
     });
   }),

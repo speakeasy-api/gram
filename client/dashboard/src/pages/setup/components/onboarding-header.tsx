@@ -1,5 +1,5 @@
 import { ArrowRight, ExternalLink, LifeBuoy } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 import { GramLogo } from "@/components/gram-logo";
 
 interface OnboardingHeaderProps {
@@ -26,7 +26,7 @@ export function OnboardingHeader({
         <div className="flex items-center gap-2">
           <Button
             asChild
-            variant="ghost"
+            variant="tertiary"
             size="sm"
             className="text-muted-foreground hover:text-foreground gap-1.5"
           >
@@ -40,7 +40,7 @@ export function OnboardingHeader({
             </a>
           </Button>
           <Button
-            variant="ghost"
+            variant="tertiary"
             size="sm"
             onClick={handleGetSupport}
             className="text-muted-foreground hover:text-foreground gap-1.5"
@@ -49,7 +49,7 @@ export function OnboardingHeader({
             Get support
           </Button>
           <Button
-            variant="ghost"
+            variant="tertiary"
             size="sm"
             onClick={onLeave}
             className="text-muted-foreground hover:text-foreground gap-1.5"

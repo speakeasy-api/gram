@@ -51,12 +51,12 @@ func TestSnapshotBillingCycleUsage_SendsHighestCrossedThresholdAlert(t *testing.
 	t.Parallel()
 	ctx := t.Context()
 
-	act, conn, telemetryQueries, orgID, projectID, captured := setupSnapshotBillingCycleUsageTestWithEmail(t, "snapshot_billing_alert_threshold")
+	act, conn, chConn, orgID, projectID, captured := setupSnapshotBillingCycleUsageTestWithEmail(t, "snapshot_billing_alert_threshold")
 
 	upsertTumAlertMetadata(t, ctx, conn, orgID, 1000, "billing@example.com")
 
 	// 950/1000 crosses 50, 75, and 90 at once; only the highest fires.
-	insertStoredSession(t, ctx, telemetryQueries, projectID.String(), time.Now().UTC(), 950)
+	insertStoredSession(t, ctx, chConn, projectID.String(), time.Now().UTC(), 950)
 	waitForActiveCycleTokens(t, ctx, act, conn, orgID, 950)
 
 	sent := captured.Sent()
@@ -79,18 +79,18 @@ func TestSnapshotBillingCycleUsage_EscalatesToOverageAlert(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	act, conn, telemetryQueries, orgID, projectID, captured := setupSnapshotBillingCycleUsageTestWithEmail(t, "snapshot_billing_alert_overage")
+	act, conn, chConn, orgID, projectID, captured := setupSnapshotBillingCycleUsageTestWithEmail(t, "snapshot_billing_alert_overage")
 
 	upsertTumAlertMetadata(t, ctx, conn, orgID, 1000, "billing@example.com")
 
-	insertStoredSession(t, ctx, telemetryQueries, projectID.String(), time.Now().UTC(), 600)
+	insertStoredSession(t, ctx, chConn, projectID.String(), time.Now().UTC(), 600)
 	waitForActiveCycleTokens(t, ctx, act, conn, orgID, 600)
 	require.Len(t, captured.Sent(), 1)
 	require.Equal(t, "50", captured.Sent()[0].DataVariables["threshold_percent"])
 
 	// Usage jumping to 150% of the limit sends the overage email for the new
 	// highest threshold.
-	insertStoredSession(t, ctx, telemetryQueries, projectID.String(), time.Now().UTC(), 900)
+	insertStoredSession(t, ctx, chConn, projectID.String(), time.Now().UTC(), 900)
 	waitForActiveCycleTokens(t, ctx, act, conn, orgID, 1500)
 
 	sent := captured.Sent()
@@ -104,11 +104,11 @@ func TestSnapshotBillingCycleUsage_ReAlertsAfterLimitChange(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	act, conn, telemetryQueries, orgID, projectID, captured := setupSnapshotBillingCycleUsageTestWithEmail(t, "snapshot_billing_alert_limit_change")
+	act, conn, chConn, orgID, projectID, captured := setupSnapshotBillingCycleUsageTestWithEmail(t, "snapshot_billing_alert_limit_change")
 
 	upsertTumAlertMetadata(t, ctx, conn, orgID, 1000, "billing@example.com")
 
-	insertStoredSession(t, ctx, telemetryQueries, projectID.String(), time.Now().UTC(), 600)
+	insertStoredSession(t, ctx, chConn, projectID.String(), time.Now().UTC(), 600)
 	waitForActiveCycleTokens(t, ctx, act, conn, orgID, 600)
 	require.Len(t, captured.Sent(), 1, "60%% of the original limit alerts at 50")
 
@@ -130,11 +130,11 @@ func TestSnapshotBillingCycleUsage_SkipsAlertWithoutAlertEmail(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	act, conn, telemetryQueries, orgID, projectID, captured := setupSnapshotBillingCycleUsageTestWithEmail(t, "snapshot_billing_alert_no_email")
+	act, conn, chConn, orgID, projectID, captured := setupSnapshotBillingCycleUsageTestWithEmail(t, "snapshot_billing_alert_no_email")
 
 	upsertTumAlertMetadata(t, ctx, conn, orgID, 1000, "")
 
-	insertStoredSession(t, ctx, telemetryQueries, projectID.String(), time.Now().UTC(), 950)
+	insertStoredSession(t, ctx, chConn, projectID.String(), time.Now().UTC(), 950)
 	waitForActiveCycleTokens(t, ctx, act, conn, orgID, 950)
 
 	require.Empty(t, captured.Sent(), "no alert contact configured means no email")
@@ -144,11 +144,11 @@ func TestSnapshotBillingCycleUsage_SkipsAlertWithoutLimit(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	act, conn, telemetryQueries, orgID, projectID, captured := setupSnapshotBillingCycleUsageTestWithEmail(t, "snapshot_billing_alert_no_limit")
+	act, conn, chConn, orgID, projectID, captured := setupSnapshotBillingCycleUsageTestWithEmail(t, "snapshot_billing_alert_no_limit")
 
 	upsertTumAlertMetadata(t, ctx, conn, orgID, 0, "billing@example.com")
 
-	insertStoredSession(t, ctx, telemetryQueries, projectID.String(), time.Now().UTC(), 950)
+	insertStoredSession(t, ctx, chConn, projectID.String(), time.Now().UTC(), 950)
 	waitForActiveCycleTokens(t, ctx, act, conn, orgID, 950)
 
 	require.Empty(t, captured.Sent(), "no contracted limit means no thresholds to cross")
@@ -158,11 +158,11 @@ func TestSnapshotBillingCycleUsage_RetriesAlertAfterSendFailure(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	act, conn, telemetryQueries, orgID, projectID, captured := setupSnapshotBillingCycleUsageTestWithEmail(t, "snapshot_billing_alert_retry")
+	act, conn, chConn, orgID, projectID, captured := setupSnapshotBillingCycleUsageTestWithEmail(t, "snapshot_billing_alert_retry")
 
 	// Let the usage materialize with no alert config so no send is attempted
 	// while ClickHouse catches up.
-	insertStoredSession(t, ctx, telemetryQueries, projectID.String(), time.Now().UTC(), 600)
+	insertStoredSession(t, ctx, chConn, projectID.String(), time.Now().UTC(), 600)
 	waitForActiveCycleTokens(t, ctx, act, conn, orgID, 600)
 	require.Empty(t, captured.Sent())
 

@@ -1,7 +1,8 @@
+import json
 import os
 import sys
-import json
 import time
+
 import requests
 
 # Check for -v flag
@@ -55,7 +56,7 @@ while True:
     print(f"Status: {status}")
 
     if status != "in_progress":
-        if "output" in poll_data and poll_data["output"]:
+        if poll_data.get("output"):
             for item in poll_data["output"]:
                 if item.get("role") == "assistant":
                     print("\n=== Plan ===")

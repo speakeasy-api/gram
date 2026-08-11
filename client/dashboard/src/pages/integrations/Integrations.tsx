@@ -1,14 +1,13 @@
-import { AddButton } from "@/components/add-button";
 import { AssetImage } from "@/components/asset-image";
 import { CreateThingCard } from "@/components/create-thing-card";
 import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
-import { Card, Cards } from "@/components/ui/card";
-import { Dialog } from "@/components/ui/dialog";
-import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
-import { Type } from "@/components/ui/type";
+import { Card, Cards } from "@/components/ui/Card";
+import { Dialog } from "@/components/ui/Dialog";
+import { Heading } from "@/components/ui/Heading";
+import { Input } from "@/components/ui/Input";
+import { Text } from "@/components/ui/Text";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -17,7 +16,9 @@ import { IntegrationEntry } from "@gram/client/models/components/integrationentr
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { useListIntegrations } from "@gram/client/react-query/listIntegrations.js";
 import { useListPackagesSuspense } from "@gram/client/react-query/listPackages.js";
-import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { Stack } from "@/components/ui/Stack";
 import { CheckIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -45,18 +46,37 @@ export default function Integrations(): JSX.Element {
       </Page.Header>
       <Page.Body>
         <Page.Section>
-          <Page.Section.Title>Integrations</Page.Section.Title>
+          {/* The integrations slug isn't in the nav-area map, so the eyebrow
+              can't auto-derive; the page distributes packages, so it reads as
+              Distribute. */}
+          <Page.Section.Title area="Distribute">
+            Integrations
+          </Page.Section.Title>
           <Page.Section.Description>
             Distribute platform toolsets as installable packages your customers
             can pull from npm.
           </Page.Section.Description>
           {isAdmin ? (
             <Page.Section.CTA>
-              <AddButton onClick={() => setCreateIntegrationDialogOpen(true)} />
+              <Button
+                variant="tertiary"
+                icon="plus"
+                className="text-muted-foreground hover:text-foreground"
+                onClick={() => setCreateIntegrationDialogOpen(true)}
+              >
+                <Button.Text className="sr-only">Add</Button.Text>
+              </Button>
             </Page.Section.CTA>
           ) : null}
           <Page.Section.Body>
             <Cards>
+              {/* Leading the grid keeps the dashed request card anchored to
+                  the first column regardless of how many integrations exist. */}
+              <CreateThingCard
+                onClick={() => setRequestIntegrationDialogOpen(true)}
+              >
+                Request an Integration
+              </CreateThingCard>
               {integrations?.integrations?.map((integration) => (
                 <IntegrationCard
                   key={integration.packageName}
@@ -66,11 +86,6 @@ export default function Integrations(): JSX.Element {
                   }}
                 />
               ))}
-              <CreateThingCard
-                onClick={() => setRequestIntegrationDialogOpen(true)}
-              >
-                Request an Integration
-              </CreateThingCard>
             </Cards>
           </Page.Section.Body>
         </Page.Section>
@@ -286,7 +301,7 @@ function IntegrationCard({
             {integration.packageImageAssetId && (
               <AssetImage
                 assetId={integration.packageImageAssetId}
-                className="h-8 w-8 rounded-md"
+                className="h-8 w-8"
               />
             )}
             <span>
@@ -306,14 +321,12 @@ function IntegrationCard({
           </Button>
         ) : (
           <Button variant="secondary" onClick={() => void toggleEnabled()}>
-            {isEnabled ? (
-              <>
+            {isEnabled && (
+              <Button.LeftIcon>
                 <CheckIcon className="h-4 w-4" />
-                Enabled
-              </>
-            ) : (
-              "Enable"
+              </Button.LeftIcon>
             )}
+            <Button.Text>{isEnabled ? "Enabled" : "Enable"}</Button.Text>
           </Button>
         )}
       </Card.Header>
@@ -322,10 +335,10 @@ function IntegrationCard({
       </Card.Content>
       <Card.Footer>
         <ToolCollectionBadge toolNames={integration.toolNames} />
-        <Type variant="body" muted className="text-sm italic">
+        <Text variant="body" muted className="text-sm italic">
           {"Updated "}
           <HumanizeDateTime date={new Date(integration.versionCreatedAt)} />
-        </Type>
+        </Text>
       </Card.Footer>
     </Card>
   );

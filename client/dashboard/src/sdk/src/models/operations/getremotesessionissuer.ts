@@ -30,6 +30,10 @@ export type GetRemoteSessionIssuerRequest = {
    */
   slug?: string | undefined;
   /**
+   * The upstream issuer URL (e.g. https://login.linear.app). Returns the issuer this project would use for that URL, or 404 when none describes it.
+   */
+  issuer?: string | undefined;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -152,6 +156,7 @@ export function getRemoteSessionIssuerSecurityToJSON(
 export type GetRemoteSessionIssuerRequest$Outbound = {
   id?: string | undefined;
   slug?: string | undefined;
+  issuer?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -165,6 +170,7 @@ export const GetRemoteSessionIssuerRequest$outboundSchema: z.ZodMiniType<
   z.object({
     id: z.optional(z.string()),
     slug: z.optional(z.string()),
+    issuer: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramProject: z.optional(z.string()),

@@ -16,8 +16,10 @@ import (
 
 // Endpoints wraps the "agent" service endpoints.
 type Endpoints struct {
-	GetPlugins      goa.Endpoint
-	ListSyncedUsers goa.Endpoint
+	GetPlugins          goa.Endpoint
+	ListSyncedUsers     goa.Endpoint
+	GetConfiguration    goa.Endpoint
+	UpdateConfiguration goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "agent" service with endpoints.
@@ -25,8 +27,10 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		GetPlugins:      NewGetPluginsEndpoint(s, a.APIKeyAuth),
-		ListSyncedUsers: NewListSyncedUsersEndpoint(s, a.APIKeyAuth),
+		GetPlugins:          NewGetPluginsEndpoint(s, a.APIKeyAuth),
+		ListSyncedUsers:     NewListSyncedUsersEndpoint(s, a.APIKeyAuth),
+		GetConfiguration:    NewGetConfigurationEndpoint(s, a.APIKeyAuth),
+		UpdateConfiguration: NewUpdateConfigurationEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -34,6 +38,8 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetPlugins = m(e.GetPlugins)
 	e.ListSyncedUsers = m(e.ListSyncedUsers)
+	e.GetConfiguration = m(e.GetConfiguration)
+	e.UpdateConfiguration = m(e.UpdateConfiguration)
 }
 
 // NewGetPluginsEndpoint returns an endpoint function that calls the method
@@ -44,8 +50,8 @@ func NewGetPluginsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
-			RequiredScopes: []string{"agent"},
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"agent_user"},
 		}
 		var key string
 		if p.ApikeyToken != nil {
@@ -79,5 +85,51 @@ func NewListSyncedUsersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			return nil, err
 		}
 		return s.ListSyncedUsers(ctx, p)
+	}
+}
+
+// NewGetConfigurationEndpoint returns an endpoint function that calls the
+// method "getConfiguration" of service "agent".
+func NewGetConfigurationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetConfigurationPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetConfiguration(ctx, p)
+	}
+}
+
+// NewUpdateConfigurationEndpoint returns an endpoint function that calls the
+// method "updateConfiguration" of service "agent".
+func NewUpdateConfigurationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdateConfigurationPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.UpdateConfiguration(ctx, p)
 	}
 }

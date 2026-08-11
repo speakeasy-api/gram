@@ -1,3 +1,9 @@
+-- name: LockOrganizationMetadata :one
+SELECT id
+FROM organization_metadata
+WHERE id = @organization_id
+FOR UPDATE;
+
 -- name: IsFeatureEnabled :one
 SELECT EXISTS (
         SELECT 1
@@ -7,7 +13,17 @@ SELECT EXISTS (
             AND deleted IS FALSE
 ) AS enabled;
 
--- name: EnableFeature :exec
+-- name: HasDeviceAgentSync :one
+-- Whether any device has polled agent.getPlugins for the org — the member-
+-- readable "org uses the device agent" signal (device_agent_syncs is written
+-- only by the device-agent poll path).
+SELECT EXISTS (
+        SELECT 1
+        FROM device_agent_syncs
+        WHERE organization_id = @organization_id
+) AS has_sync;
+
+-- name: EnableFeature :execrows
 INSERT INTO organization_features (
     organization_id,
     feature_name

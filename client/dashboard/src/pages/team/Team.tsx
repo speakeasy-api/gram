@@ -1,16 +1,15 @@
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
-import { Page } from "@/components/page-layout";
-import { Dialog } from "@/components/ui/dialog";
-import { Heading } from "@/components/ui/heading";
+import { ResourceListPage } from "@/components/page-templates";
+import { Dialog } from "@/components/ui/Dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { Text } from "@/components/ui/Text";
 import { useOrganization, useUser } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
 import { formatDistanceToNow } from "date-fns";
@@ -31,21 +30,20 @@ import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { OrganizationInvitation } from "@gram/client/models/components/organizationinvitation.js";
 import { OrganizationUser } from "@gram/client/models/components/organizationuser.js";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import {
-  Alert,
-  Button,
-  Column,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Icon,
-  Input,
-  Stack,
-  Table,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Icon } from "@/components/ui/Icon";
+import { Input } from "@/components/ui/Input";
+import { Stack } from "@/components/ui/Stack";
+import { Column, Table } from "@/components/ui/Table";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft,
@@ -62,50 +60,173 @@ import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { RequireScope } from "@/components/require-scope";
-import { useRBAC } from "@/hooks/useRBAC";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/ContextMenu";
 import { useOrgRoutes } from "@/routes";
 import { cn } from "@/lib/utils";
+import { getIdentityTint } from "@/components/gradient-colors";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import { ChangeRoleDialog } from "@/pages/access/ChangeRoleDialog";
 
-function getMemberColors(id: string) {
-  let hash = 2166136261;
-  for (let i = 0; i < id.length; i++) {
-    hash ^= id.charCodeAt(i);
-    hash +=
-      (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
-  }
-  hash = hash >>> 0;
-  const hue1 = hash % 360;
-  const hue2 = (hue1 + ((hash >> 8) % 360)) % 360;
-  const saturation = Math.max(65, (hash >> 16) % 100);
-  const angle = (hash >> 24) % 360;
+/**
+ * Everything from TeamInner's scope that the member actions menu needs,
+ * so the dropdown render fn and MemberRowContextMenu can build the same
+ * menu model for a member.
+ */
+type MemberMenuDeps = {
+  accessMemberByUserId: Map<string, AccessMember>;
+  adminCount: number;
+  adminRoleId: string | undefined;
+  challengesHref: string;
+  navigate: ReturnType<typeof useNavigate>;
+  roleIdsByUserId: Map<string, string[]>;
+  scimManaged: boolean;
+  setChangingMember: (member: AccessMember | null) => void;
+  setMemberToRemove: (member: OrganizationUser | null) => void;
+  userEmail: string;
+};
+
+type MemberMenuModel = {
+  accessMember: AccessMember | undefined;
+  canRemove: boolean;
+  openChallenges: () => void;
+  openManageRoles: () => void;
+  openRemove: () => void;
+  scimManaged: boolean;
+  showChallenges: boolean;
+  showManageRoles: boolean;
+};
+
+/**
+ * Single source of truth for the per-member actions menu: the visible "⋯"
+ * dropdown in the actions column and the row's right-click context menu both
+ * render from this model, so their conditions and callbacks stay in sync.
+ */
+function getMemberMenuModel(
+  member: OrganizationUser,
+  deps: MemberMenuDeps,
+): MemberMenuModel {
+  const memberRoleIds = deps.roleIdsByUserId.get(member.userId) ?? [];
+  const isLastAdmin =
+    deps.adminRoleId != null &&
+    memberRoleIds.includes(deps.adminRoleId) &&
+    deps.adminCount <= 1;
+  const isSelf = member.email === deps.userEmail;
+  const accessMember: AccessMember | undefined =
+    deps.accessMemberByUserId.get(member.userId) ??
+    (memberRoleIds.length > 0
+      ? {
+          id: member.userId,
+          principalUrn: `user:${member.userId}`,
+          name: member.name,
+          email: member.email,
+          photoUrl: member.photoUrl,
+          roleIds: memberRoleIds,
+          joinedAt: member.createdAt,
+        }
+      : undefined);
+
   return {
-    from: `hsl(${hue1}, ${saturation}%, 65%)`,
-    to: `hsl(${hue2}, ${saturation}%, 60%)`,
-    angle,
+    accessMember,
+    canRemove: !isSelf && !isLastAdmin,
+    openChallenges: () => {
+      void setTimeout(() => {
+        void deps.navigate(
+          `${deps.challengesHref}?identity=${encodeURIComponent(member.email)}`,
+        );
+      }, 0);
+    },
+    openManageRoles: () => {
+      if (!accessMember) return;
+      void setTimeout(() => deps.setChangingMember(accessMember), 0);
+    },
+    openRemove: () => {
+      void setTimeout(() => deps.setMemberToRemove(member), 0);
+    },
+    scimManaged: deps.scimManaged,
+    showChallenges: true,
+    showManageRoles: true,
   };
+}
+
+/**
+ * Right-click menu for a member row, mirroring the actions-column dropdown
+ * item for item (same model, same permission gating). Renders children
+ * unwrapped when no menu item is renderable.
+ */
+function MemberRowContextMenu({
+  member,
+  deps,
+  children,
+}: {
+  member: OrganizationUser;
+  deps: MemberMenuDeps;
+  children: React.ReactElement;
+}): React.JSX.Element {
+  const model = getMemberMenuModel(member, deps);
+  const hasManageRoles =
+    model.showManageRoles && (model.scimManaged || model.accessMember != null);
+  const hasItemsAbove = hasManageRoles || model.showChallenges;
+
+  if (!hasItemsAbove && !model.canRemove) {
+    return <>{children}</>;
+  }
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuContent className="min-w-[10rem]">
+        {model.showManageRoles &&
+          (model.scimManaged ? (
+            <ContextMenuItem disabled>Manage roles</ContextMenuItem>
+          ) : (
+            model.accessMember && (
+              <RequireScope scope="org:admin" level="component">
+                <ContextMenuItem onSelect={model.openManageRoles}>
+                  Manage roles
+                </ContextMenuItem>
+              </RequireScope>
+            )
+          ))}
+        {model.showChallenges && (
+          <ContextMenuItem onSelect={model.openChallenges}>
+            View challenges
+          </ContextMenuItem>
+        )}
+        {model.canRemove && (
+          <>
+            {hasItemsAbove && <ContextMenuSeparator />}
+            <RequireScope scope="org:admin" level="component">
+              <ContextMenuItem
+                variant="destructive"
+                onSelect={model.openRemove}
+              >
+                Remove member
+              </ContextMenuItem>
+            </RequireScope>
+          </>
+        )}
+      </ContextMenuContent>
+    </ContextMenu>
+  );
 }
 
 export default function Team(): JSX.Element {
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope="org:admin" level="page">
-          <TeamInner />
-        </RequireScope>
-      </Page.Body>
-    </Page>
+    <RequireScope scope="org:admin" level="page">
+      <TeamInner />
+    </RequireScope>
   );
 }
 
 function TeamInner() {
   const organization = useOrganization();
   const user = useUser();
-  const { isRbacEnabled } = useRBAC();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const orgRoutes = useOrgRoutes();
@@ -164,9 +285,7 @@ function TeamInner() {
   );
   const memberRoleId = memberRole?.id;
   const defaultRoleId = memberRoleId;
-  const effectiveInviteRoleId = isRbacEnabled
-    ? (inviteRoleId ?? defaultRoleId)
-    : memberRoleId;
+  const effectiveInviteRoleId = inviteRoleId ?? defaultRoleId;
 
   // Cross-reference AccessMember (has roleIds) by user ID
   const roleIdsByUserId = new Map(accessMembers.map((m) => [m.id, m.roleIds]));
@@ -307,7 +426,6 @@ function TeamInner() {
     invite: OrganizationInvitation,
     roleId: string,
   ) => {
-    if (!isRbacEnabled) return;
     if (!roleId || roleId === getInviteRoleId(invite)) return;
 
     updateInviteRoleMutation.mutate(
@@ -331,9 +449,7 @@ function TeamInner() {
   };
 
   const handleResendInvite = (invite: OrganizationInvitation) => {
-    const inviteRoleId = isRbacEnabled
-      ? (getInviteRoleId(invite) ?? effectiveInviteRoleId)
-      : memberRoleId;
+    const inviteRoleId = getInviteRoleId(invite) ?? effectiveInviteRoleId;
 
     // Must revoke first — the unique partial index (org_id, email) WHERE
     // state = 'pending' blocks a second pending invite for the same email.
@@ -378,6 +494,19 @@ function TeamInner() {
 
   const membersByUserId = new Map(members.map((m) => [m.userId, m]));
 
+  const memberMenuDeps: MemberMenuDeps = {
+    accessMemberByUserId,
+    adminCount,
+    adminRoleId,
+    challengesHref: orgRoutes.access.challenges.href(),
+    navigate,
+    roleIdsByUserId,
+    scimManaged: Boolean(organization.scimEnabled),
+    setChangingMember,
+    setMemberToRemove,
+    userEmail: user.email,
+  };
+
   const memberColumns: Column<OrganizationUser>[] = [
     {
       key: "member",
@@ -393,10 +522,8 @@ function TeamInner() {
             />
           ) : (
             <div
-              className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium text-white"
-              style={{
-                backgroundImage: `linear-gradient(${getMemberColors(member.id).angle}deg, ${getMemberColors(member.id).from}, ${getMemberColors(member.id).to})`,
-              }}
+              className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium"
+              style={getIdentityTint(member.id)}
             >
               {member.name
                 .split(" ")
@@ -407,12 +534,12 @@ function TeamInner() {
             </div>
           )}
           <Stack direction="vertical" gap={0}>
-            <Type variant="body" className="font-medium">
+            <Text variant="body" className="font-medium">
               {member.name}
-            </Type>
-            <Type variant="body" className="text-muted-foreground text-sm">
+            </Text>
+            <Text variant="body" className="text-muted-foreground text-sm">
               {member.email}
-            </Type>
+            </Text>
           </Stack>
         </Stack>
       ),
@@ -422,59 +549,55 @@ function TeamInner() {
       header: "Joined",
       width: "200px",
       render: (member) => (
-        <Type
+        <Text
           variant="body"
           className="text-muted-foreground whitespace-nowrap"
         >
           <HumanizeDateTime date={member.createdAt} />
-        </Type>
+        </Text>
       ),
     },
-    ...(isRbacEnabled
-      ? [
-          {
-            key: "role",
-            header: "Roles",
-            width: "200px",
-            render: (member) => {
-              const memberRoleIds = roleIdsByUserId.get(member.userId);
-              if (!memberRoleIds || memberRoleIds.length === 0)
-                return <span className="text-muted-foreground">—</span>;
-              const MAX_VISIBLE = 1;
-              const visible = memberRoleIds.slice(0, MAX_VISIBLE);
-              const overflow = memberRoleIds.slice(MAX_VISIBLE);
-              return (
-                <Stack direction="horizontal" gap={1} className="flex-wrap">
-                  {visible.map((roleId) => (
-                    <Link
-                      key={roleId}
-                      to={`${orgRoutes.access.roles.href()}?editRole=${roleId}`}
-                      className="text-foreground hover:text-primary rounded-sm border px-1.5 py-0.5 text-xs no-underline transition-colors"
-                    >
-                      {getRoleName(roleId)}
-                    </Link>
-                  ))}
-                  {overflow.length > 0 && (
-                    <SimpleTooltip
-                      tooltip={overflow.map((id) => getRoleName(id)).join(", ")}
-                    >
-                      <span className="text-muted-foreground cursor-pointer rounded-sm border px-1.5 py-0.5 text-xs">
-                        +{overflow.length} more
-                      </span>
-                    </SimpleTooltip>
-                  )}
-                </Stack>
-              );
-            },
-          } satisfies Column<OrganizationUser>,
-        ]
-      : []),
+    {
+      key: "role",
+      header: "Roles",
+      width: "200px",
+      render: (member) => {
+        const memberRoleIds = roleIdsByUserId.get(member.userId);
+        if (!memberRoleIds || memberRoleIds.length === 0)
+          return <span className="text-muted-foreground">—</span>;
+        const MAX_VISIBLE = 1;
+        const visible = memberRoleIds.slice(0, MAX_VISIBLE);
+        const overflow = memberRoleIds.slice(MAX_VISIBLE);
+        return (
+          <Stack direction="horizontal" gap={1} className="flex-wrap">
+            {visible.map((roleId) => (
+              <Link
+                key={roleId}
+                to={`${orgRoutes.access.roles.href()}?editRole=${roleId}`}
+                className="text-foreground hover:text-primary border px-1.5 py-0.5 text-xs no-underline transition-colors"
+              >
+                {getRoleName(roleId)}
+              </Link>
+            ))}
+            {overflow.length > 0 && (
+              <SimpleTooltip
+                tooltip={overflow.map((id) => getRoleName(id)).join(", ")}
+              >
+                <span className="text-muted-foreground cursor-pointer border px-1.5 py-0.5 text-xs">
+                  +{overflow.length} more
+                </span>
+              </SimpleTooltip>
+            )}
+          </Stack>
+        );
+      },
+    } satisfies Column<OrganizationUser>,
     {
       key: "lastLogin",
       header: "Last active",
       width: "200px",
       render: (member) => (
-        <Type
+        <Text
           variant="body"
           className="text-muted-foreground whitespace-nowrap"
         >
@@ -483,7 +606,7 @@ function TeamInner() {
           ) : (
             <span className="text-muted-foreground/50">—</span>
           )}
-        </Type>
+        </Text>
       ),
     },
     {
@@ -491,25 +614,7 @@ function TeamInner() {
       header: "",
       width: "60px",
       render: (member) => {
-        const memberRoleIds = roleIdsByUserId.get(member.userId) ?? [];
-        const isLastAdmin =
-          adminRoleId != null &&
-          memberRoleIds.includes(adminRoleId) &&
-          adminCount <= 1;
-        const isSelf = member.email === user.email;
-        const accessMember: AccessMember | undefined =
-          accessMemberByUserId.get(member.userId) ??
-          (memberRoleIds.length > 0
-            ? {
-                id: member.userId,
-                principalUrn: `user:${member.userId}`,
-                name: member.name,
-                email: member.email,
-                photoUrl: member.photoUrl,
-                roleIds: memberRoleIds,
-                joinedAt: member.createdAt,
-              }
-            : undefined);
+        const model = getMemberMenuModel(member, memberMenuDeps);
 
         return (
           <DropdownMenu modal={false}>
@@ -517,15 +622,15 @@ function TeamInner() {
               <button
                 type="button"
                 className={cn(
-                  "text-muted-foreground hover:bg-accent hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-colors",
+                  "text-muted-foreground hover:bg-accent hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center transition-colors",
                 )}
               >
                 <Ellipsis className="h-4 w-4" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {isRbacEnabled &&
-                (organization.scimEnabled ? (
+              {model.showManageRoles &&
+                (model.scimManaged ? (
                   <SimpleTooltip tooltip="Role assignments are managed by your identity provider. Configure them under SSO → SCIM in identity settings.">
                     <span className="inline-flex w-full">
                       <DropdownMenuItem disabled className="w-full">
@@ -534,43 +639,26 @@ function TeamInner() {
                     </span>
                   </SimpleTooltip>
                 ) : (
-                  accessMember && (
+                  model.accessMember && (
                     <RequireScope scope="org:admin" level="component">
-                      <DropdownMenuItem
-                        onSelect={() => {
-                          void setTimeout(
-                            () => setChangingMember(accessMember),
-                            0,
-                          );
-                        }}
-                      >
+                      <DropdownMenuItem onSelect={model.openManageRoles}>
                         Manage roles
                       </DropdownMenuItem>
                     </RequireScope>
                   )
                 ))}
-              {isRbacEnabled && (
-                <DropdownMenuItem
-                  onSelect={() => {
-                    void setTimeout(() => {
-                      void navigate(
-                        `${orgRoutes.access.challenges.href()}?identity=${encodeURIComponent(member.email)}`,
-                      );
-                    }, 0);
-                  }}
-                >
+              {model.showChallenges && (
+                <DropdownMenuItem onSelect={model.openChallenges}>
                   View challenges
                 </DropdownMenuItem>
               )}
-              {!isSelf && !isLastAdmin && (
+              {model.canRemove && (
                 <>
-                  {isRbacEnabled && <DropdownMenuSeparator />}
+                  {model.showManageRoles && <DropdownMenuSeparator />}
                   <RequireScope scope="org:admin" level="component">
                     <DropdownMenuItem
                       className="text-destructive focus:text-destructive"
-                      onSelect={() => {
-                        void setTimeout(() => setMemberToRemove(member), 0);
-                      }}
+                      onSelect={model.openRemove}
                     >
                       Remove member
                     </DropdownMenuItem>
@@ -599,10 +687,8 @@ function TeamInner() {
             className={isExpired ? "opacity-50" : ""}
           >
             <div
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white"
-              style={{
-                backgroundImage: `linear-gradient(${getMemberColors(invite.email).angle}deg, ${getMemberColors(invite.email).from}, ${getMemberColors(invite.email).to})`,
-              }}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium"
+              style={getIdentityTint(invite.email)}
             >
               {invite.email
                 .split("@")[0]
@@ -610,53 +696,45 @@ function TeamInner() {
                 .slice(0, 2)
                 .toUpperCase() || "?"}
             </div>
-            <Type variant="body">{invite.email}</Type>
+            <Text variant="body">{invite.email}</Text>
           </Stack>
         );
       },
     },
-    ...(isRbacEnabled
-      ? [
-          {
-            key: "role",
-            header: "Role",
-            width: "180px",
-            render: (invite) => {
-              const inviteRole = getInviteRole(invite);
-              if (roles.length === 0) {
-                return (
-                  <Type variant="body" className="text-muted-foreground">
-                    {invite.roleSlug ?? "—"}
-                  </Type>
-                );
-              }
+    {
+      key: "role",
+      header: "Role",
+      width: "180px",
+      render: (invite) => {
+        const inviteRole = getInviteRole(invite);
+        if (roles.length === 0) {
+          return (
+            <Text variant="body" className="text-muted-foreground">
+              {invite.roleSlug ?? "—"}
+            </Text>
+          );
+        }
 
-              return (
-                <Select
-                  value={inviteRole?.id}
-                  onValueChange={(roleId) =>
-                    handleUpdateInviteRole(invite, roleId)
-                  }
-                  disabled={updateInviteRoleMutation.isPending}
-                >
-                  <SelectTrigger>
-                    <SelectValue
-                      placeholder={invite.roleSlug ?? "Select role"}
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {roles.map((role) => (
-                      <SelectItem key={role.id} value={role.id}>
-                        {role.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              );
-            },
-          } satisfies Column<OrganizationInvitation>,
-        ]
-      : []),
+        return (
+          <Select
+            value={inviteRole?.id}
+            onValueChange={(roleId) => handleUpdateInviteRole(invite, roleId)}
+            disabled={updateInviteRoleMutation.isPending}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder={invite.roleSlug ?? "Select role"} />
+            </SelectTrigger>
+            <SelectContent>
+              {roles.map((role) => (
+                <SelectItem key={role.id} value={role.id}>
+                  {role.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        );
+      },
+    } satisfies Column<OrganizationInvitation>,
     {
       key: "invitedBy",
       header: "Invited by",
@@ -676,10 +754,8 @@ function TeamInner() {
               />
             ) : (
               <div
-                className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium text-white"
-                style={{
-                  backgroundImage: `linear-gradient(${getMemberColors(inviter.id).angle}deg, ${getMemberColors(inviter.id).from}, ${getMemberColors(inviter.id).to})`,
-                }}
+                className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-medium"
+                style={getIdentityTint(inviter.id)}
               >
                 {inviter.name
                   .split(" ")
@@ -698,12 +774,12 @@ function TeamInner() {
       header: "Sent",
       width: "1fr",
       render: (invite) => (
-        <Type
+        <Text
           variant="body"
           className={`text-muted-foreground whitespace-nowrap ${invite.state === "expired" ? "opacity-50" : ""}`}
         >
           <HumanizeDateTime date={invite.createdAt} />
-        </Type>
+        </Text>
       ),
     },
     {
@@ -715,7 +791,7 @@ function TeamInner() {
           invite.state === "expired" ||
           (invite.expiresAt && invite.expiresAt < new Date());
         return (
-          <Type
+          <Text
             variant="body"
             className={isExpired ? "text-destructive" : "text-muted-foreground"}
           >
@@ -724,7 +800,7 @@ function TeamInner() {
               : invite.expiresAt
                 ? formatDistanceToNow(invite.expiresAt, { addSuffix: true })
                 : "—"}
-          </Type>
+          </Text>
         );
       },
     },
@@ -769,196 +845,201 @@ function TeamInner() {
     },
   ];
 
+  const inviteButton = (
+    <RequireScope scope="org:admin" level="component">
+      {organization.scimEnabled ? (
+        <SimpleTooltip tooltip="Managed by your identity provider">
+          <span className="inline-flex">
+            <Button onClick={() => setIsInviteDialogOpen(true)} disabled>
+              <Button.LeftIcon>
+                <UserPlus className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>Invite Member</Button.Text>
+            </Button>
+          </span>
+        </SimpleTooltip>
+      ) : (
+        <Button onClick={() => setIsInviteDialogOpen(true)}>
+          <Button.LeftIcon>
+            <UserPlus className="h-4 w-4" />
+          </Button.LeftIcon>
+          <Button.Text>Invite Member</Button.Text>
+        </Button>
+      )}
+    </RequireScope>
+  );
+
   return (
     <>
-      <Stack direction="vertical" gap={8}>
-        {/* Members Section */}
-        <div>
-          <Stack
-            direction="horizontal"
-            justify="space-between"
-            align="center"
-            className="mb-4"
-          >
-            <Stack direction="vertical" gap={1}>
-              <Heading variant="h4">Team Members</Heading>
-              <Type variant="body" className="text-muted-foreground">
-                Manage who has access to {organization.name}
-              </Type>
-            </Stack>
-            <RequireScope scope="org:admin" level="component">
-              {organization.scimEnabled ? (
-                <SimpleTooltip tooltip="Managed by your identity provider">
-                  <span className="inline-flex">
-                    <Button
-                      onClick={() => setIsInviteDialogOpen(true)}
-                      disabled
-                    >
-                      <Button.LeftIcon>
-                        <UserPlus className="h-4 w-4" />
-                      </Button.LeftIcon>
-                      <Button.Text>Invite Member</Button.Text>
-                    </Button>
-                  </span>
-                </SimpleTooltip>
-              ) : (
-                <Button onClick={() => setIsInviteDialogOpen(true)}>
-                  <Button.LeftIcon>
-                    <UserPlus className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>Invite Member</Button.Text>
-                </Button>
-              )}
-            </RequireScope>
-          </Stack>
-
-          {organization.scimEnabled && (
-            <Alert variant="info" dismissible={false} className="mb-8 text-sm">
-              Directory Sync (SCIM) is enabled. Members are provisioned and
-              roles assigned from your identity provider, not here.{" "}
-              <Link
-                to={orgRoutes.identity.href()}
-                className="underline underline-offset-2"
-              >
-                Manage identity settings
-              </Link>
-            </Alert>
-          )}
-
-          <div className="relative">
-            <Icon
-              name="search"
-              className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
-            />
-            <Input
-              type="text"
-              placeholder="Search members..."
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(0);
-              }}
-              className="mb-4 w-full py-2 pl-9 text-sm"
-            />
-          </div>
-
-          <Table
-            columns={memberColumns}
-            data={visibleMembers}
-            rowKey={(row) => row.userId}
-            className="min-h-fit"
-            noResultsMessage={
-              <Stack
-                gap={2}
-                className="bg-background h-full p-8"
-                align="center"
-                justify="center"
-              >
-                <Users className="text-muted-foreground h-12 w-12" />
-                <Type variant="body" className="text-muted-foreground">
-                  {search
-                    ? "No members matching your search"
-                    : "No team members yet"}
-                </Type>
-              </Stack>
-            }
-          />
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between border-t px-4 py-3">
-              <Type variant="body" className="text-muted-foreground text-sm">
-                {safePage * MEMBERS_PAGE_SIZE + 1}–
-                {Math.min((safePage + 1) * MEMBERS_PAGE_SIZE, members.length)}{" "}
-                of {members.length}
-              </Type>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="tertiary"
-                  size="sm"
-                  onClick={() => setPage((p) => p - 1)}
-                  disabled={safePage === 0}
-                >
-                  <Button.LeftIcon>
-                    <ChevronLeft className="size-4" />
-                  </Button.LeftIcon>
-                  <Button.Text className="sr-only">Previous page</Button.Text>
-                </Button>
-                <Button
-                  variant="tertiary"
-                  size="sm"
-                  onClick={() => setPage((p) => p + 1)}
-                  disabled={safePage >= totalPages - 1}
-                >
-                  <Button.LeftIcon>
-                    <ChevronRight className="size-4" />
-                  </Button.LeftIcon>
-                  <Button.Text className="sr-only">Next page</Button.Text>
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Pending Invites Section */}
-        {invites.length > 0 && (
+      <ResourceListPage
+        title="Team Members"
+        description={`Manage who has access to ${organization.name}`}
+        primaryAction={inviteButton}
+      >
+        <Stack direction="vertical" gap={8}>
+          {/* Members Section */}
           <div>
-            <Stack direction="vertical" gap={1} className="mb-4">
-              <Heading variant="h4">Pending Invites</Heading>
-              <Type variant="body" className="text-muted-foreground">
-                Invitations that haven't been accepted yet
-              </Type>
-            </Stack>
+            {organization.scimEnabled && (
+              <Alert
+                variant="info"
+                dismissible={false}
+                className="mb-8 text-sm"
+              >
+                Directory Sync (SCIM) is enabled. Members are provisioned and
+                roles assigned from your identity provider, not here.{" "}
+                <Link
+                  to={orgRoutes.identity.href()}
+                  className="underline underline-offset-2"
+                >
+                  Manage identity settings
+                </Link>
+              </Alert>
+            )}
+
+            <div className="relative">
+              <Icon
+                name="search"
+                className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+              />
+              <Input
+                type="text"
+                placeholder="Search members..."
+                value={search}
+                onChange={(value) => {
+                  setSearch(value);
+                  setPage(0);
+                }}
+                className="mb-4 w-full py-2 pl-9 text-sm"
+              />
+            </div>
 
             <Table
-              columns={inviteColumns}
-              data={invites}
-              rowKey={(row) => row.id}
+              columns={memberColumns}
+              data={visibleMembers}
+              rowKey={(row) => row.userId}
+              renderRow={(row, rowElement) => (
+                <MemberRowContextMenu
+                  key={row.userId}
+                  member={row}
+                  deps={memberMenuDeps}
+                >
+                  {rowElement}
+                </MemberRowContextMenu>
+              )}
               className="min-h-fit"
+              noResultsMessage={
+                <Stack
+                  gap={2}
+                  className="bg-background h-full p-8"
+                  align="center"
+                  justify="center"
+                >
+                  <Users className="text-muted-foreground h-12 w-12" />
+                  <Text variant="body" className="text-muted-foreground">
+                    {search
+                      ? "No members matching your search"
+                      : "No team members yet"}
+                  </Text>
+                </Stack>
+              }
             />
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between border-t px-4 py-3">
+                <Text variant="body" className="text-muted-foreground text-sm">
+                  {safePage * MEMBERS_PAGE_SIZE + 1}–
+                  {Math.min((safePage + 1) * MEMBERS_PAGE_SIZE, members.length)}{" "}
+                  of {members.length}
+                </Text>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="tertiary"
+                    size="sm"
+                    onClick={() => setPage((p) => p - 1)}
+                    disabled={safePage === 0}
+                  >
+                    <Button.LeftIcon>
+                      <ChevronLeft className="size-4" />
+                    </Button.LeftIcon>
+                    <Button.Text className="sr-only">Previous page</Button.Text>
+                  </Button>
+                  <Button
+                    variant="tertiary"
+                    size="sm"
+                    onClick={() => setPage((p) => p + 1)}
+                    disabled={safePage >= totalPages - 1}
+                  >
+                    <Button.LeftIcon>
+                      <ChevronRight className="size-4" />
+                    </Button.LeftIcon>
+                    <Button.Text className="sr-only">Next page</Button.Text>
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
-        )}
-        {/* Identity signpost */}
-        <div className="border-border border-t pt-8">
-          {organization.scimEnabled ? (
-            <div className="border-border bg-muted/30 flex items-start gap-3 rounded-md border px-4 py-3">
-              <FolderSync className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-              <div className="min-w-0 flex-1">
-                <Type variant="body" className="text-sm font-medium">
-                  Directory Sync is enabled
-                </Type>
-                <Type muted small className="mt-0.5">
-                  Team membership and role assignments are managed by your
-                  identity provider.{" "}
-                  <Link
-                    to={orgRoutes.identity.href()}
-                    className="text-foreground underline underline-offset-4"
-                  >
-                    Manage identity settings
-                  </Link>
-                </Type>
-              </div>
-            </div>
-          ) : (
-            <div className="border-border bg-muted/30 flex items-start gap-3 rounded-md border px-4 py-3">
-              <Shield className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-              <div className="min-w-0 flex-1">
-                <Type variant="body" className="text-sm font-medium">
-                  SSO & Directory Sync
-                </Type>
-                <Type muted small className="mt-0.5">
-                  Automate member provisioning and enforce identity provider
-                  authentication.{" "}
-                  <Link
-                    to={orgRoutes.identity.href()}
-                    className="text-foreground underline underline-offset-4"
-                  >
-                    Set up SSO & SCIM
-                  </Link>
-                </Type>
-              </div>
+
+          {/* Pending Invites Section */}
+          {invites.length > 0 && (
+            <div>
+              <Stack direction="vertical" gap={1} className="mb-4">
+                <h3 className="text-eyebrow">Pending Invites</h3>
+                <Text variant="body" className="text-muted-foreground">
+                  Invitations that haven't been accepted yet
+                </Text>
+              </Stack>
+
+              <Table
+                columns={inviteColumns}
+                data={invites}
+                rowKey={(row) => row.id}
+                className="min-h-fit"
+              />
             </div>
           )}
-        </div>
-      </Stack>
+          {/* Identity signpost */}
+          <div className="border-border border-t pt-8">
+            {organization.scimEnabled ? (
+              <div className="border-border bg-muted/30 flex items-start gap-3 border px-4 py-3">
+                <FolderSync className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <Text variant="body" className="text-sm font-medium">
+                    Directory Sync is enabled
+                  </Text>
+                  <Text muted small className="mt-0.5">
+                    Team membership and role assignments are managed by your
+                    identity provider.{" "}
+                    <Link
+                      to={orgRoutes.identity.href()}
+                      className="text-foreground underline underline-offset-4"
+                    >
+                      Manage identity settings
+                    </Link>
+                  </Text>
+                </div>
+              </div>
+            ) : (
+              <div className="border-border bg-muted/30 flex items-start gap-3 border px-4 py-3">
+                <Shield className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <Text variant="body" className="text-sm font-medium">
+                    SSO & Directory Sync
+                  </Text>
+                  <Text muted small className="mt-0.5">
+                    Automate member provisioning and enforce identity provider
+                    authentication.{" "}
+                    <Link
+                      to={orgRoutes.identity.href()}
+                      className="text-foreground underline underline-offset-4"
+                    >
+                      Set up SSO & SCIM
+                    </Link>
+                  </Text>
+                </div>
+              </div>
+            )}
+          </div>
+        </Stack>
+      </ResourceListPage>
 
       {/* Invite Dialog */}
       <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>
@@ -967,13 +1048,13 @@ function TeamInner() {
             <Dialog.Title>Invite Team Member</Dialog.Title>
           </Dialog.Header>
           <form className="space-y-4 py-4" onSubmit={handleInvite}>
-            <Type variant="body" className="text-muted-foreground">
+            <Text variant="body" className="text-muted-foreground">
               Enter the email address of the person you'd like to invite to{" "}
               <span className="text-foreground font-medium">
                 {organization.name}
               </span>
               .
-            </Type>
+            </Text>
             <InputField
               label="Email address"
               name="email"
@@ -995,7 +1076,7 @@ function TeamInner() {
               data-lpignore="true"
               data-bwignore
             />
-            {isRbacEnabled && roles.length > 0 && (
+            {roles.length > 0 && (
               <AnyField
                 label="Role"
                 optionality="hidden"
@@ -1053,12 +1134,12 @@ function TeamInner() {
             <Dialog.Title>Remove Team Member</Dialog.Title>
           </Dialog.Header>
           <div className="space-y-4 py-4">
-            <Type variant="body">
+            <Text variant="body">
               Are you sure you want to remove{" "}
               <span className="font-bold">{memberToRemove?.name}</span> from{" "}
               {organization.name}? They will lose access to all projects and
               resources.
-            </Type>
+            </Text>
             <div className="flex justify-end space-x-2">
               <Button
                 variant="secondary"
@@ -1092,10 +1173,10 @@ function TeamInner() {
             <Dialog.Title>Cancel Invite</Dialog.Title>
           </Dialog.Header>
           <div className="space-y-4 py-4">
-            <Type variant="body">
+            <Text variant="body">
               Are you sure you want to cancel the invite to{" "}
               <span className="font-bold">{inviteToCancel?.email}</span>?
-            </Type>
+            </Text>
             <div className="flex justify-end space-x-2">
               <Button
                 variant="secondary"
@@ -1118,7 +1199,7 @@ function TeamInner() {
       </Dialog>
 
       {/* Change Role Dialog — hidden when directory sync manages role assignment */}
-      {isRbacEnabled && !organization.scimEnabled && (
+      {!organization.scimEnabled && (
         <ChangeRoleDialog
           member={changingMember}
           onOpenChange={(open) => {

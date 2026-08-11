@@ -8,6 +8,8 @@
 package server
 
 import (
+	"unicode/utf8"
+
 	hooks "github.com/speakeasy-api/gram/server/gen/hooks"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -172,6 +174,31 @@ type IngestRequestBody struct {
 	// Original provider payload for debugging. The backend does not use this for
 	// feature behavior.
 	Raw any `form:"raw,omitempty" json:"raw,omitempty" xml:"raw,omitempty"`
+}
+
+// UploadSkillContentRequestBody is the type of the "hooks" service
+// "uploadSkillContent" endpoint HTTP request body.
+type UploadSkillContentRequestBody struct {
+	// Contract version.
+	SchemaVersion *string `form:"schema_version,omitempty" json:"schema_version,omitempty" xml:"schema_version,omitempty"`
+	// Lowercase SHA-256 of the raw content.
+	RawSha256 *string `form:"raw_sha256,omitempty" json:"raw_sha256,omitempty" xml:"raw_sha256,omitempty"`
+	// Raw UTF-8 skill manifest content. The server rejects content whose UTF-8
+	// encoding exceeds 65,536 bytes.
+	Content *string `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
+}
+
+// SkillFeedbackRequestBody is the type of the "hooks" service "skillFeedback"
+// endpoint HTTP request body.
+type SkillFeedbackRequestBody struct {
+	// Contract version.
+	SchemaVersion *string `form:"schema_version,omitempty" json:"schema_version,omitempty" xml:"schema_version,omitempty"`
+	// Canonical name of the skill that was used.
+	Skill *string `form:"skill,omitempty" json:"skill,omitempty" xml:"skill,omitempty"`
+	// How the skill affected the task.
+	Outcome *string `form:"outcome,omitempty" json:"outcome,omitempty" xml:"outcome,omitempty"`
+	// Optional concise context about the outcome.
+	Note *string `form:"note,omitempty" json:"note,omitempty" xml:"note,omitempty"`
 }
 
 // LogsRequestBody is the type of the "hooks" service "logs" endpoint HTTP
@@ -964,6 +991,372 @@ type IngestGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// UploadSkillContentUnauthorizedResponseBody is the type of the "hooks"
+// service "uploadSkillContent" endpoint HTTP response body for the
+// "unauthorized" error.
+type UploadSkillContentUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UploadSkillContentForbiddenResponseBody is the type of the "hooks" service
+// "uploadSkillContent" endpoint HTTP response body for the "forbidden" error.
+type UploadSkillContentForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UploadSkillContentBadRequestResponseBody is the type of the "hooks" service
+// "uploadSkillContent" endpoint HTTP response body for the "bad_request" error.
+type UploadSkillContentBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UploadSkillContentNotFoundResponseBody is the type of the "hooks" service
+// "uploadSkillContent" endpoint HTTP response body for the "not_found" error.
+type UploadSkillContentNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UploadSkillContentConflictResponseBody is the type of the "hooks" service
+// "uploadSkillContent" endpoint HTTP response body for the "conflict" error.
+type UploadSkillContentConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UploadSkillContentUnsupportedMediaResponseBody is the type of the "hooks"
+// service "uploadSkillContent" endpoint HTTP response body for the
+// "unsupported_media" error.
+type UploadSkillContentUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UploadSkillContentInvalidResponseBody is the type of the "hooks" service
+// "uploadSkillContent" endpoint HTTP response body for the "invalid" error.
+type UploadSkillContentInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UploadSkillContentInvariantViolationResponseBody is the type of the "hooks"
+// service "uploadSkillContent" endpoint HTTP response body for the
+// "invariant_violation" error.
+type UploadSkillContentInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UploadSkillContentUnexpectedResponseBody is the type of the "hooks" service
+// "uploadSkillContent" endpoint HTTP response body for the "unexpected" error.
+type UploadSkillContentUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UploadSkillContentGatewayErrorResponseBody is the type of the "hooks"
+// service "uploadSkillContent" endpoint HTTP response body for the
+// "gateway_error" error.
+type UploadSkillContentGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SkillFeedbackUnauthorizedResponseBody is the type of the "hooks" service
+// "skillFeedback" endpoint HTTP response body for the "unauthorized" error.
+type SkillFeedbackUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SkillFeedbackForbiddenResponseBody is the type of the "hooks" service
+// "skillFeedback" endpoint HTTP response body for the "forbidden" error.
+type SkillFeedbackForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SkillFeedbackBadRequestResponseBody is the type of the "hooks" service
+// "skillFeedback" endpoint HTTP response body for the "bad_request" error.
+type SkillFeedbackBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SkillFeedbackNotFoundResponseBody is the type of the "hooks" service
+// "skillFeedback" endpoint HTTP response body for the "not_found" error.
+type SkillFeedbackNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SkillFeedbackConflictResponseBody is the type of the "hooks" service
+// "skillFeedback" endpoint HTTP response body for the "conflict" error.
+type SkillFeedbackConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SkillFeedbackUnsupportedMediaResponseBody is the type of the "hooks" service
+// "skillFeedback" endpoint HTTP response body for the "unsupported_media"
+// error.
+type SkillFeedbackUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SkillFeedbackInvalidResponseBody is the type of the "hooks" service
+// "skillFeedback" endpoint HTTP response body for the "invalid" error.
+type SkillFeedbackInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SkillFeedbackInvariantViolationResponseBody is the type of the "hooks"
+// service "skillFeedback" endpoint HTTP response body for the
+// "invariant_violation" error.
+type SkillFeedbackInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SkillFeedbackUnexpectedResponseBody is the type of the "hooks" service
+// "skillFeedback" endpoint HTTP response body for the "unexpected" error.
+type SkillFeedbackUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SkillFeedbackGatewayErrorResponseBody is the type of the "hooks" service
+// "skillFeedback" endpoint HTTP response body for the "gateway_error" error.
+type SkillFeedbackGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // LogsUnauthorizedResponseBody is the type of the "hooks" service "logs"
 // endpoint HTTP response body for the "unauthorized" error.
 type LogsUnauthorizedResponseBody struct {
@@ -1334,6 +1727,10 @@ type HookIngestSourceRequestBody struct {
 	RawEventName *string `form:"raw_event_name,omitempty" json:"raw_event_name,omitempty" xml:"raw_event_name,omitempty"`
 	// Hostname of the machine that emitted the hook event.
 	Hostname *string `form:"hostname,omitempty" json:"hostname,omitempty" xml:"hostname,omitempty"`
+	// Self-reported email of the developer on the emitting machine (device agent
+	// or provider account), used for attribution when the API key is shared
+	// org-wide.
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
 }
 
 // HookIngestSessionRequestBody is used to define fields on request body types.
@@ -1358,13 +1755,28 @@ type HookIngestEventRequestBody struct {
 
 // HookIngestDataRequestBody is used to define fields on request body types.
 type HookIngestDataRequestBody struct {
-	Prompt       *HookPromptDataRequestBody       `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
-	ToolCall     *HookToolCallDataRequestBody     `form:"tool_call,omitempty" json:"tool_call,omitempty" xml:"tool_call,omitempty"`
-	Mcp          *HookMCPDataRequestBody          `form:"mcp,omitempty" json:"mcp,omitempty" xml:"mcp,omitempty"`
-	Usage        *HookUsageDataRequestBody        `form:"usage,omitempty" json:"usage,omitempty" xml:"usage,omitempty"`
-	Message      *HookMessageDataRequestBody      `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	Skill        *HookSkillDataRequestBody        `form:"skill,omitempty" json:"skill,omitempty" xml:"skill,omitempty"`
-	Notification *HookNotificationDataRequestBody `form:"notification,omitempty" json:"notification,omitempty" xml:"notification,omitempty"`
+	Prompt   *HookPromptDataRequestBody   `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	ToolCall *HookToolCallDataRequestBody `form:"tool_call,omitempty" json:"tool_call,omitempty" xml:"tool_call,omitempty"`
+	Mcp      *HookMCPDataRequestBody      `form:"mcp,omitempty" json:"mcp,omitempty" xml:"mcp,omitempty"`
+	// Configured MCP server snapshot captured at session start or configuration
+	// change. Transport credentials must be redacted by the sender.
+	McpInventory []*HookMCPDataRequestBody `form:"mcp_inventory,omitempty" json:"mcp_inventory,omitempty" xml:"mcp_inventory,omitempty"`
+	// Whether the sender was able to read the agent's MCP server list for this
+	// session. True with an empty mcp_inventory means the agent genuinely has no
+	// servers configured; absent or false means the list could not be read (no
+	// agent binary, a failed probe) and the inventory says nothing about what the
+	// session can reach. Enforcement that treats a missing inventory as proof of
+	// absence must consult this first.
+	McpInventoryCollected *bool                            `form:"mcp_inventory_collected,omitempty" json:"mcp_inventory_collected,omitempty" xml:"mcp_inventory_collected,omitempty"`
+	Usage                 *HookUsageDataRequestBody        `form:"usage,omitempty" json:"usage,omitempty" xml:"usage,omitempty"`
+	Message               *HookMessageDataRequestBody      `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	Skill                 *HookSkillDataRequestBody        `form:"skill,omitempty" json:"skill,omitempty" xml:"skill,omitempty"`
+	Notification          *HookNotificationDataRequestBody `form:"notification,omitempty" json:"notification,omitempty" xml:"notification,omitempty"`
+	// Transcript-derived per-request MCP attribution (Claude Stop/SubagentStop).
+	McpAttribution []*HookMCPAttributionEntryRequestBody `form:"mcp_attribution,omitempty" json:"mcp_attribution,omitempty" xml:"mcp_attribution,omitempty"`
+	// Transcript-derived prompt attachment content (Claude
+	// Stop/SubagentStop/SessionEnd).
+	PromptAttachments []*HookPromptAttachmentEntryRequestBody `form:"prompt_attachments,omitempty" json:"prompt_attachments,omitempty" xml:"prompt_attachments,omitempty"`
 }
 
 // HookPromptDataRequestBody is used to define fields on request body types.
@@ -1443,6 +1855,12 @@ type HookSkillDataRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Skill source or namespace, if available.
 	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	// Scope where the skill was resolved, if available.
+	SourceLevel *string `form:"source_level,omitempty" json:"source_level,omitempty" xml:"source_level,omitempty"`
+	// Local path where the skill was resolved, if available.
+	SourcePath *string `form:"source_path,omitempty" json:"source_path,omitempty" xml:"source_path,omitempty"`
+	// SHA-256 of the raw skill manifest, if available.
+	RawSha256 *string `form:"raw_sha256,omitempty" json:"raw_sha256,omitempty" xml:"raw_sha256,omitempty"`
 }
 
 // HookNotificationDataRequestBody is used to define fields on request body
@@ -1454,6 +1872,47 @@ type HookNotificationDataRequestBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// Notification message.
 	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+}
+
+// HookMCPAttributionEntryRequestBody is used to define fields on request body
+// types.
+type HookMCPAttributionEntryRequestBody struct {
+	// Provider API request identifier (e.g. Claude's req_*) the attribution
+	// applies to.
+	RequestID *string `form:"request_id,omitempty" json:"request_id,omitempty" xml:"request_id,omitempty"`
+	// Unredacted MCP server name from the transcript.
+	McpServer *string `form:"mcp_server,omitempty" json:"mcp_server,omitempty" xml:"mcp_server,omitempty"`
+	// Unredacted MCP tool name from the transcript.
+	McpTool *string `form:"mcp_tool,omitempty" json:"mcp_tool,omitempty" xml:"mcp_tool,omitempty"`
+}
+
+// HookPromptAttachmentEntryRequestBody is used to define fields on request
+// body types.
+type HookPromptAttachmentEntryRequestBody struct {
+	// Provider transcript entry UUID. Used as the stable attachment identifier.
+	EntryUUID *string `form:"entry_uuid,omitempty" json:"entry_uuid,omitempty" xml:"entry_uuid,omitempty"`
+	// Prompt identifier of the user turn this attachment belongs to, when the
+	// transcript parent chain resolves.
+	PromptID *string `form:"prompt_id,omitempty" json:"prompt_id,omitempty" xml:"prompt_id,omitempty"`
+	// Lowercase hex SHA-256 of the trimmed prompt text stored for the parent user
+	// message, when available.
+	PromptSha256 *string `form:"prompt_sha256,omitempty" json:"prompt_sha256,omitempty" xml:"prompt_sha256,omitempty"`
+	// Absolute provider-reported file or directory path, when available.
+	FilePath *string `form:"file_path,omitempty" json:"file_path,omitempty" xml:"file_path,omitempty"`
+	// Provider display path for the attachment, when available.
+	DisplayPath *string `form:"display_path,omitempty" json:"display_path,omitempty" xml:"display_path,omitempty"`
+	// Provider attachment kind, such as file or directory.
+	AttachmentKind *string `form:"attachment_kind,omitempty" json:"attachment_kind,omitempty" xml:"attachment_kind,omitempty"`
+	// Attachment text visible to the model.
+	Content *string `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
+	// Number of lines included in the attachment window, when reported.
+	NumLines *int `form:"num_lines,omitempty" json:"num_lines,omitempty" xml:"num_lines,omitempty"`
+	// Total source file lines, when reported.
+	TotalLines *int `form:"total_lines,omitempty" json:"total_lines,omitempty" xml:"total_lines,omitempty"`
+	// First one-based source line included in the attachment window, when reported.
+	StartLine *int `form:"start_line,omitempty" json:"start_line,omitempty" xml:"start_line,omitempty"`
+	// Provider transcript timestamp for this attachment, when available.
+	Timestamp *string `form:"timestamp,omitempty" json:"timestamp,omitempty" xml:"timestamp,omitempty"`
 }
 
 // OTELResourceLogRequestBody is used to define fields on request body types.
@@ -2225,6 +2684,288 @@ func NewIngestGatewayErrorResponseBody(res *goa.ServiceError) *IngestGatewayErro
 	return body
 }
 
+// NewUploadSkillContentUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "uploadSkillContent" endpoint of the "hooks" service.
+func NewUploadSkillContentUnauthorizedResponseBody(res *goa.ServiceError) *UploadSkillContentUnauthorizedResponseBody {
+	body := &UploadSkillContentUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUploadSkillContentForbiddenResponseBody builds the HTTP response body
+// from the result of the "uploadSkillContent" endpoint of the "hooks" service.
+func NewUploadSkillContentForbiddenResponseBody(res *goa.ServiceError) *UploadSkillContentForbiddenResponseBody {
+	body := &UploadSkillContentForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUploadSkillContentBadRequestResponseBody builds the HTTP response body
+// from the result of the "uploadSkillContent" endpoint of the "hooks" service.
+func NewUploadSkillContentBadRequestResponseBody(res *goa.ServiceError) *UploadSkillContentBadRequestResponseBody {
+	body := &UploadSkillContentBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUploadSkillContentNotFoundResponseBody builds the HTTP response body from
+// the result of the "uploadSkillContent" endpoint of the "hooks" service.
+func NewUploadSkillContentNotFoundResponseBody(res *goa.ServiceError) *UploadSkillContentNotFoundResponseBody {
+	body := &UploadSkillContentNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUploadSkillContentConflictResponseBody builds the HTTP response body from
+// the result of the "uploadSkillContent" endpoint of the "hooks" service.
+func NewUploadSkillContentConflictResponseBody(res *goa.ServiceError) *UploadSkillContentConflictResponseBody {
+	body := &UploadSkillContentConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUploadSkillContentUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "uploadSkillContent" endpoint of the "hooks"
+// service.
+func NewUploadSkillContentUnsupportedMediaResponseBody(res *goa.ServiceError) *UploadSkillContentUnsupportedMediaResponseBody {
+	body := &UploadSkillContentUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUploadSkillContentInvalidResponseBody builds the HTTP response body from
+// the result of the "uploadSkillContent" endpoint of the "hooks" service.
+func NewUploadSkillContentInvalidResponseBody(res *goa.ServiceError) *UploadSkillContentInvalidResponseBody {
+	body := &UploadSkillContentInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUploadSkillContentInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "uploadSkillContent" endpoint of the "hooks"
+// service.
+func NewUploadSkillContentInvariantViolationResponseBody(res *goa.ServiceError) *UploadSkillContentInvariantViolationResponseBody {
+	body := &UploadSkillContentInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUploadSkillContentUnexpectedResponseBody builds the HTTP response body
+// from the result of the "uploadSkillContent" endpoint of the "hooks" service.
+func NewUploadSkillContentUnexpectedResponseBody(res *goa.ServiceError) *UploadSkillContentUnexpectedResponseBody {
+	body := &UploadSkillContentUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUploadSkillContentGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "uploadSkillContent" endpoint of the "hooks" service.
+func NewUploadSkillContentGatewayErrorResponseBody(res *goa.ServiceError) *UploadSkillContentGatewayErrorResponseBody {
+	body := &UploadSkillContentGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSkillFeedbackUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "skillFeedback" endpoint of the "hooks" service.
+func NewSkillFeedbackUnauthorizedResponseBody(res *goa.ServiceError) *SkillFeedbackUnauthorizedResponseBody {
+	body := &SkillFeedbackUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSkillFeedbackForbiddenResponseBody builds the HTTP response body from the
+// result of the "skillFeedback" endpoint of the "hooks" service.
+func NewSkillFeedbackForbiddenResponseBody(res *goa.ServiceError) *SkillFeedbackForbiddenResponseBody {
+	body := &SkillFeedbackForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSkillFeedbackBadRequestResponseBody builds the HTTP response body from
+// the result of the "skillFeedback" endpoint of the "hooks" service.
+func NewSkillFeedbackBadRequestResponseBody(res *goa.ServiceError) *SkillFeedbackBadRequestResponseBody {
+	body := &SkillFeedbackBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSkillFeedbackNotFoundResponseBody builds the HTTP response body from the
+// result of the "skillFeedback" endpoint of the "hooks" service.
+func NewSkillFeedbackNotFoundResponseBody(res *goa.ServiceError) *SkillFeedbackNotFoundResponseBody {
+	body := &SkillFeedbackNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSkillFeedbackConflictResponseBody builds the HTTP response body from the
+// result of the "skillFeedback" endpoint of the "hooks" service.
+func NewSkillFeedbackConflictResponseBody(res *goa.ServiceError) *SkillFeedbackConflictResponseBody {
+	body := &SkillFeedbackConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSkillFeedbackUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "skillFeedback" endpoint of the "hooks" service.
+func NewSkillFeedbackUnsupportedMediaResponseBody(res *goa.ServiceError) *SkillFeedbackUnsupportedMediaResponseBody {
+	body := &SkillFeedbackUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSkillFeedbackInvalidResponseBody builds the HTTP response body from the
+// result of the "skillFeedback" endpoint of the "hooks" service.
+func NewSkillFeedbackInvalidResponseBody(res *goa.ServiceError) *SkillFeedbackInvalidResponseBody {
+	body := &SkillFeedbackInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSkillFeedbackInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "skillFeedback" endpoint of the "hooks" service.
+func NewSkillFeedbackInvariantViolationResponseBody(res *goa.ServiceError) *SkillFeedbackInvariantViolationResponseBody {
+	body := &SkillFeedbackInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSkillFeedbackUnexpectedResponseBody builds the HTTP response body from
+// the result of the "skillFeedback" endpoint of the "hooks" service.
+func NewSkillFeedbackUnexpectedResponseBody(res *goa.ServiceError) *SkillFeedbackUnexpectedResponseBody {
+	body := &SkillFeedbackUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSkillFeedbackGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "skillFeedback" endpoint of the "hooks" service.
+func NewSkillFeedbackGatewayErrorResponseBody(res *goa.ServiceError) *SkillFeedbackGatewayErrorResponseBody {
+	body := &SkillFeedbackGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewLogsUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "logs" endpoint of the "hooks" service.
 func NewLogsUnauthorizedResponseBody(res *goa.ServiceError) *LogsUnauthorizedResponseBody {
@@ -2626,7 +3367,7 @@ func NewCodexPayload(body *CodexRequestBody, apikeyToken *string, projectSlugInp
 }
 
 // NewIngestPayload builds a hooks service ingest endpoint payload.
-func NewIngestPayload(body *IngestRequestBody, apikeyToken *string, projectSlugInput *string, idempotencyKey *string) *hooks.IngestPayload {
+func NewIngestPayload(body *IngestRequestBody, apikeyToken *string, projectSlugInput *string, idempotencyKey *string, replayed *bool) *hooks.IngestPayload {
 	v := &hooks.IngestPayload{
 		SchemaVersion: *body.SchemaVersion,
 		Raw:           body.Raw,
@@ -2642,6 +3383,36 @@ func NewIngestPayload(body *IngestRequestBody, apikeyToken *string, projectSlugI
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 	v.IdempotencyKey = idempotencyKey
+	v.Replayed = replayed
+
+	return v
+}
+
+// NewUploadSkillContentPayload builds a hooks service uploadSkillContent
+// endpoint payload.
+func NewUploadSkillContentPayload(body *UploadSkillContentRequestBody, apikeyToken *string, projectSlugInput *string) *hooks.UploadSkillContentPayload {
+	v := &hooks.UploadSkillContentPayload{
+		SchemaVersion: *body.SchemaVersion,
+		RawSha256:     *body.RawSha256,
+		Content:       *body.Content,
+	}
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewSkillFeedbackPayload builds a hooks service skillFeedback endpoint
+// payload.
+func NewSkillFeedbackPayload(body *SkillFeedbackRequestBody, apikeyToken *string, projectSlugInput *string) *hooks.SkillFeedbackPayload {
+	v := &hooks.SkillFeedbackPayload{
+		SchemaVersion: *body.SchemaVersion,
+		Skill:         *body.Skill,
+		Outcome:       *body.Outcome,
+		Note:          body.Note,
+	}
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
@@ -2747,6 +3518,72 @@ func ValidateIngestRequestBody(body *IngestRequestBody) (err error) {
 	return
 }
 
+// ValidateUploadSkillContentRequestBody runs the validations defined on
+// UploadSkillContentRequestBody
+func ValidateUploadSkillContentRequestBody(body *UploadSkillContentRequestBody) (err error) {
+	if body.SchemaVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("schema_version", "body"))
+	}
+	if body.RawSha256 == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("raw_sha256", "body"))
+	}
+	if body.Content == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("content", "body"))
+	}
+	if body.SchemaVersion != nil {
+		if !(*body.SchemaVersion == "hook.skill-content.v1") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.schema_version", *body.SchemaVersion, []any{"hook.skill-content.v1"}))
+		}
+	}
+	if body.RawSha256 != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.raw_sha256", *body.RawSha256, "^[0-9a-f]{64}$"))
+	}
+	return
+}
+
+// ValidateSkillFeedbackRequestBody runs the validations defined on
+// SkillFeedbackRequestBody
+func ValidateSkillFeedbackRequestBody(body *SkillFeedbackRequestBody) (err error) {
+	if body.SchemaVersion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("schema_version", "body"))
+	}
+	if body.Skill == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skill", "body"))
+	}
+	if body.Outcome == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("outcome", "body"))
+	}
+	if body.SchemaVersion != nil {
+		if !(*body.SchemaVersion == "hook.skill-feedback.v1") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.schema_version", *body.SchemaVersion, []any{"hook.skill-feedback.v1"}))
+		}
+	}
+	if body.Skill != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.skill", *body.Skill, "^[a-z0-9]+(?:-[a-z0-9]+)*$"))
+	}
+	if body.Skill != nil {
+		if utf8.RuneCountInString(*body.Skill) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.skill", *body.Skill, utf8.RuneCountInString(*body.Skill), 1, true))
+		}
+	}
+	if body.Skill != nil {
+		if utf8.RuneCountInString(*body.Skill) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.skill", *body.Skill, utf8.RuneCountInString(*body.Skill), 64, false))
+		}
+	}
+	if body.Outcome != nil {
+		if !(*body.Outcome == "helped" || *body.Outcome == "partially_helped" || *body.Outcome == "did_not_help" || *body.Outcome == "misleading" || *body.Outcome == "harmful") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.outcome", *body.Outcome, []any{"helped", "partially_helped", "did_not_help", "misleading", "harmful"}))
+		}
+	}
+	if body.Note != nil {
+		if utf8.RuneCountInString(*body.Note) > 4000 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.note", *body.Note, utf8.RuneCountInString(*body.Note), 4000, false))
+		}
+	}
+	return
+}
+
 // ValidateLogsRequestBody runs the validations defined on LogsRequestBody
 func ValidateLogsRequestBody(body *LogsRequestBody) (err error) {
 	for _, e := range body.ResourceLogs {
@@ -2787,8 +3624,8 @@ func ValidateHookIngestEventRequestBody(body *HookIngestEventRequestBody) (err e
 		err = goa.MergeErrors(err, goa.MissingFieldError("type", "body"))
 	}
 	if body.Type != nil {
-		if !(*body.Type == "session.started" || *body.Type == "session.updated" || *body.Type == "session.ended" || *body.Type == "prompt.submitted" || *body.Type == "tool.requested" || *body.Type == "tool.completed" || *body.Type == "tool.failed" || *body.Type == "assistant.responded" || *body.Type == "assistant.thought" || *body.Type == "usage.reported" || *body.Type == "skill.activated" || *body.Type == "notification.reported") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"session.started", "session.updated", "session.ended", "prompt.submitted", "tool.requested", "tool.completed", "tool.failed", "assistant.responded", "assistant.thought", "usage.reported", "skill.activated", "notification.reported"}))
+		if !(*body.Type == "session.started" || *body.Type == "session.updated" || *body.Type == "session.ended" || *body.Type == "mcp.inventory" || *body.Type == "prompt.submitted" || *body.Type == "tool.requested" || *body.Type == "tool.completed" || *body.Type == "tool.failed" || *body.Type == "assistant.responded" || *body.Type == "assistant.thought" || *body.Type == "usage.reported" || *body.Type == "skill.activated" || *body.Type == "notification.reported") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"session.started", "session.updated", "session.ended", "mcp.inventory", "prompt.submitted", "tool.requested", "tool.completed", "tool.failed", "assistant.responded", "assistant.thought", "usage.reported", "skill.activated", "notification.reported"}))
 		}
 	}
 	if body.OccurredAt != nil {
@@ -2805,6 +3642,20 @@ func ValidateHookIngestDataRequestBody(body *HookIngestDataRequestBody) (err err
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	for _, e := range body.McpAttribution {
+		if e != nil {
+			if err2 := ValidateHookMCPAttributionEntryRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.PromptAttachments {
+		if e != nil {
+			if err2 := ValidateHookPromptAttachmentEntryRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	return
 }
 
@@ -2813,6 +3664,55 @@ func ValidateHookIngestDataRequestBody(body *HookIngestDataRequestBody) (err err
 func ValidateHookSkillDataRequestBody(body *HookSkillDataRequestBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) > 256 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 256, false))
+		}
+	}
+	if body.Source != nil {
+		if utf8.RuneCountInString(*body.Source) > 256 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.source", *body.Source, utf8.RuneCountInString(*body.Source), 256, false))
+		}
+	}
+	if body.SourceLevel != nil {
+		if utf8.RuneCountInString(*body.SourceLevel) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.source_level", *body.SourceLevel, utf8.RuneCountInString(*body.SourceLevel), 64, false))
+		}
+	}
+	if body.SourcePath != nil {
+		if utf8.RuneCountInString(*body.SourcePath) > 4096 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.source_path", *body.SourcePath, utf8.RuneCountInString(*body.SourcePath), 4096, false))
+		}
+	}
+	if body.RawSha256 != nil {
+		if utf8.RuneCountInString(*body.RawSha256) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.raw_sha256", *body.RawSha256, utf8.RuneCountInString(*body.RawSha256), 128, false))
+		}
+	}
+	return
+}
+
+// ValidateHookMCPAttributionEntryRequestBody runs the validations defined on
+// HookMCPAttributionEntryRequestBody
+func ValidateHookMCPAttributionEntryRequestBody(body *HookMCPAttributionEntryRequestBody) (err error) {
+	if body.RequestID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("request_id", "body"))
+	}
+	return
+}
+
+// ValidateHookPromptAttachmentEntryRequestBody runs the validations defined on
+// HookPromptAttachmentEntryRequestBody
+func ValidateHookPromptAttachmentEntryRequestBody(body *HookPromptAttachmentEntryRequestBody) (err error) {
+	if body.EntryUUID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("entry_uuid", "body"))
+	}
+	if body.AttachmentKind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("attachment_kind", "body"))
+	}
+	if body.Content == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("content", "body"))
 	}
 	return
 }

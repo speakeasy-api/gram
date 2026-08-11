@@ -39,21 +39,34 @@ type Service interface {
 	// Get project-level overview including total chats, tool calls, active
 	// servers/users, and top lists
 	GetProjectOverview(context.Context, *GetProjectOverviewPayload) (res *GetProjectOverviewResult, err error)
+	// Best-effort tool-call activity for an unproxied MCP server, sourced from
+	// Shadow MCP's hook-reported traces matched by canonicalized URL. Coverage is
+	// opportunistic: only calls made from hook-instrumented sessions in this
+	// project are visible, so a freshly added or rarely used server may show no
+	// data.
+	GetUnproxiedMcpServerUsage(context.Context, *GetUnproxiedMcpServerUsagePayload) (res *GetUnproxiedMcpServerUsageResult, err error)
+	// Best-effort per-tool call counts for an unproxied MCP server, sourced from
+	// Shadow MCP's hook-reported traces matched by canonicalized URL. Same
+	// coverage caveats as getUnproxiedMcpServerUsage.
+	GetUnproxiedMcpServerToolUsage(context.Context, *GetUnproxiedMcpServerToolUsagePayload) (res *GetUnproxiedMcpServerToolUsageResult, err error)
+	// Best-effort per-user call counts for an unproxied MCP server, sourced from
+	// Shadow MCP's hook-reported traces matched by canonicalized URL. Same
+	// coverage caveats as getUnproxiedMcpServerUsage.
+	GetUnproxiedMcpServerUserUsage(context.Context, *GetUnproxiedMcpServerUserUsagePayload) (res *GetUnproxiedMcpServerUserUsageResult, err error)
+	// Best-effort per-client (hook source, e.g. claude-code, cursor, codex) call
+	// counts for an unproxied MCP server, sourced from Shadow MCP's hook-reported
+	// traces matched by canonicalized URL. Same coverage caveats as
+	// getUnproxiedMcpServerUsage.
+	GetUnproxiedMcpServerClientUsage(context.Context, *GetUnproxiedMcpServerClientUsagePayload) (res *GetUnproxiedMcpServerClientUsageResult, err error)
 	// Generic, org-scoped analytics query over pre-aggregated usage metrics.
 	// Returns both a grouped table and a per-group hourly timeseries for the same
 	// slice of data, supporting arbitrary allowlisted group-by dimensions and
 	// filters (e.g. group by department_name, then drill in by filtering
 	// department_name and grouping by role).
 	Query(context.Context, *QueryPayload) (res *QueryResult, err error)
-	// Org-scoped daily token usage split by risk involvement: tokens from sessions
-	// with at least one active risk finding in the window versus all session
-	// tokens. Powers the token-usage panel's risk breakdown on the costs page.
-	QueryRiskTokens(context.Context, *QueryRiskTokensPayload) (res *QueryRiskTokensResult, err error)
-	// Org-scoped daily usage details for the billing page's metrics table,
-	// computed in one pass: token type sums, session/tool-call/active-user counts,
-	// attribution slices (MCP tools, skills, unattributed users), and
-	// message-level stats (tokens in messages with active risk findings, tokens in
-	// tool-call messages).
+	// Org-scoped daily usage details for the billing page, computed in one pass:
+	// the tokens-under-management daily token-type split (observed agent traffic;
+	// cache reads excluded) and per-dimension breakdowns over the same population.
 	QueryTumDetails(context.Context, *QueryTumDetailsPayload) (res *TumDetailsResult, err error)
 	// Org-scoped list of individual chat sessions for a slice of usage, filtered
 	// by the same allowlisted dimensions as telemetry.query. Returns per-session
@@ -68,10 +81,29 @@ type Service interface {
 	GetHooksSummary(context.Context, *GetHooksSummaryPayload) (res *GetHooksSummaryResult, err error)
 	// Get target-aware MCP and tool usage metrics
 	GetToolUsageSummary(context.Context, *GetToolUsageSummaryPayload) (res *GetToolUsageSummaryResult, err error)
+	// Get overall MCP and tool usage totals
+	GetToolUsageTotals(context.Context, *GetToolUsageTotalsPayload) (res *GetToolUsageTotalsResult, err error)
+	// Get top MCP and tool usage targets
+	GetToolUsageTargets(context.Context, *GetToolUsageTargetsPayload) (res *GetToolUsageTargetsResult, err error)
+	// Get top MCP and tool usage user identities
+	GetToolUsageUsers(context.Context, *GetToolUsageUsersPayload) (res *GetToolUsageUsersResult, err error)
+	// Get time-series MCP and tool usage grouped by target
+	GetToolUsageTargetTimeSeries(context.Context, *GetToolUsageTargetTimeSeriesPayload) (res *GetToolUsageTargetTimeSeriesResult, err error)
+	// Get time-series MCP and tool usage grouped by user identity
+	GetToolUsageUserTimeSeries(context.Context, *GetToolUsageUserTimeSeriesPayload) (res *GetToolUsageUserTimeSeriesResult, err error)
+	// Get cross-dimensional MCP and tool usage grouped by target and user identity
+	GetToolUsageUsersByTarget(context.Context, *GetToolUsageUsersByTargetPayload) (res *GetToolUsageUsersByTargetResult, err error)
+	// Get per-tool MCP and tool usage grouped by target
+	GetToolUsageTargetToolBreakdown(context.Context, *GetToolUsageTargetToolBreakdownPayload) (res *GetToolUsageTargetToolBreakdownResult, err error)
 	// List target-aware MCP and tool usage traces
 	ListToolUsageTraces(context.Context, *ListToolUsageTracesPayload) (res *ListToolUsageTracesResult, err error)
 	// Get filter options for target-aware MCP and tool usage metrics
 	GetToolUsageFilterOptions(context.Context, *GetToolUsageFilterOptionsPayload) (res *GetToolUsageFilterOptionsResult, err error)
+	// Get per-MCP-server tool-call activity for the Distribute MCP listing.
+	// Returns, for every MCP server with usage in the lookback window, its total
+	// and recent tool-call counts plus the last tool-call time, so the listing can
+	// flag servers that have never received a tool call or that have gone quiet.
+	GetMcpServerActivity(context.Context, *GetMcpServerActivityPayload) (res *GetMcpServerActivityResult, err error)
 	// List hook traces aggregated by trace_id with user information
 	ListHooksTraces(context.Context, *ListHooksTracesPayload) (res *ListHooksTracesResult, err error)
 }
@@ -98,7 +130,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [21]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "query", "queryRiskTokens", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "listToolUsageTraces", "getToolUsageFilterOptions", "listHooksTraces"}
+var MethodNames = [32]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getProjectOverview", "getUnproxiedMcpServerUsage", "getUnproxiedMcpServerToolUsage", "getUnproxiedMcpServerUserUsage", "getUnproxiedMcpServerClientUsage", "query", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "getToolUsageTotals", "getToolUsageTargets", "getToolUsageUsers", "getToolUsageTargetTimeSeries", "getToolUsageUserTimeSeries", "getToolUsageUsersByTarget", "getToolUsageTargetToolBreakdown", "listToolUsageTraces", "getToolUsageFilterOptions", "getMcpServerActivity", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -263,6 +295,30 @@ type GetHooksSummaryResult struct {
 	SkillBreakdown []*SkillBreakdownRow
 }
 
+// GetMcpServerActivityPayload is the payload type of the telemetry service
+// getMcpServerActivity method.
+type GetMcpServerActivityPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Size of the recent-activity window in days. A server with tool calls in the
+	// overall lookback window but none inside this window is flagged as stale.
+	// Defaults to 14.
+	RecentWindowDays int
+}
+
+// GetMcpServerActivityResult is the result type of the telemetry service
+// getMcpServerActivity method.
+type GetMcpServerActivityResult struct {
+	// One entry per MCP server (hosted or tunneled) that has received at least one
+	// tool call within the lookback window
+	Activity []*McpServerActivity
+	// The recent-activity window size in days that was applied
+	RecentWindowDays int
+	// The overall lookback window size in days (bounded by telemetry retention)
+	LookbackDays int
+}
+
 // GetMetricsSummaryResult is the result type of the telemetry service
 // getProjectMetricsSummary method.
 type GetMetricsSummaryResult struct {
@@ -425,6 +481,328 @@ type GetToolUsageSummaryResult struct {
 	UsersByTarget []*ToolUsageUsersByTargetRow
 	// Per-tool usage rows grouped by target
 	TargetToolBreakdown []*ToolUsageTargetToolBreakdownRow
+}
+
+// GetToolUsageTargetTimeSeriesPayload is the payload type of the telemetry
+// service getToolUsageTargetTimeSeries method.
+type GetToolUsageTargetTimeSeriesPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Target types to include. Empty means all target types.
+	TargetTypes []ToolUsageTargetType
+	// Hosted MCP toolset slugs to include
+	HostedToolsetSlugs []string
+	// Shadow MCP server names to include
+	ShadowServerNames []string
+	// Typed user identities to include
+	UserFilters []*ToolUsageUserFilter
+	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
+	// and are excluded when this filter is set.
+	HookSources []string
+	// Optional account type filter ('team' or 'personal').
+	AccountType *string
+}
+
+// GetToolUsageTargetTimeSeriesResult is the result type of the telemetry
+// service getToolUsageTargetTimeSeries method.
+type GetToolUsageTargetTimeSeriesResult struct {
+	// Time-series usage buckets grouped by target
+	TargetTimeSeries []*ToolUsageTargetTimeSeriesPoint
+}
+
+// GetToolUsageTargetToolBreakdownPayload is the payload type of the telemetry
+// service getToolUsageTargetToolBreakdown method.
+type GetToolUsageTargetToolBreakdownPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Target types to include. Empty means all target types.
+	TargetTypes []ToolUsageTargetType
+	// Hosted MCP toolset slugs to include
+	HostedToolsetSlugs []string
+	// Shadow MCP server names to include
+	ShadowServerNames []string
+	// Typed user identities to include
+	UserFilters []*ToolUsageUserFilter
+	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
+	// and are excluded when this filter is set.
+	HookSources []string
+	// Optional account type filter ('team' or 'personal').
+	AccountType *string
+}
+
+// GetToolUsageTargetToolBreakdownResult is the result type of the telemetry
+// service getToolUsageTargetToolBreakdown method.
+type GetToolUsageTargetToolBreakdownResult struct {
+	// Per-tool usage rows grouped by target
+	TargetToolBreakdown []*ToolUsageTargetToolBreakdownRow
+}
+
+// GetToolUsageTargetsPayload is the payload type of the telemetry service
+// getToolUsageTargets method.
+type GetToolUsageTargetsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Target types to include. Empty means all target types.
+	TargetTypes []ToolUsageTargetType
+	// Hosted MCP toolset slugs to include
+	HostedToolsetSlugs []string
+	// Shadow MCP server names to include
+	ShadowServerNames []string
+	// Typed user identities to include
+	UserFilters []*ToolUsageUserFilter
+	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
+	// and are excluded when this filter is set.
+	HookSources []string
+	// Optional account type filter ('team' or 'personal').
+	AccountType *string
+}
+
+// GetToolUsageTargetsResult is the result type of the telemetry service
+// getToolUsageTargets method.
+type GetToolUsageTargetsResult struct {
+	// Top usage targets for the selected filters and time range
+	Targets []*ToolUsageTargetSummary
+}
+
+// GetToolUsageTotalsPayload is the payload type of the telemetry service
+// getToolUsageTotals method.
+type GetToolUsageTotalsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Target types to include. Empty means all target types.
+	TargetTypes []ToolUsageTargetType
+	// Hosted MCP toolset slugs to include
+	HostedToolsetSlugs []string
+	// Shadow MCP server names to include
+	ShadowServerNames []string
+	// Typed user identities to include
+	UserFilters []*ToolUsageUserFilter
+	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
+	// and are excluded when this filter is set.
+	HookSources []string
+	// Optional account type filter ('team' or 'personal').
+	AccountType *string
+}
+
+// GetToolUsageTotalsResult is the result type of the telemetry service
+// getToolUsageTotals method.
+type GetToolUsageTotalsResult struct {
+	// Overall usage totals for the selected filters and time range
+	Totals *ToolUsageTotals
+}
+
+// GetToolUsageUserTimeSeriesPayload is the payload type of the telemetry
+// service getToolUsageUserTimeSeries method.
+type GetToolUsageUserTimeSeriesPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Target types to include. Empty means all target types.
+	TargetTypes []ToolUsageTargetType
+	// Hosted MCP toolset slugs to include
+	HostedToolsetSlugs []string
+	// Shadow MCP server names to include
+	ShadowServerNames []string
+	// Typed user identities to include
+	UserFilters []*ToolUsageUserFilter
+	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
+	// and are excluded when this filter is set.
+	HookSources []string
+	// Optional account type filter ('team' or 'personal').
+	AccountType *string
+}
+
+// GetToolUsageUserTimeSeriesResult is the result type of the telemetry service
+// getToolUsageUserTimeSeries method.
+type GetToolUsageUserTimeSeriesResult struct {
+	// Time-series usage buckets grouped by user identity
+	UserTimeSeries []*ToolUsageUserTimeSeriesPoint
+}
+
+// GetToolUsageUsersByTargetPayload is the payload type of the telemetry
+// service getToolUsageUsersByTarget method.
+type GetToolUsageUsersByTargetPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Target types to include. Empty means all target types.
+	TargetTypes []ToolUsageTargetType
+	// Hosted MCP toolset slugs to include
+	HostedToolsetSlugs []string
+	// Shadow MCP server names to include
+	ShadowServerNames []string
+	// Typed user identities to include
+	UserFilters []*ToolUsageUserFilter
+	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
+	// and are excluded when this filter is set.
+	HookSources []string
+	// Optional account type filter ('team' or 'personal').
+	AccountType *string
+}
+
+// GetToolUsageUsersByTargetResult is the result type of the telemetry service
+// getToolUsageUsersByTarget method.
+type GetToolUsageUsersByTargetResult struct {
+	// Cross-dimensional usage rows grouped by target and user identity
+	UsersByTarget []*ToolUsageUsersByTargetRow
+}
+
+// GetToolUsageUsersPayload is the payload type of the telemetry service
+// getToolUsageUsers method.
+type GetToolUsageUsersPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Target types to include. Empty means all target types.
+	TargetTypes []ToolUsageTargetType
+	// Hosted MCP toolset slugs to include
+	HostedToolsetSlugs []string
+	// Shadow MCP server names to include
+	ShadowServerNames []string
+	// Typed user identities to include
+	UserFilters []*ToolUsageUserFilter
+	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
+	// and are excluded when this filter is set.
+	HookSources []string
+	// Optional account type filter ('team' or 'personal').
+	AccountType *string
+}
+
+// GetToolUsageUsersResult is the result type of the telemetry service
+// getToolUsageUsers method.
+type GetToolUsageUsersResult struct {
+	// Top user identities for the selected filters and time range
+	Users []*ToolUsageUserSummary
+}
+
+// GetUnproxiedMcpServerClientUsagePayload is the payload type of the telemetry
+// service getUnproxiedMcpServerClientUsage method.
+type GetUnproxiedMcpServerClientUsagePayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The unproxied MCP server's vendor URL
+	URL string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Cursor for pagination
+	Cursor *string
+	// Number of items to return (1-500)
+	Limit int
+}
+
+// GetUnproxiedMcpServerClientUsageResult is the result type of the telemetry
+// service getUnproxiedMcpServerClientUsage method.
+type GetUnproxiedMcpServerClientUsageResult struct {
+	Clients []*UnproxiedMcpServerClientUsageRow
+	// Cursor for next page
+	NextCursor *string
+}
+
+// GetUnproxiedMcpServerToolUsagePayload is the payload type of the telemetry
+// service getUnproxiedMcpServerToolUsage method.
+type GetUnproxiedMcpServerToolUsagePayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The unproxied MCP server's vendor URL
+	URL string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Cursor for pagination
+	Cursor *string
+	// Number of items to return (1-500)
+	Limit int
+}
+
+// GetUnproxiedMcpServerToolUsageResult is the result type of the telemetry
+// service getUnproxiedMcpServerToolUsage method.
+type GetUnproxiedMcpServerToolUsageResult struct {
+	Tools []*UnproxiedMcpServerToolUsageRow
+	// Cursor for next page
+	NextCursor *string
+}
+
+// GetUnproxiedMcpServerUsagePayload is the payload type of the telemetry
+// service getUnproxiedMcpServerUsage method.
+type GetUnproxiedMcpServerUsagePayload struct {
+	// The unproxied MCP server's vendor URL
+	URL string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To               string
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// GetUnproxiedMcpServerUsageResult is the result type of the telemetry service
+// getUnproxiedMcpServerUsage method.
+type GetUnproxiedMcpServerUsageResult struct {
+	Buckets []*UnproxiedMcpServerUsageBucket
+}
+
+// GetUnproxiedMcpServerUserUsagePayload is the payload type of the telemetry
+// service getUnproxiedMcpServerUserUsage method.
+type GetUnproxiedMcpServerUserUsagePayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The unproxied MCP server's vendor URL
+	URL string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Cursor for pagination
+	Cursor *string
+	// Number of items to return (1-500)
+	Limit int
+}
+
+// GetUnproxiedMcpServerUserUsageResult is the result type of the telemetry
+// service getUnproxiedMcpServerUserUsage method.
+type GetUnproxiedMcpServerUserUsageResult struct {
+	Users []*UnproxiedMcpServerUserUsageRow
+	// Cursor for next page
+	NextCursor *string
 }
 
 // GetUserMetricsSummaryPayload is the payload type of the telemetry service
@@ -730,6 +1108,29 @@ type LogFilter struct {
 	Values []string
 }
 
+// Tool-call activity for one MCP server, keyed by the same target identifier
+// used elsewhere (toolset slug for hosted servers, MCP server slug for
+// tunneled/remote servers)
+type McpServerActivity struct {
+	// Specific kind of MCP server target (hosted_mcp_server or tunneled_mcp_server)
+	TargetType McpServerActivityTargetType
+	// Stable target identifier: toolset slug for hosted servers, MCP server slug
+	// for tunneled/remote servers
+	TargetID string
+	// User-facing label for the target
+	TargetLabel string
+	// Number of tool calls observed across the whole lookback window
+	TotalToolCalls int64
+	// Number of tool calls observed inside the recent-activity window
+	RecentToolCalls int64
+	// ISO 8601 timestamp of the most recent tool call
+	LastToolCallAt *string
+}
+
+// MCP server activity target type. Only the two server-backed kinds this
+// endpoint reports are valid, unlike the broader tool-usage target types.
+type McpServerActivityTargetType string
+
 // Model usage statistics
 type ModelUsage struct {
 	// Model name
@@ -880,6 +1281,15 @@ type QueryMeasures struct {
 	TotalToolCalls int64
 	// Number of distinct chat sessions
 	TotalChats int64
+	// Total work units delivered by scored sessions (work-units analysis)
+	TotalWorkUnits float64
+	// Total cost in USD of the sessions that carry a work-units score. Divide by
+	// total_work_units for cost per unit; using total_cost would overstate it
+	// whenever analysis coverage is partial.
+	ScoredCost float64
+	// Total tokens of the sessions that carry a work-units score. Divide by
+	// total_work_units for tokens per unit.
+	ScoredTokens int64
 }
 
 // QueryPayload is the payload type of the telemetry service query method.
@@ -925,28 +1335,6 @@ type QueryResult struct {
 	Timeseries []*QuerySeries
 }
 
-// QueryRiskTokensPayload is the payload type of the telemetry service
-// queryRiskTokens method.
-type QueryRiskTokensPayload struct {
-	SessionToken *string
-	// Start time in ISO 8601 format
-	From string
-	// End time in ISO 8601 format
-	To string
-	// Optional project to scope to; defaults to every project in the organization.
-	ProjectID *string
-}
-
-// QueryRiskTokensResult is the result type of the telemetry service
-// queryRiskTokens method.
-type QueryRiskTokensResult struct {
-	// Timeseries bucket width in seconds. Always 86400 — the source aggregate is
-	// bucketed daily.
-	IntervalSeconds int64
-	// Gap-filled daily buckets in ascending time order
-	Points []*RiskTokensPoint
-}
-
 // One row of the grouped table: measures aggregated over the full time range
 // for a single group value.
 type QueryRow struct {
@@ -982,17 +1370,6 @@ type QueryTumDetailsPayload struct {
 	To string
 	// Optional project to scope to; defaults to every project in the organization.
 	ProjectID *string
-}
-
-// One UTC day of token usage split by risk involvement
-type RiskTokensPoint struct {
-	// Bucket start time in Unix nanoseconds (string for JS precision)
-	BucketTimeUnixNano string
-	// Tokens from sessions with at least one active risk finding created in the
-	// query window
-	RiskyTokens int64
-	// All session tokens in the bucket
-	TotalTokens int64
 }
 
 // Aggregated usage summary for a role
@@ -1207,6 +1584,23 @@ type SearchUsersPayload struct {
 	Sort string
 	// Number of items to return (1-1000)
 	Limit int
+	// Level of usage metrics to compute per user. 'full' (default) returns the
+	// complete set: chat counts, cost, cache tokens, tool-call totals, and the
+	// per-tool and per-hook-source breakdowns. 'basic' computes only user
+	// identity, first/last activity, and input/output token sums — a much cheaper
+	// aggregation for large orgs (e.g. the employee enrollment list, which renders
+	// only those fields). The remaining fields are zero/empty under 'basic'.
+	// Ignored when source='agent_metrics'.
+	Metrics string
+	// Where per-user summaries are read from (internal employee grouping only).
+	// 'logs' (default) scans raw telemetry_logs and computes the metrics selected
+	// by 'metrics'. 'agent_metrics' reads the pre-aggregated
+	// attribute_metrics_summaries view — canonical observed agent usage (Claude
+	// Code, Codex, Cursor, Claude Chat, LiteLLM), keyed by email — which is far
+	// cheaper but returns only identity, last activity (hourly), and
+	// input/output/total token sums; users without an email in the window are
+	// surfaced separately from raw logs with activity but no token counts.
+	Source string
 }
 
 // SearchUsersResult is the result type of the telemetry service searchUsers
@@ -1673,10 +2067,10 @@ type TopUser struct {
 
 // Per-dimension billed token breakdown for the usage details table
 type TumDetailsBreakdown struct {
-	// The breakdown dimension key (hook_source, risk_analysis_model,
-	// completion_model, division_name, role). The two model keys partition the
-	// billed population: risk_analysis_model covers the platform's risk-policy
-	// scanning inference, completion_model covers user-facing completion surfaces.
+	// The breakdown dimension key (model, hook_source, provider, account_type,
+	// email, division_name, department_name, role, project_id) — the public
+	// telemetry dimension identifiers, so the same keys work as telemetry.query
+	// filters. project_id rows carry project UUIDs; clients map them to names.
 	Key string
 	// Top values by tokens in descending order, with the remainder rolled into
 	// 'Other'
@@ -1697,11 +2091,14 @@ type TumDetailsBreakdownRow struct {
 type TumDetailsPoint struct {
 	// Bucket start time in Unix nanoseconds (string for JS precision)
 	BucketTimeUnixNano string
-	// Billed input tokens
+	// Observed input tokens (cache reads excluded)
 	InputTokens int64
-	// Billed output tokens
+	// Observed output tokens
 	OutputTokens int64
-	// Billed tokens under management
+	// Observed cache-write tokens — prompt content entering the provider cache,
+	// counted once
+	CacheCreationTokens int64
+	// Tokens under management: input + output + cache writes
 	TotalTokens int64
 }
 
@@ -1721,12 +2118,52 @@ type TumDetailsResult struct {
 
 // Whole-range totals for the billing usage details
 type TumDetailsTotals struct {
-	// Billed input tokens
+	// Observed input tokens (cache reads excluded)
 	InputTokens int64
-	// Billed output tokens
+	// Observed output tokens
 	OutputTokens int64
-	// Billed tokens under management
+	// Observed cache-write tokens — prompt content entering the provider cache,
+	// counted once
+	CacheCreationTokens int64
+	// Tokens under management: input + output + cache writes
 	TotalTokens int64
+}
+
+// Call activity for a single client/agent surface (e.g. claude-code, cursor,
+// codex) calling an unproxied MCP server
+type UnproxiedMcpServerClientUsageRow struct {
+	// The hook-reported client/agent surface
+	Client string
+	// Number of observed calls from this client
+	CallCount int
+}
+
+// Call activity for a single tool on an unproxied MCP server
+type UnproxiedMcpServerToolUsageRow struct {
+	// The tool's name
+	ToolName string
+	// Number of observed calls to this tool
+	CallCount int
+	// Number of observed calls that errored
+	FailureCount int
+}
+
+// A single day's Shadow-MCP-observed call count for an unproxied MCP server
+type UnproxiedMcpServerUsageBucket struct {
+	// Bucket date (YYYY-MM-DD, UTC)
+	Date string
+	// Number of observed tool calls in this bucket
+	CallCount int
+}
+
+// Call activity for a single user of an unproxied MCP server
+type UnproxiedMcpServerUserUsageRow struct {
+	// The calling user's email, when Shadow MCP could resolve one
+	UserEmail string
+	// Number of observed calls from this user
+	CallCount int
+	// Time of the user's most recent observed call, ISO 8601
+	LastCalledAt string
 }
 
 // A linked AI account for a user. The identity is (provider, email): the same

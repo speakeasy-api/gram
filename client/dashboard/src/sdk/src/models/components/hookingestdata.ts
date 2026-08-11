@@ -5,6 +5,11 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import {
+  HookMCPAttributionEntry,
+  HookMCPAttributionEntry$Outbound,
+  HookMCPAttributionEntry$outboundSchema,
+} from "./hookmcpattributionentry.js";
+import {
   HookMCPData,
   HookMCPData$Outbound,
   HookMCPData$outboundSchema,
@@ -19,6 +24,11 @@ import {
   HookNotificationData$Outbound,
   HookNotificationData$outboundSchema,
 } from "./hooknotificationdata.js";
+import {
+  HookPromptAttachmentEntry,
+  HookPromptAttachmentEntry$Outbound,
+  HookPromptAttachmentEntry$outboundSchema,
+} from "./hookpromptattachmententry.js";
 import {
   HookPromptData,
   HookPromptData$Outbound,
@@ -49,6 +59,18 @@ export type HookIngestData = {
    */
   mcp?: HookMCPData | undefined;
   /**
+   * Transcript-derived per-request MCP attribution (Claude Stop/SubagentStop).
+   */
+  mcpAttribution?: Array<HookMCPAttributionEntry> | undefined;
+  /**
+   * Configured MCP server snapshot captured at session start or configuration change. Transport credentials must be redacted by the sender.
+   */
+  mcpInventory?: Array<HookMCPData> | undefined;
+  /**
+   * Whether the sender was able to read the agent's MCP server list for this session. True with an empty mcp_inventory means the agent genuinely has no servers configured; absent or false means the list could not be read (no agent binary, a failed probe) and the inventory says nothing about what the session can reach. Enforcement that treats a missing inventory as proof of absence must consult this first.
+   */
+  mcpInventoryCollected?: boolean | undefined;
+  /**
    * Assistant/user message payload.
    */
   message?: HookMessageData | undefined;
@@ -60,6 +82,10 @@ export type HookIngestData = {
    * Prompt feature payload.
    */
   prompt?: HookPromptData | undefined;
+  /**
+   * Transcript-derived prompt attachment content (Claude Stop/SubagentStop/SessionEnd).
+   */
+  promptAttachments?: Array<HookPromptAttachmentEntry> | undefined;
   /**
    * Skill activation payload.
    */
@@ -77,9 +103,13 @@ export type HookIngestData = {
 /** @internal */
 export type HookIngestData$Outbound = {
   mcp?: HookMCPData$Outbound | undefined;
+  mcp_attribution?: Array<HookMCPAttributionEntry$Outbound> | undefined;
+  mcp_inventory?: Array<HookMCPData$Outbound> | undefined;
+  mcp_inventory_collected?: boolean | undefined;
   message?: HookMessageData$Outbound | undefined;
   notification?: HookNotificationData$Outbound | undefined;
   prompt?: HookPromptData$Outbound | undefined;
+  prompt_attachments?: Array<HookPromptAttachmentEntry$Outbound> | undefined;
   skill?: HookSkillData$Outbound | undefined;
   tool_call?: HookToolCallData$Outbound | undefined;
   usage?: HookUsageData$Outbound | undefined;
@@ -92,15 +122,25 @@ export const HookIngestData$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     mcp: z.optional(HookMCPData$outboundSchema),
+    mcpAttribution: z.optional(z.array(HookMCPAttributionEntry$outboundSchema)),
+    mcpInventory: z.optional(z.array(HookMCPData$outboundSchema)),
+    mcpInventoryCollected: z.optional(z.boolean()),
     message: z.optional(HookMessageData$outboundSchema),
     notification: z.optional(HookNotificationData$outboundSchema),
     prompt: z.optional(HookPromptData$outboundSchema),
+    promptAttachments: z.optional(
+      z.array(HookPromptAttachmentEntry$outboundSchema),
+    ),
     skill: z.optional(HookSkillData$outboundSchema),
     toolCall: z.optional(HookToolCallData$outboundSchema),
     usage: z.optional(HookUsageData$outboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {
+      mcpAttribution: "mcp_attribution",
+      mcpInventory: "mcp_inventory",
+      mcpInventoryCollected: "mcp_inventory_collected",
+      promptAttachments: "prompt_attachments",
       toolCall: "tool_call",
     });
   }),

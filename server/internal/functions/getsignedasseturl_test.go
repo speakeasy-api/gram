@@ -7,9 +7,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/functions"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestService_GetSignedAssetURL_Success(t *testing.T) {
@@ -253,7 +253,7 @@ func TestService_GetSignedAssetURL_CrossProjectAccess(t *testing.T) {
 	require.NotEmpty(t, result.URL)
 
 	// Create second auth context with different project using the same database connection
-	ctx2 := testenv.InitAuthContext(t, t.Context(), ti.conn, ti.sessionManager)
+	ctx2 := authztest.InitAuthContext(t, t.Context(), ti.conn, ti.sessionManager)
 
 	// Create deployment in project 2
 	dep2 := createFunctionsDeploymentWithKey(t, ctx2, ti, "test-functions-cross-project-2")

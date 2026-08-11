@@ -717,3 +717,738 @@ func DecodeDeleteConfigResponse(decoder func(*http.Response) goahttp.Decoder, re
 		}
 	}
 }
+
+// BuildListSchedulesRequest instantiates a HTTP request object with method and
+// path set to call the "aiIntegrations" service "listSchedules" endpoint
+func (c *Client) BuildListSchedulesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListSchedulesAiIntegrationsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("aiIntegrations", "listSchedules", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListSchedulesRequest returns an encoder for requests sent to the
+// aiIntegrations listSchedules server.
+func EncodeListSchedulesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*aiintegrations.ListSchedulesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("aiIntegrations", "listSchedules", "*aiintegrations.ListSchedulesPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		values.Add("provider", p.Provider)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListSchedulesResponse returns a decoder for responses returned by the
+// aiIntegrations listSchedules endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListSchedulesResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListSchedulesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListSchedulesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "listSchedules", err)
+			}
+			err = ValidateListSchedulesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "listSchedules", err)
+			}
+			res := NewListSchedulesListAIIntegrationSchedulesResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListSchedulesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "listSchedules", err)
+			}
+			err = ValidateListSchedulesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "listSchedules", err)
+			}
+			return nil, NewListSchedulesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListSchedulesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "listSchedules", err)
+			}
+			err = ValidateListSchedulesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "listSchedules", err)
+			}
+			return nil, NewListSchedulesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListSchedulesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "listSchedules", err)
+			}
+			err = ValidateListSchedulesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "listSchedules", err)
+			}
+			return nil, NewListSchedulesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListSchedulesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "listSchedules", err)
+			}
+			err = ValidateListSchedulesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "listSchedules", err)
+			}
+			return nil, NewListSchedulesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListSchedulesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "listSchedules", err)
+			}
+			err = ValidateListSchedulesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "listSchedules", err)
+			}
+			return nil, NewListSchedulesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListSchedulesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "listSchedules", err)
+			}
+			err = ValidateListSchedulesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "listSchedules", err)
+			}
+			return nil, NewListSchedulesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListSchedulesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "listSchedules", err)
+			}
+			err = ValidateListSchedulesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "listSchedules", err)
+			}
+			return nil, NewListSchedulesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListSchedulesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("aiIntegrations", "listSchedules", err)
+				}
+				err = ValidateListSchedulesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("aiIntegrations", "listSchedules", err)
+				}
+				return nil, NewListSchedulesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListSchedulesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("aiIntegrations", "listSchedules", err)
+				}
+				err = ValidateListSchedulesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("aiIntegrations", "listSchedules", err)
+				}
+				return nil, NewListSchedulesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("aiIntegrations", "listSchedules", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListSchedulesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "listSchedules", err)
+			}
+			err = ValidateListSchedulesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "listSchedules", err)
+			}
+			return nil, NewListSchedulesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("aiIntegrations", "listSchedules", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildSetScheduleEnabledRequest instantiates a HTTP request object with
+// method and path set to call the "aiIntegrations" service
+// "setScheduleEnabled" endpoint
+func (c *Client) BuildSetScheduleEnabledRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetScheduleEnabledAiIntegrationsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("aiIntegrations", "setScheduleEnabled", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetScheduleEnabledRequest returns an encoder for requests sent to the
+// aiIntegrations setScheduleEnabled server.
+func EncodeSetScheduleEnabledRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*aiintegrations.SetScheduleEnabledPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("aiIntegrations", "setScheduleEnabled", "*aiintegrations.SetScheduleEnabledPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewSetScheduleEnabledRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("aiIntegrations", "setScheduleEnabled", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetScheduleEnabledResponse returns a decoder for responses returned by
+// the aiIntegrations setScheduleEnabled endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeSetScheduleEnabledResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetScheduleEnabledResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetScheduleEnabledResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "setScheduleEnabled", err)
+			}
+			err = ValidateSetScheduleEnabledResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "setScheduleEnabled", err)
+			}
+			res := NewSetScheduleEnabledAIIntegrationScheduleStateOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetScheduleEnabledUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "setScheduleEnabled", err)
+			}
+			err = ValidateSetScheduleEnabledUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "setScheduleEnabled", err)
+			}
+			return nil, NewSetScheduleEnabledUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetScheduleEnabledForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "setScheduleEnabled", err)
+			}
+			err = ValidateSetScheduleEnabledForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "setScheduleEnabled", err)
+			}
+			return nil, NewSetScheduleEnabledForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetScheduleEnabledBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "setScheduleEnabled", err)
+			}
+			err = ValidateSetScheduleEnabledBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "setScheduleEnabled", err)
+			}
+			return nil, NewSetScheduleEnabledBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetScheduleEnabledNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "setScheduleEnabled", err)
+			}
+			err = ValidateSetScheduleEnabledNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "setScheduleEnabled", err)
+			}
+			return nil, NewSetScheduleEnabledNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetScheduleEnabledConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "setScheduleEnabled", err)
+			}
+			err = ValidateSetScheduleEnabledConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "setScheduleEnabled", err)
+			}
+			return nil, NewSetScheduleEnabledConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetScheduleEnabledUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "setScheduleEnabled", err)
+			}
+			err = ValidateSetScheduleEnabledUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "setScheduleEnabled", err)
+			}
+			return nil, NewSetScheduleEnabledUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetScheduleEnabledInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "setScheduleEnabled", err)
+			}
+			err = ValidateSetScheduleEnabledInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "setScheduleEnabled", err)
+			}
+			return nil, NewSetScheduleEnabledInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetScheduleEnabledInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("aiIntegrations", "setScheduleEnabled", err)
+				}
+				err = ValidateSetScheduleEnabledInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("aiIntegrations", "setScheduleEnabled", err)
+				}
+				return nil, NewSetScheduleEnabledInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetScheduleEnabledUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("aiIntegrations", "setScheduleEnabled", err)
+				}
+				err = ValidateSetScheduleEnabledUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("aiIntegrations", "setScheduleEnabled", err)
+				}
+				return nil, NewSetScheduleEnabledUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("aiIntegrations", "setScheduleEnabled", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetScheduleEnabledGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "setScheduleEnabled", err)
+			}
+			err = ValidateSetScheduleEnabledGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "setScheduleEnabled", err)
+			}
+			return nil, NewSetScheduleEnabledGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("aiIntegrations", "setScheduleEnabled", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRetryScheduleRequest instantiates a HTTP request object with method and
+// path set to call the "aiIntegrations" service "retrySchedule" endpoint
+func (c *Client) BuildRetryScheduleRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RetryScheduleAiIntegrationsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("aiIntegrations", "retrySchedule", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRetryScheduleRequest returns an encoder for requests sent to the
+// aiIntegrations retrySchedule server.
+func EncodeRetryScheduleRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*aiintegrations.RetrySchedulePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("aiIntegrations", "retrySchedule", "*aiintegrations.RetrySchedulePayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewRetryScheduleRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("aiIntegrations", "retrySchedule", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRetryScheduleResponse returns a decoder for responses returned by the
+// aiIntegrations retrySchedule endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeRetryScheduleResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRetryScheduleResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RetryScheduleResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "retrySchedule", err)
+			}
+			err = ValidateRetryScheduleResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "retrySchedule", err)
+			}
+			res := NewRetryScheduleAIIntegrationScheduleStateOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RetryScheduleUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "retrySchedule", err)
+			}
+			err = ValidateRetryScheduleUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "retrySchedule", err)
+			}
+			return nil, NewRetryScheduleUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RetryScheduleForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "retrySchedule", err)
+			}
+			err = ValidateRetryScheduleForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "retrySchedule", err)
+			}
+			return nil, NewRetryScheduleForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RetryScheduleBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "retrySchedule", err)
+			}
+			err = ValidateRetryScheduleBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "retrySchedule", err)
+			}
+			return nil, NewRetryScheduleBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RetryScheduleNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "retrySchedule", err)
+			}
+			err = ValidateRetryScheduleNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "retrySchedule", err)
+			}
+			return nil, NewRetryScheduleNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RetryScheduleConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "retrySchedule", err)
+			}
+			err = ValidateRetryScheduleConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "retrySchedule", err)
+			}
+			return nil, NewRetryScheduleConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RetryScheduleUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "retrySchedule", err)
+			}
+			err = ValidateRetryScheduleUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "retrySchedule", err)
+			}
+			return nil, NewRetryScheduleUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RetryScheduleInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "retrySchedule", err)
+			}
+			err = ValidateRetryScheduleInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "retrySchedule", err)
+			}
+			return nil, NewRetryScheduleInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RetryScheduleInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("aiIntegrations", "retrySchedule", err)
+				}
+				err = ValidateRetryScheduleInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("aiIntegrations", "retrySchedule", err)
+				}
+				return nil, NewRetryScheduleInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RetryScheduleUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("aiIntegrations", "retrySchedule", err)
+				}
+				err = ValidateRetryScheduleUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("aiIntegrations", "retrySchedule", err)
+				}
+				return nil, NewRetryScheduleUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("aiIntegrations", "retrySchedule", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RetryScheduleGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "retrySchedule", err)
+			}
+			err = ValidateRetryScheduleGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "retrySchedule", err)
+			}
+			return nil, NewRetryScheduleGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("aiIntegrations", "retrySchedule", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// unmarshalAIIntegrationScheduleStateResponseBodyToAiintegrationsAIIntegrationScheduleState
+// builds a value of type *aiintegrations.AIIntegrationScheduleState from a
+// value of type *AIIntegrationScheduleStateResponseBody.
+func unmarshalAIIntegrationScheduleStateResponseBodyToAiintegrationsAIIntegrationScheduleState(v *AIIntegrationScheduleStateResponseBody) *aiintegrations.AIIntegrationScheduleState {
+	res := &aiintegrations.AIIntegrationScheduleState{
+		Schedule:            *v.Schedule,
+		Stream:              v.Stream,
+		StreamKind:          v.StreamKind,
+		Enabled:             *v.Enabled,
+		Status:              *v.Status,
+		LastPollSuccessAt:   v.LastPollSuccessAt,
+		LastPollFailedAt:    v.LastPollFailedAt,
+		LastPollError:       v.LastPollError,
+		NextPollAfter:       v.NextPollAfter,
+		ConsecutiveFailures: *v.ConsecutiveFailures,
+		AutoPausedAt:        v.AutoPausedAt,
+	}
+
+	return res
+}

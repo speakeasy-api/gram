@@ -5,10 +5,10 @@ import {
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { useRoutes } from "@/routes";
-import { type DateRangePreset } from "@gram-ai/elements";
+import { type DateRangePreset } from "@/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
 import { useMemo } from "react";
 import { Link, useLocation } from "react-router";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
@@ -105,7 +105,7 @@ function RiskOverviewCategoriesIndexContent() {
             </span>
           </div>
         ) : (
-          <ul className="divide-border divide-y rounded-lg border">
+          <ul className="divide-border divide-y border">
             {categories.map((c, i) => {
               const meta = RULE_CATEGORY_META[c.category as RuleCategory];
               const label = meta?.label ?? c.category;

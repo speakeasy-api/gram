@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -182,4 +183,8 @@ func TestDetectContradictionIgnoresExtraFields(t *testing.T) {
 	got, err := svc.detectContradiction(t.Context(), "org_1", "00000000-0000-0000-0000-000000000001", "a", "b")
 	require.NoError(t, err)
 	require.True(t, got)
+}
+
+func (m *mockCompletionClient) ResolveKey(_ context.Context, _ string, _ string, _ billing.ModelUsageSource, _ openrouter.KeyType) (openrouter.ResolvedKey, error) {
+	return openrouter.PlatformKey(), nil
 }

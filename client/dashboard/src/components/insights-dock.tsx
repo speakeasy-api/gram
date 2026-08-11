@@ -1,26 +1,26 @@
 import { useNoToolsetsConfigured } from "@/hooks/useObservabilityMcpConfig";
 import { useServerAssistantTransport } from "@/hooks/useServerAssistantTransport";
+import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { useListChats } from "@gram/client/react-query/listChats.js";
 import { useMembers } from "@gram/client/react-query/members.js";
+import { useSkillsInfinite } from "@gram/client/react-query/skills.js";
 import { SortBy, SortOrder } from "@gram/client/models/operations/listchats";
 import { cn, isMacPlatform } from "@/lib/utils";
 import speakeasyIcon from "@/assets/speakeasy-icon.svg";
-import { useAssistantRuntime } from "@assistant-ui/react";
-import type {
-  ElementsConfig,
-  ElementsTransportFactory,
-} from "@gram-ai/elements";
+import { useAui, useAuiState } from "@assistant-ui/react";
+import type { ElementsConfig, ElementsTransportFactory } from "@/elements";
 import {
   ActiveChatTitle,
   Chat,
   ChatHistory,
   GramElementsProvider,
   useThreadId,
-} from "@gram-ai/elements";
+} from "@/elements";
 import { stripMessageContextFraming } from "@/lib/projectAssistantTranscript";
 import { AssistantMarkdownLink } from "@/components/AssistantMarkdownLink";
 import { useAssistantLinkResolver } from "@/lib/assistantEntityLinks";
 import { useSession } from "@/contexts/Auth";
+import { emailsMatch, resolveChatOwner } from "@/lib/chat-owner";
 import {
   INSIGHTS_DOCK_CONTENT_VT_CLASS,
   INSIGHTS_DOCK_VT_CLASS,
@@ -34,7 +34,7 @@ import {
   INSIGHTS_SUGGESTION_ICONS,
   type InsightsSuggestion,
 } from "@/lib/insights-suggestions";
-import { useMoonshineConfig } from "@speakeasy-api/moonshine";
+import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
 import type { UIMessage } from "ai";
 import {
   ArrowLeft,
@@ -110,11 +110,11 @@ const DOCK_REOPEN_WINDOW_MS = 2500;
 
 /** Icon-only buttons in the chat panel's Granola-style header. */
 const PANEL_ICON_BUTTON_CLASS =
-  "hover:bg-muted text-muted-foreground hover:text-foreground rounded-md p-1.5 transition-colors";
+  "hover:bg-muted text-muted-foreground hover:text-foreground p-1.5 transition-colors";
 
 /**
  * Restyles Elements' default chat composer (tall multi-row box with an
- * attachment/mention toolbar) into the same slim rounded-xl single-line row
+ * attachment/mention toolbar) into the same slim single-line row
  * as the docked pill that opens the panel, so the two read as one control.
  * Injected into the Elements shadow root via `theme.customCss` — host-page
  * CSS can't reach it. Targets Elements' stable `aui-*` class hooks; the
@@ -122,7 +122,7 @@ const PANEL_ICON_BUTTON_CLASS =
  */
 const DOCK_PANEL_COMPOSER_CSS = `
   .aui-composer-wrapper { padding-block: 0.5rem; }
-  .aui-composer-root { min-height: 0; border-radius: 0.75rem; padding: 0; }
+  .aui-composer-root { min-height: 0; border-radius: 0; padding: 0; }
   .aui-composer-input {
     min-height: 0;
     margin-bottom: 0;
@@ -137,7 +137,14 @@ const DOCK_PANEL_COMPOSER_CSS = `
     transform: translateY(50%);
     margin: 0;
   }
-  .aui-composer-action-wrapper-inner { display: none; }
+  .aui-composer-action-wrapper-inner {
+    display: flex;
+  }
+  .aui-composer-action-wrapper-inner > :not(.aui-composer-skill-context-picker) {
+    display: none;
+  }
+  .aui-composer-skill-context-picker-label { display: none; }
+  .aui-composer-skill-context-badges { padding: 0.5rem 3rem 0 0.75rem; }
   .aui-composer-send, .aui-composer-cancel {
     width: 1.5rem;
     height: 1.5rem;
@@ -184,6 +191,14 @@ const CHAT_FULLPAGE_COMPOSER_CSS = `
     padding-bottom: 0.875rem;
     font-size: 0.9375rem;
   }
+  :host-context(.gram-chat-fullpage) .aui-composer-action-wrapper {
+    position: static;
+    margin: 0.5rem 0.25rem;
+    transform: none;
+  }
+  :host-context(.gram-chat-fullpage) .aui-composer-skill-context-picker-label {
+    display: inline;
+  }
   :host-context(.gram-chat-fullpage) .aui-composer-wrapper {
     padding-bottom: 1.25rem;
   }
@@ -206,7 +221,7 @@ function DockSubmitButton() {
     <button
       type="submit"
       aria-label="Send to Project Assistant"
-      className="bg-primary text-primary-foreground hover:bg-primary/90 flex size-6 shrink-0 items-center justify-center rounded-full transition-colors"
+      className="bg-primary text-primary-foreground hover:bg-primary/90 flex size-6 shrink-0 items-center justify-center transition-colors"
     >
       <ArrowUp className="size-3.5" />
     </button>
@@ -238,13 +253,13 @@ interface InsightsDockProps {
   panel: React.ReactNode;
 }
 
-/** Width/shape/elevation of the dock card across its states: chat panel
- *  full-screen, chat panel open, composer focused (or holding draft text),
- *  and collapsed pill. Activity is signalled by deepening shadow. */
+/** Width of the dock card across its states: chat panel open, composer
+ *  focused (or holding draft text), and collapsed bar. The card itself
+ *  carries the single floating-overlay shadow. */
 function dockCardShapeClass(open: boolean, composerExpanded: boolean): string {
-  if (open) return "max-w-3xl rounded-2xl shadow-2xl";
-  if (composerExpanded) return "max-w-2xl rounded-2xl shadow-xl";
-  return "max-w-md rounded-full shadow-md hover:shadow-lg";
+  if (open) return "max-w-3xl";
+  if (composerExpanded) return "max-w-2xl";
+  return "max-w-md";
 }
 
 /**
@@ -410,7 +425,7 @@ function InsightsDock({
       />
       <div
         className={cn(
-          "border-border bg-card text-card-foreground pointer-events-auto w-full border",
+          "border-border bg-card text-card-foreground pointer-events-auto w-full border shadow-md",
           "transition-all duration-300 ease-out",
           dockCardShapeClass(open, composerExpanded),
           // Pairs with the sidebar resume button for the dismiss/resume genie
@@ -456,8 +471,8 @@ function InsightsDock({
                   expanded composer, so opening the chat reads as the input
                   surface growing into the conversation rather than an
                   unrelated white panel appearing. */}
-              <div className="bg-muted/40 rounded-2xl p-2">
-                <div className="border-border bg-card h-[min(640px,70vh)] overflow-hidden rounded-xl border">
+              <div className="bg-muted/40 p-2">
+                <div className="border-border bg-card h-[min(640px,70vh)] overflow-hidden border">
                   {panel}
                 </div>
               </div>
@@ -485,7 +500,7 @@ function InsightsDock({
                   // Tint sits over the card's solid bg-card (rather than
                   // replacing it) so the tray reads as a subtle grey without
                   // page content bleeding through the translucency.
-                  "rounded-2xl transition-[padding,background-color] duration-300 ease-out",
+                  "transition-[padding,background-color] duration-300 ease-out",
                   composerExpanded ? "bg-muted/40 p-2" : "p-0",
                 )}
               >
@@ -530,7 +545,7 @@ function InsightsDock({
                                 type="button"
                                 tabIndex={composerExpanded ? 0 : -1}
                                 onClick={() => submit(suggestion.prompt)}
-                                className="border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors"
+                                className="border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground flex items-center gap-1.5 border px-2 py-1 text-xs transition-colors"
                               >
                                 <SuggestionIcon className="size-3 shrink-0" />
                                 {suggestion.title}
@@ -547,7 +562,7 @@ function InsightsDock({
                     submit(value);
                   }}
                   className={cn(
-                    "flex items-center gap-2.5 rounded-xl border px-4 py-2.5 transition-colors duration-300 ease-out",
+                    "flex items-center gap-2.5 border px-4 py-2.5 transition-colors duration-300 ease-out",
                     composerExpanded
                       ? "border-border bg-card"
                       : "border-transparent bg-transparent",
@@ -716,6 +731,23 @@ export function InsightsProvider({
   const contextInfo = override?.contextInfo;
   const hideTrigger = (override?.hideTrigger ?? false) || dockHiddenByPage;
   const noToolsetsConfigured = useNoToolsetsConfigured(mcpConfig.projectSlug);
+  const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
+  const selectedSkillIdsRef = useRef(selectedSkillIds);
+  selectedSkillIdsRef.current = selectedSkillIds;
+  const getSelectedSkillIds = useCallback(
+    () => selectedSkillIdsRef.current,
+    [],
+  );
+  const handleSkillIdsSent = useCallback((sentSkillIds: string[]) => {
+    const sent = new Set(sentSkillIds);
+    setSelectedSkillIds((current) =>
+      current.filter((skillID) => !sent.has(skillID)),
+    );
+  }, []);
+
+  useEffect(() => {
+    setSelectedSkillIds([]);
+  }, [mcpConfig.projectSlug]);
 
   // Server-side Project Assistant. Resolved lazily the first time the chat
   // panel is opened or a chat route is visited; once resolved it stays, so the
@@ -729,15 +761,46 @@ export function InsightsProvider({
     ready: assistantReady,
     error: assistantError,
     needsAdmin: assistantNeedsAdmin,
-  } = useServerAssistantTransport(mcpConfig.projectSlug, true);
+  } = useServerAssistantTransport(mcpConfig.projectSlug, true, {
+    getSkillIds: getSelectedSkillIds,
+    onSkillIdsSent: handleSkillIdsSent,
+  });
 
-  // Derive "Continue chat" from the server: if the assistant's most recent
-  // conversation was active within CONTINUE_WINDOW_MS, the resting pill offers
-  // to reopen it. Reading the backend (rather than client state) means it
-  // survives reloads for free. limit:1 — we only need the newest.
+  const skillsQuery = useSkillsInfinite(
+    { limit: 200, gramProject: mcpConfig.projectSlug },
+    undefined,
+    {
+      enabled: assistantReady,
+      throwOnError: false,
+    },
+  );
+  useDrainInfiniteQuery(skillsQuery, assistantReady);
+  const composerSkills = useMemo(
+    () =>
+      (skillsQuery.data?.pages.flatMap((page) => page.result.skills) ?? [])
+        .filter((skill) => skill.hasValidVersion)
+        .map((skill) => ({
+          id: skill.id,
+          name: skill.name,
+          displayName: skill.displayName,
+          summary: skill.summary,
+        })),
+    [skillsQuery.data?.pages],
+  );
+
+  // Derive "Continue chat" from the server: if the viewer's most recent
+  // dashboard-initiated session with the assistant was active within
+  // CONTINUE_WINDOW_MS, the resting pill offers to reopen it. Reading the
+  // backend (rather than client state) means it survives reloads for free.
+  // sourceKind and userId keep out other members' sessions and other sources
+  // (Slack, cron, …), which an admin's chat:read visibility would otherwise
+  // surface here. limit:1 — we only need the newest.
+  const { user } = useSession();
   const { data: recentChatsData } = useListChats(
     {
       assistantId: managedAssistantId || undefined,
+      sourceKind: "dashboard",
+      userId: user.id,
       sortBy: SortBy.LastMessageTimestamp,
       sortOrder: SortOrder.Desc,
       limit: 1,
@@ -766,12 +829,13 @@ export function InsightsProvider({
     }) => {
       if (!userId && !externalUserId) return undefined;
       // Chats started from the dashboard itself have no `userId` at capture
-      // time and stash the caller's email in `externalUserId` instead — fall
-      // back to an email match so those still resolve to a member.
-      const member = membersData?.members.find(
-        (m) =>
-          m.id === userId || (!!externalUserId && m.email === externalUserId),
-      );
+      // time and stash the caller's email in `externalUserId` instead —
+      // resolveChatOwner falls back to a case-insensitive email match so
+      // those still resolve to a member.
+      const member = resolveChatOwner(membersData?.members, {
+        userId,
+        externalUserId,
+      });
       return (
         member && {
           name: member.name,
@@ -788,7 +852,6 @@ export function InsightsProvider({
   // their chat:read grant, so hide the composer for those rather than let a
   // send 404. Chats started from the dashboard stash the caller's email in
   // externalUserId instead of userId (see resolveCreator above).
-  const { user } = useSession();
   const isOwnChat = useCallback(
     ({
       userId,
@@ -798,7 +861,7 @@ export function InsightsProvider({
       externalUserId?: string;
     }) => {
       if (!userId && !externalUserId) return true;
-      return userId === user.id || externalUserId === user.email;
+      return userId === user.id || emailsMatch(externalUserId, user.email);
     },
     [user.id, user.email],
   );
@@ -937,9 +1000,20 @@ export function InsightsProvider({
       composer: {
         placeholder: "Ask anything",
         attachments: false,
+        skillContext: {
+          skills: composerSkills,
+          selectedSkillIds,
+          onSelectedSkillIdsChange: setSelectedSkillIds,
+          loading: skillsQuery.isPending || skillsQuery.isFetchingNextPage,
+          error: !!skillsQuery.error,
+          maxSelected: 10,
+        },
       },
       theme: {
         colorScheme: theme === "dark" ? "dark" : "light",
+        // Square corners throughout the embedded chat, matching the
+        // dashboard's flat design language.
+        radius: "sharp",
         customCss:
           DOCK_PANEL_COMPOSER_CSS +
           CHAT_MARKDOWN_CSS +
@@ -955,6 +1029,11 @@ export function InsightsProvider({
       theme,
       wrappedTransport,
       managedAssistantId,
+      composerSkills,
+      selectedSkillIds,
+      skillsQuery.isPending,
+      skillsQuery.isFetchingNextPage,
+      skillsQuery.error,
       resolveAssistantLink,
       resolveCreator,
       isOwnChat,
@@ -1093,7 +1172,7 @@ export function InsightsProvider({
       setOverride: handleSetOverride,
       sendPrompt: handleSendPrompt,
       // Expose the gated "runtime is mounted" signal, not the raw eager
-      // `assistantReady`: chat pages render runtime hooks (useAssistantRuntime)
+      // `assistantReady`: chat pages render AUI hooks
       // only once the provider actually exists.
       assistantReady: runtimeMounted,
       assistantNeedsAdmin,
@@ -1141,14 +1220,14 @@ export function InsightsProvider({
     <>
       {/* Notice when the Project Assistant failed to connect */}
       {assistantError && (
-        <div className="border-destructive/40 bg-destructive/10 text-destructive mx-4 mt-1 flex items-start gap-2 rounded-md border px-3 py-2 text-xs">
+        <div className="border-destructive/40 bg-destructive/10 text-destructive mx-4 mt-1 flex items-start gap-2 border px-3 py-2 text-xs">
           <Terminal className="mt-0.5 size-3.5 shrink-0" />
           <span>{assistantError}</span>
         </div>
       )}
 
       {assistantNeedsAdmin && (
-        <div className="border-border bg-muted/50 text-muted-foreground mx-4 mt-1 flex items-start gap-2 rounded-md border px-3 py-2 text-xs">
+        <div className="border-border bg-muted/50 text-muted-foreground mx-4 mt-1 flex items-start gap-2 border px-3 py-2 text-xs">
           <Terminal className="mt-0.5 size-3.5 shrink-0" />
           <span>
             Ask an admin to enable the Project Assistant for this project.
@@ -1158,7 +1237,7 @@ export function InsightsProvider({
 
       {/* Notice when no toolsets are configured */}
       {noToolsetsConfigured && (
-        <div className="border-border bg-muted/50 text-muted-foreground mx-4 mt-1 flex items-start gap-2 rounded-md border px-3 py-2 text-xs">
+        <div className="border-border bg-muted/50 text-muted-foreground mx-4 mt-1 flex items-start gap-2 border px-3 py-2 text-xs">
           <Terminal className="mt-0.5 size-3.5 shrink-0" />
           <span>
             AI tools are unavailable. Create an MCP server to enable the Project
@@ -1381,11 +1460,14 @@ function PendingPromptBridge({
   pending: { text: string; nonce: number } | null;
   onConsume: () => void;
 }): null {
-  const assistantRuntime = useAssistantRuntime();
+  const thread = useAui().thread();
+  const isThreadReady = useAuiState(
+    ({ thread }) => !thread.isLoading && !thread.isDisabled,
+  );
   const firedNonceRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!pending || !assistantRuntime) return;
+    if (!pending || !isThreadReady) return;
     if (firedNonceRef.current === pending.nonce) return;
     firedNonceRef.current = pending.nonce;
 
@@ -1400,21 +1482,16 @@ function PendingPromptBridge({
     // asynchronously, so a post-append "did it land?" check races and
     // re-appending duplicates the send.
     let done = false;
-    let unsubscribe: (() => void) | null = null;
 
     const finish = () => {
       done = true;
-      unsubscribe?.();
-      unsubscribe = null;
       onConsume();
     };
 
     const attempt = () => {
       if (done) return;
-      const state = assistantRuntime.thread.getState();
-      if (state.isLoading || state.isDisabled) return;
       try {
-        assistantRuntime.thread.append(text);
+        thread.append(text);
       } catch (err) {
         if (!isEmptyThreadError(err)) {
           console.error("Failed to send queued assistant prompt:", err);
@@ -1426,16 +1503,11 @@ function PendingPromptBridge({
     };
 
     attempt();
-    if (!done) {
-      unsubscribe = assistantRuntime.thread.subscribe(attempt);
-    }
 
     return () => {
       done = true;
-      unsubscribe?.();
-      unsubscribe = null;
     };
-  }, [pending, assistantRuntime, onConsume]);
+  }, [pending, isThreadReady, thread, onConsume]);
 
   return null;
 }

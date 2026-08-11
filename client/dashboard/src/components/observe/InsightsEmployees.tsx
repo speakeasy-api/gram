@@ -1,21 +1,22 @@
 import { AccountRow } from "@/components/observe/account-display";
+import { getInitials } from "@/lib/initials";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
-import { MetricCard } from "@/components/chart/MetricCard";
+} from "@/components/ui/Popover";
+import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
+import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
 import { useInsightsState } from "@/components/insights-context";
-import { ReleaseStageBadge } from "@/components/release-stage-badge";
-import { ErrorAlert } from "@/components/ui/alert";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { SegmentedControl } from "@/components/ui/segmented-control";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Button } from "@/components/ui/button";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Button } from "@/components/ui/Button";
 import { Page } from "@/components/page-layout";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { cn } from "@/lib/utils";
 import {
@@ -33,35 +34,43 @@ import {
   type OptionsById,
 } from "@/components/filters";
 import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
+import { Source } from "@gram/client/models/components/searchuserspayload.js";
 import type { UserSummary } from "@gram/client/models/components/usersummary.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { useSyncedAgentUsers } from "@gram/client/react-query/syncedAgentUsers.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
+import { type DateRangePreset, getPresetRange } from "@/elements";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Info } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import { useRoutes } from "@/routes";
+import { useOrgRoutes, useRoutes } from "@/routes";
 import { useSlugs } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { dateTimeFormatters } from "@/lib/dates";
 import { slugify } from "@/lib/constants";
-import {
-  Badge,
-  type Column,
-  Icon,
-  type SortDescriptor,
-  Table,
-  sortTableData,
-} from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Icon } from "@/components/ui/Icon";
+import { type Column, type SortDescriptor, Table } from "@/components/ui/Table";
+import { sortTableData } from "@/components/ui/Table/sorting";
 import { HooksSetupDialog } from "@/pages/hooks/HooksSetupDialog";
 
 type EmployeeView = "employees" | "unattributed";
 
 const VIEW_SEARCH_PARAM = "view";
+const SORT_SEARCH_PARAM = "sort";
+
+// `?sort=tokenCount:desc` seeds the table's initial sort so links into this page
+// (e.g. the Top Users card on the project home) land on the same ordering the
+// card showed. Sorting stays table-local afterwards; the param is read once.
+function parseSortParam(raw: string | null): SortDescriptor | null {
+  if (!raw) return null;
+  const [id, direction] = raw.split(":");
+  if (!id) return null;
+  return { id, direction: direction === "asc" ? "asc" : "desc" };
+}
 
 const EMPLOYEE_VIEWS: EmployeeView[] = ["employees", "unattributed"];
 const VIEW_LABELS: Record<EmployeeView, string> = {
@@ -260,6 +269,7 @@ export function InsightsEmployeesContent(): JSX.Element {
       ? "unattributed"
       : "employees";
   const isUnattributedView = view === "unattributed";
+  const initialSort = parseSortParam(searchParams.get(SORT_SEARCH_PARAM));
 
   const selectedStatuses = values.status;
   const selectedRoleId = values.role;
@@ -445,10 +455,8 @@ export function InsightsEmployeesContent(): JSX.Element {
         <div className="mx-auto flex max-w-7xl flex-col gap-6">
           <div className="flex flex-col gap-4">
             <div className="flex min-w-0 flex-col gap-1">
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-semibold">Employee Enrollment</h1>
-                <ReleaseStageBadge stage="preview" />
-              </div>
+              <Page.Eyebrow />
+              <h1 className="text-display-sm font-thin">Employee Enrollment</h1>
               <p className="text-muted-foreground text-sm">
                 Track platform adoption for organization members in this project
                 over {rangeLabel}. Employees with tool or agent session activity
@@ -504,66 +512,60 @@ export function InsightsEmployeesContent(): JSX.Element {
             <EmployeesLoadingState isInsightsOpen={isInsightsOpen} />
           ) : (
             <>
-              <section
-                className={cn(
-                  "grid gap-4 transition-all duration-300",
-                  isInsightsOpen
-                    ? "grid-cols-1 md:grid-cols-2"
-                    : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4",
-                )}
-              >
-                <MetricCard
+              <StatTileGroup>
+                <StatTile
                   title={isUnattributedView ? "Unknown users" : "Employees"}
                   value={totalEmployees}
+                  tone="information"
                   icon="user"
-                  accentColor="blue"
                   subtext={
                     isUnattributedView
                       ? "Usage not matched to a member"
                       : "Organization members"
                   }
                 />
-                <MetricCard
+                <StatTile
                   title="Enrolled"
                   value={enrolledEmployees}
+                  tone="success"
                   displayValue={isUnattributedView ? "-" : undefined}
                   icon="circle-check"
-                  accentColor="green"
                   subtext={
                     isUnattributedView
                       ? "Not applicable to unknown users"
                       : "Platform activity present"
                   }
                 />
-                <MetricCard
+                <StatTile
                   title="Not Enrolled"
                   value={notEnrolledEmployees}
+                  tone={notEnrolledEmployees > 0 ? "destructive" : "neutral"}
                   displayValue={isUnattributedView ? "-" : undefined}
                   icon="triangle-alert"
-                  accentColor="orange"
                   subtext={
                     isUnattributedView
                       ? "Not applicable to unknown users"
                       : "No platform activity found"
                   }
                 />
-                <MetricCard
+                <StatTile
                   title="Token Count"
                   value={totalTokenCount}
+                  tone="information"
                   icon="gauge"
-                  accentColor="purple"
                   subtext={
                     isUnattributedView
                       ? undefined
                       : `${enrollmentRate.toFixed(0)}% enrolled`
                   }
                 />
-              </section>
+              </StatTileGroup>
 
               <EmployeeTable
                 key={view}
                 employees={employees}
                 search={search}
+                initialSort={initialSort}
                 onSelectUser={openUser}
                 deviceSyncByEmail={deviceSyncByEmail}
                 deviceStatus={deviceStatus}
@@ -582,19 +584,25 @@ const PAGE_SIZE = 10;
 function EmployeeTable({
   employees,
   search,
+  initialSort,
   onSelectUser,
   deviceSyncByEmail,
   deviceStatus,
 }: {
   employees: Employee[];
   search: string;
+  initialSort: SortDescriptor | null;
   onSelectUser: (employee: Employee) => void;
   deviceSyncByEmail: Map<string, Date>;
   deviceStatus: DeviceAgentColumnStatus;
 }) {
   const showDeviceAgent = deviceStatus !== "hidden";
   const [page, setPage] = useState(0);
-  const [sort, setSort] = useState<SortDescriptor | null>(null);
+  // Default to enrolled-first when no explicit sort was seeded via URL. Status
+  // labels sort "Enrolled" before "Not Enrolled" ascending.
+  const [sort, setSort] = useState<SortDescriptor | null>(
+    initialSort ?? { id: "status", direction: "asc" },
+  );
   // Only ticks once statuses are actually resolvable; disabled (0) otherwise so
   // the memo stays stable (deviceAgentState is only called when "ready").
   const now = useNow(deviceStatus === "ready" ? AGENT_STATUS_TICK_MS : 0);
@@ -696,7 +704,16 @@ function EmployeeTable({
         : []),
       {
         key: "accounts",
-        header: "Accounts",
+        header: (
+          <span className="flex items-center gap-1">
+            Accounts
+            <SimpleTooltip
+              tooltip={`The AI provider accounts (Claude, Codex, Cursor) each employee has been seen using, labelled team or personal. Accounts are linked automatically from tool activity, so this stays blank until an employee is seen using a recognized account. ${PERSONAL_ACCOUNT_GOVERNANCE_NOTE}`}
+            >
+              <Info className="text-muted-foreground size-3 shrink-0" />
+            </SimpleTooltip>
+          </span>
+        ),
         sortable: true,
         sortLabel: "Accounts",
         // Personal-holders first (ascending), then more accounts before fewer,
@@ -781,7 +798,7 @@ function EmployeeTable({
 
   const NoResultsMessage = () => {
     return (
-      <div className="flex h-full items-center justify-center">
+      <div className="flex h-full items-center justify-center py-10">
         <p className="text-muted-foreground text-sm">
           {search
             ? `No employees matching "${search}".`
@@ -814,7 +831,7 @@ function EmployeeTable({
           </p>
           <div className="flex items-center gap-1">
             <Button
-              variant="ghost"
+              variant="tertiary"
               size="sm"
               onClick={() => setPage((p) => p - 1)}
               disabled={safePage === 0}
@@ -822,7 +839,7 @@ function EmployeeTable({
               <ChevronLeft className="size-4" />
             </Button>
             <Button
-              variant="ghost"
+              variant="tertiary"
               size="sm"
               onClick={() => setPage((p) => p + 1)}
               disabled={safePage >= totalPages - 1}
@@ -846,10 +863,13 @@ function routeSegmentForEmployee(employee: Employee) {
 function EnrollmentLegend() {
   const [showSetupDialog, setShowSetupDialog] = useState(false);
   const routes = useRoutes();
+  const orgRoutes = useOrgRoutes();
+  const deviceAgentEnabled =
+    useTelemetry().isFeatureEnabled("gram-device-agent") ?? false;
 
   return (
     <>
-      <section className="bg-muted/40 border-border flex flex-col gap-4 rounded-xl border p-5 md:flex-row md:items-center md:justify-between">
+      <section className="bg-muted/40 border-border flex flex-col gap-4 border p-5 md:flex-row md:items-center md:justify-between">
         <div className="max-w-3xl space-y-1">
           <h2 className="text-sm font-semibold">How enrollment works</h2>
           <p className="text-muted-foreground text-sm">
@@ -860,18 +880,34 @@ function EnrollmentLegend() {
             >
               Observability plugin
             </Link>{" "}
-            is installed in their AI agent and sends activity to this project.
-            Not enrolled yet? Install the observability plugin to start tracking
-            their usage.
+            is installed in their AI agent and sends activity to this project
+            {deviceAgentEnabled ? (
+              <>
+                , or once the{" "}
+                <Link
+                  to={orgRoutes.deviceAgent.href()}
+                  className="hover:text-foreground underline underline-offset-2"
+                >
+                  Speakeasy device agent
+                </Link>{" "}
+                is running on their machine
+              </>
+            ) : null}
+            . Not enrolled yet? Install the observability plugin
+            {deviceAgentEnabled ? " or deploy the device agent" : ""} to start
+            tracking their usage.
           </p>
         </div>
-        <Button
-          size="sm"
-          className="shrink-0 md:self-center"
-          onClick={() => setShowSetupDialog(true)}
-        >
-          Set up hooks
-        </Button>
+        <div className="flex shrink-0 flex-wrap gap-2 md:self-center">
+          {deviceAgentEnabled && (
+            <Button size="sm" variant="secondary" asChild>
+              <Link to={orgRoutes.deviceAgent.href()}>Set up device agent</Link>
+            </Button>
+          )}
+          <Button size="sm" onClick={() => setShowSetupDialog(true)}>
+            Set up hooks
+          </Button>
+        </div>
       </section>
       <HooksSetupDialog
         open={showSetupDialog}
@@ -897,14 +933,14 @@ function EmployeesLoadingState({
         )}
       >
         {Array.from({ length: 4 }).map((_, index) => (
-          <div key={index} className="bg-card rounded-lg border p-5">
+          <div key={index} className="bg-card border p-5">
             <Skeleton className="mb-4 h-4 w-28" />
             <Skeleton className="h-9 w-20" />
             <Skeleton className="mt-3 h-3 w-36" />
           </div>
         ))}
       </section>
-      <section className="bg-card rounded-xl border p-5">
+      <section className="bg-card border p-5">
         <Skeleton className="h-5 w-44" />
         <Skeleton className="mt-2 h-4 w-80" />
         <div className="mt-6 space-y-3">
@@ -954,7 +990,7 @@ function DeviceAgentCell({
   now: number;
 }) {
   if (status === "loading") {
-    return <Skeleton className="h-5 w-20 rounded-md" />;
+    return <Skeleton className="h-5 w-20" />;
   }
   if (status === "error") {
     return (
@@ -997,7 +1033,7 @@ function AccountsPopover({
           type="button"
           // Don't let the row's navigate handler fire when opening the popover.
           onClick={(e) => e.stopPropagation()}
-          className="hover:bg-muted/60 -mx-1.5 flex items-center gap-1.5 rounded-md px-1.5 py-1 transition-colors"
+          className="hover:bg-muted/60 -mx-1.5 flex items-center gap-1.5 px-1.5 py-1 transition-colors"
         >
           <span className={cn("text-muted-foreground", labelClassName)}>
             {label}
@@ -1062,15 +1098,6 @@ function LastActivityCell({ employee }: { employee: Employee }) {
   );
 }
 
-function getInitials(name: string) {
-  return name
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-}
-
 async function fetchEmployeeUsage(
   client: Parameters<typeof telemetrySearchUsers>[0],
   from: Date,
@@ -1091,6 +1118,13 @@ async function fetchEmployeeUsage(
           limit: 1000,
           sort: "desc",
           userType: "internal",
+          // Serve the enrollment list from the pre-aggregated agent-usage view
+          // instead of scanning raw telemetry_logs: the list renders only
+          // identity, last activity, token totals, and linked accounts (the
+          // latter from Postgres enrichment), all of which the view provides far
+          // more cheaply. Email-less identities (no token usage) are surfaced by
+          // the backend from raw logs so unknown users stay visible (DNO-618).
+          source: Source.AgentMetrics,
         },
       }),
     );

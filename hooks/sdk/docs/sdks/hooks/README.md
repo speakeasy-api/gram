@@ -1,0 +1,199 @@
+# Hooks
+
+## Overview
+
+Receives hook events from coding assistants for tool usage observability.
+
+### Available Operations
+
+* [Ingest](#ingest) - ingest hooks
+* [SkillFeedback](#skillfeedback) - skillFeedback hooks
+* [UploadSkillContent](#uploadskillcontent) - uploadSkillContent hooks
+
+## Ingest
+
+Feature-first unified endpoint for hook events from supported coding assistants.
+
+### Example Usage
+
+<!-- UsageSnippet language="go" operationID="ingestHookEvent" method="post" path="/rpc/hooks.ingest" -->
+```go
+package main
+
+import(
+	"context"
+	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
+	"github.com/speakeasy-api/gram/hooks/sdk"
+	"github.com/speakeasy-api/gram/hooks/sdk/models/operations"
+	"log"
+)
+
+func main() {
+    ctx := context.Background()
+
+    s := sdk.New(
+        sdk.WithSecurity(components.Security{
+            ApikeyHeaderGramKey: "<YOUR_API_KEY_HERE>",
+            ProjectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
+        }),
+    )
+
+    res, err := s.Hooks.Ingest(ctx, operations.IngestHookEventRequest{
+        Body: components.IngestRequestBody{
+            Event: components.HookIngestEvent{
+                Type: components.TypeSkillActivated,
+            },
+            SchemaVersion: "<value>",
+            Source: components.HookIngestSource{
+                Adapter: "<value>",
+            },
+        },
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+    if res.IngestHookResult != nil {
+        // handle response
+    }
+}
+```
+
+### Parameters
+
+| Parameter                                                                              | Type                                                                                   | Required                                                                               | Description                                                                            |
+| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `ctx`                                                                                  | [context.Context](https://pkg.go.dev/context#Context)                                  | :heavy_check_mark:                                                                     | The context to use for the request.                                                    |
+| `request`                                                                              | [operations.IngestHookEventRequest](../../models/operations/ingesthookeventrequest.md) | :heavy_check_mark:                                                                     | The request object to use for the request.                                             |
+| `opts`                                                                                 | [][operations.Option](../../models/operations/option.md)                               | :heavy_minus_sign:                                                                     | The options for this request.                                                          |
+
+### Response
+
+**[*operations.IngestHookEventResponse](../../models/operations/ingesthookeventresponse.md), error**
+
+### Errors
+
+| Error Type                        | Status Code                       | Content Type                      |
+| --------------------------------- | --------------------------------- | --------------------------------- |
+| apierrors.ServiceError            | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
+| apierrors.ServiceError            | 500, 502                          | application/json                  |
+| apierrors.APIError                | 4XX, 5XX                          | \*/\*                             |
+
+## SkillFeedback
+
+Records agent-volunteered feedback about a distributed skill.
+
+### Example Usage
+
+<!-- UsageSnippet language="go" operationID="skillFeedback" method="post" path="/rpc/hooks.skillFeedback" -->
+```go
+package main
+
+import(
+	"context"
+	"github.com/speakeasy-api/gram/hooks/sdk"
+	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
+	"github.com/speakeasy-api/gram/hooks/sdk/models/operations"
+	"log"
+)
+
+func main() {
+    ctx := context.Background()
+
+    s := sdk.New()
+
+    res, err := s.Hooks.SkillFeedback(ctx, operations.SkillFeedbackRequest{
+        Body: components.SkillFeedbackPayload{
+            Outcome: components.OutcomeMisleading,
+            SchemaVersion: components.SkillFeedbackPayloadSchemaVersionHookSkillFeedbackV1,
+            Skill: "<value>",
+        },
+    }, nil)
+    if err != nil {
+        log.Fatal(err)
+    }
+    if res != nil {
+        // handle response
+    }
+}
+```
+
+### Parameters
+
+| Parameter                                                                            | Type                                                                                 | Required                                                                             | Description                                                                          |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| `ctx`                                                                                | [context.Context](https://pkg.go.dev/context#Context)                                | :heavy_check_mark:                                                                   | The context to use for the request.                                                  |
+| `request`                                                                            | [operations.SkillFeedbackRequest](../../models/operations/skillfeedbackrequest.md)   | :heavy_check_mark:                                                                   | The request object to use for the request.                                           |
+| `security`                                                                           | [operations.SkillFeedbackSecurity](../../models/operations/skillfeedbacksecurity.md) | :heavy_check_mark:                                                                   | The security requirements to use for the request.                                    |
+| `opts`                                                                               | [][operations.Option](../../models/operations/option.md)                             | :heavy_minus_sign:                                                                   | The options for this request.                                                        |
+
+### Response
+
+**[*operations.SkillFeedbackResponse](../../models/operations/skillfeedbackresponse.md), error**
+
+### Errors
+
+| Error Type                        | Status Code                       | Content Type                      |
+| --------------------------------- | --------------------------------- | --------------------------------- |
+| apierrors.ServiceError            | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
+| apierrors.ServiceError            | 500, 502                          | application/json                  |
+| apierrors.APIError                | 4XX, 5XX                          | \*/\*                             |
+
+## UploadSkillContent
+
+Uploads skill manifest content requested by the unified hook ingest endpoint.
+
+### Example Usage
+
+<!-- UsageSnippet language="go" operationID="uploadSkillContent" method="post" path="/rpc/hooks.uploadSkillContent" -->
+```go
+package main
+
+import(
+	"context"
+	"github.com/speakeasy-api/gram/hooks/sdk"
+	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
+	"github.com/speakeasy-api/gram/hooks/sdk/models/operations"
+	"log"
+)
+
+func main() {
+    ctx := context.Background()
+
+    s := sdk.New()
+
+    res, err := s.Hooks.UploadSkillContent(ctx, operations.UploadSkillContentRequest{
+        Body: components.UploadSkillContentPayload{
+            Content: "<value>",
+            RawSha256: "<value>",
+            SchemaVersion: components.UploadSkillContentPayloadSchemaVersionHookSkillContentV1,
+        },
+    }, nil)
+    if err != nil {
+        log.Fatal(err)
+    }
+    if res != nil {
+        // handle response
+    }
+}
+```
+
+### Parameters
+
+| Parameter                                                                                      | Type                                                                                           | Required                                                                                       | Description                                                                                    |
+| ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `ctx`                                                                                          | [context.Context](https://pkg.go.dev/context#Context)                                          | :heavy_check_mark:                                                                             | The context to use for the request.                                                            |
+| `request`                                                                                      | [operations.UploadSkillContentRequest](../../models/operations/uploadskillcontentrequest.md)   | :heavy_check_mark:                                                                             | The request object to use for the request.                                                     |
+| `security`                                                                                     | [operations.UploadSkillContentSecurity](../../models/operations/uploadskillcontentsecurity.md) | :heavy_check_mark:                                                                             | The security requirements to use for the request.                                              |
+| `opts`                                                                                         | [][operations.Option](../../models/operations/option.md)                                       | :heavy_minus_sign:                                                                             | The options for this request.                                                                  |
+
+### Response
+
+**[*operations.UploadSkillContentResponse](../../models/operations/uploadskillcontentresponse.md), error**
+
+### Errors
+
+| Error Type                        | Status Code                       | Content Type                      |
+| --------------------------------- | --------------------------------- | --------------------------------- |
+| apierrors.ServiceError            | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
+| apierrors.ServiceError            | 500, 502                          | application/json                  |
+| apierrors.APIError                | 4XX, 5XX                          | \*/\*                             |

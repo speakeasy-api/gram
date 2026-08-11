@@ -17,6 +17,10 @@ export type UpdateRemoteSessionIssuerForm = {
    * Whether the issuer accepts a Client ID Metadata Document URL as client_id (OAuth CIMD draft).
    */
   clientIdMetadataDocumentSupported?: boolean | undefined;
+  /**
+   * Set or clear the URL of OAuth client setup documentation shown when creating clients. An empty string clears it to NULL; any other value must be an absolute http(s) URL.
+   */
+  clientSetupDocumentationUrl?: string | undefined;
   grantTypesSupported?: Array<string> | undefined;
   /**
    * The remote_session_issuer id.
@@ -73,6 +77,7 @@ export type UpdateRemoteSessionIssuerForm = {
 export type UpdateRemoteSessionIssuerForm$Outbound = {
   authorization_endpoint?: string | undefined;
   client_id_metadata_document_supported?: boolean | undefined;
+  client_setup_documentation_url?: string | undefined;
   grant_types_supported?: Array<string> | undefined;
   id: string;
   issuer?: string | undefined;
@@ -100,6 +105,7 @@ export const UpdateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
   z.object({
     authorizationEndpoint: z.optional(z.string()),
     clientIdMetadataDocumentSupported: z.optional(z.boolean()),
+    clientSetupDocumentationUrl: z.optional(z.string()),
     grantTypesSupported: z.optional(z.array(z.string())),
     id: z.string(),
     issuer: z.optional(z.string()),
@@ -123,6 +129,7 @@ export const UpdateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
       authorizationEndpoint: "authorization_endpoint",
       clientIdMetadataDocumentSupported:
         "client_id_metadata_document_supported",
+      clientSetupDocumentationUrl: "client_setup_documentation_url",
       grantTypesSupported: "grant_types_supported",
       jwksUri: "jwks_uri",
       logoAssetId: "logo_asset_id",

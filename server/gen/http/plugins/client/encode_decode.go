@@ -2176,6 +2176,7 @@ func EncodeDownloadPluginPackageRequest(encoder func(*http.Request) goahttp.Enco
 // by the plugins downloadPluginPackage endpoint. restoreBody controls whether
 // the response body should be restored after having been read.
 // DecodeDownloadPluginPackageResponse may return the following errors:
+//   - "failed_precondition" (type *goa.ServiceError): http.StatusPreconditionFailed
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -2221,6 +2222,20 @@ func DecodeDownloadPluginPackageResponse(decoder func(*http.Response) goahttp.De
 			}
 			res := NewDownloadPluginPackageResultOK(contentType, contentDisposition)
 			return res, nil
+		case http.StatusPreconditionFailed:
+			var (
+				body DownloadPluginPackageFailedPreconditionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("plugins", "downloadPluginPackage", err)
+			}
+			err = ValidateDownloadPluginPackageFailedPreconditionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("plugins", "downloadPluginPackage", err)
+			}
+			return nil, NewDownloadPluginPackageFailedPrecondition(&body)
 		case http.StatusUnauthorized:
 			var (
 				body DownloadPluginPackageUnauthorizedResponseBody
@@ -3806,14 +3821,17 @@ func DecodeUpdateMarketplaceSettingsResponse(decoder func(*http.Response) goahtt
 // *plugins.Plugin from a value of type *PluginResponseBody.
 func unmarshalPluginResponseBodyToPluginsPlugin(v *PluginResponseBody) *plugins.Plugin {
 	res := &plugins.Plugin{
-		ID:              *v.ID,
-		Name:            *v.Name,
-		Slug:            *v.Slug,
-		Description:     v.Description,
-		ServerCount:     v.ServerCount,
-		AssignmentCount: v.AssignmentCount,
-		CreatedAt:       *v.CreatedAt,
-		UpdatedAt:       *v.UpdatedAt,
+		ID:                       *v.ID,
+		Name:                     *v.Name,
+		Slug:                     *v.Slug,
+		Description:              v.Description,
+		IsDefault:                v.IsDefault,
+		ServerCount:              v.ServerCount,
+		SkillCount:               v.SkillCount,
+		AssignmentCount:          v.AssignmentCount,
+		AgentPluginsV1Compatible: *v.AgentPluginsV1Compatible,
+		CreatedAt:                *v.CreatedAt,
+		UpdatedAt:                *v.UpdatedAt,
 	}
 	if v.Servers != nil {
 		res.Servers = make([]*plugins.PluginServer, len(v.Servers))

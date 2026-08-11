@@ -1,5 +1,5 @@
 import type { InsightsSuggestion } from "@/lib/insights-suggestions";
-import type { ElementsConfig } from "@gram-ai/elements";
+import type { ElementsConfig } from "@/elements";
 import { createContext, useContext, useLayoutEffect } from "react";
 
 /**

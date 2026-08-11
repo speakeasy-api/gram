@@ -47,6 +47,7 @@ Reference these guidelines when:
   - Consider using partial indexes for specific query patterns.
   - Use appropriate index types (e.g., `B-tree`, `Hash`, `GIN`, `GiST`) based on the data and query requirements.
   - When a unique key exists mainly to be a foreign-key target (e.g. a composite `(organization_id, id)` key that a tenant-scoped child composite-FKs to for tenancy pinning), declare it as a `CREATE UNIQUE INDEX`, not a table-level `UNIQUE` constraint. Postgres accepts a non-partial, plain-column unique index as an FK target. This matters when adding the key to an existing table: `ALTER TABLE ... ADD CONSTRAINT ... UNIQUE` takes an `ACCESS EXCLUSIVE` lock and builds the index synchronously, whereas a `CREATE UNIQUE INDEX` (which Atlas automatically emits as `CONCURRENTLY` per its `concurrent_index` policy) does not. Trade-off: a concurrent index makes the migration non-transactional (Atlas emits `-- atlas:txmode none` for you), so keep such migrations minimal.
+  - Adding a `CHECK` or `FOREIGN KEY` constraint to an existing table takes an `ACCESS EXCLUSIVE` lock while Postgres scans every existing row, blocking reads and writes for the duration. Atlas reports this as lint PG305 (`CHECK`) or PG306 (`FOREIGN KEY`) but has no diff policy that avoids it, so the online-safe two-step form has to be hand-written: see the `NOT VALID` recipe under Database migrations.
 
 - **Schema evolution:**
   - Use expand-contract pattern instead of removing existing columns from a schema. Introduce new columns instead when appropriate.
@@ -155,12 +156,37 @@ Gram uses [Atlas](https://atlasgo.io) in versioned mode. Two file kinds are invo
 Rules:
 
 - **Migrations ship in their own PR.** No application/business-logic code, no backfills, no unrelated changes alongside. Shipping migrations with business logic risks outages — the server can query a schema that has not rolled out yet — and makes the PR hard to revert.
-- **Migration files and `atlas.sum` are produced only by the Atlas CLI (`mise db:diff`).** Never hand-edit, rename, or rehash them.
+- **Migration files and `atlas.sum` are produced only by the Atlas CLI (`mise run db:diff`).** Never hand-edit, rename, or rehash them. There is exactly one sanctioned exception: the `NOT VALID` constraint pattern in the last rule below.
 - **Migration files contain only DDL — never DML.** Backfills and other data manipulation (`INSERT` / `UPDATE` / `DELETE`) do not belong in a migration file. Data migrations live in application code, not migrations.
 - **Follow expand-contract.** Never drop a column or table in the same migration that adds others. If a column is unwanted, mark it nullable with a comment and leave it for a later contract migration; sticking around for a few days is fine.
 - **Never run agents (or any tooling) against dev or prod databases.** Local databases only.
 - **Out-of-order timestamps:** if `mise lint:migrations` (or CI) reports a migration timestamp at or before the latest on `main`, do NOT rename the file. Delete the offending migration on your branch, rebase/merge `main`, then re-run `mise db:diff <name>` so the migration is regenerated on top with a fresh timestamp.
 - **Migration merge conflicts:** never resolve them by hand. Delete your migrations, rebase/merge `main`, then re-run `mise db:diff` so your changes are recreated on top.
+- **Adding a `CHECK` or `FOREIGN KEY` constraint to an existing table** triggers Atlas lint PG305 / PG306: the plain `ADD CONSTRAINT` scans the whole table under an `ACCESS EXCLUSIVE` lock, blocking reads and writes for the duration of the scan. Both are warnings and do not fail CI. Whether to avoid the scan is a question of table size and nothing else. A constraint over a column added in the same migration still triggers the same scan, it just cannot fail (unless that column has a `DEFAULT`, in which case existing rows are checked against the default value). For small or empty tables, accept the warning and say so in the PR description. For large or hot tables, use the two-step `NOT VALID` pattern:
+
+  1. Edit `server/database/schema.sql` and run `mise run db:diff <name>` as usual.
+  2. Append `NOT VALID` to each generated `ADD CONSTRAINT` clause in place, leaving Atlas's combined `ALTER TABLE` intact, then add one `ALTER TABLE ... VALIDATE CONSTRAINT ...;` statement per constraint after it. Do not break the generated `ALTER TABLE` into separate statements: each statement takes its own `ACCESS EXCLUSIVE` lock, and splitting a paired `DROP CONSTRAINT` / `ADD CONSTRAINT` opens a window where the table has no constraint at all.
+  3. Make `-- atlas:txmode none` the first line of the file. The two statements must not share a transaction: inside one transaction the `ACCESS EXCLUSIVE` lock taken by the `ADD` is held until commit, so the validation scan runs under the full lock anyway and the split gains nothing. `mise lint:migrations` enforces this directive.
+  4. Run `mise run db:hash` to re-hash `atlas.sum`. Until you do, every Atlas command fails on a checksum mismatch.
+
+  ```sql
+  -- atlas:txmode none
+
+  -- Atlas generates:
+  --   ALTER TABLE "t" ADD CONSTRAINT "t_x_check" CHECK (...), ADD COLUMN "y" text NULL;
+  ALTER TABLE "t" ADD CONSTRAINT "t_x_check" CHECK (...) NOT VALID, ADD COLUMN "y" text NULL;
+  ALTER TABLE "t" VALIDATE CONSTRAINT "t_x_check";
+  ```
+
+  The end state is identical to the one-step form, so later `mise run db:diff` runs see no drift (CI verifies this). `VALIDATE CONSTRAINT` scans under `SHARE UPDATE EXCLUSIVE`, which allows concurrent reads and writes.
+
+  Three things the pattern does not buy you:
+
+  - **`NOT VALID` does not mean unenforced.** It skips the scan of existing rows only. Every subsequent `INSERT` and `UPDATE` is checked immediately, including updates to rows that already violate the constraint. Because migrations ship ahead of application code, only add a constraint that currently deployed code already satisfies.
+  - **A failed validation is expensive to recover from.** Production applies migrations through the Atlas Operator, and agents may never touch dev or prod databases, so a failed `VALIDATE` blocks every later migration until someone repairs the data by hand. Confirm there are no violating rows before shipping instead of planning to fix them afterwards.
+  - **Regenerating the migration silently reverts the edit.** The out-of-order and merge-conflict rules above both regenerate the file, which brings back the plain one-step form. Re-apply steps 2 through 4 every time you regenerate.
+
+  A constraint declared inside a brand-new `CREATE TABLE` does not trigger PG305 / PG306 and needs no change.
 
 ## Writing queries with SQLc
 

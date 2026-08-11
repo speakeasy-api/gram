@@ -1930,6 +1930,14 @@ func unmarshalAssistantResponseBodyToTypesAssistant(v *AssistantResponseBody) *t
 		}
 		res.McpServers[i] = unmarshalAssistantMCPServerRefResponseBodyToTypesAssistantMCPServerRef(val)
 	}
+	res.Skills = make([]*types.AssistantSkillRef, len(v.Skills))
+	for i, val := range v.Skills {
+		if val == nil {
+			res.Skills[i] = nil
+			continue
+		}
+		res.Skills[i] = unmarshalAssistantSkillRefResponseBodyToTypesAssistantSkillRef(val)
+	}
 
 	return res
 }
@@ -1954,6 +1962,19 @@ func unmarshalAssistantMCPServerRefResponseBodyToTypesAssistantMCPServerRef(v *A
 		McpServerSlug:   *v.McpServerSlug,
 		EnvironmentSlug: v.EnvironmentSlug,
 		EndpointSlug:    v.EndpointSlug,
+	}
+
+	return res
+}
+
+// unmarshalAssistantSkillRefResponseBodyToTypesAssistantSkillRef builds a
+// value of type *types.AssistantSkillRef from a value of type
+// *AssistantSkillRefResponseBody.
+func unmarshalAssistantSkillRefResponseBodyToTypesAssistantSkillRef(v *AssistantSkillRefResponseBody) *types.AssistantSkillRef {
+	res := &types.AssistantSkillRef{
+		SkillID:           *v.SkillID,
+		PinnedVersionID:   v.PinnedVersionID,
+		ResolvedVersionID: *v.ResolvedVersionID,
 	}
 
 	return res

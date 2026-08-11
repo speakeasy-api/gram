@@ -1,0 +1,399 @@
+@import "tw-animate-css";
+@import "tw-shimmer";
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+
+/* Utility classes that dashboard callers pass into shadow-rendered components
+   (e.g. <ChatHistory className="min-h-full">). The source("./") scan below
+   only sees elements sources, so caller-supplied classes must be safelisted
+   here or they won't exist in the ShadowRoot stylesheet. */
+@source inline("min-h-full h-full max-h-96 min-h-fit overflow-y-auto");
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+/* Scope ALL variables to .gram-elements instead of :root */
+.gram-elements {
+  /*
+   * tw-shimmer uses @property declarations for --shimmer-track-height and
+   * --shimmer-angle, but @property is document-scoped and ignored inside
+   * shadow roots. Set the initial values here so shimmer works in shadow DOM.
+   */
+  --shimmer-track-height: 200px;
+  --shimmer-angle: 15deg;
+
+  /* Scoped preflight/base styles */
+  font-family:
+    ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+    "Segoe UI Symbol", "Noto Color Emoji";
+  font-feature-settings: normal;
+  font-variation-settings: normal;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.5;
+  -webkit-tap-highlight-color: transparent;
+  tab-size: 4;
+
+  /* Theme: Radius - set via data-radius attribute */
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.141 0.005 285.823);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.141 0.005 285.823);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.141 0.005 285.823);
+  --primary: oklch(0.21 0.006 285.885);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.967 0.001 286.375);
+  --secondary-foreground: oklch(0.21 0.006 285.885);
+  --muted: oklch(0.967 0.001 286.375);
+  --muted-foreground: oklch(0.552 0.016 285.938);
+  --accent: oklch(0.967 0.001 286.375);
+  --accent-foreground: oklch(0.21 0.006 285.885);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.92 0.004 286.32);
+  --input: oklch(0.92 0.004 286.32);
+  --ring: oklch(0.705 0.015 286.067);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.141 0.005 285.823);
+  --sidebar-primary: oklch(0.21 0.006 285.885);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.967 0.001 286.375);
+  --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
+  --sidebar-border: oklch(0.92 0.004 286.32);
+  --sidebar-ring: oklch(0.705 0.015 286.067);
+}
+
+/* Dark mode scoped to .gram-elements */
+.gram-elements.dark,
+.dark .gram-elements {
+  --background: oklch(0.141 0.005 285.823);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.21 0.006 285.885);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.21 0.006 285.885);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.92 0.004 286.32);
+  --primary-foreground: oklch(0.21 0.006 285.885);
+  --secondary: oklch(0.274 0.006 286.033);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.274 0.006 286.033);
+  --muted-foreground: oklch(0.705 0.015 286.067);
+  --accent: oklch(0.274 0.006 286.033);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.552 0.016 285.938);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.21 0.006 285.885);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.274 0.006 286.033);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.552 0.016 285.938);
+}
+
+@layer base {
+  .gram-elements {
+    /* source("./") limits class detection to the elements sources. This file
+       compiles inside the dashboard project, so without it Tailwind scans the
+       whole dashboard and every dashboard-only utility ships (scoped under
+       .gram-elements) in the inlined ShadowRoot stylesheet. */
+    @tailwind utilities source("./");
+
+    /* We can't use tailwind's preflight styles here because we need to scope them to .gram-elements so therefore we just include a version of them inline here */
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      border-width: 0;
+      border-style: solid;
+      @apply border-border outline-ring/50;
+    }
+
+    /* Reset margins and padding for common elements */
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6,
+    p,
+    blockquote,
+    pre,
+    ul,
+    ol,
+    figure {
+      margin: 0;
+      padding: 0;
+    }
+
+    /* List style reset */
+    ul,
+    ol {
+      list-style: none;
+    }
+
+    /* Image defaults */
+    img,
+    svg,
+    video,
+    canvas,
+    audio,
+    iframe,
+    embed,
+    object {
+      display: block;
+    }
+
+    img,
+    video {
+      max-width: 100%;
+      height: auto;
+    }
+
+    /* Button/input reset */
+    button,
+    input,
+    optgroup,
+    select,
+    textarea {
+      font-family: inherit;
+      font-feature-settings: inherit;
+      font-variation-settings: inherit;
+      font-size: 100%;
+      font-weight: inherit;
+      line-height: inherit;
+      letter-spacing: inherit;
+      color: inherit;
+      margin: 0;
+      padding: 0;
+    }
+
+    button,
+    select {
+      text-transform: none;
+    }
+
+    button,
+    input:where([type="button"]),
+    input:where([type="reset"]),
+    input:where([type="submit"]) {
+      appearance: button;
+      -webkit-appearance: button;
+      background-color: transparent;
+      background-image: none;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: inherit;
+    }
+
+    /* Table reset */
+    table {
+      text-indent: 0;
+      border-color: inherit;
+      border-collapse: collapse;
+    }
+  }
+}
+
+/* Theme: Radius variants via data attribute - scoped */
+.gram-elements[data-radius="sharp"],
+[data-radius="sharp"] .gram-elements {
+  --radius: 0.25rem;
+}
+.gram-elements[data-radius="soft"],
+[data-radius="soft"] .gram-elements {
+  --radius: 0.625rem;
+}
+.gram-elements[data-radius="round"],
+[data-radius="round"] .gram-elements {
+  --radius: 1rem;
+}
+.gram-elements[data-radius="pill"],
+[data-radius="pill"] .gram-elements {
+  --radius: 9999px;
+}
+
+/* assistant-ui streaming indicator — rainbow gradient ring matches the
+   Speakeasy brand palette used elsewhere (see `INSIGHTS_AI_RAINBOW_BORDER_CLASS`
+   and the login page's BrandGradientBar). Shared as a variable so the inline
+   trailing dot and the standalone "thinking" dot stay in sync. */
+.gram-elements {
+  --aui-rainbow: conic-gradient(
+    from 0deg,
+    #320f1e,
+    #c83228,
+    #fb873f,
+    #d2dc91,
+    #5a8250,
+    #002314,
+    #00143c,
+    #2873d7,
+    #9bc3ff,
+    #320f1e
+  );
+  /* Spin shorthand shared by both rainbow dots so a single reduced-motion
+     override (below) stops all of them at once. */
+  --aui-spin: aui-rainbow-spin 1.6s linear infinite;
+}
+
+@keyframes aui-rainbow-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Trailing dot that follows answer text as it streams. The "before first
+   token" state is handled by <ThinkingIndicator> (cycling verbs), so there is
+   deliberately no `:empty::after` rule here. */
+.gram-elements
+  :where(.aui-md[data-status="running"])
+  > :where(:not(ol):not(ul):not(pre)):last-child::after,
+.gram-elements
+  :where(.aui-md[data-status="running"])
+  > pre:last-child
+  code::after,
+.gram-elements
+  :where(.aui-md[data-status="running"])
+  > :where(:is(ol, ul):last-child)
+  > :where(li:last-child:not(:has(* > li)))::after,
+.gram-elements
+  :where(.aui-md[data-status="running"])
+  > :where(:is(ol, ul):last-child)
+  > :where(li:last-child)
+  > :where(:is(ol, ul):last-child)
+  > :where(li:last-child:not(:has(* > li)))::after,
+.gram-elements
+  :where(.aui-md[data-status="running"])
+  > :where(:is(ol, ul):last-child)
+  > :where(li:last-child)
+  > :where(:is(ol, ul):last-child)
+  > :where(li:last-child)
+  > :where(:is(ol, ul):last-child)
+  > :where(li:last-child)::after {
+  content: "";
+  display: inline-block;
+  box-sizing: border-box;
+  vertical-align: -0.2em;
+  width: 1.1em;
+  height: 1.1em;
+  margin-left: 0.35rem;
+  margin-right: 0.15rem;
+  padding: 3px;
+  border-radius: 50%;
+  background: var(--aui-rainbow);
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  animation: var(--aui-spin);
+}
+
+/* Standalone rainbow dot for the cycling "thinking" indicator (shown before
+   the assistant streams any answer text). Same ring as the inline dot above. */
+.gram-elements .aui-thinking-dot {
+  display: inline-block;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  width: 0.95em;
+  height: 0.95em;
+  padding: 2.5px;
+  border-radius: 50%;
+  background: var(--aui-rainbow);
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  animation: var(--aui-spin);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Stops both the trailing streaming dot and the standalone thinking dot. */
+  .gram-elements {
+    --aui-spin: none;
+  }
+}
+
+/* Simple shimmer animation for title text */
+@keyframes title-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.gram-elements .title-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--foreground) 0%,
+    var(--muted-foreground) 50%,
+    var(--foreground) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: title-shimmer 1.5s ease-in-out infinite;
+}

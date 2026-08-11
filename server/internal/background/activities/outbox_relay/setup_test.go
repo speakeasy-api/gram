@@ -17,9 +17,6 @@ import (
 	bgactivitiesrepo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	outboxrepo "github.com/speakeasy-api/gram/server/internal/outbox/repo"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	svixtest "github.com/speakeasy-api/gram/server/internal/thirdparty/svix/svixtest"
@@ -28,7 +25,7 @@ import (
 var infra *testenv.Environment
 
 func TestMain(m *testing.M) {
-	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true})
+	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true})
 	if err != nil {
 		log.Fatalf("failed to launch test infrastructure: %v", err)
 	}
@@ -43,10 +40,9 @@ func TestMain(m *testing.M) {
 }
 
 type relayTestInstance struct {
-	conn     *pgxpool.Pool
-	relay    *outbox_relay.Relay
-	svixSrv  *svixtest.MockServer
-	features *productfeatures.Client
+	conn    *pgxpool.Pool
+	relay   *outbox_relay.Relay
+	svixSrv *svixtest.MockServer
 }
 
 func newRelayTestInstance(t *testing.T) *relayTestInstance {
@@ -58,9 +54,6 @@ func newRelayTestInstance(t *testing.T) *relayTestInstance {
 	logger := testenv.NewLogger(t)
 	tp := testenv.NewTracerProvider(t)
 
-	redisClient, err := infra.NewRedisClient(t, 0)
-	require.NoError(t, err)
-
 	svixSrv := svixtest.NewMockServer(logger)
 	t.Cleanup(svixSrv.Close)
 
@@ -70,13 +63,11 @@ func newRelayTestInstance(t *testing.T) *relayTestInstance {
 	})
 	require.NoError(t, err)
 
-	features := productfeatures.NewClient(logger, tp, conn, redisClient)
-	relay := outbox_relay.New(logger, tp, conn, svixClient, features)
+	relay := outbox_relay.New(logger, tp, conn, svixClient)
 	return &relayTestInstance{
-		conn:     conn,
-		relay:    relay,
-		svixSrv:  svixSrv,
-		features: features,
+		conn:    conn,
+		relay:   relay,
+		svixSrv: svixSrv,
 	}
 }
 
@@ -109,24 +100,13 @@ func seedOrg(t *testing.T, conn *pgxpool.Pool, svixAppID string, webhooksEnabled
 func seedOutboxEntry(t *testing.T, conn *pgxpool.Pool, orgID, eventType string, payload []byte) int64 {
 	t.Helper()
 	ctx := t.Context()
-	row, err := outboxrepo.New(conn).InsertOutboxEntry(ctx, outboxrepo.InsertOutboxEntryParams{
+	id, err := testrepo.New(conn).SeedOutboxEntry(ctx, testrepo.SeedOutboxEntryParams{
 		OrganizationID: orgID,
 		EventType:      eventType,
 		Payload:        payload,
 	})
 	require.NoError(t, err)
-	return row.ID
-}
-
-// enableWebhooksFeature enables the webhooks feature flag for an org in the DB.
-func enableWebhooksFeature(t *testing.T, conn *pgxpool.Pool, orgID string) {
-	t.Helper()
-	ctx := t.Context()
-	err := productfeaturesrepo.New(conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
-		OrganizationID: orgID,
-		FeatureName:    string(productfeatures.FeatureWebhooks),
-	})
-	require.NoError(t, err)
+	return id
 }
 
 // preloadAttempts calls MarkOutboxRelayFailed n times to simulate prior retry attempts.

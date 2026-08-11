@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-
-	"github.com/google/uuid"
 )
 
 // runtimeRouter fans RuntimeBackend calls out to the backend named by each
@@ -53,11 +51,6 @@ func (r *runtimeRouter) SupportsBackend(backend string) bool {
 func (r *runtimeRouter) ServerURL() *url.URL { return r.backends[r.target].ServerURL() }
 func (r *runtimeRouter) ImageRef() string    { return r.backends[r.target].ImageRef() }
 
-// ReusesIdleRuntimes resolves against the target: it drives how a deploy rolls
-// new runtimes onto the configured image, which only concerns the backend that
-// admits them. The deploy sweep skips non-target rows for the same reason.
-func (r *runtimeRouter) ReusesIdleRuntimes() bool { return r.backends[r.target].ReusesIdleRuntimes() }
-
 func (r *runtimeRouter) Ensure(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendEnsureResult, error) {
 	b, err := r.route(runtime.Backend)
 	if err != nil {
@@ -82,14 +75,14 @@ func (r *runtimeRouter) RecycleImage(ctx context.Context, runtime assistantRunti
 	return result, nil
 }
 
-func (r *runtimeRouter) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey string, authToken string, prompt string, mcpServers []runtimeMCPServer) error {
+func (r *runtimeRouter) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, turn runTurnRequest) error {
 	b, err := r.route(runtime.Backend)
 	if err != nil {
 		return err
 	}
 	// Wrap with %w so the classifyTurnError sentinels the service matches on
 	// (ErrRuntimeUnhealthy, ErrCompletionFailed, ErrHistoryCorrupted) survive.
-	if err := b.RunTurn(ctx, runtime, threadID, idempotencyKey, authToken, prompt, mcpServers); err != nil {
+	if err := b.RunTurn(ctx, runtime, turn); err != nil {
 		return fmt.Errorf("run turn on %s runtime: %w", runtime.Backend, err)
 	}
 	return nil
@@ -105,6 +98,22 @@ func (r *runtimeRouter) Status(ctx context.Context, runtime assistantRuntimeReco
 		return status, fmt.Errorf("status of %s runtime: %w", runtime.Backend, err)
 	}
 	return status, nil
+}
+
+func (r *runtimeRouter) RuntimeExists(ctx context.Context, runtime assistantRuntimeRecord) (bool, error) {
+	b, err := r.route(runtime.Backend)
+	if err != nil {
+		return false, err
+	}
+	checker, ok := b.(runtimeLivenessChecker)
+	if !ok {
+		return true, nil
+	}
+	exists, err := checker.RuntimeExists(ctx, runtime)
+	if err != nil {
+		return false, fmt.Errorf("check %s runtime existence: %w", runtime.Backend, err)
+	}
+	return exists, nil
 }
 
 func (r *runtimeRouter) Stop(ctx context.Context, runtime assistantRuntimeRecord) error {
@@ -141,3 +150,4 @@ func (r *runtimeRouter) ReapStoppedMachine(ctx context.Context, runtime assistan
 }
 
 var _ RuntimeBackend = (*runtimeRouter)(nil)
+var _ runtimeLivenessChecker = (*runtimeRouter)(nil)

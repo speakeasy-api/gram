@@ -145,7 +145,9 @@ type SendMessagePayload struct {
 	ChatID *string
 	// Stable key the client mints once per message so retries dedupe instead of
 	// enqueuing twice. A new key is generated server-side when omitted.
-	IdempotencyKey   *string
+	IdempotencyKey *string
+	// Project skills to make available for this turn.
+	SkillIds         []string
 	SessionToken     *string
 	ProjectSlugInput *string
 }

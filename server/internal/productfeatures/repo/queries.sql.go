@@ -39,7 +39,7 @@ func (q *Queries) DeleteFeature(ctx context.Context, arg DeleteFeatureParams) (O
 	return i, err
 }
 
-const enableFeature = `-- name: EnableFeature :exec
+const enableFeature = `-- name: EnableFeature :execrows
 INSERT INTO organization_features (
     organization_id,
     feature_name
@@ -56,9 +56,30 @@ type EnableFeatureParams struct {
 	FeatureName    string
 }
 
-func (q *Queries) EnableFeature(ctx context.Context, arg EnableFeatureParams) error {
-	_, err := q.db.Exec(ctx, enableFeature, arg.OrganizationID, arg.FeatureName)
-	return err
+func (q *Queries) EnableFeature(ctx context.Context, arg EnableFeatureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, enableFeature, arg.OrganizationID, arg.FeatureName)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const hasDeviceAgentSync = `-- name: HasDeviceAgentSync :one
+SELECT EXISTS (
+        SELECT 1
+        FROM device_agent_syncs
+        WHERE organization_id = $1
+) AS has_sync
+`
+
+// Whether any device has polled agent.getPlugins for the org — the member-
+// readable "org uses the device agent" signal (device_agent_syncs is written
+// only by the device-agent poll path).
+func (q *Queries) HasDeviceAgentSync(ctx context.Context, organizationID string) (bool, error) {
+	row := q.db.QueryRow(ctx, hasDeviceAgentSync, organizationID)
+	var has_sync bool
+	err := row.Scan(&has_sync)
+	return has_sync, err
 }
 
 const isFeatureEnabled = `-- name: IsFeatureEnabled :one
@@ -81,4 +102,18 @@ func (q *Queries) IsFeatureEnabled(ctx context.Context, arg IsFeatureEnabledPara
 	var enabled bool
 	err := row.Scan(&enabled)
 	return enabled, err
+}
+
+const lockOrganizationMetadata = `-- name: LockOrganizationMetadata :one
+SELECT id
+FROM organization_metadata
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) LockOrganizationMetadata(ctx context.Context, organizationID string) (string, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationMetadata, organizationID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
 }

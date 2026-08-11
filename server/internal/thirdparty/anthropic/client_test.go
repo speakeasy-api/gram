@@ -60,11 +60,44 @@ func TestListActivitiesSendsAuthAndFilters(t *testing.T) {
 		OrganizationIDs: []string{"91012d09-e48b-438e-a489-1bebfd8fa6f9"},
 		CreatedAtGTE:    time.Date(2026, 4, 10, 8, 9, 10, 0, time.UTC),
 		AfterID:         "activity_last",
+		BeforeID:        "",
 		Limit:           5000,
 	})
 	require.NoError(t, err)
 	require.True(t, page.HasMore)
 	require.Equal(t, "claude_chat_1", page.Data[0].ClaudeChatID)
+}
+
+func TestListActivitiesSendsBeforeID(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("before_id"); got != "activity_first" {
+			t.Errorf("expected before_id activity_first, got %q", got)
+		}
+		if got := r.URL.Query().Get("after_id"); got != "" {
+			t.Errorf("expected no after_id, got %q", got)
+		}
+		_ = json.NewEncoder(w).Encode(ActivitiesPage{
+			Data:    nil,
+			HasMore: false,
+			FirstID: "",
+			LastID:  "",
+		})
+	}))
+	t.Cleanup(server.Close)
+
+	client := New(testGuardianPolicy(t), WithBaseURL(server.URL), WithAPIKey("anthropic-key"))
+	page, err := client.ListActivities(t.Context(), ListActivitiesParams{
+		ActivityTypes:   nil,
+		OrganizationIDs: nil,
+		CreatedAtGTE:    time.Time{},
+		AfterID:         "",
+		BeforeID:        "activity_first",
+		Limit:           100,
+	})
+	require.NoError(t, err)
+	require.False(t, page.HasMore)
 }
 
 func TestGetChatMessagesDecodesDocsShape(t *testing.T) {

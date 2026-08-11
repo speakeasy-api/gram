@@ -89,7 +89,7 @@ func TestService_ListScopes_AllowsOrgReadGrant(t *testing.T) {
 
 	result, err := ti.service.ListScopes(ctx, &gen.ListScopesPayload{})
 	require.NoError(t, err)
-	require.Len(t, result.Scopes, 21)
+	require.Len(t, result.Scopes, 27)
 }
 
 func TestService_ListMembers_ForbiddenWithoutOrgReadGrant(t *testing.T) {
@@ -261,17 +261,6 @@ func TestService_UpdateMemberRole_AllowsOrgAdminGrant(t *testing.T) {
 
 func withRBACGrants(t *testing.T, ctx context.Context, grants ...authz.Grant) context.Context {
 	t.Helper()
-
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	authCtx.AccountType = "enterprise"
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
-
-	for i := range grants {
-		if grants[i].Effect == "" {
-			grants[i].Effect = authz.PolicyEffectAllow
-		}
-	}
 
 	return authz.GrantsToContext(ctx, grants)
 }

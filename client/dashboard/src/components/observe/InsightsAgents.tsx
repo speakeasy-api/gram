@@ -1,21 +1,23 @@
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { ChartCard } from "@/components/chart/ChartCard";
+import { TOOLTIP } from "@/components/chart/palette";
+import { useSeriesColors } from "@/components/chart/useSeriesColors";
 import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
 import { useChartZoom } from "@/components/chart/useChartZoom";
 import { buildAgentTokenTimeSeriesChartData } from "@/components/observe/agentTokenTimeSeriesChartData";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { formatCompact } from "@/lib/format";
-import { MetricCard } from "@/components/chart/MetricCard";
+import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { useInsightsState } from "@/components/insights-context";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { Dialog } from "@/components/ui/dialog";
-import { ErrorAlert } from "@/components/ui/alert";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { SegmentedControl } from "@/components/ui/segmented-control";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog } from "@/components/ui/Dialog";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { slugify } from "@/lib/constants";
 import { cn } from "@/lib/utils";
@@ -32,7 +34,7 @@ import type { UserSummary } from "@gram/client/models/components/usersummary.js"
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
+import { type DateRangePreset, getPresetRange } from "@/elements";
 import {
   defineFilters,
   useFilterState,
@@ -55,14 +57,10 @@ import {
   type ChartOptions,
 } from "chart.js";
 import ZoomPlugin from "chartjs-plugin-zoom";
-import {
-  Button,
-  type Column,
-  Icon,
-  type SortDescriptor,
-  Table,
-  sortTableData,
-} from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { type Column, type SortDescriptor, Table } from "@/components/ui/Table";
+import { sortTableData } from "@/components/ui/Table/sorting";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bar, Chart } from "react-chartjs-2";
 import { Link } from "react-router";
@@ -94,19 +92,6 @@ const PRESET_RANGE_LABELS: Record<DateRangePreset, string> = {
   "30d": "the last 30 days",
   "90d": "the last 90 days",
 };
-
-const CHART_COLORS = [
-  "#60a5fa", // blue
-  "#34d399", // emerald
-  "#f97316", // orange
-  "#a78bfa", // violet
-  "#fb7185", // rose
-  "#facc15", // yellow
-  "#38bdf8", // sky
-  "#c084fc", // purple
-  "#4ade80", // green
-  "#f472b6", // pink
-];
 
 function formatCost(value: number): string {
   if (value >= 1) return `$${value.toFixed(2)}`;
@@ -489,8 +474,9 @@ export function InsightsAgentsContent(): JSX.Element {
           {/* Page title, then the filter bar on its own row below it. */}
           <div className="flex flex-col gap-4">
             <div className="flex min-w-0 flex-col gap-1">
+              <Page.Eyebrow />
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-semibold">AI Agent Costs</h1>
+                <h1 className="text-display-sm font-thin">AI Agent Costs</h1>
                 <ReleaseStageBadge stage="preview" />
               </div>
               <p className="text-muted-foreground text-sm">
@@ -543,52 +529,45 @@ export function InsightsAgentsContent(): JSX.Element {
             <AgentsLoadingState isInsightsOpen={isInsightsOpen} />
           ) : (
             <>
-              <section
-                className={cn(
-                  "grid gap-4 transition-all duration-300",
-                  isInsightsOpen
-                    ? "grid-cols-1 md:grid-cols-2"
-                    : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4",
-                )}
-              >
-                <MetricCard
+              <StatTileGroup>
+                <StatTile
                   title="Total Tokens"
                   value={filteredTotalTokens}
+                  tone="information"
                   icon="gauge"
-                  accentColor="blue"
                   subtext={`${formatCompact(filteredTotalTokens)} across ${formatCompact(filteredTotalSessions)} sessions`}
                 />
-                <MetricCard
+                <StatTile
                   title="Total Cost"
                   value={filteredTotalCost}
+                  tone="information"
                   format="currency"
                   icon="credit-card"
-                  accentColor="purple"
                   subtext={
                     filteredTotalCost > 0
                       ? formatCost(filteredTotalCost)
                       : "No cost data reported"
                   }
                 />
-                <MetricCard
+                <StatTile
                   title="Active Users"
                   value={filteredActiveUsers}
+                  tone="information"
                   icon="user"
-                  accentColor="green"
                   subtext={`of ${(membersData?.members ?? []).length} org members`}
                 />
-                <MetricCard
+                <StatTile
                   title="AI Clients"
                   value={clientBreakdown.length}
+                  tone="information"
                   icon="terminal"
-                  accentColor="orange"
                   subtext={
                     clientBreakdown.length > 0
                       ? clientBreakdown.map((c) => c.label).join(", ")
                       : "No client data"
                   }
                 />
-              </section>
+              </StatTileGroup>
 
               <section
                 className={cn(
@@ -684,10 +663,16 @@ function TokenTimeSeriesChart({
         : b.totalInputTokens + b.totalOutputTokens) > 0,
   );
 
+  const seriesColors = useSeriesColors();
   const { timestamps, chartData } = useMemo(
     () =>
-      buildAgentTokenTimeSeriesChartData(timeSeries, timeRangeMs, valueMode),
-    [timeSeries, timeRangeMs, valueMode],
+      buildAgentTokenTimeSeriesChartData(
+        timeSeries,
+        timeRangeMs,
+        valueMode,
+        seriesColors,
+      ),
+    [timeSeries, timeRangeMs, valueMode, seriesColors],
   );
   const resolveZoomRange = useCallback(
     (min: number, max: number) => {
@@ -730,14 +715,7 @@ function TokenTimeSeriesChart({
           },
         },
         tooltip: {
-          backgroundColor: "rgba(0, 0, 0, 0.85)",
-          titleColor: "#fff",
-          bodyColor: "#e5e7eb",
-          borderColor: "rgba(255, 255, 255, 0.1)",
-          borderWidth: 1,
-          padding: 12,
-          boxPadding: 4,
-          usePointStyle: true,
+          ...TOOLTIP,
           callbacks: {
             label: (item) => {
               const val = Number(item.parsed.y ?? 0);
@@ -826,6 +804,7 @@ function ClientBreakdownChart({
   const height = isExpanded ? 420 : 260;
   const hasData = data.length > 0;
 
+  const seriesColors = useSeriesColors();
   const chartData = useMemo(
     () => ({
       labels: data.map((d) => d.label),
@@ -834,12 +813,12 @@ function ClientBreakdownChart({
           label: valueMode === "cost" ? "Cost" : "Events",
           data: data.map((d) => (valueMode === "cost" ? d.cost : d.tokens)),
           backgroundColor: data.map(
-            (_, i) => CHART_COLORS[i % CHART_COLORS.length]!,
+            (_, i) => seriesColors[i % seriesColors.length]!,
           ),
         },
       ],
     }),
-    [data, valueMode],
+    [data, valueMode, seriesColors],
   );
 
   const options = useMemo<ChartOptions<"bar">>(
@@ -850,6 +829,7 @@ function ClientBreakdownChart({
       plugins: {
         legend: { display: false },
         tooltip: {
+          ...TOOLTIP,
           callbacks: {
             afterLabel: (item) => {
               const entry = data[item.dataIndex];
@@ -905,7 +885,7 @@ function ModelBreakdownCard({
   const total = models.reduce((s, m) => s + m.count, 0);
 
   return (
-    <section className="rounded-lg border p-4">
+    <section className="border p-4">
       <h3 className="font-semibold">
         {valueMode === "cost" ? "Requests by Model" : "Requests by Model"}
       </h3>
@@ -1016,7 +996,7 @@ function EmployeeCostTable({
           <div className="flex items-center gap-2">
             <span className="font-medium">{role.roleName}</span>
             {role.roleId === "unassigned" && (
-              <span className="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-[10px]">
+              <span className="bg-muted text-muted-foreground px-1.5 py-0.5 text-[10px]">
                 no role
               </span>
             )}
@@ -1365,14 +1345,14 @@ function EmployeeCostTable({
           </p>
           <div className="flex items-center gap-1">
             <button
-              className="hover:bg-muted rounded p-1 text-sm disabled:opacity-40"
+              className="hover:bg-muted p-1 text-sm disabled:opacity-40"
               onClick={() => setPage((p) => p - 1)}
               disabled={safePage === 0}
             >
               Prev
             </button>
             <button
-              className="hover:bg-muted rounded p-1 text-sm disabled:opacity-40"
+              className="hover:bg-muted p-1 text-sm disabled:opacity-40"
               onClick={() => setPage((p) => p + 1)}
               disabled={safePage >= totalPages - 1}
             >
@@ -1411,7 +1391,7 @@ function CostDisclaimer({ providers }: { providers: string[] }) {
   };
 
   return (
-    <section className="bg-muted/40 border-border rounded-xl border p-5">
+    <section className="bg-muted/40 border-border border p-5">
       <div className="max-w-3xl space-y-1">
         <h2 className="text-sm font-semibold">About cost data</h2>
         <p className="text-muted-foreground text-sm">
@@ -1467,7 +1447,7 @@ function CostDisclaimer({ providers }: { providers: string[] }) {
               placeholder="Provider name"
               value={otherProvider}
               onChange={(e) => setOtherProvider(e.target.value)}
-              className="border-input bg-background ring-ring/20 focus-visible:ring-ring w-full rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
+              className="border-input bg-background ring-ring/20 focus-visible:ring-ring w-full border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
             />
           )}
 
@@ -1501,7 +1481,7 @@ function AgentsLoadingState({ isInsightsOpen }: { isInsightsOpen: boolean }) {
         )}
       >
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="bg-card rounded-lg border p-5">
+          <div key={i} className="bg-card border p-5">
             <Skeleton className="mb-4 h-4 w-28" />
             <Skeleton className="h-9 w-20" />
             <Skeleton className="mt-3 h-3 w-36" />
@@ -1509,11 +1489,11 @@ function AgentsLoadingState({ isInsightsOpen }: { isInsightsOpen: boolean }) {
         ))}
       </section>
       <section className="grid gap-4 lg:grid-cols-2">
-        <Skeleton className="h-72 rounded-lg" />
-        <Skeleton className="h-72 rounded-lg" />
+        <Skeleton className="h-72" />
+        <Skeleton className="h-72" />
       </section>
-      <Skeleton className="h-40 rounded-lg" />
-      <Skeleton className="h-64 rounded-lg" />
+      <Skeleton className="h-40" />
+      <Skeleton className="h-64" />
     </>
   );
 }

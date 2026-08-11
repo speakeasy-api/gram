@@ -7,7 +7,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -25,9 +24,13 @@ var expectedFullAccessScopes = []string{
 	string(authz.ScopeMCPConnect),
 	string(authz.ScopeEnvironmentRead),
 	string(authz.ScopeEnvironmentWrite),
+	string(authz.ScopeSkillRead),
+	string(authz.ScopeSkillWrite),
 	string(authz.ScopeRiskPolicyEvaluate),
 	string(authz.ScopeRiskPolicyBypass),
+	string(authz.ScopeRiskPolicyBlock),
 	string(authz.ScopeChatRead),
+	string(authz.ScopeChatWrite),
 }
 
 func TestService_ListGrants(t *testing.T) {
@@ -37,8 +40,6 @@ func TestService_ListGrants(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
-	authCtx.AccountType = "enterprise"
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, "member@example.com", "Member User", "workos_user_member", "membership_1")
 	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Custom Builder", "custom-builder", ""))
@@ -69,8 +70,6 @@ func TestService_ListGrants_RoleGrants(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
-	authCtx.AccountType = "enterprise"
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, "member@example.com", "Member User", "workos_user_member", "membership_1")
 	seedRole(t, ctx, ti.conn, authCtx.ActiveOrganizationID, mockRole("role_custom", "Custom Builder", "custom-builder", ""))
@@ -98,8 +97,6 @@ func TestService_ListGrants_NotConnectedLoadsAllUserGrants(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
-	authCtx.AccountType = "enterprise"
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	// Remove the org-user relationship created by InitAuthContext so the user
 	// is "not connected" from the DB perspective.
@@ -124,7 +121,6 @@ func TestService_ListGrants_InvalidUserPrincipal(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
-	authCtx.AccountType = "enterprise"
 	authCtx.UserID = urn.AllUsersPrincipalID
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
@@ -135,6 +131,21 @@ func TestService_ListGrants_InvalidUserPrincipal(t *testing.T) {
 	require.ErrorIs(t, err, authz.ErrPrincipalInvalid)
 }
 
+func TestService_ListGrants_WithoutActiveOrganizationReturnsNoGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+	authCtx.ActiveOrganizationID = ""
+	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+
+	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
+	require.NoError(t, err)
+	require.Empty(t, result.Grants)
+}
+
 func TestService_ListGrants_AdminImpersonatingReturnsFullAccess(t *testing.T) {
 	t.Parallel()
 
@@ -143,9 +154,8 @@ func TestService_ListGrants_AdminImpersonatingReturnsFullAccess(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	// Enterprise org with RBAC enforced, admin user, admin override set,
-	// but NO organization_users row — mirrors real impersonation.
-	authCtx.AccountType = "enterprise"
+	// RBAC-enforced org, admin user, admin override set, but NO
+	// organization_users row — mirrors real impersonation.
 	authCtx.IsAdmin = true
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 	ctx = contextvalues.SetAdminOverrideInContext(ctx, "customer-org")
@@ -166,7 +176,7 @@ func TestService_ListGrants_AdminImpersonatingReturnsFullAccess(t *testing.T) {
 	}
 }
 
-func TestService_ListGrants_NonEnterpriseReturnsFullAccess(t *testing.T) {
+func TestService_ListGrants_NonEnterpriseLoadsEffectiveGrants(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -176,24 +186,17 @@ func TestService_ListGrants_NonEnterpriseReturnsFullAccess(t *testing.T) {
 
 	authCtx.AccountType = "pro"
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+	seedGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), authz.ScopeProjectRead, "project_non_enterprise")
 
 	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
 	require.NoError(t, err)
-	require.Len(t, result.Grants, len(expectedFullAccessScopes))
-
-	byScope := make(map[string]*gen.ListRoleGrant, len(result.Grants))
-	for _, grant := range result.Grants {
-		byScope[grant.Scope] = grant
-	}
-
-	for _, scope := range expectedFullAccessScopes {
-		grant, ok := byScope[scope]
-		require.True(t, ok)
-		require.Nil(t, grant.Selectors)
-	}
+	require.Len(t, result.Grants, 1)
+	require.Equal(t, string(authz.ScopeProjectRead), result.Grants[0].Scope)
+	require.Len(t, result.Grants[0].Selectors, 1)
+	require.Equal(t, "project_non_enterprise", result.Grants[0].Selectors[0].ResourceID)
 }
 
-func TestService_ListGrants_RBACDisabledReturnsFullAccess(t *testing.T) {
+func TestService_ListGrants_WithoutSessionReturnsFullAccess(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAccessService(t)
@@ -201,37 +204,6 @@ func TestService_ListGrants_RBACDisabledReturnsFullAccess(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
 
-	authCtx.AccountType = "enterprise"
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	ti.service.authz = authz.NewEngine(ti.service.logger, ti.conn, chConn, authztest.RBACAlwaysDisabled, authztest.ChallengeLoggingAlwaysDisabled, ti.roles)
-
-	result, err := ti.service.ListGrants(ctx, &gen.ListGrantsPayload{})
-	require.NoError(t, err)
-	require.Len(t, result.Grants, len(expectedFullAccessScopes))
-
-	byScope := make(map[string]*gen.ListRoleGrant, len(result.Grants))
-	for _, grant := range result.Grants {
-		byScope[grant.Scope] = grant
-	}
-
-	for _, scope := range expectedFullAccessScopes {
-		grant, ok := byScope[scope]
-		require.True(t, ok)
-		require.Nil(t, grant.Selectors)
-	}
-}
-
-func TestService_ListGrants_EnterpriseWithoutSessionReturnsFullAccess(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestAccessService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx)
-
-	authCtx.AccountType = "enterprise"
 	authCtx.SessionID = nil
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
@@ -258,8 +230,6 @@ func TestService_ListGrants_NoRoleAssignments(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx)
-	authCtx.AccountType = "enterprise"
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	seedConnectedUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, "member@example.com", "Member User", "workos_user_member", "membership_1")
 

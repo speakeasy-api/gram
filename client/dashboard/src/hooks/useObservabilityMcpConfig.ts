@@ -2,11 +2,7 @@ import { useProject, useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { internalMcpUrl } from "@/hooks/useToolsetUrl";
 import { getServerURL } from "@/lib/utils";
-import type {
-  ElementsConfig,
-  MCPServerEntry,
-  ToolsFilter,
-} from "@gram-ai/elements";
+import type { ElementsConfig, MCPServerEntry, ToolsFilter } from "@/elements";
 import { chatSessionsCreate } from "@gram/client/funcs/chatSessionsCreate";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
@@ -58,11 +54,17 @@ export function useObservabilityMcpConfig({
       return undefined;
     }
 
-    return toolsetsData.toolsets.map((toolset) => ({
-      url: internalMcpUrl({ slug: project.slug }, toolset),
-      name: toolset.slug,
-      environment: toolset.defaultEnvironmentSlug,
-    }));
+    return toolsetsData.toolsets.flatMap((toolset) => {
+      const url = internalMcpUrl({ slug: project.slug }, toolset);
+      if (!url) return [];
+      return [
+        {
+          url,
+          name: toolset.slug,
+          environment: toolset.defaultEnvironmentSlug,
+        },
+      ];
+    });
   }, [toolsetsData?.toolsets, project.slug, isLoadingToolsets]);
 
   return useMemo(() => {

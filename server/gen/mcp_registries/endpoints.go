@@ -20,6 +20,7 @@ type Endpoints struct {
 	ListRegistries   goa.Endpoint
 	ListCatalog      goa.Endpoint
 	GetServerDetails goa.Endpoint
+	GetSetupDocs     goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "mcpRegistries" service with endpoints.
@@ -31,6 +32,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListRegistries:   NewListRegistriesEndpoint(s, a.APIKeyAuth),
 		ListCatalog:      NewListCatalogEndpoint(s, a.APIKeyAuth),
 		GetServerDetails: NewGetServerDetailsEndpoint(s, a.APIKeyAuth),
+		GetSetupDocs:     NewGetSetupDocsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -41,6 +43,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListRegistries = m(e.ListRegistries)
 	e.ListCatalog = m(e.ListCatalog)
 	e.GetServerDetails = m(e.GetServerDetails)
+	e.GetSetupDocs = m(e.GetSetupDocs)
 }
 
 // NewClearCacheEndpoint returns an endpoint function that calls the method
@@ -74,7 +77,7 @@ func NewClearCacheEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -133,7 +136,7 @@ func NewListRegistriesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -192,7 +195,7 @@ func NewListCatalogEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -251,7 +254,7 @@ func NewGetServerDetailsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent"},
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
 				RequiredScopes: []string{"producer"},
 			}
 			var key string
@@ -276,5 +279,64 @@ func NewGetServerDetailsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 			return nil, err
 		}
 		return s.GetServerDetails(ctx, p)
+	}
+}
+
+// NewGetSetupDocsEndpoint returns an endpoint function that calls the method
+// "getSetupDocs" of service "mcpRegistries".
+func NewGetSetupDocsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetSetupDocsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetSetupDocs(ctx, p)
 	}
 }

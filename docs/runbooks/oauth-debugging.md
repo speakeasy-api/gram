@@ -27,7 +27,7 @@ Run your dev server with zero for the standard development experience.
 ### Option B: Run with IDE Debugger
 
 Run the debugger in your IDE so you can add breakpoints, and run
-`mise start:dashboard` in a separate terminal.
+`pitchfork start dashboard` in a separate terminal.
 
 ## Start the ngrok Tunnel
 
@@ -39,5 +39,5 @@ ngrok http --url=gram-yourname.ngrok.app https://localhost:8080
 
 ## Test the OAuth Flow
 
-Add a Gram MCP server that uses OAuth to your desired app (Claude Code, Cursor,
-or any other MCP client) and test the authentication flow.
+Add a Gram MCP server that uses OAuth to your desired app
+and test the authentication flow.

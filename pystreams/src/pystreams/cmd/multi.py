@@ -62,6 +62,8 @@ async def multi(
     scan_workers: int,
     scan_max_tasks_per_child: int,
     scan_timeout: float,
+    scan_slot_timeout: float,
+    max_inflight: int | None,
 ):
     logging.configure_logging(
         pretty_log=pretty_log,
@@ -82,12 +84,6 @@ async def multi(
         enable_tracing=enable_tracing,
         enable_metrics=enable_metrics,
     )
-
-    # Opt-in (defaulted on for local dev via mise.toml): actively watch the loop
-    # for blocking calls and raise on a high-severity violation. The production
-    # container leaves the env var unset, so this is a no-op there.
-    if os.environ.get("GRAM_PYSTREAMS_DETECT_BLOCKING"):
-        activate_blocking_detection(logger=logger)
 
     # The emulator's project ID is arbitrary; against real GCP a project is
     # required to resolve the subscription path.
@@ -125,9 +121,20 @@ async def multi(
                 scan_workers=scan_workers,
                 scan_max_tasks_per_child=scan_max_tasks_per_child,
                 scan_timeout=scan_timeout,
+                scan_slot_timeout=scan_slot_timeout,
                 max_scan_concurrency=max_scan_concurrency,
                 logger=logger,
             )
+
+            # Opt-in (defaulted on for local dev via mise.toml): actively watch
+            # the steady-state loop for blocking calls and raise on a
+            # high-severity violation. Activate only after startup has loaded
+            # Presidio: aiocop documents lazy imports as expected startup I/O,
+            # and its own stack collection can turn the analyzer's legitimate
+            # worker-thread handoff into a noisy slow-task warning. Receivers
+            # have not started yet, so all message handling remains covered.
+            if os.environ.get("GRAM_PYSTREAMS_DETECT_BLOCKING"):
+                activate_blocking_detection(logger=logger)
 
             presidio_handler = PresidioHandler(
                 logger, findings_publisher, presidio_scanner
@@ -163,10 +170,21 @@ async def multi(
                     processor_pb2.PyProcessor,
                     PingHandler(logger, ping_log_level).handle,
                 )
+                # Admit only as many messages as the scan pool can plausibly
+                # serve: 2 handlers per scan slot keeps the pool fed while one
+                # message's findings publish, and everything past the cap waits
+                # at the broker — visible as subscription backlog and
+                # redeliverable — instead of in-process, where 50 handlers
+                # racing 2 workers spent whole slot budgets queued (the
+                # process_duration >> scan_duration gap).
+                if max_inflight is None:
+                    scan_slots = scan_workers if scan_workers > 0 else 2
+                    max_inflight = max(4, 2 * scan_slots)
                 await receivers.receive(
                     presidio_analysis_pb2.PresidioAnalysis,
                     presidio_analyzer_pb2.PresidioAnalyzer,
                     presidio_handler.handle,
+                    max_concurrency=max_inflight,
                 )
 
                 health_state.set_ready()

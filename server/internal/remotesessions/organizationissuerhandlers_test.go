@@ -2,6 +2,7 @@ package remotesessions_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -15,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // TestListIssuers returns both organizational and project-specific issuers
@@ -141,6 +143,43 @@ func TestDeleteIssuer_BlockedByClients(t *testing.T) {
 		ApikeyToken:  nil,
 	})
 	require.NoError(t, err)
+}
+
+// TestDeleteIssuer_SerializedAgainstClientBinding is the organization-tier
+// counterpart to TestDeleteRemoteSessionIssuer_SerializedAgainstClientBinding:
+// the org-admin delete must take the same client-binding advisory lock, so a
+// concurrent client create cannot commit between its client count and its soft
+// delete and strand a live client on a deleted issuer.
+func TestDeleteIssuer_SerializedAgainstClientBinding(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "admin-delissuer-lock", "")
+
+	parsed, err := uuid.Parse(issuerID)
+	require.NoError(t, err)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, repo.New(tx).LockRemoteSessionIssuerForClientBinding(ctx, parsed))
+
+	done := make(chan error, 1)
+	go func() {
+		done <- ti.service.DeleteIssuer(ctx, &orgissuersgen.DeleteIssuerPayload{
+			ID:           issuerID,
+			SessionToken: nil,
+			ApikeyToken:  nil,
+		})
+	}()
+
+	require.Never(t, func() bool { return len(done) > 0 }, 500*time.Millisecond, 25*time.Millisecond,
+		"delete completed while another transaction held the client-binding lock")
+
+	require.NoError(t, tx.Rollback(ctx))
+
+	require.Eventually(t, func() bool { return len(done) > 0 }, 30*time.Second, 25*time.Millisecond,
+		"delete did not complete after the client-binding lock was released")
+	require.NoError(t, <-done)
 }
 
 // TestDeleteIssuer_CrossOrgNotFound proves an issuer owned by another
@@ -495,4 +534,153 @@ func TestMoveIssuer_RBACForbidden(t *testing.T) {
 	})
 	require.Error(t, err)
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+// TestGetIssuer_OrgAdminResolvesPlatformIssuer proves the org-admin get-by-id
+// resolves a platform issuer (read-only surfaces opt in).
+func TestGetIssuer_OrgAdminResolvesPlatformIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	platformID := seedGlobalRemoteIssuer(t, ctx, ti.conn, "orgadmin-get-platform")
+
+	fetched, err := ti.service.GetIssuer(ctx, &orgissuersgen.GetIssuerPayload{
+		ID:           platformID.String(),
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, platformID.String(), fetched.ID)
+	require.Empty(t, fetched.OrganizationID)
+}
+
+// TestUpdateIssuer_OrgAdminCannotMutatePlatformIssuer proves an org admin cannot
+// edit a platform issuer through the org-scoped update.
+func TestUpdateIssuer_OrgAdminCannotMutatePlatformIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	platformID := seedGlobalRemoteIssuer(t, ctx, ti.conn, "refuse-org-update")
+	renamed := "Hijacked"
+
+	_, err := ti.service.UpdateIssuer(ctx, newUpdateIssuerNamePayload(platformID.String(), &renamed))
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	requirePlatformIssuerUnchanged(t, ctx, ti.conn, platformID)
+}
+
+// TestDeleteIssuer_OrgAdminCannotDeletePlatformIssuer proves an org admin cannot
+// delete a platform issuer through the org-scoped delete.
+func TestDeleteIssuer_OrgAdminCannotDeletePlatformIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	platformID := seedGlobalRemoteIssuer(t, ctx, ti.conn, "refuse-org-delete")
+
+	err := ti.service.DeleteIssuer(ctx, &orgissuersgen.DeleteIssuerPayload{
+		ID:           platformID.String(),
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	requirePlatformIssuerUnchanged(t, ctx, ti.conn, platformID)
+}
+
+// TestMoveIssuer_OrgAdminCannotMovePlatformIssuer proves an org admin cannot
+// re-scope a platform issuer into a project through moveIssuer.
+func TestMoveIssuer_OrgAdminCannotMovePlatformIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	platformID := seedGlobalRemoteIssuer(t, ctx, ti.conn, "refuse-org-move")
+	pid := authCtx.ProjectID.String()
+
+	_, err := ti.service.MoveIssuer(ctx, &orgissuersgen.MoveIssuerPayload{
+		ID:           platformID.String(),
+		ProjectID:    &pid,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	requirePlatformIssuerUnchanged(t, ctx, ti.conn, platformID)
+}
+
+// TestListIssuers_PlatformIssuerClientCountIsOrgScoped proves the client count
+// reported for a shared platform issuer counts only the caller's own clients,
+// never another organization's clients on the same issuer.
+func TestListIssuers_PlatformIssuerClientCountIsOrgScoped(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	platformID := seedGlobalRemoteIssuer(t, ctx, ti.conn, "count-platform")
+
+	// One client owned by the caller's org.
+	_, err := ti.service.CreateClient(ctx, newCreateClientPayload(platformID.String(), nil, nil))
+	require.NoError(t, err)
+
+	// Two clients owned by a different org on the same shared issuer.
+	otherOrgID := createOrganization(t, ctx, ti.conn, "count-other-org")
+	seedOrgLevelRemoteClient(t, ctx, ti.conn, otherOrgID, platformID, "count-foreign-1")
+	seedOrgLevelRemoteClient(t, ctx, ti.conn, otherOrgID, platformID, "count-foreign-2")
+
+	result, err := ti.service.ListIssuers(ctx, &orgissuersgen.ListIssuersPayload{
+		Cursor:       nil,
+		Limit:        nil,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+
+	var platform *orgissuersgen.OrganizationRemoteSessionIssuer
+	for _, item := range result.Items {
+		if item.Issuer.ID == platformID.String() {
+			platform = item
+		}
+	}
+	require.NotNil(t, platform, "platform issuer should be inherited into the org listing")
+	require.Equal(t, 1, platform.ClientCount, "count reflects only the caller's own clients, not the other org's")
+}
+
+// TestListIssuers_ClientCountIncludesPreBackfillClients proves the client count
+// for an org-owned issuer counts clients whose organization_id was never
+// backfilled (NULL), matching the org-reachability predicate. The count arm
+// resolves through the issuer's org for org-owned rows, so it does not depend on
+// the client row carrying organization_id.
+func TestListIssuers_ClientCountIncludesPreBackfillClients(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "count-backfill-issuer", "")
+	seedProjectRemoteClientNoOrg(t, ctx, ti.conn, *authCtx.ProjectID, uuid.MustParse(issuerID), "count-backfill-client")
+
+	result, err := ti.service.ListIssuers(ctx, &orgissuersgen.ListIssuersPayload{
+		Cursor:       nil,
+		Limit:        nil,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+
+	var found *orgissuersgen.OrganizationRemoteSessionIssuer
+	for _, item := range result.Items {
+		if item.Issuer.ID == issuerID {
+			found = item
+		}
+	}
+	require.NotNil(t, found, "the project-owned issuer should be listed")
+	require.Equal(t, 1, found.ClientCount, "a client with NULL organization_id must still be counted for its org-owned issuer")
 }

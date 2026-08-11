@@ -84,7 +84,7 @@ func newTestMCPMetadataService(t *testing.T) (context.Context, *testInstance) {
 
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-test"), billingClient)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
 	serverURL, err := url.Parse("http://0.0.0.0")
 	require.NoError(t, err)
@@ -93,12 +93,10 @@ func newTestMCPMetadataService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
 
 	auditLogger := audit.NewLogger()
 
-	svc := mcpmetadata.NewService(logger, tracerProvider, conn, sessionManager, serverURL, siteURL, cacheAdapter, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger)
+	svc := mcpmetadata.NewService(logger, tracerProvider, conn, sessionManager, serverURL, siteURL, cacheAdapter, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger)
 
 	return ctx, &testInstance{
 		service:        svc,

@@ -32,6 +32,10 @@ type RiskPolicy struct {
 	// approved. Sessions whose AI-account email domain is not listed are flagged.
 	// Empty means the domain rule is inert.
 	ApprovedEmailDomains []string
+	// Per-category detection scopes specified for this policy. The scan surface
+	// merges these with the recommended scopes, the specified scope winning on
+	// category conflict. Empty means every recommendation applies unchanged.
+	DetectionScopes []*RiskDetectionScope
 	// Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the
 	// policy author has unchecked within an otherwise-enabled category. Empty
 	// means every rule in the selected categories runs; matching findings are
@@ -42,7 +46,7 @@ type RiskPolicy struct {
 	CustomRuleIds []string
 	// Message types this policy applies to. When empty or omitted, applies to all
 	// types. Valid values: user_message, tool_request, tool_response,
-	// assistant_message.
+	// assistant_message, prompt_attachment.
 	MessageTypes []string
 	// CEL scope predicate: the policy evaluates a message only when this boolean
 	// expression is true (in addition to message_types). Null/empty means all
@@ -61,6 +65,12 @@ type RiskPolicy struct {
 	// Principal URNs the policy applies to. Contains user:all when audience_type
 	// is everyone.
 	AudiencePrincipalUrns []string
+	// Default disposition for shadow MCP blocking policies: block_all blocks every
+	// non-Gram-hosted server unless allowed, allow_all permits every server unless
+	// blocked. Blocked URLs are stored as risk_policy:block grants, not on the
+	// policy. Immutable after create. Only present on policies with the shadow_mcp
+	// source and block action.
+	ShadowMcpDisposition *string
 	// Whether the policy name is auto-generated. When true, the name is
 	// regenerated on each update.
 	AutoName bool
@@ -73,14 +83,21 @@ type RiskPolicy struct {
 	// For prompt_based policies: per-policy LLM-judge model configuration. Null
 	// for standard policies.
 	ModelConfig *RiskPolicyModelConfig
+	// CVSS-style severity (0.1-10) the author assigns to findings this policy
+	// produces. Descriptive only; changing it does not re-scan messages. Defaults
+	// to 5.
+	Score float64
 	// Policy version, incremented on each update.
 	Version int64
 	// When the policy was created.
 	CreatedAt string
 	// When the policy was last updated.
 	UpdatedAt string
-	// Number of messages not yet analyzed at the current policy version.
-	PendingMessages int64
-	// Total number of messages in the project.
-	TotalMessages int64
+	// Number of messages not yet analyzed at the current policy version. Populated
+	// on single-policy reads; omitted from list responses (use riskPoliciesStatus
+	// for progress).
+	PendingMessages *int64
+	// Total number of messages in the project. Populated on single-policy reads;
+	// omitted from list responses.
+	TotalMessages *int64
 }

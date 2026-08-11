@@ -2,7 +2,7 @@ import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import { computeChangedFields } from "@/lib/compute-changed-fields";
 import { useMemo, useState, Suspense } from "react";
 import React from "react";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
 import { HighlightProvider } from "@/components/diffs/provider";
 
 const StaticDiff = React.lazy(() =>
@@ -35,11 +35,11 @@ function ChangedFieldRow({
         {field}
       </span>
       <div className="flex min-w-0 flex-1 flex-wrap items-start gap-2">
-        <span className="max-w-full rounded bg-red-50 px-2 py-0.5 font-mono text-xs break-all text-red-700 line-through dark:bg-red-950 dark:text-red-400">
+        <span className="max-w-full bg-red-50 px-2 py-0.5 font-mono text-xs break-all text-red-700 line-through dark:bg-red-950 dark:text-red-400">
           {formatValue(oldValue)}
         </span>
         <span className="text-muted-foreground pt-0.5 text-xs">→</span>
-        <span className="max-w-full rounded bg-emerald-50 px-2 py-0.5 font-mono text-xs break-all text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
+        <span className="max-w-full bg-emerald-50 px-2 py-0.5 font-mono text-xs break-all text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
           {formatValue(newValue)}
         </span>
       </div>
@@ -92,7 +92,7 @@ export function StructuredDiff({ log }: { log: AuditLog }): React.JSX.Element {
           {changes.length} field{changes.length === 1 ? "" : "s"} changed
         </span>
       </div>
-      <div className="bg-background rounded-md border">
+      <div className="bg-background border">
         {changes.map((change) => (
           <ChangedFieldRow
             key={change.field}

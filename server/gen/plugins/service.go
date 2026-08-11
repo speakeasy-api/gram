@@ -238,10 +238,17 @@ type Plugin struct {
 	Slug string
 	// Optional description.
 	Description *string
+	// Whether this is the project's fallback plugin that new servers attach to.
+	IsDefault *bool
 	// Number of active servers in this plugin.
 	ServerCount *int64
+	// Number of active skills in this plugin.
+	SkillCount *int64
 	// Number of role/user assignments.
 	AssignmentCount *int64
+	// Whether the plugin's complete current intended state can be published as an
+	// Agent Plugins 1.0 package.
+	AgentPluginsV1Compatible bool
 	// Servers included in this plugin.
 	Servers []*PluginServer
 	// Role/user assignments.
@@ -329,6 +336,11 @@ type PublishStatusResult struct {
 	// When the project was last published to GitHub. Absent when the project is
 	// not connected.
 	LastPublishedAt *string
+	// Version stamped into the currently published plugin.json manifests (e.g.
+	// 0.1.1783692954) — the version plugin clients such as Claude Code report for
+	// installed plugins. Absent when the project is not connected or the live
+	// version could not be determined.
+	LiveVersion *string
 }
 
 // RemovePluginServerPayload is the payload type of the plugins service
@@ -377,6 +389,11 @@ type UpdateMarketplaceSettingsResult struct {
 	// Whether the marketplace was automatically republished to GitHub as part of
 	// this update.
 	Republished bool
+	// True when the new name reached the MCP plugins and marketplace manifests but
+	// the observability (hooks) plugin could not be updated yet because the
+	// organization is not approved for the latest hooks version; it will update
+	// automatically once the organization is rolled forward.
+	HooksUpdateDeferred *bool
 }
 
 // UpdatePluginPayload is the payload type of the plugins service updatePlugin
@@ -453,4 +470,9 @@ func MakeUnexpected(err error) *goa.ServiceError {
 // MakeGatewayError builds a goa.ServiceError from an error.
 func MakeGatewayError(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "gateway_error", false, false, true)
+}
+
+// MakeFailedPrecondition builds a goa.ServiceError from an error.
+func MakeFailedPrecondition(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "failed_precondition", false, false, false)
 }

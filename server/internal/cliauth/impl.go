@@ -9,7 +9,7 @@
 //     matching the stored challenge IS the credential. The code is single-use,
 //     consumed atomically via GETDEL on lookup, so a replayed/expired/unknown
 //     code or a PKCE mismatch fails closed with 401. On success it mints a
-//     per-user [agent,hooks] API key and returns the raw key exactly once.
+//     per-user `agent_user` API key and returns the raw key exactly once.
 package cliauth
 
 import (
@@ -53,10 +53,6 @@ const (
 	// codeKeyNamespace prefixes the Redis keys backing the one-time-code store
 	// so they never collide with the other Redis consumers sharing the client.
 	codeKeyNamespace = "cliauth:code:"
-
-	// deviceAgentKeyName is the name stamped on the API key minted by redeem, so
-	// it is identifiable in the org's key list.
-	deviceAgentKeyName = "device-agent"
 
 	// pkceMethodS256 is the only PKCE challenge method this flow accepts.
 	pkceMethodS256 = "S256"
@@ -179,7 +175,7 @@ func (s *Service) Authorize(ctx context.Context, payload *gen.AuthorizePayload) 
 		ProjectID:           project.ID.String(),
 		ProjectSlug:         project.Slug,
 		UserEmail:           *authCtx.Email,
-		Scopes:              []string{auth.APIKeyScopeAgent.String(), auth.APIKeyScopeHooks.String()},
+		Scopes:              []string{auth.APIKeyScopeAgentUser.String()},
 		CodeChallenge:       payload.CodeChallenge,
 		CodeChallengeMethod: pkceMethodS256,
 	}
@@ -211,7 +207,7 @@ func (s *Service) Authorize(ctx context.Context, payload *gen.AuthorizePayload) 
 	}, nil
 }
 
-// Redeem consumes a one-time code and mints the per-user [agent,hooks] API key.
+// Redeem consumes a one-time code and mints the per-user `agent_user` API key.
 // Every failure path returns 401 so a caller learns nothing beyond "no": the
 // code+verifier pair either works or it does not.
 func (s *Service) Redeem(ctx context.Context, payload *gen.RedeemPayload) (*gen.RedeemResult, error) {
@@ -316,6 +312,17 @@ func (s *Service) mintKey(ctx context.Context, record codeRecord, projectID uuid
 		return "", fmt.Errorf("hash api key: %w", err)
 	}
 
+	// Unique per-enrollment key name (timestamp + fresh entropy, never
+	// secret-derived — see auth.DeviceAgentKeyName). API keys are not treated as
+	// singletons: each enrollment mints its own uniquely-named key, so a user's
+	// other enrolled devices keep working — no revoke-then-mint gap, and no
+	// collision with the (organization_id, name) unique index. Stale keys are
+	// reclaimed out of band via revocation, not by deleting a prior key here.
+	keyName, err := auth.DeviceAgentKeyName(record.UserID)
+	if err != nil {
+		return "", fmt.Errorf("generate device-agent key name: %w", err)
+	}
+
 	// record.Scopes is set by Authorize and validated non-empty in Redeem, so it
 	// is used directly here — no default, so an unexpectedly empty scope set
 	// surfaces as an integrity failure upstream rather than a silently broken key.
@@ -323,7 +330,7 @@ func (s *Service) mintKey(ctx context.Context, record codeRecord, projectID uuid
 		OrganizationID:  record.OrgID,
 		ProjectID:       uuid.NullUUID{UUID: projectID, Valid: true},
 		CreatedByUserID: record.UserID,
-		Name:            deviceAgentKeyName,
+		Name:            keyName,
 		KeyPrefix:       s.keyPrefix + token[:5],
 		KeyHash:         keyHash,
 		Scopes:          record.Scopes,

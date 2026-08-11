@@ -11,7 +11,11 @@
 // Keeping both sides on these functions makes that contract un-driftable.
 package naming
 
-import "github.com/speakeasy-api/gram/server/internal/conv"
+import (
+	"encoding/json"
+
+	"github.com/speakeasy-api/gram/server/internal/conv"
+)
 
 // MarketplaceName is the marketplace.json "name" for a project's published
 // marketplace.
@@ -41,4 +45,22 @@ func MarketplaceName(orgName, projectSlug string, isDefaultProject bool) string 
 // Cursor/Codex variants append their own suffix to this).
 func ObservabilitySlug(orgName string) string {
 	return conv.ToSlug(orgName) + "-observability"
+}
+
+// PublishedHooksOrgName extracts the org name a published hooks subtree was
+// generated under from the connection's stored hooks config snapshot (written
+// by the publish path as plugins.HooksConfig — the org_name tag must stay in
+// sync with that struct). The hooks rollout gate can pin a published subtree
+// under a pre-rename org name, so every surface that names the published
+// observability plugin must feed this into the slug formulas above rather
+// than the current org name. Empty when the snapshot is missing, unreadable,
+// or predates the field; callers fall back to the current org name.
+func PublishedHooksOrgName(snapshot []byte) string {
+	var hc struct {
+		OrgName string `json:"org_name"`
+	}
+	if err := json.Unmarshal(snapshot, &hc); err != nil {
+		return ""
+	}
+	return hc.OrgName
 }

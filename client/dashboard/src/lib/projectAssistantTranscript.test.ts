@@ -1,4 +1,4 @@
-import type { GramChatMessage } from "@gram-ai/elements";
+import type { GramChatMessage } from "@/elements";
 import { describe, expect, it } from "vitest";
 import { stripMessageContextFraming } from "./projectAssistantTranscript";
 
@@ -20,6 +20,17 @@ describe("stripMessageContextFraming", () => {
       ),
     );
     expect(result?.content).toBe("Which agents call the weather tool most?");
+  });
+
+  it("preserves a following skill envelope for specialized rendering", () => {
+    const skillEnvelope =
+      "<skill-context>\nName: incident-analysis\n<skill-content>\nverbatim instructions\n</skill-content>\n</skill-context>\n\nReview this incident";
+    const result = stripMessageContextFraming(
+      userMessage(
+        `<message-context>\nEventID: e1\n</message-context>\n\n${skillEnvelope}`,
+      ),
+    );
+    expect(result?.content).toBe(skillEnvelope);
   });
 
   it("strips framing from a text content part", () => {

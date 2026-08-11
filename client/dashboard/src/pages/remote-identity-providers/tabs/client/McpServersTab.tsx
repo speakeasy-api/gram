@@ -1,8 +1,11 @@
 import { RequireScope } from "@/components/require-scope";
-import { DotRow } from "@/components/ui/dot-row";
-import { DotTable } from "@/components/ui/dot-table";
-import { Type } from "@/components/ui/type";
+import { TableRowContextMenu } from "@/components/table-row-context-menu";
+import { DotRow } from "@/components/ui/DotRow";
+import { DotTable } from "@/components/ui/DotTable";
+import type { Action } from "@/components/ui/MoreActions";
+import { Text } from "@/components/ui/Text";
 import { useSlugs } from "@/contexts/Sdk";
+import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import { formatRemoteMcpDisplay } from "@/lib/sources";
 import type { OrganizationMcpServer } from "@gram/client/models/components/organizationmcpserver.js";
@@ -11,14 +14,14 @@ import {
   useOrganizationRemoteSessionClientMcpServers,
 } from "@gram/client/react-query/organizationRemoteSessionClientMcpServers.js";
 import { useRemoveOrganizationRemoteSessionClientFromMcpServerMutation } from "@gram/client/react-query/removeOrganizationRemoteSessionClientFromMcpServer.js";
+import { Button } from "@/components/ui/Button";
 import {
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Icon } from "@/components/ui/Icon";
 import { useQueryClient } from "@tanstack/react-query";
 import { MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
@@ -40,6 +43,8 @@ function mcpServerHref(
 export function McpServersTab({ clientId }: { clientId: string }): JSX.Element {
   const { orgSlug } = useSlugs();
   const queryClient = useQueryClient();
+  const { hasAnyScope } = useRBAC();
+  const canManage = hasAnyScope(["org:admin"]);
   const { data, isLoading, isError } =
     useOrganizationRemoteSessionClientMcpServers({
       clientId,
@@ -65,17 +70,17 @@ export function McpServersTab({ clientId }: { clientId: string }): JSX.Element {
 
   if (isError) {
     return (
-      <Type className="text-destructive py-8 text-center">
+      <Text className="text-destructive py-8 text-center">
         Failed to load attached MCP servers.
-      </Type>
+      </Text>
     );
   }
 
   if (!isLoading && items.length === 0) {
     return (
-      <Type muted className="py-8 text-center">
+      <Text muted className="py-8 text-center">
         This client is not attached to any MCP servers.
-      </Type>
+      </Text>
     );
   }
 
@@ -87,64 +92,81 @@ export function McpServersTab({ clientId }: { clientId: string }): JSX.Element {
           name: server.name,
           url: server.url ?? "",
         });
+        const actions: Action[] = [
+          {
+            label: "Remove from server",
+            destructive: true,
+            disabled: remove.isPending,
+            onClick: () =>
+              remove.mutate({
+                request: {
+                  removeClientFromMcpServerRequestBody: {
+                    clientId,
+                    mcpServerId: server.id,
+                  },
+                },
+              }),
+          },
+        ];
         return (
-          <DotRow
+          <TableRowContextMenu
             key={server.id}
-            icon={
-              <Icon name="network" className="text-muted-foreground h-5 w-5" />
-            }
-            href={href ?? undefined}
-            ariaLabel={href ? `View MCP server ${label}` : undefined}
+            actions={canManage ? actions : []}
           >
-            <td className="px-3 py-3">
-              <Type
-                variant="subheading"
-                as="div"
-                className={cn(
-                  "truncate text-sm",
-                  href &&
-                    "group-hover:text-primary transition-colors group-hover:underline",
-                )}
-              >
-                {label}
-              </Type>
-            </td>
-            <td className="px-3 py-3 text-right">
-              <RequireScope scope="org:admin" level="section">
-                <div
-                  className="relative z-20"
-                  onClick={(e) => e.stopPropagation()}
+            <DotRow
+              icon={
+                <Icon
+                  name="network"
+                  className="text-muted-foreground h-5 w-5"
+                />
+              }
+              href={href ?? undefined}
+              ariaLabel={href ? `View MCP server ${label}` : undefined}
+            >
+              <td className="px-3 py-3">
+                <Text
+                  variant="subheading"
+                  as="div"
+                  className={cn(
+                    "truncate text-sm",
+                    href &&
+                      "group-hover:text-primary transition-colors group-hover:underline",
+                  )}
                 >
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="tertiary" size="sm">
-                        <Button.LeftIcon>
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button.LeftIcon>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        disabled={remove.isPending}
-                        onClick={() =>
-                          remove.mutate({
-                            request: {
-                              removeClientFromMcpServerRequestBody: {
-                                clientId,
-                                mcpServerId: server.id,
-                              },
-                            },
-                          })
-                        }
-                      >
-                        Remove from server
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </RequireScope>
-            </td>
-          </DotRow>
+                  {label}
+                </Text>
+              </td>
+              <td className="px-3 py-3 text-right">
+                <RequireScope scope="org:admin" level="section">
+                  <div
+                    className="relative z-20"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="tertiary" size="sm">
+                          <Button.LeftIcon>
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button.LeftIcon>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {actions.map((action, index) => (
+                          <DropdownMenuItem
+                            key={index}
+                            disabled={action.disabled}
+                            onClick={() => action.onClick()}
+                          >
+                            {action.label}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </RequireScope>
+              </td>
+            </DotRow>
+          </TableRowContextMenu>
         );
       })}
     </DotTable>

@@ -6,7 +6,6 @@ This document consolidates the project's coding conventions and review rules so 
 
 - `server/` — Go backend (Goa HTTP-RPC API, Temporal workflows)
 - `client/dashboard/` — React frontend (TypeScript, Tailwind, Moonshine design system)
-- `elements/` — React chat interface for Gram MCP servers
 - `functions/` — Serverless function runner
 - `cli/` — CLI for Gram
 - `server/database/schema.sql` — DDL-only schema definition
@@ -160,7 +159,7 @@ Instead: add nullable columns, deprecate by making nullable, use expand-contract
 
 ---
 
-## React Frontend (client/dashboard/, elements/)
+## React Frontend (client/dashboard/)
 
 ### General
 
@@ -191,7 +190,7 @@ Instead: add nullable columns, deprecate by making nullable, use expand-contract
 
 ### Styling
 
-- ALWAYS use Moonshine design system utilities from `@speakeasy-api/moonshine`.
+- ALWAYS use the design system components in `@/components/ui` and their token-based utilities.
 - NEVER use hardcoded Tailwind colors like `bg-neutral-100`, `border-gray-200`, `text-gray-500`.
 
 ### RBAC in the Dashboard

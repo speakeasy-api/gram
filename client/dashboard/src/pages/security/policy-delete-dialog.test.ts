@@ -25,6 +25,7 @@ function policy(overrides: Partial<RiskPolicy>): RiskPolicy {
     pendingMessages: 0,
     policyType: "standard",
     projectId: "project-1",
+    score: 5,
     sources: [],
     totalMessages: 0,
     updatedAt: new Date("2026-01-01T00:00:00Z"),

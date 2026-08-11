@@ -1,5 +1,29 @@
 import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { extendTailwindMerge } from "tailwind-merge";
+
+// The design system ships semantic font-size utilities (`text-body-md`,
+// `text-heading-lg`, …) that tailwind-merge does not know about, so without
+// this extension it treats them as unrelated to `text-sm` and friends and
+// keeps both when they conflict.
+const twMerge = extendTailwindMerge({
+  extend: {
+    classGroups: {
+      "font-size": [
+        {
+          text: [
+            (value: string) =>
+              ["heading", "body", "codeline", "display"].some((element) =>
+                value.includes(element),
+              ) &&
+              ["xs", "sm", "md", "lg", "xl", "2xl"].some((element) =>
+                value.includes(element),
+              ),
+          ],
+        },
+      ],
+    },
+  },
+});
 
 export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));
@@ -12,6 +36,31 @@ export function cn(...inputs: ClassValue[]): string {
 // displays, anything operator-facing.
 export function getServerURL(): string {
   return __GRAM_SERVER_URL__ ?? window.location.origin;
+}
+
+// Base URL for the dashboard's SDK calls. In dev the dashboard and the server
+// listen on different ports (and worktrees remap both), so every SDK call is
+// cross-origin — and because the requests carry custom headers (gram-project,
+// gram-session, …) each one pays a CORS preflight that the server never lets
+// the browser cache. Vite proxies /rpc (and /chat, /mcp, …) to the server, so
+// pointing the SDK at the dashboard's own origin in dev makes the calls
+// same-origin and the preflights disappear. In prod the dashboard is served
+// from the server's origin, so getServerURL() is already same-origin.
+export function getApiBaseURL(): string {
+  return import.meta.env.DEV ? window.location.origin : getServerURL();
+}
+
+// tunnel.speakeasy.com in prod, tunnel-pr-N.<env> in previews (single label
+// keeps the wildcard cert valid), tunnel.<host> otherwise.
+export function tunnelGatewayURL(): string {
+  const server = new URL(getServerURL());
+  const host =
+    server.host === "app.getgram.ai"
+      ? "tunnel.speakeasy.com"
+      : /^pr-\d+\./.test(server.host)
+        ? `tunnel-${server.host}`
+        : `tunnel.${server.host}`;
+  return `${server.protocol === "http:" ? "ws" : "wss"}://${host}/connect`;
 }
 
 // __PLAYGROUND_PROXY_URL__ is the dashboard origin in dev (so browser-side MCP
@@ -48,32 +97,65 @@ export function mcpConnectionUrl(
 }
 
 // firstPartyConnectUrl derives the runtime first-party connect entry point
-// (`/x/mcp/<slug>/connect/first-party`) for a display MCP URL. It's always built
-// on the Gram server origin (getServerURL), never the display URL's origin: a
-// custom-domain endpoint's display URL is `https://<customer-domain>/mcp/<slug>`,
-// but the connect page is a Gram auth surface — the IDP callback, routes, and
-// any session live on the Gram origin, not the customer's MCP domain. Opened as
-// a top-level new tab; the IDP flow is state-based so no dev proxy is needed.
+// (`/<runtimePath>/<slug>/connect/first-party`) for a display MCP URL. It's
+// always built on the Gram server origin (getServerURL), never the display
+// URL's origin: a custom-domain endpoint's display URL is
+// `https://<customer-domain>/mcp/<slug>`, but the connect page is a Gram auth
+// surface — the IDP callback, routes, and any session live on the Gram origin,
+// not the customer's MCP domain. Opened as a top-level new tab; the IDP flow is
+// state-based so no dev proxy is needed.
+//
+// `runtimePath` selects the surface the connect route is mounted on: the
+// experimental remote-MCP surface (`x/mcp`, the default) or the toolset surface
+// (`mcp`, used by the playground). Both display URLs are `/mcp/<slug>`, so the
+// surface can't be inferred from the URL and must be passed explicitly.
 // Returns undefined when the slug can't be derived.
 export function firstPartyConnectUrl(
   displayUrl: string | undefined,
+  options?: { runtimePath?: "mcp" | "x/mcp" },
 ): string | undefined {
   if (!displayUrl) return undefined;
+  const runtimePath = options?.runtimePath ?? "x/mcp";
   try {
     const slug = new URL(displayUrl).pathname.split("/").filter(Boolean).pop();
     if (!slug) return undefined;
     const url = new URL(getServerURL());
-    url.pathname = `/x/mcp/${slug}/connect/first-party`;
+    url.pathname = `/${runtimePath}/${slug}/connect/first-party`;
     return url.toString();
   } catch {
     return undefined;
   }
 }
 
-export function buildLoginRedirectURL(redirectTo: string | null): string {
-  let href = `${getServerURL()}/rpc/auth.login`;
-  if (redirectTo) href += `?redirect=${encodeURIComponent(redirectTo)}`;
-  return href;
+export function buildLoginRedirectURL(
+  redirectTo: string | null,
+  orgName?: string,
+  email?: string,
+): string {
+  // The base is only consulted when getServerURL() is relative (empty in
+  // tests, per vitest.config.ts) — window.location.origin is always
+  // absolute, so `new URL` never throws here or in the browser.
+  const url = new URL(
+    `${getServerURL()}/rpc/auth.login`,
+    window.location.origin,
+  );
+  if (redirectTo) url.searchParams.set("redirect", redirectTo);
+  // Present only from the sign-up page. The server validates it, stashes it
+  // against the login nonce, and creates the org during the auth callback.
+  // As a query param on a top-level navigation it is visible in the address
+  // bar, browser history, and access logs — acceptable for a company name,
+  // which is not a secret, and it goes no further than this request.
+  if (orgName) url.searchParams.set("org_name", orgName);
+  // Also sign-up only. The server turns this into WorkOS's `login_hint`, which
+  // pre-fills the email field on the hosted AuthKit screen. Gram never writes
+  // it to Redis or the database.
+  //
+  // It does land in request logs, though: the logger records full URLs, so
+  // like `email` on agent.getPlugins this address reaches log sinks. Tracked
+  // in AGE-3125, which covers both endpoints — the fixes differ, since this
+  // hand-off is a top-level navigation and cannot use a header.
+  if (email) url.searchParams.set("email", email);
+  return url.toString();
 }
 
 /**
@@ -105,6 +187,49 @@ export function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
     throw new Error(message);
   }
+}
+
+export function assertNever(value: unknown): never {
+  throw new Error(`Unexpected value: ${String(value)}`);
+}
+
+/**
+ * Two-letter initials from a display name or email handle: first letter of
+ * the first and last word for a multi-word name ("Adam Bull" -> "AB"), or
+ * the first two characters of the email's local part / a single-word name
+ * otherwise ("adam@..." -> "AD").
+ */
+export function initialsOf(identifier: string): string {
+  const handle = identifier.includes("@")
+    ? (identifier.split("@")[0] ?? identifier)
+    : identifier;
+  const words = handle.trim().split(/\s+/).filter(Boolean);
+  if (words.length >= 2) {
+    return (
+      words[0]!.charAt(0) + words[words.length - 1]!.charAt(0)
+    ).toUpperCase();
+  }
+  return handle.trim().slice(0, 2).toUpperCase();
+}
+
+/** Sleep that respects AbortSignal for clean cancellation. */
+export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException("Aborted", "AbortError"));
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timeout);
+      signal?.removeEventListener("abort", onAbort);
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    const timeout = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 export function getCustomDomainCNAME(): string {

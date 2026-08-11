@@ -160,13 +160,16 @@ func TestCoordinatorWorkflow_AnalyzeFailureStillMarksAnalyzed(t *testing.T) {
 	env := suite.NewTestWorkflowEnvironment()
 
 	projectID := uuid.New()
+	messageID := uuid.New()
+	contentPartID := uuid.New()
 	markCallCount := 0
 
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, _ risk_analysis.FetchUnanalyzedArgs) (*risk_analysis.FetchUnanalyzedResult, error) {
 			return &risk_analysis.FetchUnanalyzedResult{
-				MessageIDs: []uuid.UUID{uuid.New()},
-				Policies:   []risk_analysis.PolicyForAnalysis{{ID: uuid.New(), OrganizationID: "org1", Version: 1}},
+				MessageIDs:     []uuid.UUID{messageID},
+				ContentPartIDs: []uuid.UUID{contentPartID},
+				Policies:       []risk_analysis.PolicyForAnalysis{{ID: uuid.New(), OrganizationID: "org1", Version: 1}},
 			}, nil
 		},
 		activity.RegisterOptions{Name: "FetchUnanalyzedMessages"},
@@ -183,6 +186,11 @@ func TestCoordinatorWorkflow_AnalyzeFailureStillMarksAnalyzed(t *testing.T) {
 		func(_ context.Context, args risk_analysis.MarkMessagesAnalyzedArgs) error {
 			markCallCount++
 			require.Equal(t, projectID, args.ProjectID)
+			// Content parts follow the chat message path exactly: marking is
+			// best effort, so a failed batch is still marked rather than being
+			// retried forever by the next sweep.
+			require.Equal(t, []uuid.UUID{messageID}, args.MessageIDs)
+			require.Equal(t, []uuid.UUID{contentPartID}, args.ContentPartIDs)
 			return nil
 		},
 		activity.RegisterOptions{Name: "MarkMessagesAnalyzed"},
@@ -194,7 +202,7 @@ func TestCoordinatorWorkflow_AnalyzeFailureStillMarksAnalyzed(t *testing.T) {
 
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError(), "best-effort: workflow must return nil even when batch activity fails")
-	require.Equal(t, 1, markCallCount, "messages must be marked analyzed even when batch fails")
+	require.Equal(t, 1, markCallCount, "mark activity still runs after a failed batch")
 }
 
 func TestChunkUUIDs(t *testing.T) {

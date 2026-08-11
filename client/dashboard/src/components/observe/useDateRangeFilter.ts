@@ -1,4 +1,4 @@
-import { getPresetRange, type DateRangePreset } from "@gram-ai/elements";
+import { getPresetRange, type DateRangePreset } from "@/elements";
 import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router";
 import {
@@ -7,18 +7,26 @@ import {
   safeBase64Encode,
 } from "./observeFilterUtils";
 
-const DEFAULT_PRESET: DateRangePreset = "7d";
+export const DEFAULT_DATE_RANGE_PRESET: DateRangePreset = "7d";
 
 export function useDateRangeFilter(
-  defaultPreset: DateRangePreset = DEFAULT_PRESET,
+  defaultPreset: DateRangePreset = DEFAULT_DATE_RANGE_PRESET,
 ): {
   dateRange: DateRangePreset;
   customRange: { from: Date; to: Date } | null;
   customRangeLabel: string | null;
   from: Date;
   to: Date;
-  setDateRangeParam: (preset: DateRangePreset) => void;
-  setCustomRangeParam: (from: Date, to: Date, label?: string) => void;
+  setDateRangeParam: (
+    preset: DateRangePreset,
+    extraUpdates?: Record<string, string | null>,
+  ) => void;
+  setCustomRangeParam: (
+    from: Date,
+    to: Date,
+    label?: string,
+    extraUpdates?: Record<string, string | null>,
+  ) => void;
   clearCustomRange: () => void;
 } {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -63,20 +71,36 @@ export function useDateRangeFilter(
     [setSearchParams],
   );
 
+  // The setters fold host-page params (extraUpdates) into the same
+  // setSearchParams call: React Router's functional updater starts from the
+  // render-time params, so a separate setter call in the same handler would
+  // be lost, not merged.
   const setDateRangeParam = useCallback(
-    (preset: DateRangePreset) => {
-      updateSearchParams({ range: preset, from: null, to: null, label: null });
+    (preset: DateRangePreset, extraUpdates?: Record<string, string | null>) => {
+      updateSearchParams({
+        range: preset,
+        from: null,
+        to: null,
+        label: null,
+        ...extraUpdates,
+      });
     },
     [updateSearchParams],
   );
 
   const setCustomRangeParam = useCallback(
-    (from: Date, to: Date, label?: string) => {
+    (
+      from: Date,
+      to: Date,
+      label?: string,
+      extraUpdates?: Record<string, string | null>,
+    ) => {
       updateSearchParams({
         range: null,
         from: from.toISOString(),
         to: to.toISOString(),
         label: label ? safeBase64Encode(label) : null,
+        ...extraUpdates,
       });
     },
     [updateSearchParams],

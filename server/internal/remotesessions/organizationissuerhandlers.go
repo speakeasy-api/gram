@@ -3,6 +3,7 @@ package remotesessions
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
@@ -56,6 +57,12 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orgissuersgen.Creat
 	}
 	if strings.TrimSpace(payload.Issuer) == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "issuer is required").LogError(ctx, logger)
+	}
+
+	// Operator-supplied and later rendered as a link, so it is validated here.
+	// An empty value stays legal: the create query stores it as NULL.
+	if v := conv.PtrValOr(payload.ClientSetupDocumentationURL, ""); v != "" && !urls.IsAbsoluteHTTP(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "client_setup_documentation_url must be an absolute http(s) URL").LogError(ctx, logger)
 	}
 
 	logoAssetID, err := conv.PtrToNullUUID(payload.LogoAssetID)
@@ -114,6 +121,7 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orgissuersgen.Creat
 		Issuer:                            payload.Issuer,
 		Name:                              conv.PtrToPGTextTrimmed(payload.Name),
 		LogoAssetID:                       logoAssetID,
+		ClientSetupDocumentationUrl:       conv.PtrToPGTextEmpty(payload.ClientSetupDocumentationURL),
 		AuthorizationEndpoint:             conv.PtrToPGText(payload.AuthorizationEndpoint),
 		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
 		RegistrationEndpoint:              conv.PtrToPGText(payload.RegistrationEndpoint),
@@ -178,6 +186,7 @@ func (s *Service) ListIssuers(ctx context.Context, payload *orgissuersgen.ListIs
 
 	rows, err := repo.New(s.db).ListOrganizationRemoteSessionIssuers(ctx, repo.ListOrganizationRemoteSessionIssuersParams{
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+		IncludeGlobal:  true,
 		Cursor:         cursor,
 		LimitValue:     limit,
 	})
@@ -225,9 +234,12 @@ func (s *Service) GetIssuer(ctx context.Context, payload *orgissuersgen.GetIssue
 		return nil, err
 	}
 
+	// Read-only, so platform issuers resolve here: the org listing surfaces them
+	// and the detail view has to be able to open one.
 	issuer, err := repo.New(s.db).GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
 		ID:             issuerID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+		IncludeGlobal:  true,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -260,9 +272,15 @@ func (s *Service) GetIssuerDeletePreflight(ctx context.Context, payload *orgissu
 
 	r := repo.New(s.db)
 
+	// Platform issuers are deliberately excluded. A tenant cannot delete one, so
+	// the preflight is unreachable for them by design — and both queries below
+	// are unscoped by organization, so resolving a platform issuer here would
+	// report other tenants' client counts and MCP server names to this caller.
+	// Keep IncludeGlobal false unless those queries are org-scoped first.
 	if _, err := r.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
 		ID:             issuerID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+		IncludeGlobal:  false,
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "remote session issuer not found").LogError(ctx, logger)
@@ -335,6 +353,13 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 		return nil, err
 	}
 
+	// Operator-supplied and later rendered as a link, so it is validated here.
+	// An empty value stays legal: the update query reads it as the explicit
+	// "clear to NULL" sentinel.
+	if v := conv.PtrValOr(payload.ClientSetupDocumentationURL, ""); v != "" && !urls.IsAbsoluteHTTP(v) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "client_setup_documentation_url must be an absolute http(s) URL").LogError(ctx, logger)
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
@@ -343,9 +368,14 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 
 	txRepo := repo.New(dbtx)
 
+	// A tenant must never edit a platform issuer: it is shared across every
+	// organization and curated by platform admins.
+	// UpdateOrganizationRemoteSessionIssuer below is org-scoped and would refuse
+	// anyway; opting the pre-read out keeps the refusal a clean 404.
 	existing, err := txRepo.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
 		ID:             issuerID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+		IncludeGlobal:  false,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -361,6 +391,7 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 		Issuer:                            conv.PtrToPGText(payload.Issuer),
 		Name:                              conv.PtrToPGText(payload.Name),
 		LogoAssetID:                       logoAssetID,
+		ClientSetupDocumentationUrl:       conv.PtrToPGText(payload.ClientSetupDocumentationURL),
 		AuthorizationEndpoint:             conv.PtrToPGText(payload.AuthorizationEndpoint),
 		TokenEndpoint:                     conv.PtrToPGText(payload.TokenEndpoint),
 		RegistrationEndpoint:              conv.PtrToPGText(payload.RegistrationEndpoint),
@@ -410,6 +441,158 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 	return afterView, nil
 }
 
+// FetchIssuerMetadata fetches an upstream issuer's RFC 8414 metadata document
+// and returns a draft suitable for CreateIssuer. Keyed by issuer URL, so no
+// record need exist and nothing is persisted.
+//
+// The organization-scoped counterpart of
+// remoteSessionIssuers.fetchMetadata. Creating an organization-level issuer
+// through the project-scoped one meant authorizing against whichever project
+// happened to be active in the operator's session, for a resource that has no
+// project at all.
+func (s *Service) FetchIssuerMetadata(ctx context.Context, payload *orgissuersgen.FetchIssuerMetadataPayload) (*types.RemoteSessionIssuerDraft, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+
+	// Unlike the project tier, which leaves its stateless fetch ungated because
+	// there is no project resource to gate, this one is gated: every other
+	// method on this service requires org:admin, and the surface it feeds — the
+	// org-admin create sheet — is behind that scope already. Gating costs
+	// nothing here and keeps the service's authorization uniform.
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	issuerURL := strings.TrimSpace(payload.Issuer)
+	if issuerURL == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "issuer is required").LogError(ctx, logger)
+	}
+
+	if !urls.IsAbsoluteHTTP(issuerURL) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid issuer url").LogError(ctx, logger)
+	}
+
+	doc, warnings, err := discoverIssuerMetadata(ctx, s.policy, issuerURL)
+	if err != nil {
+		return nil, mapDiscoveryError(ctx, logger, err, oops.CodeBadRequest)
+	}
+
+	return buildIssuerDraft(doc, issuerURL, warnings), nil
+}
+
+// RefreshIssuerMetadata re-reads an existing issuer's RFC 8414 metadata
+// document and persists the discovered values, returning the updated issuer
+// alongside any warnings.
+//
+// One endpoint serves both tables on the Remote Identity Providers page:
+// GetOrganizationRemoteSessionIssuerByID matches organizational and
+// project-specific rows alike, and org:admin covers both.
+func (s *Service) RefreshIssuerMetadata(ctx context.Context, payload *orgissuersgen.RefreshIssuerMetadataPayload) (*types.RemoteSessionIssuerRefresh, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+
+	issuerID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid issuer id").LogError(ctx, logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	// Read outside the transaction: discovery below is an upstream HTTP call
+	// under a ten-second budget and must not hold a pooled connection. The
+	// update re-asserts this row's identity, so a concurrent move or issuer
+	// rename aborts the write rather than letting the gap be exploited.
+	//
+	// IncludeGlobal is false because this persists discovered metadata: a tenant
+	// must never rewrite a platform issuer's endpoints. The row-locked re-read
+	// below is org-scoped and would refuse anyway; opting the pre-read out keeps
+	// the refusal a clean 404.
+	existing, err := repo.New(s.db).GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
+		ID:             issuerID,
+		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+		IncludeGlobal:  false,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "remote session issuer not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session issuer").LogError(ctx, logger)
+	}
+
+	params, warnings, err := refreshIssuerMetadata(ctx, s.policy, existing)
+	if err != nil {
+		return nil, mapDiscoveryError(ctx, logger, err, oops.CodeGatewayError)
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	txRepo := repo.New(dbtx)
+
+	// Re-read under a row lock rather than reusing the pre-discovery read: an
+	// updateIssuer that committed while discovery ran would otherwise land in
+	// this entry's before/after diff and be attributed to the refresh. The lock
+	// is taken after discovery finished, so it is never held across the upstream
+	// call.
+	locked, err := txRepo.GetOrganizationRemoteSessionIssuerByIDForUpdate(ctx, repo.GetOrganizationRemoteSessionIssuerByIDForUpdateParams{
+		ID:             issuerID,
+		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeConflict, err, "%s", refreshConflictMessage).LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "lock organization admin remote session issuer").LogError(ctx, logger)
+	}
+
+	beforeView := mv.BuildRemoteSessionIssuerView(locked)
+
+	updated, err := txRepo.UpdateRemoteSessionIssuerDiscoveredMetadata(ctx, params)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeConflict, err, "%s", refreshConflictMessage).LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "update organization admin remote session issuer discovered metadata").LogError(ctx, logger)
+	}
+
+	afterView := mv.BuildRemoteSessionIssuerView(updated)
+
+	if err := s.auditLogger.LogRemoteSessionIssuerUpdate(ctx, dbtx, audit.LogRemoteSessionIssuerUpdateEvent{
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              orgProjectID(updated.ProjectID),
+		Actor:                  urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName:       authCtx.Email,
+		ActorSlug:              nil,
+		RemoteSessionIssuerURN: urn.NewRemoteSessionIssuer(updated.ID),
+		Slug:                   updated.Slug,
+		IssuerURL:              updated.Issuer,
+		Name:                   conv.FromPGText[string](updated.Name),
+		SnapshotBefore:         beforeView,
+		SnapshotAfter:          afterView,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log organization admin remote session issuer update").LogError(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	return &types.RemoteSessionIssuerRefresh{Issuer: afterView, DiscoveryWarnings: warnings}, nil
+}
+
 // DeleteIssuer soft-deletes any issuer in the caller's organization, blocked
 // when clients still reference it.
 func (s *Service) DeleteIssuer(ctx context.Context, payload *orgissuersgen.DeleteIssuerPayload) error {
@@ -437,12 +620,27 @@ func (s *Service) DeleteIssuer(ctx context.Context, payload *orgissuersgen.Delet
 
 	txRepo := repo.New(dbtx)
 
+	// Serialize the count-then-delete below against client creation: every
+	// client writer takes this advisory lock before binding a client to the
+	// issuer. Without it a create commits in the gap and strands a live client
+	// on a deleted issuer, because the soft delete only rewrites deleted_at and
+	// its FOR NO KEY UPDATE row lock does not conflict with the FOR KEY SHARE
+	// the client insert's foreign key takes. Taking the advisory lock before any
+	// row lock also matches the order the create paths use, so neither can
+	// deadlock against the other.
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock remote session issuer for client binding").LogError(ctx, logger)
+	}
+
 	// Establish org ownership of the issuer before counting clients or deleting,
 	// so a cross-org id returns NotFound rather than probing client counts or
-	// silently succeeding against the org-scoped delete below.
+	// silently succeeding against the org-scoped delete below. Platform issuers
+	// are excluded for the same reason: a tenant must never delete one, and
+	// CountRemoteSessionClientsByIssuerID below is unscoped by organization.
 	if _, err := txRepo.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
 		ID:             issuerID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+		IncludeGlobal:  false,
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeNotFound, err, "remote session issuer not found").LogError(ctx, logger)
@@ -538,9 +736,13 @@ func (s *Service) MoveIssuer(ctx context.Context, payload *orgissuersgen.MoveIss
 
 	txRepo := repo.New(dbtx)
 
+	// A platform issuer has no owning organization to re-scope within, and a
+	// tenant must never move one. SetOrganizationRemoteSessionIssuerProject is
+	// org-scoped and would refuse anyway; opting out keeps it a clean 404.
 	existing, err := txRepo.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
 		ID:             issuerID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+		IncludeGlobal:  false,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -589,6 +791,221 @@ func (s *Service) MoveIssuer(ctx context.Context, payload *orgissuersgen.MoveIss
 	}
 
 	return afterView, nil
+}
+
+// loadMigrationPair resolves the source and target issuers, both scoped to the
+// caller's organization, and validates the scope ladder between them. It is the
+// shared entry check for getIssuerMigratePreflight and migrateIssuer so the
+// dialog and the mutation agree on which pairs are addressable at all.
+//
+// forUpdate row-locks both issuers for the rest of the transaction. The mutation
+// passes true so that the scope and endpoint metadata it validates cannot be
+// rewritten by a concurrent moveIssuer or updateIssuer before it acts on them;
+// the read-only preflight passes false. Callers that lock must already hold the
+// advisory locks from lockIssuersForMigration, which order the row locks and so
+// keep two concurrent migrations of the same pair from deadlocking.
+func loadMigrationPair(ctx context.Context, r *repo.Queries, logger *slog.Logger, organizationID, sourceIDRaw, targetIDRaw string, forUpdate bool) (source, target repo.RemoteSessionIssuer, err error) {
+	sourceID, err := uuid.Parse(sourceIDRaw)
+	if err != nil {
+		return source, target, oops.E(oops.CodeBadRequest, err, "invalid source issuer id").LogError(ctx, logger)
+	}
+	targetID, err := uuid.Parse(targetIDRaw)
+	if err != nil {
+		return source, target, oops.E(oops.CodeBadRequest, err, "invalid target issuer id").LogError(ctx, logger)
+	}
+
+	if sourceID == targetID {
+		return source, target, oops.E(oops.CodeBadRequest, nil, "source and target issuer must differ").LogError(ctx, logger)
+	}
+
+	// Both arms stay org-scoped, permanently. Migrating onto a platform issuer is
+	// a platform-admin operation with its own loader, loadPlatformMigrationPair,
+	// which reads the source from the tenant partition and the target from the
+	// global one. Widening either arm here would not reproduce that: there is
+	// deliberately no global-inclusive ForUpdate variant, so a widened non-locking
+	// arm alone would let a migration validate against a scope it never locked.
+	loadIssuer := func(id uuid.UUID) (repo.RemoteSessionIssuer, error) {
+		if forUpdate {
+			return r.GetOrganizationRemoteSessionIssuerByIDForUpdate(ctx, repo.GetOrganizationRemoteSessionIssuerByIDForUpdateParams{
+				ID:             id,
+				OrganizationID: conv.ToPGText(organizationID),
+			})
+		}
+		return r.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
+			ID:             id,
+			OrganizationID: conv.ToPGText(organizationID),
+			IncludeGlobal:  false,
+		})
+	}
+
+	source, err = loadIssuer(sourceID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return source, target, oops.E(oops.CodeNotFound, err, "source remote session issuer not found").LogError(ctx, logger)
+		}
+		return source, target, oops.E(oops.CodeUnexpected, err, "get source remote session issuer").LogError(ctx, logger)
+	}
+
+	target, err = loadIssuer(targetID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return source, target, oops.E(oops.CodeNotFound, err, "target remote session issuer not found").LogError(ctx, logger)
+		}
+		return source, target, oops.E(oops.CodeUnexpected, err, "get target remote session issuer").LogError(ctx, logger)
+	}
+
+	var scopeErr migrationScopeError
+	if err := validateMigrationScope(source, target); errors.As(err, &scopeErr) {
+		return source, target, oops.E(oops.CodeBadRequest, err, "%s", scopeErr.reason).LogError(ctx, logger)
+	} else if err != nil {
+		return source, target, oops.E(oops.CodeUnexpected, err, "validate migration scope").LogError(ctx, logger)
+	}
+
+	return source, target, nil
+}
+
+// GetIssuerMigratePreflight reports what consolidating the source issuer onto
+// the target would do, and every blocker that would make it fail, so the
+// confirmation dialog is authoritative before the mutation runs.
+func (s *Service) GetIssuerMigratePreflight(ctx context.Context, payload *orgissuersgen.GetIssuerMigratePreflightPayload) (*orgissuersgen.OrganizationIssuerMigratePreflight, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	r := repo.New(s.db)
+
+	source, target, err := loadMigrationPair(ctx, r, logger, authCtx.ActiveOrganizationID, payload.SourceID, payload.TargetID, false)
+	if err != nil {
+		return nil, err
+	}
+
+	preflight, err := buildMigratePreflight(ctx, r, source, target)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "build remote session issuer migrate preflight").LogError(ctx, logger)
+	}
+
+	return &orgissuersgen.OrganizationIssuerMigratePreflight{
+		ClientCount:               int(preflight.clientCount),
+		McpServerNames:            preflight.mcpServerNames,
+		EndpointMismatches:        preflight.endpointMismatches,
+		ConflictingMcpServerNames: preflight.conflictingMcpServerNames,
+		Warnings:                  preflight.warnings,
+		CanMigrate:                preflight.canMigrate(),
+	}, nil
+}
+
+// MigrateIssuer consolidates the source issuer onto the target: every active
+// client is re-pointed onto the target and the now-empty source is soft-deleted,
+// in one transaction. Remote sessions reference the client rather than the
+// issuer, so they survive the re-point untouched and no user re-authenticates.
+//
+// Re-pointing strictly precedes the soft-delete because the runtime resolution
+// query filters `i.deleted IS FALSE`: a client left on a tombstoned issuer stops
+// resolving. Holding both in one transaction removes the window entirely.
+func (s *Service) MigrateIssuer(ctx context.Context, payload *orgissuersgen.MigrateIssuerPayload) (*orgissuersgen.MigrateOrganizationRemoteSessionIssuerResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
+	}
+	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+
+	txRepo := repo.New(dbtx)
+
+	// Establish that both issuers exist in the caller's organization before
+	// taking any lock, so a caller can never advisory-lock an issuer id that
+	// belongs to another organization.
+	source, target, err := loadMigrationPair(ctx, txRepo, logger, authCtx.ActiveOrganizationID, payload.SourceID, payload.TargetID, false)
+	if err != nil {
+		return nil, err
+	}
+
+	// Serialize against a concurrent client attach on either issuer before
+	// reading the conflict set, so the set we act on cannot go stale under us.
+	// Nothing in the schema enforces the one-client-per-(user_session_issuer,
+	// remote_session_issuer) invariant, so this advisory lock is the only thing
+	// standing between a racing attach and a duplicate binding.
+	if err := lockIssuersForMigration(ctx, txRepo, source.ID, target.ID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock issuers for migration").LogError(ctx, logger)
+	}
+
+	// Re-read both issuers under a row lock and re-validate the scope ladder.
+	// The advisory lock above only serializes writers that take it, and neither
+	// moveIssuer (which rewrites project_id) nor updateIssuer (which rewrites the
+	// endpoints) does. Without this the scope and parity guards below would run
+	// against rows a concurrent transaction could still change before we commit.
+	source, target, err = loadMigrationPair(ctx, txRepo, logger, authCtx.ActiveOrganizationID, payload.SourceID, payload.TargetID, true)
+	if err != nil {
+		return nil, err
+	}
+
+	clientsMigrated, err := runIssuerMigration(ctx, txRepo, logger, source, target)
+	if err != nil {
+		return nil, err
+	}
+
+	// The source now has no active clients, so the delete guard that
+	// DeleteIssuer applies is satisfied by construction.
+	deleted, err := txRepo.DeleteOrganizationRemoteSessionIssuer(ctx, repo.DeleteOrganizationRemoteSessionIssuerParams{
+		ID:             source.ID,
+		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "soft-delete migrated remote session issuer").LogError(ctx, logger)
+	}
+
+	targetView := mv.BuildRemoteSessionIssuerView(target)
+
+	if err := s.auditLogger.LogRemoteSessionIssuerMigrate(ctx, dbtx, audit.LogRemoteSessionIssuerMigrateEvent{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      orgProjectID(deleted.ProjectID),
+
+		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		ActorDisplayName: authCtx.Email,
+		ActorSlug:        nil,
+
+		SourceRemoteSessionIssuerURN: urn.NewRemoteSessionIssuer(deleted.ID),
+		SourceSlug:                   deleted.Slug,
+		SourceIssuerURL:              deleted.Issuer,
+		SourceName:                   conv.FromPGText[string](deleted.Name),
+
+		TargetRemoteSessionIssuerURN: urn.NewRemoteSessionIssuer(target.ID),
+		TargetSlug:                   target.Slug,
+
+		ClientsMigrated: clientsMigrated,
+
+		SnapshotBefore: mv.BuildRemoteSessionIssuerView(source),
+		SnapshotAfter:  targetView,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "log remote session issuer migration").LogError(ctx, logger)
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
+	}
+
+	return &orgissuersgen.MigrateOrganizationRemoteSessionIssuerResult{
+		Issuer:          targetView,
+		ClientsMigrated: int(clientsMigrated),
+		SourceDeleted:   true,
+	}, nil
 }
 
 // orgProjectID flattens a nullable project id for audit events; org-level

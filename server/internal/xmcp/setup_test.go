@@ -21,7 +21,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
@@ -35,6 +34,7 @@ import (
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
@@ -43,9 +43,9 @@ import (
 	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -99,6 +99,9 @@ type testInstance struct {
 	shadowMCPClient *shadowmcp.Client
 	cacheAdapter    cache.Cache
 	serverURL       *url.URL
+	// features is the injectable flag provider wired into the wrapped mcp
+	// service; tests enable flag-gated behavior with SetFlag.
+	features *feature.InMemory
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -121,7 +124,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-xmcp-test"), billingClient)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
 	serverURL, err := url.Parse("http://0.0.0.0")
 	require.NoError(t, err)
@@ -129,34 +132,39 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	enc := testenv.NewEncryptionClient(t)
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	mcpMetadataRepo := mcpmetadatarepo.New(conn)
 	env := environments.NewEnvironmentEntries(logger, conn, enc, mcpMetadataRepo)
 	posthogClient := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
-	oauthService := oauth.NewService(logger, tracerProvider, meterProvider, conn, serverURL, cacheAdapter, enc, env, sessionManager, nil, guardianPolicy)
 	devProvisioner := openrouter.NewDevelopment("test-openrouter-key")
-	chatClient := openrouter.NewUnifiedClient(logger, guardianPolicy, devProvisioner, nil, nil, nil, nil)
+	chatClient := openrouter.NewUnifiedClient(logger, guardianPolicy, devProvisioner, &openrouter.PlatformKeyResolver{Provisioner: devProvisioner}, nil, nil, nil, nil)
 	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 	logsEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	toolIOLogsEnabled := func(_ context.Context, _ string) (bool, error) { return false, nil }
 	sessionCaptureEnabled := func(_ context.Context, _ string) (bool, error) { return true, nil }
 
-	telemLogger := telemetry.NewLogger(ctx, logger, chConn, logsEnabled, toolIOLogsEnabled, telemetry.NewUserInfoResolver(logger, conn, cacheAdapter))
+	telemLogger := telemetry.NewLogger(ctx, logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, logsEnabled, toolIOLogsEnabled, telemetry.NewUserInfoResolver(logger, conn, cacheAdapter), telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 	telemService := telemetry.NewService(logger, tracerProvider, conn, chConn, sessionManager, chatSessionsManager, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine)
 
 	temporalEnv, _ := infra.NewTemporalEnv(t)
 
 	assistantTokens := assistanttokens.New("test-jwt-secret", conn, authzEngine)
-	accessStore := accesscontrol.NewRedisStore(cacheAdapter, accesscontrol.AlphaTTL)
-	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore)
+	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, nil)
 	auditLogger := audit.NewLogger()
 	userSessionSigner := usersessions.NewSigner("test-jwt-secret")
 	remoteChallengeMgr := remotesessions.NewChallengeManager(logger, conn, enc, guardianPolicy, cacheAdapter, serverURL)
-	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, guardianPolicy, authzEngine, shadowMCPClient, posthogClient, telemLogger, billingClient, billingClient)
-	mcpService := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthogClient, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingClient, billingClient, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, nil, nil, userSessionSigner, remoteChallengeMgr, remoteProxyManager, route.NewRouteTable(), "", nil)
+	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, guardianPolicy, authzEngine, posthogClient, telemLogger, billingClient, billingClient, mcpservers.NewToolDispositionCache(logger, conn, cacheAdapter))
+	features := &feature.InMemory{}
+	mcpService := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthogClient, features, serverURL, serverURL, enc, cacheAdapter, guardianPolicy, funcs, billingClient, billingClient, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, nil, nil, userSessionSigner, remoteChallengeMgr, remoteProxyManager, route.NewRouteTable(), "", nil, nil, mcp.TunnelPublicConfig{
+		SessionTTL:         0,
+		LiveSessionCap:     0,
+		InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+		RequestRate:        ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
+		MaxRequestLifetime: 0,
+	})
 
 	svc := xmcp.NewService(logger, conn, enc, mcpService)
 
@@ -172,6 +180,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		shadowMCPClient: shadowMCPClient,
 		cacheAdapter:    cacheAdapter,
 		serverURL:       serverURL,
+		features:        features,
 	}
 }
 
@@ -255,15 +264,17 @@ func seedRemoteMCPEndpoint(t *testing.T, ctx context.Context, ti *testInstance, 
 	remoteServer = seedRemoteMCPServer(t, ctx, ti, projectID, upstreamURL, headers...)
 	mcpServerID, err := uuid.NewV7()
 	require.NoError(t, err)
+	issuerID := seedUserSessionIssuer(t, ctx, ti, projectID)
 	mcpServer, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID:                mcpServerID,
-		ProjectID:         projectID,
-		Name:              conv.ToPGText("test mcp server"),
-		Slug:              conv.ToPGText("test-mcp-server-" + mcpServerID.String()[len(mcpServerID.String())-4:]),
-		EnvironmentID:     uuid.NullUUID{},
-		RemoteMcpServerID: uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
-		ToolsetID:         uuid.NullUUID{},
-		Visibility:        visibility,
+		ID:                  mcpServerID,
+		ProjectID:           projectID,
+		Name:                conv.ToPGText("test mcp server"),
+		Slug:                conv.ToPGText("test-mcp-server-" + mcpServerID.String()[len(mcpServerID.String())-4:]),
+		EnvironmentID:       uuid.NullUUID{},
+		RemoteMcpServerID:   uuid.NullUUID{UUID: remoteServer.ID, Valid: true},
+		ToolsetID:           uuid.NullUUID{},
+		Visibility:          visibility,
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
 	})
 	require.NoError(t, err)
 

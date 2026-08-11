@@ -5,6 +5,7 @@ import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { InfoField, InfoSection, InfoText } from "../../detailFields";
+import { isAbsoluteHttpUrl } from "../../issuerDocumentationLinks";
 
 // ProjectValue renders the owning project for an issuer: "—" for an
 // organizational issuer (no project_id), otherwise the project's slug linked to
@@ -39,6 +40,33 @@ function ProjectValue({ issuer }: { issuer: RemoteSessionIssuer }) {
   }
 
   return <InfoText>—</InfoText>;
+}
+
+// DocumentationUrlValue links out to one of the issuer's documentation URLs.
+// A value that is not an absolute http(s) URL is shown as plain text rather
+// than an href, so an operator can still see (and fix) it without the dashboard
+// linking somewhere unsafe.
+function DocumentationUrlValue({ value }: { value: string | undefined }) {
+  const url = value?.trim();
+
+  if (!url) {
+    return <InfoText>—</InfoText>;
+  }
+
+  if (!isAbsoluteHttpUrl(url)) {
+    return <InfoText mono>{url}</InfoText>;
+  }
+
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="hover:text-primary text-sm break-all hover:underline"
+    >
+      {url}
+    </a>
+  );
 }
 
 export function OverviewTab({
@@ -101,6 +129,12 @@ export function OverviewTab({
         </InfoField>
         <InfoField label="Client ID Metadata Document">
           {supported(issuer.clientIdMetadataDocumentSupported)}
+        </InfoField>
+        <InfoField label="Client Setup Documentation">
+          <DocumentationUrlValue value={issuer.clientSetupDocumentationUrl} />
+        </InfoField>
+        <InfoField label="Service Documentation">
+          <DocumentationUrlValue value={issuer.serviceDocumentation} />
         </InfoField>
       </InfoSection>
     </div>

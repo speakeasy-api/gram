@@ -2308,8 +2308,12 @@ type GetToolsetEnvironmentGatewayErrorResponseBody struct {
 type EnvironmentEntryResponseBody struct {
 	// The name of the environment variable
 	Name string `form:"name" json:"name" xml:"name"`
-	// Redacted values of the environment variable
+	// The value of the environment variable. Cleartext when is_secret is false,
+	// redacted otherwise.
 	Value string `form:"value" json:"value" xml:"value"`
+	// Whether the value is a secret. Secret values are redacted in reads;
+	// non-secret values are returned in cleartext.
+	IsSecret bool `form:"is_secret" json:"is_secret" xml:"is_secret"`
 	// The creation date of the environment entry
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the environment entry was last updated
@@ -2343,8 +2347,15 @@ type EnvironmentResponseBody struct {
 type EnvironmentEntryInputRequestBody struct {
 	// The name of the environment variable
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// The value of the environment variable
+	// The value of the environment variable. Omit on an existing secret entry to
+	// preserve its stored value. Required when creating an entry or when changing
+	// is_secret from true to false.
 	Value *string `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
+	// Whether the value is a secret. Secret values are encrypted at rest and
+	// redacted in reads; non-secret values are readable after save. When omitted,
+	// new entries default to secret and existing entries keep their current
+	// secrecy.
+	IsSecret *bool `form:"is_secret,omitempty" json:"is_secret,omitempty" xml:"is_secret,omitempty"`
 }
 
 // NewCreateEnvironmentResponseBody builds the HTTP response body from the
@@ -4409,9 +4420,6 @@ func ValidateSetToolsetEnvironmentLinkRequestBody(body *SetToolsetEnvironmentLin
 func ValidateEnvironmentEntryInputRequestBody(body *EnvironmentEntryInputRequestBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.Value == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("value", "body"))
 	}
 	return
 }

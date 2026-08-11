@@ -7,6 +7,7 @@ import type {
   ManifestResource,
   ManifestTool,
   ManifestVariables,
+  MCPClientInfo,
 } from "./framework.ts";
 import {
   McpError,
@@ -186,6 +187,27 @@ async function collectResources(
 }
 
 /**
+ * Coerce an untrusted, self-reported client identity into an `MCPClientInfo`.
+ * Accepts the shape used by both the MCP `initialize` handshake and the
+ * `io.modelcontextprotocol/clientInfo` request-`_meta` hint. Returns `undefined`
+ * unless a non-empty `name` string is present; `version` defaults to `""` when
+ * absent so a client that reports only a name is still usable.
+ */
+function normalizeClientInfo(value: unknown): MCPClientInfo | undefined {
+  if (value == null || typeof value !== "object") {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  const name = record["name"];
+  if (typeof name !== "string" || name === "") {
+    return undefined;
+  }
+  const version =
+    typeof record["version"] === "string" ? record["version"] : "";
+  return { name, version };
+}
+
+/**
  * Creates a low-level MCP server from a Gram instance.
  */
 export function fromGram(
@@ -304,10 +326,33 @@ export function fromGram(
     async (req, extra): Promise<CallToolResult> => {
       const { name, arguments: args } = req.params;
 
+      // Identify the calling MCP client so tools can adapt to known callers via
+      // `ctx.clientInfo`. Prefer the per-call hint carried in request `_meta`
+      // (`io.modelcontextprotocol/clientInfo`); fall back to the identity
+      // captured during the MCP `initialize` handshake. Self-reported metadata:
+      // safe for observability/convenience, never for authorization.
+      const clientInfo =
+        normalizeClientInfo(
+          req.params._meta?.["io.modelcontextprotocol/clientInfo"],
+        ) ?? normalizeClientInfo(server.getClientVersion());
+
+      // The OAuth client id rides the same untrusted `_meta` block. Nothing
+      // here verifies it — this server is reachable directly, so the value is
+      // whatever the caller sent. It is carried for attribution only, and
+      // `ctx.oauthClientId` documents that it must never gate access.
+      const rawOAuthClientId = req.params._meta?.["gram.ai/oauth-client-id"];
+      const oauthClientId =
+        typeof rawOAuthClientId === "string" && rawOAuthClientId !== ""
+          ? rawOAuthClientId
+          : undefined;
+
       let resp: Response;
       try {
         resp = (await g.handleToolCall({ name, input: args } as any, {
           signal: extra.signal,
+          clientInfo,
+          oauthClientId,
+          meta: req.params._meta,
         })) as Response;
       } catch (err) {
         // `ctx.fail()` and input validation failures reject with a `Response`

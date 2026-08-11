@@ -74,24 +74,54 @@ var CreateAwsIamCredentialForm = Type("CreateAwsIamCredentialForm", func() {
 	Required("name")
 })
 
-// CreateGcpIamCredentialForm is the input for creating a GCP IAM credential.
-// The authentication approach is inferred from which fields are provided:
-//   - wif_* triple set: Workload Identity Federation (impersonate_service_account
-//     is an optional hop).
-//   - impersonate_service_account only: direct impersonation.
-//   - none: Gram's ambient attached identity.
+// CreateGcpIamCredentialForm is the input for creating an organization GCP IAM
+// credential. Impersonation is the only approach the organization tier accepts:
+//
+//   - Ambient (Gram's own attached identity) is rejected because it is not the
+//     customer's identity at all. Resolving it proves nothing about the
+//     customer's configuration, so a credential built on it can never be
+//     meaningfully verified.
+//   - Workload Identity Federation is rejected because the resolver reports it
+//     as unsupported, so such a credential could be stored but never verified.
+//
+// Both remain available on the platform tier, which is Gram's own infrastructure
+// rather than a customer's — see CreatePlatformGcpIamCredentialForm.
 var CreateGcpIamCredentialForm = Type("CreateGcpIamCredentialForm", func() {
 	Attribute("name", String, "A human-readable name for the credential.")
-	Attribute("impersonate_service_account", String, "The service account Gram impersonates. Set alone for direct impersonation, or as the hop alongside the wif_* fields.")
-	Attribute("wif_pool_id", String, "Workload Identity Federation pool ID. Set together with the other wif_* fields.")
-	Attribute("wif_provider_id", String, "Workload Identity Federation provider ID. Set together with the other wif_* fields.")
-	Attribute("wif_project_number", String, "GCP project number backing the WIF pool. Set together with the other wif_* fields.")
+	Attribute("impersonate_service_account", String, "The service account in your project that Gram impersonates. Grant Gram's own service account roles/iam.serviceAccountTokenCreator on it — see externalCredentials.getGcpSetupInfo.")
 
-	Required("name")
+	Required("name", "impersonate_service_account")
 })
 
 // ListExternalCredentialsResult wraps the generic, supertype-only list items.
 var ListExternalCredentialsResult = Type("ListExternalCredentialsResult", func() {
 	Attribute("credentials", ArrayOf(ExternalCredentialSummary), "The organization's external credentials.")
 	Required("credentials")
+})
+
+// VerifyCredentialResult is the outcome of a live probe that Gram can assume the
+// identity an organization credential names. It is ephemeral and never
+// persisted. Unlike the platform equivalent it carries no identity_source: the
+// organization tier is impersonation-only, so the source is never in question.
+var VerifyCredentialResult = Type("VerifyCredentialResult", func() {
+	Description("Result of a live probe that Gram can assume the identity the credential names.")
+
+	Attribute("verified", Boolean, "Whether Gram could assume the credential's identity.")
+	Attribute("principal", String, "The principal the credential resolves to — the impersonated service account.")
+	Attribute("detail", String, "Human-readable detail about the probe outcome, including the failure reason when it did not verify.")
+
+	Required("verified")
+})
+
+// GcpSetupInfo reports what a customer needs in order to let Gram impersonate a
+// service account in their own GCP project. The organization tier requires
+// impersonation, so this is a prerequisite of creating a credential at all and
+// has to be readable before one exists.
+var GcpSetupInfo = Type("GcpSetupInfo", func() {
+	Description("What the customer must grant in their own GCP project before Gram can impersonate a service account there.")
+
+	Attribute("service_account_email", String, "Gram's own service account. Grant it roles/iam.serviceAccountTokenCreator on the service account you want Gram to impersonate. Empty when the running environment cannot report one (local development backed by a user login rather than a service-account key).")
+	Attribute("required_role", String, "The IAM role to grant Gram's service account on the target service account.")
+
+	Required("required_role")
 })

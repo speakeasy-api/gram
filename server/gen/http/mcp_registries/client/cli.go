@@ -178,3 +178,46 @@ func BuildGetServerDetailsPayload(mcpRegistriesGetServerDetailsRegistryID string
 
 	return v, nil
 }
+
+// BuildGetSetupDocsPayload builds the payload for the mcpRegistries
+// getSetupDocs endpoint from CLI flags.
+func BuildGetSetupDocsPayload(mcpRegistriesGetSetupDocsServerURL string, mcpRegistriesGetSetupDocsRegistrySpecifier string, mcpRegistriesGetSetupDocsSessionToken string, mcpRegistriesGetSetupDocsApikeyToken string, mcpRegistriesGetSetupDocsProjectSlugInput string) (*mcpregistries.GetSetupDocsPayload, error) {
+	var serverURL *string
+	{
+		if mcpRegistriesGetSetupDocsServerURL != "" {
+			serverURL = &mcpRegistriesGetSetupDocsServerURL
+		}
+	}
+	var registrySpecifier *string
+	{
+		if mcpRegistriesGetSetupDocsRegistrySpecifier != "" {
+			registrySpecifier = &mcpRegistriesGetSetupDocsRegistrySpecifier
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpRegistriesGetSetupDocsSessionToken != "" {
+			sessionToken = &mcpRegistriesGetSetupDocsSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpRegistriesGetSetupDocsApikeyToken != "" {
+			apikeyToken = &mcpRegistriesGetSetupDocsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpRegistriesGetSetupDocsProjectSlugInput != "" {
+			projectSlugInput = &mcpRegistriesGetSetupDocsProjectSlugInput
+		}
+	}
+	v := &mcpregistries.GetSetupDocsPayload{}
+	v.ServerURL = serverURL
+	v.RegistrySpecifier = registrySpecifier
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

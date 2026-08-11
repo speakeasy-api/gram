@@ -19,7 +19,7 @@ import (
 
 // BuildListChatsPayload builds the payload for the chat listChats endpoint
 // from CLI flags.
-func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUserID string, chatListChatsSource string, chatListChatsAssistantID string, chatListChatsSourceKind string, chatListChatsExcludeSourceKind string, chatListChatsHasRisk string, chatListChatsAccountType string, chatListChatsPinned string, chatListChatsMinRiskScore string, chatListChatsFrom string, chatListChatsTo string, chatListChatsLimit string, chatListChatsOffset string, chatListChatsSortBy string, chatListChatsSortOrder string, chatListChatsSessionToken string, chatListChatsProjectSlugInput string, chatListChatsChatSessionsToken string) (*chat.ListChatsPayload, error) {
+func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUserID string, chatListChatsUserID string, chatListChatsSource string, chatListChatsAssistantID string, chatListChatsSourceKind string, chatListChatsExcludeSourceKind string, chatListChatsHasRisk string, chatListChatsAccountType string, chatListChatsPinned string, chatListChatsMinRiskScore string, chatListChatsFrom string, chatListChatsTo string, chatListChatsLimit string, chatListChatsOffset string, chatListChatsSortBy string, chatListChatsSortOrder string, chatListChatsSessionToken string, chatListChatsProjectSlugInput string, chatListChatsChatSessionsToken string) (*chat.ListChatsPayload, error) {
 	var err error
 	var search *string
 	{
@@ -31,6 +31,12 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 	{
 		if chatListChatsExternalUserID != "" {
 			externalUserID = &chatListChatsExternalUserID
+		}
+	}
+	var userID *string
+	{
+		if chatListChatsUserID != "" {
+			userID = &chatListChatsUserID
 		}
 	}
 	var source *string
@@ -217,6 +223,7 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 	v := &chat.ListChatsPayload{}
 	v.Search = search
 	v.ExternalUserID = externalUserID
+	v.UserID = userID
 	v.Source = source
 	v.AssistantID = assistantID
 	v.SourceKind = sourceKind
@@ -238,9 +245,54 @@ func BuildListChatsPayload(chatListChatsSearch string, chatListChatsExternalUser
 	return v, nil
 }
 
+// BuildGetWorkUnitsTrendPayload builds the payload for the chat
+// getWorkUnitsTrend endpoint from CLI flags.
+func BuildGetWorkUnitsTrendPayload(chatGetWorkUnitsTrendFrom string, chatGetWorkUnitsTrendTo string, chatGetWorkUnitsTrendSessionToken string, chatGetWorkUnitsTrendProjectSlugInput string) (*chat.GetWorkUnitsTrendPayload, error) {
+	var err error
+	var from *string
+	{
+		if chatGetWorkUnitsTrendFrom != "" {
+			from = &chatGetWorkUnitsTrendFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if chatGetWorkUnitsTrendTo != "" {
+			to = &chatGetWorkUnitsTrendTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if chatGetWorkUnitsTrendSessionToken != "" {
+			sessionToken = &chatGetWorkUnitsTrendSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if chatGetWorkUnitsTrendProjectSlugInput != "" {
+			projectSlugInput = &chatGetWorkUnitsTrendProjectSlugInput
+		}
+	}
+	v := &chat.GetWorkUnitsTrendPayload{}
+	v.From = from
+	v.To = to
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildLoadChatPayload builds the payload for the chat loadChat endpoint from
 // CLI flags.
-func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, chatLoadChatLimit string, chatLoadChatBeforeSeq string, chatLoadChatAfterSeq string, chatLoadChatFromStart string, chatLoadChatRiskOnly string, chatLoadChatQuery string, chatLoadChatSessionToken string, chatLoadChatProjectSlugInput string, chatLoadChatChatSessionsToken string) (*chat.LoadChatPayload, error) {
+func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, chatLoadChatLimit string, chatLoadChatBeforeSeq string, chatLoadChatAfterSeq string, chatLoadChatFromStart string, chatLoadChatRiskOnly string, chatLoadChatQuery string, chatLoadChatSessionToken string, chatLoadChatProjectSlugInput string, chatLoadChatChatSessionsToken string, chatLoadChatApikeyToken string) (*chat.LoadChatPayload, error) {
 	var err error
 	var id string
 	{
@@ -367,6 +419,12 @@ func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, 
 			chatSessionsToken = &chatLoadChatChatSessionsToken
 		}
 	}
+	var apikeyToken *string
+	{
+		if chatLoadChatApikeyToken != "" {
+			apikeyToken = &chatLoadChatApikeyToken
+		}
+	}
 	v := &chat.LoadChatPayload{}
 	v.ID = id
 	v.Generation = generation
@@ -379,6 +437,7 @@ func BuildLoadChatPayload(chatLoadChatID string, chatLoadChatGeneration string, 
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken
+	v.ApikeyToken = apikeyToken
 
 	return v, nil
 }
@@ -499,6 +558,49 @@ func BuildSetPinnedPayload(chatSetPinnedBody string, chatSetPinnedSessionToken s
 	v := &chat.SetPinnedPayload{
 		ID:     body.ID,
 		Pinned: body.Pinned,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildSummarizePayload builds the payload for the chat summarize endpoint
+// from CLI flags.
+func BuildSummarizePayload(chatSummarizeBody string, chatSummarizeSessionToken string, chatSummarizeProjectSlugInput string) (*chat.SummarizePayload, error) {
+	var err error
+	var body SummarizeRequestBody
+	{
+		err = json.Unmarshal([]byte(chatSummarizeBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"regenerate\": false\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if chatSummarizeSessionToken != "" {
+			sessionToken = &chatSummarizeSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if chatSummarizeProjectSlugInput != "" {
+			projectSlugInput = &chatSummarizeProjectSlugInput
+		}
+	}
+	v := &chat.SummarizePayload{
+		ID:         body.ID,
+		Regenerate: body.Regenerate,
+	}
+	{
+		var zero bool
+		if v.Regenerate == zero {
+			v.Regenerate = false
+		}
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

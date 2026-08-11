@@ -20,8 +20,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	rsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -109,6 +109,12 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 		parsed := time.Duration(*payload.SessionDurationHours) * time.Hour
 		durPtr = &parsed
 	}
+	// Validated in app code: the column carries no CHECK constraint by
+	// convention, and the Goa Enum only guards the generated client. A
+	// direct API caller can still send anything.
+	if payload.ClientIDMetadataAdmissionMode != nil && !admission.IsValidMode(*payload.ClientIDMetadataAdmissionMode) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "client_id_metadata_admission_mode must be one of %v", admission.Modes()).LogError(ctx, s.logger)
+	}
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -135,8 +141,11 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 		Slug:               conv.PtrToPGText(payload.Slug),
 		AuthnChallengeMode: conv.PtrToPGText(payload.AuthnChallengeMode),
 		SessionDuration:    conv.PtrToPGInterval(durPtr),
-		ID:                 id,
-		ProjectID:          *authCtx.ProjectID,
+		// Omitted leaves the stored value untouched, NULL included; the
+		// query COALESCEs on it.
+		ClientIDMetadataAdmissionMode: conv.PtrToPGText(payload.ClientIDMetadataAdmissionMode),
+		ID:                            id,
+		ProjectID:                     *authCtx.ProjectID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -289,12 +298,33 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 
 	txRepo := repo.New(dbtx)
 
+	hasActiveOwner, err := txRepo.UserSessionIssuerHasActiveOwner(ctx, repo.UserSessionIssuerHasActiveOwnerParams{
+		ProjectID:           *authCtx.ProjectID,
+		UserSessionIssuerID: id,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check user session issuer ownership").LogError(ctx, logger)
+	}
+	if hasActiveOwner {
+		return oops.E(oops.CodeConflict, nil, "user session issuer is still in use by an active MCP server or toolset")
+	}
+
 	deleted, err := txRepo.DeleteUserSessionIssuer(ctx, repo.DeleteUserSessionIssuerParams{
 		ID:        id,
 		ProjectID: *authCtx.ProjectID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			hasActiveOwner, ownerErr := txRepo.UserSessionIssuerHasActiveOwner(ctx, repo.UserSessionIssuerHasActiveOwnerParams{
+				ProjectID:           *authCtx.ProjectID,
+				UserSessionIssuerID: id,
+			})
+			if ownerErr != nil {
+				return oops.E(oops.CodeUnexpected, ownerErr, "recheck user session issuer ownership").LogError(ctx, logger)
+			}
+			if hasActiveOwner {
+				return oops.E(oops.CodeConflict, nil, "user session issuer is still in use by an active MCP server or toolset")
+			}
 			return oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
 		}
 		return oops.E(oops.CodeUnexpected, err, "delete user session issuer").LogError(ctx, logger)
@@ -342,101 +372,22 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 	return nil
 }
 
-// MigrateLegacyGramRegistrations lifts the legacy Redis dynamic-client
-// registrations of a gram-type oauth_proxy_provider onto the given
-// user_session_issuer, so migrated MCP clients skip re-registration and
-// re-auth. The registration-migration logic lives in remotesessions (next to
-// its custom-clone counterpart) and is reached through s.remoteSessions on the
-// handler's own transaction. One-off path removed with the legacy OAuth proxy.
-func (s *Service) MigrateLegacyGramRegistrations(ctx context.Context, payload *gen.MigrateLegacyGramRegistrationsPayload) (*gen.MigrateLegacyGramRegistrationsResult, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
-		return nil, err
-	}
-
-	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
-
-	providerID, err := uuid.Parse(payload.OauthProxyProviderID)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid oauth_proxy_provider_id").LogError(ctx, logger)
-	}
-	issuerID, err := uuid.Parse(payload.UserSessionIssuerID)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid user_session_issuer_id").LogError(ctx, logger)
-	}
-
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	// Confirm the target issuer belongs to the caller's project before any
-	// registrations are migrated onto it.
-	if _, err := repo.New(dbtx).GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
-		ID:        issuerID,
-		ProjectID: *authCtx.ProjectID,
-	}); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
-	}
-
-	// Only gram-type providers migrate via this path; custom providers carry a
-	// reusable upstream client and go through the remote-session clone instead.
-	// The provider lookup lives here (not in remotesessions) so the not-found /
-	// wrong-type conditions surface with their own HTTP codes.
-	rsRepo := rsrepo.New(dbtx)
-	provider, err := rsRepo.GetOAuthProxyProviderForClone(ctx, rsrepo.GetOAuthProxyProviderForCloneParams{
-		ID:        providerID,
-		ProjectID: *authCtx.ProjectID,
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "oauth proxy provider not found").LogError(ctx, logger)
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "get oauth proxy provider").LogError(ctx, logger)
-	}
-	if provider.ProviderType != "gram" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "only gram oauth_proxy_providers migrate via this path; provider_type=%q", provider.ProviderType).LogError(ctx, logger)
-	}
-
-	// The migration runs on this handler's transaction (passed via rsRepo) so
-	// the inserted user_session_clients commit atomically with this request.
-	migrated, err := s.remoteSessions.MigrateLegacyClientRegistrations(ctx, rsRepo, *authCtx.ProjectID, provider.OauthProxyServerID, issuerID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "migrate legacy gram client registrations").LogError(ctx, logger)
-	}
-
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
-	}
-
-	logger.InfoContext(ctx, "migrated legacy gram client registrations",
-		attr.SlogUserSessionIssuerID(issuerID.String()),
-		attr.SlogUserSessionClientMigratedCount(migrated),
-	)
-
-	return &gen.MigrateLegacyGramRegistrationsResult{
-		MigratedCount: int(migrated),
-	}, nil
-}
-
 func userSessionIssuerView(row repo.UserSessionIssuer) *types.UserSessionIssuer {
 	dur := time.Duration(row.SessionDuration.Microseconds) * time.Microsecond
+	// The EFFECTIVE mode, never the raw column: an issuer that has never had
+	// one set stores NULL and reports the resolved default. Clients of this
+	// API — including the audit snapshots built from this view — should never
+	// have to know the unset state exists.
+	mode, _ := admission.ResolveMode(row.ClientIDMetadataAdmissionMode.String, row.ClientIDMetadataAdmissionMode.Valid)
 	return &types.UserSessionIssuer{
-		ID:                   row.ID.String(),
-		ProjectID:            row.ProjectID.String(),
-		Slug:                 row.Slug,
-		AuthnChallengeMode:   row.AuthnChallengeMode,
-		SessionDurationHours: int(dur / time.Hour),
-		CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
+		ID:                            row.ID.String(),
+		ProjectID:                     row.ProjectID.String(),
+		Slug:                          row.Slug,
+		AuthnChallengeMode:            row.AuthnChallengeMode,
+		SessionDurationHours:          int(dur / time.Hour),
+		ClientIDMetadataAdmissionMode: string(mode),
+		CreatedAt:                     row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:                     row.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }
 

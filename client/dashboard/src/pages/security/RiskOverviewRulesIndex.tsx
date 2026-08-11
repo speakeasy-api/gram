@@ -5,12 +5,13 @@ import {
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
 import { useRoutes } from "@/routes";
-import { type DateRangePreset } from "@gram-ai/elements";
+import { type DateRangePreset } from "@/elements";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
 import { useMemo } from "react";
 import { Link, useLocation } from "react-router";
+import { riskRuleKey } from "./riskRuleKey";
 import { getRuleTitleFallback } from "./risk-utils";
 
 const RISK_OVERVIEW_PRESETS: DateRangePreset[] = [
@@ -101,7 +102,7 @@ function RiskOverviewRulesIndexContent() {
             </span>
           </div>
         ) : (
-          <ul className="divide-border divide-y rounded-lg border">
+          <ul className="divide-border divide-y border">
             {rules.map((r, i) => {
               const label = r.ruleId
                 ? getRuleTitleFallback(r.ruleId)
@@ -153,7 +154,7 @@ function RiskOverviewRulesIndexContent() {
                 </div>
               );
               return (
-                <li key={r.ruleId || `__none_${i}`}>
+                <li key={riskRuleKey(r.source, r.ruleId)}>
                   {href ? (
                     <Link to={href} className="hover:bg-muted/40 block">
                       {body}

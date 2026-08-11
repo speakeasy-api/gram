@@ -26,6 +26,10 @@ var ErrRateLimited = errors.New("llm judge rate limited")
 // successful judge call, or an error when the judge degraded.
 type Evaluator func(ctx context.Context, in Input) (*Verdict, error)
 
+func NoopEvaluator(context.Context, Input) (*Verdict, error) {
+	return nil, nil
+}
+
 // Input carries everything needed for one judge evaluation.
 type Input struct {
 	OrgID     string

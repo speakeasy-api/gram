@@ -36,7 +36,7 @@ type TelemetryLogger interface {
 }
 
 const (
-	DefaultChatModel = "anthropic/claude-sonnet-5"
+	DefaultChatModel = "anthropic/claude-opus-5"
 )
 
 // ChatClient is the single HTTP client for all OpenRouter communication.
@@ -45,6 +45,7 @@ type ChatClient struct {
 	logger                 *slog.Logger
 	httpClient             *guardian.HTTPClient
 	provisioner            Provisioner
+	keyResolver            KeyResolver
 	messageCaptureStrategy MessageCaptureStrategy
 	usageTrackingStrategy  UsageTrackingStrategy
 	chatTitleGenerator     ChatTitleGenerator
@@ -56,6 +57,7 @@ func NewUnifiedClient(
 	logger *slog.Logger,
 	guardianPolicy *guardian.Policy,
 	provisioner Provisioner,
+	keyResolver KeyResolver,
 	captureStrategy MessageCaptureStrategy,
 	trackingStrategy UsageTrackingStrategy,
 	chatTitleGenerator ChatTitleGenerator,
@@ -65,6 +67,7 @@ func NewUnifiedClient(
 		logger:                 logger.With(attr.SlogComponent("openrouter_completions")),
 		httpClient:             guardianPolicy.PooledClient(),
 		provisioner:            provisioner,
+		keyResolver:            keyResolver,
 		messageCaptureStrategy: captureStrategy,
 		usageTrackingStrategy:  trackingStrategy,
 		chatTitleGenerator:     chatTitleGenerator,
@@ -72,8 +75,19 @@ func NewUnifiedClient(
 	}
 }
 
+// ResolveKey exposes key resolution so callers can scope rate-limit buckets to
+// the key a completion would spend.
+func (c *ChatClient) ResolveKey(ctx context.Context, orgID string, projectID string, slot billing.ModelUsageSource, keyType KeyType) (ResolvedKey, error) {
+	resolved, err := c.keyResolver.ResolveKey(ctx, orgID, projectID, slot, keyType.OrDefault())
+	if err != nil {
+		return ResolvedKey{}, fmt.Errorf("resolve OpenRouter key: %w", err)
+	}
+	return resolved, nil
+}
+
 type initializeRequestResult struct {
 	apiKey         string
+	customerKey    bool
 	requestBody    OpenAIChatRequest
 	captureSession CaptureSession
 }
@@ -99,14 +113,17 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 		captureSession = sess
 	}
 
-	// Provision API key
-	apiKey, err := c.provisioner.ProvisionAPIKey(ctx, req.OrgID, req.KeyType.OrDefault())
-	if err != nil {
-		return nil, fmt.Errorf("provision OpenRouter key: %w", err)
-	}
-
 	if _, err := uuid.Parse(req.ProjectID); err != nil {
 		return nil, fmt.Errorf("invalid project ID: %w", err)
+	}
+
+	keySlot := req.KeySlot
+	if keySlot == "" {
+		keySlot = req.UsageSource
+	}
+	resolvedKey, err := c.keyResolver.ResolveKey(ctx, req.OrgID, req.ProjectID, keySlot, req.KeyType.OrDefault())
+	if err != nil {
+		return nil, fmt.Errorf("resolve OpenRouter key: %w", err)
 	}
 
 	// Set defaults
@@ -187,7 +204,8 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 	}
 
 	return &initializeRequestResult{
-		apiKey:         apiKey,
+		apiKey:         resolvedKey.Key,
+		customerKey:    resolvedKey.Customer,
 		requestBody:    reqBody,
 		captureSession: captureSession,
 	}, nil
@@ -229,7 +247,10 @@ func (c *ChatClient) makeHTTPRequest(ctx context.Context, apiKey string, reqBody
 }
 
 // onMessageComplete applies message capture and usage tracking strategies.
-func (c *ChatClient) onMessageComplete(ctx context.Context, session CaptureSession, req CompletionRequest, response CompletionResponse) {
+// customerKey marks completions billed to a customer-supplied (BYOK) key; a
+// generation is only visible under the key that made it, so the platform-key
+// fallback usage lookup must be skipped for those.
+func (c *ChatClient) onMessageComplete(ctx context.Context, session CaptureSession, req CompletionRequest, response CompletionResponse, customerKey bool) {
 	// Apply message capture strategy
 	if c.messageCaptureStrategy != nil {
 		if err := c.messageCaptureStrategy.CaptureMessage(ctx, session, req, response); err != nil {
@@ -246,7 +267,7 @@ func (c *ChatClient) onMessageComplete(ctx context.Context, session CaptureSessi
 		inlineUsage := response.Usage.ToModelUsage(response.Model)
 		go func() {
 			modelUsage := inlineUsage
-			if response.MessageID != "" && (modelUsage == nil || modelUsage.TotalCost == nil) {
+			if response.MessageID != "" && (modelUsage == nil || modelUsage.TotalCost == nil) && !customerKey {
 				fallbackUsage, err := c.provisioner.GetModelUsage(context.WithoutCancel(ctx), response.MessageID, req.OrgID, req.KeyType.OrDefault())
 				if err != nil {
 					c.logger.WarnContext(ctx, "failed to fetch fallback openrouter usage", attr.SlogError(err))
@@ -319,7 +340,7 @@ func (c *ChatClient) requestCompletion(ctx context.Context, apiKey string, reqBo
 	}
 
 	if httpResp.StatusCode != http.StatusOK {
-		return OpenAIChatResponse{}, body, classifyHTTPError(httpResp.StatusCode, body)
+		return OpenAIChatResponse{}, body, classifyHTTPError(ctx, httpResp.StatusCode, httpResp.Header, body)
 	}
 
 	var chatResp OpenAIChatResponse
@@ -373,11 +394,7 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 	// generation id and any error envelope OpenRouter returned in lieu of
 	// choices, which is otherwise discarded here.
 	if len(chatResp.Choices) == 0 {
-		const maxLoggedBody = 2048
-		snippet := strings.TrimSpace(string(body))
-		if len(snippet) > maxLoggedBody {
-			snippet = snippet[:maxLoggedBody]
-		}
+		snippet := diagnosticBody(body)
 		trace.SpanFromContext(ctx).SetAttributes(
 			attr.OpenRouterResponseBody(snippet),
 			attr.GenAIResponseIDKey.String(chatResp.ID),
@@ -434,7 +451,7 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 	}
 
 	// Apply message capture and usage tracking strategies
-	c.onMessageComplete(context.WithoutCancel(ctx), initResult.captureSession, req, *response)
+	c.onMessageComplete(context.WithoutCancel(ctx), initResult.captureSession, req, *response, initResult.customerKey)
 
 	return response, nil
 }
@@ -463,7 +480,7 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 	if httpResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(httpResp.Body)
 		o11y.NoLogDefer(func() error { return httpResp.Body.Close() })
-		return nil, classifyHTTPError(httpResp.StatusCode, body)
+		return nil, classifyHTTPError(ctx, httpResp.StatusCode, httpResp.Header, body)
 	}
 
 	// Wrap the response body with SSE parser that accumulates metadata
@@ -472,6 +489,7 @@ func (c *ChatClient) GetCompletionStream(ctx context.Context, req CompletionRequ
 		body:                 httpResp.Body,
 		request:              req,
 		captureSession:       initResult.captureSession,
+		customerKey:          initResult.customerKey,
 		logger:               c.logger,
 		client:               c,
 		telemetryService:     c.telemetryLogger,
@@ -517,6 +535,11 @@ func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompleti
 		Name:    nil,
 	}))
 
+	reasoning := req.Reasoning
+	if reasoning == nil {
+		reasoning = &Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil}
+	}
+
 	completionReq := CompletionRequest{
 		OrgID:                     req.OrgID,
 		ProjectID:                 req.ProjectID,
@@ -530,12 +553,13 @@ func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompleti
 		ExternalUserID:            req.ExternalUserID,
 		UserEmail:                 req.UserEmail,
 		KeyType:                   req.KeyType,
+		KeySlot:                   req.KeySlot,
 		HTTPMetadata:              req.HTTPMetadata,
 		JSONSchema:                req.JSONSchema,
 		CacheControl:              nil,
 		ChatID:                    uuid.Nil,
 		APIKeyID:                  "",
-		Reasoning:                 &Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil},
+		Reasoning:                 reasoning,
 		NormalizeOutboundMessages: false,
 	}
 
@@ -549,6 +573,7 @@ type streamingResponseReader struct {
 	body             io.ReadCloser
 	request          CompletionRequest
 	captureSession   CaptureSession
+	customerKey      bool
 	logger           *slog.Logger
 	client           *ChatClient
 	telemetryService TelemetryLogger
@@ -611,7 +636,7 @@ func (r *streamingResponseReader) Close() error {
 		}
 
 		// Use WithoutCancel to ensure message capture completes even if the stream was killed
-		r.client.onMessageComplete(context.WithoutCancel(r.ctx), r.captureSession, r.request, response)
+		r.client.onMessageComplete(context.WithoutCancel(r.ctx), r.captureSession, r.request, response, r.customerKey)
 	}
 
 	return err
@@ -814,14 +839,15 @@ func (c *ChatClient) CreateEmbeddings(ctx context.Context, orgID string, model s
 	for _, opt := range opts {
 		opt(&resolved)
 	}
-	return c.createEmbeddings(ctx, orgID, model, inputs, resolved.Dimensions)
+	return c.createEmbeddings(ctx, orgID, model, inputs, resolved.Dimensions, resolved.KeyType.OrDefault())
 }
 
-func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model string, inputs []string, dimensions *int64) ([][]float32, error) {
-	openrouterKey, err := c.provisioner.ProvisionAPIKey(ctx, orgID, KeyTypeChat)
+func (c *ChatClient) createEmbeddings(ctx context.Context, orgID string, model string, inputs []string, dimensions *int64, keyType KeyType) ([][]float32, error) {
+	resolvedKey, err := c.keyResolver.ResolveKey(ctx, orgID, "", "", keyType)
 	if err != nil {
-		return nil, fmt.Errorf("provisioning OpenRouter key: %w", err)
+		return nil, fmt.Errorf("resolving OpenRouter key: %w", err)
 	}
+	openrouterKey := resolvedKey.Key
 
 	if model == "" {
 		return nil, fmt.Errorf("model is required")

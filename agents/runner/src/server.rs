@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use axum::extract::{Path, State};
+use axum::extract::{DefaultBodyLimit, Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -16,7 +16,14 @@ use crate::runtime::{
 use crate::telemetry::SpanIdentity;
 
 const IDEMPOTENCY_HEADER: &str = "x-idempotency-key";
-use crate::wire::{RunnerStateResponse, ThreadStateView, ThreadTurnRequest, ThreadTurnResponse};
+
+/// Turn requests can carry base64 `input_parts` images (the server-side
+/// per-turn inline budget is 8 MiB of raw bytes ≈ 11 MB encoded); axum's
+/// 2 MB default body limit would 413 them before the handler runs.
+const TURN_BODY_LIMIT_BYTES: usize = 32 * 1024 * 1024;
+use crate::wire::{
+    RunnerContent, RunnerStateResponse, ThreadStateView, ThreadTurnRequest, ThreadTurnResponse,
+};
 
 pub struct ServeConfig {
     pub addr: SocketAddr,
@@ -42,6 +49,7 @@ pub async fn serve(config: ServeConfig) -> Result<(), std::io::Error> {
         .route("/healthz", get(healthz))
         .route("/state", get(state_handler))
         .route("/threads/{thread_id}/turn", post(thread_turn))
+        .layer(DefaultBodyLimit::max(TURN_BODY_LIMIT_BYTES))
         .with_state(host);
 
     let listener = TcpListener::bind(config.addr).await?;
@@ -166,7 +174,7 @@ async fn thread_turn_inner(
     }
 
     thread
-        .enqueue(request.input)
+        .enqueue(RunnerContent::from_turn(request.input, request.input_parts))
         .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
 
     if let Some(ref mut guard) = admission_guard {

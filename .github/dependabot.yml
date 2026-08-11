@@ -21,6 +21,9 @@ updates:
       - "/"
     schedule:
       interval: "weekly"
+    ignore:
+      # Bumped on release by speakeasy-api/mcp-setup-docs (go-module-consumer-bump).
+      - dependency-name: "github.com/speakeasy-api/mcp-setup-docs/go"
     groups:
       otel:
         patterns:

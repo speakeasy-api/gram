@@ -11,6 +11,7 @@ vi.mock("@/contexts/Auth", () => ({
     projects: [{ id: "p1", slug: "proj", name: "Proj" }],
   }),
   useProject: () => ({ id: "p1", slug: "proj", name: "Proj", switchProject }),
+  useSession: () => ({ organizations: [{ id: "org_1" }] }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "acme", projectSlug: "proj" }),
@@ -21,6 +22,7 @@ vi.mock("@/hooks/useRBAC", () => ({
 }));
 vi.mock("react-router", () => ({
   Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
+  useNavigate: () => vi.fn(),
 }));
 vi.mock("./project-menu", () => ({
   ProjectAvatar: () => <span data-testid="project-avatar" />,

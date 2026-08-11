@@ -34,6 +34,15 @@ type SetPinnedRequestBody struct {
 	Pinned *bool `form:"pinned,omitempty" json:"pinned,omitempty" xml:"pinned,omitempty"`
 }
 
+// SummarizeRequestBody is the type of the "chat" service "summarize" endpoint
+// HTTP request body.
+type SummarizeRequestBody struct {
+	// The ID of the chat to summarize
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// When true, regenerate and overwrite any existing summary. Defaults to false.
+	Regenerate *bool `form:"regenerate,omitempty" json:"regenerate,omitempty" xml:"regenerate,omitempty"`
+}
+
 // SubmitFeedbackRequestBody is the type of the "chat" service "submitFeedback"
 // endpoint HTTP request body.
 type SubmitFeedbackRequestBody struct {
@@ -52,12 +61,25 @@ type ListChatsResponseBody struct {
 	Total int `form:"total" json:"total" xml:"total"`
 }
 
+// GetWorkUnitsTrendResponseBody is the type of the "chat" service
+// "getWorkUnitsTrend" endpoint HTTP response body.
+type GetWorkUnitsTrendResponseBody struct {
+	// Whether any work-units scores exist in the window. False for organizations
+	// without work-units analysis.
+	ScoresAvailable bool `form:"scores_available" json:"scores_available" xml:"scores_available"`
+	// One bucket per UTC day in the window, oldest first, zero-filled for days
+	// without scores.
+	Buckets []*WorkUnitsTrendBucketResponseBody `form:"buckets" json:"buckets" xml:"buckets"`
+}
+
 // LoadChatResponseBody is the type of the "chat" service "loadChat" endpoint
 // HTTP response body.
 type LoadChatResponseBody struct {
 	// The list of messages in the chat for the returned generation, ordered oldest
 	// to newest by `seq`.
 	Messages []*ChatMessageResponseBody `form:"messages" json:"messages" xml:"messages"`
+	// Non-turn content attached to this chat, such as prompt attachments.
+	ContentParts []*ChatContentPartResponseBody `form:"content_parts" json:"content_parts" xml:"content_parts"`
 	// The generation that this response's messages belong to. A generation is an
 	// immutable snapshot of the transcript; a new one is opened on compaction or
 	// message edits, while normal turns append to the current one.
@@ -86,6 +108,9 @@ type LoadChatResponseBody struct {
 	// messages are paginated, callers must use these (not the length of
 	// `messages`) to render filter-bar counts.
 	Totals *ChatTotalsResponseBody `form:"totals,omitempty" json:"totals,omitempty" xml:"totals,omitempty"`
+	// Full work-units analysis verdict as JSON (per-task breakdown, rationales,
+	// and flags). Present only when `work_units` is present.
+	WorkUnitsReport *string `form:"work_units_report,omitempty" json:"work_units_report,omitempty" xml:"work_units_report,omitempty"`
 	// The ID of the chat
 	ID string `form:"id" json:"id" xml:"id"`
 	// The title of the chat
@@ -94,6 +119,10 @@ type LoadChatResponseBody struct {
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// The ID of the external user who created the chat
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
+	// The ID of the assistant that produced this chat, if any
+	AssistantID *string `form:"assistant_id,omitempty" json:"assistant_id,omitempty" xml:"assistant_id,omitempty"`
+	// The name of the assistant that produced this chat, if any
+	AssistantName *string `form:"assistant_name,omitempty" json:"assistant_name,omitempty" xml:"assistant_name,omitempty"`
 	// The number of messages in the chat
 	NumMessages int `form:"num_messages" json:"num_messages" xml:"num_messages"`
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
@@ -117,12 +146,22 @@ type LoadChatResponseBody struct {
 	// (project-scoped, found=true). Only populated by endpoints that join risk
 	// data; absent elsewhere.
 	RiskFindingsCount *int `form:"risk_findings_count,omitempty" json:"risk_findings_count,omitempty" xml:"risk_findings_count,omitempty"`
+	// Work units of value delivered in this chat as judged by the work-units
+	// analysis. Absent unless the organization has work-units analysis enabled and
+	// this chat has been scored.
+	WorkUnits *float64 `form:"work_units,omitempty" json:"work_units,omitempty" xml:"work_units,omitempty"`
 	// Account type that produced the chat ('team', 'personal', or empty), resolved
 	// from the linked AI account.
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
 	// Email of the AI account that produced the chat, resolved from the linked AI
 	// account. May differ from the employee's work email (e.g. a personal account).
 	AccountEmail *string `form:"account_email,omitempty" json:"account_email,omitempty" xml:"account_email,omitempty"`
+	// True when the chat is pinned
+	Pinned *bool `form:"pinned,omitempty" json:"pinned,omitempty" xml:"pinned,omitempty"`
+	// Persisted LLM summary of the session transcript, if one has been generated
+	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// When the session summary was last generated.
+	SummaryGeneratedAt *string `form:"summary_generated_at,omitempty" json:"summary_generated_at,omitempty" xml:"summary_generated_at,omitempty"`
 }
 
 // GenerateTitleResponseBody is the type of the "chat" service "generateTitle"
@@ -139,6 +178,17 @@ type CreditUsageResponseBody struct {
 	CreditsUsed float64 `form:"credits_used" json:"credits_used" xml:"credits_used"`
 	// The number of monthly credits
 	MonthlyCredits int `form:"monthly_credits" json:"monthly_credits" xml:"monthly_credits"`
+}
+
+// SummarizeResponseBody is the type of the "chat" service "summarize" endpoint
+// HTTP response body.
+type SummarizeResponseBody struct {
+	// The session summary text
+	Summary string `form:"summary" json:"summary" xml:"summary"`
+	// When the summary was last generated.
+	SummaryGeneratedAt string `form:"summary_generated_at" json:"summary_generated_at" xml:"summary_generated_at"`
+	// True when an existing summary was returned without regenerating
+	Cached bool `form:"cached" json:"cached" xml:"cached"`
 }
 
 // SubmitFeedbackResponseBody is the type of the "chat" service
@@ -321,6 +371,189 @@ type ListChatsUnexpectedResponseBody struct {
 // ListChatsGatewayErrorResponseBody is the type of the "chat" service
 // "listChats" endpoint HTTP response body for the "gateway_error" error.
 type ListChatsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetWorkUnitsTrendUnauthorizedResponseBody is the type of the "chat" service
+// "getWorkUnitsTrend" endpoint HTTP response body for the "unauthorized" error.
+type GetWorkUnitsTrendUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetWorkUnitsTrendForbiddenResponseBody is the type of the "chat" service
+// "getWorkUnitsTrend" endpoint HTTP response body for the "forbidden" error.
+type GetWorkUnitsTrendForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetWorkUnitsTrendBadRequestResponseBody is the type of the "chat" service
+// "getWorkUnitsTrend" endpoint HTTP response body for the "bad_request" error.
+type GetWorkUnitsTrendBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetWorkUnitsTrendNotFoundResponseBody is the type of the "chat" service
+// "getWorkUnitsTrend" endpoint HTTP response body for the "not_found" error.
+type GetWorkUnitsTrendNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetWorkUnitsTrendConflictResponseBody is the type of the "chat" service
+// "getWorkUnitsTrend" endpoint HTTP response body for the "conflict" error.
+type GetWorkUnitsTrendConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetWorkUnitsTrendUnsupportedMediaResponseBody is the type of the "chat"
+// service "getWorkUnitsTrend" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetWorkUnitsTrendUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetWorkUnitsTrendInvalidResponseBody is the type of the "chat" service
+// "getWorkUnitsTrend" endpoint HTTP response body for the "invalid" error.
+type GetWorkUnitsTrendInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetWorkUnitsTrendInvariantViolationResponseBody is the type of the "chat"
+// service "getWorkUnitsTrend" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetWorkUnitsTrendInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetWorkUnitsTrendUnexpectedResponseBody is the type of the "chat" service
+// "getWorkUnitsTrend" endpoint HTTP response body for the "unexpected" error.
+type GetWorkUnitsTrendUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetWorkUnitsTrendGatewayErrorResponseBody is the type of the "chat" service
+// "getWorkUnitsTrend" endpoint HTTP response body for the "gateway_error"
+// error.
+type GetWorkUnitsTrendGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1239,6 +1472,186 @@ type SetPinnedGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// SummarizeUnauthorizedResponseBody is the type of the "chat" service
+// "summarize" endpoint HTTP response body for the "unauthorized" error.
+type SummarizeUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SummarizeForbiddenResponseBody is the type of the "chat" service "summarize"
+// endpoint HTTP response body for the "forbidden" error.
+type SummarizeForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SummarizeBadRequestResponseBody is the type of the "chat" service
+// "summarize" endpoint HTTP response body for the "bad_request" error.
+type SummarizeBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SummarizeNotFoundResponseBody is the type of the "chat" service "summarize"
+// endpoint HTTP response body for the "not_found" error.
+type SummarizeNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SummarizeConflictResponseBody is the type of the "chat" service "summarize"
+// endpoint HTTP response body for the "conflict" error.
+type SummarizeConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SummarizeUnsupportedMediaResponseBody is the type of the "chat" service
+// "summarize" endpoint HTTP response body for the "unsupported_media" error.
+type SummarizeUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SummarizeInvalidResponseBody is the type of the "chat" service "summarize"
+// endpoint HTTP response body for the "invalid" error.
+type SummarizeInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SummarizeInvariantViolationResponseBody is the type of the "chat" service
+// "summarize" endpoint HTTP response body for the "invariant_violation" error.
+type SummarizeInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SummarizeUnexpectedResponseBody is the type of the "chat" service
+// "summarize" endpoint HTTP response body for the "unexpected" error.
+type SummarizeUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SummarizeGatewayErrorResponseBody is the type of the "chat" service
+// "summarize" endpoint HTTP response body for the "gateway_error" error.
+type SummarizeGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // SubmitFeedbackUnauthorizedResponseBody is the type of the "chat" service
 // "submitFeedback" endpoint HTTP response body for the "unauthorized" error.
 type SubmitFeedbackUnauthorizedResponseBody struct {
@@ -1612,6 +2025,10 @@ type ChatOverviewResponseBody struct {
 	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 	// The ID of the external user who created the chat
 	ExternalUserID *string `form:"external_user_id,omitempty" json:"external_user_id,omitempty" xml:"external_user_id,omitempty"`
+	// The ID of the assistant that produced this chat, if any
+	AssistantID *string `form:"assistant_id,omitempty" json:"assistant_id,omitempty" xml:"assistant_id,omitempty"`
+	// The name of the assistant that produced this chat, if any
+	AssistantName *string `form:"assistant_name,omitempty" json:"assistant_name,omitempty" xml:"assistant_name,omitempty"`
 	// The number of messages in the chat
 	NumMessages int `form:"num_messages" json:"num_messages" xml:"num_messages"`
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
@@ -1635,12 +2052,43 @@ type ChatOverviewResponseBody struct {
 	// (project-scoped, found=true). Only populated by endpoints that join risk
 	// data; absent elsewhere.
 	RiskFindingsCount *int `form:"risk_findings_count,omitempty" json:"risk_findings_count,omitempty" xml:"risk_findings_count,omitempty"`
+	// Work units of value delivered in this chat as judged by the work-units
+	// analysis. Absent unless the organization has work-units analysis enabled and
+	// this chat has been scored.
+	WorkUnits *float64 `form:"work_units,omitempty" json:"work_units,omitempty" xml:"work_units,omitempty"`
 	// Account type that produced the chat ('team', 'personal', or empty), resolved
 	// from the linked AI account.
 	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
 	// Email of the AI account that produced the chat, resolved from the linked AI
 	// account. May differ from the employee's work email (e.g. a personal account).
 	AccountEmail *string `form:"account_email,omitempty" json:"account_email,omitempty" xml:"account_email,omitempty"`
+	// True when the chat is pinned
+	Pinned *bool `form:"pinned,omitempty" json:"pinned,omitempty" xml:"pinned,omitempty"`
+	// Persisted LLM summary of the session transcript, if one has been generated
+	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// When the session summary was last generated.
+	SummaryGeneratedAt *string `form:"summary_generated_at,omitempty" json:"summary_generated_at,omitempty" xml:"summary_generated_at,omitempty"`
+}
+
+// WorkUnitsTrendBucketResponseBody is used to define fields on response body
+// types.
+type WorkUnitsTrendBucketResponseBody struct {
+	// Start of the UTC day this bucket covers.
+	Timestamp string `form:"timestamp" json:"timestamp" xml:"timestamp"`
+	// Number of chat sessions scored by the work-units analysis in this bucket.
+	ScoredSessions int `form:"scored_sessions" json:"scored_sessions" xml:"scored_sessions"`
+	// Total work units delivered across the bucket's scored sessions.
+	WorkUnits float64 `form:"work_units" json:"work_units" xml:"work_units"`
+	// Total cost in USD across the bucket's scored sessions.
+	TotalCost float64 `form:"total_cost" json:"total_cost" xml:"total_cost"`
+	// Total tokens across the bucket's scored sessions.
+	TotalTokens int64 `form:"total_tokens" json:"total_tokens" xml:"total_tokens"`
+	// Cost per unit of work. Absent when the bucket has no positive work or no
+	// cost telemetry.
+	CostPerUnit *float64 `form:"cost_per_unit,omitempty" json:"cost_per_unit,omitempty" xml:"cost_per_unit,omitempty"`
+	// Tokens per unit of work. Absent when the bucket has no positive work or no
+	// token telemetry.
+	TokensPerUnit *float64 `form:"tokens_per_unit,omitempty" json:"tokens_per_unit,omitempty" xml:"tokens_per_unit,omitempty"`
 }
 
 // ChatMessageResponseBody is used to define fields on response body types.
@@ -1679,6 +2127,24 @@ type ChatMessageResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// Conversation generation — bumps on compaction or edit divergence
 	Generation int `form:"generation" json:"generation" xml:"generation"`
+}
+
+// ChatContentPartResponseBody is used to define fields on response body types.
+type ChatContentPartResponseBody struct {
+	// The ID of the content part.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The content kind, such as prompt_attachment.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// The text content.
+	Content string `form:"content" json:"content" xml:"content"`
+	// The chat message this content hangs off, when resolved.
+	ParentChatMessageID *string `form:"parent_chat_message_id,omitempty" json:"parent_chat_message_id,omitempty" xml:"parent_chat_message_id,omitempty"`
+	// Sparse metadata for the content kind.
+	Metadata json.RawMessage `form:"metadata,omitempty" json:"metadata,omitempty" xml:"metadata,omitempty"`
+	// Whether this content part has an active risk finding.
+	IsRisk bool `form:"is_risk" json:"is_risk" xml:"is_risk"`
+	// When the content part was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 }
 
 // RiskSegmentResponseBody is used to define fields on response body types.
@@ -1794,6 +2260,27 @@ func NewListChatsResponseBody(res *chat.ListChatsResult) *ListChatsResponseBody 
 	return body
 }
 
+// NewGetWorkUnitsTrendResponseBody builds the HTTP response body from the
+// result of the "getWorkUnitsTrend" endpoint of the "chat" service.
+func NewGetWorkUnitsTrendResponseBody(res *chat.WorkUnitsTrendResult) *GetWorkUnitsTrendResponseBody {
+	body := &GetWorkUnitsTrendResponseBody{
+		ScoresAvailable: res.ScoresAvailable,
+	}
+	if res.Buckets != nil {
+		body.Buckets = make([]*WorkUnitsTrendBucketResponseBody, len(res.Buckets))
+		for i, val := range res.Buckets {
+			if val == nil {
+				body.Buckets[i] = nil
+				continue
+			}
+			body.Buckets[i] = marshalChatWorkUnitsTrendBucketToWorkUnitsTrendBucketResponseBody(val)
+		}
+	} else {
+		body.Buckets = []*WorkUnitsTrendBucketResponseBody{}
+	}
+	return body
+}
+
 // NewLoadChatResponseBody builds the HTTP response body from the result of the
 // "loadChat" endpoint of the "chat" service.
 func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
@@ -1802,10 +2289,13 @@ func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 		MaxGeneration:        res.MaxGeneration,
 		HasMoreBefore:        res.HasMoreBefore,
 		HasMoreAfter:         res.HasMoreAfter,
+		WorkUnitsReport:      res.WorkUnitsReport,
 		ID:                   res.ID,
 		Title:                res.Title,
 		UserID:               res.UserID,
 		ExternalUserID:       res.ExternalUserID,
+		AssistantID:          res.AssistantID,
+		AssistantName:        res.AssistantName,
 		NumMessages:          res.NumMessages,
 		Source:               res.Source,
 		CreatedAt:            res.CreatedAt,
@@ -1816,8 +2306,12 @@ func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 		TotalCost:            res.TotalCost,
 		LastMessageTimestamp: res.LastMessageTimestamp,
 		RiskFindingsCount:    res.RiskFindingsCount,
+		WorkUnits:            res.WorkUnits,
 		AccountType:          res.AccountType,
 		AccountEmail:         res.AccountEmail,
+		Pinned:               res.Pinned,
+		Summary:              res.Summary,
+		SummaryGeneratedAt:   res.SummaryGeneratedAt,
 	}
 	if res.Messages != nil {
 		body.Messages = make([]*ChatMessageResponseBody, len(res.Messages))
@@ -1830,6 +2324,18 @@ func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 		}
 	} else {
 		body.Messages = []*ChatMessageResponseBody{}
+	}
+	if res.ContentParts != nil {
+		body.ContentParts = make([]*ChatContentPartResponseBody, len(res.ContentParts))
+		for i, val := range res.ContentParts {
+			if val == nil {
+				body.ContentParts[i] = nil
+				continue
+			}
+			body.ContentParts[i] = marshalChatChatContentPartToChatContentPartResponseBody(val)
+		}
+	} else {
+		body.ContentParts = []*ChatContentPartResponseBody{}
 	}
 	if res.RiskSegments != nil {
 		body.RiskSegments = make([]*RiskSegmentResponseBody, len(res.RiskSegments))
@@ -1875,6 +2381,17 @@ func NewCreditUsageResponseBody(res *chat.CreditUsageResult) *CreditUsageRespons
 	body := &CreditUsageResponseBody{
 		CreditsUsed:    res.CreditsUsed,
 		MonthlyCredits: res.MonthlyCredits,
+	}
+	return body
+}
+
+// NewSummarizeResponseBody builds the HTTP response body from the result of
+// the "summarize" endpoint of the "chat" service.
+func NewSummarizeResponseBody(res *chat.SummarizeChatResult) *SummarizeResponseBody {
+	body := &SummarizeResponseBody{
+		Summary:            res.Summary,
+		SummaryGeneratedAt: res.SummaryGeneratedAt,
+		Cached:             res.Cached,
 	}
 	return body
 }
@@ -2033,6 +2550,148 @@ func NewListChatsUnexpectedResponseBody(res *goa.ServiceError) *ListChatsUnexpec
 // result of the "listChats" endpoint of the "chat" service.
 func NewListChatsGatewayErrorResponseBody(res *goa.ServiceError) *ListChatsGatewayErrorResponseBody {
 	body := &ListChatsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetWorkUnitsTrendUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getWorkUnitsTrend" endpoint of the "chat" service.
+func NewGetWorkUnitsTrendUnauthorizedResponseBody(res *goa.ServiceError) *GetWorkUnitsTrendUnauthorizedResponseBody {
+	body := &GetWorkUnitsTrendUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetWorkUnitsTrendForbiddenResponseBody builds the HTTP response body from
+// the result of the "getWorkUnitsTrend" endpoint of the "chat" service.
+func NewGetWorkUnitsTrendForbiddenResponseBody(res *goa.ServiceError) *GetWorkUnitsTrendForbiddenResponseBody {
+	body := &GetWorkUnitsTrendForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetWorkUnitsTrendBadRequestResponseBody builds the HTTP response body
+// from the result of the "getWorkUnitsTrend" endpoint of the "chat" service.
+func NewGetWorkUnitsTrendBadRequestResponseBody(res *goa.ServiceError) *GetWorkUnitsTrendBadRequestResponseBody {
+	body := &GetWorkUnitsTrendBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetWorkUnitsTrendNotFoundResponseBody builds the HTTP response body from
+// the result of the "getWorkUnitsTrend" endpoint of the "chat" service.
+func NewGetWorkUnitsTrendNotFoundResponseBody(res *goa.ServiceError) *GetWorkUnitsTrendNotFoundResponseBody {
+	body := &GetWorkUnitsTrendNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetWorkUnitsTrendConflictResponseBody builds the HTTP response body from
+// the result of the "getWorkUnitsTrend" endpoint of the "chat" service.
+func NewGetWorkUnitsTrendConflictResponseBody(res *goa.ServiceError) *GetWorkUnitsTrendConflictResponseBody {
+	body := &GetWorkUnitsTrendConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetWorkUnitsTrendUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getWorkUnitsTrend" endpoint of the "chat"
+// service.
+func NewGetWorkUnitsTrendUnsupportedMediaResponseBody(res *goa.ServiceError) *GetWorkUnitsTrendUnsupportedMediaResponseBody {
+	body := &GetWorkUnitsTrendUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetWorkUnitsTrendInvalidResponseBody builds the HTTP response body from
+// the result of the "getWorkUnitsTrend" endpoint of the "chat" service.
+func NewGetWorkUnitsTrendInvalidResponseBody(res *goa.ServiceError) *GetWorkUnitsTrendInvalidResponseBody {
+	body := &GetWorkUnitsTrendInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetWorkUnitsTrendInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getWorkUnitsTrend" endpoint of the "chat"
+// service.
+func NewGetWorkUnitsTrendInvariantViolationResponseBody(res *goa.ServiceError) *GetWorkUnitsTrendInvariantViolationResponseBody {
+	body := &GetWorkUnitsTrendInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetWorkUnitsTrendUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getWorkUnitsTrend" endpoint of the "chat" service.
+func NewGetWorkUnitsTrendUnexpectedResponseBody(res *goa.ServiceError) *GetWorkUnitsTrendUnexpectedResponseBody {
+	body := &GetWorkUnitsTrendUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetWorkUnitsTrendGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getWorkUnitsTrend" endpoint of the "chat" service.
+func NewGetWorkUnitsTrendGatewayErrorResponseBody(res *goa.ServiceError) *GetWorkUnitsTrendGatewayErrorResponseBody {
+	body := &GetWorkUnitsTrendGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2743,6 +3402,146 @@ func NewSetPinnedGatewayErrorResponseBody(res *goa.ServiceError) *SetPinnedGatew
 	return body
 }
 
+// NewSummarizeUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "summarize" endpoint of the "chat" service.
+func NewSummarizeUnauthorizedResponseBody(res *goa.ServiceError) *SummarizeUnauthorizedResponseBody {
+	body := &SummarizeUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSummarizeForbiddenResponseBody builds the HTTP response body from the
+// result of the "summarize" endpoint of the "chat" service.
+func NewSummarizeForbiddenResponseBody(res *goa.ServiceError) *SummarizeForbiddenResponseBody {
+	body := &SummarizeForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSummarizeBadRequestResponseBody builds the HTTP response body from the
+// result of the "summarize" endpoint of the "chat" service.
+func NewSummarizeBadRequestResponseBody(res *goa.ServiceError) *SummarizeBadRequestResponseBody {
+	body := &SummarizeBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSummarizeNotFoundResponseBody builds the HTTP response body from the
+// result of the "summarize" endpoint of the "chat" service.
+func NewSummarizeNotFoundResponseBody(res *goa.ServiceError) *SummarizeNotFoundResponseBody {
+	body := &SummarizeNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSummarizeConflictResponseBody builds the HTTP response body from the
+// result of the "summarize" endpoint of the "chat" service.
+func NewSummarizeConflictResponseBody(res *goa.ServiceError) *SummarizeConflictResponseBody {
+	body := &SummarizeConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSummarizeUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "summarize" endpoint of the "chat" service.
+func NewSummarizeUnsupportedMediaResponseBody(res *goa.ServiceError) *SummarizeUnsupportedMediaResponseBody {
+	body := &SummarizeUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSummarizeInvalidResponseBody builds the HTTP response body from the
+// result of the "summarize" endpoint of the "chat" service.
+func NewSummarizeInvalidResponseBody(res *goa.ServiceError) *SummarizeInvalidResponseBody {
+	body := &SummarizeInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSummarizeInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "summarize" endpoint of the "chat" service.
+func NewSummarizeInvariantViolationResponseBody(res *goa.ServiceError) *SummarizeInvariantViolationResponseBody {
+	body := &SummarizeInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSummarizeUnexpectedResponseBody builds the HTTP response body from the
+// result of the "summarize" endpoint of the "chat" service.
+func NewSummarizeUnexpectedResponseBody(res *goa.ServiceError) *SummarizeUnexpectedResponseBody {
+	body := &SummarizeUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSummarizeGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "summarize" endpoint of the "chat" service.
+func NewSummarizeGatewayErrorResponseBody(res *goa.ServiceError) *SummarizeGatewayErrorResponseBody {
+	body := &SummarizeGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewSubmitFeedbackUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "submitFeedback" endpoint of the "chat" service.
 func NewSubmitFeedbackUnauthorizedResponseBody(res *goa.ServiceError) *SubmitFeedbackUnauthorizedResponseBody {
@@ -3024,10 +3823,11 @@ func NewListSourcesGatewayErrorResponseBody(res *goa.ServiceError) *ListSourcesG
 }
 
 // NewListChatsPayload builds a chat service listChats endpoint payload.
-func NewListChatsPayload(search *string, externalUserID *string, source *string, assistantID *string, sourceKind *string, excludeSourceKind *string, hasRisk *string, accountType *string, pinned *string, minRiskScore *int, from *string, to *string, limit int, offset int, sortBy string, sortOrder string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsPayload {
+func NewListChatsPayload(search *string, externalUserID *string, userID *string, source *string, assistantID *string, sourceKind *string, excludeSourceKind *string, hasRisk *string, accountType *string, pinned *string, minRiskScore *int, from *string, to *string, limit int, offset int, sortBy string, sortOrder string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsPayload {
 	v := &chat.ListChatsPayload{}
 	v.Search = search
 	v.ExternalUserID = externalUserID
+	v.UserID = userID
 	v.Source = source
 	v.AssistantID = assistantID
 	v.SourceKind = sourceKind
@@ -3049,8 +3849,20 @@ func NewListChatsPayload(search *string, externalUserID *string, source *string,
 	return v
 }
 
+// NewGetWorkUnitsTrendPayload builds a chat service getWorkUnitsTrend endpoint
+// payload.
+func NewGetWorkUnitsTrendPayload(from *string, to *string, sessionToken *string, projectSlugInput *string) *chat.GetWorkUnitsTrendPayload {
+	v := &chat.GetWorkUnitsTrendPayload{}
+	v.From = from
+	v.To = to
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewLoadChatPayload builds a chat service loadChat endpoint payload.
-func NewLoadChatPayload(id string, generation *int, limit int, beforeSeq *int64, afterSeq *int64, fromStart bool, riskOnly bool, query *string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.LoadChatPayload {
+func NewLoadChatPayload(id string, generation *int, limit int, beforeSeq *int64, afterSeq *int64, fromStart bool, riskOnly bool, query *string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string, apikeyToken *string) *chat.LoadChatPayload {
 	v := &chat.LoadChatPayload{}
 	v.ID = id
 	v.Generation = generation
@@ -3063,6 +3875,7 @@ func NewLoadChatPayload(id string, generation *int, limit int, beforeSeq *int64,
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken
+	v.ApikeyToken = apikeyToken
 
 	return v
 }
@@ -3103,6 +3916,23 @@ func NewSetPinnedPayload(body *SetPinnedRequestBody, sessionToken *string, proje
 	v := &chat.SetPinnedPayload{
 		ID:     *body.ID,
 		Pinned: *body.Pinned,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewSummarizePayload builds a chat service summarize endpoint payload.
+func NewSummarizePayload(body *SummarizeRequestBody, sessionToken *string, projectSlugInput *string) *chat.SummarizePayload {
+	v := &chat.SummarizePayload{
+		ID: *body.ID,
+	}
+	if body.Regenerate != nil {
+		v.Regenerate = *body.Regenerate
+	}
+	if body.Regenerate == nil {
+		v.Regenerate = false
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -3156,6 +3986,18 @@ func ValidateSetPinnedRequestBody(body *SetPinnedRequestBody) (err error) {
 	}
 	if body.Pinned == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("pinned", "body"))
+	}
+	return
+}
+
+// ValidateSummarizeRequestBody runs the validations defined on
+// SummarizeRequestBody
+func ValidateSummarizeRequestBody(body *SummarizeRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	return
 }

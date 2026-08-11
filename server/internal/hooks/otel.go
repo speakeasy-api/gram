@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"time"
 
@@ -45,13 +46,19 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		attr.SlogProjectID(projectID),
 	)
 
-	// Codex reports token usage on its OTEL logs stream (codex.sse_event /
-	// response.completed) rather than as metrics like Claude Code. Route those
-	// payloads to the usage writer; they carry no Claude session to seed.
-	if isCodexLogsPayload(payload) {
-		s.writeCodexUsageToClickHouse(ctx, payload, orgID, projectID)
+	// Codex resources persist as a raw log stream like Claude's; they carry no
+	// Claude session to seed, so they skip the attribution path below. Split
+	// per resource rather than routing the whole payload: a collector can
+	// re-batch both clients into one export, and sending the batch to a single
+	// writer would mislabel the other client's records.
+	codexPayload, claudePayload := splitCodexLogsPayload(payload)
+	if codexPayload != nil {
+		s.writeCodexOTELLogsToClickHouse(ctx, codexPayload, orgID, projectID)
+	}
+	if claudePayload == nil {
 		return nil
 	}
+	payload = claudePayload
 
 	sessions := extractSessionMetadata(payload)
 
@@ -76,14 +83,32 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		// ClickHouse stamping below runs each batch.
 		//
 		// Exception: re-attribute when this batch carries an identity field the
-		// cached attribution lacks. A collector can split a session's records so a
+		// cached attribution lacks (or a service.name that pins the product
+		// surface more precisely). A collector can split a session's records so a
 		// later batch is the first to carry the work email or provider org id;
 		// short-circuiting there would freeze a session first seen without an email
 		// as personal and never persist the late-arriving email / external_org_id
 		// or teach the device bridge (DNO-360).
+		//
+		// A company-credential session (no provider account UUID) never gets a
+		// UserAccountID — there is no account entity to persist — so for those
+		// sessions the fast path keys on the resolved AccountType instead, or they
+		// would re-attribute on every batch for their lifetime. A UUID-bearing
+		// session must still present a persisted UserAccountID: attribution stamps
+		// AccountType before the user_accounts upsert, so keying on AccountType
+		// alone would freeze a session whose entity persistence transiently failed
+		// (classified but never persisted, linked, or billing-resolved) instead of
+		// retrying on the next batch.
+		// Only an entry this Claude path owns may be adopted: the codex OTEL
+		// writer seeds the same key space (session ids are client-reported)
+		// with provider=openai entries whose shape — AccountType set, no
+		// account UUID — would otherwise satisfy the company-credential arm
+		// below and stamp Claude rows with Codex attribution.
 		var cached SessionMetadata
 		if err := s.cache.Get(ctx, sessionCacheKey(session.SessionID), &cached); err == nil &&
-			cached.UserAccountID != "" && !sessionEnrichesAttribution(session, cached) {
+			cached.Provider == providerAnthropic && cached.GramOrgID == orgID && cached.ProjectID == projectID &&
+			(cached.UserAccountID != "" || (cached.AccountType != "" && cached.ExternalAccountUUID == "")) &&
+			!sessionEnrichesAttribution(session, cached) {
 			attributionBySession[session.SessionID] = cached
 			continue
 		}
@@ -104,8 +129,12 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		}
 
 		completeMetadata := SessionMetadata{
-			SessionID:           session.SessionID,
-			ServiceName:         conv.Default(session.ServiceName, cached.ServiceName),
+			SessionID: session.SessionID,
+			// Surface-specificity merge, not plain first-non-empty: the OTEL
+			// stream reports "claude-code" for the CLI and Claude Code Desktop
+			// alike, so a cached desktop adapter slug must survive this batch,
+			// while an incoming "cowork" upgrades whatever was cached.
+			ServiceName:         preferClaudeServiceName(session.ServiceName, cached.ServiceName),
 			UserEmail:           userEmail,
 			UserID:              userID,
 			Provider:            providerAnthropic,
@@ -113,9 +142,12 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 			ExternalAccountUUID: conv.Default(session.ExternalAccountUUID, cached.ExternalAccountUUID),
 			ExternalAccountID:   conv.Default(session.ExternalAccountID, cached.ExternalAccountID),
 			DeviceID:            conv.Default(session.DeviceID, cached.DeviceID),
-			AccountType:         "",
-			BillingMode:         "",
-			UserAccountID:       "",
+			// Claude OTEL records carry no hostname; adopt whatever the hooks
+			// path cached for the session (the Go hooks send it on every event).
+			Hostname:      cached.Hostname,
+			AccountType:   "",
+			BillingMode:   "",
+			UserAccountID: "",
 			// On this path user.email is the account's own report, so it doubles
 			// as the observed email consumers keep separate from actor identity.
 			ObservedUserEmail: userEmail,
@@ -128,6 +160,8 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 			attr.SlogGenAIConversationID(session.SessionID),
 			attr.SlogAuthUserEmail(session.UserEmail),
 		)
+
+		_, metadataErr := s.getSessionMetadata(ctx, completeMetadata.SessionID)
 
 		// Attribute the account: classify team vs personal, link it to the
 		// owning employee (directly for team accounts, via the device bridge for
@@ -164,8 +198,10 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		}
 
 		// Cache only after the backfill: the once-per-session fast path above
-		// keys on the cached UserAccountID, so caching an attribution whose
-		// backfill just failed would freeze the chat unlinked forever. Skipping
+		// keys on the cached UserAccountID (or, for a company-credential session
+		// with no account entity, the resolved AccountType), so caching an
+		// attribution whose backfill just failed would freeze the chat unlinked
+		// forever. Skipping
 		// the write keeps this batch's row stamping (attributionBySession) and
 		// lets the next batch re-attribute and retry the link. Process each
 		// session independently so a single cache failure does not abort
@@ -174,6 +210,17 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 			if err := s.cache.Set(ctx, sessionCacheKey(completeMetadata.SessionID), completeMetadata, 24*time.Hour); err != nil {
 				sessionLogger.ErrorContext(ctx, "Failed to store session metadata",
 					attr.SlogEvent("claude_logs_cache_set_failed"),
+					attr.SlogError(err),
+				)
+			}
+		}
+		if metadataErr != nil {
+			entries, err := s.getCachedMCPList(ctx, completeMetadata.SessionID)
+			if err == nil {
+				s.upsertShadowMCPInventoryURLs(ctx, completeMetadata.GramOrgID, completeMetadata.ProjectID, completeMetadata.SessionID, entries)
+			} else {
+				sessionLogger.WarnContext(ctx, "failed to read cached MCP list for shadow inventory capture",
+					attr.SlogEvent("claude_otel_mcp_list_cache_miss"),
 					attr.SlogError(err),
 				)
 			}
@@ -208,12 +255,18 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 // this returns false, preserving the fast path. Note this keys on raw field
 // presence, not email resolution: a batch that merely repeats an already-seen
 // email whose membership changed does not re-trigger (that heals on the next
-// session, by design).
+// session, by design). A batch whose service.name pins the product surface
+// more precisely than the cached one (e.g. "cowork" after a resumed session's
+// client upgrade replaced the ambiguous "claude-code") also yields, so the
+// slow path's preferClaudeServiceName merge can upgrade the cached
+// ServiceName.
 func sessionEnrichesAttribution(incoming claudeLogMetadata, cached SessionMetadata) bool {
 	return (incoming.UserEmail != "" && cached.UserEmail == "") ||
 		(incoming.ExternalOrgID != "" && cached.ExternalOrgID == "") ||
+		(incoming.ExternalAccountUUID != "" && cached.ExternalAccountUUID == "") ||
 		(incoming.ExternalAccountID != "" && cached.ExternalAccountID == "") ||
-		(incoming.DeviceID != "" && cached.DeviceID == "")
+		(incoming.DeviceID != "" && cached.DeviceID == "") ||
+		claudeServiceNameSpecificity(incoming.ServiceName) > claudeServiceNameSpecificity(cached.ServiceName)
 }
 
 type claudeLogMetadata struct {
@@ -323,7 +376,14 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 	}
 
 	params := make([]telemetry.LogParams, 0)
+	stagedParams := make([]telemetry.LogParams, 0)
 	correlationSessionIDs := make(map[string]struct{})
+	// claudeSessionSurface consults the SessionStart agent-variant cache (a
+	// Redis GET per call), and this loop runs per log record — memoize the
+	// resolved surface per session + merged service name so each session pays
+	// for at most one lookup per payload.
+	type surfaceKey struct{ sessionID, serviceName string }
+	surfaceBySession := make(map[surfaceKey]string)
 	for _, resourceLog := range payload.ResourceLogs {
 		if resourceLog == nil {
 			continue
@@ -348,9 +408,28 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 				logAttrs[attr.ProjectIDKey] = projectID
 				logAttrs[attr.OrganizationIDKey] = orgID
 				logAttrs[attr.ResourceURNKey] = claudeOTELLogsURN
-				logAttrs[attr.HookSourceKey] = "claude-code"
 				sessionID := stringAttr(logAttrs, attribute.Key("session.id"))
 				sessionMeta := attributionBySession[sessionID]
+				// Label the row with the session's product surface — cowork,
+				// claude-code-desktop, or claude-code. The resource's
+				// service.name is the source of truth where it disambiguates
+				// (cowork self-identifies); the session's merged service name
+				// carries the desktop adapter slug that separates CCD from
+				// the CLI, both of which report "claude-code" over OTEL; and
+				// the SessionStart agent variant covers older cowork builds
+				// whose OTEL still reports "claude-code". Empty and non-Claude
+				// values keep the claude-code default, matching the hook and
+				// chat capture paths.
+				mergedServiceName := preferClaudeServiceName(resourceServiceName, sessionMeta.ServiceName)
+				surface, ok := surfaceBySession[surfaceKey{sessionID, mergedServiceName}]
+				if !ok {
+					surfaceMeta := sessionMeta
+					surfaceMeta.SessionID = sessionID
+					surfaceMeta.ServiceName = mergedServiceName
+					surface = conv.Default(claudeSurfaceFromServiceName(s.claudeSessionSurface(ctx, &surfaceMeta)), "claude-code")
+					surfaceBySession[surfaceKey{sessionID, mergedServiceName}] = surface
+				}
+				logAttrs[attr.HookSourceKey] = surface
 				stampAccountAttribution(logAttrs, sessionMeta)
 				if shouldTriggerClaudePromptCorrelation(logAttrs) {
 					correlationSessionIDs[sessionID] = struct{}{}
@@ -391,12 +470,29 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 				}
 
 				timestamp, observedTimestamp := otelLogTimestamps(logRecord)
-				params = append(params, telemetry.WithOTELMetadata(telemetry.LogParams{
+				logParams := telemetry.WithOTELMetadata(telemetry.LogParams{
 					Timestamp:  timestamp,
-					ToolInfo:   claudeOTELLogToolInfo(orgID, parsedProjectID.String()),
+					ToolInfo:   claudeOTELLogToolInfo(surface, orgID, parsedProjectID.String()),
 					UserInfo:   userInfo,
 					Attributes: logAttrs,
-				}, observedTimestamp, resourceAttrs))
+				}, observedTimestamp, resourceAttrs)
+
+				// Claude redacts user-configured MCP server/tool names to
+				// "custom" on api_request rows. Those rows park in
+				// telemetry_logs_staging until the transcript-derived
+				// attribution for their request_id arrives via the
+				// Stop/SubagentStop hooks (or the promotion timeout passes);
+				// the scheduled sweep then rewrites the names and inserts
+				// into telemetry_logs so attribute_metrics_summaries_mv
+				// aggregates the true attribution. The sweep scans staging
+				// per project and joins tuples per request id, so even
+				// sessionless redacted rows are reachable. Everything else
+				// writes through.
+				if isRedactedClaudeAPIRequest(logAttrs) {
+					stagedParams = append(stagedParams, logParams)
+					continue
+				}
+				params = append(params, logParams)
 			}
 		}
 	}
@@ -405,9 +501,24 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 		s.logger.ErrorContext(ctx, "failed to write Claude OTEL logs to ClickHouse", attr.SlogError(err))
 		return
 	}
+	if err := s.telemetryLogger.LogBulkStaging(ctx, stagedParams); err != nil {
+		s.logger.ErrorContext(ctx, "failed to write staged Claude OTEL logs to ClickHouse", attr.SlogError(err))
+		return
+	}
 	for sessionID := range correlationSessionIDs {
 		s.scheduleClaudePromptCorrelation(ctx, parsedProjectID, sessionIDToUUID(sessionID), sessionID)
 	}
+}
+
+// isRedactedClaudeAPIRequest reports whether this OTEL log row is a Claude
+// api_request whose inline MCP attribution Claude redacted to "custom" —
+// exactly the rows the staging/promotion path exists for.
+func isRedactedClaudeAPIRequest(logAttrs map[attr.Key]any) bool {
+	if stringAttr(logAttrs, attribute.Key("mcp_server.name")) != "custom" {
+		return false
+	}
+	return stringAttr(logAttrs, attribute.Key("event.name")) == "api_request" ||
+		stringAttr(logAttrs, attr.LogBodyKey) == "claude_code.api_request"
 }
 
 func shouldTriggerClaudePromptCorrelation(logAttrs map[attr.Key]any) bool {
@@ -433,9 +544,13 @@ func (s *Service) scheduleClaudePromptCorrelation(ctx context.Context, projectID
 	}
 }
 
-func claudeOTELLogToolInfo(orgID string, projectID string) telemetry.ToolInfo {
+// claudeOTELLogToolInfo labels an OTEL log row with the session's product
+// surface (claude-code or cowork). The URN stays claude-code:otel:logs for
+// every surface — it identifies the stream's provenance, and the session and
+// cost aggregations anchor their Claude predicates on it.
+func claudeOTELLogToolInfo(surface string, orgID string, projectID string) telemetry.ToolInfo {
 	return telemetry.ToolInfo{
-		Name:           "claude-code",
+		Name:           surface,
 		OrganizationID: orgID,
 		ProjectID:      projectID,
 		ID:             "",
@@ -660,4 +775,52 @@ func stringPtrVal(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+// Metrics handles authenticated OTEL metrics data from Claude Code and Codex.
+func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) error {
+	logger := s.logger.With(
+		attr.SlogHookSource("claude"),
+		attr.SlogHookEvent("Metrics"),
+	)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.E(oops.CodeUnauthorized, errors.New("rejected unauthorized claude OTEL metrics request"), "unauthorized").LogWarn(ctx, logger, attr.SlogEvent("claude_metrics_unauthorized"))
+	}
+
+	orgID := authCtx.ActiveOrganizationID
+	projectID := authCtx.ProjectID.String()
+
+	// Codex metrics (event counters, not token usage) must not run through the
+	// Claude usage extractor — it would find no claude_code.* metrics and can
+	// reject on temporality. Persist them verbatim instead, splitting per
+	// resource so a mixed collector batch routes each client's metrics to its
+	// own writer.
+	codexMetrics, claudeMetrics := splitCodexMetricsPayload(payload)
+	if codexMetrics != nil {
+		s.logger.InfoContext(ctx, "Received Codex OTEL metrics",
+			attr.SlogHookSource("codex"),
+			attr.SlogHookEvent("Metrics"),
+			attr.SlogEvent("codex_metrics"),
+			attr.SlogOrganizationID(orgID),
+			attr.SlogProjectID(projectID),
+		)
+		s.writeCodexMetricsToClickHouse(ctx, codexMetrics, orgID, projectID)
+	}
+	if claudeMetrics == nil {
+		return nil
+	}
+	payload = claudeMetrics
+
+	logger.InfoContext(ctx, "Received Claude token metrics",
+		attr.SlogEvent("claude_metrics"),
+		attr.SlogOrganizationID(orgID),
+		attr.SlogProjectID(projectID),
+	)
+
+	// Write metrics to ClickHouse
+	s.writeMetricsToClickHouse(ctx, payload, orgID, projectID)
+
+	return nil
 }

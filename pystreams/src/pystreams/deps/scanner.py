@@ -24,6 +24,7 @@ async def build_presidio_scanner(
     scan_workers: int,
     scan_max_tasks_per_child: int,
     scan_timeout: float,
+    scan_slot_timeout: float,
     max_scan_concurrency: int | None,
     logger: structlog.stdlib.BoundLogger,
 ) -> Scanner:
@@ -41,11 +42,13 @@ async def build_presidio_scanner(
             workers=scan_workers,
             max_tasks_per_child=scan_max_tasks_per_child,
             scan_timeout=scan_timeout,
+            scan_slot_timeout=scan_slot_timeout,
         )
         return await ProcessPoolScanner.create(
             max_workers=scan_workers,
             max_tasks_per_child=scan_max_tasks_per_child,
             scan_timeout=scan_timeout,
+            slot_timeout=scan_slot_timeout,
         )
 
     analyzer = await build_default_analyzer()

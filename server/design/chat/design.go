@@ -21,8 +21,9 @@ var _ = Service("chat", func() {
 			security.SessionPayload()
 			security.ProjectPayload()
 			security.ChatSessionsTokenPayload()
-			Attribute("search", String, "Search query (searches chat ID, user ID, and title)")
+			Attribute("search", String, "Search query (searches chat ID, user ID, user name, and title)")
 			Attribute("external_user_id", String, "Filter by external user ID")
+			Attribute("user_id", String, "Filter by Gram user ID")
 			Attribute("source", String, "Filter by agent source. Comma-separated list of exact source values (e.g. 'claude-code,Codex,playground') matched against each session's inferred source; empty for no filter. Use chat.listSources to discover the available values.")
 			Attribute("assistant_id", String, "Filter to chats produced by this assistant", func() {
 				Format(FormatUUID)
@@ -72,6 +73,7 @@ var _ = Service("chat", func() {
 			GET("/rpc/chat.list")
 			Param("search")
 			Param("external_user_id")
+			Param("user_id")
 			Param("source")
 			Param("assistant_id")
 			Param("source_kind")
@@ -97,13 +99,55 @@ var _ = Service("chat", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListChats", "type": "query"}`)
 	})
 
+	Method("getWorkUnitsTrend", func() {
+		Description("Aggregate work-units analysis results over time for the project: work done and cost/token efficiency per UTC day.")
+
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("from", String, "Start of the window (ISO 8601). Defaults to 30 days before `to`.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "End of the window (ISO 8601). Defaults to now.", func() {
+				Format(FormatDateTime)
+			})
+		})
+
+		Result(WorkUnitsTrendResult)
+
+		HTTP(func() {
+			GET("/rpc/chat.getWorkUnitsTrend")
+			Param("from")
+			Param("to")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getWorkUnitsTrend")
+		Meta("openapi:extension:x-speakeasy-name-override", "getWorkUnitsTrend")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "WorkUnitsTrend", "type": "query"}`)
+	})
+
 	Method("loadChat", func() {
+		// Reachable with a producer-scoped API key (in addition to a dashboard
+		// session or chat-session token) so backend integrations can pull chat
+		// transcripts programmatically without a browser session.
+		Security(security.Session, security.ProjectSlug)
+		Security(security.ChatSessionsToken)
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+
 		Description("Load a chat by its ID. Messages within a generation are paginated by `seq` keyset: omit cursors to receive the newest page, pass `before_seq` to load older messages (scroll up) or `after_seq` to load newer ones (scroll down). Set `from_start` to receive the oldest page (the start of the thread) instead of the newest. Omit `generation` to receive the latest generation. Set `risk_only` to return only messages with risk findings plus a few messages of surrounding context per finding. Set `query` to instead return only messages whose text matches a search query plus surrounding context (mutually exclusive with `risk_only`).")
 
 		Payload(func() {
 			security.SessionPayload()
 			security.ProjectPayload()
 			security.ChatSessionsTokenPayload()
+			security.ByKeyPayload()
 			Attribute("id", String, "The ID of the chat")
 			Attribute("generation", Int, "Generation to load. A generation is an immutable snapshot of the chat transcript: a new one is opened whenever the conversation is compacted or an earlier message is edited, while normal turns append to the current generation. Generations are numbered from 0 (oldest) up to `max_generation` (latest). Omit this attribute to receive the latest generation, or page through history by walking from `max_generation` down to 0.", func() {
 				Minimum(0)
@@ -147,6 +191,7 @@ var _ = Service("chat", func() {
 			security.SessionHeader()
 			security.ProjectHeader()
 			security.ChatSessionsTokenHeader()
+			security.ByKeyHeader()
 			Response(StatusOK)
 		})
 
@@ -260,6 +305,37 @@ var _ = Service("chat", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "setPinned")
 	})
 
+	Method("summarize", func() {
+		Description("Generate or return a persisted LLM summary of a chat session transcript. When a summary already exists and regenerate is false, returns the cached summary without calling the model.")
+
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The ID of the chat to summarize", func() {
+				Format(FormatUUID)
+			})
+			Attribute("regenerate", Boolean, "When true, regenerate and overwrite any existing summary. Defaults to false.", func() {
+				Default(false)
+			})
+			Required("id")
+		})
+
+		Result(SummarizeChatResult)
+
+		HTTP(func() {
+			POST("/rpc/chat.summarize")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "summarizeChat")
+		Meta("openapi:extension:x-speakeasy-name-override", "summarize")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SummarizeChat"}`)
+	})
+
 	Method("submitFeedback", func() {
 		Description("Submit user feedback for a chat (success/failure)")
 
@@ -316,6 +392,28 @@ var _ = Service("chat", func() {
 	})
 })
 
+var WorkUnitsTrendBucket = Type("WorkUnitsTrendBucket", func() {
+	Attribute("timestamp", String, func() {
+		Description("Start of the UTC day this bucket covers.")
+		Format(FormatDateTime)
+	})
+	Attribute("scored_sessions", Int, "Number of chat sessions scored by the work-units analysis in this bucket.")
+	Attribute("work_units", Float64, "Total work units delivered across the bucket's scored sessions.")
+	Attribute("total_cost", Float64, "Total cost in USD across the bucket's scored sessions.")
+	Attribute("total_tokens", Int64, "Total tokens across the bucket's scored sessions.")
+	Attribute("cost_per_unit", Float64, "Cost per unit of work. Absent when the bucket has no positive work or no cost telemetry.")
+	Attribute("tokens_per_unit", Float64, "Tokens per unit of work. Absent when the bucket has no positive work or no token telemetry.")
+
+	Required("timestamp", "scored_sessions", "work_units", "total_cost", "total_tokens")
+})
+
+var WorkUnitsTrendResult = Type("WorkUnitsTrendResult", func() {
+	Attribute("scores_available", Boolean, "Whether any work-units scores exist in the window. False for organizations without work-units analysis.")
+	Attribute("buckets", ArrayOf(WorkUnitsTrendBucket), "One bucket per UTC day in the window, oldest first, zero-filled for days without scores.")
+
+	Required("scores_available", "buckets")
+})
+
 var ListSourcesResult = Type("ListSourcesResult", func() {
 	Attribute("sources", ArrayOf(String), "The distinct agent sources present in this project's chats (raw source strings such as 'claude-code', 'Codex', 'playground').")
 	Required("sources")
@@ -327,11 +425,23 @@ var ListChatsResult = Type("ListChatsResult", func() {
 	Required("chats", "total")
 })
 
+var SummarizeChatResult = Type("SummarizeChatResult", func() {
+	Attribute("summary", String, "The session summary text")
+	Attribute("summary_generated_at", String, func() {
+		Description("When the summary was last generated.")
+		Format(FormatDateTime)
+	})
+	Attribute("cached", Boolean, "True when an existing summary was returned without regenerating")
+	Required("summary", "summary_generated_at", "cached")
+})
+
 var ChatOverview = Type("ChatOverview", func() {
 	Attribute("id", String, "The ID of the chat")
 	Attribute("title", String, "The title of the chat")
 	Attribute("user_id", String, "The ID of the user who created the chat")
 	Attribute("external_user_id", String, "The ID of the external user who created the chat")
+	Attribute("assistant_id", String, "The ID of the assistant that produced this chat, if any")
+	Attribute("assistant_name", String, "The name of the assistant that produced this chat, if any")
 	Attribute("num_messages", Int, "The number of messages in the chat")
 	Attribute("source", String, "The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)")
 	Attribute("created_at", String, func() {
@@ -351,8 +461,15 @@ var ChatOverview = Type("ChatOverview", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("risk_findings_count", Int, "Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.")
+	Attribute("work_units", Float64, "Work units of value delivered in this chat as judged by the work-units analysis. Absent unless the organization has work-units analysis enabled and this chat has been scored.")
 	Attribute("account_type", String, "Account type that produced the chat ('team', 'personal', or empty), resolved from the linked AI account.")
 	Attribute("account_email", String, "Email of the AI account that produced the chat, resolved from the linked AI account. May differ from the employee's work email (e.g. a personal account).")
+	Attribute("pinned", Boolean, "True when the chat is pinned")
+	Attribute("summary", String, "Persisted LLM summary of the session transcript, if one has been generated")
+	Attribute("summary_generated_at", String, func() {
+		Description("When the session summary was last generated.")
+		Format(FormatDateTime)
+	})
 
 	Required("id", "title", "num_messages", "created_at", "updated_at", "last_message_timestamp")
 })
@@ -360,6 +477,7 @@ var ChatOverview = Type("ChatOverview", func() {
 var Chat = Type("Chat", func() {
 	Extend(ChatOverview)
 	Attribute("messages", ArrayOf(ChatMessage), "The list of messages in the chat for the returned generation, ordered oldest to newest by `seq`.")
+	Attribute("content_parts", ArrayOf(ChatContentPart), "Non-turn content attached to this chat, such as prompt attachments.")
 	Attribute("generation", Int, "The generation that this response's messages belong to. A generation is an immutable snapshot of the transcript; a new one is opened on compaction or message edits, while normal turns append to the current one.")
 	Attribute("max_generation", Int, "The highest generation number present for this chat. To load the full history, walk from `max_generation` down to 0, requesting each generation in turn.")
 	Attribute("has_more_before", Boolean, "Whether older messages exist before the first message in this page (within the returned generation). Load them with a `before_seq` cursor.")
@@ -368,8 +486,26 @@ var Chat = Type("Chat", func() {
 	Attribute("match_segments", ArrayOf(RiskSegment), "Present only when `query` was requested: contiguous runs of returned messages, each spanning one or more query matches and their surrounding context. Use each segment's cursors to expand it.")
 	Attribute("agent_usage", AgentUsage, "Agent-specific usage enrichment for the chat, when available.")
 	Attribute("totals", ChatTotals, "Whole-generation trace-entry totals for the returned generation. Because messages are paginated, callers must use these (not the length of `messages`) to render filter-bar counts.")
+	Attribute("work_units_report", String, "Full work-units analysis verdict as JSON (per-task breakdown, rationales, and flags). Present only when `work_units` is present.")
 
-	Required("messages", "generation", "max_generation", "has_more_before", "has_more_after")
+	Required("messages", "content_parts", "generation", "max_generation", "has_more_before", "has_more_after")
+})
+
+var ChatContentPart = Type("ChatContentPart", func() {
+	Attribute("id", String, "The ID of the content part.")
+	Attribute("kind", String, "The content kind, such as prompt_attachment.")
+	Attribute("content", String, "The text content.")
+	Attribute("parent_chat_message_id", String, "The chat message this content hangs off, when resolved.")
+	Attribute("metadata", Any, "Sparse metadata for the content kind.", func() {
+		Meta("struct:field:type", "json.RawMessage", "encoding/json")
+	})
+	Attribute("is_risk", Boolean, "Whether this content part has an active risk finding.")
+	Attribute("created_at", String, func() {
+		Description("When the content part was created.")
+		Format(FormatDateTime)
+	})
+
+	Required("id", "kind", "content", "is_risk", "created_at")
 })
 
 var ChatTotals = Type("ChatTotals", func() {

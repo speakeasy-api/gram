@@ -1,19 +1,22 @@
-import { Label } from "@/components/ui/label";
+import { Label } from "@/components/ui/Label";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
+} from "@/components/ui/Popover";
 import {
   Sheet,
   SheetContent,
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Button } from "@speakeasy-api/moonshine";
-import { ChevronDown, Plus, X } from "lucide-react";
-import { useCallback, useState } from "react";
+} from "@/components/ui/Sheet";
+import { Switch } from "@/components/ui/Switch";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Button } from "@/components/ui/Button";
+import { AlertCircle, ChevronDown, Plus, X } from "lucide-react";
+import { type ClipboardEvent, useCallback, useRef, useState } from "react";
+import { parseDotEnvPaste } from "./dotEnvUtils";
 import { EnvVarState } from "./environmentVariableUtils";
 
 interface Environment {
@@ -26,7 +29,16 @@ interface VariableEntry {
   key: string;
   value: string;
   state: EnvVarState;
+  isSecret: boolean;
 }
+
+type DraftVariableEntry = Omit<VariableEntry, "state">;
+
+const EMPTY_ENTRY: DraftVariableEntry = {
+  key: "",
+  value: "",
+  isSecret: true,
+};
 
 interface AddVariableSheetProps {
   open: boolean;
@@ -45,24 +57,48 @@ export function AddVariableSheet({
   onAddVariables,
   onLoadFromEnvironment,
 }: AddVariableSheetProps): JSX.Element {
-  const emptyEntry = { key: "", value: "" };
-  const [entries, setEntries] = useState([{ ...emptyEntry }]);
+  // Secret is on by default so an unattended value is never stored in the clear
+  // by accident. This matches the server's default for new entries.
+  const [entries, setEntries] = useState<DraftVariableEntry[]>([
+    { ...EMPTY_ENTRY },
+  ]);
+  const [error, setError] = useState<string | null>(null);
+  const [isReadingFile, setIsReadingFile] = useState(false);
+  const fileReadSeq = useRef(0);
 
   const resetForm = useCallback(() => {
-    setEntries([{ key: "", value: "" }]);
+    fileReadSeq.current += 1;
+    setEntries([{ ...EMPTY_ENTRY }]);
+    setError(null);
+    setIsReadingFile(false);
   }, []);
 
   const handleSave = () => {
-    const validEntries = entries
-      .filter((e) => e.key.trim())
-      .map((e) => ({
+    if (isReadingFile) return;
+
+    const keyedEntries = entries.filter((e) => e.key.trim());
+    if (keyedEntries.length === 0) return;
+
+    // A non-secret value is stored as plaintext and the server rejects an
+    // empty one, so catch it here instead of losing the row to a failed save.
+    const emptyReadable = keyedEntries.find(
+      (e) => !e.isSecret && e.value.trim() === "",
+    );
+    if (emptyReadable) {
+      setError(
+        `Enter a value for ${emptyReadable.key.toUpperCase()}, or turn on Secret to store it empty.`,
+      );
+      return;
+    }
+
+    onAddVariables(
+      keyedEntries.map((e) => ({
         key: e.key.toUpperCase().replace(/\s+/g, "_"),
         value: e.value,
         state: "system" as EnvVarState,
-      }));
-    if (validEntries.length === 0) return;
-
-    onAddVariables(validEntries);
+        isSecret: e.isSecret,
+      })),
+    );
     resetForm();
     onOpenChange(false);
   };
@@ -75,16 +111,94 @@ export function AddVariableSheet({
           : e,
       ),
     );
+    if (error) setError(null);
+  };
+
+  const updateEntrySecrecy = (index: number, isSecret: boolean) => {
+    setEntries((prev) =>
+      prev.map((e, i) => (i === index ? { ...e, isSecret } : e)),
+    );
+    if (error) setError(null);
   };
 
   const addEntry = () => {
-    setEntries((prev) => [...prev, { ...emptyEntry }]);
+    setEntries((prev) => [...prev, { ...EMPTY_ENTRY }]);
+  };
+
+  const importDotEnvContents = (contents: string, index: number): boolean => {
+    const parsed = parseDotEnvPaste(contents);
+    if (!parsed) return false;
+
+    if (parsed.entries.length > 0) {
+      const importedEntries = parsed.entries.map(({ key, value }) => ({
+        key: key.toUpperCase(),
+        value,
+        isSecret: true,
+      }));
+      setEntries((prev) => [
+        ...prev.slice(0, index),
+        ...importedEntries,
+        ...prev.slice(index + 1),
+      ]);
+    }
+
+    if (parsed.invalidLineNumbers.length > 0) {
+      const lineLabel =
+        parsed.invalidLineNumbers.length === 1 ? "line" : "lines";
+      setError(
+        `Ignored invalid .env ${lineLabel}: ${parsed.invalidLineNumbers.join(", ")}.`,
+      );
+    } else {
+      setError(null);
+    }
+
+    return true;
+  };
+
+  const handleDotEnvPaste = (
+    index: number,
+    event: ClipboardEvent<HTMLInputElement>,
+  ) => {
+    const imported = importDotEnvContents(
+      event.clipboardData.getData("text"),
+      index,
+    );
+    if (imported) {
+      fileReadSeq.current += 1;
+      setIsReadingFile(false);
+      event.preventDefault();
+    }
+  };
+
+  const handleDotEnvFile = async (file: File | undefined): Promise<void> => {
+    if (!file) return;
+
+    const readSeq = ++fileReadSeq.current;
+    setIsReadingFile(true);
+
+    try {
+      const contents = await file.text();
+      if (readSeq !== fileReadSeq.current) return;
+
+      const imported = importDotEnvContents(contents, 0);
+      if (!imported) {
+        setError("No valid environment variable assignments found.");
+      }
+    } catch {
+      if (readSeq !== fileReadSeq.current) return;
+      setError("The selected .env file could not be read.");
+    } finally {
+      if (readSeq === fileReadSeq.current) {
+        setIsReadingFile(false);
+      }
+    }
   };
 
   const removeEntry = (index: number) => {
     setEntries((prev) =>
       prev.length <= 1 ? prev : prev.filter((_, i) => i !== index),
     );
+    if (error) setError(null);
   };
 
   const hasValidEntry = entries.some((e) => e.key.trim());
@@ -116,7 +230,7 @@ export function AddVariableSheet({
               </Label>
               <Popover>
                 <PopoverTrigger asChild>
-                  <button className="border-input bg-background hover:bg-accent flex h-10 w-full items-center justify-between rounded-md border px-3 text-sm transition-colors">
+                  <button className="border-input bg-background hover:bg-accent flex h-10 w-full items-center justify-between border px-3 text-sm transition-colors">
                     <span className="text-muted-foreground">
                       Select a variable to add...
                     </span>
@@ -130,7 +244,7 @@ export function AddVariableSheet({
                   {availableEnvVarsFromAttached.map((varName) => (
                     <div
                       key={varName}
-                      className="hover:bg-accent flex cursor-pointer items-center gap-2 rounded-sm px-3 py-2 text-sm"
+                      className="hover:bg-accent flex cursor-pointer items-center gap-2 px-3 py-2 text-sm"
                       onClick={() => onLoadFromEnvironment(varName)}
                     >
                       <div className="font-mono">{varName}</div>
@@ -173,8 +287,9 @@ export function AddVariableSheet({
                   type="text"
                   value={entry.key}
                   onChange={(e) => updateEntry(index, "key", e.target.value)}
+                  onPaste={(e) => handleDotEnvPaste(index, e)}
                   placeholder="CLIENT_KEY..."
-                  className="border-input bg-background placeholder:text-muted-foreground focus:ring-ring h-10 w-full rounded-md border px-3 font-mono text-sm focus:ring-2 focus:outline-none"
+                  className="border-input bg-background placeholder:text-muted-foreground focus:ring-ring h-10 w-full border px-3 font-mono text-sm focus:ring-2 focus:outline-none"
                 />
               </div>
               <div className="flex-1">
@@ -184,12 +299,36 @@ export function AddVariableSheet({
                   </Label>
                 )}
                 <input
-                  type="password"
+                  type={entry.isSecret ? "password" : "text"}
                   value={entry.value}
                   onChange={(e) => updateEntry(index, "value", e.target.value)}
                   placeholder=""
-                  className="border-input bg-background placeholder:text-muted-foreground focus:ring-ring h-10 w-full rounded-md border px-3 font-mono text-sm focus:ring-2 focus:outline-none"
+                  className="border-input bg-background placeholder:text-muted-foreground focus:ring-ring h-10 w-full border px-3 font-mono text-sm focus:ring-2 focus:outline-none"
                 />
+              </div>
+              <div className="shrink-0">
+                {index === 0 && (
+                  <Label className="text-muted-foreground mb-1.5 block text-xs">
+                    Secret
+                  </Label>
+                )}
+                <div className="flex h-10 items-center">
+                  <SimpleTooltip
+                    tooltip={
+                      entry.isSecret
+                        ? "Encrypted, and only ever shown as a redacted preview"
+                        : "Stored in the clear, and readable after saving"
+                    }
+                  >
+                    <Switch
+                      checked={entry.isSecret}
+                      onCheckedChange={(checked) =>
+                        updateEntrySecrecy(index, checked)
+                      }
+                      aria-label={`Secret${entry.key ? ` for ${entry.key}` : ""}`}
+                    />
+                  </SimpleTooltip>
+                </div>
               </div>
               {entries.length > 1 && (
                 <button
@@ -212,10 +351,20 @@ export function AddVariableSheet({
             <Plus className="h-4 w-4" />
             Add Another
           </button>
+
+          {error && (
+            <div
+              className="text-destructive flex items-center gap-2 text-sm"
+              role="alert"
+            >
+              <AlertCircle className="h-4 w-4" aria-hidden="true" />
+              {error}
+            </div>
+          )}
         </div>
 
         <SheetFooter className="flex-row items-center justify-between border-t px-6 py-4">
-          <button className="text-muted-foreground hover:text-foreground flex items-center gap-2 text-sm transition-colors">
+          <label className="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-2 text-sm transition-colors">
             <svg
               className="h-4 w-4"
               fill="none"
@@ -226,11 +375,24 @@ export function AddVariableSheet({
               <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
             </svg>
             Import .env
-          </button>
+            <input
+              type="file"
+              accept=".env,text/plain"
+              className="sr-only"
+              aria-label="Import .env file"
+              onChange={(event) => {
+                void handleDotEnvFile(event.currentTarget.files?.[0]);
+                event.currentTarget.value = "";
+              }}
+            />
+          </label>
           <span className="text-muted-foreground text-xs">
             or paste .env contents in Key input
           </span>
-          <Button onClick={handleSave} disabled={!hasValidEntry}>
+          <Button
+            onClick={handleSave}
+            disabled={!hasValidEntry || isReadingFile}
+          >
             Save
           </Button>
         </SheetFooter>

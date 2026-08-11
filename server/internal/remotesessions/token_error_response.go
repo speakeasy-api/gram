@@ -4,6 +4,12 @@ import (
 	"encoding/json"
 )
 
+// oauthErrInvalidGrant is the RFC 6749 §5.2 error code an OAuth 2.0 token
+// endpoint returns when a grant (here, a refresh_token) is invalid, expired, or
+// revoked. It is the definitive signal that the stored refresh token can never
+// renew, distinct from transient failures (server_error, temporarily_unavailable).
+const oauthErrInvalidGrant = "invalid_grant"
+
 // tokenErrorResponse is the RFC 6749 §5.2 error response an OAuth 2.0 token
 // endpoint returns on a failed grant (e.g. a rejected refresh_token). Only the
 // three RFC-defined members are modeled; provider-specific extensions are

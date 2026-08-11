@@ -26,14 +26,10 @@ func registerModelUsageSource(s ModelUsageSource) ModelUsageSource {
 	return s
 }
 
-// The surfaces whose LLM completions run through Gram's server — the
-// population billed as tokens under management. Registering a source here is
-// its single point of declaration: it names the identifier AND adds it to
-// ModelUsageSources, which the billing page's telemetry reads iterate to
-// scope analytics to the billed population. Completion telemetry is tagged
-// with these values (gram.hook.source); agent-fleet telemetry observed via
-// OTEL (claude-code, cursor, codex, …) is not billed and is never registered
-// here.
+// Registered completion surfaces become customer-configurable model-key slots
+// and form the main tokens-under-management exclusion list. Internal-only
+// surfaces such as assistants and skill efficacy are declared separately below
+// so they remain excluded from TUM without becoming customer key slots.
 var (
 	ModelUsageSourcePlayground = registerModelUsageSource("playground")
 	ModelUsageSourceElements   = registerModelUsageSource("elements")
@@ -41,12 +37,9 @@ var (
 	ModelUsageSourceSlack      = registerModelUsageSource("slack")
 
 	// ModelUsageSourceRiskAnalysis tags the platform's own risk-policy
-	// analysis inference (risk judge, prompt-injection scanner). Scanning is
-	// the metered unit of the enterprise TUM contracts — the act of securing
-	// observed agent traffic — so this source is registered (billed) even
-	// though no end user initiates the completions. The billing page reports
-	// it as its own "Risk policy analysis model" section, separate from
-	// user-facing completion surfaces.
+	// analysis inference (risk judge, prompt-injection scanner) — the
+	// textbook case of tokens Gram spends REACTING to observed traffic, so
+	// it must never count as tokens under management.
 	//
 	// Callers tagging gram or risk-analysis (platform-initiated inference)
 	// must also set openrouter.KeyTypeInternal on the completion request so
@@ -59,13 +52,33 @@ var (
 )
 
 // ModelUsageSourceAssistants tags assistants completions in telemetry but is
-// deliberately NOT registered above: Speakeasy covers assistants inference
-// today, so it must not count toward the billed population. Keeping the tag
-// (instead of dropping the constant) is what keeps those completions OUT —
-// an untagged completion normalizes to "gram" and would re-enter the billed
-// scope. Move it into the registered block when customers can BYOK
-// (see the "BYOK for Assistants" Linear project).
-const ModelUsageSourceAssistants ModelUsageSource = "assistants"
+// deliberately NOT registered above so it is not a customer-configurable model
+// key slot. It is still Gram-spent inference, so GramHostedHookSourceStrings
+// appends it to the TUM exclusion list explicitly.
+const (
+	ModelUsageSourceAssistants ModelUsageSource = "assistants"
+	// ModelUsageSourceSkillEfficacy is also unregistered so it cannot appear as
+	// a customer-configurable BYOK slot. The judge uses the platform's internal
+	// key and remains excluded from both Polar and TUM billing.
+	ModelUsageSourceSkillEfficacy ModelUsageSource = "skill-efficacy"
+	// ModelUsageSourceSkillSuggestions tags the platform-funded skill edit
+	// suggestion judge. It is internal-only like skill efficacy.
+	ModelUsageSourceSkillSuggestions ModelUsageSource = "skill-suggestions"
+	// ModelUsageSourceChatAnalysis tags the chat analysis judges (work units and
+	// friends). Unregistered for the same reason as skill efficacy: platform
+	// internal key, excluded from Polar and TUM billing, never a BYOK slot.
+	ModelUsageSourceChatAnalysis ModelUsageSource = "chat-analysis"
+)
+
+// The platform-initiated risk-analysis judges are likewise unregistered:
+// their completions are tagged and billed under ModelUsageSourceRiskAnalysis.
+// These values exist only as BYOK key slots, so a project can override the
+// key paying for the prompt-based risk-policy judge and the prompt-injection
+// classifier independently of each other and of the assistant.
+const (
+	ModelUsageSourceRiskPolicy      ModelUsageSource = "risk-policy"
+	ModelUsageSourcePromptInjection ModelUsageSource = "prompt-injection"
+)
 
 // ModelUsageSources lists every registered completion surface.
 func ModelUsageSources() []ModelUsageSource {
@@ -80,6 +93,18 @@ func ModelUsageSourceStrings() []string {
 		out[i] = string(s)
 	}
 	return out
+}
+
+// GramHostedHookSourceStrings lists every hook_source value Gram-server-run
+// completions are tagged with: the registered surfaces, the internal assistants
+// and skill-efficacy tags, and the empty string for rows recorded before Gram
+// completions were tagged (observed agent traffic is always tagged at ingest —
+// claude-code, cursor, codex — so an untagged row can only be Gram-era history). This is
+// the tokens-under-management EXCLUSION list — billing counts observed agent
+// traffic, and everything Gram itself spends (reactive scanning inference
+// and user-initiated hosted chat alike) is out of scope.
+func GramHostedHookSourceStrings() []string {
+	return append(ModelUsageSourceStrings(), string(ModelUsageSourceAssistants), string(ModelUsageSourceSkillEfficacy), string(ModelUsageSourceSkillSuggestions), string(ModelUsageSourceChatAnalysis), "")
 }
 
 type ModelUsageEvent struct {

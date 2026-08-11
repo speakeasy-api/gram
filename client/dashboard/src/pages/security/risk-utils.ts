@@ -19,6 +19,20 @@ const SOURCE_TO_CATEGORY: ReadonlyMap<string, RuleCategory> = new Map<
   ["presidio", "pii"],
 ]);
 
+// The judge-backed detectors. Each owns exactly one rule whose humanized id
+// restates its own category ("Prompt Injection" under a "Prompt Injection"
+// badge), so the rule label adds nothing for these findings. Their
+// `description` carries the judge's per-finding rationale instead of a static
+// rule blurb, and their `match` is the whole flagged event rather than a
+// substring.
+export const JUDGE_SOURCES = ["llm_judge", "prompt_injection"] as const;
+
+const JUDGE_SOURCE_SET: ReadonlySet<string> = new Set(JUDGE_SOURCES);
+
+export function isJudgeSource(source: string | undefined): boolean {
+  return source !== undefined && JUDGE_SOURCE_SET.has(source);
+}
+
 const ruleIdToCategory = new Map<string, RuleCategory>();
 const ruleIdToTitle = new Map<string, string>();
 
@@ -38,6 +52,33 @@ export function getRuleTitleFallback(ruleId: string | undefined): string {
   if (!ruleId) return "-";
   return RULE_ID_TO_TITLE.get(ruleId) ?? humanizeRuleId(ruleId);
 }
+
+// ── Severity (CVSS-style) ────────────────────────────────────────────────────
+// A policy carries a decimal severity score (0.1–10). Findings resolve their
+// rating from the owning policy's score at read time. Bands mirror the CVSS
+// qualitative scale, minus the "None" band — the lowest rating is Low.
+export type SeverityRating = "low" | "medium" | "high" | "critical";
+
+const SEVERITY_BANDS: { min: number; rating: SeverityRating }[] = [
+  { min: 9.0, rating: "critical" },
+  { min: 7.0, rating: "high" },
+  { min: 4.0, rating: "medium" },
+  { min: 0, rating: "low" },
+];
+
+export function scoreToRating(score: number): SeverityRating {
+  for (const band of SEVERITY_BANDS) {
+    if (score >= band.min) return band.rating;
+  }
+  return "low";
+}
+
+export const SEVERITY_RATING_LABEL: Record<SeverityRating, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  critical: "Critical",
+};
 
 export function getCategoryForFinding(
   source?: string,

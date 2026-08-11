@@ -108,3 +108,97 @@ func BuildDeleteConfigPayload(aiIntegrationsDeleteConfigBody string, aiIntegrati
 
 	return v, nil
 }
+
+// BuildListSchedulesPayload builds the payload for the aiIntegrations
+// listSchedules endpoint from CLI flags.
+func BuildListSchedulesPayload(aiIntegrationsListSchedulesProvider string, aiIntegrationsListSchedulesApikeyToken string, aiIntegrationsListSchedulesSessionToken string) (*aiintegrations.ListSchedulesPayload, error) {
+	var provider string
+	{
+		provider = aiIntegrationsListSchedulesProvider
+	}
+	var apikeyToken *string
+	{
+		if aiIntegrationsListSchedulesApikeyToken != "" {
+			apikeyToken = &aiIntegrationsListSchedulesApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if aiIntegrationsListSchedulesSessionToken != "" {
+			sessionToken = &aiIntegrationsListSchedulesSessionToken
+		}
+	}
+	v := &aiintegrations.ListSchedulesPayload{}
+	v.Provider = provider
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildSetScheduleEnabledPayload builds the payload for the aiIntegrations
+// setScheduleEnabled endpoint from CLI flags.
+func BuildSetScheduleEnabledPayload(aiIntegrationsSetScheduleEnabledBody string, aiIntegrationsSetScheduleEnabledApikeyToken string, aiIntegrationsSetScheduleEnabledSessionToken string) (*aiintegrations.SetScheduleEnabledPayload, error) {
+	var err error
+	var body SetScheduleEnabledRequestBody
+	{
+		err = json.Unmarshal([]byte(aiIntegrationsSetScheduleEnabledBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"enabled\": false,\n      \"provider\": \"abc123\",\n      \"schedule\": \"abc123\"\n   }'")
+		}
+	}
+	var apikeyToken *string
+	{
+		if aiIntegrationsSetScheduleEnabledApikeyToken != "" {
+			apikeyToken = &aiIntegrationsSetScheduleEnabledApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if aiIntegrationsSetScheduleEnabledSessionToken != "" {
+			sessionToken = &aiIntegrationsSetScheduleEnabledSessionToken
+		}
+	}
+	v := &aiintegrations.SetScheduleEnabledPayload{
+		Provider: body.Provider,
+		Schedule: body.Schedule,
+		Enabled:  body.Enabled,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildRetrySchedulePayload builds the payload for the aiIntegrations
+// retrySchedule endpoint from CLI flags.
+func BuildRetrySchedulePayload(aiIntegrationsRetryScheduleBody string, aiIntegrationsRetryScheduleApikeyToken string, aiIntegrationsRetryScheduleSessionToken string) (*aiintegrations.RetrySchedulePayload, error) {
+	var err error
+	var body RetryScheduleRequestBody
+	{
+		err = json.Unmarshal([]byte(aiIntegrationsRetryScheduleBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"provider\": \"abc123\",\n      \"schedule\": \"abc123\"\n   }'")
+		}
+	}
+	var apikeyToken *string
+	{
+		if aiIntegrationsRetryScheduleApikeyToken != "" {
+			apikeyToken = &aiIntegrationsRetryScheduleApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if aiIntegrationsRetryScheduleSessionToken != "" {
+			sessionToken = &aiIntegrationsRetryScheduleSessionToken
+		}
+	}
+	v := &aiintegrations.RetrySchedulePayload{
+		Provider: body.Provider,
+		Schedule: body.Schedule,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}

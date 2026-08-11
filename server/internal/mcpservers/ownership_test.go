@@ -141,7 +141,9 @@ func TestCreateMcpServer_RejectsCrossTenantRemoteMcpServer(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	// Remote MCP server lives in a different project in the same org.
+	// Remote MCP server lives in a different project in the same org. The
+	// issuer is in the caller's own project so the cross-tenant backend
+	// reference is what gets rejected.
 	otherServerID := seedOtherProjectRemoteMcpServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID).String()
 
 	_, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{

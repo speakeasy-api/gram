@@ -1,6 +1,6 @@
 // oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
-import { Separator } from "@/components/ui/separator";
-import { SidebarTrigger } from "@/components/ui/sidebar";
+import { Separator } from "@/components/ui/Separator";
+import { SidebarTrigger } from "@/components/ui/Sidebar";
 import { useOrganization, useProject } from "@/contexts/Auth.tsx";
 import { useSlugs } from "@/contexts/Sdk.tsx";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -11,7 +11,7 @@ import { BrandGradientLine } from "./brand-gradient-line.tsx";
 import { InsightsDockShortcutHint } from "./insights-dock-shortcut-hint.tsx";
 import { OnboardingBanner } from "./onboarding-banner.tsx";
 import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge.tsx";
-import { Heading } from "./ui/heading.tsx";
+import { Heading } from "@/components/ui/Heading";
 
 function PageHeaderComponent({
   className,
@@ -67,17 +67,20 @@ function PageHeaderTitle({
 // only needs to hold the exceptions where that produces the wrong text:
 //   - acronyms / non-standard casing (MCP, SDKs, OpenAPI, API)
 //   - lowercased connector words ("from")
-//   - rebrands where the display name differs from the URL segment. `slack` and
-//     `clis` are kept in the URL for backwards compatibility but were renamed.
+//   - rebrands where the display name differs from the URL segment. `slack` is
+//     kept in the URL for backwards compatibility but was renamed.
 const breadcrumbSubstitutions = {
   mcp: "MCP",
   sdks: "SDKs",
   elements: "Chat Elements",
   "add-openapi": "Add OpenAPI",
   "add-from-catalog": "Add from Catalog",
+  "ai-integrations": "AI Integrations",
   "api-keys": "API Keys",
+  "mdm-integrations": "MDM Integrations",
+  rbac: "RBAC Override",
+  jamf: "Jamf Pro",
   slack: "Assistants",
-  clis: "Skills",
 };
 
 // One rendered crumb. Pending crumbs (substitution key present, value not yet
@@ -98,7 +101,7 @@ function BreadcrumbCrumb({
     return (
       <span
         aria-hidden="true"
-        className="bg-muted inline-block h-3.5 w-20 animate-pulse rounded align-middle"
+        className="bg-muted inline-block h-3.5 w-20 animate-pulse align-middle"
       />
     );
   }

@@ -121,12 +121,9 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	svc := toolsets.NewService(logger, tracerProvider, conn, sessionManager, nil, authzEngine, auditLogger, temporalEnv, false)
 	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient, authzEngine, auditLogger)
 	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, auditLogger)
@@ -170,6 +167,10 @@ func (fakeGitHubPublisher) GetRepoFiles(ctx context.Context, installationID int6
 	return nil, ghclient.ErrRepoNotFound
 }
 
+func (fakeGitHubPublisher) GetFileContent(ctx context.Context, installationID int64, owner, repo, branch, path string) ([]byte, error) {
+	return nil, ghclient.ErrFileNotFound
+}
+
 // newTestToolsetsServiceWithGitHubPublishing is newTestToolsetsService with
 // GitHub publishing turned on end-to-end: the shared Temporal worker is
 // additionally configured with a plugins.Service backed by a fake (no-op)
@@ -203,7 +204,7 @@ func newTestToolsetsServiceWithGitHubPublishing(t *testing.T) (context.Context, 
 		Org:            "test-org",
 		InstallationID: 12345,
 	}
-	pluginPublisher := plugins.NewPublisher(logger, conn, auditLogger, ghConfig, "local", "https://app.getgram.ai")
+	pluginPublisher := plugins.NewPublisher(logger, conn, auditLogger, ghConfig, "local", "https://app.getgram.ai", f, nil)
 
 	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider,
 		background.ForDeploymentProcessing(guardianPolicy, conn, f, assetStorage, enc, funcs, mcpRegistryClient, auditLogger),
@@ -221,12 +222,9 @@ func newTestToolsetsServiceWithGitHubPublishing(t *testing.T) (context.Context, 
 
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	svc := toolsets.NewService(logger, tracerProvider, conn, sessionManager, nil, authzEngine, auditLogger, temporalEnv, true)
 
 	return ctx, &testInstance{

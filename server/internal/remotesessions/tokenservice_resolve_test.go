@@ -113,18 +113,86 @@ func TestResolveAccessTokens_SingleClientHappyPath(t *testing.T) {
 	subject := urn.NewUserSubject("resolve-happy-subject")
 	accessEnc, err := enc.Encrypt([]byte("upstream-access-token"))
 	require.NoError(t, err)
-	_, err = repo.New(ti.conn).InsertRemoteSession(ctx, repo.InsertRemoteSessionParams{
+	_, err = repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   userIssuerID,
 		RemoteSessionClientID: clientID,
 		AccessTokenEncrypted:  accessEnc,
 		AccessExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		Scopes:                []string{},
 	})
 	require.NoError(t, err)
 
 	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject, "")
 	require.NoError(t, err)
 	require.Equal(t, map[uuid.UUID]string{remoteIssuerID: "upstream-access-token"}, tokens)
+}
+
+func TestResolveAuthorization_InvalidRequestIsNotReportedAsMissingAuthorization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	mgr := newResolveManager(t, ti.conn, testenv.NewEncryptionClient(t))
+	_, err := mgr.ResolveAuthorization(ctx, uuid.Nil, authCtx.ActiveOrganizationID, uuid.New(), uuid.New(), urn.NewUserSubject("resolve-invalid-subject"), "")
+	require.ErrorIs(t, err, remotesessions.ErrInvalidAuthorizationRequest)
+	require.NotErrorIs(t, err, remotesessions.ErrNoValidToken)
+}
+
+func TestResolveAuthorization_ResolvesReviewedIssuerBinding(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	enc := testenv.NewEncryptionClient(t)
+	mgr := newResolveManager(t, ti.conn, enc)
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-resolve-authorization")
+	clientID, remoteIssuerID := seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, userIssuerID, authCtx.ActiveOrganizationID, "rsi-resolve-authorization")
+	subject := urn.NewUserSubject("resolve-authorization-subject")
+	accessEnc, err := enc.Encrypt([]byte("authorization-access-token"))
+	require.NoError(t, err)
+	session, err := repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+		SubjectUrn:            subject,
+		UserSessionIssuerID:   userIssuerID,
+		RemoteSessionClientID: clientID,
+		AccessTokenEncrypted:  accessEnc,
+		AccessExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		Scopes:                []string{},
+	})
+	require.NoError(t, err)
+
+	authorization, err := mgr.ResolveAuthorization(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, remoteIssuerID, subject, "")
+	require.NoError(t, err)
+	require.Equal(t, "authorization-access-token", authorization.AccessToken)
+	require.Equal(t, session.ID, authorization.RemoteSessionID)
+	require.Equal(t, session.UpdatedAt.Time, authorization.RemoteSessionUpdatedAt)
+	require.Equal(t, clientID, authorization.RemoteSessionClientID)
+	require.Equal(t, remoteIssuerID, authorization.RemoteSessionIssuerID)
+
+	_, err = mgr.ResolveAuthorization(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, uuid.New(), subject, "")
+	require.ErrorIs(t, err, remotesessions.ErrNoRemoteSessionClientBinding)
+}
+
+func TestResolveAuthorization_MissingSessionReturnsErrNoValidToken(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	mgr := newResolveManager(t, ti.conn, testenv.NewEncryptionClient(t))
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-resolve-authorization-missing")
+	_, remoteIssuerID := seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, userIssuerID, authCtx.ActiveOrganizationID, "rsi-resolve-authorization-missing")
+
+	_, err := mgr.ResolveAuthorization(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, remoteIssuerID, urn.NewUserSubject("resolve-authorization-missing-subject"), "")
+	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
 }
 
 func TestResolveAccessTokens_NoClientsReturnsNil(t *testing.T) {
@@ -163,4 +231,72 @@ func TestResolveAccessTokens_MissingSessionReturnsErrNoValidToken(t *testing.T) 
 	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject, "")
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
 	require.Nil(t, tokens)
+}
+
+func TestResolveAccessTokens_ExpiredAuthorizationRejectsUnexpiredAccessToken(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	enc := testenv.NewEncryptionClient(t)
+	mgr := newResolveManager(t, ti.conn, enc)
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-resolve-expired-authorization")
+	clientID, _ := seedActiveClient(t, ctx, ti.conn, *authCtx.ProjectID, userIssuerID, authCtx.ActiveOrganizationID, "rsi-resolve-expired-authorization")
+	subject := urn.NewUserSubject("resolve-expired-authorization-subject")
+	accessEnc, err := enc.Encrypt([]byte("still-unexpired-access-token"))
+	require.NoError(t, err)
+
+	_, err = repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+		SubjectUrn:             subject,
+		UserSessionIssuerID:    userIssuerID,
+		RemoteSessionClientID:  clientID,
+		AccessTokenEncrypted:   accessEnc,
+		AccessExpiresAt:        conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
+		AuthorizationExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Minute)),
+		Scopes:                 []string{},
+	})
+	require.NoError(t, err)
+
+	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject, "")
+	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
+	require.Nil(t, tokens)
+}
+
+// TestResolveAccessTokens_TenantClientOnPlatformIssuer proves an existing remote
+// session on a tenant client that points at a platform issuer resolves its
+// upstream token through the unchanged runtime path.
+func TestResolveAccessTokens_TenantClientOnPlatformIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	enc := testenv.NewEncryptionClient(t)
+	mgr := newResolveManager(t, ti.conn, enc)
+
+	platformID := seedGlobalRemoteIssuer(t, ctx, ti.conn, "resolve-platform")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "resolve-platform-usi")
+	clientID := createRemoteClient(t, ctx, ti, platformID.String(), userIssuerID.String(), "resolve-platform-client")
+
+	subject := urn.NewUserSubject("resolve-platform-subject")
+	accessEnc, err := enc.Encrypt([]byte("platform-upstream-token"))
+	require.NoError(t, err)
+	_, err = repo.New(ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+		SubjectUrn:            subject,
+		UserSessionIssuerID:   userIssuerID,
+		RemoteSessionClientID: uuid.MustParse(clientID),
+		AccessTokenEncrypted:  accessEnc,
+		AccessExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		Scopes:                []string{},
+	})
+	require.NoError(t, err)
+
+	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuerID, subject, "")
+	require.NoError(t, err)
+	require.Equal(t, map[uuid.UUID]string{platformID: "platform-upstream-token"}, tokens)
 }

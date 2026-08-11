@@ -19,16 +19,43 @@ import (
 // identity records that Gram talks to as an OAuth client.
 type Service interface {
 	// Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server
-	// document and return a draft suitable for createRemoteSessionIssuer. No
-	// persistence.
-	DiscoverRemoteSessionIssuer(context.Context, *DiscoverRemoteSessionIssuerPayload) (res *types.RemoteSessionIssuerDraft, err error)
+	// document and return a draft suitable for createRemoteSessionIssuer. Keyed by
+	// issuer URL; no record need exist and nothing is persisted. Use
+	// refreshMetadata to re-discover and persist against an existing issuer.
+	FetchRemoteSessionIssuerMetadata(context.Context, *FetchRemoteSessionIssuerMetadataPayload) (res *types.RemoteSessionIssuerDraft, err error)
+	// Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and
+	// persist the discovered values. Keyed by issuer id. Only RFC 8414-derived
+	// columns are written — endpoints, the *_supported arrays,
+	// client_id_metadata_document_supported, and the documentation URLs. Gram
+	// behavior and display fields (oidc, passthrough, name, slug, logo, client
+	// setup documentation) are left alone. Requires project:write.
+	RefreshRemoteSessionIssuerMetadata(context.Context, *RefreshRemoteSessionIssuerMetadataPayload) (res *types.RemoteSessionIssuerRefresh, err error)
 	// Create a new remote_session_issuer.
 	CreateRemoteSessionIssuer(context.Context, *CreateRemoteSessionIssuerPayload) (res *types.RemoteSessionIssuer, err error)
 	// Update fields on an existing remote_session_issuer.
 	UpdateRemoteSessionIssuer(context.Context, *UpdateRemoteSessionIssuerPayload) (res *types.RemoteSessionIssuer, err error)
 	// List remote_session_issuers in the caller's project.
 	ListRemoteSessionIssuers(context.Context, *ListRemoteSessionIssuersPayload) (res *ListRemoteSessionIssuersResult, err error)
-	// Get a remote_session_issuer by id or by slug. Provide exactly one.
+	// Get a remote_session_issuer by id, by slug, or by upstream issuer URL.
+	// Provide exactly one.
+
+	// Looking up by issuer is how an automatic setup flow decides whether an
+	// upstream authorization server already has an identity provider before
+	// creating one: a 404 means nothing describes that URL yet, so create it.
+	// Unlike id and slug, which address at most one record, several issuers may
+	// legitimately describe the same URL — a project may keep its own alongside
+	// one inherited from its organization or from the platform catalog. This
+	// returns the one this project would use, preferring project over organization
+	// over platform and, within a tier, the oldest.
+
+	// The issuer URL is canonicalized before matching: scheme and host are
+	// lowercased, the scheme's default port is dropped, and trailing slashes are
+	// stripped. http and https are deliberately NOT equated, path case is
+	// significant, and a URL carrying a query or fragment is rejected (RFC 8414
+	// forbids both on issuer identifiers). Canonicalization applies to the
+	// supplied URL only, never to stored values, so an issuer recorded with an
+	// unusual spelling may not be found and a duplicate is created instead, which
+	// is the safe direction to fail.
 	GetRemoteSessionIssuer(context.Context, *GetRemoteSessionIssuerPayload) (res *types.RemoteSessionIssuer, err error)
 	// Soft-delete a remote_session_issuer. Blocked if any remote_session_clients
 	// still reference it.
@@ -55,7 +82,7 @@ const ServiceName = "remoteSessionIssuers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"discoverRemoteSessionIssuer", "createRemoteSessionIssuer", "updateRemoteSessionIssuer", "listRemoteSessionIssuers", "getRemoteSessionIssuer", "deleteRemoteSessionIssuer"}
+var MethodNames = [7]string{"fetchRemoteSessionIssuerMetadata", "refreshRemoteSessionIssuerMetadata", "createRemoteSessionIssuer", "updateRemoteSessionIssuer", "listRemoteSessionIssuers", "getRemoteSessionIssuer", "deleteRemoteSessionIssuer"}
 
 // CreateRemoteSessionIssuerPayload is the payload type of the
 // remoteSessionIssuers service createRemoteSessionIssuer method.
@@ -72,6 +99,9 @@ type CreateRemoteSessionIssuerPayload struct {
 	Name *string
 	// Optional logo asset id.
 	LogoAssetID *string
+	// URL of OAuth client setup documentation shown when creating clients.
+	// Manually set, not RFC 8414; rejected unless an absolute http(s) URL.
+	ClientSetupDocumentationURL *string
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string
 	// Upstream token endpoint.
@@ -119,10 +149,10 @@ type DeleteRemoteSessionIssuerPayload struct {
 	ProjectSlugInput *string
 }
 
-// DiscoverRemoteSessionIssuerPayload is the payload type of the
-// remoteSessionIssuers service discoverRemoteSessionIssuer method.
-type DiscoverRemoteSessionIssuerPayload struct {
-	// Issuer URL to discover (e.g. https://login.linear.com).
+// FetchRemoteSessionIssuerMetadataPayload is the payload type of the
+// remoteSessionIssuers service fetchRemoteSessionIssuerMetadata method.
+type FetchRemoteSessionIssuerMetadataPayload struct {
+	// Issuer URL to fetch metadata for (e.g. https://login.linear.com).
 	Issuer           string
 	SessionToken     *string
 	ApikeyToken      *string
@@ -135,7 +165,10 @@ type GetRemoteSessionIssuerPayload struct {
 	// The remote_session_issuer id.
 	ID *string
 	// The remote_session_issuer slug.
-	Slug             *string
+	Slug *string
+	// The upstream issuer URL (e.g. https://login.linear.app). Returns the issuer
+	// this project would use for that URL, or 404 when none describes it.
+	Issuer           *string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
@@ -161,6 +194,16 @@ type ListRemoteSessionIssuersResult struct {
 	NextCursor *string
 }
 
+// RefreshRemoteSessionIssuerMetadataPayload is the payload type of the
+// remoteSessionIssuers service refreshRemoteSessionIssuerMetadata method.
+type RefreshRemoteSessionIssuerMetadataPayload struct {
+	// The remote_session_issuer id.
+	ID               string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
 // UpdateRemoteSessionIssuerPayload is the payload type of the
 // remoteSessionIssuers service updateRemoteSessionIssuer method.
 type UpdateRemoteSessionIssuerPayload struct {
@@ -177,6 +220,10 @@ type UpdateRemoteSessionIssuerPayload struct {
 	Name *string
 	// Set the logo asset id.
 	LogoAssetID *string
+	// Set or clear the URL of OAuth client setup documentation shown when creating
+	// clients. An empty string clears it to NULL; any other value must be an
+	// absolute http(s) URL.
+	ClientSetupDocumentationURL *string
 	// Upstream authorization endpoint.
 	AuthorizationEndpoint *string
 	// Upstream token endpoint.

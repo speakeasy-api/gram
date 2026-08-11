@@ -1,9 +1,9 @@
 import { InputDialog } from "@/components/input-dialog";
-import { Page } from "@/components/page-layout";
+import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { CardContextMenu } from "@/components/card-context-menu";
-import { DotCard } from "@/components/ui/dot-card";
-import { Action, MoreActions } from "@/components/ui/more-actions";
+import { Card } from "@/components/ui/Card";
+import { Action, MoreActions } from "@/components/ui/MoreActions";
 import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -13,8 +13,9 @@ import { useCreateEnvironmentMutation } from "@gram/client/react-query/createEnv
 import { ArrowRight, Blocks, Plus } from "lucide-react";
 import { useState } from "react";
 import { Outlet } from "react-router";
-import { Badge, Button } from "@speakeasy-api/moonshine";
-import { Type } from "@/components/ui/type";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Text } from "@/components/ui/Text";
 import { handleAPIError } from "@/lib/errors";
 import { CloneEnvironmentDialog } from "./CloneEnvironmentDialog";
 import { useEnvironments } from "./useEnvironments";
@@ -24,16 +25,9 @@ export function EnvironmentsRoot(): JSX.Element {
 
 export default function Environments(): JSX.Element {
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope={["project:read", "project:write"]} level="page">
-          <EnvironmentsInner />
-        </RequireScope>
-      </Page.Body>
-    </Page>
+    <RequireScope scope={["project:read", "project:write"]} level="page">
+      <EnvironmentsInner />
+    </RequireScope>
   );
 }
 
@@ -78,70 +72,53 @@ function EnvironmentsInner() {
     });
   };
 
+  const newEnvironmentButton = (
+    <RequireScope scope="environment:write" level="component">
+      <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
+        <Button.LeftIcon>
+          <Plus className="h-4 w-4" />
+        </Button.LeftIcon>
+        <Button.Text>New Environment</Button.Text>
+      </Button>
+    </RequireScope>
+  );
+
   return (
     <>
-      <Page.Section>
-        <Page.Section.Title>Environments</Page.Section.Title>
-        <Page.Section.Description>
-          Create re-usable environment configurations and share amongst multiple
-          MCP servers and Assistants. Commonly used to securely store sensitive
-          secrets used to access various sources.
-        </Page.Section.Description>
-        <Page.Section.CTA>
-          {environments.length > 0 && (
-            <RequireScope scope="environment:write" level="component">
-              <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
-                <Button.LeftIcon>
-                  <Plus className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>New Environment</Button.Text>
-              </Button>
-            </RequireScope>
-          )}
-        </Page.Section.CTA>
-        <Page.Section.Body>
-          {environments.length === 0 ? (
-            <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
-              <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-                <Blocks className="text-muted-foreground h-6 w-6" />
-              </div>
-              <Type variant="subheading" className="mb-1">
-                No environments yet
-              </Type>
-              <Type small muted className="mb-4 max-w-md text-center">
-                Environments let you store configuration and secrets that can be
-                shared across multiple MCP servers.
-              </Type>
-              <RequireScope scope="environment:write" level="component">
-                <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
-                  <Button.LeftIcon>
-                    <Plus className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>New Environment</Button.Text>
-                </Button>
-              </RequireScope>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-              {environments.map((environment) => (
-                <EnvironmentCard
-                  key={environment.id}
-                  environment={environment}
-                  onClone={setCloneSource}
-                />
-              ))}
-            </div>
-          )}
-        </Page.Section.Body>
-      </Page.Section>
+      <ResourceListPage
+        title="Environments"
+        description="Create re-usable environment configurations and share amongst multiple MCP servers and Assistants. Commonly used to securely store sensitive secrets used to access various sources."
+        primaryAction={
+          environments.length > 0 ? newEnvironmentButton : undefined
+        }
+        isEmpty={environments.length === 0}
+        empty={{
+          icon: "blocks",
+          heading: "No environments yet",
+          description:
+            "Environments let you store configuration and secrets that can be shared across multiple MCP servers.",
+          action: newEnvironmentButton,
+        }}
+      >
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+          {environments.map((environment) => (
+            <EnvironmentCard
+              key={environment.id}
+              environment={environment}
+              onClone={setCloneSource}
+            />
+          ))}
+        </div>
+      </ResourceListPage>
       <InputDialog
         open={createEnvironmentDialogOpen}
         onOpenChange={setCreateEnvironmentDialogOpen}
         title="Create an Environment"
         description="Give your environment a name."
+        submitButtonText="Create"
         inputs={{
           label: "Environment name",
-          placeholder: "Environment name",
+          placeholder: "e.g. Production",
           value: environmentName,
           onChange: (value) => setEnvironmentName(value),
           onSubmit: createEnvironment,
@@ -190,25 +167,27 @@ function EnvironmentCard({
         params={[environment.slug]}
         className="block h-full hover:no-underline"
       >
-        <DotCard icon={<Blocks className="text-muted-foreground h-8 w-8" />}>
+        <Card.Entity
+          icon={<Blocks className="text-muted-foreground h-8 w-8" />}
+        >
           <div className="mb-2 flex items-start justify-between gap-2">
-            <Type
+            <Text
               variant="subheading"
               as="div"
               className="text-md group-hover:text-primary flex-1 truncate transition-colors"
               title={environment.name}
             >
               {environment.name}
-            </Type>
+            </Text>
             <RequireScope scope="environment:write" level="component">
               <div onClick={(e) => e.stopPropagation()}>
                 <MoreActions actions={actions} />
               </div>
             </RequireScope>
           </div>
-          <Type small muted className="truncate">
+          <Text small muted className="truncate">
             {environment.description || "No description provided"}
-          </Type>
+          </Text>
           <div className="mt-auto flex items-center justify-between gap-2 pt-2">
             <Badge variant="neutral">
               {environment.entries.length}{" "}
@@ -219,7 +198,7 @@ function EnvironmentCard({
               <ArrowRight className="h-3.5 w-3.5" />
             </div>
           </div>
-        </DotCard>
+        </Card.Entity>
       </routes.environments.environment.Link>
     </CardContextMenu>
   );

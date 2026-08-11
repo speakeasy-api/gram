@@ -25,6 +25,10 @@ export type HookIngestSource = {
    * Provider-native event name, if one exists.
    */
   rawEventName?: string | undefined;
+  /**
+   * Self-reported email of the developer on the emitting machine (device agent or provider account), used for attribution when the API key is shared org-wide.
+   */
+  userEmail?: string | undefined;
 };
 
 /** @internal */
@@ -33,6 +37,7 @@ export type HookIngestSource$Outbound = {
   adapter_version?: string | undefined;
   hostname?: string | undefined;
   raw_event_name?: string | undefined;
+  user_email?: string | undefined;
 };
 
 /** @internal */
@@ -45,11 +50,13 @@ export const HookIngestSource$outboundSchema: z.ZodMiniType<
     adapterVersion: z.optional(z.string()),
     hostname: z.optional(z.string()),
     rawEventName: z.optional(z.string()),
+    userEmail: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       adapterVersion: "adapter_version",
       rawEventName: "raw_event_name",
+      userEmail: "user_email",
     });
   }),
 );

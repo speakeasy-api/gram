@@ -1,10 +1,10 @@
+import { Badge } from "@/components/ui/Badge";
 import {
-  Badge,
   Tooltip,
   TooltipContent,
   TooltipPortal,
   TooltipTrigger,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Tooltip";
 import type { PulseMCPServer } from "./hooks";
 import { requiresManualSetup } from "./hooks/serverMetadata";
 

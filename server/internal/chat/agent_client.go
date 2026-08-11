@@ -87,6 +87,14 @@ func (c *Client) GetObjectCompletion(ctx context.Context, request openrouter.Obj
 	return resp, nil
 }
 
+func (c *Client) ResolveKey(ctx context.Context, orgID string, projectID string, slot billing.ModelUsageSource, keyType openrouter.KeyType) (openrouter.ResolvedKey, error) {
+	resolved, err := c.completionClient.ResolveKey(ctx, orgID, projectID, slot, keyType)
+	if err != nil {
+		return openrouter.ResolvedKey{}, fmt.Errorf("agent client: %w", err)
+	}
+	return resolved, nil
+}
+
 func (c *Client) CreateEmbeddings(ctx context.Context, orgID string, model string, inputs []string, opts ...openrouter.EmbeddingOption) ([][]float32, error) {
 	embeddings, err := c.completionClient.CreateEmbeddings(ctx, orgID, model, inputs, opts...)
 	if err != nil {
@@ -198,6 +206,7 @@ func (c *Client) AgentChat(
 			Stream:                    false,
 			UsageSource:               billing.ModelUsageSourceAssistants,
 			KeyType:                   openrouter.KeyTypeChat,
+			KeySlot:                   "",
 			ChatID:                    chatID,
 			UserID:                    "",
 			ExternalUserID:            "", // TODO

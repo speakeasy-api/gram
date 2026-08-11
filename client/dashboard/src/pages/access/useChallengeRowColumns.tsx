@@ -1,18 +1,19 @@
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import { useMembers } from "@gram/client/react-query/members.js";
+import { useListMcpServersForOrg } from "@gram/client/react-query/listMcpServersForOrg.js";
 import { useListToolsetsForOrg } from "@gram/client/react-query/listToolsetsForOrg.js";
-import { Column } from "@speakeasy-api/moonshine";
+import { Column } from "@/components/ui/Table";
 import { KeyRound } from "lucide-react";
 import { useMemo } from "react";
 import { OutcomeBadge } from "./ChallengesTab";
@@ -34,6 +35,7 @@ export function useChallengeRowColumns(
   const { organization } = useSession();
   const { data: membersData } = useMembers();
   const { data: toolsetsData } = useListToolsetsForOrg();
+  const { data: mcpServersData } = useListMcpServersForOrg();
   const projectMap = useMemo(() => {
     const m = new Map<string, { slug: string; name: string }>();
     for (const p of organization.projects) {
@@ -51,6 +53,19 @@ export function useChallengeRowColumns(
     }
     return m;
   }, [toolsetsData]);
+  // Resolves grants stored against mcp_servers row ids (remote/tunneled
+  // backends). Toolset-backed grants store the toolset id and resolve via
+  // toolsetMap instead.
+  const mcpServerMap = useMemo(() => {
+    const m = new Map<
+      string,
+      { slug?: string; name?: string; projectId: string }
+    >();
+    for (const s of mcpServersData?.mcpServers ?? []) {
+      m.set(s.id, { slug: s.slug, name: s.name, projectId: s.projectId });
+    }
+    return m;
+  }, [mcpServersData]);
   const memberMap = useMemo(() => {
     const m = new Map<string, { email: string; photoUrl?: string }>();
     for (const member of membersData?.members ?? []) {
@@ -109,7 +124,7 @@ export function useChallengeRowColumns(
           return (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Type
+                <Text
                   variant="body"
                   className={cn(
                     "min-w-0 truncate text-sm font-medium",
@@ -117,7 +132,7 @@ export function useChallengeRowColumns(
                   )}
                 >
                   {display}
-                </Type>
+                </Text>
               </TooltipTrigger>
               {row.roleSlugs.length > 0 && (
                 <TooltipContent side="bottom">
@@ -152,7 +167,7 @@ export function useChallengeRowColumns(
             <TooltipTrigger asChild>
               <code
                 className={cn(
-                  "bg-muted min-w-0 truncate rounded px-1.5 py-0.5 font-mono text-xs",
+                  "bg-muted min-w-0 truncate px-1.5 py-0.5 font-mono text-xs",
                   rowFade(row),
                 )}
               >
@@ -180,6 +195,7 @@ export function useChallengeRowColumns(
               orgSlug={orgSlug ?? ""}
               projectMap={projectMap}
               toolsetMap={toolsetMap}
+              mcpServerMap={mcpServerMap}
             />
           </div>
         ),
@@ -191,9 +207,9 @@ export function useChallengeRowColumns(
         render: (row: ChallengeBucket) => {
           if (!row.resolvedBy) {
             return (
-              <Type variant="body" className="text-muted-foreground/40 text-sm">
+              <Text variant="body" className="text-muted-foreground/40 text-sm">
                 —
-              </Type>
+              </Text>
             );
           }
           const userId = row.resolvedBy.replace(/^user:/, "");
@@ -226,12 +242,12 @@ export function useChallengeRowColumns(
             <div className={cn("flex items-center gap-1.5", rowFade(row))}>
               <Tooltip delayDuration={500}>
                 <TooltipTrigger asChild>
-                  <Type
+                  <Text
                     variant="body"
                     className="text-muted-foreground cursor-default text-sm whitespace-nowrap underline decoration-dotted underline-offset-4"
                   >
                     <HumanizeDateTime date={row.lastSeen} />
-                  </Type>
+                  </Text>
                 </TooltipTrigger>
                 <TooltipContent>{row.lastSeen.toLocaleString()}</TooltipContent>
               </Tooltip>
@@ -253,6 +269,7 @@ export function useChallengeRowColumns(
     orgSlug,
     projectMap,
     toolsetMap,
+    mcpServerMap,
     memberMap,
     animatingOutIds,
     outcomeFilter,

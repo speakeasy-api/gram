@@ -1,0 +1,38 @@
+edition = "2024";
+
+package gram.telemetry.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1;telemetryv1";
+
+// LogRecord is a faithful, self-contained copy of one telemetry_logs row in
+// ClickHouse. The table is the exactly-once ledger keyed by id; ids survive
+// staging promotion, and retried publishes can duplicate messages, so
+// consumers must dedupe by id. Nullable columns use field presence: an unset
+// field maps to SQL NULL.
+message LogRecord {
+  string id = 1;
+  int64 time_unix_nano = 2;
+  int64 observed_time_unix_nano = 3;
+  string severity_text = 4; // nullable
+  string body = 5;
+  string trace_id = 6; // nullable
+  string span_id = 7; // nullable
+  // JSON object; ClickHouse materialized columns derive from this.
+  string attributes_json = 8;
+  string resource_attributes_json = 9; // JSON object
+  string gram_project_id = 10;
+  string gram_deployment_id = 11; // nullable
+  string gram_function_id = 12; // nullable
+  string gram_urn = 13;
+  string service_name = 14;
+  string service_version = 15; // nullable
+  string gram_chat_id = 16; // nullable
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: {
+      seconds: 604800 /* 7 days */
+    }
+  };
+}

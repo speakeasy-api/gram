@@ -1,0 +1,518 @@
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
+import { Page } from "@/components/page-layout";
+import type { AccessMember } from "@gram/client/models/components/accessmember.js";
+import type { Role } from "@gram/client/models/components/role.js";
+import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
+import { useDeleteShadowMCPInventoryPolicyBypassMutation } from "@gram/client/react-query/deleteShadowMCPInventoryPolicyBypass.js";
+import { useResolveShadowMCPInventoryRequestMutation } from "@gram/client/react-query/resolveShadowMCPInventoryRequest.js";
+import {
+  invalidateAllShadowMCPInventory,
+  useShadowMCPInventory,
+} from "@gram/client/react-query/shadowMCPInventory.js";
+import { useUpsertShadowMCPInventoryPolicyBypassMutation } from "@gram/client/react-query/upsertShadowMCPInventoryPolicyBypass.js";
+import { useBlockShadowMCPInventoryServerMutation } from "@gram/client/react-query/blockShadowMCPInventoryServer.js";
+import { useUnblockShadowMCPInventoryServerMutation } from "@gram/client/react-query/unblockShadowMCPInventoryServer.js";
+import { Badge } from "@/components/ui/Badge";
+import { Icon } from "@/components/ui/Icon";
+import { type Column, type SortDescriptor, Table } from "@/components/ui/Table";
+import { sortTableData } from "@/components/ui/Table/sorting";
+import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import { formatShortDate } from "@/components/access/shadow-mcp-utils";
+import { TableRowContextMenu } from "@/components/table-row-context-menu";
+import { cn } from "@/lib/utils";
+import {
+  type ActiveInventoryAction,
+  type ReviewDecision,
+  ShadowMCPInventoryActionMenu,
+  ShadowMCPInventoryActionSheet,
+  type ShadowMCPPolicy,
+} from "./ShadowMCPInventoryActions";
+import {
+  ShadowMCPInventoryServerCell,
+  ShadowMCPInventoryUsageCell,
+} from "./ShadowMCPInventoryCells";
+import { shadowMCPInventoryActions } from "./shadowMCPInventoryActionItems";
+import {
+  shadowMCPBlockingPolicyDisposition,
+  shadowMCPInventoryStatus,
+  shadowMCPInventoryStatusBadgeVariant,
+  shadowMCPInventoryStatusDescription,
+  shadowMCPInventoryStatusLabel,
+  type ShadowMCPPolicyDisposition,
+  type ShadowMCPPolicyState,
+} from "./shadowMCPInventoryStatus";
+
+const INVENTORY_PAGE_LIMIT = 50;
+const FIRST_PAGE_CURSOR = "";
+
+type InventoryPage = {
+  cursor: string;
+  nextCursor?: string;
+  servers: ShadowMCPInventoryServer[];
+};
+
+const EMPTY_INVENTORY_PAGES: InventoryPage[] = [];
+
+function InventoryStatusCell({
+  disposition,
+  policyState,
+  server,
+}: {
+  disposition: ShadowMCPPolicyDisposition | null;
+  policyState: ShadowMCPPolicyState;
+  server: ShadowMCPInventoryServer;
+}) {
+  const status = shadowMCPInventoryStatus(server, policyState);
+
+  return (
+    <div className="space-y-1">
+      <Badge variant={shadowMCPInventoryStatusBadgeVariant(status)}>
+        <Badge.Text>{shadowMCPInventoryStatusLabel(status)}</Badge.Text>
+      </Badge>
+      <Text variant="small" className="text-muted-foreground text-xs">
+        {shadowMCPInventoryStatusDescription(server, policyState, disposition)}
+      </Text>
+    </div>
+  );
+}
+
+function InventoryEmptyState() {
+  return (
+    <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16 text-center">
+      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
+        <Icon name="shield-check" className="text-muted-foreground h-6 w-6" />
+      </div>
+      <Text variant="subheading" className="mb-1">
+        No Shadow MCP servers
+      </Text>
+      <Text small muted className="mb-4 max-w-md">
+        Inventory URLs will appear here after hook startup captures configured
+        Shadow MCP servers.
+      </Text>
+    </div>
+  );
+}
+
+export function ShadowMCPInventoryTable({
+  className,
+  enabled = true,
+  members,
+  onOpenServer,
+  policyState,
+  projectID,
+  roles,
+  shadowMCPPolicies,
+}: {
+  className?: string;
+  enabled?: boolean;
+  members: AccessMember[];
+  onOpenServer?: (server: ShadowMCPInventoryServer) => void;
+  policyState: ShadowMCPPolicyState;
+  projectID: string;
+  roles: Role[];
+  shadowMCPPolicies: ShadowMCPPolicy[];
+}): JSX.Element {
+  const queryClient = useQueryClient();
+  const inventoryScope = enabled && projectID.length > 0 ? projectID : "";
+  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [pages, setPages] = useState<InventoryPage[]>([]);
+  const [paginationScope, setPaginationScope] = useState(inventoryScope);
+  const hasActivePagination = paginationScope === inventoryScope;
+  const activeCursor = hasActivePagination ? cursor : undefined;
+  const activePages = hasActivePagination ? pages : EMPTY_INVENTORY_PAGES;
+  const inventoryRequest = activeCursor
+    ? {
+        projectId: projectID,
+        limit: INVENTORY_PAGE_LIMIT,
+        cursor: activeCursor,
+      }
+    : { projectId: projectID, limit: INVENTORY_PAGE_LIMIT };
+  const inventoryQuery = useShadowMCPInventory(inventoryRequest, undefined, {
+    enabled: enabled && projectID.length > 0,
+  });
+  const upsertPolicyBypass = useUpsertShadowMCPInventoryPolicyBypassMutation();
+  const deletePolicyBypass = useDeleteShadowMCPInventoryPolicyBypassMutation();
+  const resolveInventoryRequest = useResolveShadowMCPInventoryRequestMutation();
+  const blockInventoryServer = useBlockShadowMCPInventoryServerMutation();
+  const unblockInventoryServer = useUnblockShadowMCPInventoryServerMutation();
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<SortDescriptor | null>({
+    id: "lastCalled",
+    direction: "desc",
+  });
+  const [activeAction, setActiveAction] =
+    useState<ActiveInventoryAction | null>(null);
+  const [isSubmittingAction, setIsSubmittingAction] = useState(false);
+  const isSubmitting =
+    isSubmittingAction ||
+    upsertPolicyBypass.isPending ||
+    deletePolicyBypass.isPending ||
+    resolveInventoryRequest.isPending ||
+    blockInventoryServer.isPending ||
+    unblockInventoryServer.isPending;
+  const isActionPending = isSubmitting || activeAction !== null;
+  const canManageAllowRules = shadowMCPPolicies.length > 0;
+  const disposition = shadowMCPBlockingPolicyDisposition(shadowMCPPolicies);
+  const allowAllPolicy =
+    disposition === "allow_all"
+      ? (shadowMCPPolicies.find(
+          (policy) => policy.shadowMcpDisposition === "allow_all",
+        ) ?? null)
+      : null;
+
+  useEffect(() => {
+    setPaginationScope(inventoryScope);
+    setCursor(undefined);
+    setPages([]);
+  }, [inventoryScope]);
+
+  useEffect(() => {
+    if (
+      !hasActivePagination ||
+      !enabled ||
+      projectID.length === 0 ||
+      !inventoryQuery.data
+    ) {
+      return;
+    }
+
+    const pageCursor = activeCursor ?? FIRST_PAGE_CURSOR;
+    setPages((currentPages) => {
+      const page: InventoryPage = {
+        cursor: pageCursor,
+        nextCursor: inventoryQuery.data.nextCursor,
+        servers: inventoryQuery.data.servers,
+      };
+      const existingPageIndex = currentPages.findIndex(
+        (currentPage) => currentPage.cursor === pageCursor,
+      );
+
+      if (existingPageIndex === -1) {
+        return [...currentPages, page];
+      }
+
+      return currentPages.map((currentPage, index) =>
+        index === existingPageIndex ? page : currentPage,
+      );
+    });
+  }, [
+    activeCursor,
+    enabled,
+    hasActivePagination,
+    inventoryQuery.data,
+    projectID,
+  ]);
+
+  const refreshInventory = async () => {
+    setCursor(undefined);
+    setPages([]);
+    await invalidateAllShadowMCPInventory(queryClient);
+  };
+
+  const loadedServers = useMemo(() => {
+    return activePages.flatMap((page) => page.servers);
+  }, [activePages]);
+
+  const latestPage = activePages[activePages.length - 1];
+  const canUseInventoryQueryData =
+    enabled && projectID.length > 0 && hasActivePagination;
+  const nextCursor =
+    latestPage?.nextCursor ??
+    (canUseInventoryQueryData ? inventoryQuery.data?.nextCursor : undefined);
+  const hasLoadedPages = activePages.length > 0;
+  const isInitialLoading = inventoryQuery.isLoading && !hasLoadedPages;
+  const isInitialError = Boolean(inventoryQuery.error && !hasLoadedPages);
+  const isLoadingMore = Boolean(
+    hasLoadedPages && (inventoryQuery.isFetching || inventoryQuery.isLoading),
+  );
+
+  const loadMoreServers = () => {
+    if (!nextCursor || isLoadingMore) {
+      return;
+    }
+
+    if (activeCursor === nextCursor && inventoryQuery.error) {
+      void inventoryQuery.refetch();
+      return;
+    }
+
+    setCursor(nextCursor);
+  };
+
+  const submitInventoryAction = async ({
+    action,
+    decision,
+    policyIDs,
+  }: {
+    action: ActiveInventoryAction;
+    decision: ReviewDecision;
+    policyIDs: string[];
+  }) => {
+    const label = action.server.serverName ?? action.server.canonicalServerUrl;
+    setIsSubmittingAction(true);
+    try {
+      if (action.mode === "block" || action.mode === "unblock") {
+        if (!allowAllPolicy) {
+          throw new Error("no allow_all shadow MCP policy available");
+        }
+        const target = {
+          projectId: projectID,
+          serverUrl: action.server.canonicalServerUrl,
+          policyId: allowAllPolicy.id,
+        };
+        if (action.mode === "block") {
+          await blockInventoryServer.mutateAsync({
+            request: { blockShadowMCPInventoryServerRequestBody: target },
+          });
+        } else {
+          await unblockInventoryServer.mutateAsync({ request: target });
+        }
+        toast.success(
+          action.mode === "block"
+            ? `Blocked server: ${label}`
+            : `Unblocked server: ${label}`,
+        );
+      } else if (action.mode === "delete") {
+        await deletePolicyBypass.mutateAsync({
+          request: {
+            projectId: projectID,
+            serverUrl: action.server.canonicalServerUrl,
+          },
+        });
+        toast.success(`Removed allow rule for: ${label}`);
+      } else if (action.mode === "review") {
+        await resolveInventoryRequest.mutateAsync({
+          request: {
+            resolveShadowMCPInventoryRequestForm: {
+              decision,
+              policyIds: decision === "allow" ? policyIDs : undefined,
+              projectId: projectID,
+              serverUrl: action.server.canonicalServerUrl,
+            },
+          },
+        });
+        toast.success(
+          decision === "allow"
+            ? `Request approved for: ${label}`
+            : `Request denied for: ${label}`,
+        );
+      } else {
+        await upsertPolicyBypass.mutateAsync({
+          request: {
+            shadowMCPInventoryPolicyBypassForm: {
+              policyIds: policyIDs,
+              projectId: projectID,
+              serverUrl: action.server.canonicalServerUrl,
+            },
+          },
+        });
+        toast.success(`Allow rule saved for: ${label}`);
+      }
+      await refreshInventory();
+      setActiveAction(null);
+    } catch {
+      const failureLabel =
+        action.mode === "block" || action.mode === "unblock"
+          ? "block rule"
+          : "allow rule";
+      toast.error(`Unable to update ${failureLabel} for: ${label}`);
+    } finally {
+      setIsSubmittingAction(false);
+    }
+  };
+
+  const renderActionsCell = (server: ShadowMCPInventoryServer) => {
+    return (
+      <ShadowMCPInventoryActionMenu
+        canManageAllowRules={canManageAllowRules}
+        disabled={isActionPending}
+        disposition={disposition}
+        onOpenAction={(mode, selectedServer) =>
+          setActiveAction({ mode, server: selectedServer })
+        }
+        server={server}
+      />
+    );
+  };
+
+  const columns: Column<ShadowMCPInventoryServer>[] = [
+    {
+      key: "server",
+      header: "Server",
+      sortable: true,
+      sortValue: (server) =>
+        (server.serverName || server.urlHost || server.canonicalServerUrl)
+          .trim()
+          .toLowerCase(),
+      width: "2fr",
+      render: (server) => <ShadowMCPInventoryServerCell server={server} />,
+    },
+    {
+      key: "status",
+      header: "Status",
+      sortable: true,
+      sortValue: (server) =>
+        shadowMCPInventoryStatusLabel(
+          shadowMCPInventoryStatus(server, policyState),
+        ),
+      width: "0.9fr",
+      render: (server) => (
+        <InventoryStatusCell
+          disposition={disposition}
+          policyState={policyState}
+          server={server}
+        />
+      ),
+    },
+    {
+      key: "lastCalled",
+      header: "Last called",
+      sortable: true,
+      sortValue: (server) => server.lastCalled?.getTime() ?? 0,
+      width: "0.7fr",
+      render: (server) => (
+        <Text variant="small">{formatShortDate(server.lastCalled)}</Text>
+      ),
+    },
+    {
+      key: "lastSeen",
+      header: "Last seen",
+      sortable: true,
+      sortValue: (server) => server.lastSeen.getTime(),
+      width: "0.7fr",
+      render: (server) => (
+        <Text variant="small">{formatShortDate(server.lastSeen)}</Text>
+      ),
+    },
+    {
+      key: "usage",
+      header: "Usage",
+      sortable: true,
+      sortValue: (server) => server.observedUseCount,
+      width: "0.5fr",
+      render: (server) => <ShadowMCPInventoryUsageCell server={server} />,
+    },
+    {
+      key: "actions",
+      header: "",
+      width: "0.3fr",
+      render: renderActionsCell,
+    },
+  ];
+
+  const servers = useMemo(() => {
+    if (loadedServers.length > 0) {
+      return loadedServers;
+    }
+
+    return canUseInventoryQueryData ? (inventoryQuery.data?.servers ?? []) : [];
+  }, [canUseInventoryQueryData, inventoryQuery.data?.servers, loadedServers]);
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredServers = useMemo(() => {
+    if (normalizedSearch.length === 0) {
+      return servers;
+    }
+
+    return servers.filter((server) =>
+      [server.serverName, server.urlHost, server.canonicalServerUrl].some(
+        (value) => value?.toLowerCase().includes(normalizedSearch),
+      ),
+    );
+  }, [normalizedSearch, servers]);
+  const sortedServers = sortTableData(
+    filteredServers,
+    columns,
+    sort,
+  ) as ShadowMCPInventoryServer[];
+  const noResultsMessage =
+    normalizedSearch.length > 0
+      ? `No servers matching “${search.trim()}”`
+      : undefined;
+
+  if (isInitialLoading) {
+    return <SkeletonTable />;
+  }
+
+  if (isInitialError) {
+    return (
+      <div className="bg-background flex min-h-32 flex-col items-center justify-center gap-1 px-4 py-8 text-center">
+        <Text variant="body" className="font-medium">
+          Shadow MCP inventory could not be loaded
+        </Text>
+        <Text muted small className="max-w-md">
+          Refresh the page or try again later.
+        </Text>
+      </div>
+    );
+  }
+
+  if (servers.length === 0) {
+    return <InventoryEmptyState />;
+  }
+
+  return (
+    <div
+      className={cn(
+        "flex min-h-0 shrink flex-col gap-4 overflow-hidden",
+        className,
+      )}
+    >
+      <ShadowMCPInventoryActionSheet
+        action={activeAction}
+        disposition={disposition}
+        isSubmitting={isSubmitting}
+        members={members}
+        onOpenChange={(open) => {
+          if (!open) {
+            setActiveAction(null);
+          }
+        }}
+        onSubmit={submitInventoryAction}
+        open={activeAction !== null}
+        roles={roles}
+        shadowMCPPolicies={shadowMCPPolicies}
+      />
+      <Page.Toolbar className="shrink-0">
+        <Page.Toolbar.Search
+          onChange={setSearch}
+          placeholder="Search servers..."
+          value={search}
+        />
+      </Page.Toolbar>
+      <Table
+        columns={columns}
+        className="min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] overflow-x-auto overflow-y-hidden"
+      >
+        <Table.Header columns={columns} sort={sort} onSortChange={setSort} />
+        <Table.Body
+          columns={columns}
+          data={sortedServers}
+          handleLoadMore={loadMoreServers}
+          hasMore={Boolean(nextCursor)}
+          isLoading={isLoadingMore}
+          noResultsMessage={noResultsMessage}
+          onRowClick={onOpenServer}
+          rowKey={(row) => row.canonicalServerUrl}
+          className="min-h-0 content-start overflow-y-auto"
+          renderRow={(row, rowElement) => (
+            <TableRowContextMenu
+              key={row.canonicalServerUrl}
+              actions={shadowMCPInventoryActions(row, {
+                canManageAllowRules,
+                disabled: isActionPending,
+                disposition,
+                onOpenAction: (mode, selectedServer) =>
+                  setActiveAction({ mode, server: selectedServer }),
+              })}
+            >
+              {rowElement}
+            </TableRowContextMenu>
+          )}
+        />
+      </Table>
+    </div>
+  );
+}

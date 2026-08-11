@@ -2,18 +2,20 @@
 import { useTelemetry } from "@/contexts/Telemetry.tsx";
 import { cn } from "@/lib/utils.ts";
 import { useIsProjectEmpty } from "@/pages/onboarding/upload-openapi-utils";
-import { InitialChoiceStep } from "@/pages/onboarding/Wizard.tsx";
+import { InitialChoiceStep } from "@/components/onboarding-choice-step.tsx";
 import { useRoutes } from "@/routes.tsx";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import React, { ReactElement } from "react";
 import { ContentErrorBoundary } from "./content-error-boundary.tsx";
 import { PageHeader } from "./page-header.tsx";
 import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge.tsx";
-import { Heading } from "./ui/heading.tsx";
-import { MoreActions } from "./ui/more-actions.tsx";
-import { Toolbar } from "./ui/toolbar.tsx";
-import { Type } from "./ui/type.tsx";
-import { XYFade } from "./ui/xy-fade.tsx";
+import { Heading } from "@/components/ui/Heading";
+import { MoreActions } from "@/components/ui/MoreActions";
+import { Toolbar } from "@/components/ui/Toolbar";
+import { Text } from "@/components/ui/Text";
+import { XYFade } from "@/components/ui/XyFade";
+import { PageEyebrow } from "./page-eyebrow";
 
 function PageLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -140,26 +142,38 @@ function PageSectionTitle({
   children,
   className,
   stage,
+  area,
 }: {
   children: React.ReactNode;
   className?: string;
   stage?: ReleaseStage;
+  /** Override the auto-derived area eyebrow; pass "" to suppress it. */
+  area?: string;
 }) {
-  if (stage) {
-    return (
-      <Stack direction="horizontal" align="center" gap={2}>
-        <Heading variant="h3" className={className}>
-          {children}
-        </Heading>
-        <ReleaseStageBadge stage={stage} />
-      </Stack>
-    );
-  }
+  // Primary page title: area eyebrow + thin display serif (Tobias) per the
+  // editorial idiom. text-display-sm carries the font family, thin weight,
+  // tight tracking, and display text color token; font-thin re-asserts weight
+  // over Heading's font-normal base.
+  const titleClassName = cn("text-display-sm font-thin", className);
 
-  return (
-    <Heading variant="h3" className={className}>
+  const title = stage ? (
+    <Stack direction="horizontal" align="center" gap={2}>
+      <Heading variant="h3" className={titleClassName}>
+        {children}
+      </Heading>
+      <ReleaseStageBadge stage={stage} />
+    </Stack>
+  ) : (
+    <Heading variant="h3" className={titleClassName}>
       {children}
     </Heading>
+  );
+
+  return (
+    <Stack gap={2}>
+      {area === "" ? null : <PageEyebrow area={area} />}
+      {title}
+    </Stack>
   );
 }
 
@@ -171,9 +185,9 @@ function PageSectionDescription({
   className?: string;
 }) {
   return (
-    <Type muted small className={cn("font-normal", className)}>
+    <Text muted small className={cn("font-normal", className)}>
       {children}
-    </Type>
+    </Text>
   );
 }
 
@@ -203,6 +217,7 @@ export const Page = Object.assign(PageLayout, {
   Body: PageBody,
   Section: PageSection,
   Toolbar: Toolbar,
+  Eyebrow: PageEyebrow,
 });
 
 export function EmptyState({
@@ -239,15 +254,15 @@ export function EmptyState({
 
   // For non-empty projects or loading state, show the standard empty state
   let CTA: React.ReactNode = (
-    <routes.onboarding.Link>
-      <Button size="sm">Get Started</Button>
-    </routes.onboarding.Link>
+    <routes.sources.Link>
+      <Button size="sm">Get started</Button>
+    </routes.sources.Link>
   );
 
   if (isLoading) {
     CTA = (
       <Button disabled size="sm">
-        CHECKING PROJECT...
+        Checking project…
       </Button>
     );
   } else if (!isEmpty && nonEmptyProjectCTA) {
@@ -255,7 +270,7 @@ export function EmptyState({
   }
 
   return (
-    <div className="bg-background flex h-[600px] w-full items-center justify-center rounded-xl border">
+    <div className="bg-background flex h-[600px] w-full items-center justify-center border">
       <Stack
         gap={1}
         className="m-8 w-full max-w-sm"
@@ -263,7 +278,7 @@ export function EmptyState({
         justify="center"
       >
         <XYFade
-          className={cn("h-[250px] w-full", graphicClassName)}
+          className={cn("h-[250px] w-full overflow-hidden", graphicClassName)}
           fadeColor="var(--background)"
         >
           {graphic}
@@ -271,9 +286,9 @@ export function EmptyState({
         <Heading variant="h5" className="font-medium">
           {heading}
         </Heading>
-        <Type small muted className="mb-4 text-center">
+        <Text small muted className="mb-4 text-center">
           {description}
-        </Type>
+        </Text>
         {CTA}
       </Stack>
     </div>

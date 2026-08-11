@@ -17,6 +17,10 @@ export type EnvironmentEntry = {
    */
   createdAt: Date;
   /**
+   * Whether the value is a secret. Secret values are redacted in reads; non-secret values are returned in cleartext.
+   */
+  isSecret: boolean;
+  /**
    * The name of the environment variable
    */
   name: string;
@@ -25,7 +29,7 @@ export type EnvironmentEntry = {
    */
   updatedAt: Date;
   /**
-   * Redacted values of the environment variable
+   * The value of the environment variable. Cleartext when is_secret is false, redacted otherwise.
    */
   value: string;
 };
@@ -40,6 +44,7 @@ export const EnvironmentEntry$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    is_secret: z.boolean(),
     name: z.string(),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
@@ -50,6 +55,7 @@ export const EnvironmentEntry$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "created_at": "createdAt",
+      "is_secret": "isSecret",
       "updated_at": "updatedAt",
     });
   }),

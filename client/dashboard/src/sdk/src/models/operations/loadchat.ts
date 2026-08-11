@@ -14,9 +14,15 @@ export type LoadChatSecurityOption2 = {
   chatSessionsTokenHeaderGramChatSession: string;
 };
 
+export type LoadChatSecurityOption3 = {
+  apikeyHeaderGramKey: string;
+  projectSlugHeaderGramProject: string;
+};
+
 export type LoadChatSecurity = {
   option1?: LoadChatSecurityOption1 | undefined;
   option2?: LoadChatSecurityOption2 | undefined;
+  option3?: LoadChatSecurityOption3 | undefined;
 };
 
 export type LoadChatRequest = {
@@ -64,6 +70,10 @@ export type LoadChatRequest = {
    * Chat Sessions token header
    */
   gramChatSession?: string | undefined;
+  /**
+   * API Key header
+   */
+  gramKey?: string | undefined;
 };
 
 /** @internal */
@@ -127,9 +137,41 @@ export function loadChatSecurityOption2ToJSON(
 }
 
 /** @internal */
+export type LoadChatSecurityOption3$Outbound = {
+  "apikey_header_Gram-Key": string;
+  "project_slug_header_Gram-Project": string;
+};
+
+/** @internal */
+export const LoadChatSecurityOption3$outboundSchema: z.ZodMiniType<
+  LoadChatSecurityOption3$Outbound,
+  LoadChatSecurityOption3
+> = z.pipe(
+  z.object({
+    apikeyHeaderGramKey: z.string(),
+    projectSlugHeaderGramProject: z.string(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      apikeyHeaderGramKey: "apikey_header_Gram-Key",
+      projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
+    });
+  }),
+);
+
+export function loadChatSecurityOption3ToJSON(
+  loadChatSecurityOption3: LoadChatSecurityOption3,
+): string {
+  return JSON.stringify(
+    LoadChatSecurityOption3$outboundSchema.parse(loadChatSecurityOption3),
+  );
+}
+
+/** @internal */
 export type LoadChatSecurity$Outbound = {
   Option1?: LoadChatSecurityOption1$Outbound | undefined;
   Option2?: LoadChatSecurityOption2$Outbound | undefined;
+  Option3?: LoadChatSecurityOption3$Outbound | undefined;
 };
 
 /** @internal */
@@ -140,11 +182,13 @@ export const LoadChatSecurity$outboundSchema: z.ZodMiniType<
   z.object({
     option1: z.optional(z.lazy(() => LoadChatSecurityOption1$outboundSchema)),
     option2: z.optional(z.lazy(() => LoadChatSecurityOption2$outboundSchema)),
+    option3: z.optional(z.lazy(() => LoadChatSecurityOption3$outboundSchema)),
   }),
   z.transform((v) => {
     return remap$(v, {
       option1: "Option1",
       option2: "Option2",
+      option3: "Option3",
     });
   }),
 );
@@ -170,6 +214,7 @@ export type LoadChatRequest$Outbound = {
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
   "Gram-Chat-Session"?: string | undefined;
+  "Gram-Key"?: string | undefined;
 };
 
 /** @internal */
@@ -189,6 +234,7 @@ export const LoadChatRequest$outboundSchema: z.ZodMiniType<
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     gramChatSession: z.optional(z.string()),
+    gramKey: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -199,6 +245,7 @@ export const LoadChatRequest$outboundSchema: z.ZodMiniType<
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",
       gramChatSession: "Gram-Chat-Session",
+      gramKey: "Gram-Key",
     });
   }),
 );

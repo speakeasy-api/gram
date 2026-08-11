@@ -25,8 +25,10 @@ import (
 const (
 	// snapshotBillingCycles is how many trailing billing cycles (including the
 	// active one) are kept refreshed in Postgres. Matches the TUM endpoint's
-	// reporting window and is bounded by the 2-year retention of
-	// chat_token_summaries, so the first run backfills the full window.
+	// reporting window. The attribute_metrics_summaries retention (2 years)
+	// covers it, but coverage starts where the aggregate's data does — a
+	// first run seals cycles predating coverage at whatever (possibly zero)
+	// data exists.
 	snapshotBillingCycles = 12
 
 	// billingCycleFinalizeGrace is how long after a cycle closes its snapshot
@@ -119,10 +121,10 @@ func (s *SnapshotBillingCycleUsage) snapshotOrganization(ctx context.Context, qu
 		}
 
 		days, err := s.telemetryRepo.GetTokensUnderManagementByDay(ctx, telemetryrepo.GetTokensUnderManagementParams{
-			ProjectIDs:        ids,
-			StartUnixNano:     cycle.Start.UnixNano(),
-			EndUnixNano:       cycle.End.UnixNano(),
-			BilledHookSources: billing.ModelUsageSourceStrings(),
+			ProjectIDs:          ids,
+			StartUnixNano:       cycle.Start.UnixNano(),
+			EndUnixNano:         cycle.End.UnixNano(),
+			ExcludedHookSources: billing.GramHostedHookSourceStrings(),
 		})
 		if err != nil {
 			return fmt.Errorf("compute tokens under management: %w", err)

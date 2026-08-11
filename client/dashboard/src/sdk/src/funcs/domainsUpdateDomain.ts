@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * updateDomain domains
  *
  * @remarks
- * Update the IP allowlist for the organization's custom domain
+ * Update settings for the organization's custom domain
  */
 export function domainsUpdateDomain(
   client: GramCore,

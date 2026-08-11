@@ -35,11 +35,12 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 	}
 	orgSlug := ""
 	outcome := hookMetricOutcomeAccepted
+	ctx, riskScanned := withRiskScanTracker(ctx)
 	defer func() {
 		if err != nil && outcome == hookMetricOutcomeAccepted {
 			outcome = hookMetricOutcomeFailure
 		}
-		s.metrics.RecordHookEventDuration(ctx, "cursor", logHookEventName, outcome, orgSlug, time.Since(start))
+		s.metrics.RecordHookEventDuration(ctx, "cursor", logHookEventName, outcome, cursorHookDecision(res), orgSlug, *riskScanned, time.Since(start))
 	}()
 
 	logger := s.logger.With(
@@ -85,7 +86,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 	// re-sends the same token: the decision still re-runs so the user stays
 	// blocked, but tagging the context as a duplicate suppresses the duplicate
 	// writes in recordCursorHook.
-	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, "")) {
+	if !s.claimHookIdempotency(ctx, conv.PtrValOr(payload.IdempotencyKey, ""), false) {
 		ctx = withHookDuplicate(ctx)
 	}
 
@@ -103,7 +104,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 			ID:    actorUserID,
 			Email: userEmail,
 		},
-	}, time.Now())
+	}, s.now())
 	if err != nil {
 		return nil, fmt.Errorf("normalize cursor hook event: %w", err)
 	}
@@ -122,6 +123,17 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 
 	switch ev := hookEvent.(type) {
 	case *hookevents.BeforeMCPExecution:
+		// Spend gate runs before any risk-policy evaluation: an over-budget
+		// user gets MCP tool calls denied even mid-turn. This event is the
+		// sole spend gate for MCP calls — preToolUse skips them below.
+		if block := s.checkSpendGate(ctx, ev.Event); block != nil {
+			auditReason, userReason := s.cursorSpendDenyReason(ctx, block, ev.ToolName, orgID, *authCtx.ProjectID, actorUserID, conv.PtrValOr(payload.ConversationID, ""))
+			blockReason = auditReason
+			result.Permission = new("deny")
+			result.UserMessage = &userReason
+			result.AgentMessage = &userReason
+			break
+		}
 		// beforeMCPExecution fires for MCP-routed (non-local) tool calls. Run
 		// the risk scanner first (block-only today), then fall through to the
 		// shadow-MCP guard so unapproved toolsets are still blocked.
@@ -172,7 +184,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 		}
 		toolName := strings.TrimPrefix(ev.ToolName, "MCP:")
 		evidence := cursorShadowMCPEvidence(payload)
-		if detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, actorUserID, policy.ID, toolName, evidence); denied {
+		if detail, denied := s.enforceShadowMCPToolAccess(ctx, orgID, projectID, actorUserID, policy, toolName, evidence); denied {
 			logger.InfoContext(ctx, "denying cursor tool call: failed gram toolset validation",
 				attr.SlogEvent("cursor_hook_denied"),
 				attr.SlogHookBlockReason(detail),
@@ -224,6 +236,17 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 			result.Permission = new("allow")
 			break
 		}
+		// Spend gate runs before any risk-policy evaluation. It sits below
+		// the MCP: skip so each MCP call is spend-gated exactly once, at
+		// beforeMCPExecution — the same dedup contract the risk scan follows.
+		if block := s.checkSpendGate(ctx, ev.Event); block != nil {
+			auditReason, userReason := s.cursorSpendDenyReason(ctx, block, toolName, orgID, *authCtx.ProjectID, actorUserID, conv.PtrValOr(payload.ConversationID, ""))
+			blockReason = auditReason
+			result.Permission = new("deny")
+			result.UserMessage = &userReason
+			result.AgentMessage = &userReason
+			break
+		}
 		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
 			if scanResult.Action == "warn" && s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName) {
 				result.Permission = new("allow")
@@ -263,6 +286,16 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 			result.Permission = new("allow")
 		}
 	case *hookevents.UserPromptSubmit:
+		// Spend gate runs before any risk-policy evaluation: an over-budget
+		// user is denied outright.
+		if block := s.checkSpendGate(ctx, ev.Event); block != nil {
+			reason := spendBlockReason("prompt", block)
+			blockReason = reason
+			result.Permission = new("deny")
+			result.UserMessage = &reason
+			result.AgentMessage = &reason
+			break
+		}
 		// A warn (challenge) is never hard-denied at prompt submit: there is no
 		// confirmation primitive here, and denying would diverge from the
 		// Claude/Codex prompt paths. Let it through — the follow-on tool call
@@ -315,6 +348,7 @@ func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPaylo
 		ExternalAccountUUID: "",
 		ExternalAccountID:   "",
 		DeviceID:            "",
+		Hostname:            strings.TrimSpace(conv.PtrValOr(payload.HookHostname, "")),
 		AccountType:         "",
 		BillingMode:         "",
 		UserAccountID:       "",
@@ -415,7 +449,7 @@ func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.
 
 	if s.telemetryLogger != nil {
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
-			Timestamp:  time.Now(),
+			Timestamp:  s.now(),
 			ToolInfo:   toolInfo,
 			UserInfo:   telemetry.UserInfoByIDAndEmail(userID, userEmail),
 			Attributes: attrs,
@@ -498,7 +532,7 @@ func (s *Service) writeCursorMetricsToClickHouse(ctx context.Context, payload *g
 	}
 
 	s.telemetryLogger.Log(ctx, telemetry.LogParams{
-		Timestamp:  time.Now(),
+		Timestamp:  s.now(),
 		ToolInfo:   toolInfo,
 		UserInfo:   telemetry.UserInfoByID(userID),
 		Attributes: attrs,
@@ -570,8 +604,15 @@ func (s *Service) buildCursorTelemetryAttributes(ctx context.Context, payload *g
 		}
 		// Cursor surfaces the MCP server URL on the payload directly (no
 		// SessionStart inventory), so persist it alongside the tool call.
+		// The match key carries the same server-level identifier the other
+		// senders resolve from their inventory snapshot — full URL for
+		// HTTP/SSE, launch command for stdio — so the offline risk scanner
+		// reads one attribute regardless of which agent sent the event.
 		if payload.URL != nil && *payload.URL != "" {
 			attrs[attr.MCPServerURLKey] = *payload.URL
+			attrs[attr.MCPMatchKey] = *payload.URL
+		} else if payload.Command != nil && *payload.Command != "" {
+			attrs[attr.MCPMatchKey] = *payload.Command
 		}
 	}
 
@@ -715,6 +756,8 @@ func (s *Service) writeCursorToolCallRequestToPG(ctx context.Context, payload *g
 	}
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		Replayed:         false,
+		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "assistant",
@@ -783,6 +826,8 @@ func (s *Service) writeCursorToolCallResultToPG(ctx context.Context, payload *ge
 	}
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		Replayed:         false,
+		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "tool",
@@ -830,6 +875,8 @@ func (s *Service) persistCursorAgentResponse(ctx context.Context, payload *gen.C
 	chatID := sessionIDToUUID(*payload.ConversationID)
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		Replayed:         false,
+		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
 		ProjectID:        projectID,
 		Role:             "assistant",
@@ -893,6 +940,8 @@ func (s *Service) persistCursorUserPrompt(ctx context.Context, payload *gen.Curs
 	}
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		Replayed:         false,
+		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
 		ProjectID:        parsedProjectID,
 		Role:             "user",

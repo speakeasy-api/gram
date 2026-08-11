@@ -64,7 +64,7 @@ Redis is live data-plane state:
 
 ## Local Validation
 
-Run `mise run seed`, then start the normal Gram stack with `madprocs`.
+Start the local dev stack with `./zero --agent`.
 The local Postgres MCP server and agent are declared in `compose.yml` under the
 `tunnel` profile:
 
@@ -72,7 +72,7 @@ The local Postgres MCP server and agent are declared in `compose.yml` under the
 docker compose --profile tunnel up --build tunnel-postgres-mcp tunnel-agent
 ```
 
-Two madprocs entries wrap the same local path:
+Two pitchfork daemon entries wrap the same local path:
 
 - `tunnel-gateway`: local gateway with agent `/connect` on `:8090` and internal forwarding on `:8091`, using Redis for routes.
 - `tunnel-postgres-mcp`: starts Postgres MCP and the companion tunnel agent.

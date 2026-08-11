@@ -6,8 +6,9 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
-} from "@/components/ui/context-menu";
-import { MoreActions } from "@/components/ui/more-actions";
+} from "@/components/ui/ContextMenu";
+import { MoreActions } from "@/components/ui/MoreActions";
+import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import {
@@ -16,6 +17,7 @@ import {
   subjectLabel,
   STATUS_PRESENTATION,
 } from "@/lib/user-session-status";
+import { ClientSourceBadge } from "./ClientSourceBadge";
 import { SessionStatusBadge } from "./SessionStatusBadge";
 import { RevokeSessionDialog } from "./RevokeSessionDialog";
 
@@ -28,10 +30,16 @@ export function SessionRow({
 }): JSX.Element {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const { hasScope } = useRBAC();
+  const project = useProject();
   const status = sessionStatus(session);
-  // Revoke is a write mutation (backend requires project:write); hide the
-  // affordance for read-only users instead of letting them hit a 403.
-  const canRevoke = status === "active" && hasScope("project:write");
+  // Revoke is a write mutation the backend gates on project:write for THIS
+  // project. hasScope without a resource id is existential across every
+  // project the user holds grants in (ListGrants resolves principals per
+  // organization), so an unscoped check would show Revoke to someone who is
+  // read-only here but a writer elsewhere, and hand them a 403. Mirrors
+  // pages/org/UserSessions.tsx, which scopes the same check by project id.
+  const canRevoke =
+    status === "active" && hasScope("project:write", project.id);
 
   const rowContent = (
     <li className="flex items-center gap-3 px-3 py-2">
@@ -48,6 +56,7 @@ export function SessionRow({
           {session.issuerSlug}
         </p>
       </div>
+      {session.clientName && <ClientSourceBadge client={session} />}
       <SessionStatusBadge session={session} />
       <span className="text-muted-foreground shrink-0 text-xs">
         {sessionTimeLabel(session)}

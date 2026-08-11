@@ -1,15 +1,19 @@
 import { FullPageError } from "@/components/full-page-error";
 import { GramLogo } from "@/components/gram-logo";
 import { PageHeader } from "@/components/page-header";
+import { SidebarNavSkeleton } from "@/components/sidebar-nav-skeleton";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
   SidebarInset,
   SidebarProvider,
-} from "@/components/ui/sidebar";
-import { Skeleton } from "@/components/ui/skeleton";
+} from "@/components/ui/Sidebar";
+import { Skeleton } from "@/components/ui/Skeleton";
 import BookDemo from "@/pages/demo/BookDemo";
 import SwitchOrg from "@/pages/demo/SwitchOrg";
+import { getTrialLifecycleFromDates } from "@/lib/trial-status";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useIsPlatformAdminRef } from "@/contexts/Sdk";
@@ -22,6 +26,7 @@ import {
   useSearchParams,
 } from "react-router";
 import { orgRoutePaths } from "@/routes";
+import { safeRedirectPath, UNAUTHENTICATED_PATHS } from "@/lib/session-expired";
 import { useSlugs } from "./Sdk";
 import {
   useCaptureUserAuthorizationEvent,
@@ -43,23 +48,22 @@ import type { ProjectEntry } from "@gram/client/models/components/projectentry.j
 
 const PREFERRED_PROJECT_KEY = "preferredProject";
 
-const UNAUTHENTICATED_PATHS = [
-  "/login",
-  "/register",
-  "/invite",
-  "/book-demo",
-  "/shadow-mcp/request",
-  "/risk-policy-bypass/request",
-  "/blocks",
-];
-
 const SLUG_EXEMPT_PATHS = [
   "/switch-org",
+  "/explore-demo",
+  "/talk-to-us",
   "/shadow-mcp/request",
   "/risk-policy-bypass/request",
   "/risk-policy-challenge/acknowledge",
   "/blocks",
+  "/shared",
 ];
+
+// Exact match, with or without the trailing slash. A prefix match would let
+// deeper paths (e.g. /explore-demo/projects/x) through the gate.
+function isPath(pathname: string, path: string): boolean {
+  return pathname === path || pathname === `${path}/`;
+}
 
 export const AuthProvider = ({
   children,
@@ -96,12 +100,14 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     // Don't show the authenticated app skeleton on routes that always redirect
     // (root "/" and unauthenticated pages like /login). This avoids a jarring
     // skeleton flash for logged-out users before the redirect to /login fires.
+    // A minimal centered pending state (not a blank viewport) covers the
+    // seconds the session check can take before login paints.
     if (
       location.pathname === "/" ||
       UNAUTHENTICATED_PATHS.some((p) => location.pathname.startsWith(p)) ||
       location.pathname.endsWith("/setup")
     ) {
-      return null;
+      return <AuthPendingScreen />;
     }
     return <AppLoadingShell />;
   }
@@ -116,11 +122,29 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
 
   // Show book demo page if organization is not whitelisted
   // Check this before the no-org fallback so non-whitelisted orgs are blocked before reaching the normal app flow
-  if (session.activeOrganizationId && !session.whitelisted) {
+  // /explore-demo stays reachable: it's the gate page's own escape hatch into
+  // the shared demo org (which is whitelisted).
+  if (
+    session.activeOrganizationId &&
+    !session.whitelisted &&
+    !isPath(location.pathname, "/explore-demo")
+  ) {
+    // The switcher wins even on the upgrade gate's own route. Someone with a
+    // second organization has somewhere to go, and that page offers no way to
+    // reach it — landing there would strand them.
     if (session.organizations.length > 1) {
       return <SwitchOrg gate />;
     }
-    return <BookDemo />;
+    // Past this point the upgrade gate has to render, or the redirect below
+    // sends the user to a route that bounces them straight back to it.
+    if (!isPath(location.pathname, "/talk-to-us")) {
+      // An org that never trialed (or is still mid-trial) falls through to the
+      // cold-signup gate.
+      if (getTrialLifecycleFromDates(session.trial, new Date()) === "expired") {
+        return <Navigate to="/talk-to-us" replace />;
+      }
+      return <BookDemo />;
+    }
   }
 
   if (!session.activeOrganizationId) {
@@ -163,8 +187,10 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     return <Navigate to={newPath + location.search + location.hash} replace />;
   }
 
-  // Handle initial navigation
-  const redirectParam = searchParams.get("redirect");
+  // Handle initial navigation. The param is attacker-controllable, so only
+  // same-origin paths are honored — a protocol-relative value would send the
+  // freshly authenticated user to a foreign origin.
+  const redirectParam = safeRedirectPath(searchParams.get("redirect"));
   if (redirectParam) {
     return <Navigate to={redirectParam} replace />;
   } else if (isSlugExempt) {
@@ -281,21 +307,15 @@ export const ProjectProvider = ({
   );
 };
 
-/** Skeleton nav group matching the new collapsible sidebar style. */
-const SkeletonNavItem = ({ width = "w-20" }: { width?: string }) => (
-  <div className="flex items-center gap-2 px-2 py-2">
-    <Skeleton className="h-4 w-4 shrink-0 rounded" />
-    <Skeleton className={`h-3.5 ${width}`} />
-  </div>
-);
-
-const SkeletonNavGroup = () => (
-  <div className="border-border mt-1 ml-4 border-l pl-2">
-    <div className="flex flex-col gap-0.5 py-0.5">
-      <Skeleton className="mx-2 my-1.5 h-3 w-16" />
-      <Skeleton className="mx-2 my-1.5 h-3 w-20" />
-      <Skeleton className="mx-2 my-1.5 h-3 w-14" />
-    </div>
+/**
+ * Minimal centered pending state shown while the session check resolves on
+ * routes that always redirect (root "/", /login, setup). Mirrors the
+ * thin-serif treatment CliCallback uses; the copy stays a neutral "Loading…"
+ * because on /login itself no redirect is coming.
+ */
+const AuthPendingScreen = () => (
+  <div className="flex h-screen items-center justify-center">
+    <h1 className="text-display-sm font-thin">Loading…</h1>
   </div>
 );
 
@@ -303,47 +323,34 @@ const SkeletonNavGroup = () => (
  * Lightweight shell that mirrors the real AppLayout structure,
  * shown while the auth session is still loading so the user
  * sees the app chrome immediately instead of a blank screen.
+ *
+ * Keep the structure in sync with AppLayout/AppSidebar: the logo belongs
+ * inside SidebarHeader, not a sibling header. The sidebar renders as a
+ * `fixed inset-y-0 z-10` container, so a sibling header would sit under it.
  */
 const AppLoadingShell = () => (
   <SidebarProvider
-    style={{ "--sidebar-width": "14rem" } as React.CSSProperties}
+    style={{ "--sidebar-width": "16rem" } as React.CSSProperties}
   >
     <div className="flex h-screen w-full flex-col">
-      {/* Header */}
-      <header className="dark:bg-background flex h-14 shrink-0 items-center border-b bg-white pr-4 pl-5">
-        <div className="flex items-center gap-3">
-          <GramLogo className="w-28" />
-          <span className="text-muted-foreground/50 text-xl select-none">
-            /
-          </span>
-          <Skeleton className="h-5 w-24" />
-          <span className="text-muted-foreground/50 text-xl select-none">
-            /
-          </span>
-          <Skeleton className="h-5 w-20" />
-        </div>
-        <div className="ml-auto flex items-center gap-4">
-          <Skeleton className="h-8 w-8 rounded-full" />
-        </div>
-      </header>
-      {/* Body */}
-      <div className="flex w-full flex-1 overflow-hidden pt-2">
-        <Sidebar collapsible="offcanvas" variant="inset">
-          <SidebarContent className="pt-5">
-            <div className="flex flex-col gap-1 px-2">
-              {/* Home */}
-              <SkeletonNavItem width="w-16" />
-              {/* Connect group */}
-              <SkeletonNavItem width="w-20" />
-              <SkeletonNavGroup />
-              {/* Build group */}
-              <SkeletonNavItem width="w-14" />
-              {/* Observe group */}
-              <SkeletonNavItem width="w-20" />
-              {/* Security group */}
-              <SkeletonNavItem width="w-18" />
+      <div className="flex w-full flex-1 overflow-hidden">
+        <Sidebar collapsible="icon" variant="inset">
+          <SidebarHeader className="gap-3 pb-3">
+            <div className="flex h-(--header-height) items-center px-1">
+              <GramLogo className="w-28" />
             </div>
+            {/* Workspace switcher */}
+            <Skeleton className="h-8 w-full" />
+          </SidebarHeader>
+          <SidebarContent className="pt-2">
+            <SidebarNavSkeleton />
           </SidebarContent>
+          <SidebarFooter className="border-t">
+            <div className="flex items-center gap-2 py-2">
+              <Skeleton className="size-8 shrink-0 rounded-full" />
+              <Skeleton className="h-3.5 w-24" />
+            </div>
+          </SidebarFooter>
         </Sidebar>
         <SidebarInset>
           <PageHeader>

@@ -13,8 +13,8 @@ import (
 )
 
 const cloneEnvironmentEntriesWithValues = `-- name: CloneEnvironmentEntriesWithValues :exec
-INSERT INTO environment_entries (environment_id, name, value)
-SELECT $1::uuid, ee.name, ee.value
+INSERT INTO environment_entries (environment_id, name, value, is_secret)
+SELECT $1::uuid, ee.name, ee.value, ee.is_secret
 FROM environment_entries ee
 INNER JOIN environments e ON ee.environment_id = e.id
 WHERE ee.environment_id = $2::uuid
@@ -27,18 +27,19 @@ type CloneEnvironmentEntriesWithValuesParams struct {
 	ProjectID           uuid.UUID
 }
 
-// Copy (name, encrypted-value) pairs from a source environment to a new environment.
-// The encrypted value bytes flow row-to-row inside Postgres and are never decrypted by
-// the application during the clone. Same plaintext + same nonce + same key produces the
-// same ciphertext under AES-GCM, which is cryptographically permissible.
+// Copy (name, value, is_secret) triples from a source environment to a new environment.
+// Secret values are ciphertext and flow row-to-row inside Postgres without the
+// application decrypting them. Same plaintext + same nonce + same key produces the
+// same ciphertext under AES-GCM, which is cryptographically permissible. Non-secret
+// values are plaintext and copy verbatim.
 func (q *Queries) CloneEnvironmentEntriesWithValues(ctx context.Context, arg CloneEnvironmentEntriesWithValuesParams) error {
 	_, err := q.db.Exec(ctx, cloneEnvironmentEntriesWithValues, arg.NewEnvironmentID, arg.SourceEnvironmentID, arg.ProjectID)
 	return err
 }
 
 const cloneEnvironmentEntryNames = `-- name: CloneEnvironmentEntryNames :exec
-INSERT INTO environment_entries (environment_id, name, value)
-SELECT $1::uuid, ee.name, $2::text
+INSERT INTO environment_entries (environment_id, name, value, is_secret)
+SELECT $1::uuid, ee.name, $2::text, TRUE
 FROM environment_entries ee
 INNER JOIN environments e ON ee.environment_id = e.id
 WHERE ee.environment_id = $3::uuid
@@ -54,7 +55,10 @@ type CloneEnvironmentEntryNamesParams struct {
 
 // Copy only the variable names from a source environment, using a caller-supplied
 // placeholder ciphertext as the value for every new entry. Used when the user wants
-// the structure of the source environment but not its secrets.
+// the structure of the source environment but not its secrets. Every placeholder row
+// is marked secret regardless of the source flag: the placeholder is ciphertext, and
+// the is_secret ⇔ ciphertext invariant must hold. Users flip the flag when they fill
+// in the real value.
 func (q *Queries) CloneEnvironmentEntryNames(ctx context.Context, arg CloneEnvironmentEntryNamesParams) error {
 	_, err := q.db.Exec(ctx, cloneEnvironmentEntryNames,
 		arg.NewEnvironmentID,
@@ -117,30 +121,39 @@ const createEnvironmentEntries = `-- name: CreateEnvironmentEntries :many
 INSERT INTO environment_entries (
     environment_id,
     name,
-    value
+    value,
+    is_secret
 )
 /*
  Parameters:
  - environment_id: uuid
  - names: text[]
  - values: text[]
+ - is_secrets: boolean[]
 */
 VALUES (
     $1::uuid,
     unnest($2::text[]),
-    unnest($3::text[])
+    unnest($3::text[]),
+    unnest($4::boolean[])
 )
-RETURNING name, value, environment_id, created_at, updated_at
+RETURNING name, value, is_secret, environment_id, created_at, updated_at
 `
 
 type CreateEnvironmentEntriesParams struct {
 	EnvironmentID uuid.UUID
 	Names         []string
 	Values        []string
+	IsSecrets     []bool
 }
 
 func (q *Queries) CreateEnvironmentEntries(ctx context.Context, arg CreateEnvironmentEntriesParams) ([]EnvironmentEntry, error) {
-	rows, err := q.db.Query(ctx, createEnvironmentEntries, arg.EnvironmentID, arg.Names, arg.Values)
+	rows, err := q.db.Query(ctx, createEnvironmentEntries,
+		arg.EnvironmentID,
+		arg.Names,
+		arg.Values,
+		arg.IsSecrets,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -151,6 +164,7 @@ func (q *Queries) CreateEnvironmentEntries(ctx context.Context, arg CreateEnviro
 		if err := rows.Scan(
 			&i.Name,
 			&i.Value,
+			&i.IsSecret,
 			&i.EnvironmentID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -378,7 +392,7 @@ func (q *Queries) GetEnvironmentForToolset(ctx context.Context, arg GetEnvironme
 }
 
 const listEnvironmentEntries = `-- name: ListEnvironmentEntries :many
-SELECT ee.name, ee.value, ee.environment_id, ee.created_at, ee.updated_at
+SELECT ee.name, ee.value, ee.is_secret, ee.environment_id, ee.created_at, ee.updated_at
 FROM environment_entries ee
 INNER JOIN environments e ON ee.environment_id = e.id
 WHERE
@@ -404,6 +418,54 @@ func (q *Queries) ListEnvironmentEntries(ctx context.Context, arg ListEnvironmen
 		if err := rows.Scan(
 			&i.Name,
 			&i.Value,
+			&i.IsSecret,
+			&i.EnvironmentID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEnvironmentEntriesForUpdate = `-- name: ListEnvironmentEntriesForUpdate :many
+SELECT ee.name, ee.value, ee.is_secret, ee.environment_id, ee.created_at, ee.updated_at
+FROM environment_entries ee
+INNER JOIN environments e ON ee.environment_id = e.id
+WHERE
+    e.project_id = $1 AND
+    ee.environment_id = $2
+ORDER BY ee.name ASC
+FOR UPDATE OF ee
+`
+
+type ListEnvironmentEntriesForUpdateParams struct {
+	ProjectID     uuid.UUID
+	EnvironmentID uuid.UUID
+}
+
+// Same as ListEnvironmentEntries, but holds a row lock on every entry until the
+// transaction ends. An update that omits a value preserves the stored one by
+// reading it and writing it back, so a concurrent rotation landing between the
+// read and the write would otherwise be reverted.
+func (q *Queries) ListEnvironmentEntriesForUpdate(ctx context.Context, arg ListEnvironmentEntriesForUpdateParams) ([]EnvironmentEntry, error) {
+	rows, err := q.db.Query(ctx, listEnvironmentEntriesForUpdate, arg.ProjectID, arg.EnvironmentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EnvironmentEntry
+	for rows.Next() {
+		var i EnvironmentEntry
+		if err := rows.Scan(
+			&i.Name,
+			&i.Value,
+			&i.IsSecret,
 			&i.EnvironmentID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -580,27 +642,39 @@ func (q *Queries) UpdateEnvironment(ctx context.Context, arg UpdateEnvironmentPa
 }
 
 const upsertEnvironmentEntry = `-- name: UpsertEnvironmentEntry :one
-INSERT INTO environment_entries (environment_id, name, value, updated_at)
-VALUES ($1, $2, $3, now())
+INSERT INTO environment_entries (environment_id, name, value, is_secret, updated_at)
+SELECT e.id, $1::text, $2::text, $3::boolean, now()
+FROM environments e
+WHERE e.id = $4 AND e.project_id = $5
 ON CONFLICT (environment_id, name)
 DO UPDATE SET
     value = EXCLUDED.value,
+    is_secret = EXCLUDED.is_secret,
     updated_at = now()
-RETURNING name, value, environment_id, created_at, updated_at
+RETURNING name, value, is_secret, environment_id, created_at, updated_at
 `
 
 type UpsertEnvironmentEntryParams struct {
-	EnvironmentID uuid.UUID
 	Name          string
 	Value         string
+	IsSecret      bool
+	EnvironmentID uuid.UUID
+	ProjectID     uuid.UUID
 }
 
 func (q *Queries) UpsertEnvironmentEntry(ctx context.Context, arg UpsertEnvironmentEntryParams) (EnvironmentEntry, error) {
-	row := q.db.QueryRow(ctx, upsertEnvironmentEntry, arg.EnvironmentID, arg.Name, arg.Value)
+	row := q.db.QueryRow(ctx, upsertEnvironmentEntry,
+		arg.Name,
+		arg.Value,
+		arg.IsSecret,
+		arg.EnvironmentID,
+		arg.ProjectID,
+	)
 	var i EnvironmentEntry
 	err := row.Scan(
 		&i.Name,
 		&i.Value,
+		&i.IsSecret,
 		&i.EnvironmentID,
 		&i.CreatedAt,
 		&i.UpdatedAt,

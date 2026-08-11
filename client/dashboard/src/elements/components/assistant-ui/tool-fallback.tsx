@@ -1,0 +1,111 @@
+import { cn } from "@/lib/utils";
+import {
+  useAuiState,
+  type ToolCallMessagePartComponent,
+} from "@assistant-ui/react";
+import { useToolApproval } from "@/elements/hooks/useToolApproval";
+import {
+  ToolUI,
+  type ToolStatus,
+  type ContentItem,
+} from "@/elements/components/ui/tool-ui";
+
+export const ToolFallback: ToolCallMessagePartComponent = ({
+  toolName,
+  toolCallId,
+  status,
+  result,
+  args,
+}) => {
+  const {
+    pendingApprovals,
+    whitelistTool,
+    confirmPendingApproval,
+    rejectPendingApproval,
+  } = useToolApproval();
+
+  // Check if this specific tool call has a pending approval
+  const pendingApproval = pendingApprovals.get(toolCallId);
+  // Selecting the whole message would re-render this card on every streamed
+  // chunk; select only the derived value.
+  const needsTrailingBorder = useAuiState(({ message }) => {
+    const toolParts = message.parts.filter((part) => part.type === "tool-call");
+    const index = toolParts.findIndex((part) => part.toolCallId === toolCallId);
+    return index !== -1 && index !== toolParts.length - 1;
+  });
+
+  const handleApproveOnce = () => {
+    confirmPendingApproval(toolCallId);
+  };
+
+  const handleApproveForSession = () => {
+    whitelistTool(toolName);
+    confirmPendingApproval(toolCallId);
+  };
+
+  const handleDeny = () => {
+    rejectPendingApproval(toolCallId);
+  };
+
+  // Map assistant-ui status to ToolUI status
+  const getToolStatus = (): ToolStatus => {
+    if (pendingApproval) return "approval";
+    if (status.type === "incomplete") return "error";
+    if (status.type === "complete") {
+      // Check if the result indicates an error (e.g., tool was denied)
+      if (
+        result &&
+        typeof result === "object" &&
+        "isError" in result &&
+        result.isError
+      ) {
+        return "error";
+      }
+      return "complete";
+    }
+    return "running";
+  };
+
+  // Parse result to structured content if possible
+  const getResult = ():
+    | string
+    | Record<string, unknown>
+    | { content: ContentItem[] }
+    | undefined => {
+    if (result === undefined) return undefined;
+    // Check if it's structured content with a content array
+    if (
+      typeof result === "object" &&
+      result !== null &&
+      "content" in result &&
+      Array.isArray((result as { content: unknown }).content)
+    ) {
+      return result as { content: ContentItem[] };
+    }
+    // Otherwise return as-is (string or object)
+    if (typeof result === "string") return result;
+    return result as Record<string, unknown>;
+  };
+
+  return (
+    <div
+      className={cn(
+        "aui-tool-fallback-root flex w-full flex-col",
+        needsTrailingBorder && "border-b",
+      )}
+    >
+      <ToolUI
+        name={toolName}
+        status={getToolStatus()}
+        request={args as Record<string, unknown>}
+        result={getResult()}
+        onApproveOnce={pendingApproval ? handleApproveOnce : undefined}
+        onApproveForSession={
+          pendingApproval ? handleApproveForSession : undefined
+        }
+        onDeny={pendingApproval ? handleDeny : undefined}
+        className="rounded-none border-0"
+      />
+    </div>
+  );
+};

@@ -55,7 +55,7 @@ type testInstance struct {
 	assetStorage   assets.BlobStore
 }
 
-func newTestProjectsService(t *testing.T, enableRBAC bool) (context.Context, *testInstance) {
+func newTestProjectsService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -87,9 +87,6 @@ func newTestProjectsService(t *testing.T, enableRBAC bool) (context.Context, *te
 	// Create test asset storage for testing
 	assetStorage := assetstest.NewTestBlobStore(t)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	auditLogger := audit.NewLogger()
 
 	svc := projects.NewService(
@@ -100,13 +97,10 @@ func newTestProjectsService(t *testing.T, enableRBAC bool) (context.Context, *te
 		authz.NewEngine(
 			logger,
 			conn,
-			chConn,
-			func(context.Context, string) (bool, error) {
-				return enableRBAC, nil
-			},
+
 			authztest.ChallengeLoggingAlwaysDisabled,
-			workos.NewStubClient(),
-		),
+			workos.NewStubClient()),
+
 		auditLogger,
 		nil,
 		false,

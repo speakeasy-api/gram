@@ -46,6 +46,14 @@ export type ListRiskResultsRequest = {
    */
   uniqueMatch?: boolean | undefined;
   /**
+   * If true, only return findings from chats that are not linked to an assistant. Useful for surfacing events that are missing user attribution.
+   */
+  nonAssistant?: boolean | undefined;
+  /**
+   * Optional assistant ID; only return findings from chats linked to this assistant.
+   */
+  assistantId?: string | undefined;
+  /**
    * Filter results to messages created at or after this timestamp (ISO 8601).
    */
   from?: Date | undefined;
@@ -184,6 +192,8 @@ export type ListRiskResultsRequest$Outbound = {
   rule_id?: string | undefined;
   user_id?: string | undefined;
   unique_match?: boolean | undefined;
+  non_assistant?: boolean | undefined;
+  assistant_id?: string | undefined;
   from?: string | undefined;
   to?: string | undefined;
   cursor?: string | undefined;
@@ -205,6 +215,8 @@ export const ListRiskResultsRequest$outboundSchema: z.ZodMiniType<
     ruleId: z.optional(z.string()),
     userId: z.optional(z.string()),
     uniqueMatch: z.optional(z.boolean()),
+    nonAssistant: z.optional(z.boolean()),
+    assistantId: z.optional(z.string()),
     from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     cursor: z.optional(z.string()),
@@ -220,6 +232,8 @@ export const ListRiskResultsRequest$outboundSchema: z.ZodMiniType<
       ruleId: "rule_id",
       userId: "user_id",
       uniqueMatch: "unique_match",
+      nonAssistant: "non_assistant",
+      assistantId: "assistant_id",
       gramKey: "Gram-Key",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",

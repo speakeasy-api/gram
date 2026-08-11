@@ -75,7 +75,7 @@ export const INSIGHTS_SUGGESTION_ICONS = {
   zap: Zap,
 } satisfies Record<string, LucideIcon>;
 
-type InsightsSuggestionIcon = keyof typeof INSIGHTS_SUGGESTION_ICONS;
+export type InsightsSuggestionIcon = keyof typeof INSIGHTS_SUGGESTION_ICONS;
 
 export interface InsightsSuggestion {
   /** Chip text — a short question. */
@@ -141,11 +141,17 @@ export const CHAT_LANDING_SUGGESTIONS: InsightsSuggestion[] = [
     prompt:
       "Which tools have the worst p95 latency, and which ones have regressed the most this week compared to last? Flag anything that looks like it's degrading.",
   },
+  {
+    title: "What's shipped this week on the platform?",
+    label: "Platform changelog",
+    icon: "rocket",
+    prompt: "What's shipped this week on the platform? Check the changelog.",
+  },
 ];
 
 /**
  * The full command palette shown when the user types `/` in the "Ask anything"
- * composer. A superset of the landing chips — the seven headline prompts plus a
+ * composer. A superset of the landing chips — the headline prompts plus a
  * deeper bench — so the slash menu speaks the same vocabulary as the chips while
  * surfacing the long tail of questions the assistant can answer.
  */
@@ -515,7 +521,7 @@ export const INSIGHTS_SUGGESTIONS = {
     },
   ],
 
-  clis: [
+  skills: [
     {
       title: "Which skills are used?",
       label: "Most-invoked skills",
@@ -627,7 +633,7 @@ export const INSIGHTS_SUGGESTIONS = {
       label: "Compare clients",
       icon: "bot",
       prompt:
-        "Compare usage across different AI coding clients (Claude Code, Cursor, Codex, etc). Which is most popular?",
+        "Compare usage across different AI coding clients. Which is most popular?",
     },
   ],
 
@@ -845,6 +851,39 @@ export const INSIGHTS_SUGGESTIONS = {
     },
   ],
 
+  /** Watchdog page: exclusion setup leads (the page's primary remediation),
+   * followed by the risk questions an operator triaging signals asks next. */
+  watchdog: [
+    {
+      title: "Help me exclude some false positives",
+      label: "Set up exclusions",
+      icon: "shield",
+      prompt:
+        "Help me create a risk exclusion rule. Ask me what should stop being flagged — an exact value, a detection rule, or a whole detector — then set up the exclusion, scoped globally unless I say otherwise. Never quote redacted match content back to me.",
+    },
+    {
+      title: "What are the most risky findings?",
+      label: "Top risk signals",
+      icon: "alert",
+      prompt:
+        "What are the most risky findings right now? Rank the top signals by severity and finding volume, and tell me which ones I should deal with first. Never quote redacted match content.",
+    },
+    {
+      title: "Who is most exposed?",
+      label: "Users & teams at risk",
+      icon: "users",
+      prompt:
+        "Which users and teams are generating the most risk findings in this window, and what kinds of data are they exposing? Never quote redacted match content.",
+    },
+    {
+      title: "What changed recently?",
+      label: "New risk patterns",
+      icon: "trend",
+      prompt:
+        "How has our risk posture changed recently — new kinds of findings, rules firing more than before, or severity trending up? Never quote redacted match content.",
+    },
+  ],
+
   "detection-rules": [
     {
       title: "Which rules fire most?",
@@ -918,7 +957,7 @@ export const INSIGHTS_SUGGESTIONS = {
       label: "what detectors are available",
       icon: "sparkles",
       prompt:
-        "Which detection backends are configured on this server (e.g. the prompt-injection ML classifier)?",
+        "Which detection backends are configured on this server (e.g. the prompt-injection LLM judge)?",
     },
   ],
 

@@ -1,10 +1,12 @@
-import { CopyButton } from "@/components/ui/copy-button";
-import { DotCard } from "@/components/ui/dot-card";
-import { Button } from "@/components/ui/button";
-import { Type } from "@/components/ui/type";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Text } from "@/components/ui/Text";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import { useRoutes } from "@/routes";
 import { MCPStatusIndicator } from "./MCPStatusIndicator";
+import { MCPActivityIndicator } from "./MCPActivityIndicator";
+import type { McpActivityStatus } from "./mcp-activity";
 import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import {
@@ -20,9 +22,17 @@ import {
   useExternalMcpOAuthConfigStatus,
 } from "../sources/sources-hooks";
 import { ToolCollectionBadge } from "../tool-collection-badge";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 
-export function MCPCard({ toolset }: { toolset: ToolsetEntry }): JSX.Element {
+export function MCPCard({
+  toolset,
+  activityStatus,
+  recentWindowDays,
+}: {
+  toolset: ToolsetEntry;
+  activityStatus?: McpActivityStatus | null;
+  recentWindowDays?: number;
+}): JSX.Element {
   const routes = useRoutes();
   const { installPageUrl } = useMcpUrl(toolset);
   const catalogIconMap = useCatalogIconMap();
@@ -67,7 +77,7 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }): JSX.Element {
   );
 
   return (
-    <DotCard
+    <Card.Entity
       className="cursor-pointer"
       onClick={handleClick}
       overlay={
@@ -96,19 +106,19 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }): JSX.Element {
     >
       {/* Header row with name */}
       <div className="mb-2 flex items-start justify-between gap-2">
-        <Type
+        <Text
           variant="subheading"
           as="div"
           className="text-md group-hover:text-primary flex-1 truncate transition-colors"
           title={toolset.name}
         >
           {toolset.name}
-        </Type>
+        </Text>
         <div className="flex items-center gap-1">
           {installPageUrl && (
             <CopyButton
               text={installPageUrl}
-              size="icon-sm"
+              size="sm"
               icon={Link2}
               tooltip="Copy install page URL"
             />
@@ -116,8 +126,8 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }): JSX.Element {
           {installSourceTooltip && (
             <Button
               type="button"
-              variant="ghost"
-              size="icon-sm"
+              variant="tertiary"
+              size="sm"
               tooltip={installSourceTooltip}
               aria-label={installSourceTooltip}
               onClick={(e) => e.stopPropagation()}
@@ -134,10 +144,18 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }): JSX.Element {
 
       {/* Footer row with status indicator and open link */}
       <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-        <MCPStatusIndicator
-          mcpEnabled={toolset.mcpEnabled}
-          mcpIsPublic={toolset.mcpIsPublic}
-        />
+        <div className="flex items-center gap-2">
+          <MCPStatusIndicator
+            mcpEnabled={toolset.mcpEnabled}
+            mcpIsPublic={toolset.mcpIsPublic}
+          />
+          {activityStatus && (
+            <MCPActivityIndicator
+              status={activityStatus}
+              recentWindowDays={recentWindowDays}
+            />
+          )}
+        </div>
         {oauthStatus === "required-unconfigured" ? (
           <div className="text-warning flex items-center gap-1 text-sm">
             <span>Set up</span>
@@ -150,24 +168,24 @@ export function MCPCard({ toolset }: { toolset: ToolsetEntry }): JSX.Element {
           </div>
         )}
       </div>
-    </DotCard>
+    </Card.Entity>
   );
 }
 
 export function MCPCardSkeleton(): JSX.Element {
   return (
-    <DotCard>
+    <Card.Entity>
       <div className="mb-2 flex items-start justify-between gap-2">
-        <div className="bg-muted h-5 w-2/3 animate-pulse rounded" />
+        <div className="bg-muted h-5 w-2/3 animate-pulse" />
         <div className="bg-muted h-5 w-10 animate-pulse rounded-full" />
       </div>
       <div className="mt-auto flex items-center justify-between gap-2 pt-2">
         <div className="flex items-center gap-2">
           <div className="bg-muted h-2.5 w-2.5 animate-pulse rounded-full" />
-          <div className="bg-muted h-3.5 w-12 animate-pulse rounded" />
+          <div className="bg-muted h-3.5 w-12 animate-pulse" />
         </div>
-        <div className="bg-muted h-3.5 w-10 animate-pulse rounded" />
+        <div className="bg-muted h-3.5 w-10 animate-pulse" />
       </div>
-    </DotCard>
+    </Card.Entity>
   );
 }

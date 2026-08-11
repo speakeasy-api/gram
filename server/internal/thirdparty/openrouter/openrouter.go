@@ -27,6 +27,7 @@ import (
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
+	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
 const OpenRouterBaseURL = "https://openrouter.ai/api"
@@ -82,6 +83,8 @@ func (k KeyType) Validate() error {
 // Just a general allowlist for models we allow to proxy through us for playground usage, chat, or agentic usecases
 // This list can stay sufficiently robust, we should just need to allow list a model before it goes through us
 var allowList = map[string]bool{
+	"anthropic/claude-opus-5":       true,
+	"anthropic/claude-fable-5":      true,
 	"anthropic/claude-sonnet-5":     true,
 	"anthropic/claude-opus-4.8":     true,
 	"anthropic/claude-opus-4.7":     true,
@@ -90,7 +93,9 @@ var allowList = map[string]bool{
 	"anthropic/claude-opus-4.6":     true,
 	"anthropic/claude-opus-4.5":     true,
 	"anthropic/claude-haiku-4.5":    true,
-	"anthropic/claude-sonnet-4":     true,
+	"openai/gpt-5.6-sol":            true,
+	"openai/gpt-5.6-terra":          true,
+	"openai/gpt-5.6-luna":           true,
 	"openai/gpt-5.5":                true,
 	"openai/gpt-5.5-pro":            true,
 	"openai/gpt-5.4":                true,
@@ -99,18 +104,13 @@ var allowList = map[string]bool{
 	"openai/gpt-5.3-codex":          true,
 	"openai/gpt-5.1":                true,
 	"openai/gpt-5":                  true,
-	"openai/gpt-4.1":                true,
-	"openai/o4-mini":                true,
-	"openai/o3":                     true,
 	"google/gemini-3.5-flash":       true,
+	"google/gemini-3.5-flash-lite":  true,
 	"google/gemini-3.1-pro-preview": true,
 	"google/gemini-3.1-flash-lite":  true,
-	"google/gemini-2.5-pro":         true,
-	"google/gemini-2.5-flash":       true,
 	"deepseek/deepseek-v4-pro":      true,
 	"deepseek/deepseek-v4-flash":    true,
 	"deepseek/deepseek-v3.2":        true,
-	"deepseek/deepseek-r1":          true,
 	"meta-llama/llama-4-maverick":   true,
 	"x-ai/grok-4.3":                 true,
 	"x-ai/grok-4.20":                true,
@@ -129,9 +129,27 @@ func IsModelAllowed(model string) bool {
 	return allowList[model]
 }
 
-// ResolveModel returns the model as-is if it's in the allowlist.
-// Otherwise, it returns the first allowed model (sorted alphabetically)
-// from the same provider. Returns empty string if no fallback is found.
+// providerFallbacks pins the model an unknown or de-listed model resolves to,
+// per provider. Without this, ResolveModel's alphabetical fallback silently
+// upgrades callers to whatever sorts first — for Anthropic that is the
+// premium-priced claude-fable-5. Each entry names the provider's
+// standard-cost workhorse; keep it allowlisted (enforced by tests).
+var providerFallbacks = map[string]string{
+	"anthropic":  "anthropic/claude-sonnet-5",
+	"openai":     "openai/gpt-5.6-terra",
+	"google":     "google/gemini-3.5-flash",
+	"deepseek":   "deepseek/deepseek-v4-flash",
+	"meta-llama": "meta-llama/llama-4-maverick",
+	"x-ai":       "x-ai/grok-4.3",
+	"qwen":       "qwen/qwen3.7-max",
+	"moonshotai": "moonshotai/kimi-k2.6",
+	"mistralai":  "mistralai/mistral-medium-3-5",
+}
+
+// ResolveModel returns the model as-is if it's in the allowlist. Otherwise, it
+// returns the provider's pinned fallback from providerFallbacks, or — for
+// providers without a pin — the first allowed model sorted alphabetically.
+// Returns empty string if no fallback is found.
 func ResolveModel(model string) string {
 	if allowList[model] {
 		return model
@@ -140,6 +158,10 @@ func ResolveModel(model string) string {
 	provider, _, ok := strings.Cut(model, "/")
 	if !ok || provider == "" {
 		return ""
+	}
+
+	if fallback := providerFallbacks[provider]; fallback != "" && allowList[fallback] {
+		return fallback
 	}
 
 	prefix := provider + "/"
@@ -168,6 +190,15 @@ var creditsAccountTypeMap = map[string]int{
 	"":           5, // safety default
 }
 
+// trialCreditLimit caps each key an organization inside a trial holds, so its
+// total trial exposure is this amount multiplied by len(AllKeyTypes). A trial
+// is armed without verified intent and the credit-balance gate hard-stops the
+// free tier only, so these key limits are its only spend ceiling.
+//
+// The limit binds at mint time and nothing re-mints a key. AGE-3138 and
+// AGE-3141 cover the two lifecycle edges that leaves wrong.
+const trialCreditLimit = 50
+
 var specialLimitOrgs = []string{
 	"5a25158b-24dc-4d49-b03d-e85acfbea59c", // speakeasy-team
 }
@@ -181,8 +212,16 @@ type Provisioner interface {
 	ProvisionAPIKey(ctx context.Context, orgID string, keyType KeyType) (string, error)
 
 	// RefreshAPIKeyLimit mutates the upstream OpenRouter key limit (PATCH
-	// /v1/keys/:hash) and mirrors the new value into the local DB.
+	// /v1/keys/:hash) and mirrors the new value into the local DB. It is also
+	// the reinstatement path: a key that DisableAPIKey turned off comes back
+	// enabled, upstream and locally.
 	RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType KeyType, limit *int) (int, error)
+
+	// DisableAPIKey turns the org's key off upstream and records that locally,
+	// after which ProvisionAPIKey refuses it with ErrPlatformKeyDisabled. The
+	// key survives, so RefreshAPIKeyLimit can reinstate it. An org with no key
+	// of that type is a no-op.
+	DisableAPIKey(ctx context.Context, orgID string, keyType KeyType) error
 
 	GetCreditsUsed(ctx context.Context, orgID string, keyType KeyType) (float64, int, error)
 
@@ -270,6 +309,12 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string, keyType 
 		}
 
 	default:
+		// Every platform-key completion resolves through here, so this is where
+		// the lockdown binds. Refusing locally beats an upstream rejection
+		// whose status also means "our provisioning key is broken".
+		if key.Disabled {
+			return "", fmt.Errorf("resolve %s key: %w", keyType, ErrPlatformKeyDisabled)
+		}
 		openrouterKey = key.Key
 	}
 
@@ -329,7 +374,7 @@ func (o *OpenRouter) createAndStoreAPIKey(ctx context.Context, orgID string, key
 		return "", oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
 	}
 
-	creditAmount := o.getLimitForOrg(org)
+	creditAmount := o.defaultLimitForOrg(ctx, dbtx, org)
 
 	// Cap the upstream call so guardian's retry backoff cannot stretch the
 	// advisory-lock hold to minutes during an OpenRouter outage; a burst of
@@ -391,10 +436,17 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyTy
 	if limit != nil {
 		keyLimit = *limit
 	} else {
-		keyLimit = o.getLimitForOrg(org)
+		keyLimit = o.defaultLimitForOrg(ctx, o.db, org)
 	}
 
-	keyResponse, err := o.updateOpenRouterAPIKeyLimit(ctx, key.KeyHash, keyLimit)
+	creditLimit := float64(keyLimit)
+	patch := updateKeyRequest{Limit: &creditLimit, LimitReset: "monthly", Disabled: nil}
+	if key.Disabled {
+		// Setting a limit on a disabled key does not bring it back upstream.
+		patch.Disabled = new(false)
+	}
+
+	keyResponse, err := o.patchOpenRouterAPIKey(ctx, key.KeyHash, patch)
 	if err != nil {
 		return 0, err
 	}
@@ -405,12 +457,58 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyTy
 		MonthlyCredits: int64(keyLimit),
 		KeyHash:        keyResponse.Data.Hash,
 		Key:            key.Key,
+		// Not an unconditional clear: that would drop a lockdown committed
+		// after the read above.
+		Reinstate: key.Disabled,
 	})
 	if err != nil {
 		return 0, oops.E(oops.CodeUnexpected, err, "failed to update openrouter key").LogError(ctx, o.logger)
 	}
 
 	return keyLimit, nil
+}
+
+// DisableAPIKey stops an organization from spending on its platform key. Gram
+// enforces the lockdown itself: ProvisionAPIKey refuses a disabled key and
+// returns ErrPlatformKeyDisabled. The upstream flag covers any spend that never
+// passes through key resolution, such as a key that leaked.
+//
+// The upstream PATCH runs before the local write. The reverse order would
+// record a lockdown that a permanently failing PATCH never made.
+func (o *OpenRouter) DisableAPIKey(ctx context.Context, orgID string, keyType KeyType) error {
+	keyType = keyType.OrDefault()
+	if err := keyType.Validate(); err != nil {
+		return fmt.Errorf("disable openrouter key: %w", err)
+	}
+
+	key, err := o.repo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(keyType),
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// An organization that never ran a completion has no key of this type.
+		return nil
+	case err != nil:
+		return fmt.Errorf("get openrouter key to disable: %w", err)
+	}
+
+	if _, err := o.patchOpenRouterAPIKey(ctx, key.KeyHash, updateKeyRequest{
+		Limit:      nil,
+		LimitReset: "",
+		Disabled:   new(true),
+	}); err != nil {
+		return fmt.Errorf("disable upstream openrouter key: %w", err)
+	}
+
+	if err := o.repo.DisableOpenRouterAPIKey(ctx, repo.DisableOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(keyType),
+	}); err != nil {
+		return fmt.Errorf("mark openrouter key disabled: %w", err)
+	}
+
+	return nil
 }
 
 type keyUsageResponse struct {
@@ -421,17 +519,32 @@ type keyUsageResponse struct {
 }
 
 func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string, keyType KeyType) (float64, int, error) {
-	org, err := o.orgRepo.GetOrganizationMetadata(ctx, orgID)
-	if err != nil {
-		return 0, 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
-	}
-	limit := o.getLimitForOrg(org)
-
-	key, err := o.repo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+	// The key carries the ceiling the customer actually spends against, which a
+	// raise or a tier change can move away from the policy amount. Read it
+	// first: resolving the policy amount costs two more queries, and only a key
+	// minted before the column existed needs them.
+	key, keyErr := o.repo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
 		OrganizationID: orgID,
 		KeyType:        string(keyType.OrDefault()),
 	})
-	if err != nil {
+
+	limit := 0
+	if keyErr == nil {
+		limit = int(key.MonthlyCredits)
+	}
+
+	// A key with no recorded ceiling reports the policy amount rather than a
+	// ceiling of nothing.
+	if limit <= 0 {
+		org, err := o.orgRepo.GetOrganizationMetadata(ctx, orgID)
+		if err != nil {
+			return 0, 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").LogError(ctx, o.logger)
+		}
+
+		limit = o.defaultLimitForOrg(ctx, o.db, org)
+	}
+
+	if keyErr != nil {
 		return 0, limit, nil // the key doesn't exist yet
 	}
 
@@ -525,9 +638,33 @@ func (o *OpenRouter) ReconcileMonthlyCredits(ctx context.Context, orgID string, 
 	return newLimit, nil
 }
 
-func (o *OpenRouter) getLimitForOrg(org orgRepo.OrganizationMetadatum) int {
+// defaultLimitForOrg resolves the monthly credit ceiling an organization is
+// entitled to by policy. It answers what a key would be minted at today, not
+// what an existing key carries: an operator raise leaves the key above this
+// amount, and only the key row records that. The account type is the last
+// resort, after the special-org list and the trial row.
+//
+// dbtx arrives from the caller because the provisioning path runs inside a
+// transaction that already holds an advisory lock and a pool connection, so it
+// must read through that same transaction.
+func (o *OpenRouter) defaultLimitForOrg(ctx context.Context, dbtx trialsRepo.DBTX, org orgRepo.OrganizationMetadatum) int {
 	if slices.Contains(specialLimitOrgs, org.ID) {
 		return 500
+	}
+
+	// A trial runs on the real enterprise tier, so the account type on its own
+	// cannot tell a trial apart from a paying enterprise customer. A read
+	// failure falls through to the account type rather than capping a paying
+	// customer on a transient database error.
+	_, err := trialsRepo.New(dbtx).GetActiveTrial(ctx, org.ID)
+	switch {
+	case err == nil:
+		return trialCreditLimit
+	case !errors.Is(err, pgx.ErrNoRows):
+		o.logger.WarnContext(ctx, "error reading active trial; using the account type credit limit",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(org.ID),
+		)
 	}
 
 	return creditsAccountTypeMap[org.GramAccountType]
@@ -556,6 +693,10 @@ type createKeyRequest struct {
 type updateKeyRequest struct {
 	Limit      *float64 `json:"limit,omitempty"`
 	LimitReset string   `json:"limit_reset,omitempty"`
+	// Disabled toggles the upstream key off and on. It is a pointer because
+	// omitting the field leaves the current state alone, which is what every
+	// limit-only patch wants.
+	Disabled *bool `json:"disabled,omitempty"`
 }
 
 type keyResponse struct {
@@ -619,10 +760,7 @@ func (o *OpenRouter) createOpenRouterAPIKey(ctx context.Context, orgID string, o
 	return &response, nil
 }
 
-func (o *OpenRouter) updateOpenRouterAPIKeyLimit(ctx context.Context, keyHash string, keyLimit int) (*keyResponse, error) {
-	creditLimit := float64(keyLimit)
-	requestBody := updateKeyRequest{Limit: &creditLimit, LimitReset: "monthly"}
-
+func (o *OpenRouter) patchOpenRouterAPIKey(ctx context.Context, keyHash string, requestBody updateKeyRequest) (*keyResponse, error) {
 	bodyBytes, err := json.Marshal(requestBody)
 	if err != nil {
 		o.logger.ErrorContext(ctx, "failed to marshal update openrouter key request body", attr.SlogError(err))

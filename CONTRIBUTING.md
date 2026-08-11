@@ -16,7 +16,7 @@ This populates the database with projects, deployments, API keys, and other reso
 
 ### Local auth and identity (dev-idp)
 
-Local development uses **dev-idp** — a lightweight Go server (`dev-idp/`) that replaces the external identity services Gram uses in production. It runs as a madprocs process, uses SQLite, and requires no external accounts.
+Local development uses **dev-idp** — a lightweight Go server (`dev-idp/`) that replaces the external identity services Gram uses in production. It runs as a pitchfork daemon, uses SQLite, and requires no external accounts.
 
 The mode is controlled by a single env var:
 
@@ -46,7 +46,7 @@ GRAM_IDP_CLIENT_ID = "client_..."
 
 This routes the server's WorkOS API calls through a dev-idp proxy to the real WorkOS API. OIDC login still goes through dev-idp's `/oauth2` handler locally.
 
-After changing modes, restart madprocs.
+After changing modes, restart pitchfork with `mise run start`.
 
 <details>
 <summary>dev-idp protocol handlers (advanced)</summary>
@@ -63,6 +63,56 @@ dev-idp mounts several protocol handlers on a single port, all sharing one SQLit
 The Gram server uses the same code paths as production — only `GRAM_IDP_BASE_URL` and `WORKOS_API_URL` point to localhost instead of external services.
 
 </details>
+
+### Parallel worktrees
+
+Each git worktree can run its own full stack — server, worker, dashboard, databases — side by side with the others. Ports and the Docker Compose project name are remapped per worktree, so nothing collides with your primary checkout.
+
+The flow is driven by [worktrunk](https://worktrunk.dev), configured in `.config/wt.toml`:
+
+```bash
+wt switch --create my-feature   # create the worktree and boot its stack
+wt status                       # which stacks are up, and on which URL
+wt remove                       # tear the stack down and delete the worktree
+```
+
+Creating a worktree runs two hooks:
+
+- **`pre-start`** runs `mise run git:workinit`, which copies `mise.local.toml` and `local/` from the primary worktree, installs dependencies, and assigns this worktree a free port for every `*_PORT` variable plus its own `COMPOSE_PROJECT_NAME`.
+- **`post-start`** runs `./zero --agent` in the background to bring up infra, apply migrations, start the daemons, and seed.
+
+> [!NOTE]
+> `INFRA_READINESS_TIMEOUT` is raised for the `post-start` hook. A new worktree always starts from a cold volume, so Postgres has to finish `initdb` before it accepts queries — well past the 30s default that `mise infra:start` uses elsewhere.
+
+Because `post-start` is backgrounded, `wt switch` returns before the stack is ready — expect a couple of minutes. Use `wt status` to see when it comes up, and `wt config state logs` if it doesn't:
+
+```
+  Branch          State  URL
+@ main            ● up   https://localhost:5173
++ my-feature      ● up   https://localhost:52495
++ old-experiment  ○ down https://localhost:62875
+```
+
+`wt remove` runs `mise run nuke --keep-shared` inside the worktree first, so the right Compose stack is torn down before the directory disappears (the shared Presidio stack stays up for other worktrees). Removing a worktree by hand (`git worktree remove`) skips that and leaves its containers and volumes running.
+
+#### Recommended shell setup
+
+Worktrunk needs a shell wrapper to change directory on your behalf. Install it once:
+
+```bash
+wt config shell install
+```
+
+If you already have aliases for the branch commands this flow replaces, pointing them at `wt` makes worktrees the default without learning new muscle memory:
+
+```bash
+alias nb='wt switch --create'   # new branch, in its own worktree
+alias gco='wt switch'           # switch; no argument opens a picker
+alias gbd='wt remove'           # tear down the stack, remove the worktree
+alias wts='wt status'           # which stacks are up
+```
+
+`wt switch` also takes shortcuts in place of a branch name: `^` for the default branch, `-` for the previous worktree, and `pr:123` to check out a pull request. Prefer `^` over hardcoding `main` — it resolves correctly in any repo.
 
 ### CLI development
 

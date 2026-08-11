@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -13,13 +12,17 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
@@ -27,8 +30,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
+	unproxiedmcprepo "github.com/speakeasy-api/gram/server/internal/unproxiedmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 var infra *testenv.Environment
@@ -56,6 +59,7 @@ type testInstance struct {
 	service        *mcpservers.Service
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
+	dispositions   *mcpservers.ToolDispositionCache
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -74,19 +78,27 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
-
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
 	auditLogger := audit.NewLogger()
 
-	svc := mcpservers.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, false)
+	dispositions := mcpservers.NewToolDispositionCache(logger, conn, cache.NewRedisCacheAdapter(redisClient))
+
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+
+	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+	assetStorage := assetstest.NewTestBlobStore(t)
+	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
+	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, auditLogger)
+
+	svc := mcpservers.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger, nil, dispositions, false, assetsSvc)
 
 	return ctx, &testInstance{
 		service:        svc,
 		conn:           conn,
 		sessionManager: sessionManager,
+		dispositions:   dispositions,
 	}
 }
 
@@ -157,19 +169,54 @@ func seedTunneledMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 	return server.ID
 }
 
-// seedUserSessionIssuer inserts a user_session_issuers row through the
-// generated repo so we have a valid FK for the new
-// mcp_servers.user_session_issuer_id column in tests.
-func seedUserSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) uuid.UUID {
+// seedUnproxiedMcpServer inserts an unproxied_mcp_servers row directly
+// through the generated repo so we have a valid backend FK for mcp_servers
+// tests.
+func seedUnproxiedMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) uuid.UUID {
 	t.Helper()
 
-	issuer, err := usersessionsrepo.New(conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
-		ProjectID:          projectID,
-		Slug:               "issuer-" + uuid.NewString(),
-		AuthnChallengeMode: "chain",
-		SessionDuration:    pgtype.Interval{Microseconds: time.Hour.Microseconds(), Days: 0, Months: 0, Valid: true},
+	server, err := unproxiedmcprepo.New(conn).CreateServer(ctx, unproxiedmcprepo.CreateServerParams{
+		ID:          uuid.New(),
+		ProjectID:   projectID,
+		Name:        pgtype.Text{String: "", Valid: false},
+		Slug:        pgtype.Text{String: "test-unproxied-mcp-server-" + uuid.NewString(), Valid: true},
+		Url:         "https://vendor.example.com/mcp",
+		Description: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
 
-	return issuer.ID
+	return server.ID
+}
+
+// withStaffEmail overrides the auth context's email to a Speakeasy-owned
+// domain so an unproxied-backend check passes.
+func withStaffEmail(t *testing.T, ctx context.Context) context.Context {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	email := "staffer@speakeasyapi.dev"
+	authCtx.Email = &email
+
+	return contextvalues.SetAuthContext(ctx, authCtx)
+}
+
+func enableTunneledPublicConsent(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, tunneledServerID uuid.UUID) {
+	t.Helper()
+
+	server, err := tunneledmcprepo.New(conn).GetServerByID(ctx, tunneledmcprepo.GetServerByIDParams{
+		ID:        tunneledServerID,
+		ProjectID: projectID,
+	})
+	require.NoError(t, err)
+
+	_, err = tunneledmcprepo.New(conn).UpdateServer(ctx, tunneledmcprepo.UpdateServerParams{
+		Name:        server.Name,
+		AllowPublic: pgtype.Bool{Bool: true, Valid: true},
+		ID:          tunneledServerID,
+		ProjectID:   projectID,
+	})
+	require.NoError(t, err)
 }

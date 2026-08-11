@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -76,6 +77,101 @@ func TestAuthorize_CustomDomainPrivateChallengeUsesGramIDPCallback(t *testing.T)
 	require.Equal(t, toolset.McpSlug.String, stored.Endpoint.McpSlug)
 	require.True(t, stored.Endpoint.CustomDomainID.Valid)
 	require.Equal(t, domain.ID, stored.Endpoint.CustomDomainID.UUID)
+	// The snapshot every later response in this flow derives its origin from.
+	// Stamping the platform origin here would make each of them emit an `iss`
+	// the client discards, with no error it is allowed to display.
+	require.Equal(t, "https://"+domain.Domain, stored.Endpoint.BaseURL)
+}
+
+// The end-to-end shape the mint-time snapshot exists for: /authorize runs on a
+// custom domain and the consent POST completing the flow arrives on the
+// platform origin, which is what the remote-session return leg produces. The
+// `iss` the client finally receives has to be the custom-domain issuer it
+// recorded from the metadata document, not the origin of whichever request
+// happened to finish the flow.
+func TestAuthorize_CustomDomainIssSurvivesPlatformOriginConsent(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug := "iss-cd-e2e-" + uuid.New().String()[:8]
+	toolset, issuer := createPrivateIssuerGatedToolset(t, ctx, ti, authCtx, slug)
+	// Public so /authorize stamps an anonymous subject and goes straight to
+	// consent, keeping this test on the origin question rather than the IDP
+	// round-trip. The local copy is updated too because attachCustomDomainToToolset
+	// writes the whole row back from the struct it is handed.
+	require.NoError(t, toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
+		McpIsPublic: true,
+		ID:          toolset.ID,
+		ProjectID:   toolset.ProjectID,
+	}))
+	toolset.McpIsPublic = true
+	toolset, domain := attachCustomDomainToToolset(t, ctx, ti, authCtx, toolset, "iss-cd-e2e.example.com")
+
+	clientID := "iss-e2e-client"
+	// The redirect_uri insertUserSessionClient registers for this client.
+	clientRedirectURI := "http://example.com/cb"
+	insertUserSessionClient(t, ctx, ti.conn, issuer.ID, clientID)
+
+	domainCtx := customdomains.WithContext(ctx, &customdomains.Context{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		Domain:         domain.Domain,
+		DomainID:       domain.ID,
+	})
+
+	// What the client records before it ever calls /authorize.
+	advertisedIssuer, supported := fetchAdvertisedIssuer(t, domainCtx, ti, slug)
+	require.Equal(t, true, supported)
+	require.Equal(t, "https://"+domain.Domain+"/mcp/"+slug, advertisedIssuer)
+
+	q := url.Values{}
+	q.Set("response_type", "code")
+	q.Set("client_id", clientID)
+	q.Set("redirect_uri", clientRedirectURI)
+	q.Set("state", "client-state")
+	q.Set("code_challenge", "challenge")
+	q.Set("code_challenge_method", "S256")
+	authReq := httptest.NewRequest(http.MethodGet, "/mcp/"+slug+"/authorize?"+q.Encode(), nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", slug)
+	authReq = authReq.WithContext(context.WithValue(domainCtx, chi.RouteCtxKey, rctx))
+
+	authResp := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleAuthorize(authResp, authReq))
+	require.Equal(t, http.StatusFound, authResp.Code)
+
+	consentLoc, err := url.Parse(authResp.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Contains(t, consentLoc.Path, "/connect")
+	stateID := consentLoc.Query().Get("state")
+	require.NotEmpty(t, stateID)
+
+	stored, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+	require.NoError(t, err)
+
+	// The consent POST arrives with no custom-domain context at all.
+	form := url.Values{}
+	form.Set("state", stateID)
+	form.Set("csrf_token", stored.CSRFToken)
+	form.Set("action", "approve")
+	consentReq := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect", strings.NewReader(form.Encode()))
+	consentReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	consentRctx := chi.NewRouteContext()
+	consentRctx.URLParams.Add("mcpSlug", slug)
+	consentReq = consentReq.WithContext(context.WithValue(ctx, chi.RouteCtxKey, consentRctx))
+
+	consentResp := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleConsent(consentResp, consentReq))
+	require.Equal(t, http.StatusSeeOther, consentResp.Code)
+
+	clientLoc, err := url.Parse(consentResp.Header().Get("Location"))
+	require.NoError(t, err)
+	require.NotEmpty(t, clientLoc.Query().Get("code"))
+	require.Equal(t, advertisedIssuer, clientLoc.Query().Get("iss"))
 }
 
 func TestIDPCallback_StaticRouteResolvesToolsetFromChallengeState(t *testing.T) {
@@ -180,6 +276,45 @@ func TestAuthorize_PublicToolset_IgnoresAmbientSessionCredentials(t *testing.T) 
 		"public /authorize must not promote ambient credentials to a user subject")
 	require.NotEqual(t, authCtx.UserID, stored.Subject.ID)
 	require.NotEqual(t, bearerUserID, stored.Subject.ID)
+}
+
+// Authorize rejects in two shapes — inline JSON while the redirect_uri is
+// still untrusted, and a redirect once it is. Only the redirect shape is an
+// authorization response, and it is the one that carries iss.
+func TestAuthorize_PostRedirectErrorEmitsIss(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	mcpSlug := toolset.McpSlug.String
+
+	advertisedIssuer, _ := fetchAdvertisedIssuer(t, ctx, ti, mcpSlug)
+
+	// redirect_uri is registered, so validation moves past the inline-error
+	// phase; response_type=token then fails ValidatePostRedirect and must be
+	// reported by redirect rather than inline.
+	q := url.Values{}
+	q.Set("response_type", "token")
+	q.Set("client_id", client.ClientID)
+	q.Set("redirect_uri", client.RedirectUris[0])
+	q.Set("state", "client-state")
+	q.Set("code_challenge", "challenge")
+	q.Set("code_challenge_method", "S256")
+	req := httptest.NewRequest(http.MethodGet, "/mcp/"+mcpSlug+"/authorize?"+q.Encode(), nil)
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", mcpSlug)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleAuthorize(w, req))
+	require.Equal(t, http.StatusFound, w.Code, "a trusted redirect_uri means errors go back by redirect")
+
+	loc, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(t, err)
+	require.NotEmpty(t, loc.Query().Get("error"))
+	require.Equal(t, "client-state", loc.Query().Get("state"))
+	require.Equal(t, advertisedIssuer, loc.Query().Get("iss"))
 }
 
 func createPrivateIssuerGatedToolset(

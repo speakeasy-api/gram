@@ -225,6 +225,20 @@ type Proxy struct {
 	// It is used by tunneled MCP to fail over stale gateway owners.
 	UpstreamResponseRetryer UpstreamResponseRetryer
 
+	// UpstreamResponseInterceptor, when set, runs once against the final
+	// upstream response — after any retry, before any header or body byte is
+	// relayed to the user. It may mutate resp.Header (headers are copied to
+	// the client afterwards). A non-nil error aborts the relay entirely; no
+	// status or headers have been written yet, so the caller's error path
+	// owns the client response.
+	UpstreamResponseInterceptor func(ctx context.Context, resp *http.Response) error
+
+	// DisableRedirects stops the upstream client from following redirect
+	// responses; the 3xx relays to the caller as-is. Following a redirect
+	// would replay Gram's internal forward headers (including the tunnel
+	// forward token) against an upstream-controlled URL.
+	DisableRedirects bool
+
 	// WWWAuthenticate is the challenge relayed to the client when the
 	// upstream rejects a request (401/403), replacing the upstream's own
 	// WWW-Authenticate — the upstream challenge names the upstream's
@@ -337,6 +351,12 @@ func (p *Proxy) Delete(w http.ResponseWriter, r *http.Request) (err error) {
 	upstreamStatus = upstreamResp.StatusCode
 	span.SetAttributes(attr.RemoteMCPProxyRemoteStatusCode(upstreamStatus))
 
+	if p.UpstreamResponseInterceptor != nil {
+		if err := p.UpstreamResponseInterceptor(ctx, upstreamResp); err != nil {
+			return fmt.Errorf("upstream response interceptor: %w", err)
+		}
+	}
+
 	n, err := writeResponse(w, upstreamResp, upstreamResp.Body, p.WWWAuthenticate)
 	responseBytes = n
 	if err != nil {
@@ -387,6 +407,12 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 	upstreamStatus = upstreamResp.StatusCode
 	span.SetAttributes(attr.RemoteMCPProxyRemoteStatusCode(upstreamStatus))
 
+	if p.UpstreamResponseInterceptor != nil {
+		if err := p.UpstreamResponseInterceptor(ctx, upstreamResp); err != nil {
+			return fmt.Errorf("upstream response interceptor: %w", err)
+		}
+	}
+
 	// Per MCP spec § Listening for Messages from the Server, upstream MUST
 	// return either Content-Type: text/event-stream or HTTP 405. Route SSE
 	// responses through the per-event relay so RemoteMessageInterceptors
@@ -398,7 +424,17 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, nil, nil, nil, nil)
 		responseBytes = n
 		if streamErr != nil {
-			return streamErr
+			// The standalone GET stream is idle by nature — most upstreams
+			// never send unsolicited server-initiated messages, so the
+			// per-event idle bound firing is the stream's expected end, not
+			// a fault. End the response cleanly; the client re-opens the
+			// stream per spec § Listening for Messages from the Server.
+			if streamIdledOut(upstreamResp.Body) {
+				p.Logger.DebugContext(ctx, "closing idle remote mcp listen stream",
+					attr.SlogComponent("remotemcp.proxy"))
+				return nil
+			}
+			return oops.E(oops.CodeUnexpected, streamErr, "relay mcp listen stream").LogError(ctx, p.Logger)
 		}
 		return nil
 	}
@@ -542,6 +578,12 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	upstreamStatus = upstreamResp.StatusCode
 	span.SetAttributes(attr.RemoteMCPProxyRemoteStatusCode(upstreamStatus))
 
+	if p.UpstreamResponseInterceptor != nil {
+		if err := p.UpstreamResponseInterceptor(ctx, upstreamResp); err != nil {
+			return fmt.Errorf("upstream response interceptor: %w", err)
+		}
+	}
+
 	// When upstream returns Content-Type: text/event-stream (per MCP spec
 	// § Sending Messages to the Server, step 5), dispatch through the
 	// SSE-aware relay where RemoteMessageInterceptors fire per parseable
@@ -553,7 +595,16 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, toolsCallReq, toolsListReq, resourcesReadReq, resourcesListReq)
 		responseBytes = n
 		if streamErr != nil {
-			return streamErr
+			// Unlike the standalone GET stream, a POST response stream going
+			// idle means the upstream stalled mid-reply — the client is still
+			// owed a terminal response event. Surface it as an upstream
+			// fault with the idle bound named, not a bare context error.
+			if streamIdledOut(upstreamResp.Body) {
+				return oops.E(oops.CodeGatewayError, streamErr,
+					"remote MCP server went idle mid-response (no data for %s)", p.StreamingTimeout,
+				).LogWarn(ctx, p.Logger)
+			}
+			return oops.E(oops.CodeUnexpected, streamErr, "relay mcp response stream").LogError(ctx, p.Logger)
 		}
 		return nil
 	}
@@ -715,7 +766,13 @@ func (p *Proxy) forwardRequest(ctx context.Context, r *http.Request, body io.Rea
 		return nil, nil, err
 	}
 
-	resp, err := p.GuardianPolicy.Client(p.GuardianClientOptions...).Do(upstreamReq)
+	client := p.GuardianPolicy.Client(p.GuardianClientOptions...)
+	if p.DisableRedirects {
+		client.CheckRedirect = func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
+	}
+	resp, err := client.Do(upstreamReq)
 	if err != nil {
 		// timer.Stop() returns false if the timer has already fired;
 		// that's how we distinguish a phase-1 timeout from a parent

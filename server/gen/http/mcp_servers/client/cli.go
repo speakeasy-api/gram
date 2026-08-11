@@ -10,6 +10,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	mcpservers "github.com/speakeasy-api/gram/server/gen/mcp_servers"
 	types "github.com/speakeasy-api/gram/server/gen/types"
@@ -24,13 +25,10 @@ func BuildCreateMcpServerPayload(mcpServersCreateMcpServerBody string, mcpServer
 	{
 		err = json.Unmarshal([]byte(mcpServersCreateMcpServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_variations_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_variations_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"unproxied_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }'")
 		}
 		if body.EnvironmentID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
-		}
-		if body.UserSessionIssuerID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
 		}
 		if body.RemoteMcpServerID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", *body.RemoteMcpServerID, goa.FormatUUID))
@@ -40,6 +38,9 @@ func BuildCreateMcpServerPayload(mcpServersCreateMcpServerBody string, mcpServer
 		}
 		if body.ToolsetID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+		}
+		if body.UnproxiedMcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.unproxied_mcp_server_id", *body.UnproxiedMcpServerID, goa.FormatUUID))
 		}
 		if body.ToolVariationsGroupID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))
@@ -72,10 +73,10 @@ func BuildCreateMcpServerPayload(mcpServersCreateMcpServerBody string, mcpServer
 	v := &mcpservers.CreateMcpServerPayload{
 		Name:                  body.Name,
 		EnvironmentID:         body.EnvironmentID,
-		UserSessionIssuerID:   body.UserSessionIssuerID,
 		RemoteMcpServerID:     body.RemoteMcpServerID,
 		TunneledMcpServerID:   body.TunneledMcpServerID,
 		ToolsetID:             body.ToolsetID,
+		UnproxiedMcpServerID:  body.UnproxiedMcpServerID,
 		ToolVariationsGroupID: body.ToolVariationsGroupID,
 		Visibility:            types.McpServerVisibility(body.Visibility),
 	}
@@ -136,7 +137,7 @@ func BuildGetMcpServerPayload(mcpServersGetMcpServerID string, mcpServersGetMcpS
 
 // BuildListMcpServersPayload builds the payload for the mcpServers
 // listMcpServers endpoint from CLI flags.
-func BuildListMcpServersPayload(mcpServersListMcpServersRemoteMcpServerID string, mcpServersListMcpServersTunneledMcpServerID string, mcpServersListMcpServersToolsetID string, mcpServersListMcpServersSessionToken string, mcpServersListMcpServersApikeyToken string, mcpServersListMcpServersProjectSlugInput string) (*mcpservers.ListMcpServersPayload, error) {
+func BuildListMcpServersPayload(mcpServersListMcpServersRemoteMcpServerID string, mcpServersListMcpServersTunneledMcpServerID string, mcpServersListMcpServersToolsetID string, mcpServersListMcpServersUnproxiedMcpServerID string, mcpServersListMcpServersSessionToken string, mcpServersListMcpServersApikeyToken string, mcpServersListMcpServersProjectSlugInput string) (*mcpservers.ListMcpServersPayload, error) {
 	var err error
 	var remoteMcpServerID *string
 	{
@@ -168,6 +169,16 @@ func BuildListMcpServersPayload(mcpServersListMcpServersRemoteMcpServerID string
 			}
 		}
 	}
+	var unproxiedMcpServerID *string
+	{
+		if mcpServersListMcpServersUnproxiedMcpServerID != "" {
+			unproxiedMcpServerID = &mcpServersListMcpServersUnproxiedMcpServerID
+			err = goa.MergeErrors(err, goa.ValidateFormat("unproxied_mcp_server_id", *unproxiedMcpServerID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if mcpServersListMcpServersSessionToken != "" {
@@ -190,9 +201,25 @@ func BuildListMcpServersPayload(mcpServersListMcpServersRemoteMcpServerID string
 	v.RemoteMcpServerID = remoteMcpServerID
 	v.TunneledMcpServerID = tunneledMcpServerID
 	v.ToolsetID = toolsetID
+	v.UnproxiedMcpServerID = unproxiedMcpServerID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListMcpServersForOrgPayload builds the payload for the mcpServers
+// listMcpServersForOrg endpoint from CLI flags.
+func BuildListMcpServersForOrgPayload(mcpServersListMcpServersForOrgSessionToken string) (*mcpservers.ListMcpServersForOrgPayload, error) {
+	var sessionToken *string
+	{
+		if mcpServersListMcpServersForOrgSessionToken != "" {
+			sessionToken = &mcpServersListMcpServersForOrgSessionToken
+		}
+	}
+	v := &mcpservers.ListMcpServersForOrgPayload{}
+	v.SessionToken = sessionToken
 
 	return v, nil
 }
@@ -205,14 +232,11 @@ func BuildUpdateMcpServerPayload(mcpServersUpdateMcpServerBody string, mcpServer
 	{
 		err = json.Unmarshal([]byte(mcpServersUpdateMcpServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_variations_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"environment_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"remote_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tool_variations_group_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"unproxied_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"visibility\": \"private\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if body.EnvironmentID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.environment_id", *body.EnvironmentID, goa.FormatUUID))
-		}
-		if body.UserSessionIssuerID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
 		}
 		if body.RemoteMcpServerID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.remote_mcp_server_id", *body.RemoteMcpServerID, goa.FormatUUID))
@@ -222,6 +246,9 @@ func BuildUpdateMcpServerPayload(mcpServersUpdateMcpServerBody string, mcpServer
 		}
 		if body.ToolsetID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+		}
+		if body.UnproxiedMcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.unproxied_mcp_server_id", *body.UnproxiedMcpServerID, goa.FormatUUID))
 		}
 		if body.ToolVariationsGroupID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))
@@ -255,10 +282,10 @@ func BuildUpdateMcpServerPayload(mcpServersUpdateMcpServerBody string, mcpServer
 		ID:                    body.ID,
 		Name:                  body.Name,
 		EnvironmentID:         body.EnvironmentID,
-		UserSessionIssuerID:   body.UserSessionIssuerID,
 		RemoteMcpServerID:     body.RemoteMcpServerID,
 		TunneledMcpServerID:   body.TunneledMcpServerID,
 		ToolsetID:             body.ToolsetID,
+		UnproxiedMcpServerID:  body.UnproxiedMcpServerID,
 		ToolVariationsGroupID: body.ToolVariationsGroupID,
 		Visibility:            types.McpServerVisibility(body.Visibility),
 	}
@@ -310,6 +337,266 @@ func BuildListToolFiltersPayload(mcpServersListToolFiltersID string, mcpServersL
 	v := &mcpservers.ListToolFiltersPayload{}
 	v.ID = id
 	v.Slug = slug
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildSetToolMetadataBatchPayload builds the payload for the mcpServers
+// setToolMetadataBatch endpoint from CLI flags.
+func BuildSetToolMetadataBatchPayload(mcpServersSetToolMetadataBatchBody string, mcpServersSetToolMetadataBatchSessionToken string, mcpServersSetToolMetadataBatchApikeyToken string, mcpServersSetToolMetadataBatchProjectSlugInput string) (*mcpservers.SetToolMetadataBatchPayload, error) {
+	var err error
+	var body SetToolMetadataBatchRequestBody
+	{
+		err = json.Unmarshal([]byte(mcpServersSetToolMetadataBatchBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tools\": [\n         {\n            \"destructive_hint\": false,\n            \"idempotent_hint\": false,\n            \"open_world_hint\": false,\n            \"read_only_hint\": false,\n            \"title\": \"abc123\",\n            \"tool_name\": \"abc123\"\n         }\n      ]\n   }'")
+		}
+		if body.Tools == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpServersSetToolMetadataBatchSessionToken != "" {
+			sessionToken = &mcpServersSetToolMetadataBatchSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpServersSetToolMetadataBatchApikeyToken != "" {
+			apikeyToken = &mcpServersSetToolMetadataBatchApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpServersSetToolMetadataBatchProjectSlugInput != "" {
+			projectSlugInput = &mcpServersSetToolMetadataBatchProjectSlugInput
+		}
+	}
+	v := &mcpservers.SetToolMetadataBatchPayload{
+		McpServerID: body.McpServerID,
+	}
+	if body.Tools != nil {
+		v.Tools = make([]*mcpservers.ToolMetadataForm, len(body.Tools))
+		for i, val := range body.Tools {
+			if val == nil {
+				v.Tools[i] = nil
+				continue
+			}
+			v.Tools[i] = marshalToolMetadataFormRequestBodyToMcpserversToolMetadataForm(val)
+		}
+	} else {
+		v.Tools = []*mcpservers.ToolMetadataForm{}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildAddToolMetadataBatchPayload builds the payload for the mcpServers
+// addToolMetadataBatch endpoint from CLI flags.
+func BuildAddToolMetadataBatchPayload(mcpServersAddToolMetadataBatchBody string, mcpServersAddToolMetadataBatchSessionToken string, mcpServersAddToolMetadataBatchApikeyToken string, mcpServersAddToolMetadataBatchProjectSlugInput string) (*mcpservers.AddToolMetadataBatchPayload, error) {
+	var err error
+	var body AddToolMetadataBatchRequestBody
+	{
+		err = json.Unmarshal([]byte(mcpServersAddToolMetadataBatchBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"tools\": [\n         {\n            \"destructive_hint\": false,\n            \"idempotent_hint\": false,\n            \"open_world_hint\": false,\n            \"read_only_hint\": false,\n            \"title\": \"abc123\",\n            \"tool_name\": \"abc123\"\n         }\n      ]\n   }'")
+		}
+		if body.Tools == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpServersAddToolMetadataBatchSessionToken != "" {
+			sessionToken = &mcpServersAddToolMetadataBatchSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpServersAddToolMetadataBatchApikeyToken != "" {
+			apikeyToken = &mcpServersAddToolMetadataBatchApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpServersAddToolMetadataBatchProjectSlugInput != "" {
+			projectSlugInput = &mcpServersAddToolMetadataBatchProjectSlugInput
+		}
+	}
+	v := &mcpservers.AddToolMetadataBatchPayload{
+		McpServerID: body.McpServerID,
+	}
+	if body.Tools != nil {
+		v.Tools = make([]*mcpservers.ToolMetadataForm, len(body.Tools))
+		for i, val := range body.Tools {
+			if val == nil {
+				v.Tools[i] = nil
+				continue
+			}
+			v.Tools[i] = marshalToolMetadataFormRequestBodyToMcpserversToolMetadataForm(val)
+		}
+	} else {
+		v.Tools = []*mcpservers.ToolMetadataForm{}
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildListToolMetadataPayload builds the payload for the mcpServers
+// listToolMetadata endpoint from CLI flags.
+func BuildListToolMetadataPayload(mcpServersListToolMetadataMcpServerID string, mcpServersListToolMetadataIncludeDeleted string, mcpServersListToolMetadataSessionToken string, mcpServersListToolMetadataApikeyToken string, mcpServersListToolMetadataProjectSlugInput string) (*mcpservers.ListToolMetadataPayload, error) {
+	var err error
+	var mcpServerID string
+	{
+		mcpServerID = mcpServersListToolMetadataMcpServerID
+		err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", mcpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var includeDeleted *bool
+	{
+		if mcpServersListToolMetadataIncludeDeleted != "" {
+			var val bool
+			val, err = strconv.ParseBool(mcpServersListToolMetadataIncludeDeleted)
+			includeDeleted = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for includeDeleted, must be BOOL")
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpServersListToolMetadataSessionToken != "" {
+			sessionToken = &mcpServersListToolMetadataSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpServersListToolMetadataApikeyToken != "" {
+			apikeyToken = &mcpServersListToolMetadataApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpServersListToolMetadataProjectSlugInput != "" {
+			projectSlugInput = &mcpServersListToolMetadataProjectSlugInput
+		}
+	}
+	v := &mcpservers.ListToolMetadataPayload{}
+	v.McpServerID = mcpServerID
+	v.IncludeDeleted = includeDeleted
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildSetToolMetadataPayload builds the payload for the mcpServers
+// setToolMetadata endpoint from CLI flags.
+func BuildSetToolMetadataPayload(mcpServersSetToolMetadataBody string, mcpServersSetToolMetadataSessionToken string, mcpServersSetToolMetadataApikeyToken string, mcpServersSetToolMetadataProjectSlugInput string) (*mcpservers.SetToolMetadataPayload, error) {
+	var err error
+	var body SetToolMetadataRequestBody
+	{
+		err = json.Unmarshal([]byte(mcpServersSetToolMetadataBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"destructive_hint\": false,\n      \"idempotent_hint\": false,\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"open_world_hint\": false,\n      \"read_only_hint\": false,\n      \"title\": \"abc123\",\n      \"tool_name\": \"abc123\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpServersSetToolMetadataSessionToken != "" {
+			sessionToken = &mcpServersSetToolMetadataSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpServersSetToolMetadataApikeyToken != "" {
+			apikeyToken = &mcpServersSetToolMetadataApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpServersSetToolMetadataProjectSlugInput != "" {
+			projectSlugInput = &mcpServersSetToolMetadataProjectSlugInput
+		}
+	}
+	v := &mcpservers.SetToolMetadataPayload{
+		McpServerID:     body.McpServerID,
+		ToolName:        body.ToolName,
+		Title:           body.Title,
+		ReadOnlyHint:    body.ReadOnlyHint,
+		DestructiveHint: body.DestructiveHint,
+		IdempotentHint:  body.IdempotentHint,
+		OpenWorldHint:   body.OpenWorldHint,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildDeleteToolMetadataPayload builds the payload for the mcpServers
+// deleteToolMetadata endpoint from CLI flags.
+func BuildDeleteToolMetadataPayload(mcpServersDeleteToolMetadataMcpServerID string, mcpServersDeleteToolMetadataToolName string, mcpServersDeleteToolMetadataSessionToken string, mcpServersDeleteToolMetadataApikeyToken string, mcpServersDeleteToolMetadataProjectSlugInput string) (*mcpservers.DeleteToolMetadataPayload, error) {
+	var err error
+	var mcpServerID string
+	{
+		mcpServerID = mcpServersDeleteToolMetadataMcpServerID
+		err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", mcpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var toolName string
+	{
+		toolName = mcpServersDeleteToolMetadataToolName
+	}
+	var sessionToken *string
+	{
+		if mcpServersDeleteToolMetadataSessionToken != "" {
+			sessionToken = &mcpServersDeleteToolMetadataSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpServersDeleteToolMetadataApikeyToken != "" {
+			apikeyToken = &mcpServersDeleteToolMetadataApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpServersDeleteToolMetadataProjectSlugInput != "" {
+			projectSlugInput = &mcpServersDeleteToolMetadataProjectSlugInput
+		}
+	}
+	v := &mcpservers.DeleteToolMetadataPayload{}
+	v.McpServerID = mcpServerID
+	v.ToolName = toolName
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

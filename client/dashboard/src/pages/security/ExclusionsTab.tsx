@@ -1,15 +1,16 @@
-import { Badge } from "@/components/ui/badge";
-import { Type } from "@/components/ui/type";
-import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/Badge";
+import { TableRowContextMenu } from "@/components/table-row-context-menu";
+import type { Action } from "@/components/ui/MoreActions";
+import { Text } from "@/components/ui/Text";
+import { Switch } from "@/components/ui/Switch";
+import { Button } from "@/components/ui/Button";
 import {
-  Button,
-  type Column,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Table,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { type Column, Table } from "@/components/ui/Table";
 import { useRiskDeleteExclusionMutation } from "@gram/client/react-query/riskDeleteExclusion.js";
 import {
   invalidateAllRiskListExclusions,
@@ -73,15 +74,29 @@ export function ExclusionsTab({
     });
   };
 
+  const exclusionActions = (exclusion: RiskExclusion): Action[] => [
+    {
+      label: "Edit",
+      onClick: () => onSheetChange({ mode: "edit", exclusion }),
+    },
+    {
+      label: "Delete",
+      destructive: true,
+      onClick: () => {
+        deleteMutation.mutate({ request: { id: exclusion.id } });
+      },
+    },
+  ];
+
   const columns: Column<RiskExclusion>[] = [
     {
       key: "criteria",
       header: "Criteria",
       width: "2fr",
       render: (exclusion) => (
-        <Type className="truncate font-mono text-xs" mono>
+        <Text className="truncate font-mono text-xs" mono>
           {serializeExclusionExpression(exclusion)}
-        </Type>
+        </Text>
       ),
     },
     {
@@ -89,7 +104,7 @@ export function ExclusionsTab({
       header: "Type",
       width: "0.8fr",
       render: (exclusion) => (
-        <Badge variant="secondary">{exclusion.matchType}</Badge>
+        <Badge variant="neutral">{exclusion.matchType}</Badge>
       ),
     },
     {
@@ -99,7 +114,7 @@ export function ExclusionsTab({
       render: (exclusion) => {
         const name = policyName(exclusion.riskPolicyId);
         if (!name) return <Badge variant="warning">Global</Badge>;
-        return <Badge variant="secondary">{name}</Badge>;
+        return <Badge variant="neutral">{name}</Badge>;
       },
     },
     {
@@ -120,9 +135,9 @@ export function ExclusionsTab({
       header: "Created",
       width: "0.9fr",
       render: (exclusion) => (
-        <Type className="text-muted-foreground" small>
+        <Text className="text-muted-foreground" small>
           {format(exclusion.createdAt, "MMM d, yyyy")}
-        </Type>
+        </Text>
       ),
     },
     {
@@ -131,12 +146,7 @@ export function ExclusionsTab({
       width: "0.3fr",
       render: (exclusion) => (
         <div onClick={(e) => e.stopPropagation()}>
-          <ExclusionActionsMenu
-            onEdit={() => onSheetChange({ mode: "edit", exclusion })}
-            onDelete={() => {
-              deleteMutation.mutate({ request: { id: exclusion.id } });
-            }}
-          />
+          <ExclusionActionsMenu actions={exclusionActions(exclusion)} />
         </div>
       ),
     },
@@ -144,7 +154,7 @@ export function ExclusionsTab({
 
   let body: ReactNode;
   if (isLoading) {
-    body = <Type className="text-muted-foreground">Loading exclusions…</Type>;
+    body = <Text className="text-muted-foreground">Loading exclusions…</Text>;
   } else if (exclusions.length === 0) {
     body = (
       <ExclusionsEmptyState
@@ -158,6 +168,14 @@ export function ExclusionsTab({
         data={exclusions}
         rowKey={(exclusion) => exclusion.id}
         onRowClick={(exclusion) => onSheetChange({ mode: "edit", exclusion })}
+        renderRow={(exclusion, rowElement) => (
+          <TableRowContextMenu
+            key={exclusion.id}
+            actions={exclusionActions(exclusion)}
+          >
+            {rowElement}
+          </TableRowContextMenu>
+        )}
       />
     );
   }
@@ -176,13 +194,7 @@ export function ExclusionsTab({
   );
 }
 
-function ExclusionActionsMenu({
-  onEdit,
-  onDelete,
-}: {
-  onEdit: () => void;
-  onDelete: () => void;
-}): JSX.Element {
+function ExclusionActionsMenu({ actions }: { actions: Action[] }): JSX.Element {
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
@@ -193,22 +205,22 @@ function ExclusionActionsMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem
-          className="cursor-pointer"
-          onSelect={() => {
-            setTimeout(onEdit, 0);
-          }}
-        >
-          Edit
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          className="text-destructive focus:text-destructive cursor-pointer"
-          onSelect={() => {
-            setTimeout(onDelete, 0);
-          }}
-        >
-          Delete
-        </DropdownMenuItem>
+        {actions.map((action) => (
+          <DropdownMenuItem
+            key={action.label}
+            disabled={action.disabled}
+            className={
+              action.destructive
+                ? "text-destructive focus:text-destructive cursor-pointer"
+                : "cursor-pointer"
+            }
+            onSelect={() => {
+              setTimeout(action.onClick, 0);
+            }}
+          >
+            {action.label}
+          </DropdownMenuItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -216,18 +228,18 @@ function ExclusionActionsMenu({
 
 function ExclusionsEmptyState({ onCreate }: { onCreate: () => void }) {
   return (
-    <div className="bg-background flex h-[360px] w-full flex-col items-center justify-center gap-4 rounded-xl border">
+    <div className="bg-background flex h-[360px] w-full flex-col items-center justify-center gap-4 border">
       <div className="space-y-1 text-center">
-        <Type className="font-medium">No exclusions yet</Type>
-        <Type small muted>
+        <Text className="font-medium">No exclusions yet</Text>
+        <Text small muted>
           Create an exclusion to suppress false-positive findings.
-        </Type>
+        </Text>
       </div>
       <Button onClick={onCreate}>
         <Button.LeftIcon>
           <Plus className="h-4 w-4" />
         </Button.LeftIcon>
-        <Button.Text>Create exclusion</Button.Text>
+        <Button.Text>Set up exclusion rule</Button.Text>
       </Button>
     </div>
   );

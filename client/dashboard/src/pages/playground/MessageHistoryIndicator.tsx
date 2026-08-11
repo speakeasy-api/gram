@@ -1,5 +1,5 @@
-import { Type } from "@/components/ui/type";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Text } from "@/components/ui/Text";
+import { Stack } from "@/components/ui/Stack";
 
 interface MessageHistoryIndicatorProps {
   isNavigating: boolean;
@@ -17,14 +17,14 @@ export function MessageHistoryIndicator({
   }
 
   return (
-    <div className="bg-background/80 absolute right-2 bottom-2 z-10 rounded-md border px-2 py-1 backdrop-blur-sm">
+    <div className="bg-background/80 absolute right-2 bottom-2 z-10 border px-2 py-1 backdrop-blur-sm">
       <Stack direction="horizontal" gap={1} align="center">
-        <Type variant="small" muted className="text-xs">
+        <Text variant="small" muted className="text-xs">
           History: {historyIndex + 1}/{totalMessages}
-        </Type>
-        <Type variant="small" muted className="text-xs">
+        </Text>
+        <Text variant="small" muted className="text-xs">
           (↑↓ to navigate, Esc to exit)
-        </Type>
+        </Text>
       </Stack>
     </div>
   );

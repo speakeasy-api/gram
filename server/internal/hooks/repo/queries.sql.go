@@ -12,37 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const backfillLatestClaudeUserMessagePromptID = `-- name: BackfillLatestClaudeUserMessagePromptID :execrows
-WITH latest_user_message AS (
-  SELECT chat_messages.id
-  FROM chat_messages
-  WHERE chat_messages.chat_id = $2
-    AND (chat_messages.project_id IS NULL OR chat_messages.project_id = $3::uuid)
-    AND chat_messages.role = 'user'
-  ORDER BY chat_messages.seq DESC
-  LIMIT 1
-)
-UPDATE chat_messages
-SET message_id = $1
-WHERE chat_messages.id = (SELECT latest_user_message.id FROM latest_user_message)
-  AND $1::text <> ''
-  AND (chat_messages.message_id IS NULL OR chat_messages.message_id = '' OR chat_messages.message_id != $1::text)
-`
-
-type BackfillLatestClaudeUserMessagePromptIDParams struct {
-	MessageID pgtype.Text
-	ChatID    uuid.UUID
-	ProjectID uuid.UUID
-}
-
-func (q *Queries) BackfillLatestClaudeUserMessagePromptID(ctx context.Context, arg BackfillLatestClaudeUserMessagePromptIDParams) (int64, error) {
-	result, err := q.db.Exec(ctx, backfillLatestClaudeUserMessagePromptID, arg.MessageID, arg.ChatID, arg.ProjectID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const countEmployeesForExternalOrg = `-- name: CountEmployeesForExternalOrg :one
 SELECT COUNT(DISTINCT user_id)::bigint
 FROM user_accounts
@@ -202,17 +171,19 @@ WHERE organization_id = $1
   AND deleted IS FALSE
   AND billing_mode IS NOT NULL
   AND (
-    external_organization_id IS NULL
+    $3::bool
+    OR external_organization_id IS NULL
     OR external_organization_id = ''
-    OR external_organization_id = $3
+    OR external_organization_id = $4
   )
-ORDER BY (external_organization_id = $3) DESC NULLS LAST
+ORDER BY (external_organization_id = $4) DESC NULLS LAST, updated_at DESC
 LIMIT 1
 `
 
 type GetProviderOrgBillingModeParams struct {
 	OrganizationID string
 	Provider       string
+	MatchAnyOrg    bool
 	ExternalOrgID  pgtype.Text
 }
 
@@ -222,11 +193,20 @@ type GetProviderOrgBillingModeParams struct {
 // provider org; a config with none applies provider-wide. Exact-org matches are
 // preferred over provider-wide (NULLS LAST because the comparison is NULL for a
 // NULL-scoped row, and DESC would otherwise sort NULL ahead of an exact match).
-// Only one live config per (org, provider) can exist today, so the ordering is
-// defensive. Only configs with a non-null billing_mode are considered, so an
-// undeclared org returns no rows (treated as unknown upstream).
+// @match_any_org disables the org scoping entirely: Codex sessions carry no org
+// identity on any layer while codex_compliance configs always pin one, so for
+// them the provider-wide declaration applies regardless of config scope. Only
+// one live config per (org, provider) can exist today, so the ordering (with
+// updated_at as the tiebreak against historical duplicates) is defensive. Only
+// configs with a non-null billing_mode are considered, so an undeclared org
+// returns no rows (treated as unknown upstream).
 func (q *Queries) GetProviderOrgBillingMode(ctx context.Context, arg GetProviderOrgBillingModeParams) (pgtype.Text, error) {
-	row := q.db.QueryRow(ctx, getProviderOrgBillingMode, arg.OrganizationID, arg.Provider, arg.ExternalOrgID)
+	row := q.db.QueryRow(ctx, getProviderOrgBillingMode,
+		arg.OrganizationID,
+		arg.Provider,
+		arg.MatchAnyOrg,
+		arg.ExternalOrgID,
+	)
 	var billing_mode pgtype.Text
 	err := row.Scan(&billing_mode)
 	return billing_mode, err
@@ -271,6 +251,27 @@ func (q *Queries) GetUserAccount(ctx context.Context, arg GetUserAccountParams) 
 	return i, err
 }
 
+const hasSkillObservationRawHash = `-- name: HasSkillObservationRawHash :one
+SELECT EXISTS (
+  SELECT 1
+  FROM skill_observations so
+  WHERE so.project_id = $1
+    AND so.raw_sha256 = $2
+)::boolean
+`
+
+type HasSkillObservationRawHashParams struct {
+	ProjectID uuid.UUID
+	RawSha256 pgtype.Text
+}
+
+func (q *Queries) HasSkillObservationRawHash(ctx context.Context, arg HasSkillObservationRawHashParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasSkillObservationRawHash, arg.ProjectID, arg.RawSha256)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const insertShadowMCPBlockResult = `-- name: InsertShadowMCPBlockResult :exec
 INSERT INTO risk_results (
     id
@@ -308,7 +309,7 @@ type InsertShadowMCPBlockResultParams struct {
 	OrganizationID    string
 	RiskPolicyID      uuid.UUID
 	RiskPolicyVersion int64
-	ChatMessageID     uuid.UUID
+	ChatMessageID     uuid.NullUUID
 	Description       pgtype.Text
 	Match             pgtype.Text
 	Confidence        pgtype.Float8
@@ -327,6 +328,78 @@ func (q *Queries) InsertShadowMCPBlockResult(ctx context.Context, arg InsertShad
 		arg.Confidence,
 	)
 	return err
+}
+
+const insertSkillObservation = `-- name: InsertSkillObservation :execrows
+INSERT INTO skill_observations (
+    project_id
+  , idempotency_key
+  , provider
+  , user_id
+  , user_email
+  , hostname
+  , session_id
+  , skill_name
+  , source
+  , source_level
+  , source_path
+  , raw_sha256
+  , seen_at
+) VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+  , $8
+  , $9
+  , $10
+  , $11
+  , $12
+  , $13
+)
+ON CONFLICT (project_id, idempotency_key) WHERE idempotency_key IS NOT NULL
+DO NOTHING
+`
+
+type InsertSkillObservationParams struct {
+	ProjectID      uuid.UUID
+	IdempotencyKey pgtype.Text
+	Provider       string
+	UserID         pgtype.Text
+	UserEmail      pgtype.Text
+	Hostname       pgtype.Text
+	SessionID      pgtype.Text
+	SkillName      string
+	Source         pgtype.Text
+	SourceLevel    pgtype.Text
+	SourcePath     pgtype.Text
+	RawSha256      pgtype.Text
+	SeenAt         pgtype.Timestamptz
+}
+
+func (q *Queries) InsertSkillObservation(ctx context.Context, arg InsertSkillObservationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertSkillObservation,
+		arg.ProjectID,
+		arg.IdempotencyKey,
+		arg.Provider,
+		arg.UserID,
+		arg.UserEmail,
+		arg.Hostname,
+		arg.SessionID,
+		arg.SkillName,
+		arg.Source,
+		arg.SourceLevel,
+		arg.SourcePath,
+		arg.RawSha256,
+		arg.SeenAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const insertToolCallBlock = `-- name: InsertToolCallBlock :exec
@@ -464,6 +537,55 @@ func (q *Queries) ListHooksServerNameOverrides(ctx context.Context, projectID uu
 	return items, nil
 }
 
+const listSkillObservations = `-- name: ListSkillObservations :many
+SELECT id, project_id, idempotency_key, provider, user_id, user_email, hostname, session_id, skill_name, source, source_level, source_path, raw_sha256, seen_at, skill_id, skill_version_id, reconciled_at, metrics_synced_at, efficacy_enqueued_at, reconcile_error_code, created_at
+FROM skill_observations
+WHERE project_id = $1
+ORDER BY seen_at ASC, id ASC
+`
+
+func (q *Queries) ListSkillObservations(ctx context.Context, projectID uuid.UUID) ([]SkillObservation, error) {
+	rows, err := q.db.Query(ctx, listSkillObservations, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SkillObservation
+	for rows.Next() {
+		var i SkillObservation
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.IdempotencyKey,
+			&i.Provider,
+			&i.UserID,
+			&i.UserEmail,
+			&i.Hostname,
+			&i.SessionID,
+			&i.SkillName,
+			&i.Source,
+			&i.SourceLevel,
+			&i.SourcePath,
+			&i.RawSha256,
+			&i.SeenAt,
+			&i.SkillID,
+			&i.SkillVersionID,
+			&i.ReconciledAt,
+			&i.MetricsSyncedAt,
+			&i.EfficacyEnqueuedAt,
+			&i.ReconcileErrorCode,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserAccountsByUsers = `-- name: ListUserAccountsByUsers :many
 SELECT id, user_id, provider, email, account_type, external_org_id, last_seen_at
 FROM user_accounts
@@ -518,6 +640,97 @@ func (q *Queries) ListUserAccountsByUsers(ctx context.Context, arg ListUserAccou
 		return nil, err
 	}
 	return items, nil
+}
+
+const rememberKnownSkillRawHash = `-- name: RememberKnownSkillRawHash :one
+WITH existing_alias AS (
+  SELECT srh.canonical_sha256
+  FROM skill_raw_hashes srh
+  WHERE srh.project_id = $1
+    AND srh.raw_sha256 = $2
+), known_version AS (
+  SELECT MIN(sv.canonical_sha256) AS canonical_sha256
+  FROM skill_versions sv
+  JOIN skills s ON s.id = sv.skill_id
+  WHERE s.project_id = $1
+    AND s.archived_at IS NULL
+    AND sv.raw_sha256 = $2
+    AND NOT EXISTS (SELECT 1 FROM existing_alias)
+  HAVING COUNT(*) = 1
+), inserted AS (
+  INSERT INTO skill_raw_hashes (project_id, raw_sha256, canonical_sha256)
+  SELECT $1, $2, canonical_sha256
+  FROM known_version
+  WHERE canonical_sha256 IS NOT NULL
+  ON CONFLICT (project_id, raw_sha256) DO NOTHING
+  RETURNING canonical_sha256
+), canonical_hash AS (
+  SELECT canonical_sha256 FROM existing_alias
+  UNION ALL
+  SELECT canonical_sha256 FROM inserted
+), resolved AS (
+  SELECT sv.id
+  FROM canonical_hash hash
+  JOIN skills s ON s.project_id = $1
+  JOIN skill_versions sv
+    ON sv.skill_id = s.id
+    AND sv.canonical_sha256 = hash.canonical_sha256
+  WHERE s.archived_at IS NULL
+  LIMIT 2
+)
+SELECT COUNT(*) = 1 AS known
+FROM resolved
+`
+
+type RememberKnownSkillRawHashParams struct {
+	ProjectID uuid.UUID
+	RawSha256 string
+}
+
+func (q *Queries) RememberKnownSkillRawHash(ctx context.Context, arg RememberKnownSkillRawHashParams) (bool, error) {
+	row := q.db.QueryRow(ctx, rememberKnownSkillRawHash, arg.ProjectID, arg.RawSha256)
+	var known bool
+	err := row.Scan(&known)
+	return known, err
+}
+
+const skillRawHashNeedsPromptInjectionScan = `-- name: SkillRawHashNeedsPromptInjectionScan :one
+SELECT EXISTS (
+  SELECT 1
+  FROM skill_raw_hashes srh
+  JOIN skills s
+    ON s.project_id = srh.project_id
+    AND s.archived_at IS NULL
+  JOIN skill_versions sv
+    ON sv.skill_id = s.id
+    AND sv.canonical_sha256 = srh.canonical_sha256
+  JOIN risk_policies p
+    ON p.project_id = s.project_id
+    AND p.enabled IS TRUE
+    AND p.deleted IS FALSE
+    AND 'prompt_injection' = ANY (p.sources)
+  WHERE srh.project_id = $1
+    AND srh.raw_sha256 = $2
+    AND NOT EXISTS (
+      SELECT 1
+      FROM risk_results rr
+      WHERE rr.skill_version_id = sv.id
+        AND rr.risk_policy_id = p.id
+        AND rr.risk_policy_version = p.version
+    )
+)::boolean
+`
+
+type SkillRawHashNeedsPromptInjectionScanParams struct {
+	ProjectID uuid.UUID
+	RawSha256 string
+}
+
+func (q *Queries) SkillRawHashNeedsPromptInjectionScan(ctx context.Context, arg SkillRawHashNeedsPromptInjectionScanParams) (bool, error) {
+	row := q.db.QueryRow(ctx, skillRawHashNeedsPromptInjectionScan, arg.ProjectID, arg.RawSha256)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const updateClaudeCodeSessionTimestamp = `-- name: UpdateClaudeCodeSessionTimestamp :exec

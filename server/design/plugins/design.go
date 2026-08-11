@@ -5,6 +5,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 // --- Service ---
@@ -238,6 +239,7 @@ var _ = Service("plugins", func() {
 
 	Method("downloadPluginPackage", func() {
 		Description("Download a ZIP of a single plugin package for direct installation.")
+		Error(string(oops.CodeFailedPrecondition), func() { Description(oops.CodeFailedPrecondition.UserMessage()) })
 
 		Payload(func() {
 			Attribute("plugin_id", String, func() {
@@ -246,7 +248,7 @@ var _ = Service("plugins", func() {
 			})
 			Attribute("platform", String, func() {
 				Description("Target platform to download plugins for.")
-				Enum("claude", "cursor", "codex")
+				Enum("claude", "cursor", "codex", "agent-plugin")
 			})
 			Required("plugin_id", "platform")
 			security.SessionPayload()
@@ -270,6 +272,9 @@ var _ = Service("plugins", func() {
 				Header("content_type:Content-Type")
 				Header("content_disposition:Content-Disposition")
 			})
+			Response(string(oops.CodeFailedPrecondition), StatusPreconditionFailed, func() {
+				ContentType("application/json")
+			})
 			SkipResponseBodyEncodeDecode()
 		})
 
@@ -283,7 +288,7 @@ var _ = Service("plugins", func() {
 		Payload(func() {
 			Attribute("platform", String, func() {
 				Description("Target platform.")
-				Enum("claude", "cursor", "codex")
+				Enum("claude", "cursor", "codex", "opencode")
 			})
 			Required("platform")
 			security.SessionPayload()
@@ -481,7 +486,7 @@ var PluginAssignmentModel = Type("PluginAssignment", func() {
 
 // PluginModel is the full plugin representation.
 var PluginModel = Type("Plugin", func() {
-	Required("id", "name", "slug", "created_at", "updated_at")
+	Required("id", "name", "slug", "agent_plugins_v1_compatible", "created_at", "updated_at")
 
 	Attribute("id", String, func() {
 		Description("Unique plugin identifier.")
@@ -490,8 +495,11 @@ var PluginModel = Type("Plugin", func() {
 	Attribute("name", String, "Display name.")
 	Attribute("slug", String, "URL-safe identifier, unique per org.")
 	Attribute("description", String, "Optional description.")
+	Attribute("is_default", Boolean, "Whether this is the project's fallback plugin that new servers attach to.")
 	Attribute("server_count", Int64, "Number of active servers in this plugin.")
+	Attribute("skill_count", Int64, "Number of active skills in this plugin.")
 	Attribute("assignment_count", Int64, "Number of role/user assignments.")
+	Attribute("agent_plugins_v1_compatible", Boolean, "Whether the plugin's complete current intended state can be published as an Agent Plugins 1.0 package.")
 	Attribute("servers", ArrayOf(PluginServerModel), "Servers included in this plugin.")
 	Attribute("assignments", ArrayOf(PluginAssignmentModel), "Role/user assignments.")
 	Attribute("created_at", String, func() {
@@ -599,6 +607,7 @@ var PublishStatusResult = Type("PublishStatusResult", func() {
 		Description("When the project was last published to GitHub. Absent when the project is not connected.")
 		Format(FormatDateTime)
 	})
+	Attribute("live_version", String, "Version stamped into the currently published plugin.json manifests (e.g. 0.1.1783692954) — the version plugin clients such as Claude Code report for installed plugins. Absent when the project is not connected or the live version could not be determined.")
 })
 
 var PublishPluginsResult = Type("PublishPluginsResult", func() {
@@ -619,4 +628,5 @@ var UpdateMarketplaceSettingsResult = Type("UpdateMarketplaceSettingsResult", fu
 
 	Attribute("settings", MarketplaceSettingsResult, "The updated marketplace settings.")
 	Attribute("republished", Boolean, "Whether the marketplace was automatically republished to GitHub as part of this update.")
+	Attribute("hooks_update_deferred", Boolean, "True when the new name reached the MCP plugins and marketplace manifests but the observability (hooks) plugin could not be updated yet because the organization is not approved for the latest hooks version; it will update automatically once the organization is rolled forward.")
 })

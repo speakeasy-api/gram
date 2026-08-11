@@ -83,7 +83,7 @@ async function setupRealWorkOS() {
   console.log(
     "✅ IDP mode: real WorkOS. Credentials saved to mise.local.toml.",
   );
-  console.log("   Restart madprocs to apply.");
+  console.log("   Restart pitchfork to apply.");
 }
 
 run();

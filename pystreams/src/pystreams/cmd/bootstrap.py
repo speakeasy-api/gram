@@ -37,6 +37,7 @@ so the import lives inside :func:`main`.
 from __future__ import annotations
 
 import multiprocessing
+import os
 
 
 def _noop() -> None:
@@ -49,6 +50,22 @@ def _noop() -> None:
 
 
 def main() -> None:
+    # Cap the native BLAS/OpenMP thread pools before numpy or spaCy load in any
+    # process. Each scan-pool worker is sized to own ~one core; left uncapped,
+    # a worker's BLAS backend spawns a thread per host core and the pool
+    # oversubscribes the pod's CPU request. Set here — before the forkserver
+    # bootstraps — so the forkserver, every worker forked from it, and this
+    # process itself all inherit the caps. ``setdefault`` lets an explicit
+    # override in the container environment win.
+    for var in (
+        "OMP_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "BLIS_NUM_THREADS",
+        "VECLIB_MAXIMUM_THREADS",
+    ):
+        os.environ.setdefault(var, "1")
+
     # Bootstrap the forkserver while this process is still pristine. Starting any
     # process against the forkserver context triggers its one-time fork()+exec()
     # bootstrap; doing it now means that bootstrap forks a clean parent rather than

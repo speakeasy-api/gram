@@ -3,25 +3,28 @@
 
 -- name: ListPrincipalGrantsByOrg :many
 -- Returns all grant rows for an organization, optionally filtered by principal URN.
-SELECT id, organization_id, principal_urn, principal_type, scope, effect, selectors, created_at, updated_at
+SELECT id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at
 FROM principal_grants
 WHERE organization_id = @organization_id
+  AND COALESCE(effect, 'allow') = 'allow'
   AND (@principal_urn::text = '' OR principal_urn = @principal_urn)
 ORDER BY principal_urn, scope;
 
 -- name: GetPrincipalGrants :many
 -- Returns all grant rows matching a set of principal URNs within an org.
 -- Used by the access resolver to load grants for a user+role in a single query.
-SELECT principal_urn, scope, effect, selectors
+SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = @organization_id
+  AND COALESCE(effect, 'allow') = 'allow'
   AND principal_urn = ANY(@principal_urns::text[]);
 
 -- name: ListPrincipalGrantsByResource :many
 -- Returns grant rows for a single resource selector.
-SELECT principal_urn, scope, effect, selectors
+SELECT principal_urn, scope, selectors
 FROM principal_grants
 WHERE organization_id = @organization_id
+  AND COALESCE(effect, 'allow') = 'allow'
   AND scope = @scope
   AND selectors @> jsonb_build_object(
     'resource_kind', sqlc.arg(resource_kind)::text,
@@ -29,21 +32,43 @@ WHERE organization_id = @organization_id
   )
 ORDER BY principal_urn;
 
+-- name: ListPrincipalGrantsByResourceIDs :many
+-- Returns grant rows for a set of resources under one scope in an org. Batched
+-- form of ListPrincipalGrantsByResource that stays scoped to the caller's
+-- resource ids, so listing one project's resources never loads the whole org.
+-- Callers group the results by the selector's resource_id.
+SELECT principal_urn, scope, selectors
+FROM principal_grants
+WHERE organization_id = @organization_id
+  AND COALESCE(effect, 'allow') = 'allow'
+  AND scope = @scope
+  AND selectors @> jsonb_build_object(
+    'resource_kind', sqlc.arg(resource_kind)::text
+  )
+  AND selectors->>'resource_id' = ANY(@resource_ids::text[])
+ORDER BY principal_urn;
+
 -- name: UpsertPrincipalGrant :one
--- Creates or updates a single grant row. On conflict (same org/principal/scope/effect/selectors),
--- the updated_at is refreshed. Uses COALESCE to match the functional unique index.
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
-VALUES (@organization_id, @principal_urn, @scope, @effect, @selectors)
-ON CONFLICT (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), selectors)
-DO UPDATE SET updated_at = clock_timestamp()
-RETURNING id, organization_id, principal_urn, principal_type, scope, effect, selectors, created_at, updated_at;
+-- Creates or updates a single grant row. On conflict (same org/principal/scope/selectors),
+-- any legacy effect is normalized to the allow-only NULL representation.
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+VALUES (@organization_id, @principal_urn, @scope, @selectors)
+ON CONFLICT (organization_id, principal_urn, scope, selectors)
+DO UPDATE SET
+  effect = NULL,
+  updated_at = clock_timestamp()
+RETURNING id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at;
 
 -- name: InsertPrincipalGrantIfAbsent :execrows
--- Creates a single grant row and leaves existing identical rows untouched.
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
-VALUES (@organization_id, @principal_urn, @scope, @effect, @selectors)
-ON CONFLICT (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), selectors)
-DO NOTHING;
+-- Creates a single grant row, leaves existing allow rows untouched, and converts
+-- a conflicting legacy effect row to the allow-only NULL representation.
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+VALUES (@organization_id, @principal_urn, @scope, @selectors)
+ON CONFLICT (organization_id, principal_urn, scope, selectors)
+DO UPDATE SET
+  effect = NULL,
+  updated_at = clock_timestamp()
+WHERE principal_grants.effect IS NOT NULL;
 
 -- name: DeletePrincipalGrant :execrows
 -- Removes a specific grant row by ID, scoped to the organization for safety.
@@ -52,12 +77,11 @@ WHERE id = @id
   AND organization_id = @organization_id;
 
 -- name: DeletePrincipalGrantByIdentity :execrows
--- Removes a specific grant row by principal, scope, effect, and selector.
+-- Removes a specific grant row by principal, scope, and selector.
 DELETE FROM principal_grants
 WHERE organization_id = @organization_id
   AND principal_urn = @principal_urn
   AND scope = @scope
-  AND COALESCE(effect, 'allow') = COALESCE(sqlc.arg(effect)::text, 'allow')
   AND selectors = @selectors;
 
 -- name: DeletePrincipalGrantsByTarget :execrows
@@ -66,7 +90,6 @@ WHERE organization_id = @organization_id
 DELETE FROM principal_grants
 WHERE organization_id = @organization_id
   AND scope = @scope
-  AND COALESCE(effect, 'allow') = COALESCE(sqlc.arg(effect)::text, 'allow')
   AND selectors = @selectors;
 
 -- name: DeletePrincipalGrantsByResource :execrows
@@ -498,6 +521,7 @@ LEFT JOIN global_roles
   AND global_roles.workos_deleted IS FALSE
 WHERE our.organization_id = @organization_id
   AND our.deleted IS FALSE
+  AND users.deleted_at IS NULL
 ORDER BY users.email, users.id;
 
 -- name: ListAccessNotificationUsers :many
@@ -512,6 +536,71 @@ WHERE our.organization_id = @organization_id
   AND users.deleted_at IS NULL
   AND users.email <> ''
 ORDER BY users.email, users.id;
+
+-- name: ListActiveOrganizationAdmins :many
+-- Returns a best-effort notification audience of active organization
+-- administrators and their Loops contact fields. This is not an authorization
+-- decision or a delivery guarantee; callers use the admins available when the
+-- notification is sent.
+-- Resolve roles only through the internal user ID. WorkOS role assignments
+-- are not treated as internal authorization state until they are linked.
+SELECT DISTINCT
+  users.id,
+  users.display_name,
+  users.email
+FROM organization_user_relationships AS our
+JOIN users
+  ON users.id = our.user_id
+JOIN organization_role_assignments AS ora
+  ON ora.organization_id = our.organization_id
+  AND ora.user_id = users.id
+  AND ora.deleted_at IS NULL
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE our.organization_id = @organization_id
+  AND our.deleted IS FALSE
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) = 'admin'
+  AND users.deleted_at IS NULL
+  AND users.email <> ''
+ORDER BY users.email, users.id;
+
+-- name: GetActiveOrganizationAdmin :one
+-- Returns one active organization administrator and their Loops contact fields.
+-- Resolve roles only through the internal user ID. WorkOS role assignments
+-- are not treated as internal authorization state until they are linked.
+SELECT DISTINCT
+  users.id,
+  users.display_name,
+  users.email
+FROM organization_user_relationships AS our
+JOIN users
+  ON users.id = our.user_id
+JOIN organization_role_assignments AS ora
+  ON ora.organization_id = our.organization_id
+  AND ora.user_id = users.id
+  AND ora.deleted_at IS NULL
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE our.organization_id = @organization_id
+  AND our.user_id = @user_id
+  AND our.deleted IS FALSE
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) = 'admin'
+  AND users.deleted_at IS NULL
+  AND users.email <> '';
 
 -- name: ListMemberRolePrincipalsByWorkosUser :many
 SELECT

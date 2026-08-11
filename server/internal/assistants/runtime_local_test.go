@@ -235,6 +235,30 @@ func TestLocalEnsureLaunchesAndReuses(t *testing.T) {
 	require.Equal(t, 1, engine.runCalls)
 }
 
+func TestLocalRuntimeExistsDistinguishesMissingAndStoppedContainers(t *testing.T) {
+	t.Parallel()
+
+	engine := newFakeContainerEngine(testLocalImageRef, testLocalImageID, 18081)
+	backend := newTestLocalBackend(t, engine, nil)
+	record := localRecord(uuid.New(), []byte(`{"container_id":"old"}`))
+
+	exists, err := backend.RuntimeExists(t.Context(), record)
+	require.NoError(t, err)
+	require.False(t, exists)
+
+	name := localContainerName(record)
+	engine.containers[name] = &fakeContainer{
+		id:      "container-stopped",
+		imageID: testLocalImageID,
+		running: false,
+		spec:    backend.containerSpec(record, name),
+		starts:  0,
+	}
+	exists, err = backend.RuntimeExists(t.Context(), record)
+	require.NoError(t, err)
+	require.True(t, exists, "a stopped container still exists for warm reuse")
+}
+
 func TestLocalEnsureRestartsStoppedContainer(t *testing.T) {
 	t.Parallel()
 
@@ -471,7 +495,14 @@ func TestLocalRunTurnPostsToRunner(t *testing.T) {
 	require.NoError(t, err)
 	record := localRecord(uuid.New(), metadata)
 
-	err = backend.RunTurn(t.Context(), record, threadID, "event-1", "jwt-token", "hello", nil)
+	err = backend.RunTurn(t.Context(), record, runTurnRequest{
+		ThreadID:       threadID,
+		IdempotencyKey: "event-1",
+		AuthToken:      "jwt-token",
+		Prompt:         "hello",
+		InputParts:     nil,
+		MCPServers:     nil,
+	})
 	require.NoError(t, err)
 	require.Equal(t, "/threads/"+threadID.String()+"/turn", gotPath)
 	require.Equal(t, "event-1", gotIdem)

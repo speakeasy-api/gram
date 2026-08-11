@@ -11,14 +11,16 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * Whether the local hook should allow or deny the action.
  */
-export const Decision = {
+export const IngestHookResultDecision = {
   Allow: "allow",
   Deny: "deny",
 } as const;
 /**
  * Whether the local hook should allow or deny the action.
  */
-export type Decision = ClosedEnum<typeof Decision>;
+export type IngestHookResultDecision = ClosedEnum<
+  typeof IngestHookResultDecision
+>;
 
 /**
  * Provider-neutral decision returned by the unified hook endpoint.
@@ -27,7 +29,7 @@ export type IngestHookResult = {
   /**
    * Whether the local hook should allow or deny the action.
    */
-  decision: Decision;
+  decision: IngestHookResultDecision;
   /**
    * Optional side-effect hints for hook SDKs.
    */
@@ -43,16 +45,16 @@ export type IngestHookResult = {
 };
 
 /** @internal */
-export const Decision$inboundSchema: z.ZodMiniEnum<typeof Decision> = z.enum(
-  Decision,
-);
+export const IngestHookResultDecision$inboundSchema: z.ZodMiniEnum<
+  typeof IngestHookResultDecision
+> = z.enum(IngestHookResultDecision);
 
 /** @internal */
 export const IngestHookResult$inboundSchema: z.ZodMiniType<
   IngestHookResult,
   unknown
 > = z.object({
-  decision: Decision$inboundSchema,
+  decision: IngestHookResultDecision$inboundSchema,
   effects: z.optional(z.record(z.string(), z.any())),
   message: z.optional(z.string()),
   reason: z.optional(z.string()),

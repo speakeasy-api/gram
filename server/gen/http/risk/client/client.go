@@ -57,6 +57,18 @@ type Client struct {
 	// listRiskResultsByChat endpoint.
 	ListRiskResultsByChatDoer goahttp.Doer
 
+	// MarkRiskResultsFalsePositive Doer is the HTTP client used to make requests
+	// to the markRiskResultsFalsePositive endpoint.
+	MarkRiskResultsFalsePositiveDoer goahttp.Doer
+
+	// UnmarkRiskResultsFalsePositive Doer is the HTTP client used to make requests
+	// to the unmarkRiskResultsFalsePositive endpoint.
+	UnmarkRiskResultsFalsePositiveDoer goahttp.Doer
+
+	// ListDismissedRiskResults Doer is the HTTP client used to make requests to
+	// the listDismissedRiskResults endpoint.
+	ListDismissedRiskResultsDoer goahttp.Doer
+
 	// GetRiskOverview Doer is the HTTP client used to make requests to the
 	// getRiskOverview endpoint.
 	GetRiskOverviewDoer goahttp.Doer
@@ -76,6 +88,10 @@ type Client struct {
 	// GetRiskRuleBreakdown Doer is the HTTP client used to make requests to the
 	// getRiskRuleBreakdown endpoint.
 	GetRiskRuleBreakdownDoer goahttp.Doer
+
+	// GetRiskSignals Doer is the HTTP client used to make requests to the
+	// getRiskSignals endpoint.
+	GetRiskSignalsDoer goahttp.Doer
 
 	// GetRiskPolicyStatus Doer is the HTTP client used to make requests to the
 	// getRiskPolicyStatus endpoint.
@@ -165,6 +181,10 @@ type Client struct {
 	// the suggestCustomDetectionRule endpoint.
 	SuggestCustomDetectionRuleDoer goahttp.Doer
 
+	// SuggestExclusion Doer is the HTTP client used to make requests to the
+	// suggestExclusion endpoint.
+	SuggestExclusionDoer goahttp.Doer
+
 	// TestDetectionRule Doer is the HTTP client used to make requests to the
 	// testDetectionRule endpoint.
 	TestDetectionRuleDoer goahttp.Doer
@@ -215,11 +235,15 @@ func NewClient(
 		ListRiskResultsForAgentDoer:        doer,
 		UnmaskRiskResultDoer:               doer,
 		ListRiskResultsByChatDoer:          doer,
+		MarkRiskResultsFalsePositiveDoer:   doer,
+		UnmarkRiskResultsFalsePositiveDoer: doer,
+		ListDismissedRiskResultsDoer:       doer,
 		GetRiskOverviewDoer:                doer,
 		ListRiskCategoriesDoer:             doer,
 		CompileExprDoer:                    doer,
 		GetRiskUserBreakdownDoer:           doer,
 		GetRiskRuleBreakdownDoer:           doer,
+		GetRiskSignalsDoer:                 doer,
 		GetRiskPolicyStatusDoer:            doer,
 		CreateRiskPolicyBypassRequestDoer:  doer,
 		AcknowledgeRiskPolicyChallengeDoer: doer,
@@ -242,6 +266,7 @@ func NewClient(
 		UpdateRiskExclusionDoer:            doer,
 		DeleteRiskExclusionDoer:            doer,
 		SuggestCustomDetectionRuleDoer:     doer,
+		SuggestExclusionDoer:               doer,
 		TestDetectionRuleDoer:              doer,
 		EvaluatePromptGuardrailDoer:        doer,
 		SaveRiskEvalReviewDoer:             doer,
@@ -495,6 +520,78 @@ func (c *Client) ListRiskResultsByChat() goa.Endpoint {
 	}
 }
 
+// MarkRiskResultsFalsePositive returns an endpoint that makes HTTP requests to
+// the risk service markRiskResultsFalsePositive server.
+func (c *Client) MarkRiskResultsFalsePositive() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeMarkRiskResultsFalsePositiveRequest(c.encoder)
+		decodeResponse = DecodeMarkRiskResultsFalsePositiveResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildMarkRiskResultsFalsePositiveRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.MarkRiskResultsFalsePositiveDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "markRiskResultsFalsePositive", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UnmarkRiskResultsFalsePositive returns an endpoint that makes HTTP requests
+// to the risk service unmarkRiskResultsFalsePositive server.
+func (c *Client) UnmarkRiskResultsFalsePositive() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUnmarkRiskResultsFalsePositiveRequest(c.encoder)
+		decodeResponse = DecodeUnmarkRiskResultsFalsePositiveResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUnmarkRiskResultsFalsePositiveRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UnmarkRiskResultsFalsePositiveDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "unmarkRiskResultsFalsePositive", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListDismissedRiskResults returns an endpoint that makes HTTP requests to the
+// risk service listDismissedRiskResults server.
+func (c *Client) ListDismissedRiskResults() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListDismissedRiskResultsRequest(c.encoder)
+		decodeResponse = DecodeListDismissedRiskResultsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListDismissedRiskResultsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListDismissedRiskResultsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "listDismissedRiskResults", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // GetRiskOverview returns an endpoint that makes HTTP requests to the risk
 // service getRiskOverview server.
 func (c *Client) GetRiskOverview() goa.Endpoint {
@@ -610,6 +707,30 @@ func (c *Client) GetRiskRuleBreakdown() goa.Endpoint {
 		resp, err := c.GetRiskRuleBreakdownDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "getRiskRuleBreakdown", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetRiskSignals returns an endpoint that makes HTTP requests to the risk
+// service getRiskSignals server.
+func (c *Client) GetRiskSignals() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetRiskSignalsRequest(c.encoder)
+		decodeResponse = DecodeGetRiskSignalsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetRiskSignalsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetRiskSignalsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "getRiskSignals", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -1138,6 +1259,30 @@ func (c *Client) SuggestCustomDetectionRule() goa.Endpoint {
 		resp, err := c.SuggestCustomDetectionRuleDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "suggestCustomDetectionRule", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SuggestExclusion returns an endpoint that makes HTTP requests to the risk
+// service suggestExclusion server.
+func (c *Client) SuggestExclusion() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSuggestExclusionRequest(c.encoder)
+		decodeResponse = DecodeSuggestExclusionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSuggestExclusionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SuggestExclusionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "suggestExclusion", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -6,6 +6,11 @@ import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 import {
+  RiskDetectionScope,
+  RiskDetectionScope$Outbound,
+  RiskDetectionScope$outboundSchema,
+} from "./riskdetectionscope.js";
+import {
   RiskPolicyModelConfig,
   RiskPolicyModelConfig$Outbound,
   RiskPolicyModelConfig$outboundSchema,
@@ -48,6 +53,18 @@ export const PolicyType = {
  */
 export type PolicyType = ClosedEnum<typeof PolicyType>;
 
+/**
+ * Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.
+ */
+export const ShadowMcpDisposition = {
+  BlockAll: "block_all",
+  AllowAll: "allow_all",
+} as const;
+/**
+ * Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.
+ */
+export type ShadowMcpDisposition = ClosedEnum<typeof ShadowMcpDisposition>;
+
 export type CreateRiskPolicyRequestBody = {
   /**
    * Policy action: flag, warn (challenge), or block.
@@ -73,6 +90,10 @@ export type CreateRiskPolicyRequestBody = {
    * Custom detection rule ids to attach as detectors: a match produces a finding.
    */
   customRuleIds?: Array<string> | undefined;
+  /**
+   * Per-category detection scopes. Each specified category replaces its centrally recommended scope; a scope with both predicates empty scans every message surface. Empty/omitted = all recommendations apply unchanged.
+   */
+  detectionScopes?: Array<RiskDetectionScope> | undefined;
   /**
    * Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.
    */
@@ -119,6 +140,22 @@ export type CreateRiskPolicyRequestBody = {
    */
   scopeInclude?: string | undefined;
   /**
+   * CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit to apply the default (5).
+   */
+  score?: number | undefined;
+  /**
+   * Complete desired canonical URL allow set for this policy. Omit or send empty to create no URL-specific allow decisions.
+   */
+  shadowMcpAllowedUrls?: Array<string> | undefined;
+  /**
+   * For allow_all policies: complete desired canonical URL block set. Omit or send empty to block nothing. Only valid when shadow_mcp_disposition is allow_all.
+   */
+  shadowMcpBlockedUrls?: Array<string> | undefined;
+  /**
+   * Default disposition for shadow MCP blocking policies: block_all (default) blocks every non-Gram-hosted server unless allowed, allow_all permits every server unless blocked. Only valid with the shadow_mcp source and block action. Immutable after create — switching requires delete + recreate.
+   */
+  shadowMcpDisposition?: ShadowMcpDisposition | undefined;
+  /**
    * Detection sources to enable.
    */
   sources?: Array<string> | undefined;
@@ -142,6 +179,11 @@ export const PolicyType$outboundSchema: z.ZodMiniEnum<typeof PolicyType> = z
   .enum(PolicyType);
 
 /** @internal */
+export const ShadowMcpDisposition$outboundSchema: z.ZodMiniEnum<
+  typeof ShadowMcpDisposition
+> = z.enum(ShadowMcpDisposition);
+
+/** @internal */
 export type CreateRiskPolicyRequestBody$Outbound = {
   action: string;
   approved_email_domains?: Array<string> | undefined;
@@ -149,6 +191,7 @@ export type CreateRiskPolicyRequestBody$Outbound = {
   audience_type: string;
   auto_name?: boolean | undefined;
   custom_rule_ids?: Array<string> | undefined;
+  detection_scopes?: Array<RiskDetectionScope$Outbound> | undefined;
   disabled_rules?: Array<string> | undefined;
   enabled?: boolean | undefined;
   message_types?: Array<string> | undefined;
@@ -161,6 +204,10 @@ export type CreateRiskPolicyRequestBody$Outbound = {
   prompt_injection_rules?: Array<string> | undefined;
   scope_exempt?: string | undefined;
   scope_include?: string | undefined;
+  score: number;
+  shadow_mcp_allowed_urls?: Array<string> | undefined;
+  shadow_mcp_blocked_urls?: Array<string> | undefined;
+  shadow_mcp_disposition?: string | undefined;
   sources?: Array<string> | undefined;
   user_message?: string | undefined;
 };
@@ -177,6 +224,7 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     audienceType: z._default(AudienceType$outboundSchema, "everyone"),
     autoName: z.optional(z.boolean()),
     customRuleIds: z.optional(z.array(z.string())),
+    detectionScopes: z.optional(z.array(RiskDetectionScope$outboundSchema)),
     disabledRules: z.optional(z.array(z.string())),
     enabled: z.optional(z.boolean()),
     messageTypes: z.optional(z.array(z.string())),
@@ -189,6 +237,10 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     promptInjectionRules: z.optional(z.array(z.string())),
     scopeExempt: z.optional(z.string()),
     scopeInclude: z.optional(z.string()),
+    score: z._default(z.number(), 5),
+    shadowMcpAllowedUrls: z.optional(z.array(z.string())),
+    shadowMcpBlockedUrls: z.optional(z.array(z.string())),
+    shadowMcpDisposition: z.optional(ShadowMcpDisposition$outboundSchema),
     sources: z.optional(z.array(z.string())),
     userMessage: z.optional(z.string()),
   }),
@@ -199,6 +251,7 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
       audienceType: "audience_type",
       autoName: "auto_name",
       customRuleIds: "custom_rule_ids",
+      detectionScopes: "detection_scopes",
       disabledRules: "disabled_rules",
       messageTypes: "message_types",
       modelConfig: "model_config",
@@ -208,6 +261,9 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
       promptInjectionRules: "prompt_injection_rules",
       scopeExempt: "scope_exempt",
       scopeInclude: "scope_include",
+      shadowMcpAllowedUrls: "shadow_mcp_allowed_urls",
+      shadowMcpBlockedUrls: "shadow_mcp_blocked_urls",
+      shadowMcpDisposition: "shadow_mcp_disposition",
       userMessage: "user_message",
     });
   }),

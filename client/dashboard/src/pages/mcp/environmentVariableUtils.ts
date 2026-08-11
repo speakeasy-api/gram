@@ -3,10 +3,13 @@ export type EnvVarState = "user-provided" | "system" | "omitted";
 export interface EnvironmentVariable {
   id: string;
   key: string;
-  // The (redacted) value this variable holds in each environment that defines it.
+  // The value this variable holds in each environment that defines it. A secret
+  // entry only ever arrives redacted (e.g. "sup*****"); a non-secret one
+  // arrives in cleartext and is safe to show as-is.
   environmentValues: Array<{
     environmentSlug: string;
-    value: string; // Redacted value for display
+    value: string;
+    isSecret: boolean;
   }>;
   state: EnvVarState;
   isRequired: boolean; // True for advertised vars from toolset, false for custom user-added
@@ -38,6 +41,27 @@ export const getValueForEnvironment = (
   return entry?.value || "";
 };
 
+// Whether a specific environment stores this variable at all. Distinct from
+// environmentHasValue, which reports true for states that never store one.
+export const hasEntryInEnvironment = (
+  envVar: EnvironmentVariable,
+  environmentSlug: string,
+): boolean =>
+  envVar.environmentValues.some((v) => v.environmentSlug === environmentSlug);
+
+// Whether a variable is stored as a secret in a specific environment. A
+// variable this environment does not define yet is treated as secret, matching
+// the server's default for new entries.
+export const isSecretInEnvironment = (
+  envVar: EnvironmentVariable,
+  environmentSlug: string,
+): boolean => {
+  const entry = envVar.environmentValues.find(
+    (v) => v.environmentSlug === environmentSlug,
+  );
+  return entry ? entry.isSecret : true;
+};
+
 // Check if a variable has a header display name override
 export const hasHeaderOverride = (
   envVar: EnvironmentVariable,
@@ -57,7 +81,7 @@ export const getHeaderDisplayName = (
     variableName: string;
     headerDisplayName?: string;
   }>,
-  editingState: Map<string, { value: string; headerDisplayName?: string }>,
+  editingState: Map<string, { headerDisplayName?: string }>,
 ): string => {
   if (
     editingState.has(envVar.id) &&
@@ -67,19 +91,6 @@ export const getHeaderDisplayName = (
   }
   const entry = environmentEntries.find((e) => e.variableName === envVar.key);
   return entry?.headerDisplayName || "";
-};
-
-// Get editing value for a variable (either from editing state or from environmentValues)
-export const getEditingValue = (
-  envVar: EnvironmentVariable,
-  editingState: Map<string, { value: string; headerDisplayName?: string }>,
-  selectedEnvironmentView: string,
-): string => {
-  if (editingState.has(envVar.id)) {
-    return editingState.get(envVar.id)!.value;
-  }
-  // Show the value for the currently selected environment
-  return getValueForEnvironment(envVar, selectedEnvironmentView);
 };
 
 // Check if an environment has all required variables configured

@@ -33,9 +33,6 @@ func ParseCodexMCPList(raw any) []MCPServerEntry {
 			continue
 		}
 		name, _ := m["name"].(string)
-		if name == "" {
-			continue
-		}
 		if enabled, ok := m["enabled"].(bool); ok && !enabled {
 			continue
 		}

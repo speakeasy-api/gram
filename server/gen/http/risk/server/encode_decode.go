@@ -1404,6 +1404,8 @@ func DecodeListRiskResultsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 			ruleID           *string
 			userID           *string
 			uniqueMatch      *bool
+			nonAssistant     *bool
+			assistantID      *string
 			from             *string
 			to               *string
 			cursor           *string
@@ -1449,6 +1451,23 @@ func DecodeListRiskResultsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 				}
 				uniqueMatch = &v
 			}
+		}
+		{
+			nonAssistantRaw := qp.Get("non_assistant")
+			if nonAssistantRaw != "" {
+				v, err2 := strconv.ParseBool(nonAssistantRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("non_assistant", nonAssistantRaw, "boolean"))
+				}
+				nonAssistant = &v
+			}
+		}
+		assistantIDRaw := qp.Get("assistant_id")
+		if assistantIDRaw != "" {
+			assistantID = &assistantIDRaw
+		}
+		if assistantID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("assistant_id", *assistantID, goa.FormatUUID))
 		}
 		fromRaw := qp.Get("from")
 		if fromRaw != "" {
@@ -1504,7 +1523,7 @@ func DecodeListRiskResultsRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListRiskResultsPayload(policyID, chatID, category, ruleID, userID, uniqueMatch, from, to, cursor, limit, apikeyToken, sessionToken, projectSlugInput)
+		payload = NewListRiskResultsPayload(policyID, chatID, category, ruleID, userID, uniqueMatch, nonAssistant, assistantID, from, to, cursor, limit, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -1711,6 +1730,8 @@ func DecodeListRiskResultsForAgentRequest(mux goahttp.Muxer, decoder func(*http.
 			ruleID           *string
 			userID           *string
 			uniqueMatch      *bool
+			nonAssistant     *bool
+			assistantID      *string
 			from             *string
 			to               *string
 			cursor           *string
@@ -1756,6 +1777,23 @@ func DecodeListRiskResultsForAgentRequest(mux goahttp.Muxer, decoder func(*http.
 				}
 				uniqueMatch = &v
 			}
+		}
+		{
+			nonAssistantRaw := qp.Get("non_assistant")
+			if nonAssistantRaw != "" {
+				v, err2 := strconv.ParseBool(nonAssistantRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("non_assistant", nonAssistantRaw, "boolean"))
+				}
+				nonAssistant = &v
+			}
+		}
+		assistantIDRaw := qp.Get("assistant_id")
+		if assistantIDRaw != "" {
+			assistantID = &assistantIDRaw
+		}
+		if assistantID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("assistant_id", *assistantID, goa.FormatUUID))
 		}
 		fromRaw := qp.Get("from")
 		if fromRaw != "" {
@@ -1811,7 +1849,7 @@ func DecodeListRiskResultsForAgentRequest(mux goahttp.Muxer, decoder func(*http.
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListRiskResultsForAgentPayload(policyID, chatID, category, ruleID, userID, uniqueMatch, from, to, cursor, limit, apikeyToken, sessionToken, projectSlugInput)
+		payload = NewListRiskResultsForAgentPayload(policyID, chatID, category, ruleID, userID, uniqueMatch, nonAssistant, assistantID, from, to, cursor, limit, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -2470,6 +2508,723 @@ func EncodeListRiskResultsByChatError(encoder func(context.Context, http.Respons
 				body = formatter(ctx, res)
 			} else {
 				body = NewListRiskResultsByChatGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeMarkRiskResultsFalsePositiveResponse returns an encoder for responses
+// returned by the risk markRiskResultsFalsePositive endpoint.
+func EncodeMarkRiskResultsFalsePositiveResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		w.WriteHeader(http.StatusOK)
+		return nil
+	}
+}
+
+// DecodeMarkRiskResultsFalsePositiveRequest returns a decoder for requests
+// sent to the risk markRiskResultsFalsePositive endpoint.
+func DecodeMarkRiskResultsFalsePositiveRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*risk.MarkRiskResultsFalsePositivePayload, error) {
+	return func(r *http.Request) (*risk.MarkRiskResultsFalsePositivePayload, error) {
+		var payload *risk.MarkRiskResultsFalsePositivePayload
+		var (
+			body MarkRiskResultsFalsePositiveRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateMarkRiskResultsFalsePositiveRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			apikeyToken      *string
+			sessionToken     *string
+			projectSlugInput *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewMarkRiskResultsFalsePositivePayload(&body, apikeyToken, sessionToken, projectSlugInput)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeMarkRiskResultsFalsePositiveError returns an encoder for errors
+// returned by the markRiskResultsFalsePositive risk endpoint.
+func EncodeMarkRiskResultsFalsePositiveError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewMarkRiskResultsFalsePositiveUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewMarkRiskResultsFalsePositiveForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewMarkRiskResultsFalsePositiveBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewMarkRiskResultsFalsePositiveNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewMarkRiskResultsFalsePositiveConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewMarkRiskResultsFalsePositiveUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewMarkRiskResultsFalsePositiveInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewMarkRiskResultsFalsePositiveInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewMarkRiskResultsFalsePositiveUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewMarkRiskResultsFalsePositiveGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeUnmarkRiskResultsFalsePositiveResponse returns an encoder for
+// responses returned by the risk unmarkRiskResultsFalsePositive endpoint.
+func EncodeUnmarkRiskResultsFalsePositiveResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		w.WriteHeader(http.StatusOK)
+		return nil
+	}
+}
+
+// DecodeUnmarkRiskResultsFalsePositiveRequest returns a decoder for requests
+// sent to the risk unmarkRiskResultsFalsePositive endpoint.
+func DecodeUnmarkRiskResultsFalsePositiveRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*risk.UnmarkRiskResultsFalsePositivePayload, error) {
+	return func(r *http.Request) (*risk.UnmarkRiskResultsFalsePositivePayload, error) {
+		var payload *risk.UnmarkRiskResultsFalsePositivePayload
+		var (
+			body UnmarkRiskResultsFalsePositiveRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateUnmarkRiskResultsFalsePositiveRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			apikeyToken      *string
+			sessionToken     *string
+			projectSlugInput *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewUnmarkRiskResultsFalsePositivePayload(&body, apikeyToken, sessionToken, projectSlugInput)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeUnmarkRiskResultsFalsePositiveError returns an encoder for errors
+// returned by the unmarkRiskResultsFalsePositive risk endpoint.
+func EncodeUnmarkRiskResultsFalsePositiveError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUnmarkRiskResultsFalsePositiveUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUnmarkRiskResultsFalsePositiveForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUnmarkRiskResultsFalsePositiveBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUnmarkRiskResultsFalsePositiveNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUnmarkRiskResultsFalsePositiveConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUnmarkRiskResultsFalsePositiveUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUnmarkRiskResultsFalsePositiveInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUnmarkRiskResultsFalsePositiveInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUnmarkRiskResultsFalsePositiveUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewUnmarkRiskResultsFalsePositiveGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeListDismissedRiskResultsResponse returns an encoder for responses
+// returned by the risk listDismissedRiskResults endpoint.
+func EncodeListDismissedRiskResultsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*risk.ListRiskResultsResult)
+		enc := encoder(ctx, w)
+		body := NewListDismissedRiskResultsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeListDismissedRiskResultsRequest returns a decoder for requests sent to
+// the risk listDismissedRiskResults endpoint.
+func DecodeListDismissedRiskResultsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*risk.ListDismissedRiskResultsPayload, error) {
+	return func(r *http.Request) (*risk.ListDismissedRiskResultsPayload, error) {
+		var payload *risk.ListDismissedRiskResultsPayload
+		var (
+			cursor           *string
+			limit            *int
+			apikeyToken      *string
+			sessionToken     *string
+			projectSlugInput *string
+			err              error
+		)
+		qp := r.URL.Query()
+		cursorRaw := qp.Get("cursor")
+		if cursorRaw != "" {
+			cursor = &cursorRaw
+		}
+		{
+			limitRaw := qp.Get("limit")
+			if limitRaw != "" {
+				v, err2 := strconv.ParseInt(limitRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("limit", limitRaw, "integer"))
+				}
+				pv := int(v)
+				limit = &pv
+			}
+		}
+		if limit != nil {
+			if *limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 1, true))
+			}
+		}
+		if limit != nil {
+			if *limit > 200 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 200, false))
+			}
+		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewListDismissedRiskResultsPayload(cursor, limit, apikeyToken, sessionToken, projectSlugInput)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeListDismissedRiskResultsError returns an encoder for errors returned
+// by the listDismissedRiskResults risk endpoint.
+func EncodeListDismissedRiskResultsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDismissedRiskResultsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDismissedRiskResultsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDismissedRiskResultsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDismissedRiskResultsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDismissedRiskResultsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDismissedRiskResultsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDismissedRiskResultsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDismissedRiskResultsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDismissedRiskResultsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListDismissedRiskResultsGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -3633,6 +4388,244 @@ func EncodeGetRiskRuleBreakdownError(encoder func(context.Context, http.Response
 				body = formatter(ctx, res)
 			} else {
 				body = NewGetRiskRuleBreakdownGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeGetRiskSignalsResponse returns an encoder for responses returned by
+// the risk getRiskSignals endpoint.
+func EncodeGetRiskSignalsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*risk.RiskSignalsResult)
+		enc := encoder(ctx, w)
+		body := NewGetRiskSignalsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetRiskSignalsRequest returns a decoder for requests sent to the risk
+// getRiskSignals endpoint.
+func DecodeGetRiskSignalsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*risk.GetRiskSignalsPayload, error) {
+	return func(r *http.Request) (*risk.GetRiskSignalsPayload, error) {
+		var payload *risk.GetRiskSignalsPayload
+		var (
+			from             *string
+			to               *string
+			apikeyToken      *string
+			sessionToken     *string
+			projectSlugInput *string
+			err              error
+		)
+		qp := r.URL.Query()
+		fromRaw := qp.Get("from")
+		if fromRaw != "" {
+			from = &fromRaw
+		}
+		if from != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+		}
+		toRaw := qp.Get("to")
+		if toRaw != "" {
+			to = &toRaw
+		}
+		if to != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewGetRiskSignalsPayload(from, to, apikeyToken, sessionToken, projectSlugInput)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetRiskSignalsError returns an encoder for errors returned by the
+// getRiskSignals risk endpoint.
+func EncodeGetRiskSignalsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRiskSignalsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRiskSignalsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRiskSignalsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRiskSignalsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRiskSignalsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRiskSignalsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRiskSignalsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRiskSignalsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRiskSignalsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetRiskSignalsGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -8639,6 +9632,243 @@ func EncodeSuggestCustomDetectionRuleError(encoder func(context.Context, http.Re
 	}
 }
 
+// EncodeSuggestExclusionResponse returns an encoder for responses returned by
+// the risk suggestExclusion endpoint.
+func EncodeSuggestExclusionResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*risk.SuggestExclusionResult)
+		enc := encoder(ctx, w)
+		body := NewSuggestExclusionResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeSuggestExclusionRequest returns a decoder for requests sent to the
+// risk suggestExclusion endpoint.
+func DecodeSuggestExclusionRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*risk.SuggestExclusionPayload, error) {
+	return func(r *http.Request) (*risk.SuggestExclusionPayload, error) {
+		var payload *risk.SuggestExclusionPayload
+		var (
+			body SuggestExclusionRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateSuggestExclusionRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			apikeyToken      *string
+			sessionToken     *string
+			projectSlugInput *string
+		)
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewSuggestExclusionPayload(&body, apikeyToken, sessionToken, projectSlugInput)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeSuggestExclusionError returns an encoder for errors returned by the
+// suggestExclusion risk endpoint.
+func EncodeSuggestExclusionError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSuggestExclusionUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSuggestExclusionForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSuggestExclusionBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSuggestExclusionNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSuggestExclusionConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSuggestExclusionUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSuggestExclusionInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSuggestExclusionInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSuggestExclusionUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSuggestExclusionGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeTestDetectionRuleResponse returns an encoder for responses returned by
 // the risk testDetectionRule endpoint.
 func EncodeTestDetectionRuleResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -9808,6 +11038,22 @@ func EncodeDeleteRiskEvalReviewError(encoder func(context.Context, http.Response
 	}
 }
 
+// unmarshalRiskDetectionScopeRequestBodyToTypesRiskDetectionScope builds a
+// value of type *types.RiskDetectionScope from a value of type
+// *RiskDetectionScopeRequestBody.
+func unmarshalRiskDetectionScopeRequestBodyToTypesRiskDetectionScope(v *RiskDetectionScopeRequestBody) *types.RiskDetectionScope {
+	if v == nil {
+		return nil
+	}
+	res := &types.RiskDetectionScope{
+		Category:     *v.Category,
+		ScopeInclude: v.ScopeInclude,
+		ScopeExempt:  v.ScopeExempt,
+	}
+
+	return res
+}
+
 // unmarshalRiskPolicyModelConfigRequestBodyToTypesRiskPolicyModelConfig builds
 // a value of type *types.RiskPolicyModelConfig from a value of type
 // *RiskPolicyModelConfigRequestBody.
@@ -9819,6 +11065,22 @@ func unmarshalRiskPolicyModelConfigRequestBodyToTypesRiskPolicyModelConfig(v *Ri
 		Model:       v.Model,
 		Temperature: v.Temperature,
 		FailOpen:    v.FailOpen,
+	}
+
+	return res
+}
+
+// marshalTypesRiskDetectionScopeToRiskDetectionScopeResponseBody builds a
+// value of type *RiskDetectionScopeResponseBody from a value of type
+// *types.RiskDetectionScope.
+func marshalTypesRiskDetectionScopeToRiskDetectionScopeResponseBody(v *types.RiskDetectionScope) *RiskDetectionScopeResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &RiskDetectionScopeResponseBody{
+		Category:     v.Category,
+		ScopeInclude: v.ScopeInclude,
+		ScopeExempt:  v.ScopeExempt,
 	}
 
 	return res
@@ -9854,9 +11116,11 @@ func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPo
 		Enabled:                v.Enabled,
 		Action:                 v.Action,
 		AudienceType:           v.AudienceType,
+		ShadowMcpDisposition:   v.ShadowMcpDisposition,
 		AutoName:               v.AutoName,
 		UserMessage:            v.UserMessage,
 		Prompt:                 v.Prompt,
+		Score:                  v.Score,
 		Version:                v.Version,
 		CreatedAt:              v.CreatedAt,
 		UpdatedAt:              v.UpdatedAt,
@@ -9887,6 +11151,16 @@ func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPo
 		res.ApprovedEmailDomains = make([]string, len(v.ApprovedEmailDomains))
 		for i, val := range v.ApprovedEmailDomains {
 			res.ApprovedEmailDomains[i] = val
+		}
+	}
+	if v.DetectionScopes != nil {
+		res.DetectionScopes = make([]*RiskDetectionScopeResponseBody, len(v.DetectionScopes))
+		for i, val := range v.DetectionScopes {
+			if val == nil {
+				res.DetectionScopes[i] = nil
+				continue
+			}
+			res.DetectionScopes[i] = marshalTypesRiskDetectionScopeToRiskDetectionScopeResponseBody(val)
 		}
 	}
 	if v.DisabledRules != nil {
@@ -9968,23 +11242,25 @@ func marshalRiskBuiltinExclusionEntryToBuiltinExclusionEntryResponseBody(v *risk
 // *RiskResultResponseBody from a value of type *types.RiskResult.
 func marshalTypesRiskResultToRiskResultResponseBody(v *types.RiskResult) *RiskResultResponseBody {
 	res := &RiskResultResponseBody{
-		ID:            v.ID,
-		PolicyID:      v.PolicyID,
-		PolicyVersion: v.PolicyVersion,
-		BlockID:       v.BlockID,
-		ChatMessageID: v.ChatMessageID,
-		ChatID:        v.ChatID,
-		ChatTitle:     v.ChatTitle,
-		UserID:        v.UserID,
-		Source:        v.Source,
-		RuleID:        v.RuleID,
-		Description:   v.Description,
-		Match:         v.Match,
-		StartPos:      v.StartPos,
-		EndPos:        v.EndPos,
-		Confidence:    v.Confidence,
-		MatchRedacted: v.MatchRedacted,
-		CreatedAt:     v.CreatedAt,
+		ID:                v.ID,
+		PolicyID:          v.PolicyID,
+		PolicyVersion:     v.PolicyVersion,
+		BlockID:           v.BlockID,
+		ChatMessageID:     v.ChatMessageID,
+		ChatContentPartID: v.ChatContentPartID,
+		ChatID:            v.ChatID,
+		ChatTitle:         v.ChatTitle,
+		UserID:            v.UserID,
+		Source:            v.Source,
+		RuleID:            v.RuleID,
+		Description:       v.Description,
+		Match:             v.Match,
+		StartPos:          v.StartPos,
+		EndPos:            v.EndPos,
+		Confidence:        v.Confidence,
+		MatchRedacted:     v.MatchRedacted,
+		CreatedAt:         v.CreatedAt,
+		FalsePositiveAt:   v.FalsePositiveAt,
 	}
 	if v.Tags != nil {
 		res.Tags = make([]string, len(v.Tags))
@@ -10028,20 +11304,21 @@ func marshalTypesRiskSpanToRiskSpanResponseBody(v *types.RiskSpan) *RiskSpanResp
 // *types.RiskResultRedacted.
 func marshalTypesRiskResultRedactedToRiskResultRedactedResponseBody(v *types.RiskResultRedacted) *RiskResultRedactedResponseBody {
 	res := &RiskResultRedactedResponseBody{
-		ID:            v.ID,
-		PolicyID:      v.PolicyID,
-		PolicyVersion: v.PolicyVersion,
-		ChatMessageID: v.ChatMessageID,
-		ChatID:        v.ChatID,
-		ChatTitle:     v.ChatTitle,
-		UserID:        v.UserID,
-		Source:        v.Source,
-		RuleID:        v.RuleID,
-		Description:   v.Description,
-		MatchRedacted: v.MatchRedacted,
-		PositionKnown: v.PositionKnown,
-		Confidence:    v.Confidence,
-		CreatedAt:     v.CreatedAt,
+		ID:                v.ID,
+		PolicyID:          v.PolicyID,
+		PolicyVersion:     v.PolicyVersion,
+		ChatMessageID:     v.ChatMessageID,
+		ChatContentPartID: v.ChatContentPartID,
+		ChatID:            v.ChatID,
+		ChatTitle:         v.ChatTitle,
+		UserID:            v.UserID,
+		Source:            v.Source,
+		RuleID:            v.RuleID,
+		Description:       v.Description,
+		MatchRedacted:     v.MatchRedacted,
+		PositionKnown:     v.PositionKnown,
+		Confidence:        v.Confidence,
+		CreatedAt:         v.CreatedAt,
 	}
 	if v.Tags != nil {
 		res.Tags = make([]string, len(v.Tags))
@@ -10151,12 +11428,16 @@ func marshalRiskRiskOverviewTimeSeriesFindingToRiskOverviewTimeSeriesFindingResp
 // *risk.RiskCategoryDefinition.
 func marshalRiskRiskCategoryDefinitionToRiskCategoryDefinitionResponseBody(v *risk.RiskCategoryDefinition) *RiskCategoryDefinitionResponseBody {
 	res := &RiskCategoryDefinitionResponseBody{
-		Key:          v.Key,
-		Label:        v.Label,
-		Description:  v.Description,
-		Icon:         v.Icon,
-		Source:       v.Source,
-		RuleIDPrefix: v.RuleIDPrefix,
+		Key:                        v.Key,
+		Label:                      v.Label,
+		Description:                v.Description,
+		Icon:                       v.Icon,
+		Source:                     v.Source,
+		RuleIDPrefix:               v.RuleIDPrefix,
+		RecommendedScopeInclude:    v.RecommendedScopeInclude,
+		RecommendedScopeExempt:     v.RecommendedScopeExempt,
+		RecommendedScopeRationale:  v.RecommendedScopeRationale,
+		RecommendedScopeApplicable: v.RecommendedScopeApplicable,
 	}
 	if v.RuleIds != nil {
 		res.RuleIds = make([]string, len(v.RuleIds))
@@ -10165,6 +11446,90 @@ func marshalRiskRiskCategoryDefinitionToRiskCategoryDefinitionResponseBody(v *ri
 		}
 	} else {
 		res.RuleIds = []string{}
+	}
+
+	return res
+}
+
+// marshalRiskRiskExposureSliceToRiskExposureSliceResponseBody builds a value
+// of type *RiskExposureSliceResponseBody from a value of type
+// *risk.RiskExposureSlice.
+func marshalRiskRiskExposureSliceToRiskExposureSliceResponseBody(v *risk.RiskExposureSlice) *RiskExposureSliceResponseBody {
+	res := &RiskExposureSliceResponseBody{
+		Category: v.Category,
+		Findings: v.Findings,
+		Share:    v.Share,
+	}
+
+	return res
+}
+
+// marshalRiskRiskSignalToRiskSignalResponseBody builds a value of type
+// *RiskSignalResponseBody from a value of type *risk.RiskSignal.
+func marshalRiskRiskSignalToRiskSignalResponseBody(v *risk.RiskSignal) *RiskSignalResponseBody {
+	res := &RiskSignalResponseBody{
+		Key:              v.Key,
+		RuleID:           v.RuleID,
+		Category:         v.Category,
+		Description:      v.Description,
+		Severity:         v.Severity,
+		RiskScore:        v.RiskScore,
+		Findings:         v.Findings,
+		PreviousFindings: v.PreviousFindings,
+		Users:            v.Users,
+		Teams:            v.Teams,
+		FirstSeen:        v.FirstSeen,
+		LastSeen:         v.LastSeen,
+	}
+	if v.DetectionSources != nil {
+		res.DetectionSources = make([]string, len(v.DetectionSources))
+		for i, val := range v.DetectionSources {
+			res.DetectionSources[i] = val
+		}
+	} else {
+		res.DetectionSources = []string{}
+	}
+	if v.Apps != nil {
+		res.Apps = make([]string, len(v.Apps))
+		for i, val := range v.Apps {
+			res.Apps[i] = val
+		}
+	} else {
+		res.Apps = []string{}
+	}
+	if v.TopUsers != nil {
+		res.TopUsers = make([]*RiskSignalTopUserResponseBody, len(v.TopUsers))
+		for i, val := range v.TopUsers {
+			if val == nil {
+				res.TopUsers[i] = nil
+				continue
+			}
+			res.TopUsers[i] = marshalRiskRiskSignalTopUserToRiskSignalTopUserResponseBody(val)
+		}
+	} else {
+		res.TopUsers = []*RiskSignalTopUserResponseBody{}
+	}
+	if v.Sparkline != nil {
+		res.Sparkline = make([]int64, len(v.Sparkline))
+		for i, val := range v.Sparkline {
+			res.Sparkline[i] = val
+		}
+	} else {
+		res.Sparkline = []int64{}
+	}
+
+	return res
+}
+
+// marshalRiskRiskSignalTopUserToRiskSignalTopUserResponseBody builds a value
+// of type *RiskSignalTopUserResponseBody from a value of type
+// *risk.RiskSignalTopUser.
+func marshalRiskRiskSignalTopUserToRiskSignalTopUserResponseBody(v *risk.RiskSignalTopUser) *RiskSignalTopUserResponseBody {
+	res := &RiskSignalTopUserResponseBody{
+		Email:          v.Email,
+		ExternalUserID: v.ExternalUserID,
+		Team:           v.Team,
+		Findings:       v.Findings,
 	}
 
 	return res

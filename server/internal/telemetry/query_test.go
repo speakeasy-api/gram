@@ -13,7 +13,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -129,6 +132,57 @@ func insertAttributeClaudeAPIRequestLog(t *testing.T, ctx context.Context, proje
 	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "claude_code.api_request",
 		nil, nil, string(attrsJSON), "{}",
 		projectID, "claude-code:otel:logs", "claude-code")
+	require.NoError(t, err)
+}
+
+type liteLLMSpanParams struct {
+	projectID     string
+	timestamp     time.Time
+	chatID        string
+	callID        string
+	gramURN       string
+	eventURN      string
+	requestModel  string
+	responseModel string
+	email         string
+	inputTokens   int
+	outputTokens  int
+	cost          float64
+}
+
+func insertLiteLLMSpan(t *testing.T, ctx context.Context, p liteLLMSpanParams) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+	attributes := map[string]any{
+		"gen_ai.conversation.id":     p.chatID,
+		"gen_ai.request.model":       p.requestModel,
+		"gen_ai.usage.input_tokens":  p.inputTokens,
+		"gen_ai.usage.output_tokens": p.outputTokens,
+		"gen_ai.usage.total_tokens":  p.inputTokens + p.outputTokens,
+		"gen_ai.usage.cost":          p.cost,
+		"gram.event.urn":             p.eventURN,
+		"gram.hook.source":           "litellm",
+		"gram.litellm.call_id":       p.callID,
+		"gram.resource.urn":          p.gramURN,
+		"user.email":                 p.email,
+	}
+	if p.responseModel != "" {
+		attributes["gen_ai.response.model"] = p.responseModel
+	}
+	attrsJSON, err := json.Marshal(attributes)
+	require.NoError(t, err)
+	err = conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			trace_id, span_id, attributes, resource_attributes,
+			gram_project_id, gram_urn, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id.String(), p.timestamp.UnixNano(), p.timestamp.UnixNano(), "INFO", "LiteLLM model span",
+		nil, nil, string(attrsJSON), "{}", p.projectID, p.gramURN, "litellm")
 	require.NoError(t, err)
 }
 
@@ -319,6 +373,80 @@ func rowByGroup(t *testing.T, rows []*gen.QueryRow, group string) *gen.QueryRow 
 	return nil
 }
 
+func requireQueryOopsCode(t *testing.T, err error, code oops.Code) {
+	t.Helper()
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, code, oopsErr.Code)
+}
+
+func TestQuery_SkillVersionRejectsRangesBeyondRawRetention(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestLogsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	now := time.Now().UTC()
+	from := now.Add(-91 * 24 * time.Hour).Format(time.RFC3339)
+	to := now.Add(-90 * 24 * time.Hour).Format(time.RFC3339)
+	_, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		GroupBy: conv.PtrEmpty("department_name"),
+		TopN:    10,
+		SortBy:  "total_cost",
+	})
+	require.NoError(t, err, "aggregate dimensions retain their existing historical range behavior")
+	_, err = ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		GroupBy: conv.PtrEmpty("department_name"),
+		Filters: []*gen.QueryFilter{{Dimension: "skill_version", Values: []string{}}},
+		TopN:    10,
+		SortBy:  "total_cost",
+	})
+	require.NoError(t, err, "an empty skill_version filter must stay on the aggregate path")
+
+	_, err = ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		GroupBy: conv.PtrEmpty("skill_version"),
+		TopN:    10,
+		SortBy:  "total_cost",
+	})
+	requireQueryOopsCode(t, err, oops.CodeBadRequest)
+	require.ErrorContains(t, err, "limited to 90 days")
+}
+
+func TestQuery_SkillVersionRejectsPerRowGroupDimensions(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestLogsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	now := time.Now().UTC()
+	for _, dimension := range []string{"model", "query_source", "skill_name", "agent_name", "mcp_server_name", "mcp_tool_name"} {
+		_, err := ti.service.Query(ctx, &gen.QueryPayload{
+			From:    now.Add(-time.Hour).Format(time.RFC3339),
+			To:      now.Add(time.Hour).Format(time.RFC3339),
+			GroupBy: conv.PtrEmpty(dimension),
+			Filters: []*gen.QueryFilter{{Dimension: "skill_version", Values: []string{uuid.NewString()}}},
+			TopN:    10,
+			SortBy:  "total_cost",
+		})
+		requireQueryOopsCode(t, err, oops.CodeBadRequest)
+		require.ErrorContains(t, err, "can vary within a session")
+	}
+}
+
 func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 	t.Parallel()
 
@@ -334,7 +462,7 @@ func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
 	})
 
-	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
 
 	// Engineering: admin+dev ($0.25) and dev ($0.10). Sales: no roles ($0.50).
@@ -388,16 +516,26 @@ func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 	require.ElementsMatch(t, []string{"opus"}, eng.DimensionValues["model"])
 	require.ElementsMatch(t, []string{"claude-code", "cursor"}, eng.DimensionValues["hook_source"])
 	require.ElementsMatch(t, []string{"admin", "dev"}, eng.DimensionValues["role"])
-	// Unset dimensions are present as keys with empty (filtered) lists.
-	require.Empty(t, eng.DimensionValues["job_title"])
-	// billing_mode is the exception: unclassified rows surface as "" so a scope
-	// mixing metered and unclassified spend can never read as confidently metered.
+	// '' is a real value for groupable dimensions — it is the "(unset)" bucket a
+	// breakdown by that dimension would render, so the collected lists must
+	// count it (DNO-384 for billing_mode, DNO-425 generally): an entirely unset
+	// dimension collapses to the single "" bucket, and a mixed one (Engineering
+	// has a classified team/anthropic Claude row plus an unclassified cursor
+	// row) surfaces both so the slice reads as divisible.
+	require.ElementsMatch(t, []string{""}, eng.DimensionValues["job_title"])
 	require.ElementsMatch(t, []string{""}, eng.DimensionValues["billing_mode"])
+	require.ElementsMatch(t, []string{"team", ""}, eng.DimensionValues["account_type"])
+	require.ElementsMatch(t, []string{"anthropic", ""}, eng.DimensionValues["provider"])
+	// Attribution dims are the exception (emptyIsNotApplicable): '' there marks
+	// rows the attribute doesn't apply to, not an "(unset)" slice, so it stays
+	// filtered out.
+	require.Empty(t, eng.DimensionValues["skill_name"])
 
-	// Sales had a single role-less user; its email surfaces and role is empty.
+	// Sales had a single role-less user; its email surfaces and its empty roles
+	// array collapses to the "(unset)" role bucket.
 	sales := rowByGroup(t, deptResult.Table, "Sales")
 	require.ElementsMatch(t, []string{"c@x.com"}, sales.DimensionValues["email"])
-	require.Empty(t, sales.DimensionValues["role"])
+	require.ElementsMatch(t, []string{""}, sales.DimensionValues["role"])
 
 	// Group by role: dev gets both Engineering rows ($0.35), admin one ($0.25),
 	// and Sales' role-less spend surfaces under the empty-string group ($0.50).
@@ -444,6 +582,273 @@ func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 	require.Len(t, totalResult.Timeseries, 1)
 }
 
+func TestQuery_SkillVersionAttributesFullSessionsWithoutDuplicateMappings(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestLogsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	projectID := uuid.MustParse(ti.projectID)
+	foreignProjectID := uuid.New()
+	versionOne := uuid.New()
+	versionTwo := uuid.New()
+	skillID := uuid.New()
+	now := time.Now().UTC().Truncate(time.Hour)
+	sessionOne := uuid.NewString()
+	sessionTwo := uuid.NewString()
+	assistantSession := uuid.NewString()
+	toolOnlySession := uuid.NewString()
+	outsideSession := uuid.NewString()
+	foreignSession := uuid.NewString()
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID.String(), now, sessionOne, 0.25, 10, 5, 2, 1, "opus", "a@x.com", "Engineering", nil, "main", "", "", "", "")
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID.String(), now.Add(10*time.Minute), sessionTwo, 0.40, 20, 10, 3, 2, "sonnet", "b@x.com", "Engineering", nil, "main", "", "", "", "")
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID.String(), now.Add(70*time.Minute), sessionTwo, 0.10, 4, 1, 0, 0, "sonnet", "b@x.com", "Engineering", nil, "main", "", "", "", "")
+	insertAttributeGramCompletionLog(t, ctx, projectID.String(), now.Add(20*time.Minute), assistantSession, 0.30, 12, "sonnet", "assistants", "assistant@x.com", "Product", nil)
+	insertAttributeClaudeToolResultLog(t, ctx, projectID.String(), now.Add(30*time.Minute), toolOnlySession, uuid.NewString(), "Read", "tools@x.com", "Engineering")
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID.String(), now.Add(-3*time.Hour), outsideSession, 0.80, 40, 20, 0, 0, "opus", "c@x.com", "Sales", nil, "main", "", "", "", "")
+	insertAttributeClaudeAPIRequestLog(t, ctx, foreignProjectID.String(), now, foreignSession, 1.00, 50, 25, 0, 0, "opus", "d@x.com", "Sales", nil, "main", "", "", "", "")
+
+	mapping := func(id uuid.UUID, mappedProjectID uuid.UUID, sessionID string, versionID uuid.UUID) telemetryrepo.SkillSessionVersion {
+		return telemetryrepo.SkillSessionVersion{
+			ID:              id,
+			CreatedAt:       now,
+			SeenAt:          now,
+			OrganizationID:  ti.orgID,
+			ProjectID:       mappedProjectID,
+			SessionID:       sessionID,
+			SkillID:         skillID,
+			SkillVersionID:  versionID,
+			CanonicalSHA256: uuid.NewString(),
+			Surface:         "dev",
+		}
+	}
+	assistantMapping := mapping(uuid.New(), projectID, assistantSession, versionTwo)
+	assistantMapping.Surface = "assistant"
+	require.NoError(t, ti.chClient.InsertSkillSessionVersions(ctx, []telemetryrepo.SkillSessionVersion{
+		mapping(uuid.New(), projectID, sessionOne, versionOne),
+		mapping(uuid.New(), projectID, sessionOne, versionOne),
+		mapping(uuid.New(), projectID, sessionTwo, versionOne),
+		mapping(uuid.New(), projectID, sessionTwo, versionTwo),
+		mapping(uuid.New(), projectID, toolOnlySession, versionOne),
+		assistantMapping,
+		mapping(uuid.New(), projectID, outsideSession, versionOne),
+		mapping(uuid.New(), foreignProjectID, foreignSession, versionOne),
+	}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	from := now.Add(-time.Hour).Format(time.RFC3339)
+	to := now.Add(2 * time.Hour).Format(time.RFC3339)
+	grouped, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		GroupBy: conv.PtrEmpty("skill_version"),
+		TopN:    10,
+		SortBy:  "total_cost",
+	})
+	require.NoError(t, err)
+	require.Len(t, grouped.Table, 2)
+	costs := tableCostByGroup(grouped.Table)
+	require.InDelta(t, 0.75, costs[versionOne.String()], 1e-9)
+	require.InDelta(t, 0.80, costs[versionTwo.String()], 1e-9)
+	versionOneRow := rowByGroup(t, grouped.Table, versionOne.String())
+	versionTwoRow := rowByGroup(t, grouped.Table, versionTwo.String())
+	require.Equal(t, int64(53), versionOneRow.Measures.TotalTokens)
+	require.Equal(t, int64(49), versionTwoRow.Measures.TotalTokens)
+	require.Equal(t, int64(2), versionOneRow.Measures.TotalChats, "tool-call-only sessions must not count as chats")
+	require.Equal(t, int64(2), versionTwoRow.Measures.TotalChats)
+	require.Equal(t, int64(1), versionOneRow.Measures.TotalToolCalls)
+
+	var versionTwoSeries *gen.QuerySeries
+	for _, series := range grouped.Timeseries {
+		if series.GroupValue == versionTwo.String() {
+			versionTwoSeries = series
+			break
+		}
+	}
+	require.NotNil(t, versionTwoSeries)
+	seriesCosts := make(map[string]float64, len(versionTwoSeries.Points))
+	for _, point := range versionTwoSeries.Points {
+		seriesCosts[point.BucketTimeUnixNano] = point.Measures.TotalCost
+	}
+	require.InDelta(t, 0.80, seriesCosts[strconv.FormatInt(now.UnixNano(), 10)], 1e-9, "whole sessions belong in their session-start bucket")
+	require.Zero(t, seriesCosts[strconv.FormatInt(now.Add(time.Hour).UnixNano(), 10)])
+
+	filtered, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		Filters: []*gen.QueryFilter{{Dimension: "skill_version", Values: []string{versionTwo.String(), uuid.NewString()}}},
+		TopN:    10,
+		SortBy:  "total_cost",
+	})
+	require.NoError(t, err)
+	require.Len(t, filtered.Table, 1)
+	require.InDelta(t, 0.80, filtered.Table[0].Measures.TotalCost, 1e-9)
+
+	repeatedFilters, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		GroupBy: conv.PtrEmpty("skill_version"),
+		Filters: []*gen.QueryFilter{
+			{Dimension: "skill_version", Values: []string{versionOne.String()}},
+			{Dimension: "skill_version", Values: []string{versionTwo.String()}},
+		},
+		TopN:   10,
+		SortBy: "total_cost",
+	})
+	require.NoError(t, err)
+	require.Len(t, repeatedFilters.Table, 2)
+	repeatedCosts := tableCostByGroup(repeatedFilters.Table)
+	require.InDelta(t, 0.50, repeatedCosts[versionOne.String()], 1e-9)
+	require.InDelta(t, 0.50, repeatedCosts[versionTwo.String()], 1e-9)
+
+	byDepartment, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		GroupBy: conv.PtrEmpty("department_name"),
+		Filters: []*gen.QueryFilter{{Dimension: "skill_version", Values: []string{versionOne.String()}}},
+		TopN:    10,
+		SortBy:  "total_cost",
+	})
+	require.NoError(t, err)
+	require.Len(t, byDepartment.Table, 1)
+	require.Equal(t, "Engineering", byDepartment.Table[0].GroupValue)
+	require.InDelta(t, 0.75, byDepartment.Table[0].Measures.TotalCost, 1e-9)
+
+	normal, err := ti.service.Query(ctx, &gen.QueryPayload{From: from, To: to, TopN: 10, SortBy: "total_cost"})
+	require.NoError(t, err)
+	require.Len(t, normal.Table, 1)
+	require.InDelta(t, 0.75, normal.Table[0].Measures.TotalCost, 1e-9, "normal aggregate queries must not fan out through mappings")
+}
+
+// insertAttributeClaudeAPIRequestLogWithHostname inserts a Claude api_request
+// row whose identity is only what the caller supplies: email and/or the device
+// hostname (gram.hook.hostname), either of which may be empty. Exercises the
+// email dimension's hostname fallback.
+func insertAttributeClaudeAPIRequestLogWithHostname(t *testing.T, ctx context.Context, projectID string, timestamp time.Time, chatID string, cost float64, email, hostname string) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	attributes := map[string]any{
+		"gen_ai.conversation.id": chatID,
+		"prompt.id":              uuid.NewString(),
+		"event.name":             "api_request",
+		"input_tokens":           10,
+		"output_tokens":          5,
+		"cost_usd":               cost,
+		"model":                  "opus",
+		"gram.hook.source":       "claude-code",
+		"gram.provider":          "anthropic",
+		"gram.account_type":      "team",
+	}
+	if email != "" {
+		attributes["user.email"] = email
+	}
+	if hostname != "" {
+		attributes["gram.hook.hostname"] = hostname
+	}
+
+	attrsJSON, err := json.Marshal(attributes)
+	require.NoError(t, err)
+
+	err = conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			trace_id, span_id, attributes, resource_attributes,
+			gram_project_id, gram_urn, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "claude_code.api_request",
+		nil, nil, string(attrsJSON), "{}",
+		projectID, "claude-code:otel:logs", "claude-code")
+	require.NoError(t, err)
+}
+
+func TestQuery_EmailFallsBackToHostname(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
+	ts := now.Add(-10 * time.Minute)
+
+	// An identified user (email wins over their hostname), a company-credential
+	// session with hooks (hostname only), and a session with no identity at all.
+	insertAttributeClaudeAPIRequestLogWithHostname(t, ctx, projectID, ts, uuid.NewString(), 0.25, "a@x.com", "daves-mbp.local")
+	insertAttributeClaudeAPIRequestLogWithHostname(t, ctx, projectID, ts, uuid.NewString(), 0.40, "", "ci-runner-1")
+	insertAttributeClaudeAPIRequestLogWithHostname(t, ctx, projectID, ts, uuid.NewString(), 0.10, "", "")
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	// The MV materializes synchronously with the insert; only the async insert
+	// queue needs draining for the rows to become visible deterministically.
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	// Group by email: the identified user keeps their address, the emailless
+	// session surfaces under its hostname, and only the identity-less row
+	// remains in the '' bucket.
+	result, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		GroupBy: conv.PtrEmpty("email"),
+		TopN:    10,
+		SortBy:  "total_cost",
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Table, 3)
+
+	cost := tableCostByGroup(result.Table)
+	require.InDelta(t, 0.25, cost["a@x.com"], 1e-9)
+	require.InDelta(t, 0.40, cost["ci-runner-1"], 1e-9)
+	require.InDelta(t, 0.10, cost[""], 1e-9)
+
+	// A hostname bucket is drillable: filtering the email dimension on the
+	// hostname value narrows to that device's spend.
+	drill, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		Filters: []*gen.QueryFilter{{Dimension: "email", Values: []string{"ci-runner-1"}}},
+		TopN:    10,
+		SortBy:  "total_cost",
+	})
+	require.NoError(t, err)
+	require.Len(t, drill.Table, 1)
+	require.InDelta(t, 0.40, drill.Table[0].Measures.TotalCost, 1e-9)
+
+	// The standalone Device dimension groups by hostname alone — here the
+	// identified user's spend surfaces under their machine too, unlike the
+	// email dimension where the address wins.
+	byHost, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:    from,
+		To:      to,
+		GroupBy: conv.PtrEmpty("hostname"),
+		TopN:    10,
+		SortBy:  "total_cost",
+	})
+	require.NoError(t, err)
+	hostCost := tableCostByGroup(byHost.Table)
+	require.InDelta(t, 0.25, hostCost["daves-mbp.local"], 1e-9)
+	require.InDelta(t, 0.40, hostCost["ci-runner-1"], 1e-9)
+	require.InDelta(t, 0.10, hostCost[""], 1e-9)
+}
+
 func TestQuery_DefaultSortByAndTopN(t *testing.T) {
 	t.Parallel()
 
@@ -458,7 +863,7 @@ func TestQuery_DefaultSortByAndTopN(t *testing.T) {
 		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
 	})
 
-	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
 	for i := range 12 {
 		dept := "D" + strconv.Itoa(i+1)
@@ -508,7 +913,7 @@ func TestQuery_CountsToolCalls(t *testing.T) {
 		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
 	})
 
-	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
 	chatID := uuid.NewString()
 
@@ -579,7 +984,7 @@ func TestQuery_FallsBackToRowCountedToolCalls(t *testing.T) {
 		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
 	})
 
-	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
 	insertAttributePreDedupSummaryRow(t, ctx, projectID, now.Add(-1*time.Hour), 3, 0.75)
 
 	from := now.Add(-2 * time.Hour).Format(time.RFC3339)
@@ -622,7 +1027,7 @@ func TestQuery_ExcludesAssistantChatCompletions(t *testing.T) {
 		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
 	})
 
-	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
 	insertAttributeGramCompletionLog(t, ctx, projectID, ts, uuid.NewString(), 0.42, 25, "openai/gpt-5.4", "assistants", "assistant@example.com", "Engineering", []string{"dev"})
 	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, ts, uuid.NewString(), 0.25, 15, 0, 0, 0, "opus", "claude@example.com", "Engineering", nil, "main", "", "", "", "")
@@ -653,6 +1058,75 @@ func TestQuery_ExcludesAssistantChatCompletions(t *testing.T) {
 	require.InDelta(t, 0.25, result.Table[0].Measures.TotalCost, 1e-9)
 }
 
+func TestQuery_IncludesOnlyCanonicalLiteLLMModelSpans(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
+	base := liteLLMSpanParams{
+		projectID: projectID, timestamp: now.Add(-10 * time.Minute), chatID: uuid.NewString(), callID: uuid.NewString(),
+		gramURN: "litellm:otel:traces", eventURN: "urn:telemetry:provider_otel:span:chat",
+		requestModel: "model-group", responseModel: "openai/gpt-4o", email: "litellm@example.test",
+		inputTokens: 11, outputTokens: 7, cost: 0.125,
+	}
+	insertLiteLLMSpan(t, ctx, base)
+	operational := base
+	operational.eventURN = "urn:telemetry:provider_otel:span:unknown"
+	insertLiteLLMSpan(t, ctx, operational)
+	metric := base
+	metric.eventURN = "urn:telemetry:provider_otel:metric:usage"
+	insertLiteLLMSpan(t, ctx, metric)
+	metricResource := metric
+	metricResource.gramURN = "litellm:otel:metrics"
+	insertLiteLLMSpan(t, ctx, metricResource)
+	spoofed := base
+	spoofed.gramURN = "other:otel:traces"
+	insertLiteLLMSpan(t, ctx, spoofed)
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, base.timestamp, uuid.NewString(), 0.25, 20, 5, 0, 0, "opus", "claude@example.test", "Engineering", nil, "main", "", "", "", "")
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+	var result *gen.QueryResult
+	require.Eventually(t, func() bool {
+		res, err := ti.service.Query(ctx, &gen.QueryPayload{
+			From: from, To: to, GroupBy: conv.PtrEmpty("hook_source"),
+			TopN: 10, SortBy: "total_cost",
+		})
+		if err != nil || res == nil || len(res.Table) != 2 {
+			return false
+		}
+		result = res
+		return res.Table[0].GroupValue == "claude-code" && res.Table[1].GroupValue == "litellm"
+	}, 10*time.Second, 200*time.Millisecond)
+
+	require.EqualValues(t, 20, result.Table[0].Measures.TotalInputTokens)
+	require.EqualValues(t, 5, result.Table[0].Measures.TotalOutputTokens)
+	require.EqualValues(t, 25, result.Table[0].Measures.TotalTokens)
+	require.InDelta(t, 0.25, result.Table[0].Measures.TotalCost, 1e-9)
+	require.EqualValues(t, 11, result.Table[1].Measures.TotalInputTokens)
+	require.EqualValues(t, 7, result.Table[1].Measures.TotalOutputTokens)
+	require.EqualValues(t, 18, result.Table[1].Measures.TotalTokens)
+	require.InDelta(t, 0.125, result.Table[1].Measures.TotalCost, 1e-9)
+
+	filtered, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From: from, To: to, GroupBy: conv.PtrEmpty("hook_source"),
+		Filters: []*gen.QueryFilter{{Dimension: "hook_source", Values: []string{"litellm"}}},
+		TopN:    10, SortBy: "total_cost",
+	})
+	require.NoError(t, err)
+	require.Len(t, filtered.Table, 1)
+	require.Equal(t, "litellm", filtered.Table[0].GroupValue)
+}
+
 func TestQuery_AttributesClaudeAPIRequestByMCPAndSkill(t *testing.T) {
 	t.Parallel()
 
@@ -667,7 +1141,7 @@ func TestQuery_AttributesClaudeAPIRequestByMCPAndSkill(t *testing.T) {
 		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
 	})
 
-	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
 	chatID := uuid.NewString()
 
@@ -697,7 +1171,8 @@ func TestQuery_AttributesClaudeAPIRequestByMCPAndSkill(t *testing.T) {
 	require.InDelta(t, 0.40, row.Measures.TotalCost, 1e-9)
 	require.Equal(t, int64(10), row.Measures.TotalInputTokens)
 	require.Equal(t, int64(2), row.Measures.TotalOutputTokens)
-	require.Equal(t, int64(20), row.Measures.TotalTokens)
+	// input + output + cache writes; the 3 cache-read tokens are excluded.
+	require.Equal(t, int64(17), row.Measures.TotalTokens)
 	require.Equal(t, int64(3), row.Measures.CacheReadInputTokens)
 	require.Equal(t, int64(5), row.Measures.CacheCreationInputTokens)
 	require.ElementsMatch(t, []string{"git-skill"}, row.DimensionValues["skill_name"])
@@ -729,7 +1204,7 @@ func TestQuery_TopNRollupIntoOther(t *testing.T) {
 		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
 	})
 
-	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
 
 	// Four departments with distinct costs; top_n=2 keeps the two priciest and
@@ -779,34 +1254,60 @@ func TestQuery_TopNRollupIntoOther(t *testing.T) {
 	require.True(t, hasOther)
 }
 
-// insertChatEvidenceRow inserts a chat event row without token attributes —
-// the stored-session evidence the billed queries qualify chats on.
-func insertChatEvidenceRow(t *testing.T, ctx context.Context, projectID string, timestamp time.Time, chatID string) {
+// insertRetainedGramAggregateRow seeds attribute_metrics_summaries directly
+// with a Gram-hosted completion row, the shape RETAINED from before the
+// provenance-first MV cutover stopped admitting Gram completions. The
+// tokens-under-management reads must exclude these at read time — that
+// exclusion is untestable through the MV (it no longer ingests such rows),
+// hence the direct aggregate-state insert.
+func insertRetainedGramAggregateRow(t *testing.T, ctx context.Context, projectID string, timestamp time.Time, hookSource string, tokens int64) {
 	t.Helper()
 
 	conn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	id, err := uuid.NewV7()
-	require.NoError(t, err)
-
-	attributes := map[string]any{"gen_ai.conversation.id": chatID}
-	attrsJSON, err := json.Marshal(attributes)
-	require.NoError(t, err)
-
 	err = conn.Exec(ctx, `
-		INSERT INTO telemetry_logs (
-			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
-			trace_id, span_id, attributes, resource_attributes,
-			gram_project_id, gram_urn, service_name
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "chat message",
-		nil, nil, string(attrsJSON), "{}",
-		projectID, "chat:message", "gram-server")
+		INSERT INTO attribute_metrics_summaries (
+			gram_project_id, time_bucket,
+			department_name, job_title, employee_type, division_name, cost_center_name,
+			user_email, model, hook_source, roles, groups,
+			total_chats, total_input_tokens, total_output_tokens, total_tokens,
+			cache_read_input_tokens, cache_creation_input_tokens, total_cost,
+			total_tool_calls, unique_tool_calls,
+			account_type, provider, billing_mode,
+			query_source, skill_name, agent_name, mcp_server_name, mcp_tool_name,
+			generation, is_active, hook_hostname,
+			total_work_units, scored_cost, scored_tokens
+		)
+		SELECT
+			toUUID(?) AS gram_project_id,
+			toStartOfHour(fromUnixTimestamp64Nano(?)) AS time_bucket,
+			'' AS department_name, '' AS job_title, '' AS employee_type,
+			'' AS division_name, '' AS cost_center_name,
+			'' AS user_email, 'gram-model' AS model, ? AS hook_source,
+			[]::Array(String) AS roles, []::Array(String) AS groups,
+			uniqExactIfState(toString('retained-chat'), toUInt8(1)) AS total_chats,
+			sumIfState(toInt64(?), toUInt8(1)) AS total_input_tokens,
+			sumIfState(toInt64(0), toUInt8(1)) AS total_output_tokens,
+			sumIfState(toInt64(?), toUInt8(1)) AS total_tokens,
+			sumIfState(toInt64(0), toUInt8(1)) AS cache_read_input_tokens,
+			sumIfState(toInt64(0), toUInt8(1)) AS cache_creation_input_tokens,
+			sumIfState(toFloat64(0), toUInt8(1)) AS total_cost,
+			countIfState(toUInt8(0)) AS total_tool_calls,
+			uniqExactIfState(toString(''), toUInt8(0)) AS unique_tool_calls,
+			'' AS account_type, '' AS provider, '' AS billing_mode,
+			'' AS query_source, '' AS skill_name, '' AS agent_name,
+			'' AS mcp_server_name, '' AS mcp_tool_name,
+			toUInt8(0) AS generation, toUInt8(1) AS is_active,
+			'' AS hook_hostname,
+			sumIfState(toFloat64(0), toUInt8(0)) AS total_work_units,
+			sumIfState(toFloat64(0), toUInt8(0)) AS scored_cost,
+			sumIfState(toInt64(0), toUInt8(0)) AS scored_tokens
+	`, projectID, timestamp.UnixNano(), hookSource, tokens, tokens)
 	require.NoError(t, err)
 }
 
-func TestQueryTumDetails_CountsOnlyBilledCompletions(t *testing.T) {
+func TestQueryTumDetails_CountsOnlyObservedTraffic(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
@@ -820,54 +1321,28 @@ func TestQueryTumDetails_CountsOnlyBilledCompletions(t *testing.T) {
 		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
 	})
 
-	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
 
-	// A billed completion (playground, a registered usage source) with stored
-	// evidence, next to two populations that must not appear anywhere in the
-	// billing details: an assistants completion (Speakeasy covers assistants
-	// inference until BYOK, so the surface is deliberately unregistered) and
-	// a Claude Code fleet api_request observed via OTEL (agent-native token
-	// attributes, never part of the billed population).
-	playgroundChat := uuid.NewString()
-	assistantsChat := uuid.NewString()
-	insertAttributeGramCompletionLog(t, ctx, projectID, ts, playgroundChat, 0.42, 1000, "anthropic/claude-4.6", "playground", "user@example.com", "Engineering", []string{"dev"})
-	insertChatEvidenceRow(t, ctx, projectID, ts, playgroundChat)
-	insertAttributeGramCompletionLog(t, ctx, projectID, ts, assistantsChat, 0.13, 555, "openai/gpt-5.4", "assistants", "assistant@example.com", "Engineering", nil)
-	insertChatEvidenceRow(t, ctx, projectID, ts, assistantsChat)
-	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, ts, uuid.NewString(), 1.5, 999999, 0, 0, 0, "claude-4.6", "fleet@example.com", "Engineering", nil, "main", "", "", "", "")
+	// The tokens-under-management population: observed agent traffic. A
+	// Claude session with a huge cached prefix (input, output, and cache
+	// writes count — cache reads are excluded) and a Codex usage row.
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, ts, uuid.NewString(), 1.5, 1000, 200, 50000, 300, "claude-4.6", "fleet@example.com", "Engineering", []string{"dev"}, "main", "", "", "", "")
+	insertAttributeUsageLog(t, ctx, projectID, ts, uuid.NewString(), 0.2, 400, "gpt-5.4-codex", "codex", "codex@example.com", "Engineering", nil)
 
-	// The platform's scanning inference, billed under its own model section:
-	// a judge completion carrying the dedicated risk-analysis source (and the
-	// scanned user's identity), plus a legacy internal row from before the
-	// source existed — gram-tagged with the nil chat id, classified by the
-	// grandfather fingerprint.
-	riskChat := uuid.NewString()
-	nilChat := "00000000-0000-0000-0000-000000000000"
-	insertAttributeGramCompletionLog(t, ctx, projectID, ts, riskChat, 0.01, 300, "google/gemini-3.1-flash-lite", "risk-analysis", "scanned@example.com", "Engineering", nil)
-	insertChatEvidenceRow(t, ctx, projectID, ts, riskChat)
-	insertAttributeGramCompletionLog(t, ctx, projectID, ts, nilChat, 0.01, 70, "google/gemini-3.1-flash-lite", "gram", "", "", nil)
-	insertChatEvidenceRow(t, ctx, projectID, ts, nilChat)
+	// Gram-hosted completion rows retained in the aggregate from before the
+	// provenance-first cutover: a user-facing playground chat and the
+	// platform's scanning inference. Both are Gram-spent inference — never
+	// tokens under management — and must not appear anywhere in the details.
+	insertRetainedGramAggregateRow(t, ctx, projectID, ts, "playground", 777)
+	insertRetainedGramAggregateRow(t, ctx, projectID, ts, "risk-analysis", 333)
 
 	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
 	to := now.Add(1 * time.Hour).Format(time.RFC3339)
 
-	// Wait until BOTH gram completions materialized in the billing aggregate
-	// (the assistants chat included) so the exclusion assertions below cannot
-	// pass vacuously against a half-ingested view.
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	require.Eventually(t, func() bool {
-		row := chConn.QueryRow(ctx,
-			"SELECT count(DISTINCT chat_id) FROM tum_breakdown_summaries WHERE gram_project_id = ? AND chat_id IN (?, ?, ?, ?)",
-			projectID, playgroundChat, assistantsChat, riskChat, nilChat)
-		var chats uint64
-		if err := row.Scan(&chats); err != nil {
-			return false
-		}
-		return chats == 4
-	}, 10*time.Second, 200*time.Millisecond)
-
+	// The retained rows are direct aggregate inserts (visible immediately), so
+	// the totals below can only converge once BOTH observed rows materialized
+	// AND the exclusion holds — it cannot pass vacuously.
 	var result *gen.TumDetailsResult
 	require.Eventually(t, func() bool {
 		res, resErr := ti.service.QueryTumDetails(ctx, &gen.QueryTumDetailsPayload{
@@ -880,18 +1355,18 @@ func TestQueryTumDetails_CountsOnlyBilledCompletions(t *testing.T) {
 			return false
 		}
 		result = res
-		// The stored-evidence rows qualify the chats asynchronously too.
-		return res.Totals.TotalTokens == 1370
+		return res.Totals.TotalTokens == 1900
 	}, 10*time.Second, 200*time.Millisecond)
 
-	require.Equal(t, int64(1370), result.Totals.InputTokens, "the fixture reports all tokens as input")
-	require.Equal(t, int64(0), result.Totals.OutputTokens)
+	require.Equal(t, int64(1400), result.Totals.InputTokens)
+	require.Equal(t, int64(200), result.Totals.OutputTokens)
+	require.Equal(t, int64(300), result.Totals.CacheCreationTokens)
 
 	var pointSum int64
 	for _, p := range result.Points {
 		pointSum += p.TotalTokens
 	}
-	require.Equal(t, int64(1370), pointSum, "daily points must only count the billed completions")
+	require.Equal(t, int64(1900), pointSum, "daily points must only count the observed traffic, minus cache reads")
 
 	rowsByKey := map[string]map[string]int64{}
 	for _, b := range result.Breakdowns {
@@ -900,20 +1375,22 @@ func TestQueryTumDetails_CountsOnlyBilledCompletions(t *testing.T) {
 			rowsByKey[b.Key][row.Value] = row.TotalTokens
 		}
 	}
-	require.Equal(t, map[string]int64{"playground": 1000, "risk-analysis": 300, "gram": 70}, rowsByKey["hook_source"],
-		"the source breakdown holds exactly the billed surfaces")
-	// The two model sections partition the billed population: user-facing
-	// completions vs the platform's scanning inference (declared tag and the
-	// grandfathered nil-chat gram row alike).
-	require.Equal(t, map[string]int64{"anthropic/claude-4.6": 1000}, rowsByKey["completion_model"])
-	require.Equal(t, map[string]int64{"google/gemini-3.1-flash-lite": 370}, rowsByKey["risk_analysis_model"])
-	// Scanned-user attribution flows into the billed rows, but a per-user
-	// (email) cut is deliberately not served to the billing page yet.
-	require.NotContains(t, rowsByKey, "email")
-	require.Equal(t, map[string]int64{"dev": 1000}, rowsByKey["role"])
-	// The fixture carries no division attribute; the tokens land on the ''
+	require.Equal(t, map[string]int64{"claude-code": 1500, "codex": 400}, rowsByKey["hook_source"],
+		"the agent breakdown holds exactly the observed surfaces — no Gram-hosted rows")
+	require.Equal(t, map[string]int64{"claude-4.6": 1500, "gpt-5.4-codex": 400}, rowsByKey["model"])
+	require.Equal(t, map[string]int64{"anthropic": 1500, "": 400}, rowsByKey["provider"])
+	require.Equal(t, map[string]int64{"team": 1500, "": 400}, rowsByKey["account_type"])
+	// Observed traffic attributes to the session's user.
+	require.Equal(t, map[string]int64{"fleet@example.com": 1500, "codex@example.com": 400}, rowsByKey["email"])
+	require.Equal(t, map[string]int64{"Engineering": 1900}, rowsByKey["department_name"])
+	// Role-less traffic (the codex row) lands on the '' row rather than
+	// vanishing from the section (arrayJoin on an empty array emits nothing).
+	require.Equal(t, map[string]int64{"dev": 1500, "": 400}, rowsByKey["role"])
+	// The fixtures carry no division attribute; the tokens land on the ''
 	// row (labeled by the frontend).
-	require.Equal(t, map[string]int64{"": 1370}, rowsByKey["division_name"])
+	require.Equal(t, map[string]int64{"": 1900}, rowsByKey["division_name"])
+	// Project rows carry the project UUID; the frontend maps it to a name.
+	require.Equal(t, map[string]int64{projectID: 1900}, rowsByKey["project_id"])
 }
 
 func TestQueryTumDetails_IncludesDeletedProjects(t *testing.T) {
@@ -940,15 +1417,11 @@ func TestQueryTumDetails_IncludesDeletedProjects(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	now := time.Date(2026, time.June, 20, 1, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
 	ts := now.Add(-10 * time.Minute)
 
-	liveChat := uuid.NewString()
-	doomedChat := uuid.NewString()
-	insertAttributeGramCompletionLog(t, ctx, projectID, ts, liveChat, 0.42, 1000, "anthropic/claude-4.6", "playground", "user@example.com", "Engineering", nil)
-	insertChatEvidenceRow(t, ctx, projectID, ts, liveChat)
-	insertAttributeGramCompletionLog(t, ctx, doomed.ID.String(), ts, doomedChat, 0.2, 250, "anthropic/claude-4.6", "playground", "user@example.com", "Engineering", nil)
-	insertChatEvidenceRow(t, ctx, doomed.ID.String(), ts, doomedChat)
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, ts, uuid.NewString(), 0.42, 1000, 0, 0, 0, "claude-4.6", "user@example.com", "Engineering", nil, "main", "", "", "", "")
+	insertAttributeClaudeAPIRequestLog(t, ctx, doomed.ID.String(), ts, uuid.NewString(), 0.2, 250, 0, 0, 0, "claude-4.6", "user@example.com", "Engineering", nil, "main", "", "", "", "")
 
 	_, err = projectsrepo.New(ti.conn).DeleteProject(ctx, doomed.ID)
 	require.NoError(t, err)

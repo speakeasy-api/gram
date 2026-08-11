@@ -3,6 +3,7 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
@@ -12,6 +13,10 @@ import {
 } from "./marketplacesettingsresult.js";
 
 export type UpdateMarketplaceSettingsResult = {
+  /**
+   * True when the new name reached the MCP plugins and marketplace manifests but the observability (hooks) plugin could not be updated yet because the organization is not approved for the latest hooks version; it will update automatically once the organization is rolled forward.
+   */
+  hooksUpdateDeferred?: boolean | undefined;
   /**
    * Whether the marketplace was automatically republished to GitHub as part of this update.
    */
@@ -23,10 +28,18 @@ export type UpdateMarketplaceSettingsResult = {
 export const UpdateMarketplaceSettingsResult$inboundSchema: z.ZodMiniType<
   UpdateMarketplaceSettingsResult,
   unknown
-> = z.object({
-  republished: z.boolean(),
-  settings: MarketplaceSettingsResult$inboundSchema,
-});
+> = z.pipe(
+  z.object({
+    hooks_update_deferred: z.optional(z.boolean()),
+    republished: z.boolean(),
+    settings: MarketplaceSettingsResult$inboundSchema,
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      "hooks_update_deferred": "hooksUpdateDeferred",
+    });
+  }),
+);
 
 export function updateMarketplaceSettingsResultFromJSON(
   jsonString: string,

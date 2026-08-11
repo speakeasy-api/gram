@@ -5,29 +5,27 @@
       "command": "mise",
       "args": ["x", "--", "go", "run", "./server/cmd/dev-mcp"]
     },
-    "madprocs": {
-      "type": "http",
-      "url": "https://localhost:35294/mcp"
+    "pitchfork": {
+      "command": "pitchfork",
+      "args": ["mcp"]
     },
     "mise": {
       "command": "mise",
       "args": ["mcp"],
-      "env": {
-        "MISE_EXPERIMENTAL": "1"
-      }
+      "env": { "MISE_EXPERIMENTAL": "1" }
     },
     "playwright": {
       "type": "stdio",
       "command": "npx",
       "args": [
+        "-y",
         "@playwright/mcp@latest",
         "--browser=chromium",
         "--viewport-size",
         "1920x1080",
         "--config",
         ".playwright-mcp.config.json"
-      ],
-      "env": {}
+      ]
     }
   }
 }

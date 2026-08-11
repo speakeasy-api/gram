@@ -1,17 +1,17 @@
-import { Heading } from "@/components/ui/heading";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { Text } from "@/components/ui/Text";
 import { dateTimeFormatters } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { useDeploymentSuspense } from "@gram/client/react-query/deployment.js";
 import { useDeploymentLogsSuspense } from "@gram/client/react-query/deploymentLogs.js";
-import { Icon, Input } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
+import { Input } from "@/components/ui/Input";
 import React, {
   useCallback,
   useDeferredValue,
@@ -25,10 +25,14 @@ import { useDeploymentSearchParams } from "./use-deployment-search-params";
 
 type LogLevel = "WARN" | "INFO" | "DEBUG" | "ERROR" | "OK" | "SKIP";
 
-// Uses design system tokens where available (destructive, warning, success, muted).
-// INFO/DEBUG have no semantic tokens — hardcoded Tailwind is intentional.
+// Uses design system tokens (destructive, warning, success, muted).
+// INFO/DEBUG are neutral ink — log levels are never blue in the editorial idiom.
 const levelColors = {
-  INFO: { dot: "bg-blue-500", text: "text-blue-700", bg: "bg-blue-50" },
+  INFO: {
+    dot: "bg-muted-foreground",
+    text: "text-muted-foreground",
+    bg: "bg-muted",
+  },
   WARN: { dot: "bg-warning", text: "text-warning", bg: "bg-warning/10" },
   ERROR: {
     dot: "bg-destructive",
@@ -73,6 +77,9 @@ const TIMESTAMP_PATTERNS = [
 ];
 
 const LEVEL_PATTERN = /^\[?(WARN|WARNING|INFO|DEBUG|ERROR|OK)\]?\s+(.*)$/i;
+
+/** Marks the log line targeted by j/k keyboard navigation. */
+const HIGHLIGHTED_LOG_CLASS = "ring-foreground/40 ring-1 ring-inset";
 
 function formatLogTimestamp(createdAt: string): string {
   const date = new Date(createdAt);
@@ -603,17 +610,15 @@ export const LogsTabContent = ({
 
   return (
     <>
-      <Heading variant="h2" className="mb-4">
-        Logs
-      </Heading>
+      <h2 className="text-eyebrow mb-4">Logs</h2>
 
       {/* Filters row */}
       {!embeddedMode && sourceOptions.length > 0 && (
         <div className="mb-4 flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1.5">
-            <Type small muted>
+            <Text small muted>
               Source
-            </Type>
+            </Text>
             <Select value={selectedSource} onValueChange={setSelectedSource}>
               <SelectTrigger size="sm" className="bg-background min-w-[180px]">
                 <SelectValue placeholder="All sources" />
@@ -636,7 +641,7 @@ export const LogsTabContent = ({
       )}
 
       {/* Logs container */}
-      <div className="bg-surface border-border relative overflow-hidden rounded-lg border">
+      <div className="bg-surface border-border relative overflow-hidden border">
         <div
           className={cn(
             "bg-surface/50 flex items-center gap-2 p-2 transition-all",
@@ -647,17 +652,17 @@ export const LogsTabContent = ({
             {searchQuery ? (
               <>
                 <span className="flex items-center gap-1">
-                  <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                  <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
                     N
                   </kbd>
                   <span>/</span>
-                  <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                  <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
                     ⇧N
                   </kbd>
                   <span className="ml-0.5">results</span>
                 </span>
                 <span className="flex items-center gap-1">
-                  <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                  <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
                     ESC
                   </kbd>
                   <span>clear</span>
@@ -666,23 +671,23 @@ export const LogsTabContent = ({
             ) : (
               <>
                 <span className="flex items-center gap-1">
-                  <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                  <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
                     J
                   </kbd>
                   <span>/</span>
-                  <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                  <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
                     K
                   </kbd>
                   <span className="ml-0.5">navigate</span>
                 </span>
                 <span className="flex items-center gap-1">
-                  <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                  <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
                     G
                   </kbd>
                   <span>first</span>
                 </span>
                 <span className="flex items-center gap-1">
-                  <kbd className="bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                  <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
                     ⇧G
                   </kbd>
                   <span>last</span>
@@ -701,15 +706,15 @@ export const LogsTabContent = ({
                 type="text"
                 placeholder="Search logs"
                 value={searchQuery}
-                onChange={(e) => handleSearchChange(e.target.value)}
+                onChange={handleSearchChange}
                 onFocus={() => setSearchInputFocused(true)}
                 onBlur={() => setSearchInputFocused(false)}
-                className="w-48 rounded-sm py-1 pr-16 pl-7 text-xs"
+                className="w-48 py-1 pr-16 pl-7 text-xs"
               />
               {searchQuery || searchInputFocused ? (
                 filteredIndices.length > 0 ? (
                   <div className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-0.5">
-                    <span className="text-muted-foreground bg-muted rounded-sm px-1 py-0.5 text-[10px]">
+                    <span className="text-muted-foreground bg-muted px-1 py-0.5 text-[10px]">
                       ESC
                     </span>
                     <span className="text-muted-foreground mx-0.5 text-[10px]">
@@ -718,14 +723,14 @@ export const LogsTabContent = ({
                     <div className="flex items-center">
                       <button
                         onClick={() => navigateToResult("prev")}
-                        className="hover:bg-muted rounded-sm p-0.5 opacity-60 transition-opacity hover:opacity-100"
+                        className="hover:bg-muted p-0.5 opacity-60 transition-opacity hover:opacity-100"
                         title="Previous (Shift+N)"
                       >
                         <Icon name="chevron-up" className="size-2.5" />
                       </button>
                       <button
                         onClick={() => navigateToResult("next")}
-                        className="hover:bg-muted rounded-sm p-0.5 opacity-60 transition-opacity hover:opacity-100"
+                        className="hover:bg-muted p-0.5 opacity-60 transition-opacity hover:opacity-100"
                         title="Next (N)"
                       >
                         <Icon name="chevron-down" className="size-2.5" />
@@ -734,7 +739,7 @@ export const LogsTabContent = ({
                   </div>
                 ) : (
                   <div className="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center gap-0.5">
-                    <span className="text-muted-foreground bg-muted rounded-sm px-1 py-0.5 text-[10px]">
+                    <span className="text-muted-foreground bg-muted px-1 py-0.5 text-[10px]">
                       ESC
                     </span>
                     <span className="text-muted-foreground ml-0.5 text-[10px]">
@@ -744,7 +749,7 @@ export const LogsTabContent = ({
                 )
               ) : (
                 <div className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center">
-                  <span className="text-muted-foreground bg-muted rounded-sm px-1 py-0.5 font-mono text-[10px]">
+                  <span className="text-muted-foreground bg-muted px-1 py-0.5 font-mono text-[10px]">
                     /
                   </span>
                 </div>
@@ -797,19 +802,18 @@ export const LogsTabContent = ({
                           `fallback-${globalIndex}`
                         }
                         className={cn(
-                          "relative px-3 py-1.5 transition-colors",
+                          "border-border/40 relative border-b border-l-2 border-l-transparent px-3 py-1.5 transition-colors",
                           "hover:bg-muted/20",
-                          isError && "bg-destructive/10 text-destructive",
-                          isWarn && "bg-warning/10 text-warning",
-                          isSkipped && "bg-muted/50 text-muted-foreground",
-                          isHighlighted &&
-                            "border-l-foreground border-l-4 pl-2",
+                          isError && "border-l-destructive text-destructive",
+                          isWarn && "border-l-warning text-warning",
+                          isSkipped && "text-muted-foreground",
+                          isHighlighted && HIGHLIGHTED_LOG_CLASS,
                         )}
                       >
                         <div className="flex min-w-0 items-center gap-2.5">
                           <span
                             className={cn(
-                              "size-1.5 shrink-0 rounded-full",
+                              "size-1.5 shrink-0",
                               getLevelColors(log.level).dot,
                             )}
                           />
@@ -829,7 +833,7 @@ export const LogsTabContent = ({
                           </span>
                           <span
                             className={cn(
-                              "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase",
+                              "shrink-0 px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase",
                               getLevelColors(log.level).bg,
                               getLevelColors(log.level).text,
                             )}
@@ -861,18 +865,18 @@ export const LogsTabContent = ({
                   }}
                   key={visibleEvents[index]?.id || `fallback-${index}`}
                   className={cn(
-                    "relative px-3 py-1.5 transition-colors",
+                    "border-border/40 relative border-b border-l-2 border-l-transparent px-3 py-1.5 transition-colors",
                     "hover:bg-muted/20",
-                    isError && "bg-destructive/10 text-destructive",
-                    isWarn && "bg-warning/10 text-warning",
-                    isSkipped && "bg-muted/50 text-muted-foreground",
-                    isHighlighted && "border-l-foreground border-l-4 pl-2",
+                    isError && "border-l-destructive text-destructive",
+                    isWarn && "border-l-warning text-warning",
+                    isSkipped && "text-muted-foreground",
+                    isHighlighted && HIGHLIGHTED_LOG_CLASS,
                   )}
                 >
                   <div className="flex min-w-0 items-center gap-2.5">
                     <span
                       className={cn(
-                        "size-1.5 shrink-0 rounded-full",
+                        "size-1.5 shrink-0",
                         getLevelColors(log.level).dot,
                       )}
                     />
@@ -890,7 +894,7 @@ export const LogsTabContent = ({
                     </span>
                     <span
                       className={cn(
-                        "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase",
+                        "shrink-0 px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase",
                         getLevelColors(log.level).bg,
                         getLevelColors(log.level).text,
                       )}
@@ -908,7 +912,7 @@ export const LogsTabContent = ({
         </div>
 
         {showBottomFade && (
-          <div className="from-background pointer-events-none absolute right-0 bottom-0 left-0 h-12 rounded-b-lg bg-gradient-to-t to-transparent" />
+          <div className="from-background pointer-events-none absolute right-0 bottom-0 left-0 h-12 bg-gradient-to-t to-transparent" />
         )}
       </div>
     </>

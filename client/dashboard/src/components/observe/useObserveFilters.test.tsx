@@ -17,7 +17,7 @@ vi.mock("@gram/client/react-query/members.js", () => ({
 vi.mock("@gram/client/react-query/roles.js", () => ({
   useRoles: vi.fn(),
 }));
-vi.mock("@gram/client/react-query", () => ({
+vi.mock("@gram/client/react-query/_context.js", () => ({
   useGramContext: () => ({}),
 }));
 vi.mock("@gram/client/funcs/telemetryGetHooksSummary", () => ({

@@ -1,20 +1,17 @@
-import "@speakeasy-api/moonshine/moonshine.css";
-import "./App.css"; // Import this second to override certain values in moonshine.css
+import "./App.css";
+import NotFound from "@/pages/not-found/NotFound";
 
-import { NuqsAdapter } from "nuqs/adapters/react-router/v7";
-import { Toaster } from "@/components/ui/sonner";
-import { TooltipProvider as LocalTooltipProvider } from "@/components/ui/tooltip";
-import { FontTexture, WebGLCanvas } from "@/components/webgl";
-import {
-  MoonshineConfigProvider,
-  TooltipProvider,
-} from "@speakeasy-api/moonshine";
-import { useEffect, useMemo, useState } from "react";
+import { NuqsAdapter } from "nuqs/adapters/react-router/v8";
+import { Toaster } from "@/components/ui/Sonner";
+import { ConfigProvider } from "@/components/ui/context/ConfigContext";
+import { TooltipProvider } from "@/components/ui/Tooltip";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BrowserRouter,
   Route,
   Routes,
   useLocation,
+  useNavigate,
   useSearchParams,
 } from "react-router";
 import { AppLayout, LoginCheck, OrgLayout } from "./components/app-layout.tsx";
@@ -24,7 +21,7 @@ import {
   recordVisit,
   RECENTS_LABEL_OVERRIDE_EVENT,
 } from "./components/command-palette/recentlyVisited";
-import { useUser } from "./contexts/Auth";
+import { useIsPlatformAdmin, useUser } from "./contexts/Auth";
 import { useProjectNavRoutes } from "./hooks/useProjectNavRoutes";
 import { useRBAC } from "./hooks/useRBAC";
 import { AuthProvider, ProjectProvider } from "./contexts/AuthProvider.tsx";
@@ -34,19 +31,21 @@ import { CommandPaletteProvider } from "./contexts/CommandPaletteProvider";
 import { useSlugs } from "./contexts/Sdk.tsx";
 import { SdkProvider } from "./contexts/SdkProvider.tsx";
 import { TelemetryProvider } from "./contexts/TelemetryProvider.tsx";
-import { PlatformAdminToolbar } from "./components/platform-admin-toolbar";
 import { usePageTitle } from "./hooks/use-page-title";
 import { PREFERRED_THEME_STORAGE_KEY } from "./lib/local-storage-keys";
 import CliCallback from "./pages/cli/CliCallback";
 import ShadowMCPRequestAccess from "./pages/shadow-mcp/RequestAccess";
 import RiskPolicyChallengeAcknowledge from "./pages/risk-policy-challenge/Acknowledge";
 import { BlockPage } from "./pages/blocks/BlockDetail";
+import { SHARED_SKILL_BASE_PATH } from "./pages/skills/share-link";
+import { SharedSkillPage } from "./pages/skills/SharedSkillPage";
 import SwitchOrg from "./pages/demo/SwitchOrg";
+import TalkToUs from "./pages/demo/TalkToUs";
 import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
 
 export default function App(): JSX.Element {
   // Initialize from storage so React/Moonshine match the theme the pre-paint
-  // inline script (in index.html) already applied to <html> — avoids a flash.
+  // script (loaded from index.html) already applied to <html> — avoids a flash.
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     try {
       return localStorage.getItem(PREFERRED_THEME_STORAGE_KEY) === "dark"
@@ -95,25 +94,23 @@ export default function App(): JSX.Element {
   }, []);
 
   return (
-    <MoonshineConfigProvider theme={theme} setTheme={applyTheme}>
-      <LocalTooltipProvider>
-        <TooltipProvider>
-          <TelemetryProvider>
-            <CommandPaletteProvider>
-              <BrowserRouter>
-                <NuqsAdapter>
-                  <SdkProvider>
-                    <AppContent />
-                    <Toaster />
-                    <CommandPalette />
-                  </SdkProvider>
-                </NuqsAdapter>
-              </BrowserRouter>
-            </CommandPaletteProvider>
-          </TelemetryProvider>
-        </TooltipProvider>
-      </LocalTooltipProvider>
-    </MoonshineConfigProvider>
+    <ConfigProvider theme={theme} setTheme={applyTheme}>
+      <TooltipProvider>
+        <TelemetryProvider>
+          <CommandPaletteProvider>
+            <BrowserRouter>
+              <NuqsAdapter>
+                <SdkProvider>
+                  <AppContent />
+                  <Toaster />
+                  <CommandPalette />
+                </SdkProvider>
+              </NuqsAdapter>
+            </BrowserRouter>
+          </CommandPaletteProvider>
+        </TelemetryProvider>
+      </TooltipProvider>
+    </ConfigProvider>
   );
 }
 
@@ -130,10 +127,6 @@ function AppContent() {
    * 4. Authenticated user is redirected back to the component.
    */
   const cliFlow = useCliAuthFlow();
-  const location = useLocation();
-
-  // Only render WebGL canvas during onboarding
-  const isOnboarding = location.pathname.includes("/onboarding");
 
   if (cliFlow) {
     return (
@@ -152,14 +145,7 @@ function AppContent() {
   return (
     <AuthProvider>
       <ProjectProvider>
-        {isOnboarding && (
-          <>
-            <WebGLCanvas />
-            <FontTexture />
-          </>
-        )}
         <RouteProvider />
-        <PlatformAdminToolbar />
       </ProjectProvider>
     </AuthProvider>
   );
@@ -179,6 +165,39 @@ const RouteProvider = () => {
 
   // Update document title based on active route
   usePageTitle(routes, orgRoutes);
+
+  // Ctrl+Shift+D toggles between the Platform Admin pages and wherever the
+  // user was working — carried over from the retired floating Developer
+  // Toolkit, which used the same chord to unhide itself. First press remembers
+  // the current page and jumps to the Platform Admin overview; pressing it
+  // again from any Platform Admin page returns to the remembered page. Same
+  // audience rule as the pages: platform admins, or anyone in dev.
+  const isPlatformAdmin = useIsPlatformAdmin();
+  const goToPlatformAdmin = orgRoutes.platformAdminOverview.goTo;
+  const navigate = useNavigate();
+  const platformAdminReturnPath = useRef<string | null>(null);
+  useEffect(() => {
+    if (!(import.meta.env.DEV || isPlatformAdmin)) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey && e.shiftKey && e.key === "D")) return;
+      e.preventDefault();
+      // Test the route segment below :orgSlug specifically — an org whose
+      // slug is literally "platform-admin" must not be mistaken for the
+      // admin pages (which would turn the first press into a no-op).
+      const onPlatformAdminPage =
+        location.pathname.split("/").filter(Boolean)[1] === "platform-admin";
+      if (onPlatformAdminPage) {
+        const returnPath = platformAdminReturnPath.current;
+        platformAdminReturnPath.current = null;
+        if (returnPath) void navigate(returnPath);
+      } else {
+        platformAdminReturnPath.current = location.pathname + location.search;
+        goToPlatformAdmin();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isPlatformAdmin, goToPlatformAdmin, location, navigate]);
 
   // Record the visited page for the command palette's "Recently Visited"
   // section. Stored client-side (localStorage), scoped per workspace.
@@ -246,19 +265,32 @@ const RouteProvider = () => {
     const projectActions = projectSlug
       ? projectNavRoutes
           .filter(
-            ({ route, scope }) =>
+            ({ route, scope, resourceId }) =>
               !route.external &&
               route.component &&
               route.title &&
               // Mirror the sidebar's per-page scope gating so the palette never
               // offers (nor navigates to) pages the user can't access.
-              hasAnyScope(scope),
+              hasAnyScope(scope, resourceId),
           )
           .map(({ route }) =>
             routeToNavAction(route, "Pages", `nav-page-${route.url || "home"}`),
           )
       : [];
-    const orgActions = routesToNavActions(orgRoutes, "Organization", "nav-org");
+    // Platform admin surfaces (platform-admin/* and the platform RIP catalog)
+    // follow the sidebar's audience rule: platform admins, or anyone in local
+    // dev. Filtering here keeps them out of the palette for regular users.
+    const showPlatformAdmin = import.meta.env.DEV || isPlatformAdmin;
+    const paletteOrgRoutes = Object.fromEntries(
+      Object.entries(orgRoutes).filter(
+        ([, route]) => showPlatformAdmin || !route.url.startsWith("platform-"),
+      ),
+    );
+    const orgActions = routesToNavActions(
+      paletteOrgRoutes,
+      "Organization",
+      "nav-org",
+    );
 
     const allActions = [...projectActions, ...orgActions];
     addActions(allActions);
@@ -271,6 +303,7 @@ const RouteProvider = () => {
     orgRoutes,
     projectSlug,
     hasAnyScope,
+    isPlatformAdmin,
     addActions,
     removeActions,
   ]);
@@ -304,6 +337,12 @@ const RouteProvider = () => {
         <Route path="/switch-org" element={<LoginCheck />}>
           <Route index element={<SwitchOrg />} />
         </Route>
+        {/* Outside the app layout because it is a full-page gate, but behind
+            LoginCheck: an expired trial still has a session, and a logged-out
+            visitor has no trial to talk about. */}
+        <Route path="/talk-to-us" element={<LoginCheck />}>
+          <Route index element={<TalkToUs />} />
+        </Route>
         <Route
           path="/shadow-mcp/request"
           element={<ShadowMCPRequestAccess />}
@@ -317,12 +356,17 @@ const RouteProvider = () => {
           element={<RiskPolicyChallengeAcknowledge />}
         />
         <Route path="/blocks/:id" element={<BlockPage />} />
+        <Route
+          path={`${SHARED_SKILL_BASE_PATH}/:token`}
+          element={<SharedSkillPage />}
+        />
         <Route path="/" element={<LoginCheck />}>
           <Route path=":orgSlug/projects/:projectSlug">
             {routesWithSubroutes(outsideStructureRoutes)}
           </Route>
           <Route path=":orgSlug/projects/:projectSlug" element={<AppLayout />}>
             {routesWithSubroutes(authenticatedRoutes)}
+            <Route path="*" element={<NotFound />} />
           </Route>
           {/* Org routes that render without OrgLayout (full-screen standalone pages) */}
           <Route path=":orgSlug">

@@ -4,10 +4,16 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@gram/client/react-query/index.js", () => ({
+vi.mock("@gram/client/react-query/deployment.js", () => ({
   useDeployment: vi.fn(() => ({ data: undefined, isLoading: false })),
+}));
+vi.mock("@gram/client/react-query/deploymentLogs.js", () => ({
   useDeploymentLogs: vi.fn(() => ({ data: undefined, isLoading: false })),
+}));
+vi.mock("@gram/client/react-query/latestDeployment.js", () => ({
   useLatestDeployment: vi.fn(() => ({ data: undefined, isLoading: false })),
+}));
+vi.mock("@gram/client/react-query/listToolsets.js", () => ({
   useListToolsets: vi.fn(() => ({ data: undefined })),
 }));
 

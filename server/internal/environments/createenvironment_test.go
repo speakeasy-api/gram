@@ -6,8 +6,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/environments"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 func TestEnvironmentsService_CreateEnvironment(t *testing.T) {
@@ -28,12 +30,14 @@ func TestEnvironmentsService_CreateEnvironment(t *testing.T) {
 			Description:      new("Test environment description"),
 			Entries: []*gen.EnvironmentEntryInput{
 				{
-					Name:  "API_KEY",
-					Value: "secret-key-123",
+					Name:     "API_KEY",
+					Value:    new("secret-key-123"),
+					IsSecret: new(true),
 				},
 				{
-					Name:  "DATABASE_URL",
-					Value: "postgres://localhost:5432/testdb",
+					Name:     "DATABASE_URL",
+					Value:    new("postgres://localhost:5432/testdb"),
+					IsSecret: new(false),
 				},
 			},
 		}
@@ -48,13 +52,18 @@ func TestEnvironmentsService_CreateEnvironment(t *testing.T) {
 		require.Equal(t, "Test environment description", *env.Description)
 		require.Len(t, env.Entries, 2)
 
-		// Check that values are redacted
+		// Secret values come back redacted; non-secret values come back in cleartext.
+		entriesByName := make(map[string]*types.EnvironmentEntry, len(env.Entries))
 		for _, entry := range env.Entries {
 			require.NotEmpty(t, entry.Name)
-			require.Contains(t, entry.Value, "*")
 			require.NotEmpty(t, entry.CreatedAt)
 			require.NotEmpty(t, entry.UpdatedAt)
+			entriesByName[entry.Name] = entry
 		}
+		require.Equal(t, "sec*****", entriesByName["API_KEY"].Value)
+		require.True(t, entriesByName["API_KEY"].IsSecret)
+		require.Equal(t, "postgres://localhost:5432/testdb", entriesByName["DATABASE_URL"].Value)
+		require.False(t, entriesByName["DATABASE_URL"].IsSecret)
 
 		afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionEnvironmentCreate)
 		require.NoError(t, err)
@@ -119,6 +128,50 @@ func TestEnvironmentsService_CreateEnvironment(t *testing.T) {
 	})
 }
 
+func TestEnvironmentsService_CreateEnvironment_RequiresEntryValue(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestEnvironmentService(t)
+
+	_, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		OrganizationID:   "",
+		Name:             "missing-value-env",
+		Description:      nil,
+		Entries: []*gen.EnvironmentEntryInput{
+			{Name: "API_KEY", Value: nil, IsSecret: new(true)},
+		},
+	})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
+func TestEnvironmentsService_CreateEnvironment_RejectsEmptyNonSecretValue(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestEnvironmentService(t)
+
+	// Empty values are tolerated for secret entries, but a non-secret entry
+	// cannot store empty plaintext.
+	_, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		OrganizationID:   "",
+		Name:             "empty-nonsecret-env",
+		Description:      nil,
+		Entries: []*gen.EnvironmentEntryInput{
+			{Name: "API_URL", Value: new(""), IsSecret: new(false)},
+		},
+	})
+	require.Error(t, err)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
+
 func TestEnvironmentsService_CreateEnvironment_AuditLog(t *testing.T) {
 	t.Parallel()
 
@@ -134,7 +187,7 @@ func TestEnvironmentsService_CreateEnvironment_AuditLog(t *testing.T) {
 		Name:             "audit-create-env",
 		Description:      &description,
 		Entries: []*gen.EnvironmentEntryInput{
-			{Name: "API_KEY", Value: "super-secret-create-value"},
+			{Name: "API_KEY", Value: new("super-secret-create-value"), IsSecret: new(true)},
 		},
 	})
 	require.NoError(t, err)

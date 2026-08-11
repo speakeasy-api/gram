@@ -250,7 +250,7 @@ func TestProductFeaturesClient_IsFeatureEnabled(t *testing.T) {
 
 		// Enable the feature directly in the database
 		queries := repo.New(ti.conn)
-		err = queries.EnableFeature(ctx, repo.EnableFeatureParams{
+		_, err = queries.EnableFeature(ctx, repo.EnableFeatureParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			FeatureName:    "logs",
 		})
@@ -315,4 +315,26 @@ func TestProductFeaturesClient_IsFeatureEnabled(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, isEnabled)
 	})
+}
+
+func TestProductFeaturesClient_SkillsAlwaysEnabled(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestProductFeaturesService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	redisClient, err := infra.NewRedisClient(t, 1)
+	require.NoError(t, err)
+	client := productfeatures.NewClient(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		ti.conn,
+		redisClient,
+	)
+	client.UpdateFeatureCache(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureSkills, false)
+
+	enabled, err := client.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureSkills)
+	require.NoError(t, err)
+	require.True(t, enabled)
 }

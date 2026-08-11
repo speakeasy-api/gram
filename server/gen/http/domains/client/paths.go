@@ -12,6 +12,11 @@ func GetDomainDomainsPath() string {
 	return "/rpc/domain.get"
 }
 
+// ListDomainsDomainsPath returns the URL path to the domains service listDomains HTTP endpoint.
+func ListDomainsDomainsPath() string {
+	return "/rpc/domain.list"
+}
+
 // CreateDomainDomainsPath returns the URL path to the domains service createDomain HTTP endpoint.
 func CreateDomainDomainsPath() string {
 	return "/rpc/domain.register"
@@ -20,6 +25,16 @@ func CreateDomainDomainsPath() string {
 // UpdateDomainDomainsPath returns the URL path to the domains service updateDomain HTTP endpoint.
 func UpdateDomainDomainsPath() string {
 	return "/rpc/domain.update"
+}
+
+// SetRootMcpEndpointDomainsPath returns the URL path to the domains service setRootMcpEndpoint HTTP endpoint.
+func SetRootMcpEndpointDomainsPath() string {
+	return "/rpc/domain.setRootMcpEndpoint"
+}
+
+// CheckHealthDomainsPath returns the URL path to the domains service checkHealth HTTP endpoint.
+func CheckHealthDomainsPath() string {
+	return "/rpc/domain.checkHealth"
 }
 
 // DeleteDomainDomainsPath returns the URL path to the domains service deleteDomain HTTP endpoint.

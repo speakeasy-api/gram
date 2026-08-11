@@ -15,6 +15,10 @@ import { PluginServer, PluginServer$inboundSchema } from "./pluginserver.js";
 
 export type Plugin = {
   /**
+   * Whether the plugin's complete current intended state can be published as an Agent Plugins 1.0 package.
+   */
+  agentPluginsV1Compatible: boolean;
+  /**
    * Number of role/user assignments.
    */
   assignmentCount?: number | undefined;
@@ -32,6 +36,10 @@ export type Plugin = {
    */
   id: string;
   /**
+   * Whether this is the project's fallback plugin that new servers attach to.
+   */
+  isDefault?: boolean | undefined;
+  /**
    * Display name.
    */
   name: string;
@@ -44,6 +52,10 @@ export type Plugin = {
    */
   servers?: Array<PluginServer> | undefined;
   /**
+   * Number of active skills in this plugin.
+   */
+  skillCount?: number | undefined;
+  /**
    * URL-safe identifier, unique per org.
    */
   slug: string;
@@ -53,6 +65,7 @@ export type Plugin = {
 /** @internal */
 export const Plugin$inboundSchema: z.ZodMiniType<Plugin, unknown> = z.pipe(
   z.object({
+    agent_plugins_v1_compatible: z.boolean(),
     assignment_count: z.optional(z.int()),
     assignments: z.optional(z.array(PluginAssignment$inboundSchema)),
     created_at: z.pipe(
@@ -61,9 +74,11 @@ export const Plugin$inboundSchema: z.ZodMiniType<Plugin, unknown> = z.pipe(
     ),
     description: z.optional(z.string()),
     id: z.string(),
+    is_default: z.optional(z.boolean()),
     name: z.string(),
     server_count: z.optional(z.int()),
     servers: z.optional(z.array(PluginServer$inboundSchema)),
+    skill_count: z.optional(z.int()),
     slug: z.string(),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
@@ -72,9 +87,12 @@ export const Plugin$inboundSchema: z.ZodMiniType<Plugin, unknown> = z.pipe(
   }),
   z.transform((v) => {
     return remap$(v, {
+      "agent_plugins_v1_compatible": "agentPluginsV1Compatible",
       "assignment_count": "assignmentCount",
       "created_at": "createdAt",
+      "is_default": "isDefault",
       "server_count": "serverCount",
+      "skill_count": "skillCount",
       "updated_at": "updatedAt",
     });
   }),

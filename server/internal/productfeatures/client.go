@@ -14,7 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 )
@@ -22,7 +21,6 @@ import (
 type Client struct {
 	tracer       trace.Tracer
 	logger       *slog.Logger
-	db           *pgxpool.Pool
 	repo         *repo.Queries
 	featureCache cache.TypedCacheObject[FeatureCache]
 }
@@ -33,13 +31,17 @@ func NewClient(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgx
 	return &Client{
 		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/productfeatures"),
 		logger:       logger,
-		db:           db,
 		repo:         repo.New(db),
 		featureCache: cache.NewTypedObjectCache[FeatureCache](logger.With(attr.SlogCacheNamespace("productfeature")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 	}
 }
 
 func (c *Client) IsFeatureEnabled(ctx context.Context, organizationID string, feature Feature) (bool, error) {
+	// Skills is generally available; the feature remains in the API for compatibility.
+	if feature == FeatureSkills {
+		return true, nil
+	}
+
 	if cached, err := c.featureCache.Get(ctx, FeatureCacheKey(organizationID, feature)); err == nil {
 		return cached.Enabled, nil
 	}
@@ -119,53 +121,97 @@ func (c *Client) UpdateFeatureCache(ctx context.Context, organizationID string, 
 	}
 }
 
-// EnableRBACTx seeds the built-in system-role grants and turns on the org-level
-// RBAC feature flag within the caller's transaction. It is the single source of
-// truth for "enable RBAC for an org" and is idempotent: an already-enabled org
-// re-runs cleanly. It deliberately does not touch the feature cache —
-// transaction-based callers (e.g. provisioning an org from a WorkOS webhook)
-// create brand-new orgs for which nothing is cached yet. Callers holding a
-// *Client should prefer Client.EnableRBAC, which wraps this in a transaction and
-// refreshes the cache.
-func EnableRBACTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
-	if err := authz.SeedSystemRoleGrantsTx(ctx, dbtx, organizationID); err != nil {
-		return fmt.Errorf("seed system role grants: %w", err)
+func provisionSkillsSystemRoleGrantsTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
+	if _, err := authz.PatchRoleGrantsTx(ctx, dbtx, organizationID, authz.SystemRoleMember, "", []*authz.RoleGrant{
+		{
+			Scope:     string(authz.ScopeSkillRead),
+			Selectors: nil,
+		},
+	}, nil); err != nil {
+		return fmt.Errorf("provision member Skills grants: %w", err)
 	}
 
-	// EnableFeature inserts ON CONFLICT DO NOTHING against the partial unique
-	// index (org, feature) WHERE deleted IS FALSE, so re-enabling an already-
-	// enabled org is a true no-op rather than a UniqueViolation that would
-	// poison the transaction.
-	if err := repo.New(dbtx).EnableFeature(ctx, repo.EnableFeatureParams{
-		OrganizationID: organizationID,
-		FeatureName:    string(FeatureRBAC),
-	}); err != nil {
-		return fmt.Errorf("enable RBAC feature flag: %w", err)
+	if _, err := authz.PatchRoleGrantsTx(ctx, dbtx, organizationID, authz.SystemRoleAdmin, "", []*authz.RoleGrant{
+		{
+			Scope:     string(authz.ScopeSkillRead),
+			Selectors: nil,
+		},
+		{
+			Scope:     string(authz.ScopeSkillWrite),
+			Selectors: nil,
+		},
+	}, nil); err != nil {
+		return fmt.Errorf("provision admin Skills grants: %w", err)
 	}
 
 	return nil
 }
 
-// EnableRBAC enables RBAC for an organization: it seeds the built-in system-role
-// grants and turns on the RBAC feature flag atomically, then refreshes the
-// feature cache so the engine observes the change without waiting for the cache
-// TTL. Idempotent — safe to call on every org creation and to re-run from the
-// super-admin tool.
-func (c *Client) EnableRBAC(ctx context.Context, organizationID string) error {
-	tx, err := c.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin enable RBAC transaction: %w", err)
-	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+// EnterpriseTrialBundle is the entitlement set an enterprise trial organization
+// receives at signup. A trial gates only on the time window, so identity (SSO,
+// SCIM) is included rather than held back as a conversion lever.
+//
+// FeatureSkills is absent because Skills is generally available. The bundle
+// still calls EnableSkillsTx, which provisions the Skills role grants that the
+// entitlement cannot work without. FeatureHooksFailOpen and
+// FeatureSkillCaptureMetadataOnly are absent because they change how an
+// entitlement behaves rather than granting one.
+var EnterpriseTrialBundle = []Feature{
+	FeatureLogs,
+	FeatureToolIOLogs,
+	FeatureSessionCapture,
+	FeatureAuthzChallengeLogging,
+	FeatureSSO,
+	FeatureSCIM,
+	FeatureHooksBrowserLogin,
+	FeatureCustomModelKeys,
+	FeatureAIPlatformPushIntegrations,
+	FeaturePlatformMCP,
+	FeatureCustomerManagedEncryptionKeys,
+}
 
-	if err := EnableRBACTx(ctx, tx, organizationID); err != nil {
+// SeedEnterpriseTrialBundleTx enables the enterprise trial entitlements in the
+// caller's transaction. Idempotent, so a replayed signup is safe. The feature
+// cache is left untouched: the organization is created in the same transaction,
+// so no reader can have cached a state for it yet.
+func SeedEnterpriseTrialBundleTx(ctx context.Context, tx pgx.Tx, organizationID string) error {
+	q := repo.New(tx)
+
+	for _, feature := range EnterpriseTrialBundle {
+		if _, err := q.EnableFeature(ctx, repo.EnableFeatureParams{
+			OrganizationID: organizationID,
+			FeatureName:    string(feature),
+		}); err != nil {
+			return fmt.Errorf("enable %s for enterprise trial: %w", feature, err)
+		}
+	}
+
+	if err := EnableSkillsTx(ctx, tx, organizationID); err != nil {
+		return fmt.Errorf("enable Skills for enterprise trial: %w", err)
+	}
+
+	return nil
+}
+
+// EnableSkillsTx provisions the built-in Skills grants and enables the
+// org-level Skills feature in the caller's transaction. Existing grants and
+// exclusions are preserved.
+func EnableSkillsTx(ctx context.Context, dbtx repo.DBTX, organizationID string) error {
+	q := repo.New(dbtx)
+	if _, err := q.LockOrganizationMetadata(ctx, organizationID); err != nil {
+		return fmt.Errorf("lock organization for Skills enable: %w", err)
+	}
+
+	if err := provisionSkillsSystemRoleGrantsTx(ctx, dbtx, organizationID); err != nil {
 		return err
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit enable RBAC transaction: %w", err)
+	if _, err := q.EnableFeature(ctx, repo.EnableFeatureParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(FeatureSkills),
+	}); err != nil {
+		return fmt.Errorf("enable Skills feature flag: %w", err)
 	}
 
-	c.UpdateFeatureCache(ctx, organizationID, FeatureRBAC, true)
 	return nil
 }

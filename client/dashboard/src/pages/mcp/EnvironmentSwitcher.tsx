@@ -1,4 +1,4 @@
-import { Button as UIButton } from "@/components/ui/button";
+import { Button as UIButton } from "@/components/ui/Button";
 import {
   Command,
   CommandEmpty,
@@ -6,15 +6,15 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "@/components/ui/command";
+} from "@/components/ui/Command";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+} from "@/components/ui/Popover";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
 import { Check, ChevronsUpDown, Link, Plus, Unlink } from "lucide-react";
 import { useState } from "react";
 import {
@@ -124,7 +124,7 @@ export function EnvironmentSwitcher({
         <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
           <PopoverTrigger asChild>
             <UIButton
-              variant="outline"
+              variant="secondary"
               role="combobox"
               aria-expanded={pickerOpen}
               className="min-w-[200px] justify-between gap-2 px-3"

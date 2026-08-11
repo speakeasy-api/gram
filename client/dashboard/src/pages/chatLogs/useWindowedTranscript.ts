@@ -6,12 +6,13 @@ import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { useLoadChat } from "@gram/client/react-query/loadChat.js";
 import { useSdkClient } from "@/contexts/Sdk";
 import { TRANSCRIPT_PAGE_SIZE } from "./useChatTranscript";
+import { fetchFullTranscript, FULL_LOAD_PAGE_SIZE } from "./transcriptFull";
 
 // Initial window is generous so most matches + context arrive in one request;
 // gaps between disjoint windows are expanded on demand.
 const WINDOW_INITIAL_LIMIT = 200;
 
-type WindowLoadKey = "before" | "after" | `gap:${number}`;
+type WindowLoadKey = "before" | "after" | "all" | `gap:${number}`;
 
 export interface WindowedTranscript {
   chat: Chat | undefined;
@@ -20,9 +21,15 @@ export interface WindowedTranscript {
   gaps: Set<number>;
   hasMoreBefore: boolean;
   hasMoreAfter: boolean;
+  /** Single-page edge loads, for scroll-driven streaming. */
   loadBefore: () => void;
   loadAfter: () => void;
+  /** Full-range loads: everything above / below the window, the entirety of
+   * one gap, or the chat's whole remaining history. */
+  loadAllBefore: () => void;
+  loadAllAfter: () => void;
   loadGap: (afterSeq: number) => void;
+  loadAll: () => void;
   loadingKey: WindowLoadKey | null;
   isLoading: boolean;
   isError: boolean;
@@ -75,8 +82,9 @@ function buildInitial(chat: Chat, segments: RiskSegment[]): WindowState {
 // disjoint windows. The mode is decided by `request`: `{ riskOnly: true }`
 // windows around risk findings (segments in `risk_segments`), `{ query }`
 // windows around text-search matches (segments in `match_segments`). The
-// incremental expansion is identical for both modes: plain before_seq/after_seq
-// page loads merged into the window.
+// incremental expansion is identical for both modes: scrolling streams
+// single pages at the edges, while the divider buttons load a full range
+// (the whole gap / everything above or below) in one action.
 export function useWindowedTranscript(
   chatId: string,
   enabled: boolean,
@@ -118,7 +126,7 @@ export function useWindowedTranscript(
   // Clear in-flight loading state when the request changes (chat switch or new
   // query). The previous request's in-flight load is guarded out of its own
   // finally (it checks requestKeyRef), so without this reset `loadingKey` could
-  // stay stuck and permanently disable loadBefore/After/Gap.
+  // stay stuck and permanently disable the incremental loads.
   useEffect(() => {
     setLoadingKey(null);
     setLoadError(false);
@@ -135,23 +143,22 @@ export function useWindowedTranscript(
     }
   }, [base.data, riskOnly]);
 
-  // Runs one incremental page load: ignores the result if the active request
-  // changed mid-flight (chat switch or new query), and records failures so they
-  // surface via isError instead of silently no-opping.
+  // Runs one incremental load: `run` fetches (one page or a whole range) and
+  // returns the state update to apply. The result is ignored if the active
+  // request changed mid-flight (chat switch or new query), and failures are
+  // recorded so they surface via isError instead of silently no-opping.
   const runIncrementalLoad = useCallback(
     (
       key: WindowLoadKey,
-      req: { beforeSeq?: number; afterSeq?: number },
-      apply: (prev: WindowState, page: Chat) => WindowState,
+      run: () => Promise<(prev: WindowState) => WindowState>,
     ) => {
       if (loadingKey) return;
       const startKey = requestKeyRef.current;
       setLoadingKey(key);
-      void client.chat
-        .load({ id: chatId, limit: TRANSCRIPT_PAGE_SIZE, ...req })
-        .then((page) => {
+      void run()
+        .then((apply) => {
           if (requestKeyRef.current !== startKey) return; // request changed
-          setState((prev) => (prev ? apply(prev, page) : prev));
+          setState((prev) => (prev ? apply(prev) : prev));
         })
         .catch(() => {
           if (requestKeyRef.current === startKey) setLoadError(true);
@@ -160,58 +167,157 @@ export function useWindowedTranscript(
           if (requestKeyRef.current === startKey) setLoadingKey(null);
         });
     },
-    [client, chatId, loadingKey],
+    [loadingKey],
   );
 
   const loadBefore = useCallback(() => {
     if (!state || !state.hasMoreBefore) return;
     const oldest = state.messages[0];
     if (!oldest) return;
-    runIncrementalLoad("before", { beforeSeq: oldest.seq }, (prev, page) => ({
-      ...prev,
-      messages: mergeSorted(page.messages, prev.messages),
-      hasMoreBefore: page.hasMoreBefore,
-    }));
-  }, [state, runIncrementalLoad]);
+    runIncrementalLoad("before", async () => {
+      const page = await client.chat.load({
+        id: chatId,
+        beforeSeq: oldest.seq,
+        limit: TRANSCRIPT_PAGE_SIZE,
+      });
+      return (prev) => ({
+        ...prev,
+        messages: mergeSorted(page.messages, prev.messages),
+        hasMoreBefore: page.hasMoreBefore,
+      });
+    });
+  }, [state, runIncrementalLoad, client, chatId]);
 
   const loadAfter = useCallback(() => {
     if (!state || !state.hasMoreAfter) return;
     const newest = state.messages[state.messages.length - 1];
     if (!newest) return;
-    runIncrementalLoad("after", { afterSeq: newest.seq }, (prev, page) => ({
-      ...prev,
-      messages: mergeSorted(prev.messages, page.messages),
-      hasMoreAfter: page.hasMoreAfter,
-    }));
-  }, [state, runIncrementalLoad]);
+    runIncrementalLoad("after", async () => {
+      const page = await client.chat.load({
+        id: chatId,
+        afterSeq: newest.seq,
+        limit: TRANSCRIPT_PAGE_SIZE,
+      });
+      return (prev) => ({
+        ...prev,
+        messages: mergeSorted(prev.messages, page.messages),
+        hasMoreAfter: page.hasMoreAfter,
+      });
+    });
+  }, [state, runIncrementalLoad, client, chatId]);
 
+  const loadAllBefore = useCallback(() => {
+    if (!state || !state.hasMoreBefore) return;
+    const oldest = state.messages[0];
+    if (!oldest) return;
+    runIncrementalLoad("before", async () => {
+      const collected: ChatMessage[] = [];
+      let cursor = oldest.seq;
+      let more = true;
+      while (more) {
+        const page = await client.chat.load({
+          id: chatId,
+          beforeSeq: cursor,
+          limit: FULL_LOAD_PAGE_SIZE,
+        });
+        collected.push(...page.messages);
+        // Pages arrive ascending; the first row is the new oldest edge.
+        const pageOldest = page.messages[0];
+        more = page.hasMoreBefore && !!pageOldest && pageOldest.seq !== cursor;
+        cursor = pageOldest?.seq ?? cursor;
+      }
+      return (prev) => ({
+        ...prev,
+        messages: mergeSorted(collected, prev.messages),
+        hasMoreBefore: false,
+      });
+    });
+  }, [state, runIncrementalLoad, client, chatId]);
+
+  const loadAllAfter = useCallback(() => {
+    if (!state || !state.hasMoreAfter) return;
+    const newest = state.messages[state.messages.length - 1];
+    if (!newest) return;
+    runIncrementalLoad("after", async () => {
+      const collected: ChatMessage[] = [];
+      let cursor = newest.seq;
+      let more = true;
+      while (more) {
+        const page = await client.chat.load({
+          id: chatId,
+          afterSeq: cursor,
+          limit: FULL_LOAD_PAGE_SIZE,
+        });
+        collected.push(...page.messages);
+        const pageNewest = page.messages[page.messages.length - 1];
+        more = page.hasMoreAfter && !!pageNewest && pageNewest.seq !== cursor;
+        cursor = pageNewest?.seq ?? cursor;
+      }
+      return (prev) => ({
+        ...prev,
+        messages: mergeSorted(prev.messages, collected),
+        hasMoreAfter: false,
+      });
+    });
+  }, [state, runIncrementalLoad, client, chatId]);
+
+  // Loads the ENTIRE gap after `afterSeq`: pages forward until the walk
+  // reaches the next already-loaded message, so one click closes the break.
   const loadGap = useCallback(
     (afterSeq: number) => {
       if (!state) return;
-      runIncrementalLoad(`gap:${afterSeq}`, { afterSeq }, (prev, page) => {
-        // The message immediately after the gap, by seq (messages stay sorted
-        // ascending via mergeSorted, so find() is enough).
-        const nextSeq = prev.messages.find((m) => m.seq > afterSeq)?.seq;
-        const maxLoaded = page.messages.reduce(
-          (mx, m) => Math.max(mx, m.seq),
-          afterSeq,
-        );
-        const gaps = new Set(prev.gaps);
-        gaps.delete(afterSeq);
-        // Gap stays open (advanced to the new edge) only if the page didn't
-        // reach the next already-loaded message.
-        if (nextSeq !== undefined && maxLoaded < nextSeq) {
-          gaps.add(maxLoaded);
+      // The message immediately after the gap, by seq (messages stay sorted
+      // ascending via mergeSorted, so find() is enough).
+      const nextSeq = state.messages.find((m) => m.seq > afterSeq)?.seq;
+      runIncrementalLoad(`gap:${afterSeq}`, async () => {
+        const collected: ChatMessage[] = [];
+        let cursor = afterSeq;
+        let more = true;
+        while (more) {
+          const page = await client.chat.load({
+            id: chatId,
+            afterSeq: cursor,
+            limit: FULL_LOAD_PAGE_SIZE,
+          });
+          collected.push(...page.messages);
+          const pageNewest = page.messages[page.messages.length - 1];
+          const reachedNext =
+            nextSeq !== undefined && !!pageNewest && pageNewest.seq >= nextSeq;
+          more =
+            !reachedNext &&
+            page.hasMoreAfter &&
+            !!pageNewest &&
+            pageNewest.seq !== cursor;
+          cursor = pageNewest?.seq ?? cursor;
         }
-        return {
-          ...prev,
-          messages: mergeSorted(prev.messages, page.messages),
-          gaps,
+        return (prev) => {
+          const gaps = new Set(prev.gaps);
+          gaps.delete(afterSeq);
+          return {
+            ...prev,
+            messages: mergeSorted(prev.messages, collected),
+            gaps,
+          };
         };
       });
     },
-    [state, runIncrementalLoad],
+    [state, runIncrementalLoad, client, chatId],
   );
+
+  // Loads the chat's complete history in one action: full from-start walk
+  // merged over the window, clearing every gap and both edges.
+  const loadAll = useCallback(() => {
+    if (!state) return;
+    runIncrementalLoad("all", async () => {
+      const all = await fetchFullTranscript(client, chatId);
+      return (prev) => ({
+        messages: mergeSorted(prev.messages, all),
+        gaps: new Set<number>(),
+        hasMoreBefore: false,
+        hasMoreAfter: false,
+      });
+    });
+  }, [state, runIncrementalLoad, client, chatId]);
 
   return {
     chat: base.data,
@@ -223,7 +329,10 @@ export function useWindowedTranscript(
       base.error instanceof GramError && base.error.statusCode === 403,
     loadBefore,
     loadAfter,
+    loadAllBefore,
+    loadAllAfter,
     loadGap,
+    loadAll,
     loadingKey,
     isLoading: base.isLoading,
     isError: base.isError || loadError,

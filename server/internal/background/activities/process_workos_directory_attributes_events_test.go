@@ -5,10 +5,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 	"github.com/workos/workos-go/v6/pkg/events"
 
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -92,7 +95,7 @@ func TestProcessWorkOSOrganizationEvents_UpsertsDirectoryGroupAndAdvancesOrganiz
 		{ID: "event_group", Event: "dsync.group.updated", CreatedAt: time.Now(), Data: directoryGroupEventData(workosOrgID, groupID, "Platform")},
 	}})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_seed", res.SinceEventID)
@@ -139,7 +142,7 @@ func TestProcessWorkOSOrganizationEvents_SkipsStaleDirectoryGroupEvent(t *testin
 		{ID: "event_0001", Event: "dsync.group.updated", CreatedAt: directorySyncTime(), Data: directoryGroupEventDataWithUpdatedAt(workosOrgID, groupID, "Old Name", "2026-05-12T10:00:00Z")},
 	}})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_0001", res.LastEventID)
@@ -180,6 +183,7 @@ func TestProcessWorkOSOrganizationEvents_OpensAndClosesDirectoryMembership(t *te
 		WorkosDirectoryUserID: directoryUserID,
 		Email:                 conv.ToPGText(email),
 		Attributes:            []byte(`{"department":"Engineering","team":"SDK"}`),
+		RestoreDeleted:        true,
 		WorkosCreatedAt:       conv.ToPGTimestamptz(directorySyncTime()),
 		WorkosUpdatedAt:       conv.ToPGTimestamptz(directorySyncTime()),
 		WorkosLastEventID:     conv.ToPGText("event_seed_user"),
@@ -191,7 +195,7 @@ func TestProcessWorkOSOrganizationEvents_OpensAndClosesDirectoryMembership(t *te
 		{ID: "event_membership_added", Event: "dsync.group.user_added", CreatedAt: time.Now(), Data: directoryGroupMembershipEventData(workosOrgID, groupID, directoryUserID, email)},
 	}})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_membership_added", res.LastEventID)
@@ -251,6 +255,7 @@ func TestProcessWorkOSOrganizationEvents_RemoveMissingDirectoryMembershipNoops(t
 		WorkosDirectoryUserID: directoryUserID,
 		Email:                 conv.ToPGText(email),
 		Attributes:            []byte(`{}`),
+		RestoreDeleted:        true,
 		WorkosCreatedAt:       conv.ToPGTimestamptz(directorySyncTime()),
 		WorkosUpdatedAt:       conv.ToPGTimestamptz(directorySyncTime()),
 		WorkosLastEventID:     conv.ToPGText("event_seed_user"),
@@ -262,7 +267,7 @@ func TestProcessWorkOSOrganizationEvents_RemoveMissingDirectoryMembershipNoops(t
 		{ID: "event_missing_membership_removed", Event: "dsync.group.user_removed", CreatedAt: directorySyncTime(), Data: directoryGroupMembershipEventData(workosOrgID, groupID, directoryUserID, email)},
 	}})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_missing_membership_removed", res.LastEventID)
@@ -300,6 +305,7 @@ func TestProcessWorkOSOrganizationEvents_DeleteDirectoryGroupClosesMemberships(t
 		WorkosDirectoryUserID: directoryUserID,
 		Email:                 conv.ToPGText("directory.group.delete@example.com"),
 		Attributes:            []byte(`{}`),
+		RestoreDeleted:        true,
 		WorkosCreatedAt:       conv.ToPGTimestamptz(directorySyncTime()),
 		WorkosUpdatedAt:       conv.ToPGTimestamptz(directorySyncTime()),
 		WorkosLastEventID:     conv.ToPGText("event_seed_user"),
@@ -319,7 +325,7 @@ func TestProcessWorkOSOrganizationEvents_DeleteDirectoryGroupClosesMemberships(t
 		{ID: "event_0001", Event: "dsync.group.deleted", CreatedAt: time.Now(), Data: directoryGroupEventData(workosOrgID, groupID, "Platform")},
 	}})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_0001", res.LastEventID)
@@ -327,4 +333,146 @@ func TestProcessWorkOSOrganizationEvents_DeleteDirectoryGroupClosesMemberships(t
 	_, _, _, deleted := getDirectoryGroupRow(t, ctx, conn, groupID)
 	require.True(t, deleted)
 	require.Equal(t, 0, countCurrentMemberships(t, ctx, conn, groupID, directoryUserID))
+}
+
+func directoryUserEventDataWithState(workosOrgID, workosDirectoryUserID, email, state, updatedAt string) []byte {
+	return []byte(`{"id":"` + workosDirectoryUserID + `","organization_id":"` + workosOrgID + `","email":"` + email + `","first_name":"Ada","last_name":"Lovelace","state":"` + state + `","custom_attributes":{"department":"Engineering"},"created_at":"2026-05-12T10:00:00Z","updated_at":"` + updatedAt + `"}`)
+}
+
+func directoryUserEventDataWithoutState(workosOrgID, workosDirectoryUserID, email, updatedAt string) []byte {
+	return []byte(`{"id":"` + workosDirectoryUserID + `","organization_id":"` + workosOrgID + `","email":"` + email + `","first_name":"Ada","last_name":"Lovelace","custom_attributes":{"department":"Engineering"},"created_at":"2026-05-12T10:00:00Z","updated_at":"` + updatedAt + `"}`)
+}
+
+func TestProcessWorkOSOrganizationEvents_DirectoryUserDeactivationDeprovisionsAccess(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_directory_user_deactivate")
+	logger := testenv.NewLogger(t)
+
+	const (
+		organizationID  = "gram_org_dsync_deactivate"
+		workosOrgID     = "org_01HZDSYNCDEACT"
+		userID          = "user_dsync_deactivate"
+		workosUserID    = "user_01HZDSYNCDEACT"
+		membershipID    = "mem_01HZDSYNCDEACT"
+		directoryUserID = "directory_user_deactivate"
+	)
+	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+	seedWorkOSUser(t, ctx, conn, userID, workosUserID)
+	seedOrganizationRole(t, ctx, conn, organizationID, "member")
+
+	// The seeded user's email matches the directory user payload so the
+	// deactivation can resolve the Gram user by email.
+	email := userID + "@example.com"
+
+	workosClient := workos.NewStubClient()
+	workosClient.SetEventPages([][]events.Event{{
+		newWorkOSMembershipEvent(t, "organization_membership.created", "event_0001", membershipID, workosOrgID, workosUserID, time.Date(2026, 5, 12, 12, 0, 0, 0, time.UTC), "member"),
+		{ID: "event_0002", Event: "dsync.user.created", CreatedAt: time.Date(2026, 5, 12, 12, 30, 0, 0, time.UTC), Data: directoryUserEventDataWithState(workosOrgID, directoryUserID, email, "active", "2026-05-12T12:30:00Z")},
+		// SCIM deactivation: the IdP suspends the user and WorkOS emits a
+		// dsync.user.updated event with state=inactive.
+		{ID: "event_0003", Event: "dsync.user.updated", CreatedAt: time.Date(2026, 5, 12, 13, 0, 0, 0, time.UTC), Data: directoryUserEventDataWithState(workosOrgID, directoryUserID, email, "inactive", "2026-05-12T13:00:00Z")},
+	}})
+
+	capturingCache := newCaptureCache()
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, capturingCache)
+
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_0003", res.LastEventID)
+
+	// The directory user row is soft-deleted.
+	_, err = workosrepo.New(conn).GetDirectoryUserByWorkOSID(ctx, directoryUserID)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	// The user's organization access is deprovisioned.
+	relationship, err := orgrepo.New(conn).GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(userID),
+	})
+	require.NoError(t, err)
+	require.True(t, relationship.Deleted)
+	require.Equal(t, "event_0003", relationship.WorkosLastEventID.String)
+
+	assignments, err := orgrepo.New(conn).ListOrganizationRoleAssignmentsByWorkOSUser(ctx, orgrepo.ListOrganizationRoleAssignmentsByWorkOSUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   workosUserID,
+	})
+	require.NoError(t, err)
+	require.Len(t, assignments, 1)
+	require.True(t, assignments[0].DeletedAt.Valid)
+
+	// Cached user info is invalidated so org-access checks observe the
+	// deprovisioning without waiting out the cache TTL.
+	deletedKeys := capturingCache.Deleted()
+	require.Len(t, deletedKeys, 1)
+	require.Contains(t, deletedKeys[0], sessions.UserInfoCacheKey(userID))
+}
+
+func TestProcessWorkOSOrganizationEvents_DirectoryUserReactivationRestoresDirectoryUser(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_directory_user_reactivate")
+	logger := testenv.NewLogger(t)
+
+	const (
+		organizationID  = "gram_org_dsync_reactivate"
+		workosOrgID     = "org_01HZDSYNCREACT"
+		directoryUserID = "directory_user_reactivate"
+		email           = "dsync.reactivate@example.com"
+	)
+	seedDirectoryAttributesWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+
+	workosClient := workos.NewStubClient()
+	workosClient.SetEventPages([][]events.Event{{
+		{ID: "event_0001", Event: "dsync.user.created", CreatedAt: time.Date(2026, 5, 12, 12, 0, 0, 0, time.UTC), Data: directoryUserEventDataWithState(workosOrgID, directoryUserID, email, "active", "2026-05-12T12:00:00Z")},
+		{ID: "event_0002", Event: "dsync.user.updated", CreatedAt: time.Date(2026, 5, 12, 13, 0, 0, 0, time.UTC), Data: directoryUserEventDataWithState(workosOrgID, directoryUserID, email, "inactive", "2026-05-12T13:00:00Z")},
+		// Re-provisioning: an explicitly active update restores the row.
+		{ID: "event_0003", Event: "dsync.user.updated", CreatedAt: time.Date(2026, 5, 12, 14, 0, 0, 0, time.UTC), Data: directoryUserEventDataWithState(workosOrgID, directoryUserID, email, "active", "2026-05-12T14:00:00Z")},
+	}})
+
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache)
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_0003", res.LastEventID)
+
+	directoryUser, err := workosrepo.New(conn).GetDirectoryUserByWorkOSID(ctx, directoryUserID)
+	require.NoError(t, err)
+	require.False(t, directoryUser.Deleted)
+	require.Equal(t, "event_0003", directoryUser.WorkosLastEventID.String)
+}
+
+func TestProcessWorkOSOrganizationEvents_DirectoryUserStatelessUpdateDoesNotResurrect(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_directory_user_stateless")
+	logger := testenv.NewLogger(t)
+
+	const (
+		organizationID  = "gram_org_dsync_stateless"
+		workosOrgID     = "org_01HZDSYNCSTATELESS"
+		directoryUserID = "directory_user_stateless"
+		email           = "dsync.stateless@example.com"
+	)
+	seedDirectoryAttributesWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+
+	workosClient := workos.NewStubClient()
+	workosClient.SetEventPages([][]events.Event{{
+		{ID: "event_0001", Event: "dsync.user.created", CreatedAt: time.Date(2026, 5, 12, 12, 0, 0, 0, time.UTC), Data: directoryUserEventDataWithState(workosOrgID, directoryUserID, email, "active", "2026-05-12T12:00:00Z")},
+		{ID: "event_0002", Event: "dsync.user.updated", CreatedAt: time.Date(2026, 5, 12, 13, 0, 0, 0, time.UTC), Data: directoryUserEventDataWithState(workosOrgID, directoryUserID, email, "inactive", "2026-05-12T13:00:00Z")},
+		// A newer update without a state must not resurrect the soft-deleted
+		// row.
+		{ID: "event_0003", Event: "dsync.user.updated", CreatedAt: time.Date(2026, 5, 12, 14, 0, 0, 0, time.UTC), Data: directoryUserEventDataWithoutState(workosOrgID, directoryUserID, email, "2026-05-12T14:00:00Z")},
+	}})
+
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, workosClient, cache.NoopCache)
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_0003", res.LastEventID)
+
+	_, err = workosrepo.New(conn).GetDirectoryUserByWorkOSID(ctx, directoryUserID)
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }

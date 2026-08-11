@@ -36,11 +36,13 @@ func (a *AnalyzeBatch) scanPresidio(ctx context.Context, args AnalyzeBatchArgs, 
 
 func (a *AnalyzeBatch) publishPresidioScanRequests(ctx context.Context, args AnalyzeBatchArgs, requestID uuid.UUID, messages []batchMessage, scoreThreshold float64) {
 	createdAt := time.Now().UTC().Format(time.RFC3339)
-	publishResults := make([]gcp.PublishResult, len(messages))
-	for i, msg := range messages {
-		publishResults[i] = a.presidioPub.Publish(ctx, riskv1.PresidioAnalysis_builder{
+	publishResults := make([]gcp.PublishResult, 0, len(messages))
+	for _, msg := range messages {
+		chatMessageID, contentPartID := msg.anchorIDStrings()
+		publishResults = append(publishResults, a.presidioPub.Publish(ctx, riskv1.PresidioAnalysis_builder{
 			RequestId:         new(requestID.String()),
-			ChatMessageId:     new(msg.ID.String()),
+			ChatMessageId:     chatMessageID,
+			ContentPartId:     contentPartID,
 			ProjectId:         new(args.ProjectID.String()),
 			OrganizationId:    &args.OrganizationID,
 			RiskPolicyId:      new(args.RiskPolicyID.String()),
@@ -51,7 +53,7 @@ func (a *AnalyzeBatch) publishPresidioScanRequests(ctx context.Context, args Ana
 			Content:        new(msg.Content),
 			Entities:       args.PresidioEntities,
 			ScoreThreshold: &scoreThreshold,
-		}.Build())
+		}.Build()))
 	}
 	drainPublishAcks(ctx, a.logger, "failed to publish presidio scan request", publishResults)
 }

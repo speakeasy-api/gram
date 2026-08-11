@@ -57,6 +57,21 @@ func ListRiskResultsByChatRiskPath() string {
 	return "/rpc/risk.listResultsByChat"
 }
 
+// MarkRiskResultsFalsePositiveRiskPath returns the URL path to the risk service markRiskResultsFalsePositive HTTP endpoint.
+func MarkRiskResultsFalsePositiveRiskPath() string {
+	return "/rpc/risk.markResultsFalsePositive"
+}
+
+// UnmarkRiskResultsFalsePositiveRiskPath returns the URL path to the risk service unmarkRiskResultsFalsePositive HTTP endpoint.
+func UnmarkRiskResultsFalsePositiveRiskPath() string {
+	return "/rpc/risk.unmarkResultsFalsePositive"
+}
+
+// ListDismissedRiskResultsRiskPath returns the URL path to the risk service listDismissedRiskResults HTTP endpoint.
+func ListDismissedRiskResultsRiskPath() string {
+	return "/rpc/risk.listDismissedResults"
+}
+
 // GetRiskOverviewRiskPath returns the URL path to the risk service getRiskOverview HTTP endpoint.
 func GetRiskOverviewRiskPath() string {
 	return "/rpc/risk.getOverview"
@@ -80,6 +95,11 @@ func GetRiskUserBreakdownRiskPath() string {
 // GetRiskRuleBreakdownRiskPath returns the URL path to the risk service getRiskRuleBreakdown HTTP endpoint.
 func GetRiskRuleBreakdownRiskPath() string {
 	return "/rpc/risk.getRuleBreakdown"
+}
+
+// GetRiskSignalsRiskPath returns the URL path to the risk service getRiskSignals HTTP endpoint.
+func GetRiskSignalsRiskPath() string {
+	return "/rpc/risk.getSignals"
 }
 
 // GetRiskPolicyStatusRiskPath returns the URL path to the risk service getRiskPolicyStatus HTTP endpoint.
@@ -190,6 +210,11 @@ func DeleteRiskExclusionRiskPath() string {
 // SuggestCustomDetectionRuleRiskPath returns the URL path to the risk service suggestCustomDetectionRule HTTP endpoint.
 func SuggestCustomDetectionRuleRiskPath() string {
 	return "/rpc/risk.suggestCustomRules"
+}
+
+// SuggestExclusionRiskPath returns the URL path to the risk service suggestExclusion HTTP endpoint.
+func SuggestExclusionRiskPath() string {
+	return "/rpc/risk.suggestExclusion"
 }
 
 // TestDetectionRuleRiskPath returns the URL path to the risk service testDetectionRule HTTP endpoint.

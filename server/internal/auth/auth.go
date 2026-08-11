@@ -69,7 +69,34 @@ func (s *Auth) Authorize(ctx context.Context, key string, scheme *security.APIKe
 		return ctx, oops.E(oops.CodeUnexpected, err, "load access grants").LogError(ctx, s.logger)
 	}
 
+	// After resolving Gram-Project, require the caller holds project:read on
+	// that project. When RBAC is off (or the caller is an API key), Require is
+	// a no-op and org/project-bound key scoping above remains authoritative.
+	if scheme.Name == constants.ProjectSlugSecuritySchema {
+		if err := s.requireResolvedProjectAccess(ctx); err != nil {
+			return ctx, err
+		}
+	}
+
 	return ctx, nil
+}
+
+// requireResolvedProjectAccess ensures the authenticated principal is granted
+// project:read on the project selected via the Gram-Project header. This closes
+// the gap where checkProjectAccess only verified the project belonged to the
+// caller's organization (AIS-425).
+func (s *Auth) requireResolvedProjectAccess(ctx context.Context) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return oops.E(oops.CodeUnauthorized, nil, "no session found")
+	}
+
+	return s.authz.Require(ctx, authz.Check{
+		Scope:        authz.ScopeProjectRead,
+		ResourceKind: "",
+		ResourceID:   authCtx.ProjectID.String(),
+		Dimensions:   nil,
+	})
 }
 
 func (s *Auth) checkProjectAccess(ctx context.Context, logger *slog.Logger, projectSlug string) (context.Context, error) {
@@ -77,6 +104,7 @@ func (s *Auth) checkProjectAccess(ctx context.Context, logger *slog.Logger, proj
 	if !ok {
 		return ctx, oops.E(oops.CodeUnauthorized, nil, "no session found")
 	}
+	boundProjectID := authCtx.ProjectID
 
 	projects, err := s.repo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
 	switch {
@@ -97,6 +125,9 @@ func (s *Auth) checkProjectAccess(ctx context.Context, logger *slog.Logger, proj
 	hasProjectAccess := false
 	for _, project := range projects {
 		if project.Slug == projectSlug {
+			if boundProjectID != nil && project.ID != *boundProjectID {
+				return ctx, oops.C(oops.CodeForbidden)
+			}
 			authCtx.ProjectID = &project.ID // This is important
 			authCtx.ProjectSlug = &projectSlug
 			hasProjectAccess = true
@@ -106,6 +137,21 @@ func (s *Auth) checkProjectAccess(ctx context.Context, logger *slog.Logger, proj
 
 	if !hasProjectAccess {
 		return ctx, oops.C(oops.CodeForbidden)
+	}
+	if IsLiteLLMAPIKeyName(authCtx.APIKeyName) && authCtx.APIKeyID != "" {
+		keyID, parseErr := uuid.Parse(authCtx.APIKeyID)
+		if parseErr != nil {
+			logger.WarnContext(ctx, "failed to parse LiteLLM API key ID",
+				attr.SlogError(parseErr),
+				attr.SlogAPIKeyID(authCtx.APIKeyID),
+			)
+		} else if touchErr := s.keys.keyDB.UpdateAPIKeyLastAccessedAt(ctx, keyID); touchErr != nil {
+			logger.WarnContext(ctx, "failed to update LiteLLM API key last accessed at",
+				attr.SlogError(touchErr),
+				attr.SlogAPIKeyID(authCtx.APIKeyID),
+				attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+			)
+		}
 	}
 
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)

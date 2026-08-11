@@ -3,7 +3,11 @@ server:
   - "go.mod"
   - "go.sum"
   - "agents/**"
+  - "ci/**"
   - "server/**"
+  - "infra/**"
+  - ".mise-tasks/test/ci.sh"
+  - ".mise-tasks/test/server.sh"
 
 client:
   - ".github/**"
@@ -27,6 +31,14 @@ cli:
   - "server/design/**"
   - "server/gen/**"
 
+hooks:
+  - ".github/**"
+  - "go.mod"
+  - "go.sum"
+  - "hooks/**"
+  - ".mise-tasks/build/hooks.sh"
+  - ".mise-tasks/test/hooks.sh"
+
 tsframework:
   - "ts-framework/**"
 
@@ -38,18 +50,19 @@ sdk:
 sdk-gen:
   - ".speakeasy/workflow.yaml"
   - "client/dashboard/src/sdk/.speakeasy/gen.yaml"
+  - "hooks/sdk/.speakeasy/gen.yaml"
   - "mise.toml"
   - "overlays/**"
   - "server/gen/http/openapi3.yaml"
-
-elements:
-  - "elements/**"
 
 migrations:
   - "go.mod"
   - "go.sum"
   - "server/migrations/**"
+  - "server/database/schema.sql"
   - "server/clickhouse/migrations/**"
+  - "server/clickhouse/local/golang_migrate/**"
+  - "server/clickhouse/schema.sql"
 
 database-changes:
   - "server/migrations/**"
@@ -97,6 +110,16 @@ webhooks-catalog:
 
 otel-collector:
   - "otel-collector/**"
+
+# Paths that were moved or retired. PRs must not add or modify files here —
+# stale generators, cherry-picks, or muscle memory can silently resurrect a
+# directory after it was relocated (e.g. client/sdk lived on for a year after
+# the SDK moved to client/dashboard/src/sdk). Enforced by the "Block changes
+# to deprecated paths" step in .github/workflows/hygiene.yaml; add an entry
+# here whenever a part of the codebase is moved.
+# Deletions are allowed so cleanup PRs can still remove stragglers.
+deprecated-paths:
+  - added|modified: "client/sdk/**"
 
 tunnel:
   - ".github/**"

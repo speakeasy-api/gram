@@ -3,12 +3,12 @@ package shadowmcp
 import (
 	"context"
 	"log/slog"
+	"net/url"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -40,8 +40,6 @@ func (p PolicyEnabledCache) CacheKey() string {
 	return "shadow_mcp_policy_enabled:" + p.ProjectID
 }
 
-func (p PolicyEnabledCache) AdditionalCacheKeys() []string { return nil }
-
 func (p PolicyEnabledCache) TTL() time.Duration { return policyEnabledCacheTTL }
 
 // Client serves "is MCP tool identity capture enabled for this project?" reads
@@ -58,15 +56,20 @@ type Client struct {
 	repo         *risk_repo.Queries
 	cache        cache.TypedCacheObject[PolicyEnabledCache]
 	toolsetCache cache.TypedCacheObject[mv.ToolsetBaseContents]
-	accessStore  accesscontrol.Store
+	// serverURL is the deployment's own base URL, trusted as a Gram-hosted
+	// MCP host alongside the built-in ones. Nil in contexts that never
+	// classify URLs (the check then falls back to the built-ins plus the
+	// org's custom domain).
+	serverURL *url.URL
 }
 
-func NewClient(logger *slog.Logger, db *pgxpool.Pool, cacheImpl cache.Cache, accessStore accesscontrol.Store) *Client {
+func NewClient(logger *slog.Logger, db *pgxpool.Pool, cacheImpl cache.Cache, serverURL *url.URL) *Client {
 	logger = logger.With(attr.SlogComponent("shadowmcp"))
 	return &Client{
-		logger: logger,
-		db:     db,
-		repo:   risk_repo.New(db),
+		logger:    logger,
+		db:        db,
+		repo:      risk_repo.New(db),
+		serverURL: serverURL,
 		cache: cache.NewTypedObjectCache[PolicyEnabledCache](
 			logger.With(attr.SlogCacheNamespace("shadow_mcp_policy_enabled")),
 			cacheImpl,
@@ -77,7 +80,6 @@ func NewClient(logger *slog.Logger, db *pgxpool.Pool, cacheImpl cache.Cache, acc
 			cacheImpl,
 			cache.SuffixNone,
 		),
-		accessStore: accessStore,
 	}
 }
 

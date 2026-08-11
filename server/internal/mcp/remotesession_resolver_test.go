@@ -232,6 +232,7 @@ func insertRemoteSessionAccessToken(
 		RefreshTokenEncrypted: pgtype.Text{String: "", Valid: false},
 		RefreshExpiresAt:      pgtype.Timestamptz{Valid: false},
 		Scopes:                []string{},
+		Resource:              pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
 	return session
@@ -245,12 +246,12 @@ func mintUserSessionBearerForSubject(
 ) string {
 	t.Helper()
 
-	token, _, err := usersessions.NewSigner("test-jwt-secret").Mint(
-		subject,
-		urn.NewToolset(toolset.ID).String(),
-		ti.serverURL.String()+"/mcp/"+toolset.McpSlug.String,
-		time.Hour,
-	)
+	token, _, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
+		Subject:  subject,
+		Audience: urn.NewToolset(toolset.ID).String(),
+		Issuer:   ti.serverURL.String() + "/mcp/" + toolset.McpSlug.String,
+		Lifetime: time.Hour,
+	})
 	require.NoError(t, err)
 	return token
 }

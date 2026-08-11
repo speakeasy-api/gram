@@ -41,8 +41,6 @@ func NewToolsetsClient(options *ToolsetsClientOptions) *ToolsetsClient {
 		h.CloneToolset(),
 		h.AddExternalOAuthServer(),
 		h.RemoveOAuthServer(),
-		h.AddOAuthProxyServer(),
-		h.UpdateOAuthProxyServer(),
 		h.SetUserSessionIssuer(),
 		h.SetToolVariationsGroup(),
 	)

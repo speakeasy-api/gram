@@ -52,59 +52,54 @@ func UpdateMemberRolesAccessPath() string {
 	return "/rpc/access.updateMemberRoles"
 }
 
-// ListShadowMCPApprovalRequestsAccessPath returns the URL path to the access service listShadowMCPApprovalRequests HTTP endpoint.
-func ListShadowMCPApprovalRequestsAccessPath() string {
-	return "/rpc/access.listShadowMcpRequests"
+// ListShadowMCPInventoryAccessPath returns the URL path to the access service listShadowMCPInventory HTTP endpoint.
+func ListShadowMCPInventoryAccessPath() string {
+	return "/rpc/access.listShadowMCPInventory"
 }
 
-// CreateShadowMCPApprovalRequestAccessPath returns the URL path to the access service createShadowMCPApprovalRequest HTTP endpoint.
-func CreateShadowMCPApprovalRequestAccessPath() string {
-	return "/rpc/access.createShadowMcpRequest"
+// GetShadowMCPInventoryServerAccessPath returns the URL path to the access service getShadowMCPInventoryServer HTTP endpoint.
+func GetShadowMCPInventoryServerAccessPath() string {
+	return "/rpc/access.getShadowMCPInventoryServer"
 }
 
-// ApproveShadowMCPApprovalRequestAccessPath returns the URL path to the access service approveShadowMCPApprovalRequest HTTP endpoint.
-func ApproveShadowMCPApprovalRequestAccessPath() string {
-	return "/rpc/access.approveShadowMcpRequest"
+// UpdateShadowMCPInventoryServerNameAccessPath returns the URL path to the access service updateShadowMCPInventoryServerName HTTP endpoint.
+func UpdateShadowMCPInventoryServerNameAccessPath() string {
+	return "/rpc/access.updateShadowMCPInventoryServerName"
 }
 
-// DenyShadowMCPApprovalRequestAccessPath returns the URL path to the access service denyShadowMCPApprovalRequest HTTP endpoint.
-func DenyShadowMCPApprovalRequestAccessPath() string {
-	return "/rpc/access.denyShadowMcpRequest"
+// ListShadowMCPInventoryUsersAccessPath returns the URL path to the access service listShadowMCPInventoryUsers HTTP endpoint.
+func ListShadowMCPInventoryUsersAccessPath() string {
+	return "/rpc/access.listShadowMCPInventoryUsers"
 }
 
-// ListShadowMCPAccessRulesAccessPath returns the URL path to the access service listShadowMCPAccessRules HTTP endpoint.
-func ListShadowMCPAccessRulesAccessPath() string {
-	return "/rpc/access.listShadowMcpRules"
+// UpsertShadowMCPInventoryPolicyBypassAccessPath returns the URL path to the access service upsertShadowMCPInventoryPolicyBypass HTTP endpoint.
+func UpsertShadowMCPInventoryPolicyBypassAccessPath() string {
+	return "/rpc/access.upsertShadowMCPInventoryPolicyBypass"
 }
 
-// CreateShadowMCPAccessRuleAccessPath returns the URL path to the access service createShadowMCPAccessRule HTTP endpoint.
-func CreateShadowMCPAccessRuleAccessPath() string {
-	return "/rpc/access.createShadowMcpRule"
+// DeleteShadowMCPInventoryPolicyBypassAccessPath returns the URL path to the access service deleteShadowMCPInventoryPolicyBypass HTTP endpoint.
+func DeleteShadowMCPInventoryPolicyBypassAccessPath() string {
+	return "/rpc/access.deleteShadowMCPInventoryPolicyBypass"
 }
 
-// UpdateShadowMCPAccessRuleAccessPath returns the URL path to the access service updateShadowMCPAccessRule HTTP endpoint.
-func UpdateShadowMCPAccessRuleAccessPath() string {
-	return "/rpc/access.updateShadowMcpRule"
+// BlockShadowMCPInventoryServerAccessPath returns the URL path to the access service blockShadowMCPInventoryServer HTTP endpoint.
+func BlockShadowMCPInventoryServerAccessPath() string {
+	return "/rpc/access.blockShadowMCPInventoryServer"
 }
 
-// DeleteShadowMCPAccessRuleAccessPath returns the URL path to the access service deleteShadowMCPAccessRule HTTP endpoint.
-func DeleteShadowMCPAccessRuleAccessPath() string {
-	return "/rpc/access.deleteShadowMcpRule"
+// UnblockShadowMCPInventoryServerAccessPath returns the URL path to the access service unblockShadowMCPInventoryServer HTTP endpoint.
+func UnblockShadowMCPInventoryServerAccessPath() string {
+	return "/rpc/access.unblockShadowMCPInventoryServer"
 }
 
-// GetRBACStatusAccessPath returns the URL path to the access service getRBACStatus HTTP endpoint.
-func GetRBACStatusAccessPath() string {
-	return "/rpc/access.getRBACStatus"
+// ResolveShadowMCPInventoryRequestAccessPath returns the URL path to the access service resolveShadowMCPInventoryRequest HTTP endpoint.
+func ResolveShadowMCPInventoryRequestAccessPath() string {
+	return "/rpc/access.resolveShadowMCPInventoryRequest"
 }
 
-// EnableRBACAccessPath returns the URL path to the access service enableRBAC HTTP endpoint.
-func EnableRBACAccessPath() string {
-	return "/rpc/access.enableRBAC"
-}
-
-// DisableRBACAccessPath returns the URL path to the access service disableRBAC HTTP endpoint.
-func DisableRBACAccessPath() string {
-	return "/rpc/access.disableRBAC"
+// RequestAccessAccessPath returns the URL path to the access service requestAccess HTTP endpoint.
+func RequestAccessAccessPath() string {
+	return "/rpc/access.requestAccess"
 }
 
 // ListChallengesAccessPath returns the URL path to the access service listChallenges HTTP endpoint.

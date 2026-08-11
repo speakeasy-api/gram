@@ -3,6 +3,7 @@ package hooks
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -11,7 +12,11 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/hookevents"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 type alwaysEnabledFeatures struct{}
@@ -118,6 +123,215 @@ func TestClaudeHookSource_ConsistentAcrossAllWrites(t *testing.T) {
 		assert.Equal(t, wantUserID, m.UserID.String,
 			"UserID should match metadata.UserID for all hook writes (role=%s)", m.Role)
 	}
+}
+
+// TestPersistConversationEvent_WritesClickHouseTelemetry guards the fix for
+// the onboarding "Confirm traffic" step never showing prompt/response
+// traffic: UserPromptSubmit and Stop previously only reached Postgres via
+// persistConversationEvent, so ClickHouse-backed consumers of
+// event_source="hook" rows (like ListRecentHookEventsForOnboarding) only ever
+// saw tool calls. This asserts both conversation event types now also land in
+// ClickHouse, the same way persistToolCallEvent's tool events do.
+func TestPersistConversationEvent_WritesClickHouseTelemetry(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	enabled := func(context.Context, string) (bool, error) { return true, nil }
+	ti.service.telemetryLogger = telemetry.NewLogger(ctx, testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.chConn, enabled, enabled, nil, telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := uuid.NewString()
+	const wantUserID = "conversation-telemetry-user"
+	const wantUserEmail = "conversation-telemetry@example.com"
+	seedHookUser(t, ctx, ti.conn, authCtx.ActiveOrganizationID, wantUserID, wantUserEmail)
+
+	metadata := &SessionMetadata{
+		SessionID: sessionID,
+		UserEmail: wantUserEmail,
+		UserID:    wantUserID,
+		GramOrgID: authCtx.ActiveOrganizationID,
+		ProjectID: authCtx.ProjectID.String(),
+	}
+
+	prompt := "hello from the onboarding wizard"
+	lastAssistantMessage := "hi there"
+	model := "claude-opus"
+
+	require.NoError(t, ti.service.persistConversationEvent(ctx, &gen.ClaudePayload{
+		HookEventName: "UserPromptSubmit",
+		SessionID:     &sessionID,
+		Prompt:        &prompt,
+	}, metadata))
+
+	require.NoError(t, ti.service.persistConversationEvent(ctx, &gen.ClaudePayload{
+		HookEventName:        "Stop",
+		SessionID:            &sessionID,
+		LastAssistantMessage: &lastAssistantMessage,
+		Model:                &model,
+	}, metadata))
+
+	var rows []telemetryrepo.RecentHookEvent
+	require.Eventually(t, func() bool {
+		var listErr error
+		rows, listErr = telemetryrepo.New(ti.chConn).ListRecentHookEventsForOnboarding(ctx, telemetryrepo.ListRecentHookEventsForOnboardingParams{
+			ProjectIDs: []string{authCtx.ProjectID.String()},
+			Limit:      10,
+		})
+		return listErr == nil && len(rows) >= 2
+	}, 2*time.Second, 50*time.Millisecond)
+
+	var sawPrompt, sawStop bool
+	for _, row := range rows {
+		require.NotNil(t, row.EventName)
+		switch *row.EventName {
+		case "UserPromptSubmit":
+			sawPrompt = true
+		case "Stop":
+			sawStop = true
+		}
+	}
+	assert.True(t, sawPrompt, "UserPromptSubmit must be visible to the onboarding hook-event feed")
+	assert.True(t, sawStop, "Stop (assistant reply) must be visible to the onboarding hook-event feed")
+}
+
+// The three Claude surfaces must resolve distinctly: cowork self-identifies
+// on the OTEL service.name, Claude Code Desktop on the desktop hook adapter
+// slug, and the CLI on the shared "claude-code" name. Non-Claude values must
+// not resolve at all.
+func TestClaudeSurfaceFromServiceName(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "cowork", claudeSurfaceFromServiceName("cowork"))
+	assert.Equal(t, "cowork", claudeSurfaceFromServiceName("claude-cowork"))
+	assert.Equal(t, "cowork", claudeSurfaceFromServiceName(" Claude Cowork "))
+	assert.Equal(t, "claude-code-desktop", claudeSurfaceFromServiceName("claude-code-desktop"))
+	assert.Equal(t, "claude-code", claudeSurfaceFromServiceName("claude-code"))
+	assert.Equal(t, "claude-code", claudeSurfaceFromServiceName("ClaudeCode"))
+	assert.Empty(t, claudeSurfaceFromServiceName("cursor"))
+	assert.Empty(t, claudeSurfaceFromServiceName("codex_cli_rs"))
+	assert.Empty(t, claudeSurfaceFromServiceName(""))
+}
+
+// Merging a fresh service name with the cached one keeps whichever pins the
+// surface more precisely: "cowork" beats the desktop adapter slug, the
+// desktop adapter slug beats the ambiguous "claude-code" the OTEL stream
+// reports for both desktop and CLI, and ties keep the fresh value. Non-Claude
+// incoming values pass through unchanged so non-Claude senders keep their
+// reported name.
+func TestPreferClaudeServiceName(t *testing.T) {
+	t.Parallel()
+
+	// OTEL "cowork" upgrades a cached desktop adapter slug.
+	assert.Equal(t, "cowork", preferClaudeServiceName("cowork", "claude-code-desktop"))
+	// A cached "cowork" survives both the ambiguous OTEL name and the shared
+	// desktop adapter slug.
+	assert.Equal(t, "cowork", preferClaudeServiceName("claude-code", "cowork"))
+	assert.Equal(t, "cowork", preferClaudeServiceName("claude-code-desktop", "cowork"))
+	// A cached desktop adapter slug survives OTEL batches reporting the
+	// ambiguous "claude-code"; the adapter upgrades a cached ambiguous name.
+	assert.Equal(t, "claude-code-desktop", preferClaudeServiceName("claude-code", "claude-code-desktop"))
+	assert.Equal(t, "claude-code-desktop", preferClaudeServiceName("claude-code-desktop", "claude-code"))
+	// Empty incoming keeps the cache; empty cache takes the incoming value.
+	assert.Equal(t, "cowork", preferClaudeServiceName("", "cowork"))
+	assert.Equal(t, "claude-code", preferClaudeServiceName("claude-code", ""))
+	// A non-Claude incoming value always keeps its reported name — even
+	// against a cached Claude value under the same session id.
+	assert.Equal(t, "cursor", preferClaudeServiceName("cursor", "Cursor"))
+	assert.Equal(t, "cursor", preferClaudeServiceName("cursor", "claude-code"))
+	assert.Equal(t, "cursor", preferClaudeServiceName("cursor", "claude-code-desktop"))
+	assert.Equal(t, "cursor", preferClaudeServiceName("cursor", "cowork"))
+	// The bare "claude" adapter slug the hooks binary sends for Claude Code
+	// marks a Claude-family sender without naming a surface, so any cached
+	// surface survives it instead of being clobbered.
+	assert.Equal(t, "claude-code", preferClaudeServiceName("claude", "claude-code"))
+	assert.Equal(t, "claude-code-desktop", preferClaudeServiceName("claude", "claude-code-desktop"))
+	assert.Equal(t, "cowork", preferClaudeServiceName("claude", "cowork"))
+	assert.Equal(t, "claude", preferClaudeServiceName("claude", ""))
+	// And any Claude surface upgrades a cached bare slug.
+	assert.Equal(t, "claude-code", preferClaudeServiceName("claude-code", "claude"))
+}
+
+// A session whose OTEL stream reports service.name "cowork" must persist its
+// chat messages with source "cowork" — no SessionStart inventory variant
+// needed. This is the current cowork identification path: the canonical
+// ingest transport stamps no variant, so the service name is the only signal.
+func TestClaudeChatSource_CoworkFromServiceName(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+	prompt := "hello from cowork"
+
+	metadata := &SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "cowork",
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}
+	require.NoError(t, ti.service.persistConversationEvent(ctx, &gen.ClaudePayload{
+		HookEventName: "UserPromptSubmit",
+		SessionID:     &sessionID,
+		Prompt:        &prompt,
+	}, metadata))
+
+	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	require.True(t, msgs[0].Source.Valid)
+	require.Equal(t, "cowork", msgs[0].Source.String)
+}
+
+// Older cowork builds report service.name "claude-code"; for those the
+// inventory-shape variant stamped at SessionStart must still relabel chat
+// messages as cowork.
+func TestClaudeChatSource_CoworkFromVariantOverridesAmbiguousServiceName(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := uuid.NewString()
+	chatID := sessionIDToUUID(sessionID)
+	prompt := "hello from legacy cowork"
+	require.NoError(t, ti.service.cache.Set(ctx, sessionAgentVariantCacheKey(sessionID),
+		agentVariantCowork, sessionMCPListTTL))
+
+	metadata := &SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "claude-code",
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}
+	require.NoError(t, ti.service.persistConversationEvent(ctx, &gen.ClaudePayload{
+		HookEventName: "UserPromptSubmit",
+		SessionID:     &sessionID,
+		Prompt:        &prompt,
+	}, metadata))
+
+	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	require.True(t, msgs[0].Source.Valid)
+	require.Equal(t, "cowork", msgs[0].Source.String)
 }
 
 func TestClaudeUserPromptSubmitDoesNotPersistPromptIDAsMessageID(t *testing.T) {
@@ -230,8 +444,41 @@ func TestClaudeStopBackfillsLatestUserPromptID(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, msgs, 2)
 	require.Equal(t, "user", msgs[0].Role)
-	require.True(t, msgs[0].MessageID.Valid)
-	require.Equal(t, wantPromptID, msgs[0].MessageID.String)
+	require.False(t, msgs[0].MessageID.Valid)
 	require.Equal(t, "assistant", msgs[1].Role)
 	require.False(t, msgs[1].MessageID.Valid)
+}
+
+func TestClaudeSessionEndDoesNotWakeBeforeTranscriptPersistence(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	projectID := uuid.New()
+
+	unattributed, err := ti.service.handleSessionEnd(ctx, hookevents.NewSessionEnd(
+		hookevents.Event{
+			Provider: "claude", Type: "", RawEventType: "SessionEnd", Timestamp: time.Now(),
+			AuthContext: nil, ConversationID: "unattributed", Raw: nil,
+			Context: hookevents.EventContext{
+				OrganizationID: "", ProjectID: uuid.Nil, User: hookevents.User{ID: "", Email: ""},
+			},
+		},
+		hookevents.SessionEndParams{Reason: "clear"},
+	))
+	require.NoError(t, err)
+	require.NotNil(t, unattributed)
+	require.Empty(t, ti.efficacySignals.signaled(), "a session with no project wakes nothing")
+
+	resolved, err := ti.service.handleSessionEnd(ctx, hookevents.NewSessionEnd(
+		hookevents.Event{
+			Provider: "claude", Type: "", RawEventType: "SessionEnd", Timestamp: time.Now(),
+			AuthContext: nil, ConversationID: "resolved", Raw: nil,
+			Context: hookevents.EventContext{
+				OrganizationID: "org", ProjectID: projectID, User: hookevents.User{ID: "", Email: ""},
+			},
+		},
+		hookevents.SessionEndParams{Reason: "exit"},
+	))
+	require.NoError(t, err)
+	require.NotNil(t, resolved)
+	require.Empty(t, ti.efficacySignals.signaled(), "durable observations, messages, and the sweep provide later wakes")
 }

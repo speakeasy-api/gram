@@ -1,10 +1,12 @@
-import { CopyButton } from "@/components/ui/copy-button";
-import { DotRow } from "@/components/ui/dot-row";
-import { Button } from "@/components/ui/button";
-import { Type } from "@/components/ui/type";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { DotRow } from "@/components/ui/DotRow";
+import { Button } from "@/components/ui/Button";
+import { Text } from "@/components/ui/Text";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import { useRoutes } from "@/routes";
 import { MCPStatusIndicator } from "./MCPStatusIndicator";
+import { MCPActivityIndicator } from "./MCPActivityIndicator";
+import type { McpActivityStatus } from "./mcp-activity";
 import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { AlertTriangleIcon, Link2, Network, Package } from "lucide-react";
@@ -14,12 +16,16 @@ import {
   useExternalMcpOAuthConfigStatus,
 } from "../sources/sources-hooks";
 import { ToolCollectionBadge } from "../tool-collection-badge";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 
 export function MCPTableRow({
   toolset,
+  activityStatus,
+  recentWindowDays,
 }: {
   toolset: ToolsetEntry;
+  activityStatus?: McpActivityStatus | null;
+  recentWindowDays?: number;
 }): JSX.Element {
   const routes = useRoutes();
   const { url: mcpUrl } = useMcpUrl(toolset);
@@ -83,14 +89,14 @@ export function MCPTableRow({
       {/* Name */}
       <td className="px-3 py-3">
         <div className="flex items-center gap-2">
-          <Type
+          <Text
             variant="subheading"
             as="div"
-            className="group-hover:text-primary truncate text-sm transition-colors"
+            className="group-hover:text-primary min-w-0 flex-1 truncate text-sm transition-colors"
             title={toolset.name}
           >
             {toolset.name}
-          </Type>
+          </Text>
           {oauthStatus === "required-unconfigured" && (
             <Badge variant="warning">
               <Badge.LeftIcon>
@@ -98,6 +104,14 @@ export function MCPTableRow({
               </Badge.LeftIcon>
               <Badge.Text>OAuth Required</Badge.Text>
             </Badge>
+          )}
+          {activityStatus && (
+            <MCPActivityIndicator
+              status={activityStatus}
+              recentWindowDays={recentWindowDays}
+              size="sm"
+              className="shrink-0"
+            />
           )}
         </div>
       </td>
@@ -115,20 +129,20 @@ export function MCPTableRow({
       <td className="max-w-xs px-3 py-3">
         {mcpUrl ? (
           <div className="flex items-center gap-1.5">
-            <Type small muted className="truncate">
+            <Text small muted className="truncate">
               {mcpUrl}
-            </Type>
+            </Text>
             <CopyButton
               text={mcpUrl}
-              size="icon-sm"
+              size="sm"
               icon={Link2}
               tooltip="Copy MCP URL"
             />
             {installSourceTooltip && (
               <Button
                 type="button"
-                variant="ghost"
-                size="icon-sm"
+                variant="tertiary"
+                size="sm"
                 tooltip={installSourceTooltip}
                 aria-label={installSourceTooltip}
                 onClick={(e) => e.stopPropagation()}
@@ -138,9 +152,9 @@ export function MCPTableRow({
             )}
           </div>
         ) : (
-          <Type small muted>
+          <Text small muted>
             —
-          </Type>
+          </Text>
         )}
       </td>
 
@@ -159,16 +173,16 @@ export function MCPTableRowSkeleton(): JSX.Element {
   return (
     <DotRow>
       <td className="px-3 py-3">
-        <div className="bg-muted h-4 w-2/3 animate-pulse rounded" />
+        <div className="bg-muted h-4 w-2/3 animate-pulse" />
       </td>
       <td className="px-3 py-3">
         <div className="flex items-center gap-2">
           <div className="bg-muted h-2 w-2 animate-pulse rounded-full" />
-          <div className="bg-muted h-3.5 w-12 animate-pulse rounded" />
+          <div className="bg-muted h-3.5 w-12 animate-pulse" />
         </div>
       </td>
       <td className="px-3 py-3">
-        <div className="bg-muted h-3.5 w-40 animate-pulse rounded" />
+        <div className="bg-muted h-3.5 w-40 animate-pulse" />
       </td>
       <td className="px-3 py-3">
         <div className="bg-muted h-5 w-10 animate-pulse rounded-full" />

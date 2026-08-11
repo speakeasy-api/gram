@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
-import type { DateRangePreset } from "@gram-ai/elements";
+import type { DateRangePreset } from "@/elements";
 import { Operator } from "@gram/client/models/components/logfilter";
-import type { MultiSelectGroup } from "@/components/ui/multi-select";
+import type { MultiSelectGroup } from "@/components/ui/MultiSelect";
 
 /**
  * Shared, strongly-typed filter system.
@@ -28,6 +28,12 @@ export interface FilterOption {
   label: string;
   value: string;
   icon?: ComponentType<{ className?: string }>;
+  /**
+   * Optional secondary explanation under the option label in select /
+   * multiselect menus. Prefer this for non-obvious values users need to
+   * distinguish (e.g. Manual vs Captured).
+   */
+  description?: string;
 }
 
 /** Multiselect dimensions may supply grouped options (e.g. servers by type). */

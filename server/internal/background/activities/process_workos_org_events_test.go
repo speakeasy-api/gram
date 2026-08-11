@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,7 +15,9 @@ import (
 	"github.com/workos/workos-go/v6/pkg/events"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -62,7 +65,7 @@ func TestProcessWorkOSOrganizationEvents_AdvancesCursor(t *testing.T) {
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{
 		WorkOSOrganizationID: workosOrgID,
@@ -96,7 +99,7 @@ func TestProcessWorkOSOrganizationEvents_ResumesFromCursor(t *testing.T) {
 		{{ID: "event_01HZNEXT", Event: "organization.updated", CreatedAt: time.Now(), Data: newOrgEventPayload(t, workosOrgID)}},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{
 		WorkOSOrganizationID: workosOrgID,
@@ -129,7 +132,7 @@ func TestProcessWorkOSOrganizationEvents_FullPageHasMore(t *testing.T) {
 	}
 
 	stub := newWorkOSClientWithEvents([][]events.Event{page})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -146,7 +149,7 @@ func TestProcessWorkOSOrganizationEvents_EmptyPage(t *testing.T) {
 	const workosOrgID = "org_01HZTESTEMPTY"
 
 	stub := newWorkOSClientWithEvents([][]events.Event{nil})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -178,7 +181,7 @@ func TestProcessWorkOSOrganizationEvents_CreatesOrgAndUpdatesWorkOSExternalIDWhe
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -217,7 +220,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationCreateRejectsEmptySlug(t *t
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.Error(t, err)
 
@@ -250,7 +253,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationExternalIDMissingLocallyCre
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_01HZMISSINGEXTERNAL", res.LastEventID)
@@ -295,7 +298,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationCreateHandlesConcurrentInse
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_01HZCONCURRENT", res.LastEventID)
@@ -336,7 +339,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationCreateAddsHashForTakenSlug(
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_01HZTAKENSLUG", res.LastEventID)
@@ -385,7 +388,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationCreateConflictSkipsStaleEve
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_01HZ0001", res.LastEventID)
@@ -436,7 +439,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationCreatedAndUpdated(t *testin
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 
@@ -488,7 +491,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationUpdatePreservesExistingSlug
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_01HZSLUG1", res.LastEventID)
@@ -532,7 +535,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationUpdateDoesNotRemapExistingW
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_01HZREMAP", res.LastEventID)
@@ -573,7 +576,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationUpdateRelinksExternalIDMatc
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: newWorkosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_01HZRELINK", res.LastEventID)
@@ -612,7 +615,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationUpdateWithoutExternalIDKeep
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	require.Equal(t, "event_01HZNOEXTERNAL", res.LastEventID)
@@ -662,7 +665,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationUpdateSkippedWhenStale(t *t
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 
@@ -710,7 +713,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationDeletedSetsDisabled(t *test
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 
@@ -763,7 +766,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationUpdateDoesNotClearDisabled(
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 
@@ -873,7 +876,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationRoleUpsertAndDelete(t *test
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 
@@ -933,7 +936,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationDeletedSkippedWhenStale(t *
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 	_, err = activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 
@@ -1056,7 +1059,7 @@ func TestProcessWorkOSOrganizationEvents_MembershipFilterIncludesMembershipTypes
 	const workosOrgID = "org_01HZMEMFILTER"
 
 	stub := newWorkOSClientWithEvents([][]events.Event{nil})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 
 	_, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1111,7 +1114,7 @@ func TestProcessWorkOSOrganizationEvents_MembershipKnownUserSyncsRoles(t *testin
 			newWorkOSMembershipEvent(t, "organization_membership.created", "event_01HZMEM1", "mem_01HZKNOWN", workosOrgID, workosUserID, updatedAt, "member"),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1158,7 +1161,7 @@ func TestProcessWorkOSOrganizationEvents_MembershipUnknownUserStillSyncsRoles(t 
 			newWorkOSMembershipEvent(t, "organization_membership.created", "event_01HZMEMUNK", "mem_01HZUNKNOWN", workosOrgID, workosUserID, time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC), "member"),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1197,7 +1200,7 @@ func TestProcessWorkOSOrganizationEvents_MembershipDeleteSoftDeletesAndClearsAss
 			newWorkOSMembershipEvent(t, "organization_membership.deleted", "event_01HZDEL2", membershipID, workosOrgID, workosUserID, time.Date(2026, 5, 6, 13, 0, 0, 0, time.UTC)),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1252,7 +1255,7 @@ func TestProcessWorkOSOrganizationEvents_MembershipRejoinReusesTombstone(t *test
 			newWorkOSMembershipEvent(t, "organization_membership.created", "event_01HZREJOIN3", secondMembershipID, workosOrgID, workosUserID, time.Date(2026, 5, 6, 14, 0, 0, 0, time.UTC)),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1282,7 +1285,7 @@ func TestProcessWorkOSOrganizationEvents_MembershipUnknownOrganizationSkips(t *t
 			newWorkOSMembershipEvent(t, "organization_membership.created", "event_01HZMEMUNKORG", "mem_01HZUNKNOWNORG", workosOrgID, "user_01HZUNKNOWNORG", time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC), "member"),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1317,7 +1320,7 @@ func TestProcessWorkOSOrganizationEvents_MembershipMultipleRolesCreatesMultipleA
 			newWorkOSMembershipEvent(t, "organization_membership.created", "event_01HZMULTI1", "mem_01HZMULTI", workosOrgID, workosUserID, updatedAt, "admin", "builder", "viewer"),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1365,7 +1368,7 @@ func TestProcessWorkOSOrganizationEvents_MembershipMultipleRolesUnknownUserOptim
 			newWorkOSMembershipEvent(t, "organization_membership.created", "event_01HZMULTIUNK", "mem_01HZMULTIUNK", workosOrgID, workosUserID, time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC), "editor", "reviewer"),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1432,7 +1435,7 @@ func TestProcessWorkOSOrganizationEvents_ConnectionActivatedSetsSSOEnabled(t *te
 	stub := newWorkOSClientWithEvents([][]events.Event{
 		{newWorkOSConnectionEvent(t, "connection.activated", "event_01HZSSOACT", workosOrgID)},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1463,7 +1466,7 @@ func TestProcessWorkOSOrganizationEvents_ConnectionDeactivatedClearsSSOEnabled(t
 			newWorkOSConnectionEvent(t, "connection.deactivated", "event_01HZSSO2", workosOrgID),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1493,7 +1496,7 @@ func TestProcessWorkOSOrganizationEvents_ConnectionDeletedClearsSSOEnabled(t *te
 			newWorkOSConnectionEvent(t, "connection.deleted", "event_01HZSSO4", workosOrgID),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1525,7 +1528,7 @@ func TestProcessWorkOSOrganizationEvents_ConnectionEventEmptyOrgIDSkips(t *testi
 	stub := newWorkOSClientWithEvents([][]events.Event{
 		{{ID: "event_01HZSSONULL", Event: "connection.activated", CreatedAt: time.Now(), Data: data}},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1551,7 +1554,7 @@ func TestProcessWorkOSOrganizationEvents_ConnectionActivatedIdempotent(t *testin
 			newWorkOSConnectionEvent(t, "connection.activated", "event_01HZSSO6", workosOrgID),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1582,7 +1585,7 @@ func TestProcessWorkOSOrganizationEvents_DSyncActivatedSetsSCIMEnabled(t *testin
 	stub := newWorkOSClientWithEvents([][]events.Event{
 		{newWorkOSDSyncEvent(t, "dsync.activated", "event_01HZSCIMACT", workosOrgID)},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1612,7 +1615,7 @@ func TestProcessWorkOSOrganizationEvents_DSyncDeletedClearsSCIMEnabled(t *testin
 			newWorkOSDSyncEvent(t, "dsync.deleted", "event_01HZSCIM4", workosOrgID),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1643,7 +1646,7 @@ func TestProcessWorkOSOrganizationEvents_DSyncEventEmptyOrgIDSkips(t *testing.T)
 	stub := newWorkOSClientWithEvents([][]events.Event{
 		{{ID: "event_01HZSCIMNULL", Event: "dsync.activated", CreatedAt: time.Now(), Data: data}},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1668,7 +1671,7 @@ func TestProcessWorkOSOrganizationEvents_DSyncActivatedIdempotent(t *testing.T) 
 			newWorkOSDSyncEvent(t, "dsync.activated", "event_01HZSCIM6", workosOrgID),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1705,7 +1708,7 @@ func TestProcessWorkOSOrganizationEvents_SSOAndSCIMFullLifecycle(t *testing.T) {
 			newWorkOSDSyncEvent(t, "dsync.deleted", "event_01HZL4", workosOrgID),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1739,7 +1742,7 @@ func TestProcessWorkOSOrganizationEvents_StaleConnectionEventSkipped(t *testing.
 			newWorkOSConnectionEvent(t, "connection.deactivated", "event_01HZSSOSTALE1", workosOrgID),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1776,7 +1779,7 @@ func TestProcessWorkOSOrganizationEvents_StaleDSyncEventSkipped(t *testing.T) {
 			newWorkOSDSyncEvent(t, "dsync.deleted", "event_01HZSCIMSTALE1", workosOrgID),
 		},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1803,7 +1806,7 @@ func TestProcessWorkOSOrganizationEvents_ConnectionEventUnknownOrgNoError(t *tes
 	stub := newWorkOSClientWithEvents([][]events.Event{
 		{newWorkOSConnectionEvent(t, "connection.activated", "event_01HZSSOUNK", workosOrgID)},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1822,7 +1825,7 @@ func TestProcessWorkOSOrganizationEvents_DSyncEventUnknownOrgNoError(t *testing.
 	stub := newWorkOSClientWithEvents([][]events.Event{
 		{newWorkOSDSyncEvent(t, "dsync.activated", "event_01HZSCIMUNK", workosOrgID)},
 	})
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
@@ -1851,7 +1854,7 @@ func TestProcessWorkOSOrganizationEvents_OrganizationRoleSkippedForUnknownOrg(t 
 		},
 	})
 
-	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub)
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
 	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
 	require.NoError(t, err)
 	// Cursor still advances — we don't replay events for orgs that don't yet
@@ -1863,4 +1866,183 @@ func TestProcessWorkOSOrganizationEvents_OrganizationRoleSkippedForUnknownOrg(t 
 		WorkosSlug:     "phantom",
 	})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
+}
+
+// captureCache records cache Delete calls so tests can assert that
+// deprovisioning events invalidate cached user info. All other operations
+// delegate to the embedded no-op cache.
+type captureCache struct {
+	cache.Cache
+	mu      sync.Mutex
+	deleted []string
+}
+
+func newCaptureCache() *captureCache {
+	return &captureCache{Cache: cache.NoopCache, mu: sync.Mutex{}, deleted: nil}
+}
+
+func (c *captureCache) Delete(ctx context.Context, key string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.deleted = append(c.deleted, key)
+	return nil
+}
+
+func (c *captureCache) Deleted() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]string, len(c.deleted))
+	copy(out, c.deleted)
+	return out
+}
+
+func newWorkOSMembershipEventWithStatus(t *testing.T, eventType, eventID, membershipID, workosOrgID, workosUserID, status string, updatedAt time.Time, roleSlugs ...string) events.Event {
+	t.Helper()
+
+	roles := make([]struct {
+		Slug string `json:"slug"`
+	}, 0, len(roleSlugs))
+	for _, slug := range roleSlugs {
+		roles = append(roles, struct {
+			Slug string `json:"slug"`
+		}{Slug: slug})
+	}
+
+	payload := struct {
+		ID             string `json:"id"`
+		Object         string `json:"object"`
+		OrganizationID string `json:"organization_id"`
+		UserID         string `json:"user_id"`
+		Status         string `json:"status"`
+		Roles          []struct {
+			Slug string `json:"slug"`
+		} `json:"roles"`
+		UpdatedAt time.Time `json:"updated_at"`
+	}{
+		ID:             membershipID,
+		Object:         "organization_membership",
+		OrganizationID: workosOrgID,
+		UserID:         workosUserID,
+		Status:         status,
+		Roles:          roles,
+		UpdatedAt:      updatedAt,
+	}
+
+	data, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	return events.Event{
+		ID:        eventID,
+		Event:     eventType,
+		CreatedAt: updatedAt,
+		Data:      data,
+	}
+}
+
+func TestProcessWorkOSOrganizationEvents_MembershipInactiveStatusDeprovisions(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_membership_inactive")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_mem_inactive"
+	const workosOrgID = "org_01HZMEMINACTIVE"
+	const userID = "user_mem_inactive"
+	const workosUserID = "user_01HZMEMINACTIVE"
+	const membershipID = "mem_01HZINACTIVE"
+
+	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+	seedWorkOSUser(t, ctx, conn, userID, workosUserID)
+	seedOrganizationRole(t, ctx, conn, organizationID, "member")
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			newWorkOSMembershipEventWithStatus(t, "organization_membership.created", "event_01HZINACT1", membershipID, workosOrgID, workosUserID, "active", time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC), "member"),
+			// SCIM deactivation: WorkOS flips the membership to inactive via
+			// an update event instead of emitting a delete.
+			newWorkOSMembershipEventWithStatus(t, "organization_membership.updated", "event_01HZINACT2", membershipID, workosOrgID, workosUserID, "inactive", time.Date(2026, 5, 6, 13, 0, 0, 0, time.UTC), "member"),
+		},
+	})
+	capturingCache := newCaptureCache()
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, capturingCache)
+
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZINACT2", res.LastEventID)
+
+	relationship, err := orgrepo.New(conn).GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(userID),
+	})
+	require.NoError(t, err)
+	require.True(t, relationship.Deleted)
+	require.Equal(t, "event_01HZINACT2", relationship.WorkosLastEventID.String)
+
+	assignments, err := orgrepo.New(conn).ListOrganizationRoleAssignmentsByWorkOSUser(ctx, orgrepo.ListOrganizationRoleAssignmentsByWorkOSUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   workosUserID,
+	})
+	require.NoError(t, err)
+	require.Len(t, assignments, 1)
+	require.True(t, assignments[0].DeletedAt.Valid)
+
+	deletedKeys := capturingCache.Deleted()
+	require.Len(t, deletedKeys, 1)
+	require.Contains(t, deletedKeys[0], sessions.UserInfoCacheKey(userID))
+}
+
+func TestProcessWorkOSOrganizationEvents_MembershipReactivationRestoresAccess(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	conn := newOrgEventsTestConn(t, "workos_org_events_membership_reactivate")
+	logger := testenv.NewLogger(t)
+
+	const organizationID = "gram_org_mem_reactivate"
+	const workosOrgID = "org_01HZMEMREACT"
+	const userID = "user_mem_reactivate"
+	const workosUserID = "user_01HZMEMREACT"
+	const membershipID = "mem_01HZREACT"
+
+	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
+	seedWorkOSUser(t, ctx, conn, userID, workosUserID)
+	seedOrganizationRole(t, ctx, conn, organizationID, "member")
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			newWorkOSMembershipEventWithStatus(t, "organization_membership.created", "event_01HZREACT1", membershipID, workosOrgID, workosUserID, "active", time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC), "member"),
+			newWorkOSMembershipEventWithStatus(t, "organization_membership.updated", "event_01HZREACT2", membershipID, workosOrgID, workosUserID, "inactive", time.Date(2026, 5, 6, 13, 0, 0, 0, time.UTC), "member"),
+			newWorkOSMembershipEventWithStatus(t, "organization_membership.updated", "event_01HZREACT3", membershipID, workosOrgID, workosUserID, "active", time.Date(2026, 5, 6, 14, 0, 0, 0, time.UTC), "member"),
+		},
+	})
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
+
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZREACT3", res.LastEventID)
+
+	relationship, err := orgrepo.New(conn).GetOrganizationRelationshipForUser(ctx, orgrepo.GetOrganizationRelationshipForUserParams{
+		OrganizationID: organizationID,
+		UserID:         conv.ToPGText(userID),
+	})
+	require.NoError(t, err)
+	require.False(t, relationship.Deleted)
+	require.Equal(t, "event_01HZREACT3", relationship.WorkosLastEventID.String)
+
+	// Deactivation tombstones the original assignment and reactivation
+	// creates a fresh row (same pattern as a membership rejoin), so exactly
+	// one assignment must be active again.
+	assignments, err := orgrepo.New(conn).ListOrganizationRoleAssignmentsByWorkOSUser(ctx, orgrepo.ListOrganizationRoleAssignmentsByWorkOSUserParams{
+		OrganizationID: organizationID,
+		WorkosUserID:   workosUserID,
+	})
+	require.NoError(t, err)
+	active := 0
+	for _, assignment := range assignments {
+		if !assignment.DeletedAt.Valid {
+			active++
+		}
+	}
+	require.Equal(t, 1, active)
 }

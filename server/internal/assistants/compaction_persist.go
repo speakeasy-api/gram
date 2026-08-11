@@ -93,7 +93,10 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 		return oops.E(oops.CodeForbidden, nil, "thread does not belong to assistant").LogError(ctx, s.logger, logAttrs...)
 	}
 
-	chatRow, err := chatrepo.New(s.db).GetChat(ctx, threadRow.ChatID)
+	chatRow, err := chatrepo.New(s.db).GetChat(ctx, chatrepo.GetChatParams{
+		ID:        threadRow.ChatID,
+		ProjectID: projectID,
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeNotFound, nil, "assistant chat not found").LogError(ctx, s.logger, logAttrs...)
@@ -116,7 +119,10 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 		return oops.E(oops.CodeUnexpected, err, "lock chat for compaction").LogError(ctx, s.logger, logAttrs...)
 	}
 
-	currentGen, err := chatrepo.New(tx).GetMaxGenerationForChat(ctx, threadRow.ChatID)
+	currentGen, err := chatrepo.New(tx).GetMaxGenerationForChat(ctx, chatrepo.GetMaxGenerationForChatParams{
+		ChatID:    threadRow.ChatID,
+		ProjectID: projectID,
+	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "load chat generation").LogError(ctx, s.logger, logAttrs...)
 	}
@@ -130,10 +136,12 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 		}
 		empty := pgtype.Text{String: "", Valid: false}
 		params = append(params, chatrepo.CreateChatMessageParams{
+			Replayed:         false,
+			CreatedAt:        conv.PtrToPGTimestamptz(nil),
 			ChatID:           threadRow.ChatID,
 			Role:             m.Role,
 			ProjectID:        chatRow.ProjectID,
-			Content:          m.Content,
+			Content:          m.Content.Text(),
 			ContentRaw:       nil,
 			ContentAssetUrl:  empty,
 			StorageError:     empty,

@@ -1,0 +1,180 @@
+package mv
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+
+	gen "github.com/speakeasy-api/gram/server/gen/skills"
+	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/skills/repo"
+)
+
+func BuildSkillFeedbackView(feedback repo.SkillFeedback) *gen.SkillFeedback {
+	return &gen.SkillFeedback{
+		ID:             feedback.ID.String(),
+		Source:         gen.SkillFeedbackSource(feedback.Source),
+		Outcome:        gen.SkillFeedbackOutcome(feedback.Outcome),
+		Note:           conv.FromPGText[string](feedback.Note),
+		SkillVersionID: conv.FromNullableUUID(feedback.SkillVersionID),
+		ReviewedAt:     conv.PtrEmpty(conv.FromPGTimestamptz(feedback.ReviewedAt)),
+		CreatedAt:      conv.FromPGTimestamptz(feedback.CreatedAt),
+	}
+}
+
+func BuildSkillFeedbackListView(rows []repo.SkillFeedback) []*gen.SkillFeedback {
+	result := make([]*gen.SkillFeedback, len(rows))
+	for i, row := range rows {
+		result[i] = BuildSkillFeedbackView(row)
+	}
+	return result
+}
+
+func BuildSkillView(skill repo.Skill, latestVersionID uuid.UUID, versionCount int64, hasValidVersion bool, shareToken pgtype.Text) *types.Skill {
+	var latestVersionIDValue *string
+	if latestVersionID != uuid.Nil {
+		latestVersionIDValue = conv.PtrEmpty(latestVersionID.String())
+	}
+	return &types.Skill{
+		ID:              skill.ID.String(),
+		ProjectID:       skill.ProjectID.String(),
+		Name:            skill.Name,
+		DisplayName:     skill.DisplayName,
+		Summary:         conv.FromPGText[string](skill.Summary),
+		SourceKind:      skill.SourceKind,
+		Classification:  skill.Classification,
+		Tags:            skillTagsOrEmpty(skill.Tags),
+		LatestVersionID: latestVersionIDValue,
+		VersionCount:    versionCount,
+		HasValidVersion: hasValidVersion,
+		FirstSeenAt:     conv.PtrEmpty(conv.FromPGTimestamptz(skill.FirstSeenAt)),
+		LastSeenAt:      conv.PtrEmpty(conv.FromPGTimestamptz(skill.LastSeenAt)),
+		SeenCount:       skill.SeenCount,
+		ShareToken:      conv.FromPGText[string](shareToken),
+		CreatedAt:       conv.FromPGTimestamptz(skill.CreatedAt),
+		UpdatedAt:       conv.FromPGTimestamptz(skill.UpdatedAt),
+	}
+}
+
+func skillTagsOrEmpty(tags []string) []string {
+	if tags == nil {
+		return []string{}
+	}
+	return tags
+}
+
+func BuildSkillListView(rows []repo.ListSkillsRow) []*types.Skill {
+	result := make([]*types.Skill, len(rows))
+	for i, row := range rows {
+		result[i] = BuildSkillView(row.Skill, row.LatestVersionID, row.VersionCount, row.HasValidVersion, row.ShareToken)
+	}
+
+	return result
+}
+
+type SkillVersionSightingStats struct {
+	FirstSeenAt pgtype.Timestamptz
+	LastSeenAt  pgtype.Timestamptz
+	SeenCount   int64
+}
+
+func BuildSkillVersionView(version repo.SkillVersion, derivedFromVersionID uuid.NullUUID, frontmatter map[string]any, sightings SkillVersionSightingStats) (*types.SkillVersion, error) {
+	metadata := make(map[string]any)
+	metadataDecoder := json.NewDecoder(bytes.NewReader(version.Metadata))
+	metadataDecoder.UseNumber()
+	if err := metadataDecoder.Decode(&metadata); err != nil {
+		return nil, fmt.Errorf("decode skill version metadata: %w", err)
+	}
+	if metadata == nil {
+		metadata = make(map[string]any)
+	}
+
+	if frontmatter == nil {
+		frontmatter = make(map[string]any)
+	}
+
+	validationErrors := make([]*types.SkillValidationError, 0)
+	//nolint:musttag // Goa's generated type uses exported field names without JSON tags.
+	if err := json.Unmarshal(version.ValidationErrors, &validationErrors); err != nil {
+		return nil, fmt.Errorf("decode skill version validation errors: %w", err)
+	}
+	if validationErrors == nil {
+		validationErrors = make([]*types.SkillValidationError, 0)
+	}
+
+	return &types.SkillVersion{
+		ID:                   version.ID.String(),
+		SkillID:              version.SkillID.String(),
+		Content:              version.Content,
+		CanonicalSha256:      version.CanonicalSha256,
+		RawSha256:            version.RawSha256,
+		Description:          conv.FromPGText[string](version.Description),
+		Metadata:             metadata,
+		Frontmatter:          frontmatter,
+		SpecValid:            version.SpecValid,
+		ValidationErrors:     validationErrors,
+		DerivedFromVersionID: conv.FromNullableUUID(derivedFromVersionID),
+		CreatedAt:            conv.FromPGTimestamptz(version.CreatedAt),
+		CreatedByUserID:      version.CreatedByUserID,
+		FirstSeenAt:          conv.PtrEmpty(conv.FromPGTimestamptz(sightings.FirstSeenAt)),
+		LastSeenAt:           conv.PtrEmpty(conv.FromPGTimestamptz(sightings.LastSeenAt)),
+		SeenCount:            sightings.SeenCount,
+	}, nil
+}
+
+func BuildSkillVersionListView(rows []repo.ListSkillVersionsRow, frontmatter func(content string) map[string]any) ([]*types.SkillVersion, error) {
+	result := make([]*types.SkillVersion, len(rows))
+	for i, row := range rows {
+		view, err := BuildSkillVersionView(row.SkillVersion, row.DerivedFromVersionID, frontmatter(row.SkillVersion.Content), SkillVersionSightingStats{
+			FirstSeenAt: row.FirstSeenAt,
+			LastSeenAt:  row.LastSeenAt,
+			SeenCount:   row.SeenCount,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("build skill version %s: %w", row.SkillVersion.ID, err)
+		}
+		result[i] = view
+	}
+
+	return result, nil
+}
+
+func BuildSkillDistributionView(distribution repo.SkillDistribution, skillName, skillDisplayName string, pluginName, assistantName *string, resolvedVersionID uuid.UUID) *types.SkillDistribution {
+	return &types.SkillDistribution{
+		ID:                distribution.ID.String(),
+		ProjectID:         distribution.ProjectID.String(),
+		SkillID:           distribution.SkillID.String(),
+		SkillName:         skillName,
+		SkillDisplayName:  skillDisplayName,
+		PluginID:          conv.FromNullableUUID(distribution.PluginID),
+		PluginName:        pluginName,
+		AssistantID:       conv.FromNullableUUID(distribution.AssistantID),
+		AssistantName:     assistantName,
+		PinnedVersionID:   conv.FromNullableUUID(distribution.PinnedVersionID),
+		ResolvedVersionID: resolvedVersionID.String(),
+		Channel:           distribution.Channel,
+		CreatedByUserID:   distribution.CreatedByUserID,
+		CreatedAt:         conv.FromPGTimestamptz(distribution.CreatedAt),
+		UpdatedAt:         conv.FromPGTimestamptz(distribution.UpdatedAt),
+	}
+}
+
+func BuildSkillDistributionListView(rows []repo.ListActiveSkillDistributionsRow) []*types.PluginSkillDistribution {
+	result := make([]*types.PluginSkillDistribution, len(rows))
+	for i, row := range rows {
+		result[i] = &types.PluginSkillDistribution{
+			ID: row.SkillDistribution.ID.String(), ProjectID: row.SkillDistribution.ProjectID.String(),
+			SkillID: row.SkillDistribution.SkillID.String(), SkillName: row.SkillName, SkillDisplayName: row.SkillDisplayName,
+			PluginID: row.SkillDistribution.PluginID.UUID.String(), PluginName: row.PluginName,
+			PinnedVersionID: conv.FromNullableUUID(row.SkillDistribution.PinnedVersionID), ResolvedVersionID: row.ResolvedVersionID.String(),
+			Channel: row.SkillDistribution.Channel, CreatedByUserID: row.SkillDistribution.CreatedByUserID,
+			CreatedAt: conv.FromPGTimestamptz(row.SkillDistribution.CreatedAt), UpdatedAt: conv.FromPGTimestamptz(row.SkillDistribution.UpdatedAt),
+		}
+	}
+
+	return result
+}

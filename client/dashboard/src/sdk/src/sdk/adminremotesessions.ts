@@ -6,15 +6,25 @@ import { adminRemoteSessionsCreateGlobalClient } from "../funcs/adminRemoteSessi
 import { adminRemoteSessionsCreateGlobalIssuer } from "../funcs/adminRemoteSessionsCreateGlobalIssuer.js";
 import { adminRemoteSessionsDeleteGlobalClient } from "../funcs/adminRemoteSessionsDeleteGlobalClient.js";
 import { adminRemoteSessionsDeleteGlobalIssuer } from "../funcs/adminRemoteSessionsDeleteGlobalIssuer.js";
+import { adminRemoteSessionsFetchGlobalIssuerMetadata } from "../funcs/adminRemoteSessionsFetchGlobalIssuerMetadata.js";
 import { adminRemoteSessionsGetGlobalClient } from "../funcs/adminRemoteSessionsGetGlobalClient.js";
 import { adminRemoteSessionsGetGlobalIssuer } from "../funcs/adminRemoteSessionsGetGlobalIssuer.js";
+import { adminRemoteSessionsGetGlobalIssuerMigratePreflight } from "../funcs/adminRemoteSessionsGetGlobalIssuerMigratePreflight.js";
 import { adminRemoteSessionsListGlobalClients } from "../funcs/adminRemoteSessionsListGlobalClients.js";
+import { adminRemoteSessionsListGlobalIssuerConvergenceCandidates } from "../funcs/adminRemoteSessionsListGlobalIssuerConvergenceCandidates.js";
 import { adminRemoteSessionsListGlobalIssuers } from "../funcs/adminRemoteSessionsListGlobalIssuers.js";
+import { adminRemoteSessionsMigrateToGlobalIssuer } from "../funcs/adminRemoteSessionsMigrateToGlobalIssuer.js";
+import { adminRemoteSessionsRefreshGlobalIssuerMetadata } from "../funcs/adminRemoteSessionsRefreshGlobalIssuerMetadata.js";
 import { adminRemoteSessionsUpdateGlobalClient } from "../funcs/adminRemoteSessionsUpdateGlobalClient.js";
 import { adminRemoteSessionsUpdateGlobalIssuer } from "../funcs/adminRemoteSessionsUpdateGlobalIssuer.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { GlobalRemoteSessionIssuer } from "../models/components/globalremotesessionissuer.js";
+import { IssuerMigratePreflight } from "../models/components/issuermigratepreflight.js";
+import { MigrateRemoteSessionIssuerResult } from "../models/components/migrateremotesessionissuerresult.js";
 import { RemoteSessionClient } from "../models/components/remotesessionclient.js";
 import { RemoteSessionIssuer } from "../models/components/remotesessionissuer.js";
+import { RemoteSessionIssuerDraft } from "../models/components/remotesessionissuerdraft.js";
+import { RemoteSessionIssuerRefresh } from "../models/components/remotesessionissuerrefresh.js";
 import {
   CreateGlobalRemoteSessionClientRequest,
   CreateGlobalRemoteSessionClientSecurity,
@@ -32,6 +42,10 @@ import {
   DeleteGlobalRemoteSessionIssuerSecurity,
 } from "../models/operations/deleteglobalremotesessionissuer.js";
 import {
+  FetchGlobalRemoteSessionIssuerMetadataRequest,
+  FetchGlobalRemoteSessionIssuerMetadataSecurity,
+} from "../models/operations/fetchglobalremotesessionissuermetadata.js";
+import {
   GetGlobalRemoteSessionClientRequest,
   GetGlobalRemoteSessionClientSecurity,
 } from "../models/operations/getglobalremotesessionclient.js";
@@ -40,15 +54,32 @@ import {
   GetGlobalRemoteSessionIssuerSecurity,
 } from "../models/operations/getglobalremotesessionissuer.js";
 import {
+  GetGlobalRemoteSessionIssuerMigratePreflightRequest,
+  GetGlobalRemoteSessionIssuerMigratePreflightSecurity,
+} from "../models/operations/getglobalremotesessionissuermigratepreflight.js";
+import {
   ListGlobalRemoteSessionClientsRequest,
   ListGlobalRemoteSessionClientsResponse,
   ListGlobalRemoteSessionClientsSecurity,
 } from "../models/operations/listglobalremotesessionclients.js";
 import {
+  ListGlobalRemoteSessionIssuerConvergenceCandidatesRequest,
+  ListGlobalRemoteSessionIssuerConvergenceCandidatesResponse,
+  ListGlobalRemoteSessionIssuerConvergenceCandidatesSecurity,
+} from "../models/operations/listglobalremotesessionissuerconvergencecandidates.js";
+import {
   ListGlobalRemoteSessionIssuersRequest,
   ListGlobalRemoteSessionIssuersResponse,
   ListGlobalRemoteSessionIssuersSecurity,
 } from "../models/operations/listglobalremotesessionissuers.js";
+import {
+  MigrateToGlobalRemoteSessionIssuerRequest,
+  MigrateToGlobalRemoteSessionIssuerSecurity,
+} from "../models/operations/migratetoglobalremotesessionissuer.js";
+import {
+  RefreshGlobalRemoteSessionIssuerMetadataRequest,
+  RefreshGlobalRemoteSessionIssuerMetadataSecurity,
+} from "../models/operations/refreshglobalremotesessionissuermetadata.js";
 import {
   UpdateGlobalRemoteSessionClientRequest,
   UpdateGlobalRemoteSessionClientSecurity,
@@ -138,6 +169,25 @@ export class AdminRemoteSessions extends ClientSDK {
   }
 
   /**
+   * fetchGlobalIssuerMetadata adminRemoteSessions
+   *
+   * @remarks
+   * Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server document and return a draft suitable for createGlobalIssuer. Keyed by issuer URL; no record need exist and nothing is persisted. Requires platform admin.
+   */
+  async fetchGlobalIssuerMetadata(
+    request: FetchGlobalRemoteSessionIssuerMetadataRequest,
+    security?: FetchGlobalRemoteSessionIssuerMetadataSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<RemoteSessionIssuerDraft> {
+    return unwrapAsync(adminRemoteSessionsFetchGlobalIssuerMetadata(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * getGlobalClient adminRemoteSessions
    *
    * @remarks
@@ -166,8 +216,27 @@ export class AdminRemoteSessions extends ClientSDK {
     request: GetGlobalRemoteSessionIssuerRequest,
     security?: GetGlobalRemoteSessionIssuerSecurity | undefined,
     options?: RequestOptions,
-  ): Promise<RemoteSessionIssuer> {
+  ): Promise<GlobalRemoteSessionIssuer> {
     return unwrapAsync(adminRemoteSessionsGetGlobalIssuer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getGlobalIssuerMigratePreflight adminRemoteSessions
+   *
+   * @remarks
+   * Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Also reports how many tenant-owned clients the target already carries, since those permanently block deleting it. Requires platform admin.
+   */
+  async getGlobalIssuerMigratePreflight(
+    request: GetGlobalRemoteSessionIssuerMigratePreflightRequest,
+    security?: GetGlobalRemoteSessionIssuerMigratePreflightSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<IssuerMigratePreflight> {
+    return unwrapAsync(adminRemoteSessionsGetGlobalIssuerMigratePreflight(
       this,
       request,
       security,
@@ -197,6 +266,34 @@ export class AdminRemoteSessions extends ClientSDK {
   }
 
   /**
+   * listGlobalIssuerConvergenceCandidates adminRemoteSessions
+   *
+   * @remarks
+   * List the organization- and project-level remote_session_issuers that describe the same upstream authorization server as a given global issuer, and so could be consolidated onto it. Matching is by canonical issuer URL, collapsing trailing-slash and default-port spellings. Each candidate carries its owning organization, the number of clients that would move, and the metadata differences that would block or accompany the migration. Requires platform admin.
+   */
+  async listGlobalIssuerConvergenceCandidates(
+    request: ListGlobalRemoteSessionIssuerConvergenceCandidatesRequest,
+    security?:
+      | ListGlobalRemoteSessionIssuerConvergenceCandidatesSecurity
+      | undefined,
+    options?: RequestOptions,
+  ): Promise<
+    PageIterator<
+      ListGlobalRemoteSessionIssuerConvergenceCandidatesResponse,
+      { cursor: string }
+    >
+  > {
+    return unwrapResultIterator(
+      adminRemoteSessionsListGlobalIssuerConvergenceCandidates(
+        this,
+        request,
+        security,
+        options,
+      ),
+    );
+  }
+
+  /**
    * listGlobalIssuers adminRemoteSessions
    *
    * @remarks
@@ -210,6 +307,44 @@ export class AdminRemoteSessions extends ClientSDK {
     PageIterator<ListGlobalRemoteSessionIssuersResponse, { cursor: string }>
   > {
     return unwrapResultIterator(adminRemoteSessionsListGlobalIssuers(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * migrateToGlobalIssuer adminRemoteSessions
+   *
+   * @remarks
+   * Consolidate an organization- or project-level remote_session_issuer onto a global one: re-point every client from the source issuer onto the target, then soft-delete the source. Existing remote sessions are preserved, so no user re-authenticates. The source may belong to any organization; the target must be a global issuer. Both must agree on issuer (compared canonically), token_endpoint, and authorization_endpoint. One source per call. Requires platform admin.
+   */
+  async migrateToGlobalIssuer(
+    request: MigrateToGlobalRemoteSessionIssuerRequest,
+    security?: MigrateToGlobalRemoteSessionIssuerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<MigrateRemoteSessionIssuerResult> {
+    return unwrapAsync(adminRemoteSessionsMigrateToGlobalIssuer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * refreshGlobalIssuerMetadata adminRemoteSessions
+   *
+   * @remarks
+   * Re-fetch an existing global remote_session_issuer's RFC 8414 metadata document and persist the discovered values. Keyed by issuer id. Only RFC 8414-derived columns are written — endpoints, the *_supported arrays, client_id_metadata_document_supported, and the documentation URLs. Gram behavior and display fields (oidc, passthrough, name, slug, logo, client setup documentation) are left alone. Requires platform admin.
+   */
+  async refreshGlobalIssuerMetadata(
+    request: RefreshGlobalRemoteSessionIssuerMetadataRequest,
+    security?: RefreshGlobalRemoteSessionIssuerMetadataSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<RemoteSessionIssuerRefresh> {
+    return unwrapAsync(adminRemoteSessionsRefreshGlobalIssuerMetadata(
       this,
       request,
       security,

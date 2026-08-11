@@ -19,6 +19,9 @@ import (
 type Service interface {
 	// List all chats for a project
 	ListChats(context.Context, *ListChatsPayload) (res *ListChatsResult, err error)
+	// Aggregate work-units analysis results over time for the project: work done
+	// and cost/token efficiency per UTC day.
+	GetWorkUnitsTrend(context.Context, *GetWorkUnitsTrendPayload) (res *WorkUnitsTrendResult, err error)
 	// Load a chat by its ID. Messages within a generation are paginated by `seq`
 	// keyset: omit cursors to receive the newest page, pass `before_seq` to load
 	// older messages (scroll up) or `after_seq` to load newer ones (scroll down).
@@ -42,6 +45,10 @@ type Service interface {
 	// Pin or unpin a chat. Pinned chats surface in a dedicated section above
 	// recents on the chat page.
 	SetPinned(context.Context, *SetPinnedPayload) (err error)
+	// Generate or return a persisted LLM summary of a chat session transcript.
+	// When a summary already exists and regenerate is false, returns the cached
+	// summary without calling the model.
+	Summarize(context.Context, *SummarizePayload) (res *SummarizeChatResult, err error)
 	// Submit user feedback for a chat (success/failure)
 	SubmitFeedback(context.Context, *SubmitFeedbackPayload) (res *SubmitFeedbackResult, err error)
 	// List the distinct agent sources present in this project's chats, for
@@ -71,7 +78,7 @@ const ServiceName = "chat"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"listChats", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "submitFeedback", "listSources"}
+var MethodNames = [10]string{"listChats", "getWorkUnitsTrend", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "summarize", "submitFeedback", "listSources"}
 
 type AgentUsage struct {
 	// The agent usage payload discriminator.
@@ -85,6 +92,8 @@ type Chat struct {
 	// The list of messages in the chat for the returned generation, ordered oldest
 	// to newest by `seq`.
 	Messages []*ChatMessage
+	// Non-turn content attached to this chat, such as prompt attachments.
+	ContentParts []*ChatContentPart
 	// The generation that this response's messages belong to. A generation is an
 	// immutable snapshot of the transcript; a new one is opened on compaction or
 	// message edits, while normal turns append to the current one.
@@ -113,6 +122,9 @@ type Chat struct {
 	// messages are paginated, callers must use these (not the length of
 	// `messages`) to render filter-bar counts.
 	Totals *ChatTotals
+	// Full work-units analysis verdict as JSON (per-task breakdown, rationales,
+	// and flags). Present only when `work_units` is present.
+	WorkUnitsReport *string
 	// The ID of the chat
 	ID string
 	// The title of the chat
@@ -121,6 +133,10 @@ type Chat struct {
 	UserID *string
 	// The ID of the external user who created the chat
 	ExternalUserID *string
+	// The ID of the assistant that produced this chat, if any
+	AssistantID *string
+	// The name of the assistant that produced this chat, if any
+	AssistantName *string
 	// The number of messages in the chat
 	NumMessages int
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
@@ -144,12 +160,39 @@ type Chat struct {
 	// (project-scoped, found=true). Only populated by endpoints that join risk
 	// data; absent elsewhere.
 	RiskFindingsCount *int
+	// Work units of value delivered in this chat as judged by the work-units
+	// analysis. Absent unless the organization has work-units analysis enabled and
+	// this chat has been scored.
+	WorkUnits *float64
 	// Account type that produced the chat ('team', 'personal', or empty), resolved
 	// from the linked AI account.
 	AccountType *string
 	// Email of the AI account that produced the chat, resolved from the linked AI
 	// account. May differ from the employee's work email (e.g. a personal account).
 	AccountEmail *string
+	// True when the chat is pinned
+	Pinned *bool
+	// Persisted LLM summary of the session transcript, if one has been generated
+	Summary *string
+	// When the session summary was last generated.
+	SummaryGeneratedAt *string
+}
+
+type ChatContentPart struct {
+	// The ID of the content part.
+	ID string
+	// The content kind, such as prompt_attachment.
+	Kind string
+	// The text content.
+	Content string
+	// The chat message this content hangs off, when resolved.
+	ParentChatMessageID *string
+	// Sparse metadata for the content kind.
+	Metadata json.RawMessage
+	// Whether this content part has an active risk finding.
+	IsRisk bool
+	// When the content part was created.
+	CreatedAt string
 }
 
 type ChatMessage struct {
@@ -198,6 +241,10 @@ type ChatOverview struct {
 	UserID *string
 	// The ID of the external user who created the chat
 	ExternalUserID *string
+	// The ID of the assistant that produced this chat, if any
+	AssistantID *string
+	// The name of the assistant that produced this chat, if any
+	AssistantName *string
 	// The number of messages in the chat
 	NumMessages int
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
@@ -221,12 +268,22 @@ type ChatOverview struct {
 	// (project-scoped, found=true). Only populated by endpoints that join risk
 	// data; absent elsewhere.
 	RiskFindingsCount *int
+	// Work units of value delivered in this chat as judged by the work-units
+	// analysis. Absent unless the organization has work-units analysis enabled and
+	// this chat has been scored.
+	WorkUnits *float64
 	// Account type that produced the chat ('team', 'personal', or empty), resolved
 	// from the linked AI account.
 	AccountType *string
 	// Email of the AI account that produced the chat, resolved from the linked AI
 	// account. May differ from the employee's work email (e.g. a personal account).
 	AccountEmail *string
+	// True when the chat is pinned
+	Pinned *bool
+	// Persisted LLM summary of the session transcript, if one has been generated
+	Summary *string
+	// When the session summary was last generated.
+	SummaryGeneratedAt *string
 }
 
 // Trace-entry counts across the entire returned generation, independent of
@@ -340,15 +397,28 @@ type GenerateTitleResult struct {
 	Title string
 }
 
+// GetWorkUnitsTrendPayload is the payload type of the chat service
+// getWorkUnitsTrend method.
+type GetWorkUnitsTrendPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Start of the window (ISO 8601). Defaults to 30 days before `to`.
+	From *string
+	// End of the window (ISO 8601). Defaults to now.
+	To *string
+}
+
 // ListChatsPayload is the payload type of the chat service listChats method.
 type ListChatsPayload struct {
 	SessionToken      *string
 	ProjectSlugInput  *string
 	ChatSessionsToken *string
-	// Search query (searches chat ID, user ID, and title)
+	// Search query (searches chat ID, user ID, user name, and title)
 	Search *string
 	// Filter by external user ID
 	ExternalUserID *string
+	// Filter by Gram user ID
+	UserID *string
 	// Filter by agent source. Comma-separated list of exact source values (e.g.
 	// 'claude-code,Codex,playground') matched against each session's inferred
 	// source; empty for no filter. Use chat.listSources to discover the available
@@ -417,6 +487,7 @@ type LoadChatPayload struct {
 	SessionToken      *string
 	ProjectSlugInput  *string
 	ChatSessionsToken *string
+	ApikeyToken       *string
 	// The ID of the chat
 	ID string
 	// Generation to load. A generation is an immutable snapshot of the chat
@@ -508,6 +579,56 @@ type SubmitFeedbackPayload struct {
 type SubmitFeedbackResult struct {
 	// Whether the feedback was submitted successfully
 	Success bool
+}
+
+// SummarizeChatResult is the result type of the chat service summarize method.
+type SummarizeChatResult struct {
+	// The session summary text
+	Summary string
+	// When the summary was last generated.
+	SummaryGeneratedAt string
+	// True when an existing summary was returned without regenerating
+	Cached bool
+}
+
+// SummarizePayload is the payload type of the chat service summarize method.
+type SummarizePayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The ID of the chat to summarize
+	ID string
+	// When true, regenerate and overwrite any existing summary. Defaults to false.
+	Regenerate bool
+}
+
+type WorkUnitsTrendBucket struct {
+	// Start of the UTC day this bucket covers.
+	Timestamp string
+	// Number of chat sessions scored by the work-units analysis in this bucket.
+	ScoredSessions int
+	// Total work units delivered across the bucket's scored sessions.
+	WorkUnits float64
+	// Total cost in USD across the bucket's scored sessions.
+	TotalCost float64
+	// Total tokens across the bucket's scored sessions.
+	TotalTokens int64
+	// Cost per unit of work. Absent when the bucket has no positive work or no
+	// cost telemetry.
+	CostPerUnit *float64
+	// Tokens per unit of work. Absent when the bucket has no positive work or no
+	// token telemetry.
+	TokensPerUnit *float64
+}
+
+// WorkUnitsTrendResult is the result type of the chat service
+// getWorkUnitsTrend method.
+type WorkUnitsTrendResult struct {
+	// Whether any work-units scores exist in the window. False for organizations
+	// without work-units analysis.
+	ScoresAvailable bool
+	// One bucket per UTC day in the window, oldest first, zero-filled for days
+	// without scores.
+	Buckets []*WorkUnitsTrendBucket
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

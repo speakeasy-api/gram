@@ -3,20 +3,11 @@ package hooks
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/toolref"
 )
-
-// gramHostedMCPHost is the canonical host for Gram-managed MCP servers.
-// The shadow-MCP guard allows a tool call only when the cached server
-// entry's URL exactly matches this host (case-insensitive). We avoid a
-// suffix-match on ".getgram.ai" because a third party squatting on a
-// subdomain (e.g. via a CNAME mistake) could bypass the guard otherwise.
-const gramHostedMCPHost = "app.getgram.ai"
 
 // parsedClaudeToolName is the result of splitting a Claude Code tool name
 // into its MCP "<server>" and "<tool>" parts. IsMCP is false for native
@@ -222,52 +213,6 @@ func resolvedMCPMatch(matched *MCPServerEntry, serverPrefix string) string {
 		}
 	}
 	return serverPrefix
-}
-
-// isGramHostedMCPURL reports whether rawURL points at a Gram-managed MCP
-// server. Checks the canonical host plus any additional trusted hosts.
-// Exact host match, case-insensitive.
-func isGramHostedMCPURL(rawURL string, additionalTrustedHosts ...string) bool {
-	if rawURL == "" {
-		return false
-	}
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return false
-	}
-	hostname := u.Hostname()
-	if strings.EqualFold(hostname, gramHostedMCPHost) {
-		return true
-	}
-	for _, h := range additionalTrustedHosts {
-		if strings.EqualFold(hostname, h) {
-			return true
-		}
-	}
-	return false
-}
-
-// isGramHostedMCPURLForOrg checks if a URL is a Gram-managed MCP server for
-// the given organization. It checks against the canonical host first (no DB
-// hit), then falls back to checking the org's custom domain if needed.
-func (s *Service) isGramHostedMCPURLForOrg(ctx context.Context, rawURL, orgID string) bool {
-	trustedHosts := make([]string, 0, 1)
-	if s.serverURL != nil && s.serverURL.Hostname() != "" {
-		trustedHosts = append(trustedHosts, s.serverURL.Hostname())
-	}
-
-	// Fast path: check canonical/configured hosts first to avoid DB lookup for app.getgram.ai URLs.
-	if isGramHostedMCPURL(rawURL, trustedHosts...) {
-		return true
-	}
-	if rawURL == "" || orgID == "" {
-		return false
-	}
-	customDomain, err := repo.New(s.db).GetCustomDomainByOrganization(ctx, orgID)
-	if err != nil || !customDomain.Verified || !customDomain.Activated {
-		return false
-	}
-	return isGramHostedMCPURL(rawURL, customDomain.Domain)
 }
 
 // getCachedMCPList retrieves the parsed `claude mcp list` snapshot stored

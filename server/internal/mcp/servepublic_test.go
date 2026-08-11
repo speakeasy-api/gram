@@ -21,8 +21,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
-	"github.com/speakeasy-api/gram/server/internal/oauth"
-	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	variations_repo "github.com/speakeasy-api/gram/server/internal/variations/repo"
 )
@@ -81,64 +79,6 @@ func servePublicHTTP(
 		return w, fmt.Errorf("serve public: %w", err)
 	}
 	return w, nil
-}
-
-// createPrivateOAuthToolset creates a private MCP toolset wired to a Gram
-// OAuth proxy server. Returns the toolset row. The wiring matches what
-// TestServePublic_PrivateWithOAuth_* tests construct inline today.
-func createPrivateOAuthToolset(
-	t *testing.T,
-	ctx context.Context,
-	conn toolsets_repo.DBTX,
-	authCtx *contextvalues.AuthContext,
-	slug string,
-) toolsets_repo.Toolset {
-	t.Helper()
-
-	oauthRepo := oauth_repo.New(conn)
-	oauthServer, err := oauthRepo.UpsertOAuthProxyServer(ctx, oauth_repo.UpsertOAuthProxyServerParams{
-		ProjectID: *authCtx.ProjectID,
-		Slug:      "priv-oauth-server-" + uuid.New().String()[:8],
-	})
-	require.NoError(t, err)
-
-	_, err = oauthRepo.UpsertOAuthProxyProvider(ctx, oauth_repo.UpsertOAuthProxyProviderParams{
-		ProjectID:                         *authCtx.ProjectID,
-		OauthProxyServerID:                oauthServer.ID,
-		Slug:                              "gram-provider-" + uuid.New().String()[:8],
-		ProviderType:                      string(oauth.OAuthProxyProviderTypeGram),
-		ScopesSupported:                   []string{},
-		ResponseTypesSupported:            []string{},
-		ResponseModesSupported:            []string{},
-		GrantTypesSupported:               []string{},
-		TokenEndpointAuthMethodsSupported: []string{},
-		SecurityKeyNames:                  []string{},
-		Secrets:                           []byte("{}"),
-	})
-	require.NoError(t, err)
-
-	toolsetsRepo := toolsets_repo.New(conn)
-	uniqueSlug := slug + "-" + uuid.New().String()[:8]
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "Private OAuth MCP " + slug,
-		Slug:                   uniqueSlug,
-		Description:            conv.ToPGText("Private MCP with OAuth"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText(uniqueSlug),
-		McpEnabled:             true,
-	})
-	require.NoError(t, err)
-
-	toolset, err = toolsetsRepo.UpdateToolsetOAuthProxyServer(ctx, toolsets_repo.UpdateToolsetOAuthProxyServerParams{
-		OauthProxyServerID: uuid.NullUUID{UUID: oauthServer.ID, Valid: true},
-		Slug:               toolset.Slug,
-		ProjectID:          *authCtx.ProjectID,
-	})
-	require.NoError(t, err)
-
-	return toolset
 }
 
 // createPublicMCPToolset creates a public MCP toolset for testing.
@@ -316,6 +256,44 @@ func TestServePublic_PrivateDisabledMCP_Returns404(t *testing.T) {
 
 	_, err = servePublicHTTP(t, context.Background(), ti, toolset.Slug, makeInitializeBody(), "", nil)
 	require.Error(t, err)
+	require.Contains(t, err.Error(), "not found")
+}
+
+// TestServePublic_DisabledPublicLegacyToolset_Returns404 verifies that a
+// legacy toolset-backed MCP server (mcp_slug set, no mcp_endpoints row)
+// stops serving once disabled, even when it was public — mcp_enabled false
+// must surface as not-found on the serve path, not just on the metadata
+// surfaces.
+func TestServePublic_DisabledPublicLegacyToolset_Returns404(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolsetsRepo := toolsets_repo.New(ti.conn)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	slug := "disabled-public-" + uuid.NewString()[:8]
+	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, slug)
+
+	// Serves anonymously while enabled.
+	w, err := servePublicHTTP(t, ctx, ti, slug, makeInitializeBody(), "", nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
+
+	// Disable via the same flag the dashboard/API writes, deliberately
+	// leaving mcp_is_public true — the state that kept serving anonymously
+	// before the fix.
+	err = toolsetsRepo.SetToolsetMCPEnabledByID(ctx, toolsets_repo.SetToolsetMCPEnabledByIDParams{
+		McpEnabled: false,
+		ID:         toolset.ID,
+		ProjectID:  *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	_, err = servePublicHTTP(t, ctx, ti, slug, makeInitializeBody(), "", nil)
+	require.Error(t, err, "disabled toolset must not serve")
 	require.Contains(t, err.Error(), "not found")
 }
 

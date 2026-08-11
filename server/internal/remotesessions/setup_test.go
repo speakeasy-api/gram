@@ -24,14 +24,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/environments"
-	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/oauth"
-	oauthrepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -40,7 +36,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -92,16 +87,14 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
+	redisCache := cache.NewRedisCacheAdapter(redisClient)
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
 	enc := testenv.NewEncryptionClient(t)
 	envEntries := environments.NewEnvironmentEntries(logger, conn, enc, mcpmetadatarepo.New(conn))
@@ -109,20 +102,18 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	serverURL, err := url.Parse(testServerURL)
 	require.NoError(t, err)
 
-	redisCache := cache.NewRedisCacheAdapter(redisClient)
-
 	svc := remotesessions.NewService(
 		logger,
 		tracerProvider,
 		conn,
 		sessionManager,
-		authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
+		authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
 		enc,
 		envEntries,
 		guardianPolicy,
 		audit.NewLogger(),
 		serverURL,
-		redisCache,
+		remotesessions.NewRefreshService(logger, conn, enc, guardianPolicy, redisCache),
 	)
 
 	return ctx, &testInstance{
@@ -194,12 +185,13 @@ func insertRemoteSession(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 	clientUUID, err := uuid.Parse(clientID)
 	require.NoError(t, err)
 
-	row, err := repo.New(conn).InsertRemoteSession(ctx, repo.InsertRemoteSessionParams{
+	row, err := repo.New(conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
 		SubjectUrn:            principal,
 		UserSessionIssuerID:   userIssuerUUID,
 		RemoteSessionClientID: clientUUID,
 		AccessTokenEncrypted:  "ciphertext",
 		AccessExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+		Scopes:                []string{},
 	})
 	require.NoError(t, err)
 	return row
@@ -331,6 +323,53 @@ func seedOrgLevelRemoteIssuer(t *testing.T, ctx context.Context, conn *pgxpool.P
 	return issuer.ID
 }
 
+// seedGlobalRemoteIssuer creates a platform (global) remote session issuer:
+// project_id IS NULL AND organization_id IS NULL, the shared catalog partition
+// owned by Speakeasy platform admins. Tenants inherit it read-only and may
+// attach their own clients to it.
+func seedGlobalRemoteIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug string) uuid.UUID {
+	t.Helper()
+	issuer, err := repo.New(conn).CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         uuid.NullUUID{},
+		OrganizationID:                    pgtype.Text{String: "", Valid: false},
+		Slug:                              slug,
+		Issuer:                            "https://" + slug + ".example.com",
+		AuthorizationEndpoint:             conv.ToPGText("https://" + slug + ".example.com/authorize"),
+		TokenEndpoint:                     conv.ToPGText("https://" + slug + ".example.com/token"),
+		ScopesSupported:                   []string{"openid"},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
+	})
+	require.NoError(t, err)
+	return issuer.ID
+}
+
+// seedRemoteIssuerWithURL creates a remote session issuer at a chosen tenancy
+// tier carrying a specific upstream URL. The tier-specific seeders above all
+// hardcode their issuer URL, which is exactly the column resolveRemoteSessionIssuer
+// matches on, so resolution tests need to set it per row.
+//
+// Pass a valid projectID for the project tier, a zero projectID plus an
+// organizationID for the organization tier, and neither for the platform tier.
+func seedRemoteIssuerWithURL(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.NullUUID, organizationID pgtype.Text, slug, issuerURL string) uuid.UUID {
+	t.Helper()
+	issuer, err := repo.New(conn).CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         projectID,
+		OrganizationID:                    organizationID,
+		Slug:                              slug,
+		Issuer:                            issuerURL,
+		AuthorizationEndpoint:             conv.ToPGText(issuerURL + "/authorize"),
+		TokenEndpoint:                     conv.ToPGText(issuerURL + "/token"),
+		ScopesSupported:                   []string{"openid"},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
+	})
+	require.NoError(t, err)
+	return issuer.ID
+}
+
 // seedOrgLevelRemoteClient creates an organization-level (project_id IS NULL,
 // organization_id set) remote_session_client referencing remoteIssuerID and
 // attaches it to each userSessionIssuerID through the join table. Org-level
@@ -378,13 +417,16 @@ func seedMCPServerInOrg(t *testing.T, ctx context.Context, conn *pgxpool.Pool, o
 	})
 	require.NoError(t, err)
 
+	issuerID := createUserSessionIssuerInProject(t, ctx, conn, project.ID, "usi-"+uuid.NewString()[:8])
+
 	server, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID:                uuid.New(),
-		ProjectID:         project.ID,
-		Name:              conv.ToPGText(slug),
-		Slug:              conv.ToPGText(slug),
-		RemoteMcpServerID: conv.ToNullUUID(remoteServer.ID),
-		Visibility:        "private",
+		ID:                  uuid.New(),
+		ProjectID:           project.ID,
+		Name:                conv.ToPGText(slug),
+		Slug:                conv.ToPGText(slug),
+		RemoteMcpServerID:   conv.ToNullUUID(remoteServer.ID),
+		Visibility:          "private",
+		UserSessionIssuerID: conv.ToNullUUID(issuerID),
 	})
 	require.NoError(t, err)
 	return server.ID
@@ -431,7 +473,7 @@ func createRemoteIssuer(t *testing.T, ctx context.Context, svc *testInstance, sl
 
 // withAdmin returns ctx with the auth context's IsAdmin flag flipped to true.
 // Tests for admin-only endpoints opt in explicitly so non-admin paths exercise
-// the realistic default produced by testenv.InitAuthContext.
+// the realistic default produced by authztest.InitAuthContext.
 func withAdmin(t *testing.T, ctx context.Context) context.Context {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -441,131 +483,32 @@ func withAdmin(t *testing.T, ctx context.Context) context.Context {
 	return contextvalues.SetAuthContext(ctx, authCtx)
 }
 
-// insertProxyProvider seeds an oauth_proxy_server + oauth_proxy_provider row
-// with the supplied secrets JSONB for the clone tests. Returns the provider
-// id and the oauth_proxy_server id (the latter for attaching toolsets).
-func insertProxyProvider(t *testing.T, ctx context.Context, conn *pgxpool.Pool, slug, providerType string, secrets []byte) (uuid.UUID, uuid.UUID) {
+// requirePlatformIssuerUnchanged asserts the platform issuer row still exists in
+// the global partition (NULL project_id, NULL organization_id) and was not
+// renamed, i.e. no tenant-scoped mutation touched it. Reads through the
+// platform-admin global query, which matches only global rows.
+func requirePlatformIssuerUnchanged(t *testing.T, ctx context.Context, conn *pgxpool.Pool, id uuid.UUID) {
 	t.Helper()
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	q := oauthrepo.New(conn)
-	srv, err := q.UpsertOAuthProxyServer(ctx, oauthrepo.UpsertOAuthProxyServerParams{
-		ProjectID: *authCtx.ProjectID,
-		Slug:      "srv-" + slug,
-		Audience:  conv.ToPGText("https://example.com"),
-	})
-	require.NoError(t, err)
-
-	prov, err := q.UpsertOAuthProxyProvider(ctx, oauthrepo.UpsertOAuthProxyProviderParams{
-		ProjectID:                         *authCtx.ProjectID,
-		OauthProxyServerID:                srv.ID,
-		Slug:                              slug,
-		ProviderType:                      providerType,
-		AuthorizationEndpoint:             conv.ToPGText("https://idp.example.com/authorize"),
-		TokenEndpoint:                     conv.ToPGText("https://idp.example.com/token"),
-		RegistrationEndpoint:              conv.ToPGText("https://idp.example.com/register"),
-		ScopesSupported:                   []string{"openid"},
-		ResponseTypesSupported:            []string{"code"},
-		ResponseModesSupported:            []string{"query"},
-		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
-		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
-		SecurityKeyNames:                  []string{},
-		Secrets:                           secrets,
-	})
-	require.NoError(t, err)
-	return prov.ID, srv.ID
+	row, err := repo.New(conn).GetGlobalRemoteSessionIssuerByID(ctx, id)
+	require.NoError(t, err, "platform issuer should still exist in the global partition")
+	require.False(t, row.ProjectID.Valid, "platform issuer project_id must stay NULL")
+	require.False(t, row.OrganizationID.Valid, "platform issuer organization_id must stay NULL")
+	require.False(t, row.Name.Valid, "platform issuer name must be untouched")
 }
 
-// attachToolsetToProxyServer seeds a toolset routed through the given
-// oauth_proxy_server under the given MCP slug. When customDomain is non-empty
-// a custom_domains row is created and bound to the toolset, making the MCP
-// server reachable on both the default domain and the custom domain.
-func attachToolsetToProxyServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, proxyServerID uuid.UUID, mcpSlug, customDomain string) {
+// seedProjectRemoteClientNoOrg creates a project-owned remote_session_client
+// with a NULL organization_id, mirroring a legacy row from before the
+// organization_id backfill. Used to prove counts and reachability do not depend
+// on the client's organization_id being populated.
+func seedProjectRemoteClientNoOrg(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, remoteIssuerID uuid.UUID, clientID string) uuid.UUID {
 	t.Helper()
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	q := toolsetsrepo.New(conn)
-	_, err := q.CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   mcpSlug,
-		Slug:                   mcpSlug,
-		Description:            pgtype.Text{},
-		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                conv.ToPGText(mcpSlug),
-		McpEnabled:             true,
+	created, err := repo.New(conn).CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+		ProjectID:             conv.ToNullUUID(projectID),
+		OrganizationID:        pgtype.Text{String: "", Valid: false},
+		RemoteSessionIssuerID: remoteIssuerID,
+		ClientID:              clientID,
+		ClientIDIssuedAt:      conv.ToPGTimestamptz(time.Now().UTC()),
 	})
 	require.NoError(t, err)
-
-	_, err = q.UpdateToolsetOAuthProxyServer(ctx, toolsetsrepo.UpdateToolsetOAuthProxyServerParams{
-		OauthProxyServerID: uuid.NullUUID{UUID: proxyServerID, Valid: true},
-		Slug:               mcpSlug,
-		ProjectID:          *authCtx.ProjectID,
-	})
-	require.NoError(t, err)
-
-	if customDomain != "" {
-		domainRow, err := customdomainsrepo.New(conn).CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
-			OrganizationID:  authCtx.ActiveOrganizationID,
-			Domain:          customDomain,
-			IngressName:     pgtype.Text{},
-			CertSecretName:  pgtype.Text{},
-			ProvisionerKind: "ingress",
-			IpAllowlist:     []string{},
-		})
-		require.NoError(t, err)
-
-		err = q.SetToolsetCustomDomain(ctx, toolsetsrepo.SetToolsetCustomDomainParams{
-			CustomDomainID: uuid.NullUUID{UUID: domainRow.ID, Valid: true},
-			Slug:           mcpSlug,
-			ProjectID:      *authCtx.ProjectID,
-		})
-		require.NoError(t, err)
-	}
-}
-
-// seedLegacyRegistration stores a legacy OAuth proxy client registration in
-// Redis through the real oauth typed cache — the same write path as the
-// legacy DCR endpoint — pinning the wire format the clone migration reads.
-func seedLegacyRegistration(t *testing.T, ctx context.Context, ti *testInstance, info oauth.OauthProxyClientInfo) {
-	t.Helper()
-	typed := cache.NewTypedObjectCache[oauth.OauthProxyClientInfo](testenv.NewLogger(t), ti.redisCache, cache.SuffixNone)
-	require.NoError(t, typed.Store(ctx, info))
-}
-
-// seedEnvironmentWithEntries creates an environment + entries via the same
-// EnvironmentEntries helper the production code uses, so values land encrypted
-// under the test encryption key. Returns the environment slug.
-func seedEnvironmentWithEntries(t *testing.T, ctx context.Context, ti *testInstance, slug string, entries map[string]string) string {
-	t.Helper()
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-
-	envRow, err := environmentsrepo.New(ti.conn).CreateEnvironment(ctx, environmentsrepo.CreateEnvironmentParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      *authCtx.ProjectID,
-		Name:           slug,
-		Slug:           slug,
-		Description:    pgtype.Text{},
-	})
-	require.NoError(t, err)
-
-	names := make([]string, 0, len(entries))
-	values := make([]string, 0, len(entries))
-	for name, value := range entries {
-		names = append(names, name)
-		values = append(values, value)
-	}
-	_, err = ti.envEntries.CreateEnvironmentEntries(ctx, environmentsrepo.CreateEnvironmentEntriesParams{
-		EnvironmentID: envRow.ID,
-		Names:         names,
-		Values:        values,
-	})
-	require.NoError(t, err)
-	return envRow.Slug
+	return created.ID
 }

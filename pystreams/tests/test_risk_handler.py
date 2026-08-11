@@ -10,7 +10,12 @@ from structlog.testing import capture_logs
 from pystreams.risk import handler as handler_mod
 from pystreams.risk import metrics
 from pystreams.risk.handler import PresidioHandler
-from pystreams.risk.scanner import DEFAULT_SCORE_THRESHOLD, Detection, _AsyncCloseable
+from pystreams.risk.scanner import (
+    DEFAULT_SCORE_THRESHOLD,
+    Detection,
+    ScanSlotTimeout,
+    _AsyncCloseable,
+)
 
 # Matches the RFC3339 UTC form the handler stamps on a finding's created_at.
 _RFC3339_UTC = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
@@ -131,8 +136,9 @@ async def test_publishes_a_finding_per_detection():
         await handler.handle(msg, _meta(delivery_attempt=2))
 
     (finding,) = publisher.published
-    # Each finding gets a fresh UUIDv7 identifier.
-    assert uuid.UUID(finding.id).version == 7
+    # Each finding id is name-based (uuid5/SHA-1), derived from the finding's
+    # identity so redeliveries republish under the same id.
+    assert uuid.UUID(finding.id).version == 5
     # Originating request/message context is carried through verbatim.
     assert finding.request_id == "req-1"
     assert finding.chat_message_id == "chat-1"
@@ -151,6 +157,12 @@ async def test_publishes_a_finding_per_detection():
     assert finding.end_pos == 19
     assert finding.confidence == 0.85
     assert list(finding.tags) == ["pii"]
+    # Reveal metadata: Presidio scans the verbatim content, so the offsets
+    # index the anchored message text; no span-level attribution applies.
+    assert finding.surface == "content"
+    assert finding.field == ""
+    assert finding.path == ""
+    assert finding.tool_call_id == ""
 
     (entry,) = logs
     assert entry["event"] == "presidio scan detected entities"
@@ -160,6 +172,114 @@ async def test_publishes_a_finding_per_detection():
     assert entry["detected_count"] == 1
     assert entry["published_count"] == 1
     assert entry["delivery_attempt"] == 2
+
+
+async def test_publishes_content_part_anchor():
+    scanner = FakeScanner(
+        [_detection("EMAIL_ADDRESS", "a@b.com", start_pos=0, end_pos=7)]
+    )
+    publisher = FakePublisher()
+    handler = _handler(scanner, publisher)
+    msg = _message(
+        "a@b.com",
+        request_id="req-1",
+        chat_message_id="",
+        content_part_id="part-1",
+        project_id="proj-1",
+        organization_id="org-1",
+        risk_policy_id="policy-1",
+        risk_policy_version=7,
+    )
+
+    await handler.handle(msg, _meta())
+
+    (finding,) = publisher.published
+    assert finding.chat_message_id == ""
+    assert finding.content_part_id == "part-1"
+
+
+async def test_finding_ids_are_deterministic_across_deliveries():
+    """A redelivered message republishes every finding under the same id."""
+    detections = [
+        _detection("EMAIL_ADDRESS", "a@b.com", start_pos=12, end_pos=19),
+        _detection("PHONE_NUMBER", "555-0100", start_pos=25, end_pos=33),
+    ]
+    kwargs = dict(
+        request_id="req-1",
+        chat_message_id="chat-1",
+        project_id="proj-1",
+        organization_id="org-1",
+        risk_policy_id="policy-1",
+        risk_policy_version=7,
+    )
+
+    first = FakePublisher()
+    await _handler(FakeScanner(detections), first).handle(
+        _message("email me", **kwargs), _meta()
+    )
+    second = FakePublisher()
+    await _handler(FakeScanner(detections), second).handle(
+        _message("email me", **kwargs), _meta(delivery_attempt=2)
+    )
+
+    assert [f.id for f in first.published] == [f.id for f in second.published]
+    assert len({f.id for f in first.published}) == 2
+
+
+async def test_finding_id_matches_go_derivation():
+    """Cross-language vector: the id must equal Go's deterministicFindingID.
+
+    The expected uuids were computed with the Go implementation
+    (server/internal/scanners/publish.go): uuid.NewSHA1(uuid.NameSpaceURL,
+    "gram:risk:finding:" + parts joined by NUL), and the in-batch duplicate
+    derived as "gram:risk:finding:dup:<base>:1". If this test fails, the two
+    write paths have diverged and redeliveries will double-count in ClickHouse.
+    """
+    duplicate = _detection(
+        "EMAIL_ADDRESS", "user@example.com", start_pos=10, end_pos=26
+    )
+    scanner = FakeScanner([duplicate, duplicate])
+    publisher = FakePublisher()
+    handler = _handler(scanner, publisher)
+    msg = _message(
+        "mail user@example.com twice",
+        request_id="req-1",
+        chat_message_id="msg-1",
+        project_id="proj-1",
+        organization_id="org-1",
+        risk_policy_id="policy-1",
+        risk_policy_version=3,
+    )
+
+    await handler.handle(msg, _meta())
+
+    base, dup = publisher.published
+    assert base.id == "7bfa8d60-e261-5d4d-9676-2ec0083da5cc"
+    assert dup.id == "27bdeb04-de7b-5e19-82f8-9de1e8eed21c"
+
+
+async def test_content_part_id_changes_finding_id():
+    """content_part_id joins the id parts only when set, mirroring Go."""
+    detections = [_detection("EMAIL_ADDRESS", "a@b.com", start_pos=0, end_pos=7)]
+    kwargs = dict(
+        request_id="req-1",
+        chat_message_id="",
+        project_id="proj-1",
+        organization_id="org-1",
+        risk_policy_id="policy-1",
+        risk_policy_version=7,
+    )
+
+    without_part = FakePublisher()
+    await _handler(FakeScanner(detections), without_part).handle(
+        _message("a@b.com", **kwargs), _meta()
+    )
+    with_part = FakePublisher()
+    await _handler(FakeScanner(detections), with_part).handle(
+        _message("a@b.com", content_part_id="part-1", **kwargs), _meta()
+    )
+
+    assert without_part.published[0].id != with_part.published[0].id
 
 
 async def test_publishes_one_finding_per_hit_and_dedupes_log_types():
@@ -276,6 +396,40 @@ async def test_scan_failure_is_swallowed_and_logged():
     assert "123-45-6789" not in repr(entry)
 
 
+async def test_slot_timeout_is_reraised_for_redelivery():
+    scanner = FakeScanner(error=ScanSlotTimeout("scan queued for 60s"))
+    publisher = FakePublisher()
+    handler = _handler(scanner, publisher)
+    msg = _message("my ssn is 123-45-6789", request_id="req-1")
+
+    # A slot timeout means the content was never scanned: unlike other scan
+    # failures it must propagate, so the message nacks and Pub/Sub redelivers
+    # it (with the subscription's retry backoff) once capacity clears, instead
+    # of being acked away unscanned.
+    with capture_logs() as logs, pytest.raises(ScanSlotTimeout):
+        await handler.handle(msg, _meta(delivery_attempt=4))
+
+    # Nothing was scanned, so nothing is published — redelivery duplicates no
+    # findings.
+    assert publisher.published == []
+    # Deliberately silent: requeues fire in bursts under backlog, and the
+    # ``requeued`` outcome on process_duration already carries the signal, so
+    # the handler emits no per-message log line (it must not be mislabeled as
+    # a "presidio scan failed" swallow either).
+    assert logs == []
+
+
+async def test_slot_timeout_records_requeued_outcome(recorded_durations):
+    handler = _handler(FakeScanner(error=ScanSlotTimeout("scan queued for 60s")))
+
+    with pytest.raises(ScanSlotTimeout):
+        await handler.handle(_message("a@b.com", request_id="req-1"), _meta())
+
+    (seconds, outcome, _) = recorded_durations[-1]
+    assert outcome == metrics.OUTCOME_REQUEUED
+    assert seconds >= 0.0
+
+
 class _BoomResult:
     """A PublishResult whose ``get`` raises, simulating a Pub/Sub commit failure."""
 
@@ -349,16 +503,16 @@ async def test_sync_publish_failure_is_swallowed_and_logged():
 
 @pytest.fixture
 def recorded_durations(monkeypatch):
-    """Capture every ``record_process_duration`` call as ``(seconds, outcome)``.
+    """Capture ``record_process_duration`` calls as ``(seconds, outcome, size_bucket)``.
 
     Patches the helper on the handler's ``metrics`` module so the per-message
     distribution recording is observable without standing up a real
     ``MeterProvider`` (which is a process-global singleton, awkward across tests).
     """
-    calls: list[tuple[float, str]] = []
+    calls: list[tuple[float, str, str]] = []
 
-    def _capture(seconds: float, outcome: str) -> None:
-        calls.append((seconds, outcome))
+    def _capture(seconds: float, outcome: str, size_bucket: str) -> None:
+        calls.append((seconds, outcome, size_bucket))
 
     monkeypatch.setattr(handler_mod.metrics, "record_process_duration", _capture)
     return calls
@@ -370,9 +524,10 @@ async def test_records_detected_outcome_when_findings_published(recorded_duratio
 
     await handler.handle(_message("a@b.com", request_id="req-1"), _meta())
 
-    (seconds, outcome) = recorded_durations[-1]
+    (seconds, outcome, size_bucket) = recorded_durations[-1]
     assert outcome == metrics.OUTCOME_DETECTED
     assert seconds >= 0.0
+    assert size_bucket == "0-1k"
 
 
 async def test_records_clean_outcome_when_nothing_detected(recorded_durations):
@@ -380,9 +535,10 @@ async def test_records_clean_outcome_when_nothing_detected(recorded_durations):
 
     await handler.handle(_message("nothing sensitive here"), _meta())
 
-    (seconds, outcome) = recorded_durations[-1]
+    (seconds, outcome, size_bucket) = recorded_durations[-1]
     assert outcome == metrics.OUTCOME_CLEAN
     assert seconds >= 0.0
+    assert size_bucket == "0-1k"
 
 
 async def test_records_error_outcome_when_scan_fails(recorded_durations):
@@ -390,7 +546,7 @@ async def test_records_error_outcome_when_scan_fails(recorded_durations):
 
     await handler.handle(_message("...", request_id="req-1"), _meta())
 
-    (seconds, outcome) = recorded_durations[-1]
+    (seconds, outcome, _) = recorded_durations[-1]
     assert outcome == metrics.OUTCOME_ERROR
     assert seconds >= 0.0
 
@@ -403,9 +559,19 @@ async def test_records_error_outcome_when_all_publishes_fail(recorded_durations)
 
     await handler.handle(_message("a@b.com", request_id="req-1"), _meta())
 
-    (seconds, outcome) = recorded_durations[-1]
+    (seconds, outcome, _) = recorded_durations[-1]
     assert outcome == metrics.OUTCOME_ERROR
     assert seconds >= 0.0
+
+
+async def test_records_size_bucket_from_content_length(recorded_durations):
+    # A 5000-char payload lands in the 1k-10k band regardless of outcome.
+    handler = _handler(FakeScanner([]))
+
+    await handler.handle(_message("x" * 5_000), _meta())
+
+    (_, _, size_bucket) = recorded_durations[-1]
+    assert size_bucket == "1k-10k"
 
 
 async def test_does_not_leak_content_or_values_to_logs():

@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -71,6 +72,71 @@ func TestDeleteUserSessionIssuer_NotFound(t *testing.T) {
 		ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestDeleteUserSessionIssuer_ConflictWithActiveMCPServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	server := createIssuerGatedMintServer(t, ctx, ti, "delete-issuer-server-owner")
+	issuerID := server.UserSessionIssuerID.UUID
+
+	err := ti.service.DeleteUserSessionIssuer(ctx, &gen.DeleteUserSessionIssuerPayload{
+		ID:               issuerID.String(),
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	_, err = repo.New(ti.conn).GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
+		ID:        issuerID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err, "issuer must remain active when deletion is rejected")
+}
+
+func TestDeleteUserSessionIssuer_ConflictWithActiveToolset(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	created, err := ti.service.CreateUserSessionIssuer(ctx, &gen.CreateUserSessionIssuerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "delete-issuer-toolset-owner",
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+
+	issuerID := uuid.MustParse(created.ID)
+	toolset := createBackingToolset(t, ctx, ti, "delete-issuer-toolset-owner")
+	_, err = toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
+		Slug:                toolset.Slug,
+		ProjectID:           *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+
+	err = ti.service.DeleteUserSessionIssuer(ctx, &gen.DeleteUserSessionIssuerPayload{
+		ID:               issuerID.String(),
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	_, err = repo.New(ti.conn).GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
+		ID:        issuerID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err, "issuer must remain active when deletion is rejected")
 }
 
 func TestDeleteUserSessionIssuer_BadID(t *testing.T) {

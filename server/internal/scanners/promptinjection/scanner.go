@@ -3,6 +3,7 @@ package promptinjection
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -17,8 +18,19 @@ const Rule = "prompt_injection"
 // LabelInjection is the positive class an engine returns for a flagged message.
 const LabelInjection = "INJECTION"
 
-// LabelSafe is the fail-open verdict when an engine cannot reach a decision.
+// LabelSafe is a judgement: the engine looked at the content and cleared it.
 const LabelSafe = "SAFE"
+
+// LabelUnavailable is the fail-open verdict when an engine cannot reach a
+// decision at all — outage, timeout, rate limit, cancellation, no judge wired.
+// It yields no finding just like LabelSafe, so gating still fails open, but it
+// stays distinguishable so ScanStrict can refuse to let a caller record it as
+// a clean judgement. (cubic)
+const LabelUnavailable = "UNAVAILABLE"
+
+// ErrNoVerdict reports that the judge never reached a decision. Distinct from
+// a clean verdict: nothing was judged, so nothing may be recorded as clean.
+var ErrNoVerdict = errors.New("pi judge reached no verdict")
 
 type Request struct {
 	Messages  []judgemessage.Message
@@ -38,10 +50,12 @@ type Result struct {
 
 type Classifier func(ctx context.Context, req Request) ([]Result, error)
 
+// NoopClassifier stands in when no judge is configured. It reaches no verdict
+// rather than clearing content nothing looked at.
 func NoopClassifier(_ context.Context, req Request) ([]Result, error) {
 	results := make([]Result, len(req.Messages))
 	for i := range results {
-		results[i] = Result{Label: LabelSafe, Score: 0, Rationale: ""}
+		results[i] = Result{Label: LabelUnavailable, Score: 0, Rationale: ""}
 	}
 	return results, nil
 }
@@ -62,62 +76,68 @@ func NewScanner(logger *slog.Logger, classifier Classifier) *Scanner {
 	return &Scanner{classifier: classifier, logger: logger}
 }
 
-func (s *Scanner) l1Active(l1Enabled bool) bool {
-	return l1Enabled
-}
-
-func (s *Scanner) Scan(ctx context.Context, text, orgID, projectID, userID string, msg judgemessage.Message, l1Enabled bool) ([]scanners.Finding, error) {
-	if text == "" && !msg.HasContent() {
-		return nil, nil
-	}
-
-	findings := runHeuristics(text)
-
-	if !s.l1Active(l1Enabled) {
-		return findings, nil
-	}
-
-	results, err := s.classifier(ctx, Request{Messages: []judgemessage.Message{msg}, OrgID: orgID, ProjectID: projectID, UserIDs: []string{userID}})
+// Scan fails open: a judge that cannot reach a verdict yields no findings, so
+// an outage never turns into a blocked message on the gating path.
+func (s *Scanner) Scan(ctx context.Context, text, orgID, projectID, userID string, msg judgemessage.Message) ([]scanners.Finding, error) {
+	findings, err := s.ScanStrict(ctx, text, orgID, projectID, userID, msg)
 	if err != nil {
-		s.logger.WarnContext(ctx, "pi L1 scan failed; returning L0 findings only",
+		if errors.Is(err, ErrNoVerdict) {
+			return nil, nil
+		}
+		s.logger.WarnContext(ctx, "pi judge scan failed; dropping prompt injection findings",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(orgID),
 		)
-		return findings, nil
-	}
-	if len(results) != 1 {
-		return findings, nil
-	}
-
-	if f := s.findingFromResult(text, results[0]); f != nil {
-		findings = append(findings, *f)
+		return nil, nil
 	}
 	return findings, nil
 }
 
-func (s *Scanner) ScanBatch(ctx context.Context, texts []string, orgID, projectID string, userIDs []string, msgs []judgemessage.Message, l1Enabled bool) ([][]scanners.Finding, error) {
-	out := make([][]scanners.Finding, len(texts))
-	for i, t := range texts {
-		if t == "" {
-			continue
-		}
-		out[i] = runHeuristics(t)
+// ScanStrict reports a judge failure instead of failing open. Callers that
+// record whether a scan happened need to tell "judged clean" apart from "never
+// judged" - collapsing the two writes down a durable claim that content is
+// clean on the strength of an outage.
+func (s *Scanner) ScanStrict(ctx context.Context, text, orgID, projectID, userID string, msg judgemessage.Message) ([]scanners.Finding, error) {
+	if text == "" && !msg.HasContent() {
+		return nil, nil
 	}
 
-	if !s.l1Active(l1Enabled) {
+	results, err := s.classifier(ctx, Request{Messages: []judgemessage.Message{msg}, OrgID: orgID, ProjectID: projectID, UserIDs: []string{userID}})
+	if err != nil {
+		return nil, fmt.Errorf("pi judge classify: %w", err)
+	}
+	if len(results) != 1 {
+		return nil, fmt.Errorf("pi judge returned %d results for 1 message", len(results))
+	}
+	if results[0].Label == LabelUnavailable {
+		return nil, ErrNoVerdict
+	}
+
+	if f := s.findingFromResult(text, results[0]); f != nil {
+		return []scanners.Finding{*f}, nil
+	}
+	return nil, nil
+}
+
+func (s *Scanner) ScanBatch(ctx context.Context, texts []string, orgID, projectID string, userIDs []string, msgs []judgemessage.Message) ([][]scanners.Finding, error) {
+	out := make([][]scanners.Finding, len(texts))
+	if len(msgs) != len(texts) {
+		s.logger.WarnContext(ctx, "pi judge batch scan has mismatched message count",
+			attr.SlogError(errors.New("len(msgs) != len(texts)")),
+		)
 		return out, nil
 	}
 
 	results, err := s.classifier(ctx, Request{Messages: msgs, OrgID: orgID, ProjectID: projectID, UserIDs: userIDs})
 	if err != nil {
-		s.logger.WarnContext(ctx, "pi L1 batch scan failed; returning L0 findings only",
+		s.logger.WarnContext(ctx, "pi judge batch scan failed; dropping prompt injection findings",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(orgID),
 		)
 		return out, nil
 	}
 	if len(results) != len(texts) {
-		s.logger.WarnContext(ctx, "pi engine returned mismatched batch size, dropping L1 findings",
+		s.logger.WarnContext(ctx, "pi judge returned mismatched batch size, dropping prompt injection findings",
 			attr.SlogError(errors.New("len(results) != len(texts)")),
 		)
 		return out, nil
@@ -157,11 +177,4 @@ func (s *Scanner) findingFromResult(text string, r Result) *scanners.Finding {
 		Field:               "",
 		Path:                "",
 	}
-}
-
-func Detect(_ context.Context, text string) ([]scanners.Finding, error) {
-	if text == "" {
-		return nil, nil
-	}
-	return runHeuristics(text), nil
 }

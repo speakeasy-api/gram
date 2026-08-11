@@ -2,11 +2,11 @@ import {
   PoweredBySpeakeasyBadge,
   ToolCollectionBadge,
 } from "@/components/tool-collection-badge";
-import { DotCard } from "@/components/ui/dot-card";
-import { Type } from "@/components/ui/type";
+import { Card } from "@/components/ui/Card";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
-import type { DeploymentExternalMCP } from "@gram/client/models/components/deploymentexternalmcp.js";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { ArrowRight, Check } from "lucide-react";
 import { Link } from "react-router";
 import type { PulseMCPServer } from "./hooks";
@@ -15,7 +15,8 @@ import { ManualSetupBadge } from "./ManualSetupBadge";
 interface ServerCardProps {
   server: PulseMCPServer;
   detailHref: string;
-  externalMcps: DeploymentExternalMCP[];
+  /** Whether this catalog server is already installed in the project. */
+  isAdded: boolean;
   isSelected?: boolean;
   onToggleSelect?: () => void;
 }
@@ -32,7 +33,7 @@ interface ServerCardProps {
 export function ServerCard({
   server,
   detailHref,
-  externalMcps,
+  isAdded,
   isSelected,
   onToggleSelect,
 }: ServerCardProps): JSX.Element {
@@ -41,11 +42,6 @@ export function ServerCard({
   const isSpeakeasyServer = server.registrySpecifier.startsWith(
     "com.pulsemcp.mirror/gram",
   );
-
-  const existingMcp = externalMcps.find(
-    (mcp) => mcp.registryServerSpecifier === server.registrySpecifier,
-  );
-  const isAdded = !!existingMcp;
 
   // The catalog list carries a precomputed tool count, not the tool defs.
   const toolCount = server.toolCount;
@@ -73,7 +69,7 @@ export function ServerCard({
         }
       }}
     >
-      <DotCard
+      <Card.Entity
         className={cn(
           "cursor-pointer",
           isAdded && "border-success/50 ring-success/20 ring-1",
@@ -101,18 +97,18 @@ export function ServerCard({
         <div className="mb-2 flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <Type
+              <Text
                 variant="subheading"
                 as="div"
                 className="text-md group-hover:text-primary truncate transition-colors"
                 title={displayName}
               >
                 {displayName}
-              </Type>
+              </Text>
             </div>
-            <Type small muted className="truncate">
+            <Text small muted className="truncate">
               v{server.version}
-            </Type>
+            </Text>
           </div>
           <div className="flex items-baseline gap-1">
             {isSpeakeasyServer && <PoweredBySpeakeasyBadge />}
@@ -125,19 +121,20 @@ export function ServerCard({
         </div>
 
         {/* Description */}
-        <Type small muted className="mb-3 line-clamp-2">
+        <Text small muted className="mb-3 line-clamp-2">
           {server.description}
-        </Type>
+        </Text>
 
         {/* Footer row with stats and actions */}
         <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-          {/* Selection indicator */}
+          {/* Selection indicator: checkbox-style square, ink-filled when
+              selected, faint hairline outline otherwise. */}
           {isSelected ? (
-            <div className="flex size-6 items-center justify-center rounded-full bg-[#1DA1F2]">
-              <Check className="size-3.5 text-white" strokeWidth={5} />
+            <div className="bg-foreground flex size-5 items-center justify-center">
+              <Check className="text-background size-3.5" strokeWidth={3} />
             </div>
           ) : (
-            <div className="border-muted-foreground/30 size-6 rounded-full border-2" />
+            <div className="border-border size-5 border" />
           )}
 
           {/* View Details button */}
@@ -154,7 +151,7 @@ export function ServerCard({
             </Button>
           </Link>
         </div>
-      </DotCard>
+      </Card.Entity>
     </div>
   );
 }

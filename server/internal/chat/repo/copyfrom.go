@@ -9,6 +9,48 @@ import (
 	"context"
 )
 
+// iteratorForCreateChatContentPart implements pgx.CopyFromSource.
+type iteratorForCreateChatContentPart struct {
+	rows                 []CreateChatContentPartParams
+	skippedFirstNextCall bool
+}
+
+func (r *iteratorForCreateChatContentPart) Next() bool {
+	if len(r.rows) == 0 {
+		return false
+	}
+	if !r.skippedFirstNextCall {
+		r.skippedFirstNextCall = true
+		return true
+	}
+	r.rows = r.rows[1:]
+	return len(r.rows) > 0
+}
+
+func (r iteratorForCreateChatContentPart) Values() ([]interface{}, error) {
+	return []interface{}{
+		r.rows[0].ChatID,
+		r.rows[0].ProjectID,
+		r.rows[0].Kind,
+		r.rows[0].ContentAssetUrl,
+		r.rows[0].ExternalID,
+		r.rows[0].ParentChatMessageID,
+		r.rows[0].Version,
+		r.rows[0].Source,
+		r.rows[0].Metadata,
+		r.rows[0].RiskAnalyzedAt,
+		r.rows[0].CreatedAt,
+	}, nil
+}
+
+func (r iteratorForCreateChatContentPart) Err() error {
+	return nil
+}
+
+func (q *Queries) CreateChatContentPart(ctx context.Context, arg []CreateChatContentPartParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"chat_content_parts"}, []string{"chat_id", "project_id", "kind", "content_asset_url", "external_id", "parent_chat_message_id", "version", "source", "metadata", "risk_analyzed_at", "created_at"}, &iteratorForCreateChatContentPart{rows: arg})
+}
+
 // iteratorForCreateChatMessage implements pgx.CopyFromSource.
 type iteratorForCreateChatMessage struct {
 	rows                 []CreateChatMessageParams
@@ -52,6 +94,8 @@ func (r iteratorForCreateChatMessage) Values() ([]interface{}, error) {
 		r.rows[0].Source,
 		r.rows[0].ContentHash,
 		r.rows[0].Generation,
+		r.rows[0].Replayed,
+		r.rows[0].CreatedAt,
 	}, nil
 }
 
@@ -59,6 +103,10 @@ func (r iteratorForCreateChatMessage) Err() error {
 	return nil
 }
 
+// created_at is caller-supplied so hook-captured messages carry the event's
+// original occurred_at: spool replays arrive after newer live rows, and
+// insert-time stamps would sort them out of conversation order. Transcript
+// readers order by (created_at, seq).
 func (q *Queries) CreateChatMessage(ctx context.Context, arg []CreateChatMessageParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"chat_messages"}, []string{"chat_id", "role", "project_id", "content", "content_raw", "content_asset_url", "storage_error", "model", "message_id", "tool_call_id", "user_id", "external_user_id", "finish_reason", "tool_calls", "prompt_tokens", "completion_tokens", "total_tokens", "origin", "user_agent", "ip_address", "source", "content_hash", "generation"}, &iteratorForCreateChatMessage{rows: arg})
+	return q.db.CopyFrom(ctx, []string{"chat_messages"}, []string{"chat_id", "role", "project_id", "content", "content_raw", "content_asset_url", "storage_error", "model", "message_id", "tool_call_id", "user_id", "external_user_id", "finish_reason", "tool_calls", "prompt_tokens", "completion_tokens", "total_tokens", "origin", "user_agent", "ip_address", "source", "content_hash", "generation", "replayed", "created_at"}, &iteratorForCreateChatMessage{rows: arg})
 }

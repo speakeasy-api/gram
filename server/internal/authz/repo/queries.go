@@ -11,17 +11,16 @@ import (
 // sq is the squirrel statement builder pre-configured for ClickHouse (uses ? placeholders).
 var sq = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Question)
 
-// InsertChallenge writes a single challenge row using server-side async insert.
-// The call is fire-and-forget from CH's perspective: it acks once the row is
-// queued in CH's async insert buffer, not once the row is committed to disk.
+// InsertChallenge writes one challenge with a stable deduplication token. The
+// server may batch concurrent async inserts, but the call waits for the flush so
+// the Pub/Sub handler only acknowledges a durably accepted row.
 func (q *Queries) InsertChallenge(ctx context.Context, row ChallengeRow) error {
-	ctx = clickhouse.Context(ctx,
-		clickhouse.WithAsync(false),
-		clickhouse.WithSettings(clickhouse.Settings{
-			"async_insert":          1,
-			"wait_for_async_insert": 0,
-		}),
-	)
+	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
+		"async_insert":               1,
+		"async_insert_deduplicate":   1,
+		"insert_deduplication_token": "authz-challenge:" + row.ID,
+		"wait_for_async_insert":      1,
+	}))
 
 	reqScope := make([]string, len(row.RequestedChecks))
 	reqKind := make([]string, len(row.RequestedChecks))
@@ -179,6 +178,20 @@ func challengeWhere(sb squirrel.SelectBuilder, f ChallengeListFilters) squirrel.
 	return sb
 }
 
+// challengeAttributed keeps only rows that name what was checked.
+//
+// Batch Filter and FindMatched calls log a single row for the whole batch with
+// a nil focus check, so scope, resource_kind and resource_id are all written
+// empty. Those rows carry nothing to display and nothing to grant against, and
+// they are produced on the hottest paths (project and toolset listing, MCP
+// tools/list), which makes them the most recent buckets in almost every
+// organization. Dropping them here rather than in the caller keeps LIMIT/OFFSET
+// and the bucket total consistent with what is actually returned — filtering
+// after pagination lets them fill a page and starve it of real buckets.
+func challengeAttributed(sb squirrel.SelectBuilder) squirrel.SelectBuilder {
+	return sb.Where("scope != '' AND resource_kind != '' AND resource_id != ''")
+}
+
 // challengePagination applies LIMIT/OFFSET to a squirrel SelectBuilder when not skipped.
 func challengePagination(sb squirrel.SelectBuilder, f ChallengeListFilters) squirrel.SelectBuilder {
 	if !f.SkipPagination {
@@ -257,6 +270,7 @@ func scanChallengeSummary(rows interface{ Scan(dest ...any) error }) (ChallengeS
 // ListChallenges queries ClickHouse for authz challenge events.
 func (q *Queries) ListChallenges(ctx context.Context, f ChallengeListFilters) ([]ChallengeSummary, error) {
 	sb := sq.Select(challengeSummaryColumns...).
+		Distinct().
 		From("authz_challenges").
 		OrderBy("timestamp DESC")
 	sb = challengeWhere(sb, f)
@@ -289,7 +303,7 @@ func (q *Queries) ListChallenges(ctx context.Context, f ChallengeListFilters) ([
 
 // CountChallenges returns the total number of matching challenges for pagination.
 func (q *Queries) CountChallenges(ctx context.Context, f ChallengeListFilters) (uint64, error) {
-	sb := sq.Select("count(*)").From("authz_challenges")
+	sb := sq.Select("uniqExact(id)").From("authz_challenges")
 	sb = challengeWhere(sb, f)
 
 	query, args, err := sb.ToSql()
@@ -319,6 +333,7 @@ func (q *Queries) ListChallengesByIDs(ctx context.Context, orgID string, ids []s
 	}
 
 	sb := sq.Select(challengeSummaryColumns...).
+		Distinct().
 		From("authz_challenges").
 		Where("organization_id = ?", orgID).
 		Where(squirrel.Eq{"id": ids}).
@@ -395,8 +410,8 @@ var challengeBucketColumns = []string{
 	"argMax(role_slugs, timestamp) AS role_slugs",
 	"argMax(evaluated_grant_count, timestamp) AS evaluated_grant_count",
 	"max(length(matched_grants.scope)) AS matched_grant_count",
-	"count(*) AS challenge_count",
-	"arrayMap(x -> toString(x), groupArray(id)) AS challenge_ids",
+	"uniqExact(id) AS challenge_count",
+	"arrayMap(x -> toString(x), groupUniqArray(id)) AS challenge_ids",
 	"formatDateTime(min(timestamp), '%Y-%m-%dT%H:%i:%S.000Z', 'UTC') AS first_seen",
 }
 
@@ -409,6 +424,7 @@ func (q *Queries) ListChallengeBuckets(ctx context.Context, f ChallengeListFilte
 		GroupBy(challengeBucketGroupBy).
 		OrderBy("max(timestamp) DESC")
 	sb = challengeWhere(sb, f)
+	sb = challengeAttributed(sb)
 	sb = challengePagination(sb, f)
 
 	query, args, err := sb.ToSql()
@@ -463,6 +479,7 @@ func (q *Queries) CountChallengeBuckets(ctx context.Context, f ChallengeListFilt
 		From("authz_challenges").
 		GroupBy(challengeBucketGroupBy)
 	inner = challengeWhere(inner, f)
+	inner = challengeAttributed(inner)
 
 	innerQuery, args, err := inner.ToSql()
 	if err != nil {

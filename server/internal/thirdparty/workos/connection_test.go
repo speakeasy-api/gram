@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -27,9 +26,8 @@ func newClientWithHandler(t *testing.T, handler http.Handler) *workos.Client {
 	require.NoError(t, err)
 
 	return workos.NewClient(guardianPolicy, "test-api-key", workos.ClientOpts{
-		Endpoint:   srv.URL,
-		HTTPClient: &http.Client{Timeout: 10 * time.Second},
-		ClientID:   "test-client-id",
+		Endpoint: srv.URL,
+		ClientID: "test-client-id",
 	})
 }
 

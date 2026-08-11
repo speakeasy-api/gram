@@ -1,5 +1,5 @@
-import { Heading } from "@/components/ui/heading";
-import { Type } from "@/components/ui/type";
+import { Heading } from "@/components/ui/Heading";
+import { Text } from "@/components/ui/Text";
 import type { ReactNode } from "react";
 
 // Shared read-only field primitives for the org-admin Remote Identity Provider
@@ -17,13 +17,13 @@ export function InfoText({
   mono?: boolean;
 }): JSX.Element {
   return (
-    <Type
+    <Text
       small
       as="div"
       className={mono ? "font-mono break-all" : "break-words"}
     >
       {children}
-    </Type>
+    </Text>
   );
 }
 
@@ -37,9 +37,9 @@ export function InfoField({
 }): JSX.Element {
   return (
     <div className="flex flex-col gap-1">
-      <Type small muted>
+      <Text small muted>
         {label}
-      </Type>
+      </Text>
       {children}
     </div>
   );

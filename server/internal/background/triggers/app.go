@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -38,6 +39,7 @@ const (
 	StatusCancelled     = "cancelled"
 
 	DefinitionSlugSlack     = "slack"
+	DefinitionSlugMSTeams   = "msteams"
 	DefinitionSlugLinear    = "linear"
 	DefinitionSlugGithub    = "github"
 	DefinitionSlugCron      = "cron"
@@ -63,7 +65,7 @@ type EnvironmentLoader interface {
 }
 
 type DeliveryLogger interface {
-	LogTriggerDelivery(triggerrepo.TriggerInstance, EventEnvelope, DeliveryStatus, string, error)
+	LogTriggerDelivery(context.Context, triggerrepo.TriggerInstance, EventEnvelope, DeliveryStatus, string, error)
 }
 
 type Dispatcher interface {
@@ -86,6 +88,7 @@ func NewTriggerDeliveryLogger(write func(context.Context, TriggerDeliveryLog)) D
 }
 
 func (l *triggerDeliveryLogger) LogTriggerDelivery(
+	ctx context.Context,
 	instance triggerrepo.TriggerInstance,
 	envelope EventEnvelope,
 	status DeliveryStatus,
@@ -121,8 +124,14 @@ func (l *triggerDeliveryLogger) LogTriggerDelivery(
 	if err != nil {
 		attributes[attr.ErrorMessageKey] = err.Error()
 	}
+	// telemetry.HTTPLogAttributes.RecordTraceContext is off-limits here (import
+	// cycle through platformtools), so stamp the trace context directly.
+	if spanCtx := trace.SpanContextFromContext(ctx); spanCtx.IsValid() {
+		attributes[attr.TraceIDKey] = spanCtx.TraceID().String()
+		attributes[attr.SpanIDKey] = spanCtx.SpanID().String()
+	}
 
-	l.write(context.Background(), TriggerDeliveryLog{
+	l.write(ctx, TriggerDeliveryLog{
 		Timestamp:  conv.Default(envelope.ReceivedAt, time.Now().UTC()),
 		Attributes: attributes,
 		Instance:   instance,
@@ -137,6 +146,7 @@ type App struct {
 	deliveryLogger DeliveryLogger
 	temporalEnv    *tenv.Environment
 	serverURL      *url.URL
+	siteURL        *url.URL
 	dispatchers    map[string]Dispatcher
 	audit          *audit.Logger
 	slackClient    *slackclient.SlackClient
@@ -186,6 +196,7 @@ func NewApp(
 	deliveryLogger DeliveryLogger,
 	auditLogger *audit.Logger,
 	serverURL *url.URL,
+	siteURL *url.URL,
 	slackClient *slackclient.SlackClient,
 	dispatchers ...Dispatcher,
 ) *App {
@@ -204,6 +215,7 @@ func NewApp(
 		deliveryLogger: deliveryLogger,
 		temporalEnv:    temporalEnv,
 		serverURL:      serverURL,
+		siteURL:        siteURL,
 		dispatchers:    dispatcherMap,
 		audit:          auditLogger,
 		slackClient:    slackClient,
@@ -717,7 +729,7 @@ func (a *App) ProcessWebhook(ctx context.Context, instanceID uuid.UUID, body []b
 		}
 	}
 
-	if err := definition.AuthenticateWebhook(body, headers, envMap, config); err != nil {
+	if err := definition.AuthenticateWebhook(ctx, body, headers, envMap, config); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrAuthFailed, err)
 	}
 
@@ -744,6 +756,11 @@ func (a *App) ProcessWebhook(ctx context.Context, instanceID uuid.UUID, body []b
 	if result.Event.CorrelationID == "" {
 		result.Event.CorrelationID = result.Event.EventID
 	}
+
+	// Unfurl before ProcessEvent: link previews should render even when no
+	// assistant subscribes to link_shared (ProcessEvent would filter the event
+	// out and return a nil task).
+	a.unfurlSlackGramLinks(ctx, instance, envMap, body, *result.Event)
 
 	task, err := a.ProcessEvent(ctx, instance, *result.Event)
 	if err != nil {
@@ -864,33 +881,33 @@ func boundAssistantKey(id string) string {
 func (a *App) ProcessEvent(ctx context.Context, instance triggerrepo.TriggerInstance, envelope EventEnvelope) (*Task, error) {
 	rawConfig, err := configJSONToMap(instance.ConfigJson)
 	if err != nil {
-		a.emitDeliveryLog(instance, envelope, DeliveryStatusFailed, "decode trigger config", err)
+		a.deliveryLogger.LogTriggerDelivery(ctx, instance, envelope, DeliveryStatusFailed, "decode trigger config", err)
 		return nil, fmt.Errorf("decode trigger config: %w", err)
 	}
 
 	_, config, err := a.validateInstance(ctx, instance.ProjectID, nullUUIDToUUID(instance.EnvironmentID), instance.DefinitionSlug, rawConfig)
 	if err != nil {
-		a.emitDeliveryLog(instance, envelope, DeliveryStatusFailed, "validate trigger instance", err)
+		a.deliveryLogger.LogTriggerDelivery(ctx, instance, envelope, DeliveryStatusFailed, "validate trigger instance", err)
 		return nil, fmt.Errorf("validate trigger instance: %w", err)
 	}
 
 	if instance.Status != StatusActive {
-		a.emitDeliveryLog(instance, envelope, DeliveryStatusSkipped, "trigger is paused", nil)
+		a.deliveryLogger.LogTriggerDelivery(ctx, instance, envelope, DeliveryStatusSkipped, "trigger is paused", nil)
 		return nil, nil
 	}
 
 	match, err := config.Filter(envelope.Event)
 	if err != nil {
-		a.emitDeliveryLog(instance, envelope, DeliveryStatusFailed, "evaluate filter", err)
+		a.deliveryLogger.LogTriggerDelivery(ctx, instance, envelope, DeliveryStatusFailed, "evaluate filter", err)
 		return nil, fmt.Errorf("evaluate filter: %w", err)
 	}
 	if !match {
-		a.emitDeliveryLog(instance, envelope, DeliveryStatusSkipped, "filter did not match", nil)
+		a.deliveryLogger.LogTriggerDelivery(ctx, instance, envelope, DeliveryStatusSkipped, "filter did not match", nil)
 		return nil, nil
 	}
 
 	if err := ValidateTargetKind(instance.TargetKind); err != nil {
-		a.emitDeliveryLog(instance, envelope, DeliveryStatusFailed, "trigger target is not supported", err)
+		a.deliveryLogger.LogTriggerDelivery(ctx, instance, envelope, DeliveryStatusFailed, "trigger target is not supported", err)
 		return nil, fmt.Errorf("validate trigger target kind: %w", err)
 	}
 
@@ -908,13 +925,13 @@ func (a *App) ProcessEvent(ctx context.Context, instance triggerrepo.TriggerInst
 	if envelope.Event != nil {
 		eventJSON, err := json.Marshal(envelope.Event)
 		if err != nil {
-			a.emitDeliveryLog(instance, envelope, DeliveryStatusFailed, "marshal event payload", err)
+			a.deliveryLogger.LogTriggerDelivery(ctx, instance, envelope, DeliveryStatusFailed, "marshal event payload", err)
 			return nil, fmt.Errorf("marshal event payload: %w", err)
 		}
 		task.EventJSON = eventJSON
 	}
 
-	a.emitDeliveryLog(instance, envelope, DeliveryStatusSent, "trigger event enqueued", nil)
+	a.deliveryLogger.LogTriggerDelivery(ctx, instance, envelope, DeliveryStatusSent, "trigger event enqueued", nil)
 	return task, nil
 }
 
@@ -1071,10 +1088,6 @@ func (a *App) loadEnvironmentMap(ctx context.Context, projectID uuid.UUID, envir
 		return map[string]string{}, nil
 	}
 	return envMap, nil
-}
-
-func (a *App) emitDeliveryLog(instance triggerrepo.TriggerInstance, envelope EventEnvelope, status DeliveryStatus, reason string, err error) {
-	a.deliveryLogger.LogTriggerDelivery(instance, envelope, status, reason, err)
 }
 
 func ValidateTargetKind(targetKind string) error {

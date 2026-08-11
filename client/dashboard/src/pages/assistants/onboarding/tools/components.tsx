@@ -1,13 +1,13 @@
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { TextArea } from "@/components/ui/textarea";
-import { Type } from "@/components/ui/type";
+import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
+import { TextArea } from "@/components/ui/Textarea";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { ToolCallMessagePartProps } from "@assistant-ui/react";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
 import {
   AlertTriangle,
   Check,
@@ -51,16 +51,16 @@ function ToolCard({
   return (
     <div
       className={cn(
-        "border-border bg-card my-3 max-w-2xl rounded-lg border shadow-sm",
+        "border-border bg-card my-4 max-w-2xl border shadow-sm",
         tone === "success" && "border-emerald-300/40 bg-emerald-50/30",
         tone === "info" && "border-sky-300/40 bg-sky-50/30",
       )}
     >
       <div className="border-border flex items-center gap-2 border-b px-5 py-3">
         {icon}
-        <Type variant="body" className="font-medium">
+        <Text variant="body" className="font-medium">
           {title}
-        </Type>
+        </Text>
       </div>
       <div className="px-5 py-4">{children}</div>
     </div>
@@ -130,18 +130,18 @@ export function RequestEnvironmentSecretsComponent({
         tone="success"
         icon={<Check className="text-emerald-600" size={16} />}
       >
-        <Type small muted>
+        <Text small muted>
           Saved to <code>{r.environment_slug}</code>:{" "}
           {savedKeys.length === 0 ? (
             <em>no values provided; keys declared as empty.</em>
           ) : (
             savedKeys.map((k) => (
-              <code key={k} className="bg-muted mr-1 rounded px-1.5 py-0.5">
+              <code key={k} className="bg-muted mr-1 px-1.5 py-0.5">
                 {k}
               </code>
             ))
           )}
-        </Type>
+        </Text>
       </ToolCard>
     );
   }
@@ -149,9 +149,9 @@ export function RequestEnvironmentSecretsComponent({
   if (settled && r?.cancelled) {
     return (
       <ToolCard title="Environment secrets — skipped">
-        <Type small muted>
+        <Text small muted>
           You can add these later from the Environments page.
-        </Type>
+        </Text>
       </ToolCard>
     );
   }
@@ -159,9 +159,9 @@ export function RequestEnvironmentSecretsComponent({
   if (settled) {
     return (
       <ToolCard title="Environment secrets — error">
-        <Type small className="text-red-600">
+        <Text small className="text-red-600">
           {r?.error ?? "Form was closed without saving."}
-        </Type>
+        </Text>
       </ToolCard>
     );
   }
@@ -199,9 +199,9 @@ export function RequestEnvironmentSecretsComponent({
       icon={<Icon name="key-round" className="text-muted-foreground h-4 w-4" />}
     >
       {reason && (
-        <Type small muted className="mb-3">
+        <Text small muted className="mb-3">
           {reason}
-        </Type>
+        </Text>
       )}
       <div className="space-y-3">
         {keys.map((k) => (
@@ -211,9 +211,9 @@ export function RequestEnvironmentSecretsComponent({
               <code className="text-muted-foreground">{k.name}</code>
             </Label>
             {k.description && (
-              <Type small muted className="mb-1">
+              <Text small muted className="mb-1">
                 {k.description}
-              </Type>
+              </Text>
             )}
             <Input
               type={k.sensitive ? "password" : "text"}
@@ -225,12 +225,12 @@ export function RequestEnvironmentSecretsComponent({
         ))}
       </div>
       {error && (
-        <Type small className="mt-2 text-red-600">
+        <Text small className="mt-2 text-red-600">
           {error}
-        </Type>
+        </Text>
       )}
       <div className="mt-4 flex justify-end gap-2">
-        <Button variant="ghost" onClick={cancel} disabled={submitting}>
+        <Button variant="tertiary" onClick={cancel} disabled={submitting}>
           Skip
         </Button>
         <Button
@@ -274,13 +274,13 @@ export function ShowWebhookUrlComponent({
       icon={<Icon name="webhook" className="text-muted-foreground h-4 w-4" />}
     >
       {a.instructions && (
-        <Type small muted className="mb-3 whitespace-pre-line">
+        <Text small muted className="mb-3 whitespace-pre-line">
           {a.instructions}
-        </Type>
+        </Text>
       )}
-      <div className="border-border bg-muted/30 flex items-center gap-2 rounded-md border px-3 py-2">
+      <div className="border-border bg-muted/30 flex items-center gap-2 border px-3 py-2">
         <code className="flex-1 truncate font-mono text-xs">{url}</code>
-        <Button size="sm" variant="ghost" onClick={() => void copy()}>
+        <Button size="sm" variant="tertiary" onClick={() => void copy()}>
           {copied ? (
             <Check className="h-3.5 w-3.5" />
           ) : (
@@ -323,6 +323,7 @@ export function ShowSlackAppGuideComponent({
         webhookUrl: a.webhook_url,
         extraScopes: a.bot_scopes,
         extraBotEvents: a.bot_events,
+        unfurlDomain: window.location.hostname,
       }),
     [a.app_name, a.webhook_url, a.bot_scopes, a.bot_events, assistantName],
   );
@@ -351,9 +352,9 @@ export function ShowSlackAppGuideComponent({
         tone="success"
         icon={<Check className="text-emerald-600" size={16} />}
       >
-        <Type small muted>
+        <Text small muted>
           Next: paste your tokens.
-        </Type>
+        </Text>
       </ToolCard>
     );
   }
@@ -361,10 +362,10 @@ export function ShowSlackAppGuideComponent({
   if (settled && r?.cancelled) {
     return (
       <ToolCard title="Slack install — skipped">
-        <Type small muted>
+        <Text small muted>
           You can come back to this anytime — just ask me to retry the Slack
           setup.
-        </Type>
+        </Text>
       </ToolCard>
     );
   }
@@ -425,7 +426,7 @@ export function ShowSlackAppGuideComponent({
           </a>
         </Button>
         <div className="flex gap-2">
-          <Button variant="ghost" onClick={skip}>
+          <Button variant="tertiary" onClick={skip}>
             Skip
           </Button>
           <Button onClick={markInstalled}>I'm done</Button>
@@ -505,9 +506,9 @@ export function ProposeNameComponent({
         tone="success"
         icon={<Check className="text-emerald-600" size={16} />}
       >
-        <Type small muted>
-          Name: <code className="bg-muted rounded px-1.5 py-0.5">{r.name}</code>
-        </Type>
+        <Text small muted>
+          Name: <code className="bg-muted px-1.5 py-0.5">{r.name}</code>
+        </Text>
       </ToolCard>
     );
   }
@@ -515,9 +516,9 @@ export function ProposeNameComponent({
   if (settled) {
     return (
       <ToolCard title="Name — skipped">
-        <Type small muted>
+        <Text small muted>
           No name selected. You can set one from the draft panel anytime.
-        </Type>
+        </Text>
       </ToolCard>
     );
   }
@@ -545,9 +546,9 @@ export function ProposeNameComponent({
       icon={<Sparkles className="text-muted-foreground h-4 w-4" />}
     >
       {goal && (
-        <Type small muted className="mb-3">
+        <Text small muted className="mb-3">
           Based on: {goal}
-        </Type>
+        </Text>
       )}
 
       <div>
@@ -578,7 +579,7 @@ export function ProposeNameComponent({
       </div>
 
       <div className="mt-4 flex justify-end gap-2">
-        <Button variant="ghost" onClick={cancel}>
+        <Button variant="tertiary" onClick={cancel}>
           Skip
         </Button>
         <Button onClick={submit} disabled={!canSubmit}>
@@ -625,9 +626,9 @@ export function ProposePersonalityComponent({
         tone="success"
         icon={<Check className="text-emerald-600" size={16} />}
       >
-        <Type small muted>
+        <Text small muted>
           Personality saved.
-        </Type>
+        </Text>
       </ToolCard>
     );
   }
@@ -635,9 +636,9 @@ export function ProposePersonalityComponent({
   if (settled) {
     return (
       <ToolCard title="Personality — skipped">
-        <Type small muted>
+        <Text small muted>
           No personality selected. You can set one from the draft panel anytime.
-        </Type>
+        </Text>
       </ToolCard>
     );
   }
@@ -688,9 +689,9 @@ export function ProposePersonalityComponent({
       icon={<Sparkles className="text-muted-foreground h-4 w-4" />}
     >
       {assistantName && (
-        <Type small muted className="mb-3">
+        <Text small muted className="mb-3">
           For: {assistantName}
-        </Type>
+        </Text>
       )}
 
       <div>
@@ -699,7 +700,7 @@ export function ProposePersonalityComponent({
           onValueChange={(v) => setMode(v as PersonalityMode)}
           className="gap-2"
         >
-          <div className="border-border rounded-md border p-3">
+          <div className="border-border border p-3">
             <div className="flex items-start gap-2">
               <RadioGroupItem
                 value="prebuilt"
@@ -710,21 +711,21 @@ export function ProposePersonalityComponent({
                 htmlFor="personality-prebuilt"
                 className="flex-1 cursor-pointer flex-col items-start gap-0"
               >
-                <Type small className="font-medium">
+                <Text small className="font-medium">
                   Pick a preset
-                </Type>
+                </Text>
               </Label>
             </div>
             {mode === "prebuilt" && (
               <div className="mt-3 flex flex-col gap-3">
                 <div className="flex flex-col gap-2">
                   <div>
-                    <Type small className="font-medium">
+                    <Text small className="font-medium">
                       Speakeasy team voices
-                    </Type>
-                    <Type small muted>
+                    </Text>
+                    <Text small muted>
                       Personalities modeled on real teammates.
-                    </Type>
+                    </Text>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {TEAM_PERSONALITIES.map((p) => (
@@ -733,14 +734,14 @@ export function ProposePersonalityComponent({
                         type="button"
                         onClick={() => setPrebuiltSlug(p.slug)}
                         className={cn(
-                          "border-border hover:bg-muted rounded-md border px-3 py-1.5 text-left transition-colors",
+                          "border-border hover:bg-muted border px-3 py-1.5 text-left transition-colors",
                           prebuiltSlug === p.slug &&
                             "border-primary bg-primary/5",
                         )}
                       >
-                        <Type small className="font-medium">
+                        <Text small className="font-medium">
                           {p.title}
-                        </Type>
+                        </Text>
                       </button>
                     ))}
                   </div>
@@ -749,9 +750,9 @@ export function ProposePersonalityComponent({
                       (p) => p.slug === prebuiltSlug,
                     );
                     return selectedTeam ? (
-                      <Type small muted>
+                      <Text small muted>
                         {selectedTeam.summary}
-                      </Type>
+                      </Text>
                     ) : null;
                   })()}
                 </div>
@@ -762,17 +763,17 @@ export function ProposePersonalityComponent({
                       type="button"
                       onClick={() => setPrebuiltSlug(p.slug)}
                       className={cn(
-                        "border-border hover:bg-muted rounded-md border p-2 text-left transition-colors",
+                        "border-border hover:bg-muted border p-2 text-left transition-colors",
                         prebuiltSlug === p.slug &&
                           "border-primary bg-primary/5",
                       )}
                     >
-                      <Type small className="font-medium">
+                      <Text small className="font-medium">
                         {p.title}
-                      </Type>
-                      <Type small muted className="mt-0.5">
+                      </Text>
+                      <Text small muted className="mt-0.5">
                         {p.summary}
-                      </Type>
+                      </Text>
                     </button>
                   ))}
                 </div>
@@ -780,7 +781,7 @@ export function ProposePersonalityComponent({
             )}
           </div>
 
-          <div className="border-border rounded-md border p-3">
+          <div className="border-border border p-3">
             <div className="flex items-start gap-2">
               <RadioGroupItem
                 value="generate"
@@ -791,12 +792,12 @@ export function ProposePersonalityComponent({
                 htmlFor="personality-generate"
                 className="flex-1 cursor-pointer flex-col items-start gap-0"
               >
-                <Type small className="font-medium">
+                <Text small className="font-medium">
                   Describe it in your own words
-                </Type>
-                <Type small muted className="mt-0.5">
+                </Text>
+                <Text small muted className="mt-0.5">
                   A sentence or two — we'll expand it into a full personality.
-                </Type>
+                </Text>
               </Label>
             </div>
             {mode === "generate" && (
@@ -810,7 +811,7 @@ export function ProposePersonalityComponent({
             )}
           </div>
 
-          <div className="border-border rounded-md border p-3">
+          <div className="border-border border p-3">
             <div className="flex items-start gap-2">
               <RadioGroupItem
                 value="custom"
@@ -821,12 +822,12 @@ export function ProposePersonalityComponent({
                 htmlFor="personality-custom"
                 className="flex-1 cursor-pointer flex-col items-start gap-0"
               >
-                <Type small className="font-medium">
+                <Text small className="font-medium">
                   Paste full instructions
-                </Type>
-                <Type small muted className="mt-0.5">
+                </Text>
+                <Text small muted className="mt-0.5">
                   Use as-is. You can always edit later.
-                </Type>
+                </Text>
               </Label>
             </div>
             {mode === "custom" && (
@@ -840,7 +841,7 @@ export function ProposePersonalityComponent({
             )}
           </div>
 
-          <div className="border-border rounded-md border p-3">
+          <div className="border-border border p-3">
             <div className="flex items-start gap-2">
               <RadioGroupItem
                 value="random"
@@ -851,13 +852,13 @@ export function ProposePersonalityComponent({
                 htmlFor="personality-random"
                 className="flex-1 cursor-pointer flex-col items-start gap-0"
               >
-                <Type small className="font-medium">
+                <Text small className="font-medium">
                   <Shuffle className="mr-1 inline h-3.5 w-3.5" />
                   Surprise me
-                </Type>
-                <Type small muted className="mt-0.5">
+                </Text>
+                <Text small muted className="mt-0.5">
                   Generate a fresh, unexpected personality.
-                </Type>
+                </Text>
               </Label>
             </div>
           </div>
@@ -865,7 +866,7 @@ export function ProposePersonalityComponent({
       </div>
 
       <div className="mt-4 flex justify-end gap-2">
-        <Button variant="ghost" onClick={cancel}>
+        <Button variant="tertiary" onClick={cancel}>
           Skip
         </Button>
         <Button onClick={submit} disabled={!canSubmit}>
@@ -941,9 +942,9 @@ export function ProposeSlackSetupComponent({
         tone="success"
         icon={<Check className="text-emerald-600" size={16} />}
       >
-        <Type small muted>
+        <Text small muted>
           {`Created a Slack toolset for ${assistantName} and wired up its triggers.`}
-        </Type>
+        </Text>
       </ToolCard>
     );
   }
@@ -951,9 +952,9 @@ export function ProposeSlackSetupComponent({
   if (settled && r?.cancelled) {
     return (
       <ToolCard title="Slack setup — skipped">
-        <Type small muted>
+        <Text small muted>
           You can come back to this anytime — just ask me to set up Slack.
-        </Type>
+        </Text>
       </ToolCard>
     );
   }
@@ -961,9 +962,9 @@ export function ProposeSlackSetupComponent({
   if (settled) {
     return (
       <ToolCard title="Slack setup — error">
-        <Type small className="text-red-600">
+        <Text small className="text-red-600">
           {r?.error ?? "Setup did not complete."}
-        </Type>
+        </Text>
       </ToolCard>
     );
   }
@@ -1004,10 +1005,10 @@ export function ProposeSlackSetupComponent({
       title="Set up Slack"
       icon={<Icon name="bot" className="text-muted-foreground h-4 w-4" />}
     >
-      <Type small muted className="mb-3">
+      <Text small muted className="mb-3">
         Pick what {assistantName} can do in Slack and what wakes it up. You can
         adjust this later from the assistant's settings.
-      </Type>
+      </Text>
 
       <div className="space-y-4">
         <section>
@@ -1023,7 +1024,7 @@ export function ProposeSlackSetupComponent({
                   key={g.slug}
                   htmlFor={id}
                   className={cn(
-                    "border-border hover:bg-muted/60 flex cursor-pointer items-start gap-2 rounded-md border p-2 transition-colors",
+                    "border-border hover:bg-muted/60 flex cursor-pointer items-start gap-2 border p-2 transition-colors",
                     checked && "border-primary bg-primary/5",
                   )}
                 >
@@ -1034,12 +1035,12 @@ export function ProposeSlackSetupComponent({
                     className="mt-0.5"
                   />
                   <div className="flex-1">
-                    <Type small className="font-medium">
+                    <Text small className="font-medium">
                       {g.label}
-                    </Type>
-                    <Type small muted className="mt-0.5">
+                    </Text>
+                    <Text small muted className="mt-0.5">
                       {g.description}
-                    </Type>
+                    </Text>
                   </div>
                 </label>
               );
@@ -1060,7 +1061,7 @@ export function ProposeSlackSetupComponent({
                   key={g.slug}
                   htmlFor={id}
                   className={cn(
-                    "border-border hover:bg-muted/60 flex cursor-pointer items-start gap-2 rounded-md border p-2 transition-colors",
+                    "border-border hover:bg-muted/60 flex cursor-pointer items-start gap-2 border p-2 transition-colors",
                     checked && "border-primary bg-primary/5",
                   )}
                 >
@@ -1071,12 +1072,12 @@ export function ProposeSlackSetupComponent({
                     className="mt-0.5"
                   />
                   <div className="flex-1">
-                    <Type small className="font-medium">
+                    <Text small className="font-medium">
                       {g.label}
-                    </Type>
-                    <Type small muted className="mt-0.5">
+                    </Text>
+                    <Text small muted className="mt-0.5">
                       {g.description}
-                    </Type>
+                    </Text>
                   </div>
                 </label>
               );
@@ -1085,25 +1086,25 @@ export function ProposeSlackSetupComponent({
         </section>
 
         {anyEvent && (
-          <div className="flex items-start gap-2 rounded-md border border-amber-300/40 bg-amber-50/40 px-3 py-2 dark:bg-amber-950/20">
+          <div className="flex items-start gap-2 border border-amber-300/40 bg-amber-50/40 px-3 py-2 dark:bg-amber-950/20">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
             <div className="flex-1">
-              <Type small className="font-medium">
+              <Text small className="font-medium">
                 Heads up: {assistantName} will be always on
-              </Type>
-              <Type small muted className="mt-0.5">
+              </Text>
+              <Text small muted className="mt-0.5">
                 It reacts every time one of these happens, in every channel it's
                 in. If that's too much, we can narrow it down together after —
                 just say things like &ldquo;only when @-mentioned&rdquo; or
                 &ldquo;only in #support&rdquo;.
-              </Type>
+              </Text>
             </div>
           </div>
         )}
       </div>
 
       <div className="mt-4 flex justify-end gap-2">
-        <Button variant="ghost" onClick={() => void cancel()}>
+        <Button variant="tertiary" onClick={() => void cancel()}>
           Skip
         </Button>
         <Button onClick={() => void submit()} disabled={!anySelected}>

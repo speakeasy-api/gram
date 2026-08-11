@@ -6,9 +6,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	aiintegrationsrepo "github.com/speakeasy-api/gram/server/internal/aiintegrations/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -442,7 +444,7 @@ func TestClaude_LinksChatToUserAccount(t *testing.T) {
 	var chat chatRepo.GetChatRow
 	require.Eventually(t, func() bool {
 		var err error
-		chat, err = chatRepo.New(ti.conn).GetChat(ctx, chatID)
+		chat, err = chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{ID: chatID, ProjectID: *authCtx.ProjectID})
 		return err == nil
 	}, 2*time.Second, 25*time.Millisecond)
 
@@ -492,7 +494,7 @@ func TestLogs_BackfillsChatAccountLinkOnExistingChat(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	chat, err := chatRepo.New(ti.conn).GetChat(ctx, chatID)
+	chat, err := chatRepo.New(ti.conn).GetChat(ctx, chatRepo.GetChatParams{ID: chatID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
 	require.True(t, chat.UserAccountID.Valid)
 	require.Equal(t, account.ID, chat.UserAccountID.UUID)
@@ -529,6 +531,111 @@ func TestLogs_NoAccountIdentityDoesNotCreateUserAccount(t *testing.T) {
 		ExternalAccountUuid: "",
 	})
 	require.Error(t, err)
+}
+
+// TestLogs_ClassifiesCompanyCredentialSessionAsTeam covers a Claude session
+// authenticated by company credentials (an API key / gateway / Bedrock / Vertex):
+// it emits user.email and user.id but no user.account_uuid or organization.id, so
+// no personal account is behind it. Attribution must classify it team and stamp
+// account_type onto the telemetry — even though no user_accounts entity can be
+// persisted (that entity keys on the absent UUID) — so the cost breakdown does
+// not park the whole org's spend under "(unset)". The email is deliberately NOT
+// provisioned in Gram: this is the corporate-gateway population that an email- or
+// provider-org-based signal alone would miss.
+func TestLogs_ClassifiesCompanyCredentialSessionAsTeam(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	chClient := enableHookTelemetryLogger(t, ctx, ti)
+	authCtx := hookAuthContext(t, ctx)
+	orgID := authCtx.ActiveOrganizationID
+	now := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+
+	err := ti.service.Logs(ctx, claudeLogsPayload(
+		[]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")},
+		nil,
+		&gen.OTELLogRecord{
+			TimeUnixNano: new(nanoString(now)),
+			Body:         &gen.OTELLogBody{StringValue: new("api request")},
+			Attributes: []*gen.OTELAttribute{
+				strAttr("session.id", "gateway-session"),
+				strAttr("user.email", "gateway-user@example.com"),
+				strAttr("user.id", "gateway-device"),
+			},
+		},
+	))
+	require.NoError(t, err)
+
+	logs := waitForHookLogs(t, ctx, chClient, authCtx.ProjectID.String(), claudeOTELLogsURN, now, 1)
+	require.Contains(t, logs[0].Attributes, accountTypeTeam)
+
+	// No account entity is persisted: the user_accounts key (external_account_uuid)
+	// is absent for a company-credential session.
+	_, err = repo.New(ti.conn).GetUserAccount(ctx, repo.GetUserAccountParams{
+		OrganizationID:      orgID,
+		Provider:            providerAnthropic,
+		ExternalAccountUuid: "",
+	})
+	require.Error(t, err)
+}
+
+// TestLogs_CompanyCredentialSessionTeachesDeviceBridge covers the bridge at a
+// gateway-only org: the device bridge keys on the per-device id, not the account
+// UUID, so a company-credential session whose work email resolves must still
+// teach device -> employee — it is the only session shape such an org ever
+// produces, and without its teaching a personal account later seen on the same
+// device could never be attributed to its employee.
+func TestLogs_CompanyCredentialSessionTeachesDeviceBridge(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	orgID := authCtx.ActiveOrganizationID
+	queries := repo.New(ti.conn)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	userID, workEmail := "gateway-employee", "gateway-employee@example.com"
+	seedHookUser(t, ctx, ti.conn, orgID, userID, workEmail)
+
+	const deviceID = "device-gateway-1"
+
+	// Company-credential session: work email resolves, no account UUID.
+	err := ti.service.Logs(ctx, claudeLogsPayload(
+		[]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")},
+		nil,
+		&gen.OTELLogRecord{
+			TimeUnixNano: new(nanoString(now)),
+			Body:         &gen.OTELLogBody{StringValue: new("api request")},
+			Attributes: []*gen.OTELAttribute{
+				strAttr("session.id", "gateway-teach-session"),
+				strAttr("user.email", workEmail),
+				strAttr("user.id", deviceID),
+			},
+		},
+	))
+	require.NoError(t, err)
+
+	// The gateway session taught the bridge despite carrying no account UUID.
+	owner, err := queries.GetDeviceOwner(ctx, repo.GetDeviceOwnerParams{
+		OrganizationID: orgID,
+		Provider:       providerAnthropic,
+		DeviceID:       deviceID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, userID, owner.LinkedUserID.String)
+
+	// A personal session on the same device (UUID present, gmail does not
+	// resolve) adopts the learned employee through the bridge.
+	claudeAccountSession(t, ctx, ti, "gateway-pers-session", "gateway-person@gmail.com", "gateway-max-org", "acct-gateway-personal", deviceID, now.Add(time.Minute))
+
+	personalAccount, err := queries.GetUserAccount(ctx, repo.GetUserAccountParams{
+		OrganizationID:      orgID,
+		Provider:            providerAnthropic,
+		ExternalAccountUuid: "acct-gateway-personal",
+	})
+	require.NoError(t, err)
+	require.Equal(t, accountTypePersonal, personalAccount.AccountType.String)
+	require.Equal(t, userID, personalAccount.UserID.String)
 }
 
 // TestLogs_LateBridgeBackfillsPersonalAccount covers the "late linking" ordering:
@@ -660,14 +767,123 @@ func TestResolveBillingMode_EmptyWhenNoDeclaration(t *testing.T) {
 // TestProviderBillingConfigProvider verifies the mapping from a session provider
 // tag to the ai_integration_configs provider identifier where org-level billing
 // modes are declared. Claude sessions tag 'anthropic' but the config lives under
-// 'anthropic_compliance'; other providers map to themselves.
+// 'anthropic_compliance'; Codex sessions tag 'openai' and their config lives
+// under 'codex_compliance'; other providers map to themselves.
 func TestProviderBillingConfigProvider(t *testing.T) {
 	t.Parallel()
 
 	require.Equal(t, "anthropic_compliance", providerBillingConfigProvider(providerAnthropic))
 	require.Equal(t, providerCursor, providerBillingConfigProvider(providerCursor))
-	require.Equal(t, providerOpenAI, providerBillingConfigProvider(providerOpenAI))
+	require.Equal(t, "codex_compliance", providerBillingConfigProvider(providerOpenAI))
 	require.Empty(t, providerBillingConfigProvider(""))
+}
+
+// seedCodexBillingConfig inserts an enabled codex_compliance integration config
+// with an admin-declared billing mode. The external org id is always set (the
+// UI requires it), which is exactly why openai billing-mode resolution must be
+// provider-wide: Codex sessions carry no external org to match it with.
+func seedCodexBillingConfig(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID uuid.UUID, billingMode string) {
+	t.Helper()
+
+	_, err := aiintegrationsrepo.New(conn).InsertConfig(ctx, aiintegrationsrepo.InsertConfigParams{
+		OrganizationID:         organizationID,
+		Provider:               "codex_compliance",
+		ProjectID:              projectID,
+		ExternalOrganizationID: conv.ToPGTextEmpty("org-codex-billing"),
+		ApiKeyEncrypted:        "test-encrypted-key",
+		Enabled:                true,
+		BillingMode:            conv.ToPGTextEmpty(billingMode),
+	})
+	require.NoError(t, err)
+}
+
+// TestClassifyAccount_CodexTeamOnResolvedEmail: Codex sessions never carry an
+// account UUID, so the Claude company-credential rule (missing UUID → team)
+// must not apply; classification is email-based, and a resolved work email is
+// team.
+func TestClassifyAccount_CodexTeamOnResolvedEmail(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+
+	got, err := ti.service.classifyAccount(ctx, &SessionMetadata{
+		GramOrgID: authCtx.ActiveOrganizationID,
+		Provider:  providerOpenAI,
+		UserID:    "user-123",
+	})
+	require.NoError(t, err)
+	require.Equal(t, accountTypeTeam, got)
+}
+
+// TestClassifyAccount_CodexPersonalOnUnresolvedEmail: an unresolved (or absent)
+// email on a Codex session classifies personal — under the Claude rule the
+// missing UUID would have forced team, which is wrong for a provider that
+// never emits one.
+func TestClassifyAccount_CodexPersonalOnUnresolvedEmail(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+
+	got, err := ti.service.classifyAccount(ctx, &SessionMetadata{
+		GramOrgID: authCtx.ActiveOrganizationID,
+		Provider:  providerOpenAI,
+		UserID:    "",
+	})
+	require.NoError(t, err)
+	require.Equal(t, accountTypePersonal, got)
+}
+
+// TestAttributeSession_CodexTeamResolvesOrgWideBillingMode: a team-classified
+// Codex session resolves the org-level billing mode from the codex_compliance
+// config even though it carries no account UUID (no user_accounts entity) and
+// no external org id to match the config's scope with.
+func TestAttributeSession_CodexTeamResolvesOrgWideBillingMode(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	seedCodexBillingConfig(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "flat_rate")
+
+	meta := &SessionMetadata{
+		SessionID:   "codex-billing-team",
+		ServiceName: "Codex",
+		Provider:    providerOpenAI,
+		UserEmail:   "dev@example.com",
+		UserID:      "user-123",
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}
+	require.NoError(t, ti.service.attributeSession(ctx, meta))
+	require.Equal(t, accountTypeTeam, meta.AccountType)
+	require.Equal(t, "flat_rate", meta.BillingMode)
+	// No account UUID → no user_accounts entity is persisted.
+	require.Empty(t, meta.UserAccountID)
+}
+
+// TestAttributeSession_CodexPersonalDoesNotInheritOrgBillingMode: the org-level
+// declaration describes the company's OpenAI org; a personal Codex session
+// (unresolved email) must not inherit it.
+func TestAttributeSession_CodexPersonalDoesNotInheritOrgBillingMode(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	seedCodexBillingConfig(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "flat_rate")
+
+	meta := &SessionMetadata{
+		SessionID:   "codex-billing-personal",
+		ServiceName: "Codex",
+		Provider:    providerOpenAI,
+		UserEmail:   "someone@personal.example",
+		UserID:      "",
+		GramOrgID:   authCtx.ActiveOrganizationID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}
+	require.NoError(t, ti.service.attributeSession(ctx, meta))
+	require.Equal(t, accountTypePersonal, meta.AccountType)
+	require.Empty(t, meta.BillingMode)
 }
 
 // TestStampAccountAttribution_SkipsEmptyFields verifies an unclassified or
@@ -691,4 +907,87 @@ func TestStampAccountAttribution_SkipsEmptyFields(t *testing.T) {
 	require.NotContains(t, partial, attr.ExternalOrgIDKey)
 	require.NotContains(t, partial, attr.BillingModeKey)
 	require.NotContains(t, partial, attr.DeviceIDKey)
+}
+
+// TestAttributeSession_CodexPersonalWithAccountUUIDDoesNotInheritOrgBillingMode:
+// the team-only gate on the openai provider-wide billing lookup lives in
+// providerOrgBillingMode, so it also holds on the entity path — should a
+// Codex session ever carry an account UUID, a personal classification still
+// never inherits the company's declared mode.
+func TestAttributeSession_CodexPersonalWithAccountUUIDDoesNotInheritOrgBillingMode(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	seedCodexBillingConfig(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "flat_rate")
+
+	meta := &SessionMetadata{
+		SessionID:           "codex-billing-personal-uuid",
+		ServiceName:         "Codex",
+		Provider:            providerOpenAI,
+		UserEmail:           "someone@personal.example",
+		UserID:              "",
+		ExternalAccountUUID: "codex-personal-acct-uuid",
+		GramOrgID:           authCtx.ActiveOrganizationID,
+		ProjectID:           authCtx.ProjectID.String(),
+	}
+	require.NoError(t, ti.service.attributeSession(ctx, meta))
+	require.Equal(t, accountTypePersonal, meta.AccountType)
+	require.Empty(t, meta.BillingMode)
+	// The UUID means an account entity IS persisted, unlike UUID-less codex.
+	require.NotEmpty(t, meta.UserAccountID)
+}
+
+// TestLogs_DoesNotAdoptCodexCachedAttribution: session ids are client-reported
+// and the session cache is keyed on them alone, so the Claude OTEL fast path
+// must not adopt an entry the codex OTEL writer seeded — its shape (account
+// type set, no account UUID) would otherwise satisfy the company-credential
+// arm and stamp Claude rows with Codex attribution.
+func TestLogs_DoesNotAdoptCodexCachedAttribution(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx := hookAuthContext(t, ctx)
+	orgID := authCtx.ActiveOrganizationID
+
+	userID := "claude-collision-user"
+	workEmail := "collision@example.com"
+	seedHookUser(t, ctx, ti.conn, orgID, userID, workEmail)
+
+	sessionID := "codex-claude-collision-session"
+	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
+		SessionID:   sessionID,
+		ServiceName: "Codex",
+		UserEmail:   workEmail,
+		UserID:      userID,
+		Provider:    providerOpenAI,
+		AccountType: accountTypePersonal,
+		BillingMode: "flat_rate",
+		GramOrgID:   orgID,
+		ProjectID:   authCtx.ProjectID.String(),
+	}, 0))
+
+	// A company-credential Claude session (no account UUID / org / device):
+	// it carries no identity the cached entry lacks, so before the provider
+	// guard the fast path would have adopted the codex entry wholesale.
+	now := time.Now().UTC().Truncate(time.Second)
+	require.NoError(t, ti.service.Logs(ctx, claudeLogsPayload(
+		[]*gen.OTELResourceAttribute{resourceStrAttr("service.name", "claude-code")},
+		nil,
+		&gen.OTELLogRecord{
+			TimeUnixNano: new(nanoString(now)),
+			Body:         &gen.OTELLogBody{StringValue: new("api request")},
+			Attributes: []*gen.OTELAttribute{
+				strAttr("session.id", sessionID),
+				strAttr("user.email", workEmail),
+			},
+		},
+	)))
+
+	var cached SessionMetadata
+	require.NoError(t, ti.service.cache.Get(ctx, sessionCacheKey(sessionID), &cached))
+	require.Equal(t, providerAnthropic, cached.Provider)
+	// Claude semantics: no account UUID means company credentials → team.
+	require.Equal(t, accountTypeTeam, cached.AccountType)
+	require.Empty(t, cached.BillingMode)
 }

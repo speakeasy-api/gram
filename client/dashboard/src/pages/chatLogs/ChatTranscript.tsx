@@ -21,27 +21,26 @@ import {
   Ellipsis,
   GitBranch,
   Loader2,
-  ShieldOff,
-  SlidersHorizontal,
+  Paperclip,
 } from "lucide-react";
+import { Icon } from "@/components/ui/Icon";
 import {
-  Badge,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  Icon,
-} from "@speakeasy-api/moonshine";
-import { MessageContent, type SectionMatch, ToolUI } from "@gram-ai/elements";
+  MessageContent,
+  type SectionMatch,
+  ToolUI,
+  ToolUIGroup,
+  type ToolUIMetaRow,
+} from "@/elements";
 import type { ClaudeToolUsage } from "@gram/client/models/components/claudetoolusage.js";
+import type { ClaudeTurnUsage } from "@gram/client/models/components/claudeturnusage.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
+} from "@/components/ui/Popover";
 import { cn } from "@/lib/utils";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/Avatar";
 import {
   type ClaudeUsageMatch,
   formatByteCount,
@@ -50,9 +49,12 @@ import {
 } from "./claudeUsage";
 import {
   argsToString,
+  displayItemContainsMessage,
   type DisplayItem,
+  findQueryRanges,
   messageText,
   type MessageRow,
+  type PromptAttachment,
   type SearchFieldKey,
   type ToolRow,
   type TranscriptRow,
@@ -70,8 +72,9 @@ import {
   useRowReveal,
 } from "./chatHelpers";
 import { QueryHighlight } from "./QueryHighlight";
-import { getCategoryCodeForFinding } from "@/pages/security/risk-utils";
 import { CreateExclusionContext } from "./exclusionContext";
+import { toolSectionRiskMatches, type ToolRiskField } from "./toolRisk";
+import { useDismissFinding } from "@/pages/security/useDismissFinding";
 
 type RowDecoration = {
   footer?: ReactNode;
@@ -81,6 +84,9 @@ interface RowContext {
   riskResultsByMessage?: Map<string, RiskResult[]>;
   claudeUsageByMessage?: Map<string, ClaudeUsageMatch>;
   claudeToolUsageByToolUseId?: Map<string, ClaudeToolUsage>;
+  /** Turn usage keyed by prompt id — a tool row joins to its turn's cost
+   * through `ClaudeToolUsage.promptId`. */
+  claudeTurnByPromptId?: Map<string, ClaudeTurnUsage>;
   rowDecoration?: (messageIds: string[]) => RowDecoration | null;
   /** When the session has findings, non-flagged rows are dimmed to spotlight
    * the risky ones. */
@@ -103,6 +109,7 @@ type ResolvedRowContext = Required<
     | "riskResultsByMessage"
     | "claudeUsageByMessage"
     | "claudeToolUsageByToolUseId"
+    | "claudeTurnByPromptId"
   >
 > &
   RowContext;
@@ -110,6 +117,7 @@ type ResolvedRowContext = Required<
 const EMPTY_RISK_RESULTS = new Map<string, RiskResult[]>();
 const EMPTY_CLAUDE_USAGE = new Map<string, ClaudeUsageMatch>();
 const EMPTY_CLAUDE_TOOL_USAGE = new Map<string, ClaudeToolUsage>();
+const EMPTY_CLAUDE_TURNS = new Map<string, ClaudeTurnUsage>();
 
 function applyRowContextDefaults(ctx: RowContext): ResolvedRowContext {
   return {
@@ -118,6 +126,7 @@ function applyRowContextDefaults(ctx: RowContext): ResolvedRowContext {
     claudeUsageByMessage: ctx.claudeUsageByMessage ?? EMPTY_CLAUDE_USAGE,
     claudeToolUsageByToolUseId:
       ctx.claudeToolUsageByToolUseId ?? EMPTY_CLAUDE_TOOL_USAGE,
+    claudeTurnByPromptId: ctx.claudeTurnByPromptId ?? EMPTY_CLAUDE_TURNS,
   };
 }
 
@@ -203,13 +212,29 @@ function CostBadge({ usage }: { usage: ClaudeUsageMatch }) {
   );
 }
 
-function ToolByteBadge({ bytes }: { bytes: number }) {
-  if (bytes <= 0) return null;
-  return (
-    <Badge variant="neutral" className="shrink-0 text-[10px]">
-      <Badge.Text>{formatByteCount(bytes)}</Badge.Text>
-    </Badge>
-  );
+// The API reports payload size per tool call but cost only per turn (a turn
+// covers every tool it called), so the cost row is labelled accordingly.
+function toolMetaRows({
+  usage,
+  turn,
+}: {
+  usage: ClaudeToolUsage | undefined;
+  turn: ClaudeTurnUsage | undefined;
+}): ToolUIMetaRow[] {
+  if (!usage) return [];
+  const total = usage.inputSizeBytes + usage.resultSizeBytes;
+  const rows: ToolUIMetaRow[] = [];
+  if (total > 0) {
+    rows.push(
+      { label: "Arguments size", value: formatByteCount(usage.inputSizeBytes) },
+      { label: "Output size", value: formatByteCount(usage.resultSizeBytes) },
+      { label: "Total size", value: formatByteCount(total) },
+    );
+  }
+  if (turn) {
+    rows.push({ label: "Turn cost", value: formatUsageCost(turn.costUsd) });
+  }
+  return rows;
 }
 
 // Two letters for the avatar fallback: the first two name parts of an email
@@ -260,67 +285,13 @@ function ZigZagRule({
   );
 }
 
-// Distinct, excludable findings for a flagged turn (drops llm_judge and dupes),
-// mirroring CreateExclusionButton's selection.
-function useActionableExclusions(results: RiskResult[] | undefined) {
-  const openCreateExclusion = useContext(CreateExclusionContext);
-  const actionable = useMemo(() => {
-    if (!openCreateExclusion || !results) return [];
-    const seen = new Set<string>();
-    const out: RiskResult[] = [];
-    for (const r of results) {
-      const key = `${r.source}|${r.ruleId ?? ""}|${r.match ?? ""}`;
-      if (seen.has(key) || r.ruleId === "llm_judge") continue;
-      seen.add(key);
-      out.push(r);
-    }
-    return out;
-  }, [results, openCreateExclusion]);
-  return { openCreateExclusion, actionable };
-}
-
-// Pill-styled (matches the avatar pill) "Actions" dropdown on the turn header,
-// surfacing the create-exclusion action for the turn's findings.
-function TurnActions({ results }: { results: RiskResult[] }) {
-  const { openCreateExclusion, actionable } = useActionableExclusions(results);
-  if (actionable.length === 0) return null;
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className="bg-background text-muted-foreground hover:text-foreground flex h-9 items-center gap-1.5 rounded-full border px-3 text-sm transition-colors"
-        >
-          <SlidersHorizontal className="size-3.5" />
-          Actions
-          <ChevronDown className="size-3.5" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        {actionable.map((r) => (
-          <DropdownMenuItem
-            key={r.id}
-            className="cursor-pointer"
-            onSelect={() => openCreateExclusion?.(r)}
-          >
-            <ShieldOff className="size-3.5" />
-            Create exclusion
-            {actionable.length > 1 &&
-              `: ${[r.ruleId, getCategoryCodeForFinding(r.source, r.ruleId)]
-                .filter(Boolean)
-                .join(" · ")}`}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 // Avatar + name above each turn, separated from the previous turn by a rule.
 // Both speakers are left-aligned and get an avatar here (outside the bubble) so
 // an assistant turn — which may be only tool calls — still reads as one labelled
-// block. A flagged user turn shows its risk badge beside the pill and an
-// "Actions" menu (create exclusion) on the right.
+// block. A flagged user turn shows its risk badge beside the pill; "Setup
+// exclusion rule" and "Mark false positive" both live in that badge's popover
+// menu per finding now (previously a separate "Actions" pill duplicated the
+// exclusion action here for the same findings).
 function TurnHeader({
   author,
   userId,
@@ -389,7 +360,7 @@ function TurnHeader({
         />
       </div>
       <div className="flex items-center justify-between pt-1 pb-3">
-        <div className="bg-background flex h-9 min-w-0 items-center gap-2 rounded-full border pr-3 pl-1">
+        <div className="bg-background flex h-9 min-w-0 items-center gap-2 border pr-3 pl-1">
           <Avatar className="size-7 shrink-0">
             <AvatarFallback className="bg-muted text-muted-foreground text-xs font-medium">
               {isUser ? userInitials(userName) : <Bot className="size-3.5" />}
@@ -399,35 +370,48 @@ function TurnHeader({
             {isUser ? userDisplayName(userName) : "Assistant"}
           </span>
         </div>
-        {flagged && <TurnActions results={results} />}
       </div>
     </div>
   );
 }
 
 // Outgoing turn — left-aligned to match the assistant, but kept in a bg-muted
-// bubble. The avatar/name + risk badge + Actions menu sit in the turn header
-// above; the meta strip below keeps the message time, cost, and reveal toggle
-// (create-exclusion moved to the header Actions menu).
+// bubble. The avatar/name + risk badge sit in the turn header above (the risk
+// badge's popover carries "Mark false positive" and "Setup exclusion rule"
+// per finding); the meta strip below keeps the message time, cost, and
+// reveal toggle.
 function UserMessageRow({
   row,
   ctx,
   activeTextOccurrence,
+  activeAttachmentOccurrence,
 }: {
   row: MessageRow;
   ctx: ResolvedRowContext;
   /** Index of the active search occurrence within this message's text, or null
    * when this row doesn't hold the active occurrence. */
   activeTextOccurrence: number | null;
+  activeAttachmentOccurrence: number | null;
 }) {
   const { message } = row;
-  const results = ctx.riskResultsByMessage.get(message.id);
+  const messageResults = ctx.riskResultsByMessage.get(message.id);
+  const attachmentResults = row.attachments.flatMap(
+    (attachment) => ctx.riskResultsByMessage.get(attachment.id) ?? [],
+  );
+  let results = messageResults;
+  if (attachmentResults.length > 0) {
+    results = [...(messageResults ?? []), ...attachmentResults];
+  }
   const usage = ctx.claudeUsageByMessage.get(message.id);
   const text = messageText(message.content);
-  const flagged = !!results && results.length > 0;
-  const sensitive = flagged && resultsAreSensitive(results);
-  const { revealed, setRevealed } = useRowReveal(sensitive);
+  const flagged =
+    (!!results && results.length > 0) ||
+    row.attachments.some((attachment) => attachment.isRisk);
+  const messageSensitive =
+    !!messageResults && resultsAreSensitive(messageResults);
+  const { revealed, setRevealed } = useRowReveal(messageSensitive);
   const decoration = ctx.rowDecoration?.([message.id]) ?? null;
+  let attachmentOccurrenceOffset = 0;
 
   return (
     <div
@@ -438,14 +422,14 @@ function UserMessageRow({
     >
       <div
         className={cn(
-          "bg-muted text-foreground mx-2 max-w-[80%] rounded-xl px-4 py-2 wrap-break-word",
+          "bg-muted text-foreground mx-2 max-w-[80%] px-4 py-2 wrap-break-word",
         )}
       >
-        {flagged ? (
+        {messageResults && messageResults.length > 0 ? (
           <HighlightedMessageText
             text={text}
-            results={results}
-            revealed={sensitive ? revealed : undefined}
+            results={messageResults}
+            revealed={messageSensitive ? revealed : undefined}
           />
         ) : (
           <div className="whitespace-pre-wrap">
@@ -461,24 +445,147 @@ function UserMessageRow({
           </div>
         )}
       </div>
-      <RowDecorationFooter
-        decoration={decoration}
-        className="mx-2 max-w-[80%] pl-4"
-      />
-      {(usage || sensitive) && (
+      {(usage || messageSensitive) && (
         <div className="text-muted-foreground mx-2 flex items-center gap-2 pl-4 text-xs">
           {usage && <CostBadge usage={usage} />}
-          {usage && sensitive && <MetaSeparator />}
-          {sensitive && (
+          {usage && messageSensitive && <MetaSeparator />}
+          {messageSensitive && (
             <RevealSecretButton
-              results={results}
+              results={messageResults}
               revealed={revealed}
               onToggle={() => setRevealed(!revealed)}
             />
           )}
         </div>
       )}
+      {row.attachments.length > 0 && (
+        <div className="mx-2 flex max-w-[80%] flex-col items-start gap-1 pl-4">
+          {row.attachments.map((attachment) => {
+            let occurrenceCount = 0;
+            const attachmentFlagged =
+              attachment.isRisk ||
+              (ctx.riskResultsByMessage.get(attachment.id)?.length ?? 0) > 0;
+            if (ctx.searchQuery && !attachmentFlagged) {
+              occurrenceCount = findQueryRanges(
+                messageText(attachment.content),
+                ctx.searchQuery,
+              ).length;
+            }
+            let activeOccurrence: number | null = null;
+            const activeInAttachment =
+              activeAttachmentOccurrence != null &&
+              activeAttachmentOccurrence >= attachmentOccurrenceOffset &&
+              activeAttachmentOccurrence <
+                attachmentOccurrenceOffset + occurrenceCount;
+            if (activeInAttachment && activeAttachmentOccurrence != null) {
+              activeOccurrence =
+                activeAttachmentOccurrence - attachmentOccurrenceOffset;
+            }
+            if (!attachmentFlagged) {
+              attachmentOccurrenceOffset += occurrenceCount;
+            }
+            return (
+              <PromptAttachmentChip
+                key={attachment.id}
+                attachment={attachment}
+                ctx={ctx}
+                activeOccurrence={activeOccurrence}
+              />
+            );
+          })}
+        </div>
+      )}
+      <RowDecorationFooter
+        decoration={decoration}
+        className="mx-2 max-w-[80%] pl-4"
+      />
     </div>
+  );
+}
+
+function PromptAttachmentChip({
+  attachment,
+  ctx,
+  activeOccurrence,
+}: {
+  attachment: PromptAttachment;
+  ctx: ResolvedRowContext;
+  activeOccurrence: number | null;
+}) {
+  const results = ctx.riskResultsByMessage.get(attachment.id);
+  const text = messageText(attachment.content);
+  const hasDetailedResults = !!results && results.length > 0;
+  const flagged = hasDetailedResults || attachment.isRisk;
+  const sensitive = hasDetailedResults && resultsAreSensitive(results);
+  const { revealed, setRevealed } = useRowReveal(sensitive);
+  const [expanded, setExpanded] = useState(flagged || activeOccurrence != null);
+
+  useEffect(() => {
+    if (flagged || activeOccurrence != null) setExpanded(true);
+  }, [flagged, activeOccurrence]);
+
+  return (
+    <details
+      open={expanded}
+      onToggle={(event) => setExpanded(event.currentTarget.open)}
+      className="border-border bg-background overflow-hidden border text-xs"
+    >
+      <summary className="hover:bg-muted/40 flex cursor-pointer list-none items-center gap-2 px-2.5 py-1.5 select-none">
+        <Paperclip className="text-muted-foreground size-3.5 shrink-0" />
+        <span className="text-foreground max-w-[240px] truncate font-medium">
+          {attachment.displayPath}
+        </span>
+        <span className="text-muted-foreground shrink-0 font-mono uppercase">
+          {attachment.kind}
+        </span>
+        <span className="ml-auto flex shrink-0 items-center gap-2">
+          {hasDetailedResults ? (
+            <RiskBadge results={results} />
+          ) : flagged ? (
+            <span className="bg-destructive text-destructive-foreground px-1.5 py-0.5 text-[10px] font-medium">
+              Risk
+            </span>
+          ) : null}
+          {sensitive && (
+            <span
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+            >
+              <RevealSecretButton
+                results={results}
+                revealed={revealed}
+                onToggle={() => setRevealed(!revealed)}
+              />
+            </span>
+          )}
+        </span>
+      </summary>
+      <div className="border-border border-t px-3 py-2">
+        {hasDetailedResults ? (
+          <div className="max-h-64 overflow-auto">
+            <HighlightedMessageText
+              text={text}
+              results={results}
+              revealed={sensitive ? revealed : undefined}
+            />
+          </div>
+        ) : ctx.searchQuery && !flagged ? (
+          <div className="whitespace-pre-wrap">
+            <QueryHighlight
+              text={text}
+              query={ctx.searchQuery}
+              activeIndex={activeOccurrence}
+            />
+          </div>
+        ) : (
+          <pre className="text-foreground max-h-64 overflow-auto font-mono text-xs whitespace-pre-wrap">
+            {text}
+          </pre>
+        )}
+      </div>
+    </details>
   );
 }
 
@@ -559,7 +666,7 @@ function SystemMessageRow({
   const text = messageText(row.message.content);
   return (
     <div className={cn("px-4 py-2", dimClass(ctx.dimNonRisk))}>
-      <details className="border-muted bg-muted/20 group overflow-hidden rounded-md border">
+      <details className="border-muted bg-muted/20 group overflow-hidden border">
         <summary className="text-muted-foreground hover:bg-muted/40 flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs select-none">
           <Icon
             name="chevron-right"
@@ -580,10 +687,12 @@ function MessageRowView({
   row,
   ctx,
   activeTextOccurrence,
+  activeAttachmentOccurrence,
 }: {
   row: MessageRow;
   ctx: ResolvedRowContext;
   activeTextOccurrence: number | null;
+  activeAttachmentOccurrence: number | null;
 }) {
   switch (row.entryType) {
     case "user":
@@ -592,6 +701,7 @@ function MessageRowView({
           row={row}
           ctx={ctx}
           activeTextOccurrence={activeTextOccurrence}
+          activeAttachmentOccurrence={activeAttachmentOccurrence}
         />
       );
     case "assistant":
@@ -621,29 +731,38 @@ function toolResults(
   };
 }
 
-// Distinct findings (by matched value) for one tool section, each carrying its
-// rule label and a context-wired "create exclusion" action. The elements
-// ToolUI surfaces the active match's label + action as you step through them.
-function toSectionMatches(
+// Distinct findings that actually belong to and occur within one tool section,
+// each carrying its rule label and a context-wired exclusion action. A risk
+// result is attached to the whole message and can instead target tool.function;
+// filtering here prevents an Arguments badge from opening onto no matching text.
+function toSectionRisk(
   results: RiskResult[] | undefined,
+  content: string | undefined,
+  field: ToolRiskField,
   openExclusion: ((r: RiskResult) => void) | null,
-): SectionMatch[] | undefined {
-  if (!results?.length) return undefined;
-  const byValue = new Map<string, RiskResult>();
-  for (const r of results) {
-    if (r.match && !byValue.has(r.match)) byValue.set(r.match, r);
-  }
-  if (byValue.size === 0) return undefined;
-  return [...byValue.values()]
-    .sort((a, b) => (b.match?.length ?? 0) - (a.match?.length ?? 0))
-    .map((r) => ({
-      value: r.match!,
-      label: r.ruleId && r.ruleId !== "llm_judge" ? r.ruleId : r.source,
+  dismiss: (results: RiskResult[]) => void,
+): { matches: SectionMatch[]; results: RiskResult[] } | undefined {
+  const sectionMatches = toolSectionRiskMatches(results, content, field);
+  if (sectionMatches.length === 0) return undefined;
+
+  const matchingResults = new Map<string, RiskResult>();
+  const matches = sectionMatches.map(({ value, result }) => {
+    matchingResults.set(result.id, result);
+    return {
+      value,
+      label:
+        result.ruleId && result.ruleId !== "llm_judge"
+          ? result.ruleId
+          : result.source,
       onExclude:
-        openExclusion && r.ruleId !== "llm_judge"
-          ? () => openExclusion(r)
+        openExclusion && result.ruleId !== "llm_judge"
+          ? () => openExclusion(result)
           : undefined,
-    }));
+      onMarkFalsePositive: () => dismiss([result]),
+    };
+  });
+
+  return { matches, results: [...matchingResults.values()] };
 }
 
 function ToolRowView({
@@ -653,6 +772,7 @@ function ToolRowView({
   activeNameOccurrence,
   activeArgsOccurrence,
   activeOutputOccurrence,
+  bare = false,
 }: {
   row: ToolRow;
   ctx: ResolvedRowContext;
@@ -665,8 +785,13 @@ function ToolRowView({
   activeArgsOccurrence: number | null;
   /** Active occurrence index within the Output section, or null. */
   activeOutputOccurrence: number | null;
+  /** Render as a flush row inside a ToolUIGroup: the group supplies the card
+   * (border, rounding, inset), so the row drops its own padding and the ToolUI
+   * de-cards itself — mirroring `ToolFallback` in the assistant thread. */
+  bare?: boolean;
 }) {
   const openExclusion = useContext(CreateExclusionContext);
+  const { dismiss } = useDismissFinding();
   const name =
     row.toolCall?.function?.name || row.toolCall?.name || "Tool result";
   const request = argsToString(row.toolCall?.function?.arguments);
@@ -680,9 +805,21 @@ function ToolRowView({
 
   // Flag matches inside the tool's own Arguments/Output sections; the elements
   // ToolUI draws the risk badge in the section header, plus the match navigator
-  // and active-match exclusion action.
-  const reqMatches = toSectionMatches(callResults, openExclusion);
-  const resMatches = toSectionMatches(resultResults, openExclusion);
+  // and active-match "Mark false positive" / "Setup exclusion rule" actions.
+  const requestRisk = toSectionRisk(
+    callResults,
+    request,
+    "tool.args",
+    openExclusion,
+    dismiss,
+  );
+  const resultRisk = toSectionRisk(
+    resultResults,
+    result,
+    "tool_result",
+    openExclusion,
+    dismiss,
+  );
   // Search: which of this tool's sections contain the query (case-insensitive,
   // mirroring the server's ILIKE) — drives which section auto-opens + highlights.
   const queryLc = ctx.searchQuery?.trim().toLowerCase();
@@ -697,11 +834,11 @@ function ToolRowView({
   const searchSection: SectionMatch[] = ctx.searchQuery
     ? [{ value: ctx.searchQuery, label: "match" }]
     : [];
-  const requestHighlight = callResults?.length
+  const requestHighlight = requestRisk
     ? {
-        matches: reqMatches ?? [],
-        masked: resultsAreSensitive(callResults),
-        headerBadge: <RiskBadge results={callResults} />,
+        matches: requestRisk.matches,
+        masked: resultsAreSensitive(requestRisk.results),
+        headerBadge: <RiskBadge results={requestRisk.results} />,
       }
     : requestMatches
       ? {
@@ -711,11 +848,11 @@ function ToolRowView({
           activeOccurrence: activeArgsOccurrence,
         }
       : undefined;
-  const resultHighlight = resultResults?.length
+  const resultHighlight = resultRisk
     ? {
-        matches: resMatches ?? [],
-        masked: resultsAreSensitive(resultResults),
-        headerBadge: <RiskBadge results={resultResults} />,
+        matches: resultRisk.matches,
+        masked: resultsAreSensitive(resultRisk.results),
+        headerBadge: <RiskBadge results={resultRisk.results} />,
       }
     : resultMatches
       ? {
@@ -728,17 +865,17 @@ function ToolRowView({
 
   const toolUseId = row.toolCall?.id ?? row.resultMessage?.toolCallId ?? "";
   const usage = ctx.claudeToolUsageByToolUseId.get(toolUseId);
-  const inputBytes = usage?.inputSizeBytes ?? 0;
-  const outputBytes = usage?.resultSizeBytes ?? 0;
+  const turn = usage ? ctx.claudeTurnByPromptId.get(usage.promptId) : undefined;
+  const meta = toolMetaRows({ usage, turn });
   const decoration = ctx.rowDecoration?.(messageIdsForRow(row)) ?? null;
 
   return (
-    <div className={cn("px-4 py-2.5", dimClass(ctx.dimNonRisk && !flagged))}>
-      {inputBytes + outputBytes > 0 && (
-        <div className="mb-1.5 flex items-center gap-2 pl-1">
-          <ToolByteBadge bytes={inputBytes + outputBytes} />
-        </div>
+    <div
+      className={cn(
+        bare ? "flex w-full flex-col" : "px-4 py-2.5",
+        dimClass(ctx.dimNonRisk && !flagged),
       )}
+    >
       <ToolUI
         // ToolUI expansion is uncontrolled, so key on `toolActive` to remount it:
         // landing on this tool's match opens it; moving to the next match
@@ -752,8 +889,10 @@ function ToolRowView({
         defaultExpanded={flagged || toolActive}
         requestHighlight={requestHighlight}
         resultHighlight={resultHighlight}
+        meta={meta}
         nameQuery={ctx.searchQuery}
         nameActiveOccurrence={activeNameOccurrence}
+        className={bare ? "border-0" : undefined}
       />
       <RowDecorationFooter
         decoration={decoration}
@@ -762,6 +901,76 @@ function ToolRowView({
     </div>
   );
 }
+
+function toolRowFlagged(row: ToolRow, ctx: ResolvedRowContext): boolean {
+  const { callResults, resultResults } = toolResults(row, ctx);
+  return (callResults?.length ?? 0) > 0 || (resultResults?.length ?? 0) > 0;
+}
+
+// A run of consecutive tool calls, collapsed by default behind a single summary
+// so a long tool chain doesn't flood the transcript. Presentation is the shared
+// elements `ToolUIGroup` — the same shell the project assistant thread uses via
+// assistant-ui's ToolGroup slot — so both surfaces stay identical. Only the run
+// DETECTION differs: the assistant gets it from assistant-ui, while this
+// virtualized transcript coalesces runs in the model (`coalesceToolGroups`).
+//
+// A finding or the active search match inside the run pins the group open, so
+// neither is ever hidden behind a collapsed summary. ToolUIGroup owns its
+// expanded state internally, so `groupKey` remounts it when that pin toggles;
+// navigating away collapses it back.
+const ToolGroupView = memo(function ToolGroupView({
+  group,
+  ctx,
+  activeRowId,
+  activeField,
+}: {
+  group: Extract<DisplayItem, { type: "toolGroup" }>;
+  ctx: ResolvedRowContext;
+  /** Row inside THIS group holding the active search occurrence, else null
+   * (resolved by the caller so groups without the match skip re-render on nav). */
+  activeRowId: string | null;
+  /** Field + occurrence index within `activeRowId`, or null. */
+  activeField: ActiveField | null;
+}) {
+  const flaggedCount = useMemo(
+    () => group.rows.filter((r) => toolRowFlagged(r, ctx)).length,
+    [group.rows, ctx],
+  );
+  const forceOpen = flaggedCount > 0 || activeRowId != null;
+  const count = group.rows.length;
+  const title =
+    flaggedCount > 0
+      ? `Executed ${count} tools · ${flaggedCount} flagged`
+      : `Executed ${count} tools`;
+
+  return (
+    <div
+      className={cn(
+        "px-4 py-1.5",
+        dimClass(ctx.dimNonRisk && flaggedCount === 0),
+      )}
+    >
+      <ToolUIGroup
+        key={forceOpen ? "pinned-open" : "collapsible"}
+        title={title}
+        defaultExpanded={forceOpen}
+      >
+        <div className="divide-border divide-y">
+          {group.rows.map((r) => (
+            <RowView
+              key={r.id}
+              row={r}
+              ctx={ctx}
+              active={r.id === activeRowId}
+              activeField={r.id === activeRowId ? activeField : null}
+              bare
+            />
+          ))}
+        </div>
+      </ToolUIGroup>
+    </div>
+  );
+});
 
 function SegmentDivider({ generation }: { generation: number }) {
   return (
@@ -780,10 +989,16 @@ function SegmentDivider({ generation }: { generation: number }) {
 export interface TranscriptPagination {
   hasMoreBefore: boolean;
   hasMoreAfter: boolean;
+  /** Single-page loads driven by scrolling near an edge. */
   onLoadOlder: () => void;
   onLoadNewer: () => void;
   isFetchingOlder: boolean;
   isFetchingNewer: boolean;
+  /** Break-button loads: everything missing in the break's range (all earlier
+   * messages / all remaining messages), not just one page. */
+  onLoadAllOlder: () => void;
+  onLoadAllNewer: () => void;
+  /** Loads the entire un-loaded span after `afterSeq` (windowed views). */
   onLoadGap?: (afterSeq: number) => void;
   isLoadingGap?: (afterSeq: number) => boolean;
   /** Display-item index to bring to the top on first paint, or null to stay at
@@ -806,12 +1021,18 @@ export interface TranscriptPagination {
    * else is pale. null when not searching / no matches. */
   activeOccurrence?: {
     itemIndex: number;
+    /** Row within the item holding it — a toolGroup item covers many rows. */
+    rowId: string;
     fieldKey: SearchFieldKey;
     indexInField: number;
   } | null;
+  /** Raw chat-message ID to persistently highlight. Used by provenance links
+   * that open a session at one cited transcript message. */
+  focusedMessageId?: string | null;
 }
 
-/** Edge "load older/newer" affordance + the risk-gap "load in-between" marker. */
+/** A break in the transcript — messages are missing here. Renders a prominent
+ * button that loads every missing message in the break's range. */
 function LoadDivider({
   icon,
   label,
@@ -826,20 +1047,20 @@ function LoadDivider({
   const Glyph =
     icon === "up" ? ChevronUp : icon === "down" ? ChevronDown : Ellipsis;
   return (
-    <div className="flex items-center justify-center gap-2 px-4 py-2">
+    <div className="flex items-center justify-center gap-3 px-4 py-3">
       <div className="bg-border h-px flex-1" />
       <button
         type="button"
         disabled={loading}
         onClick={onClick}
-        className="text-muted-foreground hover:text-foreground hover:bg-muted/50 inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors disabled:opacity-60"
+        className="bg-background text-foreground hover:bg-muted inline-flex cursor-pointer items-center gap-1.5 border px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-default disabled:opacity-60"
       >
         {loading ? (
-          <Loader2 className="size-3 animate-spin" />
+          <Loader2 className="size-3.5 animate-spin" />
         ) : (
-          <Glyph className="size-3" />
+          <Glyph className="size-3.5" />
         )}
-        {label}
+        {loading ? "Loading messages…" : label}
       </button>
       <div className="bg-border h-px flex-1" />
     </div>
@@ -862,6 +1083,7 @@ const RowView = memo(function RowView({
   ctx,
   active,
   activeField,
+  bare = false,
 }: {
   row: TranscriptRow;
   ctx: ResolvedRowContext;
@@ -869,6 +1091,8 @@ const RowView = memo(function RowView({
   active: boolean;
   /** Which field + occurrence in this row is active, or null when none is. */
   activeField: ActiveField | null;
+  /** Render tool cards without the transcript's row padding (inside a group). */
+  bare?: boolean;
 }) {
   if (row.kind === "message") {
     return (
@@ -877,6 +1101,9 @@ const RowView = memo(function RowView({
         ctx={ctx}
         activeTextOccurrence={
           activeField?.key === "text" ? activeField.index : null
+        }
+        activeAttachmentOccurrence={
+          activeField?.key === "attachment" ? activeField.index : null
         }
       />
     );
@@ -895,6 +1122,7 @@ const RowView = memo(function RowView({
       activeOutputOccurrence={
         activeField?.key === "output" ? activeField.index : null
       }
+      bare={bare}
     />
   );
 });
@@ -931,23 +1159,23 @@ function DisplayItemView({
       return item.dir === "older" ? (
         <LoadDivider
           icon="up"
-          label="Load older messages"
+          label="Load earlier messages"
           loading={pagination.isFetchingOlder}
-          onClick={pagination.onLoadOlder}
+          onClick={pagination.onLoadAllOlder}
         />
       ) : (
         <LoadDivider
           icon="down"
-          label="Load newer messages"
+          label="Load remaining messages"
           loading={pagination.isFetchingNewer}
-          onClick={pagination.onLoadNewer}
+          onClick={pagination.onLoadAllNewer}
         />
       );
     case "serverGap":
       return (
         <LoadDivider
           icon="ellipsis"
-          label="Load messages in between"
+          label="Load missing messages"
           loading={pagination.isLoadingGap?.(item.afterSeq) ?? false}
           onClick={() => pagination.onLoadGap?.(item.afterSeq)}
         />
@@ -968,6 +1196,23 @@ function DisplayItemView({
           ctx={ctx}
           active={active}
           activeField={activeField}
+        />
+      );
+    }
+    case "toolGroup": {
+      // Resolve the active occurrence only when it lands inside THIS group;
+      // otherwise null, so the memo skips groups that don't hold the match
+      // during nav churn.
+      const occ = pagination.activeOccurrence;
+      const inGroup = occ != null && occ.itemIndex === index;
+      return (
+        <ToolGroupView
+          group={item}
+          ctx={ctx}
+          activeRowId={inGroup ? occ.rowId : null}
+          activeField={
+            inGroup ? { key: occ.fieldKey, index: occ.indexInField } : null
+          }
         />
       );
     }
@@ -1118,7 +1363,7 @@ export function ChatTranscript({
         <button
           type="button"
           onClick={scrollToStart}
-          className="bg-background text-muted-foreground hover:text-foreground hover:bg-muted absolute top-2 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1 rounded-full border px-2.5 py-1 text-xs shadow-sm transition-colors"
+          className="bg-background text-muted-foreground hover:text-foreground hover:bg-muted absolute top-2 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1 border px-2.5 py-1 text-xs transition-colors"
         >
           <ArrowUp className="size-3" />
           Start of thread
@@ -1133,22 +1378,33 @@ export function ChatTranscript({
           className="relative w-full"
           style={{ height: `${virtualizer.getTotalSize()}px` }}
         >
-          {virtualizer.getVirtualItems().map((virtualRow) => (
-            <div
-              key={virtualRow.key}
-              data-index={virtualRow.index}
-              ref={virtualizer.measureElement}
-              className="absolute top-0 left-0 w-full"
-              style={{ transform: `translateY(${virtualRow.start}px)` }}
-            >
-              <DisplayItemView
-                item={items[virtualRow.index]!}
-                index={virtualRow.index}
-                ctx={ctx}
-                pagination={pagination}
-              />
-            </div>
-          ))}
+          {virtualizer.getVirtualItems().map((virtualRow) => {
+            const item = items[virtualRow.index]!;
+            const focused =
+              pagination.focusedMessageId != null &&
+              displayItemContainsMessage(item, pagination.focusedMessageId);
+            return (
+              <div
+                key={virtualRow.key}
+                data-index={virtualRow.index}
+                data-focused-message={focused ? "true" : undefined}
+                aria-current={focused ? "location" : undefined}
+                ref={virtualizer.measureElement}
+                className={cn(
+                  "absolute top-0 left-0 w-full transition-colors",
+                  focused && "bg-warning/10 ring-warning/40 ring-1 ring-inset",
+                )}
+                style={{ transform: `translateY(${virtualRow.start}px)` }}
+              >
+                <DisplayItemView
+                  item={item}
+                  index={virtualRow.index}
+                  ctx={ctx}
+                  pagination={pagination}
+                />
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

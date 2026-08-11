@@ -1,7 +1,8 @@
 import { assistantsSendMessage } from "@gram/client/funcs/assistantsSendMessage";
 import { chatLoad } from "@gram/client/funcs/chatLoad";
 import type { GramCore } from "@gram/client/core";
-import { sleep, type ElementsTransportContext } from "@gram-ai/elements";
+import { sleep, type ElementsTransportContext } from "@/elements";
+import { streamTurn } from "@/lib/turnStream";
 import {
   type ChatTransport,
   createUIMessageStream,
@@ -45,9 +46,23 @@ export interface ServerAssistantTransportDeps {
   assistantId: string;
   /** Project slug for the Gram-Project header on sendMessage. */
   projectSlug: string;
+  /**
+   * Reads the caller's current `Gram-Session` token. The /chat/* routes
+   * authenticate from request headers rather than cookies, so without it the
+   * stream 401s and every turn silently falls back to polling.
+   *
+   * A getter rather than a value: the transport is built once, while the
+   * session resolves asynchronously, so capturing the token would pin
+   * whatever it was at construction — usually empty.
+   */
+  getSessionToken?: () => string | undefined;
   /** Optional poll tuning. */
   pollIntervalMs?: number;
   pollTimeoutMs?: number;
+  /** Reads the skill context selected for the turn at send time. */
+  getSkillIds?: () => string[];
+  /** Called after the server accepts the selected skills with the message. */
+  onSkillIdsSent?: (skillIds: string[]) => void;
 }
 
 interface Snapshot {
@@ -101,6 +116,7 @@ export function createServerAssistantTransport(
       if (!text) {
         throw new Error("No user message to send.");
       }
+      const skillIds = deps.getSkillIds?.() ?? [];
 
       // The stream is created up front and `execute` does all the async work —
       // send + poll — writing chunks as new assistant rows are discovered so
@@ -147,6 +163,53 @@ export function createServerAssistantTransport(
           const snapshot = chatId
             ? await snapshotAssistantIds(deps.client, chatId, abortSignal)
             : null;
+
+          // Frames drive the turn. The poll is kept only as a resync: if the
+          // stream cannot deliver (disabled server-side, or a connection that
+          // will not come back), fall back to discovering the reply the old
+          // way rather than losing it.
+          //
+          // Owned here rather than inside the stream so a failed stream can
+          // hand over the calls it surfaced but never saw answered. Without
+          // that the fallback poll ignores their tool rows — it only resolves
+          // calls it emitted itself — and the turn renders a tool that never
+          // returns.
+          const pendingToolCalls = new Set<string>();
+          let streamError: unknown;
+          const startStream = (id: string, replayFromStart: boolean) => {
+            let markSubscribed: () => void = () => {};
+            const subscribed = new Promise<void>((resolve) => {
+              markSubscribed = resolve;
+            });
+            const done = streamTurn({
+              chatId: id,
+              writer,
+              abortSignal: pollSignal,
+              sessionToken: deps.getSessionToken?.(),
+              projectSlug: deps.projectSlug,
+              pendingToolCalls,
+              replayFromStart,
+              onSubscribed: () => markSubscribed(),
+            })
+              .catch((err: unknown) => {
+                streamError = err;
+              })
+              // A stream that fails before it ever subscribes must not leave
+              // the send waiting on a promise nothing will resolve.
+              .finally(() => markSubscribed());
+            return { subscribed, done };
+          };
+
+          // Subscribe BEFORE sending when the chat already exists. The
+          // subscription starts from "now", so frames published between the
+          // send and the connection would be lost — and a turn that finished
+          // in that window leaves the client tailing a stream whose terminal
+          // frame it already missed, waiting forever. The handler flushes SSE
+          // headers immediately after subscribing, so a resolved response is
+          // proof the subscription is live.
+          let stream = chatId ? startStream(chatId, false) : null;
+          if (stream) await stream.subscribed;
+
           const sent = await assistantsSendMessage(
             deps.client,
             {
@@ -156,6 +219,7 @@ export function createServerAssistantTransport(
                 message: text,
                 chatId: chatId ?? undefined,
                 idempotencyKey: latest?.id,
+                skillIds: skillIds.length > 0 ? skillIds : undefined,
               },
             },
             undefined,
@@ -164,20 +228,37 @@ export function createServerAssistantTransport(
           if (!sent.ok) {
             throw sent.error;
           }
+          if (skillIds.length > 0) {
+            deps.onSkillIdsSent?.(skillIds);
+          }
           if (!chatId) {
             // New conversation: adopt the server-minted id so the thread, its
             // history, and the conversation list all resolve to the same chat.
             chatId = sent.value.chatId;
             adopt(chatId);
+            // The chat did not exist to subscribe to before the send, so the
+            // stream starts here and replays from the beginning. Everything
+            // retained for a chat this new belongs to this turn, which makes
+            // the replay exact rather than a guess.
+            stream = startStream(chatId, true);
           }
 
-          await pollForReplies({
-            deps,
-            chatId,
-            snapshot,
-            writer,
-            abortSignal: pollSignal,
-          });
+          await stream!.done;
+
+          if (streamError) {
+            if (pollSignal.aborted) throw streamError;
+            // The fallback masks why the stream failed, and "it fell back" is
+            // indistinguishable from "it worked" in a network trace.
+            console.error("[turnstream] fell back to polling:", streamError);
+            await pollForReplies({
+              deps,
+              chatId,
+              snapshot,
+              writer,
+              abortSignal: pollSignal,
+              pendingToolCalls,
+            });
+          }
 
           writer.write({ type: "finish" });
         },
@@ -206,6 +287,12 @@ async function pollForReplies(args: {
   snapshot: Snapshot | null;
   writer: UIMessageStreamWriter<UIMessage>;
   abortSignal?: AbortSignal;
+  /**
+   * Tool calls a failed turn stream already surfaced and left unanswered.
+   * Seeding the set makes the poll resolve their tool rows, which it otherwise
+   * skips as belonging to a prior turn.
+   */
+  pendingToolCalls?: Set<string>;
 }): Promise<void> {
   const { deps, chatId, snapshot, writer, abortSignal } = args;
   const {
@@ -227,7 +314,7 @@ async function pollForReplies(args: {
   // tracked in `seen` — don't emit twice. Transcript order guarantees an
   // assistant row precedes its tool rows, so the input chunk always lands
   // before the matching output.
-  const pendingToolCalls = new Set<string>();
+  const pendingToolCalls = args.pendingToolCalls ?? new Set<string>();
   let consecutiveFailures = 0;
   let attempt = 0;
   // Tracks whether a `start-step` is open and awaiting its `finish-step`. Each

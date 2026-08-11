@@ -1,14 +1,15 @@
 -- name: GetAgentPluginSet :many
 -- Returns the device agent's full plugin set for an org, marketplace-first.
 --
--- The base is every *published* marketplace in the org (a
--- plugin_github_connections row with a marketplace_token), so a marketplace —
--- and its always-required observability plugin, synthesized in the view layer —
--- is returned for every published project. Every non-deleted plugin in those
--- projects is LEFT JOINed on top and returned to every org member: per-principal
--- assignment scoping is intentionally disabled for now (see DNO-239) and will be
--- reinstated once RBAC-backed assignment management ships. Projects with no
--- plugins still yield one row with null plugin columns.
+-- The base is the org's *published* marketplaces (plugin_github_connections rows
+-- with a marketplace_token), scoped so the device agent isn't flooded with every
+-- project: the org's default project always appears (marketplace + its
+-- always-required observability plugin, synthesized in the view layer) as the
+-- org-wide baseline, while a non-default project appears only when the caller has
+-- a matching assignment there. Plugins whose assignment principal_urn matches the
+-- caller's resolved principal set (email, user:<id>, user:all, role:<...>, or the
+-- org wildcard) are LEFT JOINed on top; the default project still yields one row
+-- with null plugin columns when the caller has no assignment there.
 --
 -- Each project resolves to a marketplace name the way the publish path does:
 -- the per-project override (project_marketplace_settings.marketplace_name) when
@@ -27,6 +28,10 @@ SELECT
   om.name AS organization_name,
   pgc.marketplace_token,
   pgc.updated_at AS marketplace_updated_at,
+  -- The hooks subtree may be pinned by the rollout gate under a pre-rename org
+  -- name; the view derives the observability slug from this snapshot so devices
+  -- install the plugin that actually exists in the published repo.
+  pgc.published_hooks_config,
   pms.marketplace_name AS marketplace_name_override,
   -- The org's default project (oldest, by id ASC over ALL non-deleted projects,
   -- not just published ones) keeps the bare org-derived marketplace name; others
@@ -58,8 +63,32 @@ LEFT JOIN project_marketplace_settings pms
 LEFT JOIN plugins p
   ON p.project_id = pr.id
   AND p.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1 FROM plugin_assignments pa
+    WHERE pa.plugin_id = p.id
+      AND pa.organization_id = @organization_id
+      AND pa.principal_urn = ANY(@principal_urns::text[])
+  )
 WHERE pr.organization_id = @organization_id
   AND pgc.marketplace_token IS NOT NULL
+  AND (
+    -- The org's default project (oldest, by id ASC) is the org-wide baseline:
+    -- always surface its marketplace + observability, even when the caller has no
+    -- assignment there. Pinned to @organization_id (uncorrelated) so Postgres
+    -- evaluates it once; the same subquery backs the is_default_project column.
+    pr.id = (
+      SELECT p2.id
+      FROM projects p2
+      WHERE p2.organization_id = @organization_id
+        AND p2.deleted IS FALSE
+      ORDER BY p2.id ASC
+      LIMIT 1
+    )
+    -- A non-default project surfaces only when the caller has a matching assigned
+    -- plugin there (the LEFT JOIN produced a non-null plugin row); otherwise its
+    -- marketplace and observability plugin are just noise for this user.
+    OR p.id IS NOT NULL
+  )
 ORDER BY pr.id, p.slug;
 
 -- name: UpsertDeviceAgentSync :exec
@@ -74,6 +103,32 @@ SET last_seen_at = clock_timestamp()
   , updated_at   = clock_timestamp()
 WHERE device_agent_syncs.last_seen_at < clock_timestamp() - interval '1 minute';
 
+-- name: UpsertDeviceAgentDeviceSync :exec
+-- Best-effort record that the agent on the machine bearing @serial_number
+-- polled. Sibling of UpsertDeviceAgentSync: that one answers "does this user
+-- run the agent somewhere", this one answers "does THIS machine run it".
+-- Only called when the agent reported a serial.
+--
+-- The guard extends the sibling's once-a-minute heartbeat throttle with two
+-- change conditions. Throttling alone would be wrong here: the row carries
+-- mutable descriptive columns, and at a ~60s poll cadence last_seen_at is
+-- almost always fresh, so a reassigned machine's new user (or a rename)
+-- could go unrecorded for the entire session.
+INSERT INTO device_agent_device_syncs (organization_id, serial_number, email, hostname)
+VALUES (@organization_id, @serial_number, @email, sqlc.narg('hostname'))
+-- Infers device_agent_device_syncs_org_lower_serial_key, the unique
+-- expression index that is this table's dedup key. Matching the readers'
+-- LOWER() comparison is what stops one machine from holding two rows.
+ON CONFLICT (organization_id, LOWER(serial_number)) DO UPDATE
+SET last_seen_at = clock_timestamp()
+  , updated_at   = clock_timestamp()
+  , email        = EXCLUDED.email
+    -- An agent that stopped reporting a hostname must not blank a known one.
+  , hostname     = COALESCE(EXCLUDED.hostname, device_agent_device_syncs.hostname)
+WHERE device_agent_device_syncs.last_seen_at < clock_timestamp() - interval '1 minute'
+   OR device_agent_device_syncs.email IS DISTINCT FROM EXCLUDED.email
+   OR (EXCLUDED.hostname IS NOT NULL AND device_agent_device_syncs.hostname IS DISTINCT FROM EXCLUDED.hostname);
+
 -- name: ListDeviceAgentSyncs :many
 -- Lists every distinct email seen polling the device agent for an org, most
 -- recently active first, for the dashboard's device-agent users view.
@@ -81,3 +136,50 @@ SELECT organization_id, email, first_seen_at, last_seen_at
 FROM device_agent_syncs
 WHERE organization_id = @organization_id
 ORDER BY last_seen_at DESC;
+
+-- name: GetDeviceAgentConfiguration :one
+SELECT organization_id, schema_version, config, created_at, updated_at
+FROM device_agent_configurations
+WHERE organization_id = @organization_id;
+
+-- AcquireDeviceAgentConfigurationLock serializes configuration updates for an
+-- organization even when no row exists yet — FOR UPDATE cannot lock an absent
+-- row, so two concurrent first-time saves would otherwise both audit a nil
+-- before-snapshot. Transaction-scoped: released automatically at
+-- commit/rollback.
+
+-- name: AcquireDeviceAgentConfigurationLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended('device_agent_configurations:' || @organization_id::text, 0));
+
+-- GetDeviceAgentConfigurationForUpdate locks the row for the update
+-- transaction so the unknown-key merge and audit before-snapshot cannot read
+-- a config replaced beneath them.
+
+-- name: GetDeviceAgentConfigurationForUpdate :one
+SELECT organization_id, schema_version, config, created_at, updated_at
+FROM device_agent_configurations
+WHERE organization_id = @organization_id
+FOR UPDATE;
+
+-- UpsertDeviceAgentConfiguration deliberately replaces the whole document:
+-- @config is the already-merged result computed by UpdateConfiguration under
+-- the org advisory lock, where stored keys outside the caller's replaceable
+-- set (unknown keys, platform-admin-only keys for org admins) were carried
+-- over. Do not call this with a raw client payload.
+
+-- name: UpsertDeviceAgentConfiguration :one
+INSERT INTO device_agent_configurations (
+  organization_id,
+  schema_version,
+  config
+)
+VALUES (
+  @organization_id,
+  @schema_version,
+  @config::jsonb
+)
+ON CONFLICT (organization_id) DO UPDATE
+SET schema_version = EXCLUDED.schema_version
+  , config = EXCLUDED.config
+  , updated_at = clock_timestamp()
+RETURNING organization_id, schema_version, config, created_at, updated_at;

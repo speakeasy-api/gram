@@ -14,10 +14,17 @@ export const FeatureName = {
   ToolIoLogs: "tool_io_logs",
   SessionCapture: "session_capture",
   AuthzChallengeLogging: "authz_challenge_logging",
-  Webhooks: "webhooks",
   Sso: "sso",
   Scim: "scim",
-  ObservabilityMode: "observability_mode",
+  HooksBrowserLogin: "hooks_browser_login",
+  HooksFailOpen: "hooks_fail_open",
+  CustomModelKeys: "custom_model_keys",
+  Skills: "skills",
+  SkillCaptureMetadataOnly: "skill_capture_metadata_only",
+  AiPlatformPushIntegrations: "ai_platform_push_integrations",
+  PlatformMcp: "platform_mcp",
+  CustomerManagedEncryptionKeys: "customer_managed_encryption_keys",
+  RemoteSessionAutoRefresh: "remote_session_auto_refresh",
 } as const;
 /**
  * Name of the feature to update

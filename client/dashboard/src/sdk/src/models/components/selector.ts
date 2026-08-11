@@ -12,7 +12,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * Tool disposition filter (MCP scopes only).
  */
-export const SelectorDisposition = {
+export const Disposition = {
   ReadOnly: "read_only",
   Destructive: "destructive",
   Idempotent: "idempotent",
@@ -21,7 +21,7 @@ export const SelectorDisposition = {
 /**
  * Tool disposition filter (MCP scopes only).
  */
-export type SelectorDisposition = ClosedEnum<typeof SelectorDisposition>;
+export type Disposition = ClosedEnum<typeof Disposition>;
 
 /**
  * The kind of resource this selector targets.
@@ -31,6 +31,7 @@ export const ResourceKind = {
   Mcp: "mcp",
   Org: "org",
   Environment: "environment",
+  Skill: "skill",
   RiskPolicy: "risk_policy",
   Chat: "chat",
   Wildcard: "*",
@@ -47,7 +48,7 @@ export type Selector = {
   /**
    * Tool disposition filter (MCP scopes only).
    */
-  disposition?: SelectorDisposition | undefined;
+  disposition?: Disposition | undefined;
   /**
    * Project filter (MCP scopes only). When set with resource_id='*', grants access to all servers in the project.
    */
@@ -71,13 +72,11 @@ export type Selector = {
 };
 
 /** @internal */
-export const SelectorDisposition$inboundSchema: z.ZodMiniEnum<
-  typeof SelectorDisposition
-> = z.enum(SelectorDisposition);
+export const Disposition$inboundSchema: z.ZodMiniEnum<typeof Disposition> = z
+  .enum(Disposition);
 /** @internal */
-export const SelectorDisposition$outboundSchema: z.ZodMiniEnum<
-  typeof SelectorDisposition
-> = SelectorDisposition$inboundSchema;
+export const Disposition$outboundSchema: z.ZodMiniEnum<typeof Disposition> =
+  Disposition$inboundSchema;
 
 /** @internal */
 export const ResourceKind$inboundSchema: z.ZodMiniEnum<typeof ResourceKind> = z
@@ -89,7 +88,7 @@ export const ResourceKind$outboundSchema: z.ZodMiniEnum<typeof ResourceKind> =
 /** @internal */
 export const Selector$inboundSchema: z.ZodMiniType<Selector, unknown> = z.pipe(
   z.object({
-    disposition: z.optional(SelectorDisposition$inboundSchema),
+    disposition: z.optional(Disposition$inboundSchema),
     project_id: z.optional(z.string()),
     resource_id: z.string(),
     resource_kind: ResourceKind$inboundSchema,
@@ -121,7 +120,7 @@ export const Selector$outboundSchema: z.ZodMiniType<
   Selector
 > = z.pipe(
   z.object({
-    disposition: z.optional(SelectorDisposition$outboundSchema),
+    disposition: z.optional(Disposition$outboundSchema),
     projectId: z.optional(z.string()),
     resourceId: z.string(),
     resourceKind: ResourceKind$outboundSchema,

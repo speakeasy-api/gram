@@ -77,7 +77,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -97,9 +97,6 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	serverURL, err := url.Parse("https://gram.test.local")
 	require.NoError(t, err)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	auditLogger := audit.NewLogger()
 
 	app := bgtriggers.NewApp(
@@ -111,6 +108,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		auditLogger,
 		serverURL,
 		nil,
+		nil,
 	)
 
 	svc := triggers.NewService(
@@ -118,7 +116,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		tracerProvider,
 		conn,
 		sessionManager,
-		authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
+		authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
 		app,
 		auditLogger,
 	)

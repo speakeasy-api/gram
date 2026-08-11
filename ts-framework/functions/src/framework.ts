@@ -150,6 +150,28 @@ export function assert<V extends { error: string; stack?: never }>(
   }
 }
 
+/**
+ * Identity of the MCP client that initiated a tool call, as reported by the
+ * client during the MCP `initialize` handshake (or forwarded per-call via
+ * `_meta["io.modelcontextprotocol/clientInfo"]`). Present only when the tool is
+ * invoked over MCP; `undefined` for direct (non-MCP) invocations.
+ */
+export interface MCPClientInfo {
+  name: string;
+  version: string;
+}
+
+/**
+ * What a tool call reports about its caller. Every field is optional and every
+ * field is attribution only — none of it is verified at the point a tool reads
+ * it, so none of it may be used for authorization.
+ */
+export interface ToolCaller {
+  clientInfo?: MCPClientInfo;
+  oauthClientId?: string;
+  meta?: Record<string, unknown>;
+}
+
 class ToolContext<Env> {
   /**
    * The parsed environment variables available to the tool.
@@ -160,9 +182,38 @@ class ToolContext<Env> {
    * calls and other async operations to propagate cancellation.
    */
   readonly signal: AbortSignal;
-  constructor(signal: AbortSignal, env: Env) {
+  /**
+   * Identity of the MCP client that initiated the call, when available. This is
+   * populated from the MCP client's `clientInfo` when the tool is invoked over
+   * MCP and is `undefined` otherwise. Tools can use it to adapt behavior for
+   * known clients (e.g. inferring a caller's identity without an explicit
+   * input). Treat it as untrusted, self-reported metadata: use it for
+   * observability and convenience, never for authorization.
+   */
+  readonly clientInfo?: MCPClientInfo;
+  /**
+   * The OAuth client id attributed to the caller, when one accompanied the
+   * call.
+   *
+   * For attribution only — logging, metrics, telling one integration's traffic
+   * from another's. Never use it for authorization. It reaches a tool as
+   * ordinary request metadata, and a tool has no way to tell a value a trusted
+   * host attached from one a caller supplied itself, so an allowlist keyed on
+   * it can be defeated by simply claiming the right id. Authorization belongs
+   * to whatever verifies credentials in front of the tool.
+   */
+  readonly oauthClientId?: string;
+  /**
+   * The raw `_meta` block that accompanied the call, for keys this SDK does
+   * not model yet. Prefer the named fields above where they exist.
+   */
+  readonly meta?: Record<string, unknown>;
+  constructor(signal: AbortSignal, env: Env, caller?: ToolCaller) {
     this.signal = signal;
     this.env = env;
+    this.clientInfo = caller?.clientInfo;
+    this.oauthClientId = caller?.oauthClientId;
+    this.meta = caller?.meta;
   }
 
   /**
@@ -475,7 +526,7 @@ export class Gram<
       name: TName;
       input: InferInput<TTools[TName]>;
     },
-    options?: { signal?: AbortSignal },
+    options?: { signal?: AbortSignal } & ToolCaller,
   ): Promise<InferResult<TTools[TName]>> {
     const tool = this.#tools.get(request.name);
     if (!tool) {
@@ -487,6 +538,7 @@ export class Gram<
     const ctx = new ToolContext(
       options?.signal || new AbortController().signal,
       envSchema.parse(tool.inputEnv ?? process.env),
+      options,
     );
 
     const schema = zm.object(tool.inputSchema);

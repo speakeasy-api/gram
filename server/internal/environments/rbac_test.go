@@ -199,7 +199,7 @@ func TestEnvironments_RBAC_Update_AllowedWithEnvironmentWrite(t *testing.T) {
 		Description:      nil,
 		Name:             nil,
 		EntriesToUpdate: []*gen.EnvironmentEntryInput{
-			{Name: "KEY", Value: "value"},
+			{Name: "KEY", Value: new("value"), IsSecret: new(true)},
 		},
 		EntriesToRemove: []string{},
 	})
@@ -236,7 +236,7 @@ func TestEnvironments_RBAC_Update_DeniedWithProjectWriteOnly(t *testing.T) {
 		Description:      nil,
 		Name:             nil,
 		EntriesToUpdate: []*gen.EnvironmentEntryInput{
-			{Name: "KEY", Value: "value"},
+			{Name: "KEY", Value: new("value"), IsSecret: new(true)},
 		},
 		EntriesToRemove: []string{},
 	})
@@ -398,6 +398,174 @@ func TestEnvironments_RBAC_Delete_MissingSlug_NoopWithEnvironmentWrite(t *testin
 		Slug:             types.Slug("does-not-exist"),
 	})
 	require.NoError(t, err)
+}
+
+// The source/toolset link handlers gate on environment:read, not project:write:
+// binding an environment to a source or toolset exposes its secret values to a
+// resource the caller can invoke, so the caller must already be able to read
+// those secrets. project:write alone must NOT authorize them — otherwise a
+// caller without environment:read could exfiltrate secrets by linking.
+
+func TestEnvironments_RBAC_SetSourceLink_AllowedWithEnvironmentRead(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestEnvironmentService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	// Create the environment with an environment:write grant, then downgrade to
+	// environment:read to prove the link handler needs no more than read.
+	ctx = authztest.WithExactGrants(t, ctx, envGrant(authz.ScopeEnvironmentWrite, authCtx.ProjectID.String()))
+	env, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		OrganizationID:   "",
+		Name:             "rbac-set-source-env",
+		Description:      nil,
+		Entries:          []*gen.EnvironmentEntryInput{},
+	})
+	require.NoError(t, err)
+
+	ctx = authztest.WithExactGrants(t, ctx, envGrant(authz.ScopeEnvironmentRead, authCtx.ProjectID.String()))
+	_, err = ti.service.SetSourceEnvironmentLink(ctx, &gen.SetSourceEnvironmentLinkPayload{
+		SourceKind:       gen.SourceKind("http"),
+		SourceSlug:       "rbac-source",
+		EnvironmentID:    env.ID,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+}
+
+func TestEnvironments_RBAC_SetSourceLink_DeniedWithProjectWriteOnly(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestEnvironmentService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, authCtx.ProjectID.String())})
+
+	_, err := ti.service.SetSourceEnvironmentLink(ctx, &gen.SetSourceEnvironmentLinkPayload{
+		SourceKind:       gen.SourceKind("http"),
+		SourceSlug:       "rbac-source",
+		EnvironmentID:    uuid.NewString(),
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestEnvironments_RBAC_DeleteSourceLink_AllowedWithEnvironmentRead(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestEnvironmentService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	ctx = authztest.WithExactGrants(t, ctx, envGrant(authz.ScopeEnvironmentRead, authCtx.ProjectID.String()))
+
+	// No existing link: the handler no-ops, but must still pass authz.
+	err := ti.service.DeleteSourceEnvironmentLink(ctx, &gen.DeleteSourceEnvironmentLinkPayload{
+		SourceKind:       gen.SourceKind("http"),
+		SourceSlug:       "rbac-source-missing",
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+}
+
+func TestEnvironments_RBAC_DeleteSourceLink_DeniedWithProjectWriteOnly(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestEnvironmentService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, authCtx.ProjectID.String())})
+
+	err := ti.service.DeleteSourceEnvironmentLink(ctx, &gen.DeleteSourceEnvironmentLinkPayload{
+		SourceKind:       gen.SourceKind("http"),
+		SourceSlug:       "rbac-source-missing",
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestEnvironments_RBAC_SetToolsetLink_DeniedWithProjectWriteOnly(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestEnvironmentService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, authCtx.ProjectID.String())})
+
+	_, err := ti.service.SetToolsetEnvironmentLink(ctx, &gen.SetToolsetEnvironmentLinkPayload{
+		ToolsetID:        uuid.NewString(),
+		EnvironmentID:    uuid.NewString(),
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestEnvironments_RBAC_DeleteToolsetLink_AllowedWithEnvironmentRead(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestEnvironmentService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	ctx = authztest.WithExactGrants(t, ctx, envGrant(authz.ScopeEnvironmentRead, authCtx.ProjectID.String()))
+
+	// No existing link: the handler no-ops, but must still pass authz.
+	err := ti.service.DeleteToolsetEnvironmentLink(ctx, &gen.DeleteToolsetEnvironmentLinkPayload{
+		ToolsetID:        uuid.NewString(),
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+}
+
+func TestEnvironments_RBAC_DeleteToolsetLink_DeniedWithProjectWriteOnly(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestEnvironmentService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeProjectWrite, Selector: authz.NewSelector(authz.ScopeProjectWrite, authCtx.ProjectID.String())})
+
+	err := ti.service.DeleteToolsetEnvironmentLink(ctx, &gen.DeleteToolsetEnvironmentLinkPayload{
+		ToolsetID:        uuid.NewString(),
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 // Clone shares the slug-miss authz gate with update/delete.

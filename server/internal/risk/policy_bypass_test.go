@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -207,7 +208,6 @@ func TestPolicyBypassEvaluator_AudienceSemantics(t *testing.T) {
 			Scope:          authz.ScopeRiskPolicyBypass,
 			ResourceID:     allUsersPolicyID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: []urn.Principal{authz.AllUsersPrincipal()},
 		Selector:   selector,
 	}))
@@ -253,7 +253,6 @@ func TestPolicyBypassEvaluator_AudienceSemantics(t *testing.T) {
 			Scope:          authz.ScopeRiskPolicyBypass,
 			ResourceID:     rolePolicyID,
 		},
-		Effect:     authz.PolicyEffectAllow,
 		Principals: []urn.Principal{rolePrincipal},
 		Selector:   roleSelector,
 	}))
@@ -277,6 +276,97 @@ func TestPolicyBypassEvaluator_AudienceSemantics(t *testing.T) {
 		PolicyID:       rolePolicyID,
 		Target:         &roleTarget,
 	}))
+}
+
+func TestPolicyBypassEvaluator_LegacyCombinedGrantMatchesCanonicalURLTarget(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	policyID := "policy_legacy_combined_target"
+	serverURL := "https://mcp.example.com/legacy"
+	selector := authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID)
+	selector[authz.SelectorKeyServerURL] = serverURL
+	selector[authz.SelectorKeyServerIdentity] = "legacy-alias"
+	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
+		Resource: authz.Resource{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Scope:          authz.ScopeRiskPolicyBypass,
+			ResourceID:     policyID,
+		},
+		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
+		Selector:   selector,
+	}))
+
+	target := risk.ShadowMCPPolicyBypassTarget(shadowmcp.AccessEvidence{
+		FullURL:        serverURL,
+		URLHost:        "",
+		ServerIdentity: "",
+	}, "list_events")
+	require.NotNil(t, target)
+	require.NotContains(t, target.Dimensions, authz.SelectorKeyServerIdentity)
+	require.True(t, risk.NewPolicyBypassEvaluator(testenv.NewLogger(t), ti.conn).CanBypass(ctx, risk.PolicyBypassEvaluation{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         authCtx.UserID,
+		PolicyID:       policyID,
+		Target:         target,
+	}))
+}
+
+func TestPolicyBypassEvaluator_UnresolvedTargetMatchesOnlyWholePolicyGrant(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	scopedPolicyID := "policy_scoped_unresolved"
+	scopedSelector := authz.NewSelector(authz.ScopeRiskPolicyBypass, scopedPolicyID)
+	scopedSelector[authz.SelectorKeyServerURL] = "https://mcp.example.com/scoped"
+	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
+		Resource: authz.Resource{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Scope:          authz.ScopeRiskPolicyBypass,
+			ResourceID:     scopedPolicyID,
+		},
+		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
+		Selector:   scopedSelector,
+	}))
+
+	wholePolicyID := "policy_whole_unresolved"
+	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
+		Resource: authz.Resource{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Scope:          authz.ScopeRiskPolicyBypass,
+			ResourceID:     wholePolicyID,
+		},
+		Principals: []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)},
+		Selector:   authz.NewSelector(authz.ScopeRiskPolicyBypass, wholePolicyID),
+	}))
+
+	scopedEvaluation := risk.PolicyBypassEvaluation{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         authCtx.UserID,
+		PolicyID:       scopedPolicyID,
+		Target:         nil,
+	}
+	wholeEvaluation := risk.PolicyBypassEvaluation{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		UserID:         authCtx.UserID,
+		PolicyID:       wholePolicyID,
+		Target:         nil,
+	}
+	decisions := risk.NewPolicyBypassEvaluator(testenv.NewLogger(t), ti.conn).CanBypassBatch(ctx, []risk.PolicyBypassEvaluation{
+		scopedEvaluation,
+		wholeEvaluation,
+	})
+
+	require.False(t, decisions[scopedEvaluation], "an unresolved call must not match a server-scoped grant")
+	require.True(t, decisions[wholeEvaluation], "an unresolved call may match an explicit whole-policy grant")
 }
 
 func TestApprovePolicyBypassRequest_CanGrantRole(t *testing.T) {
@@ -734,4 +824,87 @@ func principalsHaveRiskPolicyBypassGrant(t *testing.T, ti *testInstance, organiz
 		return true
 	}
 	return false
+}
+
+func TestApproveAndRevokePolicyBypassRequest_AllowAllEditsBlockedList(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	blockedURL := "https://sketchy.example.com/mcp"
+	otherBlockedURL := "https://bad.example.com/mcp"
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:                 new("Allow All Bypass"),
+		Sources:              []string{"shadow_mcp"},
+		Action:               "block",
+		ShadowMcpDisposition: new("allow_all"),
+		ShadowMcpBlockedUrls: []string{blockedURL, otherBlockedURL},
+	})
+	require.NoError(t, err)
+
+	token := riskPolicyBypassRequestToken(t, ti, authCtx, policy.ID, blockedURL)
+	request, err := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
+		RequestToken: token,
+	})
+	require.NoError(t, err)
+
+	approved, err := ti.service.ApproveRiskPolicyBypassRequest(ctx, &gen.ApproveRiskPolicyBypassRequestPayload{
+		ID: request.ID,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "approved", approved.Status)
+	// Approval is project-wide under allow_all: the URL leaves the blocked
+	// list and no principal-scoped grant is minted.
+	assert.Empty(t, approved.GrantedPrincipalUrns)
+	assert.False(t, userHasRiskPolicyBypassGrant(t, ti, authCtx.ActiveOrganizationID, authCtx.UserID, policy.ID, blockedURL))
+
+	require.Equal(t, []string{otherBlockedURL}, shadowMCPPolicyBlockedURLs(t, ctx, ti.conn, policy.ID))
+
+	revoked, err := ti.service.RevokeRiskPolicyBypassRequest(ctx, &gen.RevokeRiskPolicyBypassRequestPayload{
+		ID: request.ID,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "revoked", revoked.Status)
+
+	require.Equal(t, []string{otherBlockedURL, blockedURL}, shadowMCPPolicyBlockedURLs(t, ctx, ti.conn, policy.ID))
+}
+
+func TestDenyPolicyBypassRequest_AllowAllLeavesBlockedListUntouched(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	blockedURL := "https://sketchy.example.com/mcp"
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:                 new("Allow All Deny"),
+		Sources:              []string{"shadow_mcp"},
+		Action:               "block",
+		ShadowMcpDisposition: new("allow_all"),
+		ShadowMcpBlockedUrls: []string{blockedURL},
+	})
+	require.NoError(t, err)
+
+	token := riskPolicyBypassRequestToken(t, ti, authCtx, policy.ID, blockedURL)
+	request, err := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
+		RequestToken: token,
+	})
+	require.NoError(t, err)
+
+	denied, err := ti.service.DenyRiskPolicyBypassRequest(ctx, &gen.DenyRiskPolicyBypassRequestPayload{
+		ID: request.ID,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "denied", denied.Status)
+
+	require.Equal(t, []string{blockedURL}, shadowMCPPolicyBlockedURLs(t, ctx, ti.conn, policy.ID))
 }

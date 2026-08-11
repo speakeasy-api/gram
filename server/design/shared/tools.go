@@ -255,7 +255,8 @@ var EnvironmentEntry = Type("EnvironmentEntry", func() {
 	Description("A single environment entry")
 
 	Attribute("name", String, "The name of the environment variable")
-	Attribute("value", String, "Redacted values of the environment variable")
+	Attribute("value", String, "The value of the environment variable. Cleartext when is_secret is false, redacted otherwise.")
+	Attribute("is_secret", Boolean, "Whether the value is a secret. Secret values are redacted in reads; non-secret values are returned in cleartext.")
 	Attribute("created_at", String, func() {
 		Description("The creation date of the environment entry")
 		Format(FormatDateTime)
@@ -265,5 +266,5 @@ var EnvironmentEntry = Type("EnvironmentEntry", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("name", "value", "created_at", "updated_at")
+	Required("name", "value", "is_secret", "created_at", "updated_at")
 })

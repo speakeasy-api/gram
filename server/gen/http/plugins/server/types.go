@@ -104,10 +104,17 @@ type GetPluginResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Optional description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether this is the project's fallback plugin that new servers attach to.
+	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
+	// Number of active skills in this plugin.
+	SkillCount *int64 `form:"skill_count,omitempty" json:"skill_count,omitempty" xml:"skill_count,omitempty"`
 	// Number of role/user assignments.
 	AssignmentCount *int64 `form:"assignment_count,omitempty" json:"assignment_count,omitempty" xml:"assignment_count,omitempty"`
+	// Whether the plugin's complete current intended state can be published as an
+	// Agent Plugins 1.0 package.
+	AgentPluginsV1Compatible bool `form:"agent_plugins_v1_compatible" json:"agent_plugins_v1_compatible" xml:"agent_plugins_v1_compatible"`
 	// Servers included in this plugin.
 	Servers []*PluginServerResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
 	// Role/user assignments.
@@ -127,10 +134,17 @@ type CreatePluginResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Optional description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether this is the project's fallback plugin that new servers attach to.
+	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
+	// Number of active skills in this plugin.
+	SkillCount *int64 `form:"skill_count,omitempty" json:"skill_count,omitempty" xml:"skill_count,omitempty"`
 	// Number of role/user assignments.
 	AssignmentCount *int64 `form:"assignment_count,omitempty" json:"assignment_count,omitempty" xml:"assignment_count,omitempty"`
+	// Whether the plugin's complete current intended state can be published as an
+	// Agent Plugins 1.0 package.
+	AgentPluginsV1Compatible bool `form:"agent_plugins_v1_compatible" json:"agent_plugins_v1_compatible" xml:"agent_plugins_v1_compatible"`
 	// Servers included in this plugin.
 	Servers []*PluginServerResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
 	// Role/user assignments.
@@ -150,10 +164,17 @@ type UpdatePluginResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Optional description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether this is the project's fallback plugin that new servers attach to.
+	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
+	// Number of active skills in this plugin.
+	SkillCount *int64 `form:"skill_count,omitempty" json:"skill_count,omitempty" xml:"skill_count,omitempty"`
 	// Number of role/user assignments.
 	AssignmentCount *int64 `form:"assignment_count,omitempty" json:"assignment_count,omitempty" xml:"assignment_count,omitempty"`
+	// Whether the plugin's complete current intended state can be published as an
+	// Agent Plugins 1.0 package.
+	AgentPluginsV1Compatible bool `form:"agent_plugins_v1_compatible" json:"agent_plugins_v1_compatible" xml:"agent_plugins_v1_compatible"`
 	// Servers included in this plugin.
 	Servers []*PluginServerResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
 	// Role/user assignments.
@@ -244,6 +265,11 @@ type GetPublishStatusResponseBody struct {
 	// When the project was last published to GitHub. Absent when the project is
 	// not connected.
 	LastPublishedAt *string `form:"last_published_at,omitempty" json:"last_published_at,omitempty" xml:"last_published_at,omitempty"`
+	// Version stamped into the currently published plugin.json manifests (e.g.
+	// 0.1.1783692954) — the version plugin clients such as Claude Code report for
+	// installed plugins. Absent when the project is not connected or the live
+	// version could not be determined.
+	LiveVersion *string `form:"live_version,omitempty" json:"live_version,omitempty" xml:"live_version,omitempty"`
 }
 
 // PublishPluginsResponseBody is the type of the "plugins" service
@@ -274,6 +300,11 @@ type UpdateMarketplaceSettingsResponseBody struct {
 	// Whether the marketplace was automatically republished to GitHub as part of
 	// this update.
 	Republished bool `form:"republished" json:"republished" xml:"republished"`
+	// True when the new name reached the MCP plugins and marketplace manifests but
+	// the observability (hooks) plugin could not be updated yet because the
+	// organization is not approved for the latest hooks version; it will update
+	// automatically once the organization is rolled forward.
+	HooksUpdateDeferred *bool `form:"hooks_update_deferred,omitempty" json:"hooks_update_deferred,omitempty" xml:"hooks_update_deferred,omitempty"`
 }
 
 // ListPluginsUnauthorizedResponseBody is the type of the "plugins" service
@@ -1926,6 +1957,25 @@ type SetPluginAssignmentsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// DownloadPluginPackageFailedPreconditionResponseBody is the type of the
+// "plugins" service "downloadPluginPackage" endpoint HTTP response body for
+// the "failed_precondition" error.
+type DownloadPluginPackageFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DownloadPluginPackageUnauthorizedResponseBody is the type of the "plugins"
 // service "downloadPluginPackage" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -3252,10 +3302,17 @@ type PluginResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// Optional description.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Whether this is the project's fallback plugin that new servers attach to.
+	IsDefault *bool `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
 	// Number of active servers in this plugin.
 	ServerCount *int64 `form:"server_count,omitempty" json:"server_count,omitempty" xml:"server_count,omitempty"`
+	// Number of active skills in this plugin.
+	SkillCount *int64 `form:"skill_count,omitempty" json:"skill_count,omitempty" xml:"skill_count,omitempty"`
 	// Number of role/user assignments.
 	AssignmentCount *int64 `form:"assignment_count,omitempty" json:"assignment_count,omitempty" xml:"assignment_count,omitempty"`
+	// Whether the plugin's complete current intended state can be published as an
+	// Agent Plugins 1.0 package.
+	AgentPluginsV1Compatible bool `form:"agent_plugins_v1_compatible" json:"agent_plugins_v1_compatible" xml:"agent_plugins_v1_compatible"`
 	// Servers included in this plugin.
 	Servers []*PluginServerResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
 	// Role/user assignments.
@@ -3328,14 +3385,17 @@ func NewListPluginsResponseBody(res *plugins.ListPluginsResult) *ListPluginsResp
 // the "getPlugin" endpoint of the "plugins" service.
 func NewGetPluginResponseBody(res *plugins.Plugin) *GetPluginResponseBody {
 	body := &GetPluginResponseBody{
-		ID:              res.ID,
-		Name:            res.Name,
-		Slug:            res.Slug,
-		Description:     res.Description,
-		ServerCount:     res.ServerCount,
-		AssignmentCount: res.AssignmentCount,
-		CreatedAt:       res.CreatedAt,
-		UpdatedAt:       res.UpdatedAt,
+		ID:                       res.ID,
+		Name:                     res.Name,
+		Slug:                     res.Slug,
+		Description:              res.Description,
+		IsDefault:                res.IsDefault,
+		ServerCount:              res.ServerCount,
+		SkillCount:               res.SkillCount,
+		AssignmentCount:          res.AssignmentCount,
+		AgentPluginsV1Compatible: res.AgentPluginsV1Compatible,
+		CreatedAt:                res.CreatedAt,
+		UpdatedAt:                res.UpdatedAt,
 	}
 	if res.Servers != nil {
 		body.Servers = make([]*PluginServerResponseBody, len(res.Servers))
@@ -3364,14 +3424,17 @@ func NewGetPluginResponseBody(res *plugins.Plugin) *GetPluginResponseBody {
 // the "createPlugin" endpoint of the "plugins" service.
 func NewCreatePluginResponseBody(res *plugins.Plugin) *CreatePluginResponseBody {
 	body := &CreatePluginResponseBody{
-		ID:              res.ID,
-		Name:            res.Name,
-		Slug:            res.Slug,
-		Description:     res.Description,
-		ServerCount:     res.ServerCount,
-		AssignmentCount: res.AssignmentCount,
-		CreatedAt:       res.CreatedAt,
-		UpdatedAt:       res.UpdatedAt,
+		ID:                       res.ID,
+		Name:                     res.Name,
+		Slug:                     res.Slug,
+		Description:              res.Description,
+		IsDefault:                res.IsDefault,
+		ServerCount:              res.ServerCount,
+		SkillCount:               res.SkillCount,
+		AssignmentCount:          res.AssignmentCount,
+		AgentPluginsV1Compatible: res.AgentPluginsV1Compatible,
+		CreatedAt:                res.CreatedAt,
+		UpdatedAt:                res.UpdatedAt,
 	}
 	if res.Servers != nil {
 		body.Servers = make([]*PluginServerResponseBody, len(res.Servers))
@@ -3400,14 +3463,17 @@ func NewCreatePluginResponseBody(res *plugins.Plugin) *CreatePluginResponseBody 
 // the "updatePlugin" endpoint of the "plugins" service.
 func NewUpdatePluginResponseBody(res *plugins.Plugin) *UpdatePluginResponseBody {
 	body := &UpdatePluginResponseBody{
-		ID:              res.ID,
-		Name:            res.Name,
-		Slug:            res.Slug,
-		Description:     res.Description,
-		ServerCount:     res.ServerCount,
-		AssignmentCount: res.AssignmentCount,
-		CreatedAt:       res.CreatedAt,
-		UpdatedAt:       res.UpdatedAt,
+		ID:                       res.ID,
+		Name:                     res.Name,
+		Slug:                     res.Slug,
+		Description:              res.Description,
+		IsDefault:                res.IsDefault,
+		ServerCount:              res.ServerCount,
+		SkillCount:               res.SkillCount,
+		AssignmentCount:          res.AssignmentCount,
+		AgentPluginsV1Compatible: res.AgentPluginsV1Compatible,
+		CreatedAt:                res.CreatedAt,
+		UpdatedAt:                res.UpdatedAt,
 	}
 	if res.Servers != nil {
 		body.Servers = make([]*PluginServerResponseBody, len(res.Servers))
@@ -3496,6 +3562,7 @@ func NewGetPublishStatusResponseBody(res *plugins.PublishStatusResult) *GetPubli
 		HasCollaborators:          res.HasCollaborators,
 		UpToDate:                  res.UpToDate,
 		LastPublishedAt:           res.LastPublishedAt,
+		LiveVersion:               res.LiveVersion,
 	}
 	return body
 }
@@ -3525,7 +3592,8 @@ func NewGetMarketplaceSettingsResponseBody(res *plugins.MarketplaceSettingsResul
 // service.
 func NewUpdateMarketplaceSettingsResponseBody(res *plugins.UpdateMarketplaceSettingsResult) *UpdateMarketplaceSettingsResponseBody {
 	body := &UpdateMarketplaceSettingsResponseBody{
-		Republished: res.Republished,
+		Republished:         res.Republished,
+		HooksUpdateDeferred: res.HooksUpdateDeferred,
 	}
 	if res.Settings != nil {
 		body.Settings = marshalPluginsMarketplaceSettingsResultToMarketplaceSettingsResultResponseBody(res.Settings)
@@ -4808,6 +4876,21 @@ func NewSetPluginAssignmentsUnexpectedResponseBody(res *goa.ServiceError) *SetPl
 // service.
 func NewSetPluginAssignmentsGatewayErrorResponseBody(res *goa.ServiceError) *SetPluginAssignmentsGatewayErrorResponseBody {
 	body := &SetPluginAssignmentsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDownloadPluginPackageFailedPreconditionResponseBody builds the HTTP
+// response body from the result of the "downloadPluginPackage" endpoint of the
+// "plugins" service.
+func NewDownloadPluginPackageFailedPreconditionResponseBody(res *goa.ServiceError) *DownloadPluginPackageFailedPreconditionResponseBody {
+	body := &DownloadPluginPackageFailedPreconditionResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

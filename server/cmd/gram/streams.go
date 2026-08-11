@@ -2,9 +2,13 @@ package gram
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"os/signal"
 	"runtime/debug"
+	"syscall"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,23 +24,41 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/speakeasy-api/gram/infra/gen"
+	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
 	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
+	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ping"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
+	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
+	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/streams"
+	"github.com/speakeasy-api/gram/server/internal/subscribers"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/webhooks/svixrelay"
 )
 
 func newStreamsCommand() *cli.Command {
@@ -60,6 +82,82 @@ func newStreamsCommand() *cli.Command {
 			Usage:    "Database read replica URL",
 			EnvVars:  []string{"GRAM_DATABASE_READ_REPLICA_URL"},
 			Required: true,
+		},
+		&cli.StringFlag{
+			Name:     "database-url",
+			Usage:    "Database URL",
+			EnvVars:  []string{"GRAM_DATABASE_URL"},
+			Required: true,
+		},
+		&cli.StringFlag{
+			Name:     "encryption-key",
+			Usage:    "Key for App level AES encryption/decyryption",
+			Required: true,
+			EnvVars:  []string{"GRAM_ENCRYPTION_KEY"},
+		},
+		&cli.StringFlag{
+			Name:    "openrouter-dev-key",
+			Usage:   "Dev API key for OpenRouter (primarily for local development) - https://openrouter.ai/settings/keys",
+			EnvVars: []string{"OPENROUTER_DEV_KEY"},
+		},
+		&cli.StringFlag{
+			Name:    "openrouter-provisioning-key",
+			Usage:   "Provisioning key for OpenRouter to create new API keys for orgs - https://openrouter.ai/settings/provisioning-keys",
+			EnvVars: []string{"OPENROUTER_PROVISIONING_KEY"},
+		},
+		&cli.StringFlag{
+			Name:     "polar-api-key",
+			Usage:    "The polar API key",
+			EnvVars:  []string{"POLAR_API_KEY"},
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     "polar-webhook-secret",
+			Usage:    "The polar webhook secret",
+			EnvVars:  []string{"POLAR_WEBHOOK_SECRET"},
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     "polar-product-id-free",
+			Usage:    "The product ID of the free tier in Polar",
+			EnvVars:  []string{"POLAR_PRODUCT_ID_FREE"},
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     "polar-product-id-pro",
+			Usage:    "The product ID of the pro tier in Polar",
+			EnvVars:  []string{"POLAR_PRODUCT_ID_PRO"},
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     "polar-meter-id-tool-calls",
+			Usage:    "The ID of the tool calls meter in Polar",
+			EnvVars:  []string{"POLAR_METER_ID_TOOL_CALLS"},
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     "polar-meter-id-servers",
+			Usage:    "The ID of the servers meter in Polar",
+			EnvVars:  []string{"POLAR_METER_ID_SERVERS"},
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     "polar-meter-id-credits",
+			Usage:    "The ID of the credits meter in Polar",
+			EnvVars:  []string{"POLAR_METER_ID_CREDITS"},
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     "polar-product-id-assistants",
+			Usage:    "The product ID granting the assistants benefit in Polar (auto-attached on assistants-disposition signup)",
+			EnvVars:  []string{"POLAR_PRODUCT_ID_ASSISTANTS"},
+			Required: false,
+		},
+		&cli.StringSliceFlag{
+			Name:     "polar-product-ids-topup",
+			Usage:    "Product IDs of one-time credit top-up packs in Polar",
+			EnvVars:  []string{"POLAR_PRODUCT_IDS_TOPUP"},
+			Required: false,
 		},
 		&cli.BoolFlag{
 			Name:    "unsafe-db-log",
@@ -101,9 +199,11 @@ func newStreamsCommand() *cli.Command {
 		},
 	}
 
-	flags = append(flags, gcpFlags...)
-	flags = append(flags, posthogFlags...)
-	flags = append(flags, riskFlags...)
+	flags = append(flags, gcpFlags()...)
+	flags = append(flags, svixFlags()...)
+	flags = append(flags, posthogFlags()...)
+	flags = append(flags, riskFlags()...)
+	flags = append(flags, clickHouseFlags()...)
 
 	return &cli.Command{
 		Name:  "streams",
@@ -121,8 +221,11 @@ func newStreamsCommand() *cli.Command {
 				attr.SlogServiceEnv(serviceEnv),
 			)
 
-			ctx, cancel := context.WithCancel(c.Context)
-			defer cancel()
+			// Without a signal handler the runtime kills the process on SIGTERM,
+			// so the Action never returns and the After hook never runs the
+			// shutdownFuncs registered below.
+			ctx, stop := signal.NotifyContext(c.Context, os.Interrupt, syscall.SIGTERM)
+			defer stop()
 
 			shutdown, err := o11y.SetupOTelSDK(ctx, logger, o11y.SetupOTelSDKOptions{
 				ServiceName:    serviceName,
@@ -144,11 +247,18 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("embedded descriptor set is empty: cannot generate pubsub topology")
 			}
 
-			guardianPolicy, err := newGuardianPolicy(c, tracerProvider)
+			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
+				enableUnsafeLogging: c.Bool("unsafe-db-log"),
+			})
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to connect to database: %w", err)
 			}
-			_ = guardianPolicy
+			defer db.Close()
+
+			encryptionClient, err := encryption.New(c.String("encryption-key"))
+			if err != nil {
+				return fmt.Errorf("failed to create encryption client: %w", err)
+			}
 
 			replicaDB, err := newDBClient(ctx, logger, meterProvider, c.String("database-read-replica-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
@@ -166,7 +276,11 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to connect to redis: %w", err)
 			}
-			_ = redisClient
+
+			guardianPolicy, err := newGuardianPolicy(c, logger, tracerProvider, meterProvider, redisClient)
+			if err != nil {
+				return err
+			}
 
 			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
 			var featureFlags feature.Provider = posthogClient
@@ -174,27 +288,47 @@ func newStreamsCommand() *cli.Command {
 				featureFlags = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
 			}
 
-			_, psbroker, shutdown, err := newPubSubClient(ctx, c, logger)
-			shutdownFuncs = append(shutdownFuncs, shutdown)
+			productFeatures := productfeatures.NewClient(logger, tracerProvider, db, redisClient)
+			_, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, c)
+			if err != nil {
+				return fmt.Errorf("failed to create billing provider: %w", err)
+			}
+
+			var openRouter openrouter.Provisioner
+			if c.String("environment") == "local" {
+				openRouter = openrouter.NewDevelopment(c.String("openrouter-dev-key"))
+			} else {
+				openRouter = openrouter.New(logger, tracerProvider, guardianPolicy, db, c.String("environment"), c.String("openrouter-provisioning-key"), nil, productFeatures, billingTracker)
+			}
+
+			completionsClient := openrouter.NewUnifiedClient(
+				logger,
+				guardianPolicy,
+				openRouter,
+				modelkeys.NewResolver(db, encryptionClient, openRouter),
+				nil,
+				chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker),
+				nil,
+				nil,
+			)
+			judgeRateLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(redisClient))
+
+			_, psbroker, pubsubShutdown, err := newPubSubClient(ctx, c, logger)
 			if err != nil {
 				return fmt.Errorf("failed to create pubsub client: %w", err)
-			}
-
-			bqClient, shutdown, err := newBigQueryClient(ctx, c, logger)
-			shutdownFuncs = append(shutdownFuncs, shutdown)
-			if err != nil {
-				return fmt.Errorf("failed to create bigquery client: %w", err)
-			}
-
-			riskFindingsTable, err := bqTableFromSpec(bqClient, c.String("bq-risk-findings"))
-			if err != nil {
-				return fmt.Errorf("failed to parse BigQuery table spec: %w", err)
 			}
 
 			riskFingerprinter, err := risk.ParsePepperKeyRing([]byte(c.String("risk-fingerprint-pepper-keyring")))
 			if err != nil {
 				return fmt.Errorf("failed to parse risk fingerprint pepper keyring: %w", err)
 			}
+
+			enableCHRiskWrites := !c.Bool("disable-clickhouse-risk-writes")
+			chConn, shutdown, err := newClickhouseClient(ctx, logger, c)
+			if err != nil {
+				return fmt.Errorf("failed to create clickhouse client: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, shutdown)
 
 			// Gitleaks shadow-mode subscriber: re-runs the in-process gitleaks
 			// scan over GitleaksAnalysis requests and publishes any matches into
@@ -203,9 +337,19 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create pubsub publisher for risk findings: %w", err)
 			}
-			shutdownFuncs = append(shutdownFuncs, findingsPub.Stop)
+			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
+				stopErr := findingsPub.Stop(ctx)
+				closeErr := pubsubShutdown(ctx)
+				return errors.Join(stopErr, closeErr)
+			})
 
 			gitleaksHandler := gitleaks.NewHandler(logger, findingsPub)
+			promptInjectionScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter).Classify)
+			promptInjectionStubScanner := promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
+			promptInjectionHandler := promptinjection.NewHandler(logger, meterProvider, promptInjectionScanner, promptInjectionStubScanner, findingsPub, scanners.NewAsyncShadowGate(logger, featureFlags, replicaDB))
+			promptPolicyScanner := promptpolicy.NewScanner(logger, ppopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter).Evaluate)
+			promptPolicyStubScanner := promptpolicy.NewScanner(logger, promptpolicy.NoopEvaluator)
+			promptPolicyHandler := promptpolicy.NewHandler(logger, meterProvider, promptPolicyScanner, promptPolicyStubScanner, findingsPub, scanners.NewAsyncShadowGate(logger, featureFlags, replicaDB))
 
 			// Custom-rules shadow-mode subscriber: loads a project's selected CEL
 			// detection rules from the read replica (caching their compilation) and
@@ -255,19 +399,41 @@ func newStreamsCommand() *cli.Command {
 				broker:     psbroker,
 			}
 
+			svixClient, svixShutdown, err := newSvixClient(c, logger, guardianPolicy)
+			if err != nil {
+				return fmt.Errorf("failed to create svix client: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, svixShutdown)
+
+			svixRelayHandler := svixrelay.NewHandler(logger, meterProvider, db, svixClient)
+
 			pingLogLevel := conv.Ternary(c.String("environment") == "local", slog.LevelInfo, slog.LevelDebug)
 
 			// Start subscription receivers in this block
 			{
 				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, pingLogLevel))
+
 				mustReceive(rg, &riskv1.GitleaksAnalysis{}, &riskv1.GitleaksAnalyzer{}, gitleaksHandler)
+				mustReceive(rg, &riskv1.PromptInjectionAnalysis{}, &riskv1.PromptInjectionAnalyzer{}, promptInjectionHandler)
+				mustReceive(rg, &riskv1.PromptPolicyAnalysis{}, &riskv1.PromptPolicyAnalyzer{}, promptPolicyHandler)
 				mustReceive(rg, &riskv1.CustomRulesAnalysis{}, &riskv1.CustomRulesAnalyzer{}, customRulesHandler)
 
-				mustReceiveBatch(
-					rg, &riskv1.Finding{}, &riskv1.FindingBQWriter{},
-					gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second},
-					risk.NewFindingBQWriter(logger, meterProvider, riskFindingsTable, featureFlags, riskFingerprinter),
+				mustReceive(rg, &telemetryv1.LogRecord{}, &telemetryv1.Noop{}, new(subscribers.NoopHandler[*telemetryv1.LogRecord]))
+
+				mustReceive(rg, &webhooksv1.Event{}, &webhooksv1.SvixRelay{}, svixRelayHandler)
+
+				mustReceive(
+					rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{},
+					authz.NewChallengeCHWriter(logger, chConn),
 				)
+
+				if enableCHRiskWrites {
+					mustReceiveBatch(
+						rg, &riskv1.Finding{}, &riskv1.FindingCHWriter{},
+						gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second},
+						risk.NewFindingCHWriter(logger, replicaDB, meterProvider, chrepo.New(chConn), riskFingerprinter),
+					)
+				}
 			}
 
 			// This is just a heartbeat publisher that validates the publisher-
@@ -283,6 +449,8 @@ func newStreamsCommand() *cli.Command {
 			if err := group.Wait(); err != nil {
 				return fmt.Errorf("streaming error: %w", err)
 			}
+
+			logger.InfoContext(c.Context, "shutdown signal received, all receivers stopped")
 
 			return nil
 		},

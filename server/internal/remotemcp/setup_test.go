@@ -16,7 +16,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/remote_mcp"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
-	"github.com/speakeasy-api/gram/server/internal/accesscontrol"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -33,7 +32,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -69,11 +67,10 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service         *remotemcp.Service
-	conn            *pgxpool.Pool
-	enc             *encryption.Client
-	sessionManager  *sessions.Manager
-	shadowMCPClient *shadowmcp.Client
+	service        *remotemcp.Service
+	conn           *pgxpool.Pool
+	enc            *encryption.Client
+	sessionManager *sessions.Manager
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -109,27 +106,19 @@ func newTestServiceWithPolicy(t *testing.T, servicePolicy *guardian.Policy) (con
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
 	enc := testenv.NewEncryptionClient(t)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	auditLogger := audit.NewLogger()
 
-	svc := remotemcp.NewService(logger, tracerProvider, conn, sessionManager, enc, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), servicePolicy, auditLogger)
-
-	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
-	accessStore := accesscontrol.NewRedisStore(cacheAdapter, accesscontrol.AlphaTTL)
-	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, accessStore)
+	svc := remotemcp.NewService(logger, tracerProvider, conn, sessionManager, enc, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), servicePolicy, auditLogger)
 
 	return ctx, &testInstance{
-		service:         svc,
-		conn:            conn,
-		enc:             enc,
-		sessionManager:  sessionManager,
-		shadowMCPClient: shadowMCPClient,
+		service:        svc,
+		conn:           conn,
+		enc:            enc,
+		sessionManager: sessionManager,
 	}
 }
 

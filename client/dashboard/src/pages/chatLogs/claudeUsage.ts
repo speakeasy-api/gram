@@ -10,7 +10,8 @@ export type ClaudeUsageMatch = {
 export function formatUsageCost(cost: number): string {
   if (cost === 0) return "$0.00";
   if (Math.abs(cost) < 0.0001) return `$${cost.toFixed(6)}`;
-  return `$${cost.toFixed(4)}`;
+  if (Math.abs(cost) < 0.01) return `$${cost.toFixed(4)}`;
+  return `$${cost.toFixed(2)}`;
 }
 
 export function formatTokenCount(tokens: number): string {
@@ -89,6 +90,12 @@ export function buildClaudeUsageByMessageId({
   }
 
   return result;
+}
+
+export function buildClaudeTurnByPromptId(
+  turns: ClaudeTurnUsage[],
+): Map<string, ClaudeTurnUsage> {
+  return new Map(turns.map((turn) => [turn.promptId, turn]));
 }
 
 export function buildClaudeToolUsageByToolUseId(

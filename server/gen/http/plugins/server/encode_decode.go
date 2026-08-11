@@ -2030,8 +2030,8 @@ func DecodeDownloadPluginPackageRequest(mux goahttp.Muxer, decoder func(*http.Re
 		if platform == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("platform", "query string"))
 		}
-		if !(platform == "claude" || platform == "cursor" || platform == "codex") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor", "codex"}))
+		if !(platform == "claude" || platform == "cursor" || platform == "codex" || platform == "agent-plugin") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor", "codex", "agent-plugin"}))
 		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
@@ -2074,6 +2074,20 @@ func EncodeDownloadPluginPackageError(encoder func(context.Context, http.Respons
 			return encodeError(ctx, w, v)
 		}
 		switch en.GoaErrorName() {
+		case "failed_precondition":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewDownloadPluginPackageFailedPreconditionResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusPreconditionFailed)
+			return enc.Encode(body)
 		case "unauthorized":
 			var res *goa.ServiceError
 			errors.As(v, &res)
@@ -2248,8 +2262,8 @@ func DecodeDownloadObservabilityPluginRequest(mux goahttp.Muxer, decoder func(*h
 		if platform == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("platform", "query string"))
 		}
-		if !(platform == "claude" || platform == "cursor" || platform == "codex") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor", "codex"}))
+		if !(platform == "claude" || platform == "cursor" || platform == "codex" || platform == "opencode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor", "codex", "opencode"}))
 		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
@@ -3500,14 +3514,17 @@ func EncodeUpdateMarketplaceSettingsError(encoder func(context.Context, http.Res
 // *PluginResponseBody from a value of type *plugins.Plugin.
 func marshalPluginsPluginToPluginResponseBody(v *plugins.Plugin) *PluginResponseBody {
 	res := &PluginResponseBody{
-		ID:              v.ID,
-		Name:            v.Name,
-		Slug:            v.Slug,
-		Description:     v.Description,
-		ServerCount:     v.ServerCount,
-		AssignmentCount: v.AssignmentCount,
-		CreatedAt:       v.CreatedAt,
-		UpdatedAt:       v.UpdatedAt,
+		ID:                       v.ID,
+		Name:                     v.Name,
+		Slug:                     v.Slug,
+		Description:              v.Description,
+		IsDefault:                v.IsDefault,
+		ServerCount:              v.ServerCount,
+		SkillCount:               v.SkillCount,
+		AssignmentCount:          v.AssignmentCount,
+		AgentPluginsV1Compatible: v.AgentPluginsV1Compatible,
+		CreatedAt:                v.CreatedAt,
+		UpdatedAt:                v.UpdatedAt,
 	}
 	if v.Servers != nil {
 		res.Servers = make([]*PluginServerResponseBody, len(v.Servers))

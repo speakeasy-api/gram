@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -64,6 +63,10 @@ func (m *mockProvisioner) ProvisionedKeyTypes() []KeyType {
 
 func (m *mockProvisioner) RefreshAPIKeyLimit(ctx context.Context, orgID string, keyType KeyType, limit *int) (int, error) {
 	return 0, nil
+}
+
+func (m *mockProvisioner) DisableAPIKey(ctx context.Context, orgID string, keyType KeyType) error {
+	return nil
 }
 
 func (m *mockProvisioner) GetCreditsUsed(ctx context.Context, orgID string, keyType KeyType) (float64, int, error) {
@@ -235,6 +238,7 @@ func TestChatClient_GetCompletion(t *testing.T) {
 		testenv.NewLogger(t),
 		guardianPolicy,
 		provisioner,
+		&PlatformKeyResolver{Provisioner: provisioner},
 		captureStrategy,
 		trackingStrategy,
 		titleGenerator,
@@ -381,6 +385,7 @@ func TestChatClient_GetCompletionStream(t *testing.T) {
 		testenv.NewLogger(t),
 		guardianPolicy,
 		provisioner,
+		&PlatformKeyResolver{Provisioner: provisioner},
 		captureStrategy,
 		trackingStrategy,
 		titleGenerator,
@@ -506,6 +511,7 @@ func TestChatClient_GetCompletionStream_FetchesFallbackUsageWhenFinalUsageChunkM
 		testenv.NewLogger(t),
 		guardianPolicy,
 		provisioner,
+		&PlatformKeyResolver{Provisioner: provisioner},
 		&mockMessageCaptureStrategy{},
 		trackingStrategy,
 		&mockChatTitleGenerator{},
@@ -600,6 +606,7 @@ func TestChatClient_GetCompletion_FetchesFallbackUsageWhenInlineCostMissing(t *t
 		testenv.NewLogger(t),
 		guardianPolicy,
 		provisioner,
+		&PlatformKeyResolver{Provisioner: provisioner},
 		&mockMessageCaptureStrategy{},
 		trackingStrategy,
 		&mockChatTitleGenerator{},
@@ -708,6 +715,7 @@ func TestChatClient_GetCompletion_WithToolCalls(t *testing.T) {
 		testenv.NewLogger(t),
 		guardianPolicy,
 		provisioner,
+		&PlatformKeyResolver{Provisioner: provisioner},
 		captureStrategy,
 		trackingStrategy,
 		titleGenerator,
@@ -806,6 +814,7 @@ func TestChatClient_NormalizesMixedAssistantOnlyForOpenRouterRequest(t *testing.
 		testenv.NewLogger(t),
 		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},
+		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		captureStrategy,
 		nil,
 		nil,
@@ -886,6 +895,7 @@ func TestChatClient_PassesMixedAssistantThroughWhenNormalizeFlagUnset(t *testing
 		testenv.NewLogger(t),
 		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},
+		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		&mockMessageCaptureStrategy{},
 		nil,
 		nil,
@@ -931,7 +941,7 @@ func TestChatClient_ErrorHandling(t *testing.T) {
 		{
 			name:             "provisioner error",
 			provisionerError: fmt.Errorf("failed to provision key"),
-			expectedError:    "provision OpenRouter key",
+			expectedError:    "resolve OpenRouter key",
 		},
 		{
 			name:               "start or resume error",
@@ -966,6 +976,7 @@ func TestChatClient_ErrorHandling(t *testing.T) {
 				testenv.NewLogger(t),
 				guardianPolicy,
 				provisioner,
+				&PlatformKeyResolver{Provisioner: provisioner},
 				captureStrategy,
 				trackingStrategy,
 				titleGenerator,
@@ -1036,6 +1047,7 @@ func TestChatClient_MultipleCompletions_TitleAndResolutionScheduling(t *testing.
 		testenv.NewLogger(t),
 		guardianPolicy,
 		provisioner,
+		&PlatformKeyResolver{Provisioner: provisioner},
 		captureStrategy,
 		trackingStrategy,
 		titleGenerator,
@@ -1200,6 +1212,7 @@ func TestChatClient_NilChatID_ShouldNotScheduleTitleGeneration(t *testing.T) {
 		testenv.NewLogger(t),
 		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},
+		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		&mockMessageCaptureStrategy{},
 		&mockUsageTrackingStrategy{},
 		titleGenerator,
@@ -1246,6 +1259,7 @@ func TestChatClient_TitleGeneration_ScheduledPerCompletionWithValidChatID(t *tes
 		testenv.NewLogger(t),
 		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},
+		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		tracker,
 		&mockUsageTrackingStrategy{},
 		titleGenerator,
@@ -1310,6 +1324,7 @@ func TestChatClient_ReloadChat_NoDuplicateMessages(t *testing.T) {
 		testenv.NewLogger(t),
 		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},
+		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		tracker,
 		&mockUsageTrackingStrategy{},
 		&mockChatTitleGenerator{},
@@ -1438,6 +1453,7 @@ func TestChatClient_GetCompletion_WithJSONSchema(t *testing.T) {
 		testenv.NewLogger(t),
 		guardianPolicy,
 		provisioner,
+		&PlatformKeyResolver{Provisioner: provisioner},
 		captureStrategy,
 		trackingStrategy,
 		titleGenerator,
@@ -1553,6 +1569,7 @@ func TestChatClient_GetCompletion_WithoutJSONSchema(t *testing.T) {
 		testenv.NewLogger(t),
 		guardianPolicy,
 		provisioner,
+		&PlatformKeyResolver{Provisioner: provisioner},
 		captureStrategy,
 		trackingStrategy,
 		titleGenerator,
@@ -1589,32 +1606,45 @@ func TestChatClient_GetCompletion_WithoutJSONSchema(t *testing.T) {
 		"response_format should not be set when JSONSchema is nil")
 }
 
-func firstAllowedModelForProvider(prefix string) string {
-	var models []string
-	for m := range allowList {
-		if strings.HasPrefix(m, prefix) {
-			models = append(models, m)
-		}
-	}
-	sort.Strings(models)
-	return models[0]
-}
-
 func TestResolveModel_AllowedModelReturnedAsIs(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, "openai/gpt-5.4", ResolveModel("openai/gpt-5.4"))
+	require.Equal(t, "anthropic/claude-opus-5", ResolveModel("anthropic/claude-opus-5"))
+}
+
+func TestDefaultChatModel_UsesClaudeOpus5(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "anthropic/claude-opus-5", DefaultChatModel)
 }
 
 func TestResolveModel_UnsupportedOpenAIFallback(t *testing.T) {
 	t.Parallel()
-	expected := firstAllowedModelForProvider("openai/")
-	require.Equal(t, expected, ResolveModel("openai/gpt-4"))
+	require.Equal(t, "openai/gpt-5.6-terra", ResolveModel("openai/gpt-4"))
 }
 
 func TestResolveModel_UnsupportedAnthropicFallback(t *testing.T) {
 	t.Parallel()
-	expected := firstAllowedModelForProvider("anthropic/")
-	require.Equal(t, expected, ResolveModel("anthropic/claude-2"))
+	require.Equal(t, "anthropic/claude-sonnet-5", ResolveModel("anthropic/claude-2"))
+}
+
+func TestResolveModel_FallbacksAreAllowlisted(t *testing.T) {
+	t.Parallel()
+	for provider, fallback := range providerFallbacks {
+		require.True(t, allowList[fallback],
+			"providerFallbacks[%q] = %q is not in the allowlist", provider, fallback)
+	}
+}
+
+func TestResolveModel_EveryProviderHasPinnedFallback(t *testing.T) {
+	t.Parallel()
+	// Every provider in the allowlist must have an explicit fallback pin, so
+	// de-listing a model can never silently route callers to whichever model
+	// sorts first alphabetically (e.g. a premium-priced one).
+	for m := range allowList {
+		provider, _, ok := strings.Cut(m, "/")
+		require.True(t, ok, "allowlist entry %q has no provider prefix", m)
+		require.NotEmpty(t, providerFallbacks[provider],
+			"provider %q (from allowlist entry %q) has no pinned fallback", provider, m)
+	}
 }
 
 func TestResolveModel_UnknownProviderReturnsEmpty(t *testing.T) {
@@ -1661,6 +1691,7 @@ func TestChatClient_GetCompletion_UnsupportedModelFallback(t *testing.T) {
 		testenv.NewLogger(t),
 		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},
+		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		&mockMessageCaptureStrategy{},
 		&mockUsageTrackingStrategy{},
 		&mockChatTitleGenerator{},
@@ -1718,6 +1749,7 @@ func TestChatClient_GetCompletion_AttributionFields(t *testing.T) {
 		testenv.NewLogger(t),
 		guardianPolicy,
 		&mockProvisioner{apiKey: "test-api-key"},
+		&PlatformKeyResolver{Provisioner: &mockProvisioner{apiKey: "test-api-key"}},
 		&mockMessageCaptureStrategy{},
 		&mockUsageTrackingStrategy{},
 		&mockChatTitleGenerator{},
@@ -1771,4 +1803,69 @@ func (t *testTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return nil, fmt.Errorf("test transport round trip: %w", err)
 	}
 	return resp, nil
+}
+
+// recordingKeyResolver captures the arguments of the last ResolveKey call.
+type recordingKeyResolver struct {
+	mu      sync.Mutex
+	orgID   string
+	project string
+	slot    billing.ModelUsageSource
+	keyType KeyType
+}
+
+var _ KeyResolver = (*recordingKeyResolver)(nil)
+
+func (r *recordingKeyResolver) ResolveKey(_ context.Context, orgID string, projectID string, slot billing.ModelUsageSource, keyType KeyType) (ResolvedKey, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.orgID, r.project, r.slot, r.keyType = orgID, projectID, slot, keyType
+	return ResolvedKey{Key: "recorded-key", Customer: false}, nil
+}
+
+func TestChatClient_InitializeRequest_KeySlotOverridesUsageSourceForResolution(t *testing.T) {
+	t.Parallel()
+
+	resolver := &recordingKeyResolver{}
+	client := &ChatClient{
+		logger:      testenv.NewLogger(t),
+		keyResolver: resolver,
+	}
+
+	projectID := uuid.New()
+	req := CompletionRequest{
+		OrgID:       "test-org",
+		ProjectID:   projectID.String(),
+		Messages:    []or.ChatMessages{CreateMessageUser("hi")},
+		UsageSource: billing.ModelUsageSourceSlack,
+		KeySlot:     billing.ModelUsageSourceAssistants,
+	}
+
+	_, err := client.initializeRequest(t.Context(), req)
+	require.NoError(t, err)
+	require.Equal(t, billing.ModelUsageSourceAssistants, resolver.slot,
+		"the key must resolve against the server-derived slot, not the client-claimable usage source")
+}
+
+func TestChatClient_InitializeRequest_EmptyKeySlotFallsBackToUsageSource(t *testing.T) {
+	t.Parallel()
+
+	resolver := &recordingKeyResolver{}
+	client := &ChatClient{
+		logger:      testenv.NewLogger(t),
+		keyResolver: resolver,
+	}
+
+	projectID := uuid.New()
+	req := CompletionRequest{
+		OrgID:       "test-org",
+		ProjectID:   projectID.String(),
+		Messages:    []or.ChatMessages{CreateMessageUser("hi")},
+		UsageSource: billing.ModelUsageSourceSlack,
+	}
+
+	_, err := client.initializeRequest(t.Context(), req)
+	require.NoError(t, err)
+	require.Equal(t, billing.ModelUsageSourceSlack, resolver.slot,
+		"trusted callers set UsageSource server-side; it doubles as the slot when KeySlot is unset")
 }

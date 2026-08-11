@@ -1,6 +1,6 @@
-import { Badge } from "@/components/ui/badge";
-import { Heading } from "@/components/ui/heading";
-import { Type } from "@/components/ui/type";
+import { Badge } from "@/components/ui/Badge";
+import { Heading } from "@/components/ui/Heading";
+import { Text } from "@/components/ui/Text";
 import type { Role } from "@gram/client/models/components/role.js";
 import {
   invalidateAllRoles,
@@ -11,15 +11,15 @@ import {
   useMembers,
 } from "@gram/client/react-query/members.js";
 import { useDeleteRoleMutation } from "@gram/client/react-query/deleteRole.js";
-import { SkeletonTable } from "@/components/ui/skeleton";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { Button } from "@/components/ui/Button";
 import {
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  Icon,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Icon } from "@/components/ui/Icon";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
@@ -28,9 +28,26 @@ import { DeleteRoleDialog } from "./DeleteRoleDialog";
 import { MemberFacepile } from "@/components/member-facepile";
 import { Ellipsis } from "lucide-react";
 import { RequireScope } from "@/components/require-scope";
+import { TableRowContextMenu } from "@/components/table-row-context-menu";
+import type { Action } from "@/components/ui/MoreActions";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import { visiblePermissionCount } from "./roleDialogState";
+
+// Single source of truth for the per-role actions: the "⋯" dropdown and the
+// row's right-click context menu both render from this list. Edit always;
+// Delete only for non-system roles.
+function roleActions(
+  role: Role,
+  { onEdit, onDelete }: { onEdit: () => void; onDelete: () => void },
+): Action[] {
+  return [
+    { label: "Edit", onClick: onEdit },
+    ...(!role.isSystem
+      ? [{ label: "Delete", destructive: true, onClick: onDelete }]
+      : []),
+  ];
+}
 
 function RoleActionsMenu({
   role,
@@ -42,6 +59,7 @@ function RoleActionsMenu({
   onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const actions = roleActions(role, { onEdit, onDelete });
 
   return (
     // Render-prop form: the dropdown content is portaled to <body>, so it
@@ -55,7 +73,7 @@ function RoleActionsMenu({
               type="button"
               disabled={disabled}
               className={cn(
-                "text-muted-foreground hover:bg-accent hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-colors",
+                "text-muted-foreground hover:bg-accent hover:text-foreground flex h-8 w-8 cursor-pointer items-center justify-center transition-colors",
                 open && "bg-accent text-foreground",
                 disabled && "cursor-not-allowed",
               )}
@@ -64,22 +82,16 @@ function RoleActionsMenu({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              onSelect={() => {
-                void setTimeout(onEdit, 0);
-              }}
-            >
-              Edit
-            </DropdownMenuItem>
-            {!role.isSystem && (
+            {actions.map((action) => (
               <DropdownMenuItem
+                key={action.label}
                 onSelect={() => {
-                  void setTimeout(onDelete, 0);
+                  void setTimeout(action.onClick, 0);
                 }}
               >
-                Delete
+                {action.label}
               </DropdownMenuItem>
-            )}
+            ))}
           </DropdownMenuContent>
         </DropdownMenu>
       )}
@@ -117,46 +129,54 @@ function RoleRow({
       photoUrl: m.photoUrl,
     }));
 
+  // Mirror the row-actions menu via the shared builder. Without org:admin the
+  // menu is empty and the row stays unwrapped.
+  const actions: Action[] = canManageRoles
+    ? roleActions(role, { onEdit, onDelete })
+    : [];
+
   return (
-    <div
-      role={canManageRoles ? "button" : undefined}
-      tabIndex={canManageRoles ? 0 : undefined}
-      onClick={canManageRoles ? onEdit : undefined}
-      onKeyDown={
-        canManageRoles
-          ? (e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onEdit();
+    <TableRowContextMenu actions={actions}>
+      <div
+        role={canManageRoles ? "button" : undefined}
+        tabIndex={canManageRoles ? 0 : undefined}
+        onClick={canManageRoles ? onEdit : undefined}
+        onKeyDown={
+          canManageRoles
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onEdit();
+                }
               }
-            }
-          : undefined
-      }
-      className={cn(
-        "border-border col-span-full grid grid-cols-subgrid items-center gap-x-6 border-b px-4 py-3 last:border-b-0",
-        canManageRoles && "hover:bg-muted/50 cursor-pointer",
-      )}
-    >
-      <div className="flex items-center gap-2">
-        <Type variant="body" className="font-medium">
-          {role.name}
-        </Type>
-        {role.isSystem && (
-          <Badge variant="outline" size="sm">
-            System
-          </Badge>
+            : undefined
+        }
+        className={cn(
+          "border-border col-span-full grid grid-cols-subgrid items-center gap-x-6 border-b px-4 py-3 last:border-b-0",
+          canManageRoles && "hover:bg-muted/50 cursor-pointer",
         )}
+      >
+        <div className="flex items-center gap-2">
+          <Text variant="body" className="font-medium">
+            {role.name}
+          </Text>
+          {role.isSystem && (
+            <Badge variant="neutral" size="sm">
+              System
+            </Badge>
+          )}
+        </div>
+        <Text variant="body" className="text-muted-foreground min-w-0 truncate">
+          {role.description}
+        </Text>
+        <Text variant="body">{visiblePermissionCount(role.grants)}</Text>
+        <MemberFacepile members={roleMembers} />
+        <div aria-hidden />
+        <div onClick={(e) => e.stopPropagation()} className="flex justify-end">
+          <RoleActionsMenu role={role} onEdit={onEdit} onDelete={onDelete} />
+        </div>
       </div>
-      <Type variant="body" className="text-muted-foreground min-w-0 truncate">
-        {role.description}
-      </Type>
-      <Type variant="body">{visiblePermissionCount(role.grants)}</Type>
-      <MemberFacepile members={roleMembers} />
-      <div aria-hidden />
-      <div onClick={(e) => e.stopPropagation()} className="flex justify-end">
-        <RoleActionsMenu role={role} onEdit={onEdit} onDelete={onDelete} />
-      </div>
-    </div>
+    </TableRowContextMenu>
   );
 }
 
@@ -182,7 +202,9 @@ export function RolesTab(): JSX.Element {
     if (editRoleId && roles.length > 0) {
       const role = roles.find((r) => r.id === editRoleId);
       if (role) {
-        setEditingRole(role);
+        // Mirror the row/menu gate (org:admin) on the deep-link path too
+        // (still consume the param so it doesn't linger in the URL).
+        if (canManageRoles) setEditingRole(role);
         setSearchParams(
           (prev) => {
             prev.delete("editRole");
@@ -192,7 +214,7 @@ export function RolesTab(): JSX.Element {
         );
       }
     }
-  }, [searchParams, roles, setSearchParams]);
+  }, [searchParams, roles, setSearchParams, canManageRoles]);
 
   const defaultRole =
     roles.find((r) => r.isSystem && r.name === "Member") ?? null;
@@ -215,9 +237,9 @@ export function RolesTab(): JSX.Element {
       <div className="mb-1 flex items-center justify-between">
         <div>
           <Heading variant="h4">Roles</Heading>
-          <Type muted small className="mt-1">
+          <Text muted small className="mt-1">
             Define roles and their associated permissions.
-          </Type>
+          </Text>
         </div>
         <RequireScope scope="org:admin" level="component">
           <Button onClick={() => setIsCreateOpen(true)}>
@@ -238,12 +260,12 @@ export function RolesTab(): JSX.Element {
         // subgrid spanning them, so cells align across rows. Description uses
         // minmax(0,1fr) (shrinks, absorbs slack); Members uses max-content
         // (sizes to the bounded facepile) — neither can overflow the table.
-        <div className="border-border mt-4 grid grid-cols-[max-content_minmax(0,24rem)_max-content_max-content_1fr_max-content] overflow-hidden rounded-lg border">
-          <div className="text-muted-foreground border-border col-span-full grid grid-cols-subgrid items-center gap-x-6 border-b px-4 py-2.5 text-sm">
-            <div>Name</div>
-            <div>Description</div>
-            <div>Permissions</div>
-            <div>Members</div>
+        <div className="border-border mt-4 grid grid-cols-[max-content_minmax(0,24rem)_max-content_max-content_1fr_max-content] overflow-hidden border">
+          <div className="border-border col-span-full grid grid-cols-subgrid items-center gap-x-6 border-b px-4 py-2.5">
+            <div className="text-eyebrow">Name</div>
+            <div className="text-eyebrow">Description</div>
+            <div className="text-eyebrow">Permissions</div>
+            <div className="text-eyebrow">Members</div>
             <div aria-hidden />
             <div className="sr-only">Actions</div>
           </div>
@@ -266,36 +288,36 @@ export function RolesTab(): JSX.Element {
         </div>
       )}
 
-      <div className="border-border/50 bg-muted/30 mt-8 rounded-md border px-4 py-3">
-        <Type variant="subheading" className="mb-4">
+      <div className="border-border/50 bg-muted/30 mt-8 border px-4 py-3">
+        <Text variant="subheading" className="mb-4">
           About System roles
-        </Type>
+        </Text>
         <div className="flex items-start gap-3 text-sm">
           <Badge
-            variant="outline"
+            variant="neutral"
             size="sm"
-            className="mt-0.5 w-16 shrink-0 justify-center bg-white dark:bg-zinc-900"
+            className="bg-surface-primary-default mt-0.5 w-16 shrink-0 [&>span]:text-center"
           >
             Member
           </Badge>
-          <Type variant="body" className="text-muted-foreground text-sm">
+          <Text variant="body" className="text-muted-foreground text-sm">
             The default role for most users. Grants read access across the
             organization and projects. Gives the ability to connect to MCP
             servers and other resources.
-          </Type>
+          </Text>
         </div>
         <div className="mt-2 flex items-start gap-3 text-sm">
           <Badge
-            variant="outline"
+            variant="neutral"
             size="sm"
-            className="mt-0.5 w-16 shrink-0 justify-center bg-white dark:bg-zinc-900"
+            className="bg-surface-primary-default mt-0.5 w-16 shrink-0 [&>span]:text-center"
           >
             Admin
           </Badge>
-          <Type variant="body" className="text-muted-foreground text-sm">
+          <Text variant="body" className="text-muted-foreground text-sm">
             Full access to all organization settings, billing, member
             management, every project, MCP server, skills and assistants.
-          </Type>
+          </Text>
         </div>
       </div>
 

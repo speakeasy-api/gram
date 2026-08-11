@@ -214,9 +214,9 @@ recovery, and ack/nack plumbing for you. See the next section.
 Subscribers run in a dedicated long-running process, **`gram streams`**
 (`server/cmd/gram/streams.go`). It is its own service — separate from the API
 server and the Temporal worker — so message consumers scale and fail
-independently. Locally it runs as the `streams` process under mprocs; start it
-with `mise run start:streams`. Adding a consumer is two steps: write a handler,
-then register it.
+independently. Locally it runs as the `streams` process under pitchfork; start
+it with `pitchfork start streams`. Adding a consumer is two steps: write a
+handler, then register it.
 
 ### Step 1 — write a handler
 

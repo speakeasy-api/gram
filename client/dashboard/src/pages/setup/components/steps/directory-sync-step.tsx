@@ -4,6 +4,7 @@ import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-que
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { toast } from "sonner";
 import { StepContainer } from "../step-container";
+import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { getServerURL } from "@/lib/utils";
 
 interface DirectorySyncStepProps {
@@ -42,8 +43,7 @@ export function DirectorySyncStep({
       },
       {
         onSuccess: (data) => {
-          window.open(data.url, "_blank", "noopener,noreferrer");
-          setPortalOpened(true);
+          if (openSafeExternalUrl(data.url)) setPortalOpened(true);
         },
       },
     );
@@ -78,7 +78,7 @@ export function DirectorySyncStep({
   return (
     <StepContainer
       icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center rounded-lg">
+        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
           <Users className="text-foreground h-6 w-6" />
         </div>
       }
@@ -93,9 +93,9 @@ export function DirectorySyncStep({
       skipLabel="Skip for now"
     >
       <div className="space-y-6">
-        <div className="bg-card border-border rounded-lg border p-4">
+        <div className="bg-card border-border border p-4">
           <div className="flex items-start gap-3">
-            <div className="bg-secondary mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded">
+            <div className="bg-secondary mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center">
               <ExternalLink className="text-muted-foreground h-4 w-4" />
             </div>
             <div>

@@ -18,13 +18,14 @@ import (
 
 // Server lists the remoteSessionIssuers service endpoint HTTP handlers.
 type Server struct {
-	Mounts                      []*MountPoint
-	DiscoverRemoteSessionIssuer http.Handler
-	CreateRemoteSessionIssuer   http.Handler
-	UpdateRemoteSessionIssuer   http.Handler
-	ListRemoteSessionIssuers    http.Handler
-	GetRemoteSessionIssuer      http.Handler
-	DeleteRemoteSessionIssuer   http.Handler
+	Mounts                             []*MountPoint
+	FetchRemoteSessionIssuerMetadata   http.Handler
+	RefreshRemoteSessionIssuerMetadata http.Handler
+	CreateRemoteSessionIssuer          http.Handler
+	UpdateRemoteSessionIssuer          http.Handler
+	ListRemoteSessionIssuers           http.Handler
+	GetRemoteSessionIssuer             http.Handler
+	DeleteRemoteSessionIssuer          http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -54,19 +55,21 @@ func New(
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
-			{"DiscoverRemoteSessionIssuer", "POST", "/rpc/remoteSessionIssuers.discover"},
+			{"FetchRemoteSessionIssuerMetadata", "POST", "/rpc/remoteSessionIssuers.fetchMetadata"},
+			{"RefreshRemoteSessionIssuerMetadata", "POST", "/rpc/remoteSessionIssuers.refreshMetadata"},
 			{"CreateRemoteSessionIssuer", "POST", "/rpc/remoteSessionIssuers.create"},
 			{"UpdateRemoteSessionIssuer", "POST", "/rpc/remoteSessionIssuers.update"},
 			{"ListRemoteSessionIssuers", "GET", "/rpc/remoteSessionIssuers.list"},
 			{"GetRemoteSessionIssuer", "GET", "/rpc/remoteSessionIssuers.get"},
 			{"DeleteRemoteSessionIssuer", "DELETE", "/rpc/remoteSessionIssuers.delete"},
 		},
-		DiscoverRemoteSessionIssuer: NewDiscoverRemoteSessionIssuerHandler(e.DiscoverRemoteSessionIssuer, mux, decoder, encoder, errhandler, formatter),
-		CreateRemoteSessionIssuer:   NewCreateRemoteSessionIssuerHandler(e.CreateRemoteSessionIssuer, mux, decoder, encoder, errhandler, formatter),
-		UpdateRemoteSessionIssuer:   NewUpdateRemoteSessionIssuerHandler(e.UpdateRemoteSessionIssuer, mux, decoder, encoder, errhandler, formatter),
-		ListRemoteSessionIssuers:    NewListRemoteSessionIssuersHandler(e.ListRemoteSessionIssuers, mux, decoder, encoder, errhandler, formatter),
-		GetRemoteSessionIssuer:      NewGetRemoteSessionIssuerHandler(e.GetRemoteSessionIssuer, mux, decoder, encoder, errhandler, formatter),
-		DeleteRemoteSessionIssuer:   NewDeleteRemoteSessionIssuerHandler(e.DeleteRemoteSessionIssuer, mux, decoder, encoder, errhandler, formatter),
+		FetchRemoteSessionIssuerMetadata:   NewFetchRemoteSessionIssuerMetadataHandler(e.FetchRemoteSessionIssuerMetadata, mux, decoder, encoder, errhandler, formatter),
+		RefreshRemoteSessionIssuerMetadata: NewRefreshRemoteSessionIssuerMetadataHandler(e.RefreshRemoteSessionIssuerMetadata, mux, decoder, encoder, errhandler, formatter),
+		CreateRemoteSessionIssuer:          NewCreateRemoteSessionIssuerHandler(e.CreateRemoteSessionIssuer, mux, decoder, encoder, errhandler, formatter),
+		UpdateRemoteSessionIssuer:          NewUpdateRemoteSessionIssuerHandler(e.UpdateRemoteSessionIssuer, mux, decoder, encoder, errhandler, formatter),
+		ListRemoteSessionIssuers:           NewListRemoteSessionIssuersHandler(e.ListRemoteSessionIssuers, mux, decoder, encoder, errhandler, formatter),
+		GetRemoteSessionIssuer:             NewGetRemoteSessionIssuerHandler(e.GetRemoteSessionIssuer, mux, decoder, encoder, errhandler, formatter),
+		DeleteRemoteSessionIssuer:          NewDeleteRemoteSessionIssuerHandler(e.DeleteRemoteSessionIssuer, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -75,7 +78,8 @@ func (s *Server) Service() string { return "remoteSessionIssuers" }
 
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
-	s.DiscoverRemoteSessionIssuer = m(s.DiscoverRemoteSessionIssuer)
+	s.FetchRemoteSessionIssuerMetadata = m(s.FetchRemoteSessionIssuerMetadata)
+	s.RefreshRemoteSessionIssuerMetadata = m(s.RefreshRemoteSessionIssuerMetadata)
 	s.CreateRemoteSessionIssuer = m(s.CreateRemoteSessionIssuer)
 	s.UpdateRemoteSessionIssuer = m(s.UpdateRemoteSessionIssuer)
 	s.ListRemoteSessionIssuers = m(s.ListRemoteSessionIssuers)
@@ -88,7 +92,8 @@ func (s *Server) MethodNames() []string { return remotesessionissuers.MethodName
 
 // Mount configures the mux to serve the remoteSessionIssuers endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
-	MountDiscoverRemoteSessionIssuerHandler(mux, h.DiscoverRemoteSessionIssuer)
+	MountFetchRemoteSessionIssuerMetadataHandler(mux, h.FetchRemoteSessionIssuerMetadata)
+	MountRefreshRemoteSessionIssuerMetadataHandler(mux, h.RefreshRemoteSessionIssuerMetadata)
 	MountCreateRemoteSessionIssuerHandler(mux, h.CreateRemoteSessionIssuer)
 	MountUpdateRemoteSessionIssuerHandler(mux, h.UpdateRemoteSessionIssuer)
 	MountListRemoteSessionIssuersHandler(mux, h.ListRemoteSessionIssuers)
@@ -101,22 +106,22 @@ func (s *Server) Mount(mux goahttp.Muxer) {
 	Mount(mux, s)
 }
 
-// MountDiscoverRemoteSessionIssuerHandler configures the mux to serve the
-// "remoteSessionIssuers" service "discoverRemoteSessionIssuer" endpoint.
-func MountDiscoverRemoteSessionIssuerHandler(mux goahttp.Muxer, h http.Handler) {
+// MountFetchRemoteSessionIssuerMetadataHandler configures the mux to serve the
+// "remoteSessionIssuers" service "fetchRemoteSessionIssuerMetadata" endpoint.
+func MountFetchRemoteSessionIssuerMetadataHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/remoteSessionIssuers.discover", f)
+	mux.Handle("POST", "/rpc/remoteSessionIssuers.fetchMetadata", f)
 }
 
-// NewDiscoverRemoteSessionIssuerHandler creates a HTTP handler which loads the
-// HTTP request and calls the "remoteSessionIssuers" service
-// "discoverRemoteSessionIssuer" endpoint.
-func NewDiscoverRemoteSessionIssuerHandler(
+// NewFetchRemoteSessionIssuerMetadataHandler creates a HTTP handler which
+// loads the HTTP request and calls the "remoteSessionIssuers" service
+// "fetchRemoteSessionIssuerMetadata" endpoint.
+func NewFetchRemoteSessionIssuerMetadataHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -125,13 +130,68 @@ func NewDiscoverRemoteSessionIssuerHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeDiscoverRemoteSessionIssuerRequest(mux, decoder)
-		encodeResponse = EncodeDiscoverRemoteSessionIssuerResponse(encoder)
-		encodeError    = EncodeDiscoverRemoteSessionIssuerError(encoder, formatter)
+		decodeRequest  = DecodeFetchRemoteSessionIssuerMetadataRequest(mux, decoder)
+		encodeResponse = EncodeFetchRemoteSessionIssuerMetadataResponse(encoder)
+		encodeError    = EncodeFetchRemoteSessionIssuerMetadataError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "discoverRemoteSessionIssuer")
+		ctx = context.WithValue(ctx, goa.MethodKey, "fetchRemoteSessionIssuerMetadata")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteSessionIssuers")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRefreshRemoteSessionIssuerMetadataHandler configures the mux to serve
+// the "remoteSessionIssuers" service "refreshRemoteSessionIssuerMetadata"
+// endpoint.
+func MountRefreshRemoteSessionIssuerMetadataHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/remoteSessionIssuers.refreshMetadata", f)
+}
+
+// NewRefreshRemoteSessionIssuerMetadataHandler creates a HTTP handler which
+// loads the HTTP request and calls the "remoteSessionIssuers" service
+// "refreshRemoteSessionIssuerMetadata" endpoint.
+func NewRefreshRemoteSessionIssuerMetadataHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRefreshRemoteSessionIssuerMetadataRequest(mux, decoder)
+		encodeResponse = EncodeRefreshRemoteSessionIssuerMetadataResponse(encoder)
+		encodeError    = EncodeRefreshRemoteSessionIssuerMetadataError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "refreshRemoteSessionIssuerMetadata")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteSessionIssuers")
 		payload, err := decodeRequest(r)
 		if err != nil {

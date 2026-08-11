@@ -212,7 +212,12 @@ const SLACK_EVENT_BINDINGS: Record<string, SlackEventBinding> = {
     bot_events: ["group_unarchive"],
     scopes: ["groups:read"],
   },
-  link_shared: { bot_events: ["link_shared"], scopes: ["links:read"] },
+  // links:write lets the trigger webhook answer link_shared with chat.unfurl,
+  // attaching the Speakeasy logo + title to dashboard links shared in Slack.
+  link_shared: {
+    bot_events: ["link_shared"],
+    scopes: ["links:read", "links:write"],
+  },
   member_joined_channel: {
     bot_events: ["member_joined_channel"],
     scopes: ["channels:read", "groups:read"],
@@ -279,6 +284,14 @@ export type SlackManifestInput = {
   webhookUrl?: string | undefined;
   extraScopes?: readonly string[];
   extraBotEvents?: readonly string[];
+  /**
+   * Hostname of the Gram dashboard (e.g. app.getgram.ai). When set alongside
+   * webhookUrl, it is registered as a Slack unfurl domain so link_shared
+   * events fire for dashboard links and the webhook can unfurl them with the
+   * Speakeasy logo. Hostnames without a dot (e.g. localhost) are skipped — Slack
+   * rejects them as unfurl domains.
+   */
+  unfurlDomain?: string | undefined;
 };
 
 export type SlackManifestResult = {
@@ -324,12 +337,20 @@ export function buildSlackManifest(
   const oauthScopes: { bot: string[]; user?: string[] } = { bot: sortedScopes };
   if (sortedUserScopes.length > 0) oauthScopes.user = sortedUserScopes;
 
+  const features: Record<string, unknown> = {
+    bot_user: { display_name: displayName, always_online: true },
+  };
+  // Unfurl domains only make sense when link_shared events can actually be
+  // delivered, which requires the event_subscriptions webhook below.
+  const unfurlDomain = input.unfurlDomain?.trim().toLowerCase();
+  if (input.webhookUrl && unfurlDomain && unfurlDomain.includes(".")) {
+    features.unfurl_domains = [unfurlDomain];
+  }
+
   const manifest: Record<string, unknown> = {
     _metadata: { major_version: 1, minor_version: 1 },
     display_information: { name: displayName },
-    features: {
-      bot_user: { display_name: displayName, always_online: true },
-    },
+    features,
     oauth_config: { scopes: oauthScopes },
   };
   if (input.webhookUrl) {

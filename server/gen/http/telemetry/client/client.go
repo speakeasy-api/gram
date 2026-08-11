@@ -57,12 +57,24 @@ type Client struct {
 	// getProjectOverview endpoint.
 	GetProjectOverviewDoer goahttp.Doer
 
+	// GetUnproxiedMcpServerUsage Doer is the HTTP client used to make requests to
+	// the getUnproxiedMcpServerUsage endpoint.
+	GetUnproxiedMcpServerUsageDoer goahttp.Doer
+
+	// GetUnproxiedMcpServerToolUsage Doer is the HTTP client used to make requests
+	// to the getUnproxiedMcpServerToolUsage endpoint.
+	GetUnproxiedMcpServerToolUsageDoer goahttp.Doer
+
+	// GetUnproxiedMcpServerUserUsage Doer is the HTTP client used to make requests
+	// to the getUnproxiedMcpServerUserUsage endpoint.
+	GetUnproxiedMcpServerUserUsageDoer goahttp.Doer
+
+	// GetUnproxiedMcpServerClientUsage Doer is the HTTP client used to make
+	// requests to the getUnproxiedMcpServerClientUsage endpoint.
+	GetUnproxiedMcpServerClientUsageDoer goahttp.Doer
+
 	// Query Doer is the HTTP client used to make requests to the query endpoint.
 	QueryDoer goahttp.Doer
-
-	// QueryRiskTokens Doer is the HTTP client used to make requests to the
-	// queryRiskTokens endpoint.
-	QueryRiskTokensDoer goahttp.Doer
 
 	// QueryTumDetails Doer is the HTTP client used to make requests to the
 	// queryTumDetails endpoint.
@@ -88,6 +100,34 @@ type Client struct {
 	// getToolUsageSummary endpoint.
 	GetToolUsageSummaryDoer goahttp.Doer
 
+	// GetToolUsageTotals Doer is the HTTP client used to make requests to the
+	// getToolUsageTotals endpoint.
+	GetToolUsageTotalsDoer goahttp.Doer
+
+	// GetToolUsageTargets Doer is the HTTP client used to make requests to the
+	// getToolUsageTargets endpoint.
+	GetToolUsageTargetsDoer goahttp.Doer
+
+	// GetToolUsageUsers Doer is the HTTP client used to make requests to the
+	// getToolUsageUsers endpoint.
+	GetToolUsageUsersDoer goahttp.Doer
+
+	// GetToolUsageTargetTimeSeries Doer is the HTTP client used to make requests
+	// to the getToolUsageTargetTimeSeries endpoint.
+	GetToolUsageTargetTimeSeriesDoer goahttp.Doer
+
+	// GetToolUsageUserTimeSeries Doer is the HTTP client used to make requests to
+	// the getToolUsageUserTimeSeries endpoint.
+	GetToolUsageUserTimeSeriesDoer goahttp.Doer
+
+	// GetToolUsageUsersByTarget Doer is the HTTP client used to make requests to
+	// the getToolUsageUsersByTarget endpoint.
+	GetToolUsageUsersByTargetDoer goahttp.Doer
+
+	// GetToolUsageTargetToolBreakdown Doer is the HTTP client used to make
+	// requests to the getToolUsageTargetToolBreakdown endpoint.
+	GetToolUsageTargetToolBreakdownDoer goahttp.Doer
+
 	// ListToolUsageTraces Doer is the HTTP client used to make requests to the
 	// listToolUsageTraces endpoint.
 	ListToolUsageTracesDoer goahttp.Doer
@@ -95,6 +135,10 @@ type Client struct {
 	// GetToolUsageFilterOptions Doer is the HTTP client used to make requests to
 	// the getToolUsageFilterOptions endpoint.
 	GetToolUsageFilterOptionsDoer goahttp.Doer
+
+	// GetMcpServerActivity Doer is the HTTP client used to make requests to the
+	// getMcpServerActivity endpoint.
+	GetMcpServerActivityDoer goahttp.Doer
 
 	// ListHooksTraces Doer is the HTTP client used to make requests to the
 	// listHooksTraces endpoint.
@@ -120,32 +164,43 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		SearchLogsDoer:                doer,
-		SearchToolCallsDoer:           doer,
-		SearchChatsDoer:               doer,
-		SearchUsersDoer:               doer,
-		CaptureEventDoer:              doer,
-		GetProjectMetricsSummaryDoer:  doer,
-		GetUserMetricsSummaryDoer:     doer,
-		GetEmployeeDataFlowGraphDoer:  doer,
-		GetObservabilityOverviewDoer:  doer,
-		GetProjectOverviewDoer:        doer,
-		QueryDoer:                     doer,
-		QueryRiskTokensDoer:           doer,
-		QueryTumDetailsDoer:           doer,
-		ListSessionsDoer:              doer,
-		ListFilterOptionsDoer:         doer,
-		ListAttributeKeysDoer:         doer,
-		GetHooksSummaryDoer:           doer,
-		GetToolUsageSummaryDoer:       doer,
-		ListToolUsageTracesDoer:       doer,
-		GetToolUsageFilterOptionsDoer: doer,
-		ListHooksTracesDoer:           doer,
-		RestoreResponseBody:           restoreBody,
-		scheme:                        scheme,
-		host:                          host,
-		decoder:                       dec,
-		encoder:                       enc,
+		SearchLogsDoer:                       doer,
+		SearchToolCallsDoer:                  doer,
+		SearchChatsDoer:                      doer,
+		SearchUsersDoer:                      doer,
+		CaptureEventDoer:                     doer,
+		GetProjectMetricsSummaryDoer:         doer,
+		GetUserMetricsSummaryDoer:            doer,
+		GetEmployeeDataFlowGraphDoer:         doer,
+		GetObservabilityOverviewDoer:         doer,
+		GetProjectOverviewDoer:               doer,
+		GetUnproxiedMcpServerUsageDoer:       doer,
+		GetUnproxiedMcpServerToolUsageDoer:   doer,
+		GetUnproxiedMcpServerUserUsageDoer:   doer,
+		GetUnproxiedMcpServerClientUsageDoer: doer,
+		QueryDoer:                            doer,
+		QueryTumDetailsDoer:                  doer,
+		ListSessionsDoer:                     doer,
+		ListFilterOptionsDoer:                doer,
+		ListAttributeKeysDoer:                doer,
+		GetHooksSummaryDoer:                  doer,
+		GetToolUsageSummaryDoer:              doer,
+		GetToolUsageTotalsDoer:               doer,
+		GetToolUsageTargetsDoer:              doer,
+		GetToolUsageUsersDoer:                doer,
+		GetToolUsageTargetTimeSeriesDoer:     doer,
+		GetToolUsageUserTimeSeriesDoer:       doer,
+		GetToolUsageUsersByTargetDoer:        doer,
+		GetToolUsageTargetToolBreakdownDoer:  doer,
+		ListToolUsageTracesDoer:              doer,
+		GetToolUsageFilterOptionsDoer:        doer,
+		GetMcpServerActivityDoer:             doer,
+		ListHooksTracesDoer:                  doer,
+		RestoreResponseBody:                  restoreBody,
+		scheme:                               scheme,
+		host:                                 host,
+		decoder:                              dec,
+		encoder:                              enc,
 	}
 }
 
@@ -389,6 +444,102 @@ func (c *Client) GetProjectOverview() goa.Endpoint {
 	}
 }
 
+// GetUnproxiedMcpServerUsage returns an endpoint that makes HTTP requests to
+// the telemetry service getUnproxiedMcpServerUsage server.
+func (c *Client) GetUnproxiedMcpServerUsage() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetUnproxiedMcpServerUsageRequest(c.encoder)
+		decodeResponse = DecodeGetUnproxiedMcpServerUsageResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetUnproxiedMcpServerUsageRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetUnproxiedMcpServerUsageDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "getUnproxiedMcpServerUsage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetUnproxiedMcpServerToolUsage returns an endpoint that makes HTTP requests
+// to the telemetry service getUnproxiedMcpServerToolUsage server.
+func (c *Client) GetUnproxiedMcpServerToolUsage() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetUnproxiedMcpServerToolUsageRequest(c.encoder)
+		decodeResponse = DecodeGetUnproxiedMcpServerToolUsageResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetUnproxiedMcpServerToolUsageRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetUnproxiedMcpServerToolUsageDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "getUnproxiedMcpServerToolUsage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetUnproxiedMcpServerUserUsage returns an endpoint that makes HTTP requests
+// to the telemetry service getUnproxiedMcpServerUserUsage server.
+func (c *Client) GetUnproxiedMcpServerUserUsage() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetUnproxiedMcpServerUserUsageRequest(c.encoder)
+		decodeResponse = DecodeGetUnproxiedMcpServerUserUsageResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetUnproxiedMcpServerUserUsageRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetUnproxiedMcpServerUserUsageDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "getUnproxiedMcpServerUserUsage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetUnproxiedMcpServerClientUsage returns an endpoint that makes HTTP
+// requests to the telemetry service getUnproxiedMcpServerClientUsage server.
+func (c *Client) GetUnproxiedMcpServerClientUsage() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetUnproxiedMcpServerClientUsageRequest(c.encoder)
+		decodeResponse = DecodeGetUnproxiedMcpServerClientUsageResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetUnproxiedMcpServerClientUsageRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetUnproxiedMcpServerClientUsageDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "getUnproxiedMcpServerClientUsage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // Query returns an endpoint that makes HTTP requests to the telemetry service
 // query server.
 func (c *Client) Query() goa.Endpoint {
@@ -408,30 +559,6 @@ func (c *Client) Query() goa.Endpoint {
 		resp, err := c.QueryDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("telemetry", "query", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// QueryRiskTokens returns an endpoint that makes HTTP requests to the
-// telemetry service queryRiskTokens server.
-func (c *Client) QueryRiskTokens() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeQueryRiskTokensRequest(c.encoder)
-		decodeResponse = DecodeQueryRiskTokensResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildQueryRiskTokensRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.QueryRiskTokensDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("telemetry", "queryRiskTokens", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -581,6 +708,174 @@ func (c *Client) GetToolUsageSummary() goa.Endpoint {
 	}
 }
 
+// GetToolUsageTotals returns an endpoint that makes HTTP requests to the
+// telemetry service getToolUsageTotals server.
+func (c *Client) GetToolUsageTotals() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetToolUsageTotalsRequest(c.encoder)
+		decodeResponse = DecodeGetToolUsageTotalsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetToolUsageTotalsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetToolUsageTotalsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "getToolUsageTotals", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetToolUsageTargets returns an endpoint that makes HTTP requests to the
+// telemetry service getToolUsageTargets server.
+func (c *Client) GetToolUsageTargets() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetToolUsageTargetsRequest(c.encoder)
+		decodeResponse = DecodeGetToolUsageTargetsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetToolUsageTargetsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetToolUsageTargetsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "getToolUsageTargets", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetToolUsageUsers returns an endpoint that makes HTTP requests to the
+// telemetry service getToolUsageUsers server.
+func (c *Client) GetToolUsageUsers() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetToolUsageUsersRequest(c.encoder)
+		decodeResponse = DecodeGetToolUsageUsersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetToolUsageUsersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetToolUsageUsersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "getToolUsageUsers", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetToolUsageTargetTimeSeries returns an endpoint that makes HTTP requests to
+// the telemetry service getToolUsageTargetTimeSeries server.
+func (c *Client) GetToolUsageTargetTimeSeries() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetToolUsageTargetTimeSeriesRequest(c.encoder)
+		decodeResponse = DecodeGetToolUsageTargetTimeSeriesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetToolUsageTargetTimeSeriesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetToolUsageTargetTimeSeriesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "getToolUsageTargetTimeSeries", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetToolUsageUserTimeSeries returns an endpoint that makes HTTP requests to
+// the telemetry service getToolUsageUserTimeSeries server.
+func (c *Client) GetToolUsageUserTimeSeries() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetToolUsageUserTimeSeriesRequest(c.encoder)
+		decodeResponse = DecodeGetToolUsageUserTimeSeriesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetToolUsageUserTimeSeriesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetToolUsageUserTimeSeriesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "getToolUsageUserTimeSeries", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetToolUsageUsersByTarget returns an endpoint that makes HTTP requests to
+// the telemetry service getToolUsageUsersByTarget server.
+func (c *Client) GetToolUsageUsersByTarget() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetToolUsageUsersByTargetRequest(c.encoder)
+		decodeResponse = DecodeGetToolUsageUsersByTargetResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetToolUsageUsersByTargetRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetToolUsageUsersByTargetDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "getToolUsageUsersByTarget", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetToolUsageTargetToolBreakdown returns an endpoint that makes HTTP requests
+// to the telemetry service getToolUsageTargetToolBreakdown server.
+func (c *Client) GetToolUsageTargetToolBreakdown() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetToolUsageTargetToolBreakdownRequest(c.encoder)
+		decodeResponse = DecodeGetToolUsageTargetToolBreakdownResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetToolUsageTargetToolBreakdownRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetToolUsageTargetToolBreakdownDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "getToolUsageTargetToolBreakdown", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // ListToolUsageTraces returns an endpoint that makes HTTP requests to the
 // telemetry service listToolUsageTraces server.
 func (c *Client) ListToolUsageTraces() goa.Endpoint {
@@ -624,6 +919,30 @@ func (c *Client) GetToolUsageFilterOptions() goa.Endpoint {
 		resp, err := c.GetToolUsageFilterOptionsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("telemetry", "getToolUsageFilterOptions", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetMcpServerActivity returns an endpoint that makes HTTP requests to the
+// telemetry service getMcpServerActivity server.
+func (c *Client) GetMcpServerActivity() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetMcpServerActivityRequest(c.encoder)
+		decodeResponse = DecodeGetMcpServerActivityResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetMcpServerActivityRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetMcpServerActivityDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("telemetry", "getMcpServerActivity", err)
 		}
 		return decodeResponse(resp)
 	}

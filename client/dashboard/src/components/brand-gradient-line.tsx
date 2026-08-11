@@ -15,7 +15,7 @@ export function BrandGradientLine({
   return (
     <div
       aria-hidden
-      className={cn("h-[3px] w-full shrink-0", className)}
+      className={cn("brand-gradient-line h-[3px] w-full shrink-0", className)}
       style={{
         background:
           "linear-gradient(90deg, var(--gradient-brand-primary-colors))",

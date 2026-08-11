@@ -2,6 +2,8 @@ package sessions
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"log/slog"
 
@@ -12,11 +14,32 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 )
+
+// sessionTokenBytes is the number of random bytes drawn for a session token.
+// 32 bytes yields 256 bits of entropy, base64url-encoded to a 43-character
+// opaque string.
+const sessionTokenBytes = 32
+
+// NewSessionID generates a cryptographically secure, opaque session token.
+//
+// Session tokens are bearer credentials: possession of the token string is
+// sufficient to authenticate as the user (validation is a bare cache lookup in
+// Authenticate). They must therefore be unguessable. A v4 UUID carries only 122
+// bits of entropy in a recognizable, structured format and is not intended as a
+// security token, so we draw 256 bits directly from crypto/rand instead.
+func NewSessionID() (string, error) {
+	b := make([]byte, sessionTokenBytes)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generate session token: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
 
 // SessionRevoker invalidates an IDP session. Implemented by the WorkOS
 // adapter so sessions.Manager doesn't depend on the WorkOS SDK directly.
@@ -91,6 +114,8 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 		ProjectSlug:           nil,
 		APIKeyScopes:          nil,
 		APIKeyID:              "",
+		APIKeyName:            "",
+		OrgWidePluginHooksKey: false,
 		IsAdmin:               false,
 	}
 
@@ -109,11 +134,15 @@ func (s *Manager) Authenticate(ctx context.Context, key string) (context.Context
 	authCtx.IsAdmin = s.identity.IsAdmin(ctx, session.UserID)
 
 	if !ok {
-		if !authCtx.IsAdmin {
+		// The shared demo org has no membership rows by design — any
+		// authenticated user may hold a session pointed at it.
+		isDemo := session.ActiveOrganizationID == constants.DemoOrganizationID
+		if !authCtx.IsAdmin && !isDemo {
 			return ctx, oops.C(oops.CodeForbidden)
 		}
-		// Admin visiting a customer org they don't belong to — fall back to
-		// cached user info for the email the auth context needs.
+		// Admin visiting a customer org they don't belong to (or any user in
+		// the demo org) — fall back to cached user info for the email the
+		// auth context needs.
 		if userInfo, _, err := s.identity.GetUserInfo(ctx, session.UserID); err == nil {
 			email = userInfo.Email
 		}

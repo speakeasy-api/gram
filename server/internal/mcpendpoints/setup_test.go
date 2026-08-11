@@ -5,8 +5,10 @@ import (
 	"log"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -37,6 +39,7 @@ import (
 	ghclient "github.com/speakeasy-api/gram/server/internal/thirdparty/github"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 var infra *testenv.Environment
@@ -82,14 +85,11 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
-
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
 	auditLogger := audit.NewLogger()
 
-	svc := mcpendpoints.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, false)
+	svc := mcpendpoints.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, false)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -121,6 +121,10 @@ func (fakeGitHubPublisher) HasDirectCollaborator(ctx context.Context, installati
 
 func (fakeGitHubPublisher) GetRepoFiles(ctx context.Context, installationID int64, owner, repo, branch string) (map[string][]byte, error) {
 	return nil, ghclient.ErrRepoNotFound
+}
+
+func (fakeGitHubPublisher) GetFileContent(ctx context.Context, installationID int64, owner, repo, branch, path string) ([]byte, error) {
+	return nil, ghclient.ErrFileNotFound
 }
 
 // newTestServiceWithGitHubPublishing is newTestService with GitHub publishing
@@ -155,7 +159,7 @@ func newTestServiceWithGitHubPublishing(t *testing.T) (context.Context, *testIns
 		Org:            "test-org",
 		InstallationID: 12345,
 	}
-	pluginPublisher := plugins.NewPublisher(logger, conn, auditLogger, ghConfig, "local", "https://app.getgram.ai")
+	pluginPublisher := plugins.NewPublisher(logger, conn, auditLogger, ghConfig, "local", "https://app.getgram.ai", f, nil)
 
 	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider,
 		background.ForDeploymentProcessing(guardianPolicy, conn, f, assetStorage, enc, funcs, mcpRegistryClient, auditLogger),
@@ -172,12 +176,9 @@ func newTestServiceWithGitHubPublishing(t *testing.T) (context.Context, *testIns
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
-	svc := mcpendpoints.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, temporalEnv, true)
+	svc := mcpendpoints.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, temporalEnv, true)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -222,10 +223,32 @@ func requireOopsCode(t *testing.T, err error, code oops.Code) {
 	require.Equal(t, code, oopsErr.Code)
 }
 
+// seedUserSessionIssuer inserts a user_session_issuers row in the given
+// project.
+func seedUserSessionIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) uuid.UUID {
+	t.Helper()
+
+	issuer, err := usersessionsrepo.New(conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID:          projectID,
+		Slug:               "usi-" + uuid.NewString()[:8],
+		AuthnChallengeMode: "interactive",
+		SessionDuration:    pgtype.Interval{Microseconds: time.Hour.Microseconds(), Days: 0, Months: 0, Valid: true},
+	})
+	require.NoError(t, err)
+
+	return issuer.ID
+}
+
 // seedMcpServer creates a remote_mcp_server + mcp_server row directly
 // through the generated repos so slug tests have a valid mcp_server_id FK
 // without depending on the mcpfrontends service package.
 func seedMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) uuid.UUID {
+	t.Helper()
+
+	return seedMcpServerWithVisibility(t, ctx, conn, projectID, "disabled")
+}
+
+func seedMcpServerWithVisibility(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, visibility string) uuid.UUID {
 	t.Helper()
 
 	server := remotemcptest.SeedServer(t, ctx, conn, remotemcprepo.CreateServerParams{
@@ -234,17 +257,20 @@ func seedMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projec
 		Url:           "https://test.example.com/mcp/" + uuid.NewString(),
 	})
 
+	issuerID := seedUserSessionIssuer(t, ctx, conn, projectID)
+
 	mcpServerID, err := uuid.NewV7()
 	require.NoError(t, err)
 	frontend, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID:                mcpServerID,
-		ProjectID:         projectID,
-		Name:              conv.ToPGText("test mcp server"),
-		Slug:              conv.ToPGText("test-mcp-server-" + uuid.NewString()),
-		EnvironmentID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		RemoteMcpServerID: uuid.NullUUID{UUID: server.ID, Valid: true},
-		ToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Visibility:        "disabled",
+		ID:                  mcpServerID,
+		ProjectID:           projectID,
+		Name:                conv.ToPGText("test mcp server"),
+		Slug:                conv.ToPGText("test-mcp-server-" + uuid.NewString()),
+		EnvironmentID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
+		RemoteMcpServerID:   uuid.NullUUID{UUID: server.ID, Valid: true},
+		ToolsetID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:          visibility,
 	})
 	require.NoError(t, err)
 
@@ -271,17 +297,20 @@ func seedOtherProjectMcpFrontend(t *testing.T, ctx context.Context, conn *pgxpoo
 		Url:           "https://other.example.com/mcp/" + uuid.NewString(),
 	})
 
+	issuerID := seedUserSessionIssuer(t, ctx, conn, otherProject.ID)
+
 	mcpServerID, err := uuid.NewV7()
 	require.NoError(t, err)
 	frontend, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID:                mcpServerID,
-		ProjectID:         otherProject.ID,
-		Name:              conv.ToPGText("test mcp server"),
-		Slug:              conv.ToPGText("test-mcp-server-" + uuid.NewString()),
-		EnvironmentID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		RemoteMcpServerID: uuid.NullUUID{UUID: server.ID, Valid: true},
-		ToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		Visibility:        "disabled",
+		ID:                  mcpServerID,
+		ProjectID:           otherProject.ID,
+		Name:                conv.ToPGText("test mcp server"),
+		Slug:                conv.ToPGText("test-mcp-server-" + uuid.NewString()),
+		EnvironmentID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
+		RemoteMcpServerID:   uuid.NullUUID{UUID: server.ID, Valid: true},
+		ToolsetID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Visibility:          "disabled",
 	})
 	require.NoError(t, err)
 

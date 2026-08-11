@@ -298,6 +298,69 @@ def test_publish_raises_publish_error(backend) -> None:
 
 
 @pytest.mark.parametrize("backend", BACKENDS)
+def test_receive_sizes_flow_control_from_concurrency_bound(backend) -> None:
+    # The concurrency bound must govern admission, not just execution: receive
+    # sizes the client's flow-control window to 2x the bound so a backlog past
+    # it stays undelivered at the broker instead of leased into the process
+    # (the library default admits ~1000).
+    client = FakeSubscriberClient([])
+    subscriber = Subscriber(
+        SubscriberHandle(cast(Any, client), "subscriptions/test"),
+        ping_pb2.Message,
+        logger=structlog.get_logger("gram_infra.test"),
+        topic_proto_name=TOPIC_PROTO,
+        subscription_proto_name=SUB_PROTO,
+    )
+
+    async def callback(message, meta) -> None:
+        return None
+
+    async def scenario() -> None:
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(lambda: subscriber.receive(callback, max_concurrency=8))
+            with anyio.fail_after(5):
+                while client.subscribe_kwargs is None:
+                    await anyio.lowlevel.checkpoint()
+            tg.cancel_scope.cancel()
+
+    anyio.run(scenario, backend=backend)
+
+    assert client.subscribe_kwargs is not None
+    assert client.subscribe_kwargs["flow_control"].max_messages == 16
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_receive_keeps_default_flow_control_when_unbounded(backend) -> None:
+    # <=0 disables the app-level bound; the client keeps its stock flow control
+    # rather than a window derived from a non-positive limit.
+    client = FakeSubscriberClient([])
+    subscriber = Subscriber(
+        SubscriberHandle(cast(Any, client), "subscriptions/test"),
+        ping_pb2.Message,
+        logger=structlog.get_logger("gram_infra.test"),
+        topic_proto_name=TOPIC_PROTO,
+        subscription_proto_name=SUB_PROTO,
+    )
+
+    async def callback(message, meta) -> None:
+        return None
+
+    async def scenario() -> None:
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(lambda: subscriber.receive(callback, max_concurrency=0))
+            with anyio.fail_after(5):
+                while client.subscribe_kwargs is None:
+                    await anyio.lowlevel.checkpoint()
+            tg.cancel_scope.cancel()
+
+    anyio.run(scenario, backend=backend)
+
+    assert client.subscribe_kwargs is not None
+    # () is subscribe's default sentinel for "stock FlowControl".
+    assert client.subscribe_kwargs["flow_control"] == ()
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
 def test_receive_acks_messages_on_backend(backend) -> None:
     messages = [
         FakeMessage(ping_pb2.Message(id="one").SerializeToString(), message_id="one"),

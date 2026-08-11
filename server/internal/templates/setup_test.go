@@ -69,7 +69,7 @@ func newTestTemplateService(t *testing.T) (context.Context, *testInstance) {
 
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
 	toolsetsSvc := &toolsetsServiceStub{
 		InvalidateCacheByToolFunc: func(ctx context.Context, toolURN urn.Tool, projectID uuid.UUID) error {
@@ -77,10 +77,8 @@ func newTestTemplateService(t *testing.T) (context.Context, *testInstance) {
 			return nil
 		},
 	}
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	auditLogger := audit.NewLogger()
 	svc := templates.NewService(logger, tracerProvider, conn, sessionManager, toolsetsSvc, authzEngine, auditLogger)
 

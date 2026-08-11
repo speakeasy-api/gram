@@ -18,6 +18,10 @@ export type CreateRemoteSessionIssuerForm = {
    */
   clientIdMetadataDocumentSupported?: boolean | undefined;
   /**
+   * URL of OAuth client setup documentation shown when creating clients. Manually set, not RFC 8414; rejected unless an absolute http(s) URL.
+   */
+  clientSetupDocumentationUrl?: string | undefined;
+  /**
    * Grant types advertised by the issuer.
    */
   grantTypesSupported?: Array<string> | undefined;
@@ -87,6 +91,7 @@ export type CreateRemoteSessionIssuerForm = {
 export type CreateRemoteSessionIssuerForm$Outbound = {
   authorization_endpoint?: string | undefined;
   client_id_metadata_document_supported?: boolean | undefined;
+  client_setup_documentation_url?: string | undefined;
   grant_types_supported?: Array<string> | undefined;
   issuer: string;
   jwks_uri?: string | undefined;
@@ -113,6 +118,7 @@ export const CreateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
   z.object({
     authorizationEndpoint: z.optional(z.string()),
     clientIdMetadataDocumentSupported: z.optional(z.boolean()),
+    clientSetupDocumentationUrl: z.optional(z.string()),
     grantTypesSupported: z.optional(z.array(z.string())),
     issuer: z.string(),
     jwksUri: z.optional(z.string()),
@@ -135,6 +141,7 @@ export const CreateRemoteSessionIssuerForm$outboundSchema: z.ZodMiniType<
       authorizationEndpoint: "authorization_endpoint",
       clientIdMetadataDocumentSupported:
         "client_id_metadata_document_supported",
+      clientSetupDocumentationUrl: "client_setup_documentation_url",
       grantTypesSupported: "grant_types_supported",
       jwksUri: "jwks_uri",
       logoAssetId: "logo_asset_id",

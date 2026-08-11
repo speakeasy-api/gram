@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
+
 #MISE description="Start the dev-idp operator dashboard"
+#MISE hide=true
 
 set -e
 

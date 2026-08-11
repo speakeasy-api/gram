@@ -283,4 +283,120 @@ describe("fromGram", () => {
       expect(JSON.stringify(result.content)).not.toContain("stack");
     });
   });
+
+  describe("clientInfo on ToolContext", () => {
+    // A tool that echoes back whatever `ctx.clientInfo` it was given.
+    const echoClientInfo = new Gram().tool({
+      name: "whoami",
+      description: "Echoes the calling client's info",
+      inputSchema: {},
+      async execute(ctx) {
+        return ctx.json({ clientInfo: ctx.clientInfo ?? null });
+      },
+    });
+
+    function parseClientInfo(result: Awaited<ReturnType<Client["callTool"]>>) {
+      const content = result.content as Array<{ type: string; text: string }>;
+      return JSON.parse(content[0]!.text).clientInfo;
+    }
+
+    test("populates ctx.clientInfo from the initialize handshake", async () => {
+      const client = await setup(echoClientInfo);
+      const result = await client.callTool({ name: "whoami", arguments: {} });
+
+      // setup() connects a Client named "test-client"; that identity is what
+      // the server captures during the MCP initialize handshake.
+      expect(parseClientInfo(result)).toEqual({
+        name: "test-client",
+        version: "0.0.0",
+      });
+    });
+
+    test("prefers per-call _meta clientInfo over the handshake identity", async () => {
+      const client = await setup(echoClientInfo);
+      const result = await client.callTool({
+        name: "whoami",
+        arguments: {},
+        _meta: {
+          "io.modelcontextprotocol/clientInfo": {
+            name: "vega",
+            version: "2.1.0",
+          },
+        },
+      });
+
+      expect(parseClientInfo(result)).toEqual({
+        name: "vega",
+        version: "2.1.0",
+      });
+    });
+
+    test("ignores a malformed _meta clientInfo and falls back to the handshake", async () => {
+      const client = await setup(echoClientInfo);
+      const result = await client.callTool({
+        name: "whoami",
+        arguments: {},
+        // Missing `name` → not a usable clientInfo; fall back to the handshake.
+        _meta: { "io.modelcontextprotocol/clientInfo": { version: "9.9.9" } },
+      });
+
+      expect(parseClientInfo(result)).toEqual({
+        name: "test-client",
+        version: "0.0.0",
+      });
+    });
+  });
+
+  describe("oauthClientId on ToolContext", () => {
+    // A tool that echoes the verified caller identity and the raw _meta block.
+    const echoCaller = new Gram().tool({
+      name: "whoami",
+      description: "Echoes the verified caller identity",
+      inputSchema: {},
+      async execute(ctx) {
+        return ctx.json({
+          oauthClientId: ctx.oauthClientId ?? null,
+          meta: ctx.meta ?? null,
+        });
+      },
+    });
+
+    function parseCaller(result: Awaited<ReturnType<Client["callTool"]>>) {
+      const content = result.content as Array<{ type: string; text: string }>;
+      return JSON.parse(content[0]!.text);
+    }
+
+    test("populates ctx.oauthClientId from _meta", async () => {
+      const client = await setup(echoCaller);
+      const result = await client.callTool({
+        name: "whoami",
+        arguments: {},
+        _meta: { "gram.ai/oauth-client-id": "client-abc" },
+      });
+
+      expect(parseCaller(result).oauthClientId).toBe("client-abc");
+    });
+
+    test("leaves ctx.oauthClientId undefined for an unauthenticated call", async () => {
+      const client = await setup(echoCaller);
+      const result = await client.callTool({ name: "whoami", arguments: {} });
+
+      expect(parseCaller(result).oauthClientId).toBeNull();
+    });
+
+    // ctx.meta is the escape hatch for keys this SDK does not model yet, so a
+    // tool can read them without waiting for an SDK release.
+    test("exposes the raw _meta block", async () => {
+      const client = await setup(echoCaller);
+      const result = await client.callTool({
+        name: "whoami",
+        arguments: {},
+        _meta: { "example.com/experiment": "b" },
+      });
+
+      expect(parseCaller(result).meta).toMatchObject({
+        "example.com/experiment": "b",
+      });
+    });
+  });
 });

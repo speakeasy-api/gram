@@ -19,6 +19,11 @@ PROJECT_SLUG: Final = "gram.project.slug"
 STREAMS_PROCESSOR_ID: Final = "gram.streams.processor_id"
 TOPIC_PROTO_NAME: Final = "gram.topic.proto_name"
 SUBSCRIPTION_PROTO_NAME: Final = "gram.subscription.proto_name"
+# Character length of content scanned for PII. A size (never content) is safe to
+# record; as a span attribute it carries the exact per-message value, so trace
+# analytics can correlate duration against input size without the bounded
+# bucketing the metric tags use.
+RISK_CONTENT_CHARS: Final = "gram.risk.content_chars"
 
 ERROR_ID: Final = "error.id"
 ERROR_MESSAGE: Final = "error.message"

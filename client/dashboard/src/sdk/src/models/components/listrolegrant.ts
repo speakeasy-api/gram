@@ -32,9 +32,15 @@ export const ListRoleGrantScope = {
   EnvironmentBlockedRead: "environment:blocked_read",
   EnvironmentWrite: "environment:write",
   EnvironmentBlockedWrite: "environment:blocked_write",
+  SkillRead: "skill:read",
+  SkillBlockedRead: "skill:blocked_read",
+  SkillWrite: "skill:write",
+  SkillBlockedWrite: "skill:blocked_write",
   RiskPolicyEvaluate: "risk_policy:evaluate",
   RiskPolicyBypass: "risk_policy:bypass",
+  RiskPolicyBlock: "risk_policy:block",
   ChatRead: "chat:read",
+  ChatWrite: "chat:write",
 } as const;
 /**
  * The scope slug this grant applies to.
@@ -60,9 +66,15 @@ export const SubScopes = {
   EnvironmentBlockedRead: "environment:blocked_read",
   EnvironmentWrite: "environment:write",
   EnvironmentBlockedWrite: "environment:blocked_write",
+  SkillRead: "skill:read",
+  SkillBlockedRead: "skill:blocked_read",
+  SkillWrite: "skill:write",
+  SkillBlockedWrite: "skill:blocked_write",
   RiskPolicyEvaluate: "risk_policy:evaluate",
   RiskPolicyBypass: "risk_policy:bypass",
+  RiskPolicyBlock: "risk_policy:block",
   ChatRead: "chat:read",
+  ChatWrite: "chat:write",
 } as const;
 export type SubScopes = ClosedEnum<typeof SubScopes>;
 

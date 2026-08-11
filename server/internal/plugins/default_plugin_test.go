@@ -1,6 +1,7 @@
 package plugins_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -11,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -30,6 +32,47 @@ func TestEnsureDefaultPlugin_CreatesWhenMissing(t *testing.T) {
 	require.Equal(t, "Default", result.Plugin.Name)
 	require.Equal(t, "default", result.Plugin.Slug)
 	require.Equal(t, pgtype.Bool{Bool: true, Valid: true}, result.Plugin.IsDefault)
+
+	// A freshly-created Default plugin in the org's default project (the test's
+	// only, and thus oldest, project) is assigned to the org wildcard so it
+	// delivers to everyone under agent.getPlugins' per-principal scoping.
+	assignments, err := pluginsrepo.New(tx).ListPluginAssignments(ctx, result.Plugin.ID)
+	require.NoError(t, err)
+	require.Len(t, assignments, 1)
+	require.Equal(t, "*", assignments[0].PrincipalUrn)
+}
+
+// TestEnsureDefaultPlugin_NonDefaultProjectSeedsNoAudience pins that only the
+// org's default project gets the org-wide audience: a Default plugin created in
+// a second (non-default) project starts with no assignments, so enabling a
+// server there doesn't auto-broadcast to the whole org.
+func TestEnsureDefaultPlugin_NonDefaultProjectSeedsNoAudience(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	// A second project created after the default one — its uuidv7 id sorts after
+	// the org's original project, so it is not the default (oldest) project.
+	other, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "second-project",
+		Slug:           "second-project",
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+
+	result, err := plugins.EnsureDefaultPlugin(ctx, tx, authCtx.ActiveOrganizationID, other.ID)
+	require.NoError(t, err)
+	require.True(t, result.Created)
+
+	assignments, err := pluginsrepo.New(tx).ListPluginAssignments(ctx, result.Plugin.ID)
+	require.NoError(t, err)
+	require.Empty(t, assignments,
+		"a non-default project's Default plugin starts with no audience")
 }
 
 func TestEnsureDefaultPlugin_ReturnsExistingWhenPresent(t *testing.T) {
@@ -88,7 +131,7 @@ func TestEnsureDefaultPlugin_PromotesExistingDefaultSlugPlugin(t *testing.T) {
 	require.Equal(t, pgtype.Bool{Bool: true, Valid: true}, result.Plugin.IsDefault)
 }
 
-func TestAttachToDefaultPlugin_DisplayNameCollision_ReturnsError(t *testing.T) {
+func TestAttachToDefaultPlugin_DisplayNameCollision_Uniquifies(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestPluginsService(t)
@@ -103,6 +146,7 @@ func TestAttachToDefaultPlugin_DisplayNameCollision_ReturnsError(t *testing.T) {
 	result, err := plugins.AttachToDefaultPlugin(ctx, tx1, plugins.AttachToDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
+		ToolsetID:      uuid.NullUUID{},
 		McpServerID:    uuid.NullUUID{UUID: first.id, Valid: true},
 		DisplayName:    "Attach Test Server",
 	})
@@ -110,22 +154,90 @@ func TestAttachToDefaultPlugin_DisplayNameCollision_ReturnsError(t *testing.T) {
 	require.NotNil(t, result)
 	require.NoError(t, tx1.Commit(ctx))
 
-	// A different mcp_server that happens to derive the same display name
-	// must not be silently dropped — the display_name unique violation is a
-	// different failure mode than "already attached" and must surface.
+	// A different mcp_server deriving the same display name must neither be
+	// silently dropped nor block the attach (the caller's triggering action —
+	// e.g. enabling the server — would fail with it): the name is uniquified
+	// with the backend-id suffix instead.
 	second := createTestMcpServer(t, ctx, ti.conn, "Attach Test Server 2", mcpservers.VisibilityPublic)
 	tx2 := testenv.BeginTx(t, ctx, ti.conn)
-	_, err = plugins.AttachToDefaultPlugin(ctx, tx2, plugins.AttachToDefaultPluginParams{
+	attached, err := plugins.AttachToDefaultPlugin(ctx, tx2, plugins.AttachToDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
+		ToolsetID:      uuid.NullUUID{},
 		McpServerID:    uuid.NullUUID{UUID: second.id, Valid: true},
 		DisplayName:    "Attach Test Server",
 	})
-	require.Error(t, err)
+	require.NoError(t, err)
+	require.NotNil(t, attached)
+	require.NoError(t, tx2.Commit(ctx))
+
+	idStr := second.id.String()
+	require.Equal(t, fmt.Sprintf("Attach Test Server (%s)", idStr[len(idStr)-4:]), attached.Server.DisplayName)
 
 	servers, err := queries.ListPluginServers(ctx, result.PluginID)
 	require.NoError(t, err)
-	require.Len(t, servers, 1, "the colliding server must not have been attached")
+	require.Len(t, servers, 2, "both same-named servers must be attached")
+}
+
+func TestAttachToDefaultPlugin_SuffixedNameAlsoTaken_ProbesLadder(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	queries := pluginsrepo.New(ti.conn)
+
+	first := createTestMcpServer(t, ctx, ti.conn, "Ladder Test Server", mcpservers.VisibilityPublic)
+	tx1 := testenv.BeginTx(t, ctx, ti.conn)
+	result, err := plugins.AttachToDefaultPlugin(ctx, tx1, plugins.AttachToDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		ToolsetID:      uuid.NullUUID{},
+		McpServerID:    uuid.NullUUID{UUID: first.id, Valid: true},
+		DisplayName:    "Ladder Test Server",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NoError(t, tx1.Commit(ctx))
+
+	// Occupy the backend-id-suffixed candidate too, the way a user renaming a
+	// plugin server (UpdatePluginServer) can. A single derived candidate is
+	// therefore not enough: the attach must keep probing rather than trip the
+	// unique index and fail the caller's triggering action.
+	second := createTestMcpServer(t, ctx, ti.conn, "Ladder Test Server 2", mcpservers.VisibilityPublic)
+	idStr := second.id.String()
+	suffix := idStr[len(idStr)-4:]
+
+	squatter := createTestToolset(t, ctx, ti.conn, "ladder-squatter")
+	_, err = queries.AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
+		PluginID:    result.PluginID,
+		ToolsetID:   uuid.NullUUID{UUID: squatter.ID, Valid: true},
+		McpServerID: uuid.NullUUID{},
+		DisplayName: fmt.Sprintf("Ladder Test Server (%s)", suffix),
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	tx2 := testenv.BeginTx(t, ctx, ti.conn)
+	attached, err := plugins.AttachToDefaultPlugin(ctx, tx2, plugins.AttachToDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		ToolsetID:      uuid.NullUUID{},
+		McpServerID:    uuid.NullUUID{UUID: second.id, Valid: true},
+		DisplayName:    "Ladder Test Server",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, attached)
+	require.NoError(t, tx2.Commit(ctx))
+
+	require.Equal(t, fmt.Sprintf("Ladder Test Server (%s 2)", suffix), attached.Server.DisplayName)
+
+	servers, err := queries.ListPluginServers(ctx, result.PluginID)
+	require.NoError(t, err)
+	require.Len(t, servers, 3, "the attach must succeed alongside both occupied names")
 }
 
 func TestListPluginPublishCandidates_IncludesNeverPublishedDefaultPlugin(t *testing.T) {

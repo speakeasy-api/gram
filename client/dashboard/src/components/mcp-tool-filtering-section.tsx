@@ -1,5 +1,5 @@
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
+import { Heading } from "@/components/ui/Heading";
 import { toolVariationsGroupDisplayName } from "@/lib/toolVariationGroups";
 import { cn } from "@/lib/utils";
 import {
@@ -8,8 +8,8 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { Text } from "@/components/ui/Text";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useCreateGlobalToolVariationGroupMutation } from "@gram/client/react-query/createGlobalToolVariationGroup.js";
 import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
@@ -21,7 +21,7 @@ import {
 } from "@gram/client/react-query/toolVariationGroups.js";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -99,7 +99,6 @@ export function MCPToolFilteringSection({
           remoteMcpServerId: server.remoteMcpServerId ?? undefined,
           toolsetId: server.toolsetId ?? undefined,
           environmentId: server.environmentId ?? undefined,
-          userSessionIssuerId: server.userSessionIssuerId ?? undefined,
           visibility: server.visibility,
           toolVariationsGroupId: groupId ?? undefined,
         },
@@ -136,12 +135,12 @@ export function MCPToolFilteringSection({
     <div className={cn("space-y-4", className)}>
       <div>
         <Heading variant="h4">Enable Tool Filtering</Heading>
-        <Type muted small className="mt-2 max-w-2xl">
+        <Text muted small className="mt-2 max-w-2xl">
           Enable tool filtering based on underlying tool tags. All tools are
           returned by default unless enabled and{" "}
           <code className="font-mono">tags</code> URL query parameter is
           provided.
-        </Type>
+        </Text>
       </div>
 
       {groups.length === 0 ? (
@@ -152,16 +151,14 @@ export function MCPToolFilteringSection({
             disabled={isSaving || groupsQuery.isLoading}
             onClick={() => createGroup.mutate({})}
           >
-            {createGroup.isPending ? (
-              <>
-                <Button.LeftIcon>
-                  <Loader2 className="size-4 animate-spin" />
-                </Button.LeftIcon>
-                <Button.Text>Enabling</Button.Text>
-              </>
-            ) : (
-              <Button.Text>Enable</Button.Text>
+            {createGroup.isPending && (
+              <Button.LeftIcon>
+                <Loader2 className="size-4 animate-spin" />
+              </Button.LeftIcon>
             )}
+            <Button.Text>
+              {createGroup.isPending ? "Enabling" : "Enable"}
+            </Button.Text>
           </Button>
         </RequireScope>
       ) : (

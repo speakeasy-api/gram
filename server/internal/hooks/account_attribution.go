@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -52,15 +53,17 @@ func classifyAccountType(emailResolvedUserID string) string {
 // bridge (device_owners). It mutates meta in place: AccountType, UserAccountID,
 // and — for a personal account attributed through the device bridge — UserID.
 //
-// It is a no-op when the session carries no provider account identity (e.g. an
-// older client that does not emit user.account_uuid), since there is no entity
-// to key on. All failures are returned to the caller, which logs and continues:
-// account attribution must never block session capture or enforcement.
+// Classification always runs and always stamps AccountType, and the device
+// bridge (keyed on the per-device id) is taught/consulted whenever a DeviceID
+// is present — both including sessions that carry no provider account UUID (a
+// company-credential session — see classifyAccount). The user_accounts entity
+// keys on that UUID, so it is skipped when the UUID is absent: there is no
+// account entity to persist. Billing mode normally rides on the entity, with
+// one exception: openai sessions never carry a UUID, so their org-level
+// billing mode resolves without one (team-gated — see providerOrgBillingMode).
+// All failures are returned to the caller, which logs and continues: account
+// attribution must never block session capture or enforcement.
 func (s *Service) attributeSession(ctx context.Context, meta *SessionMetadata) error {
-	if meta.ExternalAccountUUID == "" {
-		return nil
-	}
-
 	// Classify before consulting the device bridge: meta.UserID at this point
 	// reflects email resolution only.
 	accountType, err := s.classifyAccount(ctx, meta)
@@ -69,10 +72,15 @@ func (s *Service) attributeSession(ctx context.Context, meta *SessionMetadata) e
 	}
 	meta.AccountType = accountType
 
-	// Teach and resolve the device bridge. A team session (known employee)
-	// teaches device -> employee; a personal session (empty UserID) adopts the
-	// employee already learned for the device, if any. COALESCE in the query
-	// keeps a known owner when this session has none.
+	// Teach and resolve the device bridge. A session with a resolved employee
+	// (work email resolved to an org member) teaches device -> employee; a
+	// session with no resolved employee adopts the one already learned for the
+	// device, if any. COALESCE in the query keeps a known owner when this
+	// session has none. The bridge keys on the per-device id, not the account
+	// UUID, so company-credential sessions participate fully: at a gateway-only
+	// org they are the ONLY sessions that can teach the bridge, and without that
+	// teaching a personal account later seen on the same device could never be
+	// attributed to its employee.
 	if meta.DeviceID != "" {
 		owner, err := s.repo.UpsertDeviceOwner(ctx, repo.UpsertDeviceOwnerParams{
 			OrganizationID: meta.GramOrgID,
@@ -86,6 +94,28 @@ func (s *Service) attributeSession(ctx context.Context, meta *SessionMetadata) e
 		if meta.UserID == "" {
 			meta.UserID = conv.FromPGTextOrEmpty[string](owner)
 		}
+	}
+
+	// The user_accounts entity keys on the provider account UUID
+	// (user_accounts.external_account_uuid is NOT NULL and is the entity
+	// key). A session authenticated by company credentials (an API key, a
+	// gateway/proxy, Bedrock, or Vertex) carries no such UUID, so there is no
+	// account entity to persist — the account_type stamped above is the signal
+	// the cost surfaces consume. Stop here for these sessions, after the one
+	// piece of the cascade that does not need an entity: openai billing mode.
+	if meta.ExternalAccountUUID == "" {
+		// Codex sessions NEVER carry an account UUID, so their billing mode
+		// must resolve here rather than after the entity upsert. The
+		// team-only gate lives in providerOrgBillingMode so it also holds on
+		// the entity path should an openai session ever carry a UUID.
+		if meta.Provider == providerOpenAI {
+			billingMode, err := s.resolveBillingMode(ctx, meta, "")
+			if err != nil {
+				return fmt.Errorf("resolve billing mode: %w", err)
+			}
+			meta.BillingMode = billingMode
+		}
+		return nil
 	}
 
 	account, err := s.repo.UpsertUserAccount(ctx, repo.UpsertUserAccountParams{
@@ -116,12 +146,15 @@ func (s *Service) attributeSession(ctx context.Context, meta *SessionMetadata) e
 // identifier used on ai_integration_configs, where org-level billing modes are
 // declared. Claude sessions tag provider "anthropic", but its integration config
 // (the Compliance API integration that carries the external org) is stored under
-// "anthropic_compliance". Providers without a distinct config identifier map to
-// themselves.
+// "anthropic_compliance"; Codex sessions tag "openai" and their config lives
+// under "codex_compliance". Providers without a distinct config identifier map
+// to themselves.
 func providerBillingConfigProvider(provider string) string {
 	switch provider {
 	case providerAnthropic:
 		return "anthropic_compliance"
+	case providerOpenAI:
+		return "codex_compliance"
 	default:
 		return provider
 	}
@@ -138,18 +171,44 @@ func (s *Service) resolveBillingMode(ctx context.Context, meta *SessionMetadata,
 		return accountOverride, nil
 	}
 
-	orgMode, err := s.repo.GetProviderOrgBillingMode(ctx, repo.GetProviderOrgBillingModeParams{
-		OrganizationID: meta.GramOrgID,
-		Provider:       providerBillingConfigProvider(meta.Provider),
-		ExternalOrgID:  conv.ToPGTextEmpty(meta.ExternalOrgID),
-	})
+	orgMode, err := s.providerOrgBillingMode(ctx, meta)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", nil
 		}
-		return "", fmt.Errorf("get provider org billing mode: %w", err)
+		return "", err
 	}
 	return conv.FromPGTextOrEmpty[string](orgMode), nil
+}
+
+// providerOrgBillingMode resolves the org-level tier of the cascade. Sessions
+// that carry an external org id go through the org-matched lookup. Codex
+// sessions carry no org identity at any layer while codex_compliance configs
+// always pin one, so for openai with no session org the provider-wide
+// declaration applies instead — gated on team: the config describes the
+// company's OpenAI org, and only a team-classified session (resolved work
+// email) is presumed to run under it. A personal Codex session must never
+// inherit the company's declared mode, on any path.
+//
+// The gate reads meta.AccountType, so callers must run classification first —
+// attributeSession stamps AccountType before either resolveBillingMode call
+// site; a pre-classification caller would silently resolve empty for openai.
+func (s *Service) providerOrgBillingMode(ctx context.Context, meta *SessionMetadata) (pgtype.Text, error) {
+	matchAnyOrg := meta.Provider == providerOpenAI && meta.ExternalOrgID == ""
+	if matchAnyOrg && meta.AccountType != accountTypeTeam {
+		var none pgtype.Text
+		return none, nil
+	}
+	mode, err := s.repo.GetProviderOrgBillingMode(ctx, repo.GetProviderOrgBillingModeParams{
+		OrganizationID: meta.GramOrgID,
+		Provider:       providerBillingConfigProvider(meta.Provider),
+		MatchAnyOrg:    matchAnyOrg,
+		ExternalOrgID:  conv.ToPGTextEmpty(meta.ExternalOrgID),
+	})
+	if err != nil {
+		return pgtype.Text{}, fmt.Errorf("get provider org billing mode: %w", err)
+	}
+	return mode, nil
 }
 
 // classifyAccount determines whether the session's account is team or personal.
@@ -179,6 +238,33 @@ func (s *Service) resolveBillingMode(ctx context.Context, meta *SessionMetadata,
 // this deterministically needs an explicit admin-declared enterprise org id (a
 // separate follow-up); accepted because Gram is enterprise software.
 func (s *Service) classifyAccount(ctx context.Context, meta *SessionMetadata) (string, error) {
+	// A Claude session with no provider account UUID is authenticated by company
+	// credentials — an API key, a gateway/proxy, Bedrock, or Vertex — not a
+	// personal Claude subscription. A personal Max/Pro account signs in via OAuth
+	// and so always emits user.account_uuid (and organization.id); their absence
+	// means no personal account is behind the session, so it is a company (team)
+	// account. This holds even when the work email has not been provisioned in
+	// Gram yet — the whole population an email- or org-based signal would miss for
+	// an org that runs Claude Code entirely through a corporate gateway.
+	//
+	// KNOWN RESIDUAL GAP: user.account_uuid rides only on some event types, so a
+	// personal session whose first OTEL batch happens to carry none is classified
+	// team for that batch; when the UUID arrives, sessionEnrichesAttribution
+	// re-attributes it personal, but the first batch's rows keep the team stamp
+	// (telemetry rows are stamped at write). Likewise a client too old to emit
+	// user.account_uuid at all is classified team for personal sessions too.
+	// Accepted: both slices are small and the prior behavior — an entire
+	// company-credential org parked under an unclassified account type — was the
+	// far larger distortion.
+	//
+	// The signal is Anthropic-specific: Codex emits no account identity at any
+	// layer (no UUID, org id, or auth mode — DNO-734), so for other providers a
+	// missing UUID says nothing about how the session authenticated and
+	// classification falls through to email resolution below.
+	if meta.ExternalAccountUUID == "" && meta.Provider == providerAnthropic {
+		return accountTypeTeam, nil
+	}
+
 	if meta.ExternalOrgID != "" {
 		shared, err := s.isSharedEnterpriseOrg(ctx, meta)
 		if err != nil {
@@ -263,6 +349,14 @@ func stampAccountAttribution(attrs map[attr.Key]any, meta SessionMetadata) {
 	}
 	if meta.DeviceID != "" {
 		attrs[attr.DeviceIDKey] = meta.DeviceID
+	}
+	// The device hostname the hooks reported for this session. The row's own
+	// report wins: hook rows carry the attribute from their payload already,
+	// so only fill it for rows without one (the Claude OTEL stream).
+	if meta.Hostname != "" {
+		if _, ok := attrs[attr.HookHostnameKey]; !ok {
+			attrs[attr.HookHostnameKey] = meta.Hostname
+		}
 	}
 	// The account's own email, distinct from user.email (the authenticated
 	// actor). Sourced only from ObservedUserEmail — never UserEmail, which on

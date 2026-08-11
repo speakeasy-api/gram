@@ -63,7 +63,7 @@ func newTestHarness(t *testing.T) (*testHarness, context.Context) {
 
 	mem := &fakeMemory{listFn: nil, getFn: nil, deleteFn: nil}
 
-	authzEngine := authz.NewEngine(logger, nil, nil, authztest.RBACAlwaysDisabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	svc := &Service{
 		tracer: tracerProvider.Tracer("test"),
@@ -100,7 +100,7 @@ func newTestHarness(t *testing.T) (*testHarness, context.Context) {
 		mem:       mem,
 		projectID: projectID,
 		orgID:     orgID,
-	}, ctx
+	}, authztest.WithAdminGrants(ctx)
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {
@@ -134,7 +134,7 @@ func TestListAssistantMemories_RBACDenied(t *testing.T) {
 
 	h, ctx := newTestHarness(t)
 	logger := testenv.NewLogger(t)
-	h.svc.authz = authz.NewEngine(logger, nil, nil, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	h.svc.authz = authz.NewEngine(logger, nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	ctx = authztest.WithExactGrants(t, ctx)
 
 	_, err := h.svc.ListAssistantMemories(ctx, &gen.ListAssistantMemoriesPayload{
@@ -303,7 +303,7 @@ func TestGetAssistantMemory_RBACDenied(t *testing.T) {
 
 	h, ctx := newTestHarness(t)
 	logger := testenv.NewLogger(t)
-	h.svc.authz = authz.NewEngine(logger, nil, nil, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	h.svc.authz = authz.NewEngine(logger, nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	ctx = authztest.WithExactGrants(t, ctx)
 
 	_, err := h.svc.GetAssistantMemory(ctx, &gen.GetAssistantMemoryPayload{
@@ -374,7 +374,7 @@ func TestDeleteAssistantMemory_RBACDenied(t *testing.T) {
 
 	h, ctx := newTestHarness(t)
 	logger := testenv.NewLogger(t)
-	h.svc.authz = authz.NewEngine(logger, nil, nil, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	h.svc.authz = authz.NewEngine(logger, nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectRead, h.projectID.String()))
 

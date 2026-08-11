@@ -1,17 +1,23 @@
 import {
-  McpSidebarInfoLabel,
-  McpSidebarNavShell,
-  type McpSidebarNavItem,
-} from "@/components/mcp-sidebar-nav-shell";
+  DetailSidebarInfoLabel,
+  DetailSidebarNav,
+  type DetailSidebarNavItem,
+} from "@/components/detail/detail-sidebar-nav";
 import {
   McpServerReadinessBar,
   type ReadinessCheck,
 } from "@/components/mcp-server-readiness-bar";
-import { CopyButton } from "@/components/ui/copy-button";
-import { Type } from "@/components/ui/type";
-import { useTelemetry } from "@/contexts/Telemetry";
-import { getMcpServerArgs, remoteMcpRouteParam } from "@/lib/sources";
+import { SetupGuideCard } from "@/components/setup-guide/SetupGuideCard";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { Text } from "@/components/ui/Text";
+import {
+  getMcpServerArgs,
+  remoteMcpRouteParam,
+  tunneledMcpRouteParam,
+  unproxiedMcpRouteParam,
+} from "@/lib/sources";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
+import { useRBAC } from "@/hooks/useRBAC";
 import { MCPServerStatusDropdown } from "@/pages/mcp/x/MCPServerDetails";
 import {
   activeTabFromPath,
@@ -22,6 +28,8 @@ import { useAllRemoteSessionClients } from "@/pages/mcp/x/tabs/settings/sections
 import { MCP_SERVER_URL_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/ServerUrlSection";
 import { useRoutes } from "@/routes";
 import { useGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
+import { useGetUnproxiedMcpServer } from "@gram/client/react-query/getUnproxiedMcpServer.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { usePlugins } from "@gram/client/react-query/plugins";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
@@ -29,6 +37,7 @@ import {
   ArrowRight,
   ExternalLink,
   LayoutDashboard,
+  Plug,
   Settings as SettingsIcon,
   Users,
   Wrench,
@@ -38,10 +47,9 @@ import { useLocation, useParams } from "react-router";
 
 export function McpServerXSidebarNav(): React.JSX.Element | null {
   const routes = useRoutes();
-  const telemetry = useTelemetry();
   const location = useLocation();
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
-  const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
+  const { hasScope } = useRBAC();
 
   const idOrSlug = mcpServerSlug ?? "";
   const { data: mcpServer } = useGetMcpServer(
@@ -60,13 +68,23 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     isLoadingEndpoints,
   );
 
+  const remoteMcpServerId = mcpServer?.remoteMcpServerId ?? "";
+  const { data: remoteMcpServer } = useGetRemoteMcpServer(
+    { id: remoteMcpServerId },
+    undefined,
+    { enabled: remoteMcpServerId !== "" },
+  );
+  const unproxiedMcpServerId = mcpServer?.unproxiedMcpServerId ?? "";
+  const { data: unproxiedMcpServer } = useGetUnproxiedMcpServer(
+    { id: unproxiedMcpServerId },
+    undefined,
+    { enabled: unproxiedMcpServerId !== "" },
+  );
+  const upstreamUrl = remoteMcpServer?.url ?? unproxiedMcpServer?.url;
+
   const userSessionIssuerId = mcpServer?.userSessionIssuerId;
-  // Mirrors AuthenticationSection's "associated" definition: at least one
-  // remote_session_client row exists for this server's issuer. The issuer
-  // itself only gates Speakeasy-side sessions — a remote identity provider
-  // isn't actually attached (and users can't reach the upstream service)
-  // until a client pairing exists, which is what the "No remote identity
-  // providers" empty state on the Authentication tab is keyed off too.
+  // A remote identity provider is attached when this server's issuer has at
+  // least one remote session client pairing.
   const { items: remoteSessionClients } = useAllRemoteSessionClients(
     { userSessionIssuerId },
     { enabled: !!userSessionIssuerId },
@@ -91,40 +109,78 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
 
   const activeTab = activeTabFromPath(location.pathname, idOrSlug);
   const isRemoteBacked = !!mcpServer?.remoteMcpServerId;
+  const isTunneledBacked = !!mcpServer?.tunneledMcpServerId;
+  const isUnproxied = !!mcpServer?.unproxiedMcpServerId;
+  const isSourceBacked = isRemoteBacked || isTunneledBacked || isUnproxied;
+  const canViewTeamAccess =
+    !!mcpServer && hasScope("org:read") && hasScope("mcp:read", mcpServer.id);
+
+  let authenticationDescription =
+    "Attach a remote identity provider so users can access the upstream service.";
+  if (isUnproxied) {
+    authenticationDescription =
+      "Not applicable — the customer connects directly using the vendor's own credentials.";
+  } else if (hasRemoteIdentityProvider) {
+    authenticationDescription =
+      "A remote identity provider is attached to this server.";
+  } else if (isTunneledBacked) {
+    authenticationDescription =
+      "Speakeasy authentication is configured; upstream identity providers are optional.";
+  }
+
+  let sourceDescription = "Connect an MCP server as this server's source.";
+  let sourceHref = routes.sources.href();
+  if (mcpServer?.remoteMcpServerId) {
+    sourceDescription = "Backed by a remote MCP server.";
+    sourceHref = routes.sources.source.href(
+      "remotemcp",
+      remoteMcpRouteParam({ id: mcpServer.remoteMcpServerId }),
+    );
+  } else if (mcpServer?.tunneledMcpServerId) {
+    sourceDescription = "Backed by a tunneled MCP server.";
+    sourceHref = routes.sources.source.href(
+      "tunneledmcp",
+      tunneledMcpRouteParam({ id: mcpServer.tunneledMcpServerId }),
+    );
+  } else if (mcpServer?.unproxiedMcpServerId) {
+    sourceDescription = "Backed by an unproxied MCP server.";
+    sourceHref = routes.sources.source.href(
+      "unproxiedmcp",
+      unproxiedMcpRouteParam({ id: mcpServer.unproxiedMcpServerId }),
+    );
+  }
 
   const readinessChecks: ReadinessCheck[] = mcpServer
     ? [
         {
           key: "server-url",
           label: "Server URL",
-          description: mcpUrl
-            ? "Endpoint is live and ready to connect to."
-            : "Add an endpoint so this server has a URL to connect to.",
-          ready: !!mcpUrl,
-          href: `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_SERVER_URL_SECTION_ID}`,
+          description: isUnproxied
+            ? "Not applicable — unproxied servers have no Speakeasy-hosted endpoint."
+            : mcpUrl
+              ? "Endpoint is live and ready to connect to."
+              : "Add an endpoint so this server has a URL to connect to.",
+          ready: isUnproxied || !!mcpUrl,
+          href: isUnproxied
+            ? undefined
+            : `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_SERVER_URL_SECTION_ID}`,
         },
         {
           key: "authentication",
           label: "Authentication",
-          description: hasRemoteIdentityProvider
-            ? "A remote identity provider is attached to this server."
-            : "Attach a remote identity provider so users can access the upstream service.",
-          ready: hasRemoteIdentityProvider,
+          description: authenticationDescription,
+          ready:
+            isUnproxied ||
+            hasRemoteIdentityProvider ||
+            (isTunneledBacked && !!userSessionIssuerId),
           href: `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`,
         },
         {
           key: "source",
           label: "Source",
-          description: isRemoteBacked
-            ? "Backed by a remote MCP server."
-            : "Connect a remote MCP server as this server's source.",
-          ready: isRemoteBacked,
-          href: mcpServer?.remoteMcpServerId
-            ? routes.sources.source.href(
-                "remotemcp",
-                remoteMcpRouteParam({ id: mcpServer.remoteMcpServerId }),
-              )
-            : routes.sources.href(),
+          description: sourceDescription,
+          ready: isSourceBacked,
+          href: sourceHref,
         },
         {
           key: "plugin",
@@ -140,7 +196,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
       ]
     : [];
 
-  const items: McpSidebarNavItem[] = [
+  const items: DetailSidebarNavItem[] = [
     {
       key: "overview",
       title: "Overview",
@@ -148,14 +204,22 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
       href: mcpServerTabHref(routes, idOrSlug, "overview"),
       active: activeTab === "overview",
     },
-    {
-      key: "tools",
-      title: "Tools",
-      Icon: Wrench,
-      href: mcpServerTabHref(routes, idOrSlug, "tools"),
-      active: activeTab === "tools",
-    },
-    ...(isRbacEnabled
+    // Hidden for unproxied servers for now: there's no reliable way to list
+    // their tools yet (the vendor's own auth blocks an anonymous probe, and
+    // there's no fallback source wired up), so the tab had nothing useful to
+    // show.
+    ...(isUnproxied
+      ? []
+      : [
+          {
+            key: "inspect",
+            title: "Inspect",
+            Icon: Wrench,
+            href: mcpServerTabHref(routes, idOrSlug, "inspect"),
+            active: activeTab === "inspect",
+          },
+        ]),
+    ...(canViewTeamAccess
       ? [
           {
             key: "team-access",
@@ -166,6 +230,20 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
           },
         ]
       : []),
+    // Hidden for unproxied servers: the customer connects straight to the
+    // vendor with the vendor's own credentials, so Gram never mints a session
+    // or registers a client for them and the tab would always be empty.
+    ...(isUnproxied
+      ? []
+      : [
+          {
+            key: "sessions",
+            title: "Clients and Sessions",
+            Icon: Plug,
+            href: mcpServerTabHref(routes, idOrSlug, "sessions"),
+            active: activeTab === "sessions",
+          },
+        ]),
     {
       key: "settings",
       title: "Settings",
@@ -178,33 +256,39 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const cardContent = mcpServer && (
     <>
       <div className="flex flex-col gap-0.5">
-        <Type className="truncate font-semibold">
+        <Text className="truncate font-semibold">
           {mcpServer.name || "MCP Server"}
-        </Type>
+        </Text>
         {isRemoteBacked && (
-          <McpSidebarInfoLabel>Remote MCP</McpSidebarInfoLabel>
+          <DetailSidebarInfoLabel>Remote MCP</DetailSidebarInfoLabel>
+        )}
+        {isTunneledBacked && (
+          <DetailSidebarInfoLabel>Tunneled MCP</DetailSidebarInfoLabel>
+        )}
+        {isUnproxied && (
+          <DetailSidebarInfoLabel>Unproxied MCP</DetailSidebarInfoLabel>
         )}
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <McpSidebarInfoLabel>Visibility</McpSidebarInfoLabel>
+        <DetailSidebarInfoLabel>Visibility</DetailSidebarInfoLabel>
         <MCPServerStatusDropdown server={mcpServer} />
       </div>
 
       {mcpUrl && (
         <div className="flex flex-col gap-1">
-          <McpSidebarInfoLabel>URL</McpSidebarInfoLabel>
+          <DetailSidebarInfoLabel>URL</DetailSidebarInfoLabel>
           <div className="flex items-start gap-1">
-            <Type
+            <Text
               variant="small"
               muted
               className="line-clamp-2 font-mono text-xs break-all"
             >
               {mcpUrl.replace(/^https?:\/\//, "")}
-            </Type>
+            </Text>
             <CopyButton
               text={mcpUrl}
-              size="inline"
+              size="xs"
               tooltip="Copy URL"
               className="mt-[-2px] shrink-0"
             />
@@ -212,10 +296,26 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         </div>
       )}
 
-      <div className="flex flex-col gap-1">
-        <McpSidebarInfoLabel>Endpoints</McpSidebarInfoLabel>
-        <Type variant="small">{endpoints.length}</Type>
-      </div>
+      {upstreamUrl && (
+        <div className="flex flex-col gap-1">
+          <DetailSidebarInfoLabel>Upstream URL</DetailSidebarInfoLabel>
+          <div className="flex items-start gap-1">
+            <Text
+              variant="small"
+              muted
+              className="line-clamp-2 font-mono text-xs break-all"
+            >
+              {upstreamUrl.replace(/^https?:\/\//, "")}
+            </Text>
+            <CopyButton
+              text={upstreamUrl}
+              size="xs"
+              tooltip="Copy upstream URL"
+              className="mt-[-2px] shrink-0"
+            />
+          </div>
+        </div>
+      )}
 
       <div className="border-border flex items-stretch border-t pt-3">
         {installPageUrl ? (
@@ -235,23 +335,42 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
           </span>
         )}
         <div className="bg-border w-px self-stretch" />
-        <routes.playground.Link className="flex flex-1 items-center justify-center hover:no-underline">
-          <span className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-semibold transition-colors">
+        {isUnproxied ? (
+          <span className="text-muted-foreground/50 flex flex-1 cursor-not-allowed items-center justify-center gap-1 text-xs font-semibold">
             Test in Playground
             <ArrowRight className="h-3 w-3" />
           </span>
-        </routes.playground.Link>
+        ) : (
+          <routes.playground.Link
+            queryParams={
+              isRemoteBacked || isTunneledBacked
+                ? { mcpServer: mcpServer.id }
+                : undefined
+            }
+            className="flex flex-1 items-center justify-center hover:no-underline"
+          >
+            <span className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-semibold transition-colors">
+              Test in Playground
+              <ArrowRight className="h-3 w-3" />
+            </span>
+          </routes.playground.Link>
+        )}
       </div>
     </>
   );
 
   return (
-    <McpSidebarNavShell
+    <DetailSidebarNav
       backHref={routes.mcp.href()}
       topTitle="Readiness"
       topContent={
         readinessChecks.length > 0 ? (
-          <McpServerReadinessBar checks={readinessChecks} />
+          <div className="flex flex-col gap-3">
+            {/* The upstream endpoint is what the guide catalog indexes; a
+                server with no upstream has no guide to point at. */}
+            <SetupGuideCard serverUrl={upstreamUrl} />
+            <McpServerReadinessBar checks={readinessChecks} />
+          </div>
         ) : undefined
       }
       cardContent={cardContent}

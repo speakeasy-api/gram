@@ -12,6 +12,7 @@ import (
 
 var chatSessionsAllowedRoutes = []string{
 	"/chat/completions",
+	"/chat/turnstream",
 	"/mcp",
 	"/rpc/chat.",
 	"/rpc/chatSessions.",
@@ -44,9 +45,13 @@ func chatSessionsCORS(chatSessionsManager *chatsessions.Manager) func(next http.
 				return
 			}
 
-			claims, err := chatSessionsManager.ValidateToken(r.Context(), chatSession)
-			if err != nil {
+			claims, invalidToken, err := chatSessionsManager.ValidateToken(r.Context(), chatSession)
+			if invalidToken {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			if err != nil {
+				http.Error(w, "internal server error", http.StatusInternalServerError)
 				return
 			}
 

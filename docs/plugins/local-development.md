@@ -62,13 +62,7 @@ Repeat for each of the four secrets, then paste the values into `mise.local.toml
 Start all services with:
 
 ```bash
-madprocs
-```
-
-Or just the server:
-
-```bash
-mise start:server --dev-single-process
+./zero --agent
 ```
 
 The Plugins UI is at `http://local.gram.dev:<port>/plugins` once the dashboard is running.
@@ -91,7 +85,7 @@ You can fully exercise plugin creation, editing, and per-platform ZIP downloads 
 2. Create a plugin (name required, slug auto-generated)
 3. Add MCP servers (toolsets with MCP enabled)
 4. Configure assignments
-5. Use **Download** on the plugin detail page to get a ZIP for Claude, Cursor, or Codex
+5. Use **Download** on the plugin detail page to get a ZIP for each supported coding agent
 
 The **Publish to GitHub** button will be hidden/disabled when the server has no GitHub config.
 

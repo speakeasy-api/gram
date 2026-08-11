@@ -1,6 +1,7 @@
 package conv_test
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -183,4 +184,27 @@ func TestURLToSlug_OnlySeparators(t *testing.T) {
 	t.Parallel()
 
 	require.Empty(t, conv.URLToSlug("///..."))
+}
+
+func TestClampedUint32ToInt(t *testing.T) {
+	t.Parallel()
+
+	out, clamped := conv.ClampedUint32ToInt(0)
+	require.Equal(t, 0, out)
+	require.False(t, clamped)
+
+	out, clamped = conv.ClampedUint32ToInt(42)
+	require.Equal(t, 42, out)
+	require.False(t, clamped)
+
+	// On 64-bit platforms every uint32 fits; on 32-bit builds MaxUint32
+	// exceeds MaxInt and must clamp.
+	out, clamped = conv.ClampedUint32ToInt(math.MaxUint32)
+	if uint64(math.MaxInt) >= uint64(math.MaxUint32) {
+		require.False(t, clamped)
+		require.Equal(t, uint64(math.MaxUint32), uint64(out))
+	} else {
+		require.True(t, clamped)
+		require.Equal(t, math.MaxInt, out)
+	}
 }

@@ -34,6 +34,7 @@ type PresidioAnalysis struct {
 	xxx_hidden_Content           *string                `protobuf:"bytes,9,opt,name=content"`
 	xxx_hidden_Entities          []string               `protobuf:"bytes,10,rep,name=entities"`
 	xxx_hidden_ScoreThreshold    float64                `protobuf:"fixed64,11,opt,name=score_threshold,json=scoreThreshold"`
+	xxx_hidden_ContentPartId     *string                `protobuf:"bytes,12,opt,name=content_part_id,json=contentPartId"`
 	XXX_raceDetectHookData       protoimpl.RaceDetectHookData
 	XXX_presence                 [1]uint32
 	unknownFields                protoimpl.UnknownFields
@@ -166,49 +167,59 @@ func (x *PresidioAnalysis) GetScoreThreshold() float64 {
 	return 0
 }
 
+func (x *PresidioAnalysis) GetContentPartId() string {
+	if x != nil {
+		if x.xxx_hidden_ContentPartId != nil {
+			return *x.xxx_hidden_ContentPartId
+		}
+		return ""
+	}
+	return ""
+}
+
 func (x *PresidioAnalysis) SetRequestId(v string) {
 	x.xxx_hidden_RequestId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 12)
 }
 
 func (x *PresidioAnalysis) SetChatMessageId(v string) {
 	x.xxx_hidden_ChatMessageId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 12)
 }
 
 func (x *PresidioAnalysis) SetProjectId(v string) {
 	x.xxx_hidden_ProjectId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 12)
 }
 
 func (x *PresidioAnalysis) SetOrganizationId(v string) {
 	x.xxx_hidden_OrganizationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 12)
 }
 
 func (x *PresidioAnalysis) SetRiskPolicyId(v string) {
 	x.xxx_hidden_RiskPolicyId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 12)
 }
 
 func (x *PresidioAnalysis) SetRiskPolicyVersion(v int64) {
 	x.xxx_hidden_RiskPolicyVersion = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 12)
 }
 
 func (x *PresidioAnalysis) SetCreatedAt(v string) {
 	x.xxx_hidden_CreatedAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 12)
 }
 
 func (x *PresidioAnalysis) SetReplyUrn(v string) {
 	x.xxx_hidden_ReplyUrn = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 12)
 }
 
 func (x *PresidioAnalysis) SetContent(v string) {
 	x.xxx_hidden_Content = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 12)
 }
 
 func (x *PresidioAnalysis) SetEntities(v []string) {
@@ -217,7 +228,12 @@ func (x *PresidioAnalysis) SetEntities(v []string) {
 
 func (x *PresidioAnalysis) SetScoreThreshold(v float64) {
 	x.xxx_hidden_ScoreThreshold = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 12)
+}
+
+func (x *PresidioAnalysis) SetContentPartId(v string) {
+	x.xxx_hidden_ContentPartId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 12)
 }
 
 func (x *PresidioAnalysis) HasRequestId() bool {
@@ -290,6 +306,13 @@ func (x *PresidioAnalysis) HasScoreThreshold() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 10)
 }
 
+func (x *PresidioAnalysis) HasContentPartId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 11)
+}
+
 func (x *PresidioAnalysis) ClearRequestId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_RequestId = nil
@@ -340,6 +363,11 @@ func (x *PresidioAnalysis) ClearScoreThreshold() {
 	x.xxx_hidden_ScoreThreshold = 0
 }
 
+func (x *PresidioAnalysis) ClearContentPartId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 11)
+	x.xxx_hidden_ContentPartId = nil
+}
+
 type PresidioAnalysis_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
@@ -356,6 +384,7 @@ type PresidioAnalysis_builder struct {
 	// Minimum Presidio confidence (0.0-1.0) a recognizer match must clear to be
 	// emitted. Zero/unset means the consumer applies its default threshold.
 	ScoreThreshold *float64
+	ContentPartId  *string
 }
 
 func (b0 PresidioAnalysis_builder) Build() *PresidioAnalysis {
@@ -363,45 +392,49 @@ func (b0 PresidioAnalysis_builder) Build() *PresidioAnalysis {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.RequestId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 12)
 		x.xxx_hidden_RequestId = b.RequestId
 	}
 	if b.ChatMessageId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 12)
 		x.xxx_hidden_ChatMessageId = b.ChatMessageId
 	}
 	if b.ProjectId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 12)
 		x.xxx_hidden_ProjectId = b.ProjectId
 	}
 	if b.OrganizationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 12)
 		x.xxx_hidden_OrganizationId = b.OrganizationId
 	}
 	if b.RiskPolicyId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 12)
 		x.xxx_hidden_RiskPolicyId = b.RiskPolicyId
 	}
 	if b.RiskPolicyVersion != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 12)
 		x.xxx_hidden_RiskPolicyVersion = *b.RiskPolicyVersion
 	}
 	if b.CreatedAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 12)
 		x.xxx_hidden_CreatedAt = b.CreatedAt
 	}
 	if b.ReplyUrn != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 12)
 		x.xxx_hidden_ReplyUrn = b.ReplyUrn
 	}
 	if b.Content != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 12)
 		x.xxx_hidden_Content = b.Content
 	}
 	x.xxx_hidden_Entities = b.Entities
 	if b.ScoreThreshold != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 12)
 		x.xxx_hidden_ScoreThreshold = *b.ScoreThreshold
+	}
+	if b.ContentPartId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 12)
+		x.xxx_hidden_ContentPartId = b.ContentPartId
 	}
 	return m0
 }
@@ -410,7 +443,7 @@ var File_gram_risk_v1_presidio_analysis_proto protoreflect.FileDescriptor
 
 const file_gram_risk_v1_presidio_analysis_proto_rawDesc = "" +
 	"\n" +
-	"$gram/risk/v1/presidio_analysis.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\x9e\x03\n" +
+	"$gram/risk/v1/presidio_analysis.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xc6\x03\n" +
 	"\x10PresidioAnalysis\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12&\n" +
@@ -426,7 +459,8 @@ const file_gram_risk_v1_presidio_analysis_proto_rawDesc = "" +
 	"\acontent\x18\t \x01(\tR\acontent\x12\x1a\n" +
 	"\bentities\x18\n" +
 	" \x03(\tR\bentities\x12'\n" +
-	"\x0fscore_threshold\x18\v \x01(\x01R\x0escoreThreshold:\n" +
+	"\x0fscore_threshold\x18\v \x01(\x01R\x0escoreThreshold\x12&\n" +
+	"\x0fcontent_part_id\x18\f \x01(\tR\rcontentPartId:\n" +
 	"\x8a\xb5\x18\x06\x12\x04\b\x80\xf5$B=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
 
 var file_gram_risk_v1_presidio_analysis_proto_msgTypes = make([]protoimpl.MessageInfo, 1)

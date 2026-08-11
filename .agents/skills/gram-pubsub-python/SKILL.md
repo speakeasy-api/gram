@@ -208,9 +208,8 @@ coroutine; await it.
 `pystreams` runs locally against the shared Pub/Sub emulator — no Config
 Connector, no real GCP.
 
-- **Start it:** `mise run start:pystreams-multi` (runs `uv run multi` in the
-  `pystreams/` dir). Under mprocs it's the `pystreams-multi` process; drive it
-  with the `madprocs` skill.
+- **Start it:** `pitchfork start pystreams-multi` or the pitchfork mcp server if
+  available (runs `uv run multi` in the `pystreams/` dir).
 - **Emulator:** `mise.toml` sets `PUBSUB_EMULATOR_HOST` (and the
   `pubsub-emulator` compose service the Go side uses is the same one). With that
   env var set, `multi` builds an `EmulatedPubSubBroker`, which lazily creates the

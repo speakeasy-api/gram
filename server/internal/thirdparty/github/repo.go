@@ -24,6 +24,11 @@ const apiBase = "https://api.github.com"
 // project as a first publish rather than an error.
 var ErrRepoNotFound = errors.New("github repo or branch not found")
 
+// ErrFileNotFound is returned by GetFileContent when the repository, branch,
+// or file path does not exist, so callers can treat an absent file as a
+// normal condition rather than an error.
+var ErrFileNotFound = errors.New("github file not found")
+
 // validGitHubUsername matches GitHub's username rules: 1-39 chars, starting
 // with an alphanumeric, alphanumeric or hyphen thereafter. Enforced before
 // using the value in URL construction to prevent path traversal via
@@ -264,6 +269,45 @@ func (c *Client) GetRepoFiles(ctx context.Context, installationID int64, owner, 
 	}
 
 	return files, nil
+}
+
+// GetFileContent returns the raw content of a single file on the given branch
+// via the Contents API — one API call, unlike GetRepoFiles' full-tree walk, so
+// it is cheap enough for read paths that only need one known file. Returns
+// ErrFileNotFound when the repo, branch, or path does not exist.
+func (c *Client) GetFileContent(ctx context.Context, installationID int64, owner, repo, branch, filePath string) ([]byte, error) {
+	fileURL, _ := url.JoinPath(apiBase, "repos", owner, repo, "contents", filePath)
+	fileURL += "?ref=" + url.QueryEscape(branch)
+	resp, err := c.doAPI(ctx, installationID, http.MethodGet, fileURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("get file content: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, ErrFileNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("get file content: status %d: %s", resp.StatusCode, truncatedBody(resp))
+	}
+
+	var file struct {
+		Content  string `json:"content"`
+		Encoding string `json:"encoding"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&file); err != nil {
+		return nil, fmt.Errorf("decode file content: %w", err)
+	}
+	if file.Encoding != "base64" {
+		return nil, fmt.Errorf("unexpected file content encoding %q", file.Encoding)
+	}
+	// Like the Blobs API, the Contents API wraps base64 content with newlines,
+	// which the standard decoder rejects; strip them before decoding.
+	decoded, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(file.Content, "\n", ""))
+	if err != nil {
+		return nil, fmt.Errorf("decode base64 file content: %w", err)
+	}
+	return decoded, nil
 }
 
 func (c *Client) getBlob(ctx context.Context, installationID int64, owner, repo, sha string) ([]byte, error) {

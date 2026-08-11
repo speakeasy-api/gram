@@ -1,77 +1,50 @@
-import { Badge } from "@/components/ui/badge";
+import { formatCost } from "@/lib/money";
+import { Page } from "@/components/page-layout";
+import { Badge } from "@/components/ui/Badge";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@/components/ui/Select";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { type QueryRow } from "@gram/client/models/components/queryrow.js";
-import type { ReactNode } from "react";
 import {
-  BadgeCheck,
-  Bot,
-  Briefcase,
-  Building,
-  Building2,
-  ChevronLeft,
-  Cpu,
-  Download,
-  Home,
-  Info,
-  type LucideIcon,
-  Network,
-  Server,
-  Shield,
-  Sparkles,
-  UserRound,
-  Wallet,
-  Wrench,
-} from "lucide-react";
+  type ReactNode,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
+import { ChevronLeft, Download, Home, Info, RotateCcw } from "lucide-react";
 import { CostMeasureLabel } from "@/components/estimated-cost";
+import { BreakdownBar } from "./BreakdownBar";
+import { breakdownCaption, breakdownTitle } from "./breakdownCopy";
 import { CostTable } from "./CostTable";
+import { downloadCsv, slugify, toCsv } from "./csv";
 import {
   type Crumb,
+  displayName,
+  entityBadgeVariant,
+  formatWorkUnits,
+  friendlyName,
   isAttributionDim,
   LABELS,
   type Measures,
+  pluralLabel,
 } from "./taxonomy";
 
 // ── Formatting helpers ──────────────────────────────────────────────────────
 
-function formatCost(value: number): string {
-  return `$${value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
-
-function displayValue(groupValue: string): string {
-  return groupValue === "" ? "(unset)" : groupValue;
-}
-
 // ── CSV export ──────────────────────────────────────────────────────────────
-
-// Serialize one CSV field. Two concerns:
-//   1. Formula injection (CWE-1236): a cell starting with = + - @ (or a control
-//      char) is treated as a formula by Excel/Sheets. Directory-sync values
-//      (names, emails) are attacker-influenced, so neutralize with a leading
-//      apostrophe before quoting.
-//   2. RFC 4180 quoting: wrap in quotes (doubling internal quotes) when the
-//      value contains a comma, quote, or newline.
-function csvField(value: string | number): string {
-  let s = String(value);
-  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
 
 // Serialize the current table rows to CSV — same columns the table shows
 // (minus the Trend sparkline), with raw numbers so the file is spreadsheet-ready.
@@ -96,7 +69,7 @@ function buildCostCsv(
     const cost = r.measures.totalCost ?? 0;
     const chats = r.measures.totalChats ?? 0;
     return [
-      displayValue(r.groupValue),
+      displayName(groupBy, r.groupValue),
       cost.toFixed(2),
       total > 0 ? ((cost / total) * 100).toFixed(1) : "0.0",
       chats > 0 ? (cost / chats).toFixed(2) : "0.00",
@@ -107,100 +80,68 @@ function buildCostCsv(
       r.measures.totalTokens ?? 0,
     ];
   });
-  return [header, ...body]
-    .map((cols) => cols.map(csvField).join(","))
-    .join("\n");
+  return toCsv(header, body);
 }
 
-// Trigger a client-side download of a CSV string.
-function downloadCsv(filename: string, csv: string): void {
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
-function slugify(value: string): string {
-  return (
-    value
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "") || "all-costs"
+// The efficiency lens's CSV — mirrors that table's columns. Per-unit cells are
+// empty (not 0) where a row has no scored work, matching the table's "—".
+function buildEfficiencyCsv(
+  rows: QueryRow[],
+  groupLabel: string,
+  groupBy: Dimension,
+): string {
+  const totalUnits = rows.reduce(
+    (sum, r) => sum + (r.measures.totalWorkUnits ?? 0),
+    0,
   );
+  const header = [
+    groupLabel,
+    "Work Delivered",
+    "% Share",
+    "Cost Efficiency",
+    "Sessions",
+    "Token Efficiency",
+    "Total Cost",
+  ];
+  const body = rows.map((r) => {
+    const units = r.measures.totalWorkUnits ?? 0;
+    const scored = units > 0;
+    return [
+      displayName(groupBy, r.groupValue),
+      units.toFixed(1),
+      totalUnits > 0 && scored
+        ? ((units / totalUnits) * 100).toFixed(1)
+        : "0.0",
+      scored ? ((r.measures.scoredCost ?? 0) / units).toFixed(2) : "",
+      r.measures.totalChats ?? 0,
+      scored ? Math.round((r.measures.scoredTokens ?? 0) / units) : "",
+      (r.measures.totalCost ?? 0).toFixed(2),
+    ];
+  });
+  return toCsv(header, body);
 }
 
-// Initials for the avatar: email local-part tokens (olivia.novak → ON) or the
-// first letters of the first two words (Engineering → EN, R&D → RD).
-// Title-case an email local part into a name; pass other values through.
-function prettyName(value: string, dim: Dimension): string {
-  if (dim === Dimension.Email && value.includes("@")) {
-    const local = value.split("@")[0] ?? value;
-    return local
-      .split(/[._-]+/)
-      .filter(Boolean)
-      .map((w) => w[0]!.toUpperCase() + w.slice(1))
-      .join(" ");
-  }
-  return displayValue(value);
-}
-
-// A unique, deterministic colour identity for an entity, derived from its name
-// (FNV-1a → related hues), rendered as a faint blurred mesh wash behind the hero.
-function entityPalette(name: string): { mesh: string } {
-  let hash = 2166136261;
-  for (let i = 0; i < name.length; i++) {
-    hash ^= name.charCodeAt(i);
-    hash +=
-      (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
-  }
-  hash >>>= 0;
-  // Pick from an on-brand hue set only (sky, blue, indigo, violet, purple,
-  // fuchsia, rose, teal) — no lime/yellow-green or other off-brand hues. The
-  // companion hues stay within the same family via small offsets.
-  const ON_BRAND_HUES = [192, 210, 226, 244, 262, 284, 322, 340];
-  const h1 = ON_BRAND_HUES[hash % ON_BRAND_HUES.length]!;
-  const h2 = h1 + 16;
-  const h3 = h1 - 12;
-  return {
-    // Faint, low-saturation wash spread across the full width; masked + blurred
-    // in the markup so it fades downward.
-    mesh: [
-      `radial-gradient(52% 72% at 38% 10%, hsl(${h1} 70% 80% / 0.36) 0%, transparent 72%)`,
-      `radial-gradient(56% 76% at 62% 6%, hsl(${h2} 66% 78% / 0.34) 0%, transparent 72%)`,
-      `radial-gradient(56% 76% at 86% 16%, hsl(${h3} 68% 80% / 0.34) 0%, transparent 72%)`,
-      `radial-gradient(50% 70% at 100% 24%, hsl(${h1} 68% 82% / 0.30) 0%, transparent 72%)`,
-    ].join(", "),
-  };
-}
-
-// A Lucide icon representing the entity's type (Division → org chart, User →
-// person, Agent → bot, …). Falls back to the org building at the root.
-const ENTITY_ICONS: Partial<Record<Dimension, LucideIcon>> = {
-  [Dimension.DivisionName]: Network,
-  [Dimension.DepartmentName]: Building,
-  [Dimension.Email]: UserRound,
-  [Dimension.HookSource]: Bot,
-  [Dimension.JobTitle]: Briefcase,
-  [Dimension.EmployeeType]: BadgeCheck,
-  [Dimension.CostCenterName]: Wallet,
-  [Dimension.Model]: Cpu,
-  [Dimension.Role]: Shield,
-  // Claude attribution cuts (also used for the root "collection" hero).
-  [Dimension.McpServerName]: Server,
-  [Dimension.McpToolName]: Wrench,
-  [Dimension.SkillName]: Sparkles,
-  [Dimension.AgentName]: Bot,
-};
-
-function entityIcon(entity: Crumb | null): LucideIcon {
-  if (!entity) return Building2;
-  return ENTITY_ICONS[entity.dim] ?? Building2;
+// The search placeholder's noun: the axis plural sentence-cased — words
+// lowercase except acronyms ("Users" → "users", "MCP Servers" → "MCP servers").
+function searchNoun(label: string): string {
+  return label
+    .split(" ")
+    .map((word) => (word === word.toUpperCase() ? word : word.toLowerCase()))
+    .join(" ");
 }
 
 // ── Small presentational pieces ─────────────────────────────────────────────
+
+// The page's bordered ghost buttons share one core look; the control-bar
+// Reset, the table Export CSV, and the nav buttons (Home, Back) compose their
+// size/spacing on top of it.
+const GHOST_BUTTON_CLASS =
+  "text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex items-center border bg-transparent text-sm transition-colors";
+const BAR_BUTTON_CLASS = cn(
+  GHOST_BUTTON_CLASS,
+  "h-10 shrink-0 gap-1.5 px-3 font-medium disabled:pointer-events-none disabled:opacity-40",
+);
+const NAV_BUTTON_CLASS = cn(GHOST_BUTTON_CLASS, "gap-1 py-1.5 pr-3 pl-2.5");
 
 // A headline metric in the profile header (Cost / Sessions / …), echoing the
 // big Followers/Following/Likes numbers in the reference design.
@@ -217,8 +158,10 @@ function HeaderStat({
 }): JSX.Element {
   const inner = (
     <>
-      <span className="text-2xl font-semibold tabular-nums">{value}</span>
-      <span className="text-muted-foreground text-xs">{label}</span>
+      <span className="text-eyebrow">{label}</span>
+      <span className="font-display text-3xl font-thin tabular-nums">
+        {value}
+      </span>
     </>
   );
   if (onClick) {
@@ -226,13 +169,25 @@ function HeaderStat({
       <button
         type="button"
         onClick={onClick}
-        className="hover:bg-muted -mx-2 -my-1 flex flex-col rounded-md px-2 py-1 text-left transition-colors"
+        className="hover:bg-muted -mx-2 -my-1 flex flex-col gap-1 px-2 py-1 text-left transition-colors"
       >
         {inner}
       </button>
     );
   }
-  return <div className="flex flex-col">{inner}</div>;
+  return <div className="flex flex-col gap-1">{inner}</div>;
+}
+
+// Walk up from `el` to the nearest ancestor that actually scrolls vertically.
+// The app shell scrolls an inner container (Page.Body / TabsContent), not the
+// window — callers that need the scrollport (sticky pinning, scroll-to-top)
+// must find that ancestor rather than assuming `window`.
+function findVerticalScrollParent(el: HTMLElement | null): HTMLElement | null {
+  let root: HTMLElement | null = el?.parentElement ?? null;
+  while (root && !/auto|scroll/.test(getComputedStyle(root).overflowY)) {
+    root = root.parentElement;
+  }
+  return root;
 }
 
 // ── EntityProfile ───────────────────────────────────────────────────────────
@@ -247,6 +202,9 @@ export type EntityProfileProps = {
   // Whether this is an attribution lens: swaps the "Tool calls" hero stat for
   // "Tokens added" (cache-creation tokens), the meaningful measure for these cuts.
   cacheMetric: boolean;
+  // The efficiency lens: the hero and table read the work-units measures (work
+  // units delivered, cost per unit) instead of the activity measures.
+  efficiency: boolean;
   // Navigate up one ancestor. No-op at the root.
   onBack: () => void;
   // Jump straight back to the org root.
@@ -256,9 +214,9 @@ export type EntityProfileProps = {
   projectName: string;
   // The immediate parent's value, for the "Back to …" control.
   parentValue: string | null;
-  // The ancestor chain above this entity (root → immediate parent), rendered as
-  // the typed breadcrumb trail under the title so deep nesting stays legible.
-  ancestors: Crumb[];
+  // The full drill path (root → the entity in view), which the breakdown
+  // caption names so it describes the slice actually on screen.
+  path: Crumb[];
   // Headline measures summed over this entity's children.
   stats: Measures;
   // The dimension the child table is grouped by (drives labels + CostTable).
@@ -273,6 +231,10 @@ export type EntityProfileProps = {
   // beside the select (e.g. the root Skill cut excludes subagent-run skills).
   axisHint?: string;
   onAxisChange: (value: string) => void;
+  // Free-text filter over the visible table rows (dimension rows or sessions),
+  // owned by the explorer so it can filter both row sources consistently.
+  searchValue: string;
+  onSearchChange: (value: string) => void;
   // The child rows + drill handler.
   rows: QueryRow[];
   // The view's resolved billing mode; "metered" shows real cost instead of the
@@ -282,23 +244,35 @@ export type EntityProfileProps = {
   // When set, replaces the dimension CostTable (the per-session list in sessions
   // mode). The override owns its own loading/empty/error states.
   tableOverride?: ReactNode;
+  // CSV export for a `tableOverride`'s rows. Supplied alongside the override so
+  // the export control above the table keeps working on the sessions breakdown
+  // instead of unmounting and leaving a gap.
+  overrideCsv?: { rowCount: number; build: () => string };
   // Switch the breakdown to the per-session list — wired to the clickable
   // "Agent sessions" header stat. Omitted when already in sessions mode.
   onViewSessions?: () => void;
+  // Reset the whole view to its defaults (drill path, axis, dataset, range,
+  // search) — the control bar's Reset button.
+  onReset: () => void;
   // Per-group daily cost series for the row sparklines.
   seriesByGroup: Map<string, number[]>;
-  // The active dataset (spend slice) and its options, rendered as a selector at
-  // the top-right beside the date picker. `all` is the full project spend; the
+  // The active dataset (spend slice) and its options, rendered in the top
+  // control bar beside the date picker. `all` is the full project spend; the
   // others narrow to a Claude attribution lens (MCP / Subagents / Skills).
   datasetValue: string;
   datasetOptions: { value: string; label: string }[];
   onDatasetChange: (value: string) => void;
-  // The date-range picker control, rendered in the header above the stats.
+  // The date-range picker control, rendered in the top control bar.
   rangePicker: ReactNode;
   // Human date-range label (e.g. "June 15–19") for the CSV export filename.
   rangeLabel: string;
   // The summary widgets row (trend chart, mix, KPIs), rendered above the table.
   widgets: ReactNode;
+  // The stacked cost-over-time chart, rendered inside the breakdown section
+  // between the axis/search controls and the table — it stacks by the same
+  // axis the section's control bar selects, so it reads as part of the
+  // breakdown.
+  chart?: ReactNode;
   isLoading: boolean;
   isError: boolean;
 };
@@ -313,11 +287,12 @@ export function EntityProfile({
   entity,
   collection,
   cacheMetric,
+  efficiency,
   onBack,
   onHome,
   projectName,
   parentValue,
-  ancestors,
+  path,
   stats,
   groupBy,
   canDrill,
@@ -325,11 +300,15 @@ export function EntityProfile({
   axisOptions,
   axisHint,
   onAxisChange,
+  searchValue,
+  onSearchChange,
   rows,
   billingMode,
   onDrill,
   tableOverride,
+  overrideCsv,
   onViewSessions,
+  onReset,
   seriesByGroup,
   datasetValue,
   datasetOptions,
@@ -337,42 +316,177 @@ export function EntityProfile({
   rangePicker,
   rangeLabel,
   widgets,
+  chart,
   isLoading,
   isError,
 }: EntityProfileProps): JSX.Element {
   const groupLabel = LABELS[groupBy] ?? "Group";
 
   const title = entity
-    ? prettyName(entity.value, entity.dim)
+    ? friendlyName(entity.dim, entity.value)
     : (collection?.label ?? projectName ?? "All costs");
   const typeLabel = entity
     ? (LABELS[entity.dim] ?? "Group")
     : collection
       ? "Breakdown"
       : "Project";
-  // Raw ancestor values joined by chevrons (e.g. "R&D › Engineering › elena@…").
-  // Values stay raw — the title already shows the entity's pretty name.
-  const ancestryTrail = ancestors
-    .map((c) => displayValue(c.value))
-    .join("  ›  ");
-  const palette = entityPalette(title);
-  const Icon =
-    !entity && collection
-      ? (ENTITY_ICONS[collection.dim] ?? Building2)
-      : entityIcon(entity);
+  // `title` title-cases a user's address into a name ("Olivia Novak"), which is
+  // friendlier but ambiguous between two people — keep the address it came from
+  // alongside it. Only users have one; every other value is already its label.
+  // The user dimension can also hold a device hostname (the fallback for
+  // sessions with no email) — no address to repeat there.
+  const emailSuffix =
+    entity?.dim === Dimension.Email && entity.value.includes("@")
+      ? entity.value
+      : null;
+  const badgeVariant = entityBadgeVariant(
+    entity?.dim ?? collection?.dim ?? null,
+  );
 
-  const handleExportCsv = () =>
-    downloadCsv(
-      `${slugify(title)}-by-${slugify(groupLabel)}-${slugify(rangeLabel)}.csv`,
-      buildCostCsv(rows, groupLabel, groupBy),
+  // The control bar pins to the top of the scrollport once scrolled past. A
+  // 1px sentinel above the sticky wrapper drives the pinned styling (full-
+  // width blur band + hairline): the wrapper is stuck exactly while the
+  // sentinel is scrolled out of the container. Observed against the actual
+  // scroll ancestor — the app shell scrolls an inner container, so the
+  // viewport default would fire ~a header-height too late.
+  const [pinned, setPinned] = useState(false);
+  const pinSentinelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const sentinel = pinSentinelRef.current;
+    if (!sentinel) return;
+    const root = findVerticalScrollParent(sentinel);
+    const observer = new IntersectionObserver(
+      ([entry]) => setPinned(entry ? !entry.isIntersecting : false),
+      { root, threshold: 0 },
     );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, []);
+
+  // Drill navigation keeps the EntityProfile mounted and only swaps props, so
+  // the browser never resets scroll on its own. Jump back to the top of the
+  // scrollport whenever the drill path changes — otherwise a mid-table click
+  // lands the new profile still scrolled down, and it looks like nothing moved.
+  // useLayoutEffect so the reset lands before paint (no flash of mid-page).
+  const pathKey = path.map((c) => `${c.dim}:${c.value}`).join("/");
+  useLayoutEffect(() => {
+    const root = findVerticalScrollParent(pinSentinelRef.current);
+    if (root) root.scrollTop = 0;
+    else window.scrollTo(0, 0);
+  }, [pathKey]);
+
+  // The efficiency lens quotes the slice's work units where the cost lenses
+  // quote spend — the caption's grammar fits either ("… — 1,204.5 work units
+  // across 4 Models.").
+  const caption = breakdownCaption({
+    axisValue,
+    groupBy,
+    path,
+    costLabel: efficiency
+      ? `${formatWorkUnits(stats.workUnits)} work delivered`
+      : formatCost(stats.cost),
+    groupCount: isError ? 0 : rows.length,
+  });
+
+  // The hero's third and fourth stats, by lens (the first two — cost and
+  // sessions — are universal).
+  function heroTrailingStats(): JSX.Element {
+    if (efficiency) {
+      const unitCost =
+        stats.workUnits > 0 ? stats.scoredCost / stats.workUnits : null;
+      return (
+        <>
+          <HeaderStat
+            label="Work delivered"
+            value={formatWorkUnits(stats.workUnits)}
+          />
+          <HeaderStat
+            label="Cost efficiency"
+            value={unitCost !== null ? formatCost(unitCost) : "—"}
+          />
+        </>
+      );
+    }
+    if (cacheMetric) {
+      return (
+        <>
+          <HeaderStat
+            label="Tokens added"
+            value={stats.cacheCreation.toLocaleString()}
+          />
+          <HeaderStat label="Tokens" value={stats.tokens.toLocaleString()} />
+        </>
+      );
+    }
+    return (
+      <>
+        <HeaderStat label="Tool calls" value={stats.tools.toLocaleString()} />
+        <HeaderStat label="Tokens" value={stats.tokens.toLocaleString()} />
+      </>
+    );
+  }
+
+  // The "Back to …" label names the immediate parent with its own dimension's
+  // labeling (the parent crumb is second-to-last on the path; the last crumb is
+  // the entity in view), falling back to the project at the root.
+  const parentDim = path[path.length - 2]?.dim;
+  const backLabel =
+    parentValue !== null && parentDim !== undefined
+      ? displayName(parentDim, parentValue)
+      : projectName || "All costs";
+
+  // Whichever table is on screen owns the export: the dimension rows by default,
+  // the override's rows (sessions) when it has supplied a builder. The control
+  // sits above the table itself (not in the page-scope toolbar) so it reads as
+  // exporting those rows, and only disables when the table is empty.
+  const csvExport = overrideCsv
+    ? {
+        rowCount: overrideCsv.rowCount,
+        run: () =>
+          downloadCsv(
+            `${slugify(title)}-sessions-${slugify(rangeLabel)}.csv`,
+            overrideCsv.build(),
+          ),
+      }
+    : {
+        rowCount: rows.length,
+        run: () =>
+          downloadCsv(
+            `${slugify(title)}-by-${slugify(groupLabel)}-${slugify(rangeLabel)}.csv`,
+            efficiency
+              ? buildEfficiencyCsv(rows, groupLabel, groupBy)
+              : buildCostCsv(rows, groupLabel, groupBy),
+          ),
+      };
+
+  const exportCsvButton = (
+    <button
+      type="button"
+      onClick={csvExport.run}
+      disabled={csvExport.rowCount === 0}
+      className={BAR_BUTTON_CLASS}
+    >
+      <Download className="size-3.5 shrink-0" />
+      Export CSV
+    </button>
+  );
+
+  // Placeholder names what the search box narrows: the sessions list when the
+  // override table is on screen, otherwise the current axis's plural.
+  const searchPlaceholder = tableOverride
+    ? "Search sessions..."
+    : `Search ${searchNoun(pluralLabel(groupBy))}...`;
+  const searchActive = searchValue.trim().length > 0;
 
   // The default dimension table; replaced by `tableOverride` (the session list)
   // when one is supplied.
   const dimensionTable = isError ? (
-    <Type className="text-muted-foreground">Failed to load cost data.</Type>
+    <Text className="text-muted-foreground">Failed to load cost data.</Text>
   ) : (
     <CostTable
+      // Remount on a lens switch so the default sort (work units vs cost)
+      // re-applies instead of carrying the other lens's sort state over.
+      key={efficiency ? "efficiency" : "cost"}
       rows={rows}
       groupLabel={groupLabel}
       groupBy={groupBy}
@@ -381,109 +495,105 @@ export function EntityProfile({
       seriesByGroup={seriesByGroup}
       isLoading={isLoading}
       billingMode={billingMode}
+      efficiency={efficiency}
+      emptyMessage={searchActive ? "No matches for your search." : undefined}
     />
+  );
+
+  // The dataset selector: a grey "Dataset" label box wrapping the select,
+  // rendered in the top control bar's leading (page-scope) group.
+  const datasetControl = (
+    <div className="border-border bg-muted flex h-10 items-stretch overflow-hidden border text-sm">
+      <span className="text-muted-foreground flex items-center pr-2 pl-3 font-medium">
+        Dataset
+      </span>
+      <Select value={datasetValue} onValueChange={onDatasetChange}>
+        <SelectTrigger className="border-border bg-background hover:bg-muted data-[state=open]:bg-muted !h-full w-auto cursor-pointer gap-1.5 border-0 border-l py-1 pr-2.5 pl-3 font-medium shadow-none transition-colors">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent align="end">
+          {datasetOptions.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 
   return (
     <div className="flex w-full flex-col">
-      {/* Full-bleed hero: a soft, name-deterministic mesh fading downward so it
-          curves around the avatar, flush to the top of the page body. */}
-      <div className="relative w-full">
+      {/* Top strip: the back controls, shown when drilled into an entity. */}
+      <div className="mx-auto w-full max-w-7xl px-8 pt-5">
+        {/* Cost Home (jump to root) + Back (one level up). Always mounted so
+            they animate in/out across drills — conditional rendering would
+            pop. The EntityProfile instance persists across drills, so the
+            class swap triggers a real transition. */}
         <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-0 h-60 overflow-hidden [mask-image:linear-gradient(to_bottom,black_18%,transparent_92%)]"
+          aria-hidden={!entity}
+          className={cn(
+            "flex items-center gap-2 overflow-hidden transition-all duration-200 ease-out",
+            entity
+              ? "mb-3 max-h-10 translate-x-0 opacity-100"
+              : "pointer-events-none max-h-0 -translate-x-1 opacity-0",
+          )}
         >
-          <div
-            className="absolute inset-0 opacity-80 blur-2xl dark:opacity-45"
-            style={{ background: palette.mesh }}
-          />
-        </div>
-        <div className="relative mx-auto w-full max-w-7xl px-8 pt-24 pb-6">
-          {/* Cost Home (jump to root) + Back (one level up). Always mounted so
-              they animate in/out across drills — conditional rendering would
-              pop. The EntityProfile instance persists across drills, so the
-              class swap triggers a real transition. */}
-          <div
-            aria-hidden={!entity}
-            className={cn(
-              "absolute top-5 left-8 flex items-center gap-2 transition-all duration-200 ease-out",
-              entity
-                ? "translate-x-0 opacity-100"
-                : "pointer-events-none -translate-x-1 opacity-0",
-            )}
-          >
-            {/* Only useful below depth 1 — at the root's immediate child,
-                "Back to All costs" already jumps home. */}
-            {parentValue !== null && (
-              <button
-                type="button"
-                onClick={onHome}
-                tabIndex={entity ? 0 : -1}
-                className="text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex items-center gap-1 rounded-md border bg-transparent py-1.5 pr-3 pl-2.5 text-sm transition-colors"
-              >
-                <Home className="size-3.5 shrink-0" />
-                <span>Cost Overview</span>
-              </button>
-            )}
+          {/* Only useful below depth 1 — at the root's immediate child,
+              "Back to All costs" already jumps home. */}
+          {parentValue !== null && (
             <button
               type="button"
-              onClick={onBack}
+              onClick={onHome}
               tabIndex={entity ? 0 : -1}
-              className="text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex items-center gap-1 rounded-md border bg-transparent py-1.5 pr-3 pl-2.5 text-sm transition-colors"
+              className={NAV_BUTTON_CLASS}
             >
-              <ChevronLeft className="size-3.5 shrink-0" />
-              <span className="max-w-[220px] truncate">
-                Back to{" "}
-                <span className="text-foreground font-semibold">
-                  {parentValue
-                    ? displayValue(parentValue)
-                    : projectName || "All costs"}
-                </span>
-              </span>
+              <Home className="size-3.5 shrink-0" />
+              <span>Cost Overview</span>
             </button>
-          </div>
-          {/* Dataset selector + date-range picker pinned to the top-right of the
-              header, in line with the back controls on the left. The dataset
-              narrows to a spend slice; the range scopes every number below. */}
-          <div className="absolute top-5 right-8 z-10 flex items-stretch gap-2">
-            {/* Grey "Dataset" label box wrapping the selector; stretches to the
-                same height as the date picker via the row's items-stretch. */}
-            <div className="border-border bg-muted flex items-stretch overflow-hidden rounded-md border text-sm">
-              <span className="text-muted-foreground flex items-center pr-2 pl-3 font-medium">
-                Dataset
-              </span>
-              <Select value={datasetValue} onValueChange={onDatasetChange}>
-                <SelectTrigger className="border-border bg-background hover:bg-muted data-[state=open]:bg-muted !h-full w-auto cursor-pointer gap-1.5 rounded-none border-0 border-l py-1 pr-2.5 pl-3 font-medium shadow-none transition-colors">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent align="end">
-                  {datasetOptions.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {rangePicker}
-          </div>
+          )}
+          <button
+            type="button"
+            onClick={onBack}
+            tabIndex={entity ? 0 : -1}
+            className={NAV_BUTTON_CLASS}
+          >
+            <ChevronLeft className="size-3.5 shrink-0" />
+            <span className="max-w-[220px] truncate">
+              Back to{" "}
+              <span className="text-foreground font-semibold">{backLabel}</span>
+            </span>
+          </button>
+        </div>
+      </div>
+      {/* Flat hero: name + headline stats on the page surface, closed by a
+          hairline rule. */}
+      <div className="border-border w-full border-b">
+        <div className="mx-auto w-full max-w-7xl px-8 pt-8 pb-6">
           <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 items-start gap-4">
-              <div className="border-border bg-background flex size-16 shrink-0 items-center justify-center rounded-2xl border">
-                <Icon className="text-foreground size-7" strokeWidth={1.5} />
-              </div>
               <div className="min-w-0">
-                {ancestryTrail && (
-                  <div className="text-muted-foreground mb-1.5 truncate text-sm">
-                    {ancestryTrail}
-                  </div>
-                )}
-                <div className="flex items-center gap-2">
-                  <h1 className="truncate text-2xl font-semibold tracking-tight">
+                {/* The name leads; the type chip trails it, colour-coded by
+                    entity family (see entityBadgeVariant). `min-w-0` on the
+                    heading keeps the truncation on the name, so the chip stays
+                    legible however long the value is. */}
+                <Page.Eyebrow className="mb-2" />
+                <div className="flex items-center gap-3">
+                  <h1 className="text-display-sm min-w-0 truncate font-thin">
                     {title}
+                    {emailSuffix && (
+                      <span className="text-muted-foreground ml-2 text-xl font-normal">
+                        ({emailSuffix})
+                      </span>
+                    )}
                   </h1>
-                  <Badge variant="secondary" className="shrink-0">
-                    {typeLabel}
+                  <Badge
+                    size="md"
+                    variant={badgeVariant}
+                    background
+                    className="shrink-0"
+                  >
+                    <Badge.Text>{typeLabel}</Badge.Text>
                   </Badge>
                 </div>
               </div>
@@ -498,44 +608,63 @@ export function EntityProfile({
                 value={stats.sessions.toLocaleString()}
                 onClick={onViewSessions}
               />
-              {cacheMetric ? (
-                <HeaderStat
-                  label="Tokens added"
-                  value={stats.cacheCreation.toLocaleString()}
-                />
-              ) : (
-                <HeaderStat
-                  label="Tool calls"
-                  value={stats.tools.toLocaleString()}
-                />
-              )}
-              <HeaderStat
-                label="Tokens"
-                value={stats.tokens.toLocaleString()}
-              />
+              {heroTrailingStats()}
             </div>
           </div>
         </div>
       </div>
 
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-8 pt-2 pb-24">
+      {/* Page-scope controls sit under the headline numbers: dataset + range
+          shape every number on the page, and Reset acts on the current view.
+          Once scrolled past, the bar pins to the top of the scrollport (the
+          sentinel above drives the pinned styling: a full-width blur band
+          with a hairline). The breakdown axis track, row search, and CSV
+          export live with the chart/table below — not here — so they stay
+          next to the content they reshape and the rows they export. */}
+      <div ref={pinSentinelRef} aria-hidden="true" className="h-px w-full" />
+      <div
+        className={cn(
+          "sticky top-0 z-20 w-full",
+          pinned && "border-border bg-background/85 border-b backdrop-blur-md",
+        )}
+      >
+        <div className="mx-auto w-full max-w-7xl px-8 py-2">
+          <Page.Toolbar>
+            <Page.Toolbar.Leading>
+              {datasetControl}
+              {rangePicker}
+            </Page.Toolbar.Leading>
+            <Page.Toolbar.Actions>
+              <button
+                type="button"
+                onClick={onReset}
+                className={BAR_BUTTON_CLASS}
+              >
+                <RotateCcw className="size-3.5 shrink-0" />
+                Reset
+              </button>
+            </Page.Toolbar.Actions>
+          </Page.Toolbar>
+        </div>
+      </div>
+
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-8 pt-4 pb-24">
         {widgets}
-        <div className="flex flex-col gap-3">
-          <div className="mb-3 flex items-center gap-3">
-            <h2 className="flex items-center gap-2 text-sm font-semibold">
-              Breakdown by
-              <Select value={axisValue} onValueChange={onAxisChange}>
-                <SelectTrigger className="border-border hover:bg-muted data-[state=open]:bg-muted !h-auto w-auto -my-1 cursor-pointer gap-1.5 rounded-md border bg-transparent py-1.5 pr-2.5 pl-3 text-sm font-semibold shadow-none transition-colors focus-visible:ring-0">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {axisOptions.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+        {/* The breakdown is its own section under the summary widgets, so it
+            opens on a rule rather than floating off the last widget. The
+            heading states the current cut ("Cost by Model") — echoing the lit
+            segment in the control bar below — with the caption saying what
+            the cut is doing in the user's own numbers. Axis track + search
+            sit here, immediately above the chart/table they affect. */}
+        <div className="border-border flex flex-col gap-3 border-t pt-6">
+          <div className="flex flex-col gap-0.5">
+            <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+              {breakdownTitle(axisValue, groupBy, efficiency)}
+              {/* No general "what is a breakdown" note — defining it in the
+                  abstract read as jargon, and the caption below says it
+                  against the slice actually on screen. The icon is left for
+                  axes that carry a real caveat, so its presence means
+                  something. */}
               {axisHint && (
                 <Tooltip>
                   <TooltipTrigger
@@ -550,20 +679,20 @@ export function EntityProfile({
                 </Tooltip>
               )}
             </h2>
-            {/* CSV export covers the dimension table only; the session list owns
-                its own affordances. */}
-            {!tableOverride && (
-              <button
-                type="button"
-                onClick={handleExportCsv}
-                disabled={rows.length === 0}
-                className="text-muted-foreground hover:text-foreground border-border hover:bg-muted inline-flex items-center gap-1.5 rounded-md border bg-transparent px-2.5 py-1.5 text-sm transition-colors disabled:pointer-events-none disabled:opacity-40"
-              >
-                <Download className="size-3.5 shrink-0" />
-                Export CSV
-              </button>
-            )}
+            <p className="text-muted-foreground text-xs">{caption}</p>
           </div>
+          <BreakdownBar
+            axisValue={axisValue}
+            axisOptions={axisOptions}
+            onAxisChange={onAxisChange}
+            searchValue={searchValue}
+            onSearchChange={onSearchChange}
+            searchPlaceholder={searchPlaceholder}
+          />
+          {chart}
+          {/* Export sits immediately above the table so it reads as exporting
+              these rows — not the whole page's spend. */}
+          <div className="flex items-center justify-end">{exportCsvButton}</div>
           {tableOverride ?? dimensionTable}
         </div>
       </div>

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -17,13 +18,45 @@ import (
 
 type batchMessage struct {
 	ID           uuid.UUID
+	ContentPart  bool
 	Type         message.Type
 	Content      string
 	RawToolCalls []byte
 	ToolCalls    []recordedToolCall
 	// UserID is the scanned chat's owner (empty for unattributed sessions),
-	// carried onto judge completions for scanning-volume attribution.
+	// carried onto judge completions for scanning-volume attribution and into
+	// Shadow MCP bypass checks. GetMessageContentBatch must return the same
+	// WorkOS user-id space that authz.ResolveUserPrincipals expects.
 	UserID string
+	// CreatedAt is when the message was recorded. The shadow-MCP scanner uses
+	// the batch's oldest value to bound its ClickHouse provenance lookup.
+	CreatedAt time.Time
+	// Source is the agent that recorded the message (Codex, Cursor, ...). The
+	// shadow-MCP scanner attributes unresolved provenance to it.
+	Source string
+}
+
+// scanSurface is the text content scanners (gitleaks, presidio) evaluate:
+// message content plus, for tool requests, each call's arguments. Realtime
+// scans the same argument text; composing it here keeps args-only secrets and
+// PII visible to batch. Positions in an appended region index into this
+// composed surface, mirroring realtime's args-as-text anchoring.
+func (m batchMessage) scanSurface() string {
+	if m.Type != message.ToolRequest || len(m.ToolCalls) == 0 {
+		return m.Content
+	}
+	var b strings.Builder
+	b.WriteString(m.Content)
+	for _, call := range m.ToolCalls {
+		if call.Function.Arguments == "" {
+			continue
+		}
+		if b.Len() > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString(call.Function.Arguments)
+	}
+	return b.String()
 }
 
 type recordedToolCall struct {
@@ -44,6 +77,36 @@ func newBatchMessages(ctx context.Context, logger *slog.Logger, rows []repo.GetM
 			continue
 		}
 		msg.UserID = row.ChatUserID
+		if row.CreatedAt.Valid {
+			msg.CreatedAt = row.CreatedAt.Time
+		}
+		msg.Source = row.Source.String
+		messages = append(messages, msg)
+	}
+	return messages
+}
+
+func newContentPartBatchMessages(rows []repo.GetContentPartBatchRow, contents []string) []batchMessage {
+	messages := make([]batchMessage, 0, len(rows))
+	for i, row := range rows {
+		messageType := strings.TrimSpace(row.MessageType)
+		if !message.IsTypeValid(messageType) {
+			continue
+		}
+		msg := batchMessage{
+			ID:           row.ID,
+			ContentPart:  true,
+			Type:         messageType,
+			Content:      contents[i],
+			RawToolCalls: nil,
+			ToolCalls:    []recordedToolCall{},
+			UserID:       row.ChatUserID,
+			CreatedAt:    time.Time{},
+			Source:       row.Source.String,
+		}
+		if row.CreatedAt.Valid {
+			msg.CreatedAt = row.CreatedAt.Time
+		}
 		messages = append(messages, msg)
 	}
 	return messages
@@ -62,16 +125,33 @@ func newBatchMessage(ctx context.Context, logger *slog.Logger, id uuid.UUID, rol
 
 	msg := batchMessage{
 		ID:           id,
+		ContentPart:  false,
 		Type:         messageType,
 		Content:      content,
 		RawToolCalls: toolCalls,
 		ToolCalls:    []recordedToolCall{},
 		UserID:       "",
+		CreatedAt:    time.Time{},
+		Source:       "",
 	}
 	if messageType == message.ToolRequest && len(toolCalls) > 0 {
 		msg.ToolCalls = parseRecordedToolCalls(ctx, logger, toolCalls)
 	}
 	return msg, true
+}
+
+func (m batchMessage) chatMessageID() uuid.NullUUID {
+	if m.ContentPart {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	}
+	return uuid.NullUUID{UUID: m.ID, Valid: true}
+}
+
+func (m batchMessage) chatContentPartID() uuid.NullUUID {
+	if !m.ContentPart {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	}
+	return uuid.NullUUID{UUID: m.ID, Valid: true}
 }
 
 func parseRecordedToolCalls(ctx context.Context, logger *slog.Logger, raw []byte) []recordedToolCall {
@@ -86,23 +166,17 @@ func parseRecordedToolCalls(ctx context.Context, logger *slog.Logger, raw []byte
 	return calls
 }
 
-func filterMessagesByMessageTypes(messages []repo.GetMessageContentBatchRow, messageTypes []string) []repo.GetMessageContentBatchRow {
-	filtered := make([]repo.GetMessageContentBatchRow, 0, len(messages))
+func filterBatchMessagesByMessageTypes(messages []batchMessage, messageTypes []string) []batchMessage {
+	if len(messageTypes) == 0 {
+		return messages
+	}
+	filtered := make([]batchMessage, 0, len(messages))
 	for _, msg := range messages {
-		messageType, ok := messageRowMessageType(msg)
-		if !ok {
-			continue
+		if slices.Contains(messageTypes, msg.Type) {
+			filtered = append(filtered, msg)
 		}
-		if len(messageTypes) > 0 && !slices.Contains(messageTypes, messageType) {
-			continue
-		}
-		filtered = append(filtered, msg)
 	}
 	return filtered
-}
-
-func messageRowMessageType(msg repo.GetMessageContentBatchRow) (message.Type, bool) {
-	return messageTypeForRole(msg.Role, msg.ToolCalls)
 }
 
 func messageTypeForRole(role string, toolCalls []byte) (message.Type, bool) {
@@ -158,4 +232,22 @@ func batchMessageView(msg batchMessage) MessageView {
 		view.Tools = append(view.Tools, NewToolView(c.Function.Name, c.Function.Arguments))
 	}
 	return view
+}
+
+// anchorIDStrings returns the scanned unit's anchor as proto-ready pointers:
+// exactly one of chat message id or content part id is non-nil.
+func (m batchMessage) anchorIDStrings() (*string, *string) {
+	chatMessageID := m.chatMessageID()
+	if chatMessageID.Valid {
+		id := chatMessageID.UUID.String()
+		return &id, nil
+	}
+
+	chatContentPartID := m.chatContentPartID()
+	if chatContentPartID.Valid {
+		id := chatContentPartID.UUID.String()
+		return nil, &id
+	}
+
+	return nil, nil
 }

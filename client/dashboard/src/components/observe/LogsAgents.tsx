@@ -2,12 +2,14 @@ import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
 import { ObservabilitySkeleton } from "@/components/ObservabilitySkeleton";
+import { LoggingPageHeader } from "@/components/observe/LoggingPageHeader";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import {
   AccountType,
   HasRisk,
+  Pinned,
   SortBy,
   SortOrder as ApiSortOrder,
 } from "@gram/client/models/operations/listchats";
@@ -19,10 +21,21 @@ import {
   useListChats,
 } from "@gram/client/react-query/listChats.js";
 import { formatPlatform } from "@/lib/formatPlatform";
-import { Badge } from "@/components/ui/badge";
-import { Alert, Button, Icon } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { Pin } from "lucide-react";
+import {
+  useState,
+  useMemo,
+  useCallback,
+  useRef,
+  useEffect,
+  type ReactNode,
+} from "react";
 import { Link, useSearchParams } from "react-router";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useOrgRoutes } from "@/routes";
@@ -34,11 +47,12 @@ import {
   type OptionsById,
 } from "@/components/filters";
 import { Page } from "@/components/page-layout";
-import { type DateRangePreset, getPresetRange } from "@gram-ai/elements";
+import { type DateRangePreset, getPresetRange } from "@/elements";
 import { isValidPreset } from "@/components/observe/observeFilterUtils";
 
 type SortField = "chronological" | "messageCount";
 type SortOrder = "asc" | "desc";
+type SessionsView = "all" | "pinned";
 
 function toApiSortBy(field: SortField): SortBy {
   switch (field) {
@@ -58,6 +72,12 @@ function toApiHasRisk(value: string): HasRisk | undefined {
 function toApiAccountType(value: string): AccountType | undefined {
   if (value === "team") return AccountType.Team;
   if (value === "personal") return AccountType.Personal;
+  return undefined;
+}
+
+function toApiPinned(value: string): Pinned | undefined {
+  if (value === "true") return Pinned.True;
+  if (value === "false") return Pinned.False;
   return undefined;
 }
 
@@ -128,14 +148,36 @@ const HAS_RISK_OPTIONS: OptionsById = {
   ],
 };
 
-// Shown when RBAC is on and the caller lacks chat:read: the list is scoped to
-// their own sessions, so explain why and (for admins) point at the roles page
-// where chat:read is granted.
+const SESSIONS_VIEW_OPTIONS: {
+  value: SessionsView;
+  label: ReactNode;
+  tooltip: string;
+}[] = [
+  {
+    value: "all",
+    label: "All",
+    tooltip: "All agent sessions in the current filters",
+  },
+  {
+    value: "pinned",
+    label: (
+      <span className="inline-flex items-center gap-1.5">
+        <Pin className="size-3.5" aria-hidden />
+        Pinned
+      </span>
+    ),
+    tooltip: "Sessions you've pinned for quick access",
+  },
+];
+
+// Shown when the caller lacks chat:read: the list is scoped to their own
+// sessions, so explain why and (for admins) point at the roles page where
+// chat:read is granted.
 function OwnSessionsNotice(): JSX.Element | null {
   const orgRoutes = useOrgRoutes();
-  const { hasScope, isRbacEnabled, isLoading } = useRBAC();
+  const { hasScope, isLoading } = useRBAC();
 
-  if (isLoading || !isRbacEnabled || hasScope("chat:read")) return null;
+  if (isLoading || hasScope("chat:read")) return null;
 
   return (
     <Alert variant="info" dismissible={false} className="text-sm">
@@ -208,6 +250,7 @@ export function LogsAgentsContent(): JSX.Element {
   const urlChatId = searchParams.get("chatId");
   const urlHasRisk = searchParams.get("has_risk");
   const urlAccountType = searchParams.get("account_type");
+  const urlPinned = searchParams.get("pinned");
   const urlSource = searchParams.get("source");
   const urlMinRiskScore = searchParams.get("min_risk_score");
   const urlAssistantId = searchParams.get("assistantId");
@@ -224,6 +267,10 @@ export function LogsAgentsContent(): JSX.Element {
     urlAccountType === "team" || urlAccountType === "personal"
       ? urlAccountType
       : "";
+  // Pinned sessions get a dedicated view (toolbar segment), not a filter chip —
+  // otherwise they disappear into the chronological scroll of All sessions.
+  // Legacy ?pinned=false is ignored so the segment stays a two-way All/Pinned.
+  const sessionsView: SessionsView = urlPinned === "true" ? "pinned" : "all";
   const minRiskScore = useMemo(
     () => parseMinRiskScore(urlMinRiskScore),
     [urlMinRiskScore],
@@ -338,6 +385,13 @@ export function LogsAgentsContent(): JSX.Element {
     [updateSearchParams],
   );
 
+  const setSessionsView = useCallback(
+    (view: SessionsView) => {
+      updateSearchParams({ pinned: view === "pinned" ? "true" : null });
+    },
+    [updateSearchParams],
+  );
+
   const setSources = useCallback(
     (values: string[]) => {
       updateSearchParams({
@@ -365,7 +419,8 @@ export function LogsAgentsContent(): JSX.Element {
   );
 
   // Single setSearchParams so the synchronous clears don't clobber each other
-  // (react-router's setSearchParams reads a memoized snapshot).
+  // (react-router's setSearchParams reads a memoized snapshot). The All/Pinned
+  // view segment is independent of filters, so Reset leaves `pinned` alone.
   const clearAllFilters = useCallback(() => {
     updateSearchParams({
       range: null,
@@ -408,6 +463,7 @@ export function LogsAgentsContent(): JSX.Element {
             minRiskScore !== undefined ? undefined : toApiHasRisk(hasRisk),
           minRiskScore,
           accountType: toApiAccountType(accountType),
+          pinned: toApiPinned(sessionsView === "pinned" ? "true" : ""),
           assistantId: assistantId || undefined,
           source: sources.length ? sources.join(",") : undefined,
           from: timeRange.from,
@@ -441,8 +497,12 @@ export function LogsAgentsContent(): JSX.Element {
     [sourcesData?.sources],
   );
 
+  // Cache the last known total so pagination stays stable while a refetch is
+  // in flight (data briefly undefined). Include 0 so an empty view — e.g.
+  // Pinned after unpinning the last session — does not keep the previous
+  // view's count and leave Next enabled.
   const lastTotalRef = useRef(0);
-  if (data?.total !== undefined && data.total > 0) {
+  if (data?.total !== undefined) {
     lastTotalRef.current = data.total;
   }
   const total = lastTotalRef.current;
@@ -524,6 +584,8 @@ export function LogsAgentsContent(): JSX.Element {
         setHasRisk={setHasRisk}
         accountType={accountType}
         setAccountType={setAccountType}
+        sessionsView={sessionsView}
+        setSessionsView={setSessionsView}
         sources={sources}
         setSources={setSources}
         filterOptions={filterOptions}
@@ -570,6 +632,8 @@ function AgentSessionsPageContent({
   setHasRisk,
   accountType,
   setAccountType,
+  sessionsView,
+  setSessionsView,
   sources,
   setSources,
   filterOptions,
@@ -611,6 +675,8 @@ function AgentSessionsPageContent({
   setHasRisk: (value: string) => void;
   accountType: string;
   setAccountType: (value: string) => void;
+  sessionsView: SessionsView;
+  setSessionsView: (view: SessionsView) => void;
   sources: string[];
   setSources: (values: string[]) => void;
   filterOptions: OptionsById;
@@ -644,13 +710,10 @@ function AgentSessionsPageContent({
   if (isLogsDisabled) {
     return (
       <div className="min-h-0 w-full flex-1 space-y-6 overflow-y-auto p-8 pb-24">
-        <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="text-xl font-semibold">Agent Sessions</h1>
-          <p className="text-muted-foreground text-sm">
-            View and debug individual agent sessions captured for organization
-            members in this project
-          </p>
-        </div>
+        <LoggingPageHeader
+          title="Agent Sessions"
+          description="View and debug individual agent sessions captured for organization members in this project"
+        />
         <div className="relative flex-1">
           <div
             className="pointer-events-none h-full select-none"
@@ -668,16 +731,13 @@ function AgentSessionsPageContent({
     <>
       <div className="flex min-h-0 w-full flex-1 flex-col">
         <div className="shrink-0 space-y-4 px-8 py-4">
-          <div className="flex min-w-0 flex-col gap-1">
-            <h1 className="text-xl font-semibold">Agent Sessions</h1>
-            <p className="text-muted-foreground text-sm">
-              View and debug individual agent sessions captured for organization
-              members in this project
-            </p>
-          </div>
+          <LoggingPageHeader
+            title="Agent Sessions"
+            description="View and debug individual agent sessions captured for organization members in this project"
+          />
           {hasAssistantFilter && (
             <Badge
-              variant="secondary"
+              variant="neutral"
               className="w-fit gap-1.5 px-2.5 py-1 text-xs"
             >
               <Icon name="bot" className="size-3" />
@@ -691,7 +751,7 @@ function AgentSessionsPageContent({
                 type="button"
                 onClick={clearAssistantFilter}
                 aria-label="Clear assistant filter"
-                className="hover:bg-muted-foreground/20 -mr-1 ml-0.5 flex size-4 items-center justify-center rounded"
+                className="hover:bg-muted-foreground/20 -mr-1 ml-0.5 flex size-4 items-center justify-center"
               >
                 <Icon name="x" className="size-3" />
               </button>
@@ -701,7 +761,7 @@ function AgentSessionsPageContent({
             <Page.Toolbar.Search
               value={searchQuery}
               onChange={setSearchQuery}
-              placeholder="Search by chat ID, user ID, or title..."
+              placeholder="Search by chat ID, user ID, user name, or title..."
               debounceMs={500}
             />
             <Page.Toolbar.Filters
@@ -759,6 +819,13 @@ function AgentSessionsPageContent({
               }}
               onClearAll={clearAllFilters}
             />
+            <Page.Toolbar.Actions>
+              <SegmentedControl
+                value={sessionsView}
+                onChange={setSessionsView}
+                options={SESSIONS_VIEW_OPTIONS}
+              />
+            </Page.Toolbar.Actions>
             <Page.Toolbar.SortBy
               value={sortField}
               onChange={(v) => setSortField(v as SortField)}
@@ -787,17 +854,26 @@ function AgentSessionsPageContent({
                 onDeleteChat={onDeleteChat}
                 isLoading={isLoading}
                 error={error}
+                emptyState={
+                  sessionsView === "pinned"
+                    ? {
+                        title: "No pinned sessions",
+                        description:
+                          "Pin a session from All to keep it here for quick access.",
+                      }
+                    : undefined
+                }
               />
             </div>
             {(hasMore || offset > 0) && (
-              <div className="bg-background flex shrink-0 items-center justify-center gap-4 border-t p-4">
+              <div className="bg-card flex shrink-0 items-center justify-center gap-4 border-t p-4 pb-20">
                 <Button
                   onClick={() => setOffset(Math.max(0, offset - limit))}
                   disabled={offset === 0}
                 >
                   Previous
                 </Button>
-                <span className="text-muted-foreground text-sm tabular-nums">
+                <span className="text-muted-foreground font-mono text-xs tabular-nums">
                   Page {Math.floor(offset / limit) + 1}
                   {total > 0 && ` of ${Math.ceil(total / limit)}`}
                 </span>

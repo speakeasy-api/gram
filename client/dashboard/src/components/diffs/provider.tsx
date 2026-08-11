@@ -6,8 +6,10 @@ import { workerFactory } from "./worker";
 // Import this in your layout to provide the worker pool to all pages.
 export function HighlightProvider({
   children,
+  langs = ["json", "yaml"],
 }: {
   children: ReactNode;
+  langs?: string[];
 }): JSX.Element {
   return (
     <WorkerPoolContextProvider
@@ -15,8 +17,7 @@ export function HighlightProvider({
       highlighterOptions={{
         theme: { dark: "pierre-dark", light: "pierre-light" },
         preferredHighlighter: "shiki-wasm",
-        // Optionally preload languages to avoid lazy-loading delays
-        langs: ["json", "yaml"],
+        langs,
       }}
     >
       {children}

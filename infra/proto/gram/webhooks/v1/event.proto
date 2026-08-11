@@ -1,0 +1,37 @@
+edition = "2024";
+
+package gram.webhooks.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1;webhooksv1";
+
+// Event is the transport envelope for a customer-facing webhook event. Rows are
+// written to the publish_outbox table inside the producer's transaction and
+// relayed onto this topic; the payload itself stays opaque JSON so the Svix
+// event catalog (server/internal/outbox/events) remains the single source of
+// truth for what customers see.
+//
+// Two rules apply to changes here, and they are stricter than for a topic that
+// is published to directly:
+//
+//  1. Additive changes only. A message is marshaled by the binary that writes
+//     the outbox row but published later, possibly after the topic's
+//     PubSubSchema has rolled forward. Adding fields is safe (unknown fields are
+//     accepted); removing or renumbering a field is not.
+//  2. Never set the topic option's `name`. The generator skips schema
+//     attachment for topics that name an externally-owned topic, which would
+//     silently drop BINARY schema validation.
+message Event {
+  string event_id = 1;
+  string organization_id = 2;
+  string event_type = 3;
+  bytes payload = 4;
+  string created_at = 5; // Timestamp in RFC3339 format, e.g. 2023-01-01T00:00:00Z
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: {
+      seconds: 604800 /* 7 days */
+    }
+  };
+}

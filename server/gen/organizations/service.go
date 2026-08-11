@@ -43,8 +43,8 @@ type Service interface {
 	// connections and directory sync state.
 	GetOnboardingStatus(context.Context, *GetOnboardingStatusPayload) (res *OnboardingStatusResult, err error)
 	// Return recent hook events for the active organization so the onboarding
-	// wizard can confirm that Claude Code, Cursor, or Codex instrumentation is
-	// delivering events to Gram. Polled from the confirm-traffic step.
+	// wizard can confirm that coding agent instrumentation is delivering events to
+	// Gram. Polled from the confirm-traffic step.
 	VerifyOnboardingHooksSetup(context.Context, *VerifyOnboardingHooksSetupPayload) (res *VerifyOnboardingHooksSetupResult, err error)
 	// Send the enterprise admin onboarding email to one or more recipients. The
 	// email links each recipient to the wizard for the active organization. Used

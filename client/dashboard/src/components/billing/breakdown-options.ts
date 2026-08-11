@@ -1,19 +1,26 @@
+import { unsetLabel } from "@/components/observe/account-display-utils";
+import { OTHER_STACK_LABEL } from "@/components/stacked-time-series";
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import {
+  BadgeCheck,
   Bot,
+  Building2,
+  Cloud,
   Cpu,
+  FolderKanban,
+  Laptop,
   Layers,
   type LucideIcon,
   Network,
   Shield,
-  ShieldAlert,
   Sigma,
+  UserRound,
 } from "lucide-react";
 
 // The token-usage panel's breakdown catalog: every group-by dimension plus the
-// two special stackings (token type, risk), organized into scannable groups
-// for the picker. Kept in a non-component module so the picker component file
-// satisfies the react-refresh "only export components" rule.
+// special token-type stacking, organized into scannable groups for the picker.
+// Kept in a non-component module so the picker component file satisfies the
+// react-refresh "only export components" rule.
 
 // How the chart's bars stack: by the selected dimension's groups, by token
 // type, or as a single un-broken-down total. Lives here (not in the panel
@@ -27,28 +34,6 @@ export type StackMode = "group" | "tokenType" | "total";
 export const BREAKDOWN_TOTAL = "total";
 const BREAKDOWN_TOKEN_TYPE = "tokenType";
 
-// The two halves of the billed population's model cut (see the server's
-// tumBreakdownDims): the platform's risk-policy scanning inference — the
-// metered unit of the TUM contracts — and user-facing completion surfaces.
-export const RISK_ANALYSIS_MODEL_DIM = "risk_analysis_model";
-export const COMPLETION_MODEL_DIM = "completion_model";
-
-// The chart series palette, shared with the usage details table so a metric's
-// dot color matches its chart legend color.
-export const CHART_COLORS = [
-  "#60a5fa", // blue
-  "#34d399", // emerald
-  "#f97316", // orange
-  "#a78bfa", // violet
-  "#fb7185", // rose
-  "#facc15", // yellow
-  "#38bdf8", // sky
-  "#c084fc", // purple
-  "#4ade80", // green
-  "#f472b6", // pink
-];
-export const OTHER_COLOR = "#94a3b8"; // slate — the top-N remainder rollup
-
 type BreakdownOption = {
   value: string;
   label: string;
@@ -60,12 +45,12 @@ export type BreakdownGroup = {
   options: BreakdownOption[];
 };
 
-// Only dimensions billed completion rows genuinely carry: the model, the
-// identity snapshot hydrated at emit time (division, roles — a per-user cut
-// is deliberately not exposed on the billing page yet), and the consuming
-// surface. Fleet-only concepts (provider, account type, skill, MCP
-// server/tool, cache token types) live on the costs/insights pages, whose
-// analytics aggregate is scoped to agent-fleet provenance.
+// The dimensions the observed agent traffic — the tokens-under-management
+// population — genuinely carries (see the server's tumBreakdownDims): the
+// session's model and agent surface, the AI account's provider and
+// team/personal classification, and the user-identity snapshot hydrated at
+// emit time. Gram-hosted surfaces (playground, risk-analysis inference) are
+// not tokens under management and never appear here.
 export const BREAKDOWN_GROUPS: BreakdownGroup[] = [
   {
     // Ungrouped: the no-breakdown view leads the list, above every category.
@@ -73,41 +58,70 @@ export const BREAKDOWN_GROUPS: BreakdownGroup[] = [
     options: [{ value: BREAKDOWN_TOTAL, label: "Total", icon: Sigma }],
   },
   {
-    heading: "Model",
+    heading: "Usage",
     options: [
-      {
-        value: RISK_ANALYSIS_MODEL_DIM,
-        label: "Risk Policy Analysis Model",
-        icon: ShieldAlert,
-      },
-      { value: COMPLETION_MODEL_DIM, label: "Completion Model", icon: Cpu },
+      { value: Dimension.Model, label: "Model", icon: Cpu },
+      { value: BREAKDOWN_TOKEN_TYPE, label: "Token type", icon: Layers },
     ],
   },
   {
-    heading: "Usage",
+    heading: "Agents",
     options: [
-      { value: BREAKDOWN_TOKEN_TYPE, label: "Token type", icon: Layers },
+      // hook_source: the observed agent surface the session ran on
+      // (claude-code, cursor, codex, …).
+      { value: Dimension.HookSource, label: "Agent", icon: Bot },
+      { value: Dimension.Provider, label: "Provider", icon: Cloud },
+      {
+        value: Dimension.AccountType,
+        label: "Account type",
+        icon: BadgeCheck,
+      },
     ],
   },
   {
     heading: "Organization",
     options: [
+      // project_id values are project UUIDs; the section maps them to names.
+      { value: Dimension.ProjectId, label: "Project", icon: FolderKanban },
       { value: Dimension.DivisionName, label: "Division", icon: Network },
+      {
+        value: Dimension.DepartmentName,
+        label: "Department",
+        icon: Building2,
+      },
     ],
   },
   {
     heading: "People",
-    options: [{ value: Dimension.Role, label: "Role", icon: Shield }],
-  },
-  {
-    heading: "Surfaces",
     options: [
-      // hook_source: for billed completions this is the Gram surface the
-      // request ran through (playground, MCP chat, …).
-      { value: Dimension.HookSource, label: "Source", icon: Bot },
+      { value: Dimension.Email, label: "User", icon: UserRound },
+      // The machine the Go hooks report (gram.hook.hostname) — the identity
+      // the User breakdown falls back to for sessions with no email.
+      { value: Dimension.Hostname, label: "Device", icon: Laptop },
+      { value: Dimension.Role, label: "Role", icon: Shield },
     ],
   },
 ];
+
+// The server's TUM breakdown remainder row: QueryTumDetails keeps the top
+// SERVER_BREAKDOWN_TOP_N values and appends ONE synthetic rollup row last,
+// only when the dimension had more values than that — so a genuine remainder
+// always means exactly TOP_N + 1 rows. Its label is OTHER_STACK_LABEL with
+// " (other)" appended per collision with a real value. Both the chart's
+// rollup flag and the details table's neutral dot key off this one test so
+// they can never disagree.
+const SERVER_BREAKDOWN_TOP_N = 6;
+const SERVER_ROLLUP_LABEL = new RegExp(`^${OTHER_STACK_LABEL}( \\(other\\))*$`);
+export function isServerRollupRow(
+  rows: { value: string }[],
+  index: number,
+): boolean {
+  return (
+    rows.length === SERVER_BREAKDOWN_TOP_N + 1 &&
+    index === rows.length - 1 &&
+    SERVER_ROLLUP_LABEL.test(rows[index]!.value)
+  );
+}
 
 export function stackModeFor(breakdown: string): StackMode {
   switch (breakdown) {
@@ -120,24 +134,26 @@ export function stackModeFor(breakdown: string): StackMode {
   }
 }
 
-// The model cut is the one breakdown whose bars do NOT sum to the billed
-// total: each option charts only its half of the population. The panel shows
-// this note so lower bars read as a narrower scope, not less usage.
-export function scopeNoteFor(breakdown: string): string | null {
-  switch (breakdown) {
-    case RISK_ANALYSIS_MODEL_DIM:
-      return "Risk policy analysis inference only — one slice of the billed total";
-    case COMPLETION_MODEL_DIM:
-      return "Completion surfaces only — one slice of the billed total";
-    default:
-      return null;
-  }
-}
-
 export function breakdownLabel(value: string): string {
   for (const group of BREAKDOWN_GROUPS) {
     const hit = group.options.find((o) => o.value === value);
     if (hit) return hit.label;
+  }
+  return value;
+}
+
+// Display label for one breakdown row value: "" is observed traffic that
+// lacks the attribute ("(unset)", or "Team-wide API Usage" on the user
+// dimension — see unsetLabel), and project_id values are UUIDs mapped to
+// project names (a deleted project falls back to its raw id).
+export function breakdownValueLabel(
+  dimension: string,
+  value: string,
+  projectNames: Map<string, string>,
+): string {
+  if (value === "") return unsetLabel(dimension as Dimension);
+  if (dimension === Dimension.ProjectId) {
+    return projectNames.get(value) ?? value;
   }
   return value;
 }

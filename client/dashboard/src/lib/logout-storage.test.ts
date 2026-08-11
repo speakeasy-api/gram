@@ -2,11 +2,13 @@
 
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { PREFERRED_THEME_STORAGE_KEY } from "./local-storage-keys";
 import {
-  PREFERRED_THEME_STORAGE_KEY,
-  PROJECT_FAVORITES_STORAGE_PREFIX,
-} from "./local-storage-keys";
-import { clearStorageForLogout } from "./logout-storage";
+  capturePreservedStorage,
+  clearLegacyUserStorage,
+  clearStorageForLogout,
+  restorePreservedStorage,
+} from "./logout-storage";
 
 function createStorage(): Storage {
   const items = new Map<string, string>();
@@ -27,6 +29,17 @@ function createStorage(): Storage {
   };
 }
 
+function blockStorageAccess(): void {
+  for (const name of ["localStorage", "sessionStorage"] as const) {
+    Object.defineProperty(window, name, {
+      configurable: true,
+      get: () => {
+        throw new DOMException("Storage disabled", "SecurityError");
+      },
+    });
+  }
+}
+
 describe("clearStorageForLogout", () => {
   beforeEach(() => {
     Object.defineProperty(window, "localStorage", {
@@ -41,22 +54,29 @@ describe("clearStorageForLogout", () => {
     window.sessionStorage.clear();
   });
 
-  it("preserves preferred theme and organization favorites while clearing other local storage", () => {
-    const favoritesKey = `${PROJECT_FAVORITES_STORAGE_PREFIX}org_123`;
-
+  it("preserves theme and favorites while clearing user-scoped local storage", () => {
     window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "light");
-    window.localStorage.setItem(favoritesKey, '["project_123"]');
+    window.localStorage.setItem(
+      "gram:org-favorites:<ORG_ID>",
+      '["<PROJECT_ID>"]',
+    );
+    window.localStorage.setItem("gram:recents:<USER_ID>", '["/recent-page"]');
     window.localStorage.setItem("preferredProject", "project-slug");
     window.localStorage.setItem("pylon_user_email", "user@example.com");
+    window.localStorage.setItem("pylon_user_display_name", "Example User");
 
     clearStorageForLogout();
 
     expect(window.localStorage.getItem(PREFERRED_THEME_STORAGE_KEY)).toBe(
       "light",
     );
-    expect(window.localStorage.getItem(favoritesKey)).toBe('["project_123"]');
+    expect(window.localStorage.getItem("gram:org-favorites:<ORG_ID>")).toBe(
+      '["<PROJECT_ID>"]',
+    );
+    expect(window.localStorage.getItem("gram:recents:<USER_ID>")).toBeNull();
     expect(window.localStorage.getItem("preferredProject")).toBeNull();
     expect(window.localStorage.getItem("pylon_user_email")).toBeNull();
+    expect(window.localStorage.getItem("pylon_user_display_name")).toBeNull();
   });
 
   it("clears session storage", () => {
@@ -65,5 +85,90 @@ describe("clearStorageForLogout", () => {
     clearStorageForLogout();
 
     expect(window.sessionStorage.getItem("temporary")).toBeNull();
+  });
+
+  it("removes legacy Pylon PII without clearing unrelated storage", () => {
+    window.localStorage.setItem("pylon_user_email", "user@example.com");
+    window.localStorage.setItem("pylon_user_display_name", "Example User");
+    window.localStorage.setItem("unrelated", "value");
+    window.sessionStorage.setItem("pylon_user_email", "user@example.com");
+
+    clearLegacyUserStorage();
+
+    expect(window.localStorage.getItem("pylon_user_email")).toBeNull();
+    expect(window.localStorage.getItem("pylon_user_display_name")).toBeNull();
+    expect(window.sessionStorage.getItem("pylon_user_email")).toBeNull();
+    expect(window.localStorage.getItem("unrelated")).toBe("value");
+  });
+
+  it("degrades to a no-op when the browser blocks storage access", () => {
+    blockStorageAccess();
+
+    expect(() => clearStorageForLogout()).not.toThrow();
+    expect(() => clearLegacyUserStorage()).not.toThrow();
+  });
+
+  // The logout response carries Clear-Site-Data, so the browser empties
+  // localStorage before any response handler runs. Capture/restore is what
+  // survives that wipe.
+  it("restores captured entries into storage the browser already emptied", () => {
+    window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "dark");
+    window.localStorage.setItem(
+      "gram:org-favorites:<ORG_ID>",
+      '["<PROJECT_ID>"]',
+    );
+    window.localStorage.setItem("preferredProject", "project-slug");
+
+    const preserved = capturePreservedStorage();
+    window.localStorage.clear();
+    restorePreservedStorage(preserved);
+
+    expect(window.localStorage.getItem(PREFERRED_THEME_STORAGE_KEY)).toBe(
+      "dark",
+    );
+    expect(window.localStorage.getItem("gram:org-favorites:<ORG_ID>")).toBe(
+      '["<PROJECT_ID>"]',
+    );
+    expect(window.localStorage.getItem("preferredProject")).toBeNull();
+  });
+
+  // The logout response hook clears a store the browser may already have
+  // emptied, so the entries it keeps have to come from the snapshot rather than
+  // from a re-read of storage.
+  it("keeps entries from a supplied snapshot when storage is already empty", () => {
+    const preserved = [
+      [PREFERRED_THEME_STORAGE_KEY, "dark"],
+      ["gram:org-favorites:<ORG_ID>", '["<PROJECT_ID>"]'],
+    ] as const;
+    window.localStorage.setItem("preferredProject", "project-slug");
+    window.localStorage.clear();
+
+    clearStorageForLogout(preserved);
+
+    expect(window.localStorage.getItem(PREFERRED_THEME_STORAGE_KEY)).toBe(
+      "dark",
+    );
+    expect(window.localStorage.getItem("gram:org-favorites:<ORG_ID>")).toBe(
+      '["<PROJECT_ID>"]',
+    );
+    expect(window.localStorage.getItem("preferredProject")).toBeNull();
+  });
+
+  it("captures nothing but the preserved keys", () => {
+    window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "dark");
+    window.localStorage.setItem("pylon_user_email", "user@example.com");
+
+    expect(capturePreservedStorage()).toEqual([
+      [PREFERRED_THEME_STORAGE_KEY, "dark"],
+    ]);
+  });
+
+  it("degrades to a no-op when storage is blocked around a logout", () => {
+    blockStorageAccess();
+
+    expect(capturePreservedStorage()).toEqual([]);
+    expect(() =>
+      restorePreservedStorage([[PREFERRED_THEME_STORAGE_KEY, "dark"]]),
+    ).not.toThrow();
   });
 });

@@ -2,6 +2,7 @@
 
 #MISE description="Start the local tunnel gateway"
 #MISE dir="{{ config_root }}"
+#MISE hide=true
 
 set -euo pipefail
 

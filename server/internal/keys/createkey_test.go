@@ -273,6 +273,25 @@ func TestKeysService_CreateKey(t *testing.T) {
 	})
 }
 
+// Server-minted key namespaces (plugin distribution's plugins-, LiteLLM
+// instance minting's litellm-) act as provenance discriminators during
+// ingestion, so user key creation must reject every reserved prefix.
+func TestKeysService_CreateKey_RejectsReservedPrefixes(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestKeysService(t)
+
+	for _, name := range []string{"plugins-hooks-sneaky", "litellm-sneaky"} {
+		key, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
+			SessionToken: nil,
+			Name:         name + randstr(6),
+			Scopes:       []string{"hooks"},
+		})
+		require.Error(t, err)
+		require.Nil(t, key)
+		require.Contains(t, err.Error(), "reserved")
+	}
+}
+
 func TestKeysService_CreateKey_AuditLogMetadata(t *testing.T) {
 	t.Parallel()
 

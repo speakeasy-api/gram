@@ -116,8 +116,11 @@ func (s *Service) SetBillingMetadata(ctx context.Context, payload *gen.SetBillin
 }
 
 // tumHistoryCycles is how many trailing billing cycles (including the active
-// one) the TUM endpoint reports. Bounded by the 2-year retention of
-// chat_token_summaries; older cycles simply come back empty.
+// one) the TUM endpoint reports. The 2-year retention of
+// attribute_metrics_summaries comfortably covers the window, but actual
+// COVERAGE starts where the aggregate's data does (its backfill was bounded
+// by the raw telemetry TTL) — cycles predating coverage recompute to zero
+// unless a finalized snapshot protects them.
 const tumHistoryCycles = 12
 const maxTunneledMcpServerLimit = 1<<31 - 1
 
@@ -159,10 +162,10 @@ func (s *Service) buildTokensUnderManagement(ctx context.Context, authCtx *conte
 	history := make([]*gen.TUMPeriod, 0, len(cycles))
 	for _, cycle := range cycles {
 		days, err := s.telemetryRepo.GetTokensUnderManagementByDay(ctx, telemetryrepo.GetTokensUnderManagementParams{
-			ProjectIDs:        ids,
-			StartUnixNano:     cycle.Start.UnixNano(),
-			EndUnixNano:       cycle.End.UnixNano(),
-			BilledHookSources: billing.ModelUsageSourceStrings(),
+			ProjectIDs:          ids,
+			StartUnixNano:       cycle.Start.UnixNano(),
+			EndUnixNano:         cycle.End.UnixNano(),
+			ExcludedHookSources: billing.GramHostedHookSourceStrings(),
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to compute tokens under management").LogError(ctx, s.logger)

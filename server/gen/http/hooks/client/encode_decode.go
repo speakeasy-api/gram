@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 
 	hooks "github.com/speakeasy-api/gram/server/gen/hooks"
 	goahttp "goa.design/goa/v3/http"
@@ -779,6 +780,11 @@ func EncodeIngestRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 			head := *p.IdempotencyKey
 			req.Header.Set("Idempotency-Key", head)
 		}
+		if p.Replayed != nil {
+			head := *p.Replayed
+			headStr := strconv.FormatBool(head)
+			req.Header.Set("X-Gram-Replayed", headStr)
+		}
 		body := NewIngestRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
 			return goahttp.ErrEncodingError("hooks", "ingest", err)
@@ -982,6 +988,456 @@ func DecodeIngestResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("hooks", "ingest", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildUploadSkillContentRequest instantiates a HTTP request object with
+// method and path set to call the "hooks" service "uploadSkillContent" endpoint
+func (c *Client) BuildUploadSkillContentRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UploadSkillContentHooksPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("hooks", "uploadSkillContent", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUploadSkillContentRequest returns an encoder for requests sent to the
+// hooks uploadSkillContent server.
+func EncodeUploadSkillContentRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*hooks.UploadSkillContentPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("hooks", "uploadSkillContent", "*hooks.UploadSkillContentPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewUploadSkillContentRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("hooks", "uploadSkillContent", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUploadSkillContentResponse returns a decoder for responses returned by
+// the hooks uploadSkillContent endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeUploadSkillContentResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUploadSkillContentResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body UploadSkillContentUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "uploadSkillContent", err)
+			}
+			err = ValidateUploadSkillContentUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "uploadSkillContent", err)
+			}
+			return nil, NewUploadSkillContentUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UploadSkillContentForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "uploadSkillContent", err)
+			}
+			err = ValidateUploadSkillContentForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "uploadSkillContent", err)
+			}
+			return nil, NewUploadSkillContentForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UploadSkillContentBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "uploadSkillContent", err)
+			}
+			err = ValidateUploadSkillContentBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "uploadSkillContent", err)
+			}
+			return nil, NewUploadSkillContentBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UploadSkillContentNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "uploadSkillContent", err)
+			}
+			err = ValidateUploadSkillContentNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "uploadSkillContent", err)
+			}
+			return nil, NewUploadSkillContentNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UploadSkillContentConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "uploadSkillContent", err)
+			}
+			err = ValidateUploadSkillContentConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "uploadSkillContent", err)
+			}
+			return nil, NewUploadSkillContentConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UploadSkillContentUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "uploadSkillContent", err)
+			}
+			err = ValidateUploadSkillContentUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "uploadSkillContent", err)
+			}
+			return nil, NewUploadSkillContentUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UploadSkillContentInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "uploadSkillContent", err)
+			}
+			err = ValidateUploadSkillContentInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "uploadSkillContent", err)
+			}
+			return nil, NewUploadSkillContentInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UploadSkillContentInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("hooks", "uploadSkillContent", err)
+				}
+				err = ValidateUploadSkillContentInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("hooks", "uploadSkillContent", err)
+				}
+				return nil, NewUploadSkillContentInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UploadSkillContentUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("hooks", "uploadSkillContent", err)
+				}
+				err = ValidateUploadSkillContentUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("hooks", "uploadSkillContent", err)
+				}
+				return nil, NewUploadSkillContentUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("hooks", "uploadSkillContent", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UploadSkillContentGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "uploadSkillContent", err)
+			}
+			err = ValidateUploadSkillContentGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "uploadSkillContent", err)
+			}
+			return nil, NewUploadSkillContentGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("hooks", "uploadSkillContent", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildSkillFeedbackRequest instantiates a HTTP request object with method and
+// path set to call the "hooks" service "skillFeedback" endpoint
+func (c *Client) BuildSkillFeedbackRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SkillFeedbackHooksPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("hooks", "skillFeedback", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSkillFeedbackRequest returns an encoder for requests sent to the hooks
+// skillFeedback server.
+func EncodeSkillFeedbackRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*hooks.SkillFeedbackPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("hooks", "skillFeedback", "*hooks.SkillFeedbackPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewSkillFeedbackRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("hooks", "skillFeedback", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSkillFeedbackResponse returns a decoder for responses returned by the
+// hooks skillFeedback endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeSkillFeedbackResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSkillFeedbackResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body SkillFeedbackUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "skillFeedback", err)
+			}
+			err = ValidateSkillFeedbackUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "skillFeedback", err)
+			}
+			return nil, NewSkillFeedbackUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SkillFeedbackForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "skillFeedback", err)
+			}
+			err = ValidateSkillFeedbackForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "skillFeedback", err)
+			}
+			return nil, NewSkillFeedbackForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SkillFeedbackBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "skillFeedback", err)
+			}
+			err = ValidateSkillFeedbackBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "skillFeedback", err)
+			}
+			return nil, NewSkillFeedbackBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SkillFeedbackNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "skillFeedback", err)
+			}
+			err = ValidateSkillFeedbackNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "skillFeedback", err)
+			}
+			return nil, NewSkillFeedbackNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SkillFeedbackConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "skillFeedback", err)
+			}
+			err = ValidateSkillFeedbackConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "skillFeedback", err)
+			}
+			return nil, NewSkillFeedbackConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SkillFeedbackUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "skillFeedback", err)
+			}
+			err = ValidateSkillFeedbackUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "skillFeedback", err)
+			}
+			return nil, NewSkillFeedbackUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SkillFeedbackInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "skillFeedback", err)
+			}
+			err = ValidateSkillFeedbackInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "skillFeedback", err)
+			}
+			return nil, NewSkillFeedbackInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SkillFeedbackInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("hooks", "skillFeedback", err)
+				}
+				err = ValidateSkillFeedbackInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("hooks", "skillFeedback", err)
+				}
+				return nil, NewSkillFeedbackInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SkillFeedbackUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("hooks", "skillFeedback", err)
+				}
+				err = ValidateSkillFeedbackUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("hooks", "skillFeedback", err)
+				}
+				return nil, NewSkillFeedbackUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("hooks", "skillFeedback", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SkillFeedbackGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("hooks", "skillFeedback", err)
+			}
+			err = ValidateSkillFeedbackGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("hooks", "skillFeedback", err)
+			}
+			return nil, NewSkillFeedbackGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("hooks", "skillFeedback", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -1445,6 +1901,7 @@ func marshalHooksHookIngestSourceToHookIngestSourceRequestBody(v *hooks.HookInge
 		AdapterVersion: v.AdapterVersion,
 		RawEventName:   v.RawEventName,
 		Hostname:       v.Hostname,
+		UserEmail:      v.UserEmail,
 	}
 
 	return res
@@ -1484,7 +1941,9 @@ func marshalHooksHookIngestDataToHookIngestDataRequestBody(v *hooks.HookIngestDa
 	if v == nil {
 		return nil
 	}
-	res := &HookIngestDataRequestBody{}
+	res := &HookIngestDataRequestBody{
+		McpInventoryCollected: v.McpInventoryCollected,
+	}
 	if v.Prompt != nil {
 		res.Prompt = marshalHooksHookPromptDataToHookPromptDataRequestBody(v.Prompt)
 	}
@@ -1493,6 +1952,16 @@ func marshalHooksHookIngestDataToHookIngestDataRequestBody(v *hooks.HookIngestDa
 	}
 	if v.Mcp != nil {
 		res.Mcp = marshalHooksHookMCPDataToHookMCPDataRequestBody(v.Mcp)
+	}
+	if v.McpInventory != nil {
+		res.McpInventory = make([]*HookMCPDataRequestBody, len(v.McpInventory))
+		for i, val := range v.McpInventory {
+			if val == nil {
+				res.McpInventory[i] = nil
+				continue
+			}
+			res.McpInventory[i] = marshalHooksHookMCPDataToHookMCPDataRequestBody(val)
+		}
 	}
 	if v.Usage != nil {
 		res.Usage = marshalHooksHookUsageDataToHookUsageDataRequestBody(v.Usage)
@@ -1505,6 +1974,26 @@ func marshalHooksHookIngestDataToHookIngestDataRequestBody(v *hooks.HookIngestDa
 	}
 	if v.Notification != nil {
 		res.Notification = marshalHooksHookNotificationDataToHookNotificationDataRequestBody(v.Notification)
+	}
+	if v.McpAttribution != nil {
+		res.McpAttribution = make([]*HookMCPAttributionEntryRequestBody, len(v.McpAttribution))
+		for i, val := range v.McpAttribution {
+			if val == nil {
+				res.McpAttribution[i] = nil
+				continue
+			}
+			res.McpAttribution[i] = marshalHooksHookMCPAttributionEntryToHookMCPAttributionEntryRequestBody(val)
+		}
+	}
+	if v.PromptAttachments != nil {
+		res.PromptAttachments = make([]*HookPromptAttachmentEntryRequestBody, len(v.PromptAttachments))
+		for i, val := range v.PromptAttachments {
+			if val == nil {
+				res.PromptAttachments[i] = nil
+				continue
+			}
+			res.PromptAttachments[i] = marshalHooksHookPromptAttachmentEntryToHookPromptAttachmentEntryRequestBody(val)
+		}
 	}
 
 	return res
@@ -1603,8 +2092,11 @@ func marshalHooksHookSkillDataToHookSkillDataRequestBody(v *hooks.HookSkillData)
 		return nil
 	}
 	res := &HookSkillDataRequestBody{
-		Name:   v.Name,
-		Source: v.Source,
+		Name:        v.Name,
+		Source:      v.Source,
+		SourceLevel: v.SourceLevel,
+		SourcePath:  v.SourcePath,
+		RawSha256:   v.RawSha256,
 	}
 
 	return res
@@ -1626,6 +2118,46 @@ func marshalHooksHookNotificationDataToHookNotificationDataRequestBody(v *hooks.
 	return res
 }
 
+// marshalHooksHookMCPAttributionEntryToHookMCPAttributionEntryRequestBody
+// builds a value of type *HookMCPAttributionEntryRequestBody from a value of
+// type *hooks.HookMCPAttributionEntry.
+func marshalHooksHookMCPAttributionEntryToHookMCPAttributionEntryRequestBody(v *hooks.HookMCPAttributionEntry) *HookMCPAttributionEntryRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &HookMCPAttributionEntryRequestBody{
+		RequestID: v.RequestID,
+		McpServer: v.McpServer,
+		McpTool:   v.McpTool,
+	}
+
+	return res
+}
+
+// marshalHooksHookPromptAttachmentEntryToHookPromptAttachmentEntryRequestBody
+// builds a value of type *HookPromptAttachmentEntryRequestBody from a value of
+// type *hooks.HookPromptAttachmentEntry.
+func marshalHooksHookPromptAttachmentEntryToHookPromptAttachmentEntryRequestBody(v *hooks.HookPromptAttachmentEntry) *HookPromptAttachmentEntryRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &HookPromptAttachmentEntryRequestBody{
+		EntryUUID:      v.EntryUUID,
+		PromptID:       v.PromptID,
+		PromptSha256:   v.PromptSha256,
+		FilePath:       v.FilePath,
+		DisplayPath:    v.DisplayPath,
+		AttachmentKind: v.AttachmentKind,
+		Content:        v.Content,
+		NumLines:       v.NumLines,
+		TotalLines:     v.TotalLines,
+		StartLine:      v.StartLine,
+		Timestamp:      v.Timestamp,
+	}
+
+	return res
+}
+
 // marshalHookIngestSourceRequestBodyToHooksHookIngestSource builds a value of
 // type *hooks.HookIngestSource from a value of type
 // *HookIngestSourceRequestBody.
@@ -1635,6 +2167,7 @@ func marshalHookIngestSourceRequestBodyToHooksHookIngestSource(v *HookIngestSour
 		AdapterVersion: v.AdapterVersion,
 		RawEventName:   v.RawEventName,
 		Hostname:       v.Hostname,
+		UserEmail:      v.UserEmail,
 	}
 
 	return res
@@ -1674,7 +2207,9 @@ func marshalHookIngestDataRequestBodyToHooksHookIngestData(v *HookIngestDataRequ
 	if v == nil {
 		return nil
 	}
-	res := &hooks.HookIngestData{}
+	res := &hooks.HookIngestData{
+		McpInventoryCollected: v.McpInventoryCollected,
+	}
 	if v.Prompt != nil {
 		res.Prompt = marshalHookPromptDataRequestBodyToHooksHookPromptData(v.Prompt)
 	}
@@ -1683,6 +2218,16 @@ func marshalHookIngestDataRequestBodyToHooksHookIngestData(v *HookIngestDataRequ
 	}
 	if v.Mcp != nil {
 		res.Mcp = marshalHookMCPDataRequestBodyToHooksHookMCPData(v.Mcp)
+	}
+	if v.McpInventory != nil {
+		res.McpInventory = make([]*hooks.HookMCPData, len(v.McpInventory))
+		for i, val := range v.McpInventory {
+			if val == nil {
+				res.McpInventory[i] = nil
+				continue
+			}
+			res.McpInventory[i] = marshalHookMCPDataRequestBodyToHooksHookMCPData(val)
+		}
 	}
 	if v.Usage != nil {
 		res.Usage = marshalHookUsageDataRequestBodyToHooksHookUsageData(v.Usage)
@@ -1695,6 +2240,26 @@ func marshalHookIngestDataRequestBodyToHooksHookIngestData(v *HookIngestDataRequ
 	}
 	if v.Notification != nil {
 		res.Notification = marshalHookNotificationDataRequestBodyToHooksHookNotificationData(v.Notification)
+	}
+	if v.McpAttribution != nil {
+		res.McpAttribution = make([]*hooks.HookMCPAttributionEntry, len(v.McpAttribution))
+		for i, val := range v.McpAttribution {
+			if val == nil {
+				res.McpAttribution[i] = nil
+				continue
+			}
+			res.McpAttribution[i] = marshalHookMCPAttributionEntryRequestBodyToHooksHookMCPAttributionEntry(val)
+		}
+	}
+	if v.PromptAttachments != nil {
+		res.PromptAttachments = make([]*hooks.HookPromptAttachmentEntry, len(v.PromptAttachments))
+		for i, val := range v.PromptAttachments {
+			if val == nil {
+				res.PromptAttachments[i] = nil
+				continue
+			}
+			res.PromptAttachments[i] = marshalHookPromptAttachmentEntryRequestBodyToHooksHookPromptAttachmentEntry(val)
+		}
 	}
 
 	return res
@@ -1793,8 +2358,11 @@ func marshalHookSkillDataRequestBodyToHooksHookSkillData(v *HookSkillDataRequest
 		return nil
 	}
 	res := &hooks.HookSkillData{
-		Name:   v.Name,
-		Source: v.Source,
+		Name:        v.Name,
+		Source:      v.Source,
+		SourceLevel: v.SourceLevel,
+		SourcePath:  v.SourcePath,
+		RawSha256:   v.RawSha256,
 	}
 
 	return res
@@ -1811,6 +2379,46 @@ func marshalHookNotificationDataRequestBodyToHooksHookNotificationData(v *HookNo
 		Type:    v.Type,
 		Title:   v.Title,
 		Message: v.Message,
+	}
+
+	return res
+}
+
+// marshalHookMCPAttributionEntryRequestBodyToHooksHookMCPAttributionEntry
+// builds a value of type *hooks.HookMCPAttributionEntry from a value of type
+// *HookMCPAttributionEntryRequestBody.
+func marshalHookMCPAttributionEntryRequestBodyToHooksHookMCPAttributionEntry(v *HookMCPAttributionEntryRequestBody) *hooks.HookMCPAttributionEntry {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookMCPAttributionEntry{
+		RequestID: v.RequestID,
+		McpServer: v.McpServer,
+		McpTool:   v.McpTool,
+	}
+
+	return res
+}
+
+// marshalHookPromptAttachmentEntryRequestBodyToHooksHookPromptAttachmentEntry
+// builds a value of type *hooks.HookPromptAttachmentEntry from a value of type
+// *HookPromptAttachmentEntryRequestBody.
+func marshalHookPromptAttachmentEntryRequestBodyToHooksHookPromptAttachmentEntry(v *HookPromptAttachmentEntryRequestBody) *hooks.HookPromptAttachmentEntry {
+	if v == nil {
+		return nil
+	}
+	res := &hooks.HookPromptAttachmentEntry{
+		EntryUUID:      v.EntryUUID,
+		PromptID:       v.PromptID,
+		PromptSha256:   v.PromptSha256,
+		FilePath:       v.FilePath,
+		DisplayPath:    v.DisplayPath,
+		AttachmentKind: v.AttachmentKind,
+		Content:        v.Content,
+		NumLines:       v.NumLines,
+		TotalLines:     v.TotalLines,
+		StartLine:      v.StartLine,
+		Timestamp:      v.Timestamp,
 	}
 
 	return res

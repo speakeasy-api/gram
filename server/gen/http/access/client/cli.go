@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"unicode/utf8"
 
 	access "github.com/speakeasy-api/gram/server/gen/access"
 	goa "goa.design/goa/v3/pkg"
@@ -345,37 +346,23 @@ func BuildUpdateMemberRolesPayload(accessUpdateMemberRolesBody string, accessUpd
 	return v, nil
 }
 
-// BuildListShadowMCPApprovalRequestsPayload builds the payload for the access
-// listShadowMCPApprovalRequests endpoint from CLI flags.
-func BuildListShadowMCPApprovalRequestsPayload(accessListShadowMCPApprovalRequestsStatus string, accessListShadowMCPApprovalRequestsProjectID string, accessListShadowMCPApprovalRequestsLimit string, accessListShadowMCPApprovalRequestsCursor string, accessListShadowMCPApprovalRequestsSessionToken string) (*access.ListShadowMCPApprovalRequestsPayload, error) {
+// BuildListShadowMCPInventoryPayload builds the payload for the access
+// listShadowMCPInventory endpoint from CLI flags.
+func BuildListShadowMCPInventoryPayload(accessListShadowMCPInventoryProjectID string, accessListShadowMCPInventoryLimit string, accessListShadowMCPInventoryCursor string, accessListShadowMCPInventorySessionToken string) (*access.ListShadowMCPInventoryPayload, error) {
 	var err error
-	var status *string
+	var projectID string
 	{
-		if accessListShadowMCPApprovalRequestsStatus != "" {
-			status = &accessListShadowMCPApprovalRequestsStatus
-			if !(*status == "requested" || *status == "approved" || *status == "denied") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("status", *status, []any{"requested", "approved", "denied"}))
-			}
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-	var projectID *string
-	{
-		if accessListShadowMCPApprovalRequestsProjectID != "" {
-			projectID = &accessListShadowMCPApprovalRequestsProjectID
-			err = goa.MergeErrors(err, goa.ValidateFormat("project_id", *projectID, goa.FormatUUID))
-			if err != nil {
-				return nil, err
-			}
+		projectID = accessListShadowMCPInventoryProjectID
+		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
 		}
 	}
 	var limit int
 	{
-		if accessListShadowMCPApprovalRequestsLimit != "" {
+		if accessListShadowMCPInventoryLimit != "" {
 			var v int64
-			v, err = strconv.ParseInt(accessListShadowMCPApprovalRequestsLimit, 10, strconv.IntSize)
+			v, err = strconv.ParseInt(accessListShadowMCPInventoryLimit, 10, strconv.IntSize)
 			limit = int(v)
 			if err != nil {
 				return nil, fmt.Errorf("invalid value for limit, must be INT")
@@ -393,18 +380,17 @@ func BuildListShadowMCPApprovalRequestsPayload(accessListShadowMCPApprovalReques
 	}
 	var cursor *string
 	{
-		if accessListShadowMCPApprovalRequestsCursor != "" {
-			cursor = &accessListShadowMCPApprovalRequestsCursor
+		if accessListShadowMCPInventoryCursor != "" {
+			cursor = &accessListShadowMCPInventoryCursor
 		}
 	}
 	var sessionToken *string
 	{
-		if accessListShadowMCPApprovalRequestsSessionToken != "" {
-			sessionToken = &accessListShadowMCPApprovalRequestsSessionToken
+		if accessListShadowMCPInventorySessionToken != "" {
+			sessionToken = &accessListShadowMCPInventorySessionToken
 		}
 	}
-	v := &access.ListShadowMCPApprovalRequestsPayload{}
-	v.Status = status
+	v := &access.ListShadowMCPInventoryPayload{}
 	v.ProjectID = projectID
 	v.Limit = limit
 	v.Cursor = cursor
@@ -413,47 +399,50 @@ func BuildListShadowMCPApprovalRequestsPayload(accessListShadowMCPApprovalReques
 	return v, nil
 }
 
-// BuildCreateShadowMCPApprovalRequestPayload builds the payload for the access
-// createShadowMCPApprovalRequest endpoint from CLI flags.
-func BuildCreateShadowMCPApprovalRequestPayload(accessCreateShadowMCPApprovalRequestBody string, accessCreateShadowMCPApprovalRequestSessionToken string) (*access.CreateShadowMCPApprovalRequestPayload, error) {
+// BuildGetShadowMCPInventoryServerPayload builds the payload for the access
+// getShadowMCPInventoryServer endpoint from CLI flags.
+func BuildGetShadowMCPInventoryServerPayload(accessGetShadowMCPInventoryServerProjectID string, accessGetShadowMCPInventoryServerServerSlug string, accessGetShadowMCPInventoryServerSessionToken string) (*access.GetShadowMCPInventoryServerPayload, error) {
 	var err error
-	var body CreateShadowMCPApprovalRequestRequestBody
+	var projectID string
 	{
-		err = json.Unmarshal([]byte(accessCreateShadowMCPApprovalRequestBody), &body)
+		projectID = accessGetShadowMCPInventoryServerProjectID
+		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"request_token\": \"abc123\"\n   }'")
+			return nil, err
 		}
+	}
+	var serverSlug string
+	{
+		serverSlug = accessGetShadowMCPInventoryServerServerSlug
 	}
 	var sessionToken *string
 	{
-		if accessCreateShadowMCPApprovalRequestSessionToken != "" {
-			sessionToken = &accessCreateShadowMCPApprovalRequestSessionToken
+		if accessGetShadowMCPInventoryServerSessionToken != "" {
+			sessionToken = &accessGetShadowMCPInventoryServerSessionToken
 		}
 	}
-	v := &access.CreateShadowMCPApprovalRequestPayload{
-		RequestToken: body.RequestToken,
-	}
+	v := &access.GetShadowMCPInventoryServerPayload{}
+	v.ProjectID = projectID
+	v.ServerSlug = serverSlug
 	v.SessionToken = sessionToken
 
 	return v, nil
 }
 
-// BuildApproveShadowMCPApprovalRequestPayload builds the payload for the
-// access approveShadowMCPApprovalRequest endpoint from CLI flags.
-func BuildApproveShadowMCPApprovalRequestPayload(accessApproveShadowMCPApprovalRequestBody string, accessApproveShadowMCPApprovalRequestSessionToken string) (*access.ApproveShadowMCPApprovalRequestPayload, error) {
+// BuildUpdateShadowMCPInventoryServerNamePayload builds the payload for the
+// access updateShadowMCPInventoryServerName endpoint from CLI flags.
+func BuildUpdateShadowMCPInventoryServerNamePayload(accessUpdateShadowMCPInventoryServerNameBody string, accessUpdateShadowMCPInventoryServerNameSessionToken string) (*access.UpdateShadowMCPInventoryServerNamePayload, error) {
 	var err error
-	var body ApproveShadowMCPApprovalRequestRequestBody
+	var body UpdateShadowMCPInventoryServerNameRequestBody
 	{
-		err = json.Unmarshal([]byte(accessApproveShadowMCPApprovalRequestBody), &body)
+		err = json.Unmarshal([]byte(accessUpdateShadowMCPInventoryServerNameBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"access_scope\": \"project\",\n      \"display_name\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"match_breadth\": \"url_host\",\n      \"match_value\": \"abc123\",\n      \"observed_full_url\": \"abc123\",\n      \"observed_server_identity\": \"abc123\",\n      \"observed_url_host\": \"abc123\",\n      \"project_ids\": [\n         \"abc123\"\n      ],\n      \"reason\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"aaa\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }'")
 		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
-		if !(body.AccessScope == "organization" || body.AccessScope == "project") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.access_scope", body.AccessScope, []any{"organization", "project"}))
-		}
-		if !(body.MatchBreadth == "full_url" || body.MatchBreadth == "url_host") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_breadth", body.MatchBreadth, []any{"full_url", "url_host"}))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", body.ServerURL, goa.FormatURI))
+		if utf8.RuneCountInString(body.Name) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 255, false))
 		}
 		if err != nil {
 			return nil, err
@@ -461,123 +450,45 @@ func BuildApproveShadowMCPApprovalRequestPayload(accessApproveShadowMCPApprovalR
 	}
 	var sessionToken *string
 	{
-		if accessApproveShadowMCPApprovalRequestSessionToken != "" {
-			sessionToken = &accessApproveShadowMCPApprovalRequestSessionToken
+		if accessUpdateShadowMCPInventoryServerNameSessionToken != "" {
+			sessionToken = &accessUpdateShadowMCPInventoryServerNameSessionToken
 		}
 	}
-	v := &access.ApproveShadowMCPApprovalRequestPayload{
-		ID:                     body.ID,
-		AccessScope:            body.AccessScope,
-		MatchBreadth:           body.MatchBreadth,
-		MatchValue:             body.MatchValue,
-		DisplayName:            body.DisplayName,
-		ObservedFullURL:        body.ObservedFullURL,
-		ObservedURLHost:        body.ObservedURLHost,
-		ObservedServerIdentity: body.ObservedServerIdentity,
-		Reason:                 body.Reason,
-	}
-	if body.ProjectIds != nil {
-		v.ProjectIds = make([]string, len(body.ProjectIds))
-		for i, val := range body.ProjectIds {
-			v.ProjectIds[i] = val
-		}
+	v := &access.UpdateShadowMCPInventoryServerNamePayload{
+		ProjectID: body.ProjectID,
+		ServerURL: body.ServerURL,
+		Name:      body.Name,
 	}
 	v.SessionToken = sessionToken
 
 	return v, nil
 }
 
-// BuildDenyShadowMCPApprovalRequestPayload builds the payload for the access
-// denyShadowMCPApprovalRequest endpoint from CLI flags.
-func BuildDenyShadowMCPApprovalRequestPayload(accessDenyShadowMCPApprovalRequestBody string, accessDenyShadowMCPApprovalRequestSessionToken string) (*access.DenyShadowMCPApprovalRequestPayload, error) {
+// BuildListShadowMCPInventoryUsersPayload builds the payload for the access
+// listShadowMCPInventoryUsers endpoint from CLI flags.
+func BuildListShadowMCPInventoryUsersPayload(accessListShadowMCPInventoryUsersProjectID string, accessListShadowMCPInventoryUsersServerURL string, accessListShadowMCPInventoryUsersLimit string, accessListShadowMCPInventoryUsersCursor string, accessListShadowMCPInventoryUsersSessionToken string) (*access.ListShadowMCPInventoryUsersPayload, error) {
 	var err error
-	var body DenyShadowMCPApprovalRequestRequestBody
+	var projectID string
 	{
-		err = json.Unmarshal([]byte(accessDenyShadowMCPApprovalRequestBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"create_deny_rule\": false,\n      \"display_name\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"match_breadth\": \"url_host\",\n      \"match_value\": \"abc123\",\n      \"observed_full_url\": \"abc123\",\n      \"observed_server_identity\": \"abc123\",\n      \"observed_url_host\": \"abc123\",\n      \"project_ids\": [\n         \"abc123\"\n      ],\n      \"reason\": \"abc123\"\n   }'")
-		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
-		if body.MatchBreadth != nil {
-			if !(*body.MatchBreadth == "full_url" || *body.MatchBreadth == "url_host") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_breadth", *body.MatchBreadth, []any{"full_url", "url_host"}))
-			}
-		}
+		projectID = accessListShadowMCPInventoryUsersProjectID
+		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
 		if err != nil {
 			return nil, err
 		}
 	}
-	var sessionToken *string
+	var serverURL string
 	{
-		if accessDenyShadowMCPApprovalRequestSessionToken != "" {
-			sessionToken = &accessDenyShadowMCPApprovalRequestSessionToken
-		}
-	}
-	v := &access.DenyShadowMCPApprovalRequestPayload{
-		ID:                     body.ID,
-		CreateDenyRule:         body.CreateDenyRule,
-		MatchBreadth:           body.MatchBreadth,
-		MatchValue:             body.MatchValue,
-		DisplayName:            body.DisplayName,
-		ObservedFullURL:        body.ObservedFullURL,
-		ObservedURLHost:        body.ObservedURLHost,
-		ObservedServerIdentity: body.ObservedServerIdentity,
-		Reason:                 body.Reason,
-	}
-	if body.ProjectIds != nil {
-		v.ProjectIds = make([]string, len(body.ProjectIds))
-		for i, val := range body.ProjectIds {
-			v.ProjectIds[i] = val
-		}
-	}
-	v.SessionToken = sessionToken
-
-	return v, nil
-}
-
-// BuildListShadowMCPAccessRulesPayload builds the payload for the access
-// listShadowMCPAccessRules endpoint from CLI flags.
-func BuildListShadowMCPAccessRulesPayload(accessListShadowMCPAccessRulesDisposition string, accessListShadowMCPAccessRulesAccessScope string, accessListShadowMCPAccessRulesProjectID string, accessListShadowMCPAccessRulesLimit string, accessListShadowMCPAccessRulesCursor string, accessListShadowMCPAccessRulesSessionToken string) (*access.ListShadowMCPAccessRulesPayload, error) {
-	var err error
-	var disposition *string
-	{
-		if accessListShadowMCPAccessRulesDisposition != "" {
-			disposition = &accessListShadowMCPAccessRulesDisposition
-			if !(*disposition == "allowed" || *disposition == "denied") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("disposition", *disposition, []any{"allowed", "denied"}))
-			}
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-	var accessScope *string
-	{
-		if accessListShadowMCPAccessRulesAccessScope != "" {
-			accessScope = &accessListShadowMCPAccessRulesAccessScope
-			if !(*accessScope == "organization" || *accessScope == "project") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("access_scope", *accessScope, []any{"organization", "project"}))
-			}
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-	var projectID *string
-	{
-		if accessListShadowMCPAccessRulesProjectID != "" {
-			projectID = &accessListShadowMCPAccessRulesProjectID
-			err = goa.MergeErrors(err, goa.ValidateFormat("project_id", *projectID, goa.FormatUUID))
-			if err != nil {
-				return nil, err
-			}
+		serverURL = accessListShadowMCPInventoryUsersServerURL
+		err = goa.MergeErrors(err, goa.ValidateFormat("server_url", serverURL, goa.FormatURI))
+		if err != nil {
+			return nil, err
 		}
 	}
 	var limit int
 	{
-		if accessListShadowMCPAccessRulesLimit != "" {
+		if accessListShadowMCPInventoryUsersLimit != "" {
 			var v int64
-			v, err = strconv.ParseInt(accessListShadowMCPAccessRulesLimit, 10, strconv.IntSize)
+			v, err = strconv.ParseInt(accessListShadowMCPInventoryUsersLimit, 10, strconv.IntSize)
 			limit = int(v)
 			if err != nil {
 				return nil, fmt.Errorf("invalid value for limit, must be INT")
@@ -595,20 +506,19 @@ func BuildListShadowMCPAccessRulesPayload(accessListShadowMCPAccessRulesDisposit
 	}
 	var cursor *string
 	{
-		if accessListShadowMCPAccessRulesCursor != "" {
-			cursor = &accessListShadowMCPAccessRulesCursor
+		if accessListShadowMCPInventoryUsersCursor != "" {
+			cursor = &accessListShadowMCPInventoryUsersCursor
 		}
 	}
 	var sessionToken *string
 	{
-		if accessListShadowMCPAccessRulesSessionToken != "" {
-			sessionToken = &accessListShadowMCPAccessRulesSessionToken
+		if accessListShadowMCPInventoryUsersSessionToken != "" {
+			sessionToken = &accessListShadowMCPInventoryUsersSessionToken
 		}
 	}
-	v := &access.ListShadowMCPAccessRulesPayload{}
-	v.Disposition = disposition
-	v.AccessScope = accessScope
+	v := &access.ListShadowMCPInventoryUsersPayload{}
 	v.ProjectID = projectID
+	v.ServerURL = serverURL
 	v.Limit = limit
 	v.Cursor = cursor
 	v.SessionToken = sessionToken
@@ -616,27 +526,23 @@ func BuildListShadowMCPAccessRulesPayload(accessListShadowMCPAccessRulesDisposit
 	return v, nil
 }
 
-// BuildCreateShadowMCPAccessRulePayload builds the payload for the access
-// createShadowMCPAccessRule endpoint from CLI flags.
-func BuildCreateShadowMCPAccessRulePayload(accessCreateShadowMCPAccessRuleBody string, accessCreateShadowMCPAccessRuleSessionToken string) (*access.CreateShadowMCPAccessRulePayload, error) {
+// BuildUpsertShadowMCPInventoryPolicyBypassPayload builds the payload for the
+// access upsertShadowMCPInventoryPolicyBypass endpoint from CLI flags.
+func BuildUpsertShadowMCPInventoryPolicyBypassPayload(accessUpsertShadowMCPInventoryPolicyBypassBody string, accessUpsertShadowMCPInventoryPolicyBypassSessionToken string) (*access.UpsertShadowMCPInventoryPolicyBypassPayload, error) {
 	var err error
-	var body CreateShadowMCPAccessRuleRequestBody
+	var body UpsertShadowMCPInventoryPolicyBypassRequestBody
 	{
-		err = json.Unmarshal([]byte(accessCreateShadowMCPAccessRuleBody), &body)
+		err = json.Unmarshal([]byte(accessUpsertShadowMCPInventoryPolicyBypassBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"access_scope\": \"project\",\n      \"display_name\": \"abc123\",\n      \"disposition\": \"denied\",\n      \"match_breadth\": \"url_host\",\n      \"match_value\": \"abc123\",\n      \"observed_full_url\": \"abc123\",\n      \"observed_server_identity\": \"abc123\",\n      \"observed_url_host\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"project_ids\": [\n         \"abc123\"\n      ],\n      \"reason\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"policy_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }'")
 		}
-		if !(body.Disposition == "allowed" || body.Disposition == "denied") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", body.Disposition, []any{"allowed", "denied"}))
+		if body.PolicyIds == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("policy_ids", "body"))
 		}
-		if !(body.AccessScope == "organization" || body.AccessScope == "project") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.access_scope", body.AccessScope, []any{"organization", "project"}))
-		}
-		if body.ProjectID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
-		}
-		if !(body.MatchBreadth == "full_url" || body.MatchBreadth == "url_host") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_breadth", body.MatchBreadth, []any{"full_url", "url_host"}))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", body.ServerURL, goa.FormatURI))
+		for _, e := range body.PolicyIds {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_ids[*]", e, goa.FormatUUID))
 		}
 		if err != nil {
 			return nil, err
@@ -644,55 +550,154 @@ func BuildCreateShadowMCPAccessRulePayload(accessCreateShadowMCPAccessRuleBody s
 	}
 	var sessionToken *string
 	{
-		if accessCreateShadowMCPAccessRuleSessionToken != "" {
-			sessionToken = &accessCreateShadowMCPAccessRuleSessionToken
+		if accessUpsertShadowMCPInventoryPolicyBypassSessionToken != "" {
+			sessionToken = &accessUpsertShadowMCPInventoryPolicyBypassSessionToken
 		}
 	}
-	v := &access.CreateShadowMCPAccessRulePayload{
-		Disposition:            body.Disposition,
-		AccessScope:            body.AccessScope,
-		ProjectID:              body.ProjectID,
-		MatchBreadth:           body.MatchBreadth,
-		MatchValue:             body.MatchValue,
-		DisplayName:            body.DisplayName,
-		ObservedFullURL:        body.ObservedFullURL,
-		ObservedURLHost:        body.ObservedURLHost,
-		ObservedServerIdentity: body.ObservedServerIdentity,
-		Reason:                 body.Reason,
+	v := &access.UpsertShadowMCPInventoryPolicyBypassPayload{
+		ProjectID: body.ProjectID,
+		ServerURL: body.ServerURL,
 	}
-	if body.ProjectIds != nil {
-		v.ProjectIds = make([]string, len(body.ProjectIds))
-		for i, val := range body.ProjectIds {
-			v.ProjectIds[i] = val
+	if body.PolicyIds != nil {
+		v.PolicyIds = make([]string, len(body.PolicyIds))
+		for i, val := range body.PolicyIds {
+			v.PolicyIds[i] = val
 		}
+	} else {
+		v.PolicyIds = []string{}
 	}
 	v.SessionToken = sessionToken
 
 	return v, nil
 }
 
-// BuildUpdateShadowMCPAccessRulePayload builds the payload for the access
-// updateShadowMCPAccessRule endpoint from CLI flags.
-func BuildUpdateShadowMCPAccessRulePayload(accessUpdateShadowMCPAccessRuleBody string, accessUpdateShadowMCPAccessRuleSessionToken string) (*access.UpdateShadowMCPAccessRulePayload, error) {
+// BuildDeleteShadowMCPInventoryPolicyBypassPayload builds the payload for the
+// access deleteShadowMCPInventoryPolicyBypass endpoint from CLI flags.
+func BuildDeleteShadowMCPInventoryPolicyBypassPayload(accessDeleteShadowMCPInventoryPolicyBypassProjectID string, accessDeleteShadowMCPInventoryPolicyBypassServerURL string, accessDeleteShadowMCPInventoryPolicyBypassSessionToken string) (*access.DeleteShadowMCPInventoryPolicyBypassPayload, error) {
 	var err error
-	var body UpdateShadowMCPAccessRuleRequestBody
+	var projectID string
 	{
-		err = json.Unmarshal([]byte(accessUpdateShadowMCPAccessRuleBody), &body)
+		projectID = accessDeleteShadowMCPInventoryPolicyBypassProjectID
+		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"access_scope\": \"project\",\n      \"display_name\": \"abc123\",\n      \"disposition\": \"denied\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"match_breadth\": \"url_host\",\n      \"match_value\": \"abc123\",\n      \"observed_full_url\": \"abc123\",\n      \"observed_server_identity\": \"abc123\",\n      \"observed_url_host\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"reason\": \"abc123\"\n   }'")
+			return nil, err
 		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
-		if !(body.Disposition == "allowed" || body.Disposition == "denied") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.disposition", body.Disposition, []any{"allowed", "denied"}))
+	}
+	var serverURL string
+	{
+		serverURL = accessDeleteShadowMCPInventoryPolicyBypassServerURL
+		err = goa.MergeErrors(err, goa.ValidateFormat("server_url", serverURL, goa.FormatURI))
+		if err != nil {
+			return nil, err
 		}
-		if !(body.AccessScope == "organization" || body.AccessScope == "project") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.access_scope", body.AccessScope, []any{"organization", "project"}))
+	}
+	var sessionToken *string
+	{
+		if accessDeleteShadowMCPInventoryPolicyBypassSessionToken != "" {
+			sessionToken = &accessDeleteShadowMCPInventoryPolicyBypassSessionToken
 		}
-		if body.ProjectID != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	v := &access.DeleteShadowMCPInventoryPolicyBypassPayload{}
+	v.ProjectID = projectID
+	v.ServerURL = serverURL
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildBlockShadowMCPInventoryServerPayload builds the payload for the access
+// blockShadowMCPInventoryServer endpoint from CLI flags.
+func BuildBlockShadowMCPInventoryServerPayload(accessBlockShadowMCPInventoryServerBody string, accessBlockShadowMCPInventoryServerSessionToken string) (*access.BlockShadowMCPInventoryServerPayload, error) {
+	var err error
+	var body BlockShadowMCPInventoryServerRequestBody
+	{
+		err = json.Unmarshal([]byte(accessBlockShadowMCPInventoryServerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"policy_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }'")
 		}
-		if !(body.MatchBreadth == "full_url" || body.MatchBreadth == "url_host") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_breadth", body.MatchBreadth, []any{"full_url", "url_host"}))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", body.ServerURL, goa.FormatURI))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_id", body.PolicyID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessBlockShadowMCPInventoryServerSessionToken != "" {
+			sessionToken = &accessBlockShadowMCPInventoryServerSessionToken
+		}
+	}
+	v := &access.BlockShadowMCPInventoryServerPayload{
+		ProjectID: body.ProjectID,
+		ServerURL: body.ServerURL,
+		PolicyID:  body.PolicyID,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildUnblockShadowMCPInventoryServerPayload builds the payload for the
+// access unblockShadowMCPInventoryServer endpoint from CLI flags.
+func BuildUnblockShadowMCPInventoryServerPayload(accessUnblockShadowMCPInventoryServerProjectID string, accessUnblockShadowMCPInventoryServerServerURL string, accessUnblockShadowMCPInventoryServerPolicyID string, accessUnblockShadowMCPInventoryServerSessionToken string) (*access.UnblockShadowMCPInventoryServerPayload, error) {
+	var err error
+	var projectID string
+	{
+		projectID = accessUnblockShadowMCPInventoryServerProjectID
+		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var serverURL string
+	{
+		serverURL = accessUnblockShadowMCPInventoryServerServerURL
+		err = goa.MergeErrors(err, goa.ValidateFormat("server_url", serverURL, goa.FormatURI))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var policyID string
+	{
+		policyID = accessUnblockShadowMCPInventoryServerPolicyID
+		err = goa.MergeErrors(err, goa.ValidateFormat("policy_id", policyID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessUnblockShadowMCPInventoryServerSessionToken != "" {
+			sessionToken = &accessUnblockShadowMCPInventoryServerSessionToken
+		}
+	}
+	v := &access.UnblockShadowMCPInventoryServerPayload{}
+	v.ProjectID = projectID
+	v.ServerURL = serverURL
+	v.PolicyID = policyID
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildResolveShadowMCPInventoryRequestPayload builds the payload for the
+// access resolveShadowMCPInventoryRequest endpoint from CLI flags.
+func BuildResolveShadowMCPInventoryRequestPayload(accessResolveShadowMCPInventoryRequestBody string, accessResolveShadowMCPInventoryRequestSessionToken string) (*access.ResolveShadowMCPInventoryRequestPayload, error) {
+	var err error
+	var body ResolveShadowMCPInventoryRequestRequestBody
+	{
+		err = json.Unmarshal([]byte(accessResolveShadowMCPInventoryRequestBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"decision\": \"deny\",\n      \"policy_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"server_url\": \"https://example.com/foo\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.server_url", body.ServerURL, goa.FormatURI))
+		if !(body.Decision == "allow" || body.Decision == "deny") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.decision", body.Decision, []any{"allow", "deny"}))
+		}
+		for _, e := range body.PolicyIds {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.policy_ids[*]", e, goa.FormatUUID))
 		}
 		if err != nil {
 			return nil, err
@@ -700,93 +705,67 @@ func BuildUpdateShadowMCPAccessRulePayload(accessUpdateShadowMCPAccessRuleBody s
 	}
 	var sessionToken *string
 	{
-		if accessUpdateShadowMCPAccessRuleSessionToken != "" {
-			sessionToken = &accessUpdateShadowMCPAccessRuleSessionToken
+		if accessResolveShadowMCPInventoryRequestSessionToken != "" {
+			sessionToken = &accessResolveShadowMCPInventoryRequestSessionToken
 		}
 	}
-	v := &access.UpdateShadowMCPAccessRulePayload{
-		ID:                     body.ID,
-		Disposition:            body.Disposition,
-		AccessScope:            body.AccessScope,
-		ProjectID:              body.ProjectID,
-		MatchBreadth:           body.MatchBreadth,
-		MatchValue:             body.MatchValue,
-		DisplayName:            body.DisplayName,
-		ObservedFullURL:        body.ObservedFullURL,
-		ObservedURLHost:        body.ObservedURLHost,
-		ObservedServerIdentity: body.ObservedServerIdentity,
-		Reason:                 body.Reason,
+	v := &access.ResolveShadowMCPInventoryRequestPayload{
+		ProjectID: body.ProjectID,
+		ServerURL: body.ServerURL,
+		Decision:  access.ShadowMCPInventoryRequestDecision(body.Decision),
+	}
+	if body.PolicyIds != nil {
+		v.PolicyIds = make([]string, len(body.PolicyIds))
+		for i, val := range body.PolicyIds {
+			v.PolicyIds[i] = val
+		}
 	}
 	v.SessionToken = sessionToken
 
 	return v, nil
 }
 
-// BuildDeleteShadowMCPAccessRulePayload builds the payload for the access
-// deleteShadowMCPAccessRule endpoint from CLI flags.
-func BuildDeleteShadowMCPAccessRulePayload(accessDeleteShadowMCPAccessRuleID string, accessDeleteShadowMCPAccessRuleSessionToken string) (*access.DeleteShadowMCPAccessRulePayload, error) {
-	var err error
-	var id string
-	{
-		id = accessDeleteShadowMCPAccessRuleID
-		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
-		if err != nil {
-			return nil, err
-		}
-	}
-	var sessionToken *string
-	{
-		if accessDeleteShadowMCPAccessRuleSessionToken != "" {
-			sessionToken = &accessDeleteShadowMCPAccessRuleSessionToken
-		}
-	}
-	v := &access.DeleteShadowMCPAccessRulePayload{}
-	v.ID = id
-	v.SessionToken = sessionToken
-
-	return v, nil
-}
-
-// BuildGetRBACStatusPayload builds the payload for the access getRBACStatus
+// BuildRequestAccessPayload builds the payload for the access requestAccess
 // endpoint from CLI flags.
-func BuildGetRBACStatusPayload(accessGetRBACStatusSessionToken string) (*access.GetRBACStatusPayload, error) {
-	var sessionToken *string
+func BuildRequestAccessPayload(accessRequestAccessBody string, accessRequestAccessApikeyToken string, accessRequestAccessSessionToken string) (*access.RequestAccessPayload, error) {
+	var err error
+	var body RequestAccessRequestBody
 	{
-		if accessGetRBACStatusSessionToken != "" {
-			sessionToken = &accessGetRBACStatusSessionToken
+		err = json.Unmarshal([]byte(accessRequestAccessBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"message\": \"aaa\",\n      \"resource_id\": \"abc123\",\n      \"resource_name\": \"abc123\",\n      \"scope\": \"org:admin\"\n   }'")
+		}
+		if !(body.Scope == "org:read" || body.Scope == "org:admin" || body.Scope == "project:read" || body.Scope == "project:write" || body.Scope == "mcp:read" || body.Scope == "mcp:write" || body.Scope == "mcp:connect" || body.Scope == "environment:read" || body.Scope == "environment:write" || body.Scope == "skill:read" || body.Scope == "skill:write" || body.Scope == "risk_policy:evaluate" || body.Scope == "risk_policy:bypass" || body.Scope == "chat:read" || body.Scope == "chat:write") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", body.Scope, []any{"org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write"}))
+		}
+		if body.Message != nil {
+			if utf8.RuneCountInString(*body.Message) > 1000 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.message", *body.Message, utf8.RuneCountInString(*body.Message), 1000, false))
+			}
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
-	v := &access.GetRBACStatusPayload{}
-	v.SessionToken = sessionToken
-
-	return v, nil
-}
-
-// BuildEnableRBACPayload builds the payload for the access enableRBAC endpoint
-// from CLI flags.
-func BuildEnableRBACPayload(accessEnableRBACSessionToken string) (*access.EnableRBACPayload, error) {
-	var sessionToken *string
+	var apikeyToken *string
 	{
-		if accessEnableRBACSessionToken != "" {
-			sessionToken = &accessEnableRBACSessionToken
+		if accessRequestAccessApikeyToken != "" {
+			apikeyToken = &accessRequestAccessApikeyToken
 		}
 	}
-	v := &access.EnableRBACPayload{}
-	v.SessionToken = sessionToken
-
-	return v, nil
-}
-
-// BuildDisableRBACPayload builds the payload for the access disableRBAC
-// endpoint from CLI flags.
-func BuildDisableRBACPayload(accessDisableRBACSessionToken string) (*access.DisableRBACPayload, error) {
 	var sessionToken *string
 	{
-		if accessDisableRBACSessionToken != "" {
-			sessionToken = &accessDisableRBACSessionToken
+		if accessRequestAccessSessionToken != "" {
+			sessionToken = &accessRequestAccessSessionToken
 		}
 	}
-	v := &access.DisableRBACPayload{}
+	v := &access.RequestAccessPayload{
+		Scope:        body.Scope,
+		ResourceID:   body.ResourceID,
+		ResourceName: body.ResourceName,
+		Message:      body.Message,
+	}
+	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 
 	return v, nil

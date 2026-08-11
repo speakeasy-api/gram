@@ -933,6 +933,234 @@ func EncodeGetServerDetailsError(encoder func(context.Context, http.ResponseWrit
 	}
 }
 
+// EncodeGetSetupDocsResponse returns an encoder for responses returned by the
+// mcpRegistries getSetupDocs endpoint.
+func EncodeGetSetupDocsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*mcpregistries.GetSetupDocsResult)
+		enc := encoder(ctx, w)
+		body := NewGetSetupDocsResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetSetupDocsRequest returns a decoder for requests sent to the
+// mcpRegistries getSetupDocs endpoint.
+func DecodeGetSetupDocsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*mcpregistries.GetSetupDocsPayload, error) {
+	return func(r *http.Request) (*mcpregistries.GetSetupDocsPayload, error) {
+		var payload *mcpregistries.GetSetupDocsPayload
+		var (
+			serverURL         *string
+			registrySpecifier *string
+			sessionToken      *string
+			apikeyToken       *string
+			projectSlugInput  *string
+		)
+		qp := r.URL.Query()
+		serverURLRaw := qp.Get("server_url")
+		if serverURLRaw != "" {
+			serverURL = &serverURLRaw
+		}
+		registrySpecifierRaw := qp.Get("registry_specifier")
+		if registrySpecifierRaw != "" {
+			registrySpecifier = &registrySpecifierRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		payload = NewGetSetupDocsPayload(serverURL, registrySpecifier, sessionToken, apikeyToken, projectSlugInput)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetSetupDocsError returns an encoder for errors returned by the
+// getSetupDocs mcpRegistries endpoint.
+func EncodeGetSetupDocsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetSetupDocsUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetSetupDocsForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetSetupDocsBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetSetupDocsNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetSetupDocsConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetSetupDocsUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetSetupDocsInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetSetupDocsInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetSetupDocsUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetSetupDocsGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // marshalTypesMCPRegistryToMCPRegistryResponseBody builds a value of type
 // *MCPRegistryResponseBody from a value of type *types.MCPRegistry.
 func marshalTypesMCPRegistryToMCPRegistryResponseBody(v *types.MCPRegistry) *MCPRegistryResponseBody {
@@ -1067,6 +1295,57 @@ func marshalTypesExternalMCPToolToExternalMCPToolResponseBody(v *types.ExternalM
 		Description: v.Description,
 		InputSchema: v.InputSchema,
 		Annotations: v.Annotations,
+	}
+
+	return res
+}
+
+// marshalTypesMCPSetupGuideToMCPSetupGuideResponseBody builds a value of type
+// *MCPSetupGuideResponseBody from a value of type *types.MCPSetupGuide.
+func marshalTypesMCPSetupGuideToMCPSetupGuideResponseBody(v *types.MCPSetupGuide) *MCPSetupGuideResponseBody {
+	res := &MCPSetupGuideResponseBody{
+		Slug:              v.Slug,
+		Title:             v.Title,
+		Summary:           v.Summary,
+		AddServerFlow:     v.AddServerFlow,
+		MatchedRemoteID:   v.MatchedRemoteID,
+		MatchKind:         v.MatchKind,
+		ExternalMarkdown:  v.ExternalMarkdown,
+		SpeakeasyMarkdown: v.SpeakeasyMarkdown,
+	}
+	if v.Aliases != nil {
+		res.Aliases = make([]string, len(v.Aliases))
+		for i, val := range v.Aliases {
+			res.Aliases[i] = val
+		}
+	} else {
+		res.Aliases = []string{}
+	}
+	if v.Remotes != nil {
+		res.Remotes = make([]*MCPSetupGuideRemoteResponseBody, len(v.Remotes))
+		for i, val := range v.Remotes {
+			if val == nil {
+				res.Remotes[i] = nil
+				continue
+			}
+			res.Remotes[i] = marshalTypesMCPSetupGuideRemoteToMCPSetupGuideRemoteResponseBody(val)
+		}
+	} else {
+		res.Remotes = []*MCPSetupGuideRemoteResponseBody{}
+	}
+
+	return res
+}
+
+// marshalTypesMCPSetupGuideRemoteToMCPSetupGuideRemoteResponseBody builds a
+// value of type *MCPSetupGuideRemoteResponseBody from a value of type
+// *types.MCPSetupGuideRemote.
+func marshalTypesMCPSetupGuideRemoteToMCPSetupGuideRemoteResponseBody(v *types.MCPSetupGuideRemote) *MCPSetupGuideRemoteResponseBody {
+	res := &MCPSetupGuideRemoteResponseBody{
+		ID:            v.ID,
+		URL:           v.URL,
+		TransportType: v.TransportType,
+		Tenanted:      v.Tenanted,
 	}
 
 	return res

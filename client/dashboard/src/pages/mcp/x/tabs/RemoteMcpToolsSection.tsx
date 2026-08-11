@@ -1,30 +1,37 @@
-import {
-  AnnotationBadgeIcons,
-  type ResolvedToolAnnotations,
-} from "@/components/tool-list/AnnotationBadges";
-import { Heading } from "@/components/ui/heading";
+import { Heading } from "@/components/ui/Heading";
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Sheet";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
 import {
-  useRemoteMcpTools,
-  type RemoteMcpTool,
-  type RemoteMcpToolAnnotations,
-} from "@/hooks/useRemoteMcpTools";
-import { useRemoteMcpUserSessionToken } from "@/hooks/useRemoteMcpUserSessionToken";
+  useProxiedMcpTools,
+  type ProxiedMcpTool,
+  type ProxiedMcpToolAnnotations,
+} from "@/hooks/useProxiedMcpTools";
+import { useUserSessionToken } from "@/hooks/useUserSessionToken";
 import { handleError, toError } from "@/lib/errors";
 import { cn, firstPartyConnectUrl, mcpConnectionUrl } from "@/lib/utils";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import type { ToolMetadata } from "@gram/client/models/components/toolmetadata.js";
+import { ToolAnnotationIndicators } from "./ToolAnnotationIndicators";
+import { ToolMetadataDriftPanel } from "./ToolMetadataDriftPanel";
+import { computeDrift } from "./toolMetadataSync";
+import { useSyncToolMetadata } from "./useSyncToolMetadata";
+import {
+  useToolMetadata,
+  type ToolMetadataByName,
+} from "@/hooks/useToolMetadata";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { PlugZap } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
+import { Link } from "react-router";
 
 type RemoteMcpToolsSectionProps = {
   /** The Gram-proxied MCP URL to connect to; undefined while endpoints load. */
@@ -33,8 +40,24 @@ type RemoteMcpToolsSectionProps = {
   isResolvingUrl: boolean;
   /** The mcp_server id, used to mint the user-session JWT. */
   mcpServerId: string | undefined;
-  /** Whether the server is issuer-gated (has a user_session_issuer). */
-  isIssuerGated: boolean;
+  /**
+   * The server's user_session_issuer id, if it has one. Doubles as the
+   * issuer-gated flag and keys the minted JWT, so relinking the server to a
+   * different issuer discards the token bound to the old one.
+   */
+  userSessionIssuerId: string | undefined;
+  /**
+   * The backing remote_mcp_server id, when there is one. Only remote-backed
+   * servers carry tool metadata — the API rejects toolset-backed ones.
+   */
+  remoteMcpServerId?: string;
+  /** Disabled servers cannot serve MCP requests. */
+  isDisabled: boolean;
+  /**
+   * Deep link to the server's Authentication settings section. Surfaced when a
+   * server with no authentication configured fails to list its tools.
+   */
+  authSettingsHref?: string;
 };
 
 /**
@@ -54,12 +77,26 @@ type RemoteMcpToolsSectionProps = {
 export function RemoteMcpToolsSection(
   props: RemoteMcpToolsSectionProps,
 ): JSX.Element {
+  if (props.isDisabled) {
+    return (
+      <ToolsSectionShell>
+        <EmptyState message="Enable this server to load its tools." />
+      </ToolsSectionShell>
+    );
+  }
+
   return (
     <QueryErrorResetBoundary>
       {({ reset }) => (
         <ErrorBoundary
           onReset={reset}
-          FallbackComponent={RemoteMcpToolsErrorFallback}
+          fallbackRender={(fallbackProps) => (
+            <RemoteMcpToolsErrorFallback
+              {...fallbackProps}
+              isIssuerGated={!!props.userSessionIssuerId}
+              authSettingsHref={props.authSettingsHref}
+            />
+          )}
         >
           <RemoteMcpToolsSectionInner {...props} />
         </ErrorBoundary>
@@ -75,9 +112,9 @@ function ToolsSectionShell({ children }: { children: ReactNode }): JSX.Element {
       <Heading variant="h3" className="mt-1 mb-1 font-semibold normal-case">
         Tools
       </Heading>
-      <Type muted small className="mb-5">
-        Tools exposed by this remote MCP server.
-      </Type>
+      <Text muted small className="mb-5">
+        Tools exposed by this MCP server.
+      </Text>
       {children}
     </section>
   );
@@ -86,9 +123,38 @@ function ToolsSectionShell({ children }: { children: ReactNode }): JSX.Element {
 function RemoteMcpToolsErrorFallback({
   error: rawError,
   resetErrorBoundary,
-}: FallbackProps): JSX.Element {
+  isIssuerGated,
+  authSettingsHref,
+}: FallbackProps & {
+  isIssuerGated: boolean;
+  authSettingsHref?: string;
+}): JSX.Element {
   const error = toError(rawError);
   handleError(error, { silent: true });
+
+  // A server with no authentication configured usually can't list its tools —
+  // the connection is rejected upstream before any tools come back. Rather
+  // than a generic failure, guide the user to set up authentication first.
+  // Retry stays available since a non-issuer-gated server with a public
+  // upstream can also land here on a transient failure.
+  if (!isIssuerGated) {
+    return (
+      <ToolsSectionShell>
+        <EmptyState
+          message="This server has no authentication configured yet. Set up an identity provider so its tools can be listed."
+          onRetry={resetErrorBoundary}
+        >
+          {authSettingsHref ? (
+            <Button variant="secondary" asChild>
+              <Link to={authSettingsHref}>
+                <Button.Text>Configure authentication</Button.Text>
+              </Link>
+            </Button>
+          ) : null}
+        </EmptyState>
+      </ToolsSectionShell>
+    );
+  }
 
   return (
     <ToolsSectionShell>
@@ -104,10 +170,22 @@ function RemoteMcpToolsSectionInner({
   mcpUrl,
   isResolvingUrl,
   mcpServerId,
-  isIssuerGated,
+  userSessionIssuerId,
+  remoteMcpServerId,
 }: RemoteMcpToolsSectionProps): JSX.Element {
-  const { accessToken, isLoading: isTokenLoading } =
-    useRemoteMcpUserSessionToken({ mcpServerId, isIssuerGated });
+  const isIssuerGated = !!userSessionIssuerId;
+
+  const { accessToken, isLoading: isTokenLoading } = useUserSessionToken({
+    target: { kind: "mcpServer", id: mcpServerId },
+    userSessionIssuerId,
+  });
+
+  // Speakeasy's stored annotation overrides for this server's tools. Toolset-backed
+  // servers don't carry any, so skip the request entirely for them.
+  const { metadataByTool, isLoading: isMetadataLoading } = useToolMetadata(
+    mcpServerId,
+    { enabled: !!remoteMcpServerId },
+  );
 
   // Issuer-gated servers must wait for the JWT before connecting, otherwise the
   // unauthenticated request 401s and caches a spurious `needsAuth`.
@@ -123,7 +201,7 @@ function RemoteMcpToolsSectionInner({
   // isn't dropped on a cross-origin hop. No-op in prod / for custom domains.
   const connectUrl = useMemo(() => mcpConnectionUrl(mcpUrl), [mcpUrl]);
 
-  const { tools, isLoading, needsAuth, isError, refetch } = useRemoteMcpTools(
+  const { tools, isLoading, needsAuth, isError, refetch } = useProxiedMcpTools(
     connectUrl,
     { headers, enabled: connectionEnabled },
   );
@@ -150,15 +228,40 @@ function RemoteMcpToolsSectionInner({
     if (authUrl) window.open(authUrl, "_blank", "noopener,noreferrer");
   };
 
-  const loading = isResolvingUrl || isTokenLoading || isLoading;
+  const loading =
+    isResolvingUrl || isTokenLoading || isLoading || isMetadataLoading;
+
+  // Only remote-backed servers carry tool metadata, and there is nothing to
+  // reconcile until both the session and the stored set have loaded.
+  const tracksMetadata = !!remoteMcpServerId;
+  const { sync, isSyncing } = useSyncToolMetadata({
+    mcpServerId,
+    live: tools,
+    stored: metadataByTool,
+    enabled: tracksMetadata && !loading && !!tools,
+  });
+
+  const drift = useMemo(
+    () => (tracksMetadata && tools ? computeDrift(tools, metadataByTool) : []),
+    [tracksMetadata, tools, metadataByTool],
+  );
 
   return (
     <ToolsSectionShell>
+      {!loading && drift.length > 0 ? (
+        <ToolMetadataDriftPanel
+          drift={drift}
+          mcpServerId={mcpServerId}
+          onSync={sync}
+          isSyncing={isSyncing}
+        />
+      ) : null}
       <RemoteMcpToolsBody
         loading={loading}
         needsAuth={needsAuth}
         isError={isError}
         toolEntries={toolEntries}
+        metadataByTool={metadataByTool}
         onRetry={refetch}
         onConnect={authUrl ? handleConnect : undefined}
       />
@@ -171,13 +274,15 @@ function RemoteMcpToolsBody({
   needsAuth,
   isError,
   toolEntries,
+  metadataByTool,
   onRetry,
   onConnect,
 }: {
   loading: boolean;
   needsAuth: boolean;
   isError: boolean;
-  toolEntries: Array<[string, RemoteMcpTool]>;
+  toolEntries: Array<[string, ProxiedMcpTool]>;
+  metadataByTool: ToolMetadataByName;
   onRetry: () => void;
   onConnect?: () => void;
 }): JSX.Element {
@@ -202,7 +307,12 @@ function RemoteMcpToolsBody({
     return <EmptyState message="This server didn't advertise any tools." />;
   }
 
-  return <RemoteMcpToolsList toolEntries={toolEntries} />;
+  return (
+    <RemoteMcpToolsList
+      toolEntries={toolEntries}
+      metadataByTool={metadataByTool}
+    />
+  );
 }
 
 /**
@@ -212,8 +322,10 @@ function RemoteMcpToolsBody({
  */
 function RemoteMcpToolsList({
   toolEntries,
+  metadataByTool,
 }: {
-  toolEntries: Array<[string, RemoteMcpTool]>;
+  toolEntries: Array<[string, ProxiedMcpTool]>;
+  metadataByTool: ToolMetadataByName;
 }): JSX.Element {
   const [selectedName, setSelectedName] = useState<string | null>(null);
 
@@ -226,13 +338,14 @@ function RemoteMcpToolsList({
 
   return (
     <>
-      <div className="border-neutral-softest w-full overflow-hidden rounded-lg border">
+      <div className="border-neutral-softest w-full overflow-hidden border">
         {toolEntries.map(([name, tool]) => (
           <RemoteToolRow
             key={name}
             name={name}
             description={tool.description}
             annotations={tool.annotations}
+            stored={metadataByTool[name]}
             selected={name === selectedName}
             onSelect={() => setSelectedName(name)}
           />
@@ -247,7 +360,11 @@ function RemoteMcpToolsList({
       >
         <SheetContent className="w-full gap-0 sm:max-w-md">
           {selected && (
-            <RemoteToolDetails name={selected[0]} tool={selected[1]} />
+            <RemoteToolDetails
+              name={selected[0]}
+              tool={selected[1]}
+              stored={metadataByTool[selected[0]]}
+            />
           )}
         </SheetContent>
       </Sheet>
@@ -266,12 +383,14 @@ function RemoteToolRow({
   name,
   description,
   annotations,
+  stored,
   selected,
   onSelect,
 }: {
   name: string;
   description?: string;
-  annotations?: RemoteMcpToolAnnotations;
+  annotations?: ProxiedMcpToolAnnotations;
+  stored?: ToolMetadata;
   selected: boolean;
   onSelect: () => void;
 }): JSX.Element {
@@ -295,7 +414,7 @@ function RemoteToolRow({
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex min-w-0 items-center gap-2">
           <p className="text-foreground truncate text-sm leading-6">{name}</p>
-          <AnnotationBadgeIcons {...resolveAnnotations(annotations)} />
+          <ToolAnnotationIndicators annotations={annotations} stored={stored} />
         </div>
         <p className="text-muted-foreground truncate text-sm leading-6">
           {description || "No description"}
@@ -309,9 +428,11 @@ function RemoteToolRow({
 function RemoteToolDetails({
   name,
   tool,
+  stored,
 }: {
   name: string;
-  tool: RemoteMcpTool;
+  tool: ProxiedMcpTool;
+  stored?: ToolMetadata;
 }): JSX.Element {
   const parameters = useMemo(() => extractParameters(tool), [tool]);
 
@@ -322,12 +443,15 @@ function RemoteToolDetails({
           <SheetTitle className="font-mono text-sm break-all">
             {name}
           </SheetTitle>
-          <AnnotationBadgeIcons {...resolveAnnotations(tool.annotations)} />
+          <ToolAnnotationIndicators
+            annotations={tool.annotations}
+            stored={stored}
+          />
         </div>
-        {tool.annotations?.title ? (
-          <Type muted small as="p">
-            {tool.annotations.title}
-          </Type>
+        {(stored?.title ?? tool.annotations?.title) ? (
+          <Text muted small as="p">
+            {stored?.title ?? tool.annotations?.title}
+          </Text>
         ) : null}
         <SheetDescription className="whitespace-pre-line">
           {tool.description || "No description provided."}
@@ -335,13 +459,13 @@ function RemoteToolDetails({
       </SheetHeader>
 
       <div className="flex-1 overflow-y-auto p-4">
-        <Type variant="subheading" as="h4" className="mb-3">
+        <Text variant="subheading" as="h4" className="mb-3">
           Parameters
-        </Type>
+        </Text>
         {parameters.length === 0 ? (
-          <Type muted small as="p">
+          <Text muted small as="p">
             This tool takes no parameters.
-          </Type>
+          </Text>
         ) : (
           <ul className="divide-border divide-y">
             {parameters.map((parameter) => (
@@ -362,12 +486,12 @@ function ToolParameterRow({
   return (
     <li className="flex flex-col gap-1 py-3 first:pt-0 last:pb-0">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <Type mono small as="span" className="font-medium break-all">
+        <Text mono small as="span" className="font-medium break-all">
           {parameter.name}
-        </Type>
-        <Type mono small as="span" className="text-muted-foreground">
+        </Text>
+        <Text mono small as="span" className="text-muted-foreground">
           {parameter.type}
-        </Type>
+        </Text>
         {parameter.required ? (
           <Badge variant="neutral" size="sm" background>
             <Badge.Text className="text-[10px] uppercase">Required</Badge.Text>
@@ -375,9 +499,9 @@ function ToolParameterRow({
         ) : null}
       </div>
       {parameter.description ? (
-        <Type muted small as="span" className="break-words">
+        <Text muted small as="span" className="break-words">
           {parameter.description}
-        </Type>
+        </Text>
       ) : null}
     </li>
   );
@@ -393,10 +517,10 @@ function EmptyState({
   children?: ReactNode;
 }): JSX.Element {
   return (
-    <div className="border-border flex flex-col items-start gap-2 rounded-md border border-dashed px-4 py-6">
-      <Type muted small>
+    <div className="border-border flex flex-col items-start gap-2 border border-dashed px-4 py-6">
+      <Text muted small>
         {message}
-      </Type>
+      </Text>
       {children}
       {onRetry ? (
         <button
@@ -413,7 +537,7 @@ function EmptyState({
 
 function ToolsListSkeleton(): JSX.Element {
   return (
-    <div className="border-neutral-softest w-full overflow-hidden rounded-lg border">
+    <div className="border-neutral-softest w-full overflow-hidden border">
       {Array.from({ length: 5 }).map((_, index) => (
         <ToolRowSkeleton key={index} />
       ))}
@@ -441,11 +565,11 @@ function RemoteMcpToolsConnectPrompt({
   onConnect?: () => void;
 }): JSX.Element {
   return (
-    <div className="border-neutral-softest flex flex-col items-center gap-3 rounded-lg border px-6 py-12 text-center">
+    <div className="border-neutral-softest flex flex-col items-center gap-3 border px-6 py-12 text-center">
       <PlugZap className="text-muted-foreground/70 size-8" />
-      <Type muted small>
+      <Text muted small>
         Connect to this MCP to view the tools.
-      </Type>
+      </Text>
       {onConnect ? (
         <Button variant="secondary" onClick={onConnect}>
           <Button.Text>Connect</Button.Text>
@@ -453,18 +577,6 @@ function RemoteMcpToolsConnectPrompt({
       ) : null}
     </div>
   );
-}
-
-/** Map raw MCP annotation hints to the booleans AnnotationBadgeIcons renders. */
-function resolveAnnotations(
-  annotations: RemoteMcpToolAnnotations | undefined,
-): ResolvedToolAnnotations {
-  return {
-    readOnly: Boolean(annotations?.readOnlyHint),
-    destructive: Boolean(annotations?.destructiveHint),
-    idempotent: Boolean(annotations?.idempotentHint),
-    openWorld: Boolean(annotations?.openWorldHint),
-  };
 }
 
 type ToolParameter = {
@@ -475,7 +587,7 @@ type ToolParameter = {
 };
 
 /** Flatten a tool's JSON Schema into a flat list of named parameters. */
-function extractParameters(tool: RemoteMcpTool): ToolParameter[] {
+function extractParameters(tool: ProxiedMcpTool): ToolParameter[] {
   const schema = readJsonSchema(tool.inputSchema);
   if (!schema) return [];
 

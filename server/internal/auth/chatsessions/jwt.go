@@ -24,8 +24,7 @@ type ChatSessionClaims struct {
 	// engine will load and enforce RBAC grants for the user.
 	SessionID *string `json:"session_id,omitempty"`
 	// AccountType is the organization's billing tier (e.g. "enterprise").
-	// Required for RBAC enforcement — the authz engine only loads grants
-	// for enterprise accounts.
+	// It is carried as session metadata and does not control RBAC enforcement.
 	AccountType string `json:"account_type,omitempty"`
 	jwt.RegisteredClaims
 }
@@ -55,8 +54,12 @@ func (m *Manager) GenerateToken(ctx context.Context, claims ChatSessionClaims, e
 	return signed, jti, nil
 }
 
-// ValidateToken validates a JWT token and returns the claims
-func (m *Manager) ValidateToken(ctx context.Context, tokenString string) (*ChatSessionClaims, error) {
+// ValidateToken validates a JWT token and returns the claims. invalidToken
+// reports that the token itself was rejected (malformed, bad signature,
+// expired, or revoked) and the caller should be treated as unauthenticated;
+// an error without invalidToken is a server fault, such as a failed
+// revocation lookup.
+func (m *Manager) ValidateToken(ctx context.Context, tokenString string) (claims *ChatSessionClaims, invalidToken bool, err error) {
 	//nolint:exhaustruct // no point in setting all the claims fields
 	token, err := jwt.ParseWithClaims(tokenString, &ChatSessionClaims{}, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -66,19 +69,21 @@ func (m *Manager) ValidateToken(ctx context.Context, tokenString string) (*ChatS
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("parse token: %w", err)
+		return nil, true, fmt.Errorf("parse token: %w", err)
 	}
 
 	claims, ok := token.Claims.(*ChatSessionClaims)
 	if !ok || !token.Valid {
-		return nil, fmt.Errorf("invalid token")
+		return nil, true, fmt.Errorf("invalid token")
 	}
 
-	// Check if token is revoked
-	isRevoked, _ := m.IsTokenRevoked(ctx, claims.ID)
+	isRevoked, err := m.IsTokenRevoked(ctx, claims.ID)
+	if err != nil {
+		return nil, false, fmt.Errorf("check token revocation: %w", err)
+	}
 	if isRevoked {
-		return nil, fmt.Errorf("token has been revoked")
+		return nil, true, fmt.Errorf("token has been revoked")
 	}
 
-	return claims, nil
+	return claims, false, nil
 }

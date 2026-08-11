@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
+	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -109,6 +110,17 @@ func (s *Service) serveResolvedMCPEndpoint(
 	logger = logger.With(attr.SlogMcpServerID(mcpServer.ID.String()))
 
 	issuerGated := mcpServer.UserSessionIssuerID.Valid
+
+	// Public tunneled servers serve anonymously: no OAuth handshake, so the
+	// issuer gate is skipped even though the issuer column is populated.
+	// Gate on owner consent before dispatch so ungated callers are never
+	// challenged for a server that will not serve them.
+	if isTunneledPublic(mcpServer) {
+		if err := s.requireTunneledPublicConsent(ctx, logger, mcpEndpoint, mcpServer); err != nil {
+			return err
+		}
+		issuerGated = false
+	}
 
 	// Issuer-gated mcp_servers run the JWT-validation branch here, before
 	// backend dispatch. ServeToolsetResolved then skips its in-toolset
@@ -253,7 +265,11 @@ func (s *Service) LoadResolvedMcpEndpointBySlug(ctx context.Context, logger *slo
 	var shareErr *oops.ShareableError
 	switch {
 	case err == nil:
-		if !mcpServer.UserSessionIssuerID.Valid {
+		// Public tunneled servers serve anonymously and expose no OAuth
+		// surface: every issuer-gated handler resolving through here
+		// (authorize, token, register, revoke, consent) must 404 even
+		// though the issuer column is populated.
+		if !mcpServer.UserSessionIssuerID.Valid || isTunneledPublic(mcpServer) {
 			return nil, oops.E(oops.CodeNotFound, nil, "not found")
 		}
 		return s.BuildResolvedMcpEndpointForServer(ctx, logger, mcpEndpoint, mcpServer, mcpRouteBase)
@@ -418,13 +434,8 @@ func (s *Service) serveTunneledBackend(
 	ctx := r.Context()
 	logger = logger.With(attr.SlogTunneledMCPServerID(mcpServer.TunneledMcpServerID.UUID.String()))
 
-	// Fail closed: tunneled servers front customer-private networks and must
-	// never serve unauthenticated. CreateMCPServer/UpdateMCPServer already
-	// reject public visibility for tunneled backends; this guards the serve
-	// path against any other write reaching the row (manual SQL, future
-	// endpoints) so a flipped flag cannot expose the tunnel.
 	if mcpServer.Visibility == mcpservers.VisibilityPublic {
-		return oops.E(oops.CodeForbidden, nil, "tunneled MCP servers cannot be served publicly").LogError(ctx, logger)
+		return s.serveTunneledPublicBackend(w, r, logger, endpoint, mcpServer)
 	}
 
 	var err error
@@ -461,7 +472,7 @@ func (s *Service) prepareProxyBackendContext(
 	// would only know how to validate API keys / OAuth tokens / chat
 	// sessions, and would reject a perfectly valid user-session JWT. Skip
 	// it and trust the gate.
-	issuerGated := mcpServer.UserSessionIssuerID.Valid
+	issuerGated := mcpServer.UserSessionIssuerID.Valid && !isTunneledPublic(mcpServer)
 	switch mcpServer.Visibility {
 	case mcpservers.VisibilityPrivate:
 		// Private mcp_servers require identity auth, that the caller's
@@ -506,7 +517,11 @@ func (s *Service) prepareProxyBackendContext(
 
 		// mcp:connect covers non-tool proxy methods; tool interceptors still enforce per-tool scopes.
 		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, mcpServer.ID.String(), endpoint.ProjectID.String())); err != nil {
-			return nil, err
+			serverName := ""
+			if mcpServer.Name.Valid {
+				serverName = mcpServer.Name.String
+			}
+			return nil, fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, mcpServer.ID.String(), serverName)))
 		}
 	case mcpservers.VisibilityPublic:
 		// Public, no OAuth: optionally probe Gram identity if the

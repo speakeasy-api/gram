@@ -39,6 +39,7 @@ The pieces (all optional, written in any order — the toolbar sorts them):
 | --------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Search`  | left  | Debounced white search box (`debounceMs` optional, built-in clear button)                                                                                                                         |
 | `Filters` | left  | Filter chips + "More filters" sheet + "Reset to default"                                                                                                                                          |
+| `Leading` | left  | Page-specific left-aligned extras that narrow or re-cut the collection (e.g. a segmented axis track, a scope selector)                                                                            |
 | `SortBy`  | right | Sort dropdown, optionally with a built-in asc/desc direction toggle (one bordered box)                                                                                                            |
 | `Count`   | right | Result-count text                                                                                                                                                                                 |
 | `ViewAs`  | right | Grid/table toggle (grid/table only)                                                                                                                                                               |
@@ -46,6 +47,21 @@ The pieces (all optional, written in any order — the toolbar sorts them):
 | `Refresh` | right | Manual refresh button (`onRefresh` required, `isRefreshing` optional); spins/disables while refreshing and enforces a ~2s minimum visible spin so a fast/cached refetch doesn't look like a no-op |
 
 Layout, height (40px), the grey bar, the search↔filters divider, and the left/right `justify-between` split are all handled by the component — don't re-create them.
+
+A bar with too many controls for one line composes explicit rows inside the same shell instead of hand-rolling a second bar — each `Page.Toolbar.Row` takes the same pieces and lays out the same left/right clusters (see the costs page's `BreakdownBar`):
+
+```jsx
+<Page.Toolbar>
+  <Page.Toolbar.Row>
+    <Page.Toolbar.Search value={q} onChange={setQ} />
+    <Page.Toolbar.Actions>{axisTrack}</Page.Toolbar.Actions>
+  </Page.Toolbar.Row>
+  <Page.Toolbar.Row>
+    <Page.Toolbar.Leading>{scopeControls}</Page.Toolbar.Leading>
+    <Page.Toolbar.Actions>{exportButton}</Page.Toolbar.Actions>
+  </Page.Toolbar.Row>
+</Page.Toolbar>
+```
 
 ## Declaring filters
 

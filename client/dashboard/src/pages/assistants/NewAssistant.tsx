@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useSearchParams } from "react-router";
-import { useSidebar } from "@/components/ui/sidebar-context";
+import { useSidebar } from "@/components/ui/Sidebar/sidebar-context";
 import { NewAssistantOnboarding } from "./onboarding/AssistantOnboarding";
 
 export default function NewAssistantPage(): JSX.Element {

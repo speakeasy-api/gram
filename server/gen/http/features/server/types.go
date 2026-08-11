@@ -34,15 +34,37 @@ type GetProductFeaturesResponseBody struct {
 	SessionCaptureEnabled bool `form:"session_capture_enabled" json:"session_capture_enabled" xml:"session_capture_enabled"`
 	// Whether authz challenge logging to ClickHouse is enabled
 	AuthzChallengeLoggingEnabled bool `form:"authz_challenge_logging_enabled" json:"authz_challenge_logging_enabled" xml:"authz_challenge_logging_enabled"`
-	// Whether webhooks are enabled
-	Webhooks bool `form:"webhooks" json:"webhooks" xml:"webhooks"`
 	// Whether SSO setup is enabled for the organization
 	SsoEnabled bool `form:"sso_enabled" json:"sso_enabled" xml:"sso_enabled"`
 	// Whether SCIM/directory sync setup is enabled for the organization
 	ScimEnabled bool `form:"scim_enabled" json:"scim_enabled" xml:"scim_enabled"`
-	// Whether observability mode is enabled, making generated hook plugins fully
-	// non-blocking
-	ObservabilityModeEnabled bool `form:"observability_mode_enabled" json:"observability_mode_enabled" xml:"observability_mode_enabled"`
+	// Whether generated hook plugins may mint per-user keys via the interactive
+	// browser login
+	HooksBrowserLoginEnabled bool `form:"hooks_browser_login_enabled" json:"hooks_browser_login_enabled" xml:"hooks_browser_login_enabled"`
+	// Whether hooks fail open when the Speakeasy control plane is unreachable or
+	// erroring — blocking policies are not enforced for the duration of the outage
+	HooksFailOpenEnabled bool `form:"hooks_fail_open_enabled" json:"hooks_fail_open_enabled" xml:"hooks_fail_open_enabled"`
+	// Whether the organization can supply its own model provider API keys (BYOK)
+	CustomModelKeysEnabled bool `form:"custom_model_keys_enabled" json:"custom_model_keys_enabled" xml:"custom_model_keys_enabled"`
+	// Whether the Skills page is enabled for the organization
+	SkillsEnabled bool `form:"skills_enabled" json:"skills_enabled" xml:"skills_enabled"`
+	// Whether skill capture stores activation metadata without requesting manifest
+	// content
+	SkillCaptureMetadataOnly bool `form:"skill_capture_metadata_only" json:"skill_capture_metadata_only" xml:"skill_capture_metadata_only"`
+	// Whether the organization can provision push integrations for AI platforms
+	AiPlatformPushIntegrationsEnabled bool `form:"ai_platform_push_integrations_enabled" json:"ai_platform_push_integrations_enabled" xml:"ai_platform_push_integrations_enabled"`
+	// Whether the organization is eligible for the Gram Platform MCP capability
+	PlatformMcpEnabled bool `form:"platform_mcp_enabled" json:"platform_mcp_enabled" xml:"platform_mcp_enabled"`
+	// Whether the organization can manage the external credentials and cloud KMS
+	// keys backing customer-managed encryption
+	CustomerManagedEncryptionKeysEnabled bool `form:"customer_managed_encryption_keys_enabled" json:"customer_managed_encryption_keys_enabled" xml:"customer_managed_encryption_keys_enabled"`
+	// Whether consent screens expose automatic remote-session refresh for the
+	// organization
+	RemoteSessionAutoRefreshEnabled bool `form:"remote_session_auto_refresh_enabled" json:"remote_session_auto_refresh_enabled" xml:"remote_session_auto_refresh_enabled"`
+	// Whether the organization uses the device agent (any device has polled
+	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
+	// feature.
+	DeviceAgent bool `form:"device_agent" json:"device_agent" xml:"device_agent"`
 }
 
 // GetProductFeaturesUnauthorizedResponseBody is the type of the "features"
@@ -422,14 +444,22 @@ type SetProductFeatureGatewayErrorResponseBody struct {
 // result of the "getProductFeatures" endpoint of the "features" service.
 func NewGetProductFeaturesResponseBody(res *features.GetProductFeaturesResult) *GetProductFeaturesResponseBody {
 	body := &GetProductFeaturesResponseBody{
-		LogsEnabled:                  res.LogsEnabled,
-		ToolIoLogsEnabled:            res.ToolIoLogsEnabled,
-		SessionCaptureEnabled:        res.SessionCaptureEnabled,
-		AuthzChallengeLoggingEnabled: res.AuthzChallengeLoggingEnabled,
-		Webhooks:                     res.Webhooks,
-		SsoEnabled:                   res.SsoEnabled,
-		ScimEnabled:                  res.ScimEnabled,
-		ObservabilityModeEnabled:     res.ObservabilityModeEnabled,
+		LogsEnabled:                          res.LogsEnabled,
+		ToolIoLogsEnabled:                    res.ToolIoLogsEnabled,
+		SessionCaptureEnabled:                res.SessionCaptureEnabled,
+		AuthzChallengeLoggingEnabled:         res.AuthzChallengeLoggingEnabled,
+		SsoEnabled:                           res.SsoEnabled,
+		ScimEnabled:                          res.ScimEnabled,
+		HooksBrowserLoginEnabled:             res.HooksBrowserLoginEnabled,
+		HooksFailOpenEnabled:                 res.HooksFailOpenEnabled,
+		CustomModelKeysEnabled:               res.CustomModelKeysEnabled,
+		SkillsEnabled:                        res.SkillsEnabled,
+		SkillCaptureMetadataOnly:             res.SkillCaptureMetadataOnly,
+		AiPlatformPushIntegrationsEnabled:    res.AiPlatformPushIntegrationsEnabled,
+		PlatformMcpEnabled:                   res.PlatformMcpEnabled,
+		CustomerManagedEncryptionKeysEnabled: res.CustomerManagedEncryptionKeysEnabled,
+		RemoteSessionAutoRefreshEnabled:      res.RemoteSessionAutoRefreshEnabled,
+		DeviceAgent:                          res.DeviceAgent,
 	}
 	return body
 }
@@ -758,8 +788,8 @@ func ValidateSetProductFeatureRequestBody(body *SetProductFeatureRequestBody) (e
 		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
 	if body.FeatureName != nil {
-		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture" || *body.FeatureName == "authz_challenge_logging" || *body.FeatureName == "webhooks" || *body.FeatureName == "sso" || *body.FeatureName == "scim" || *body.FeatureName == "observability_mode") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "webhooks", "sso", "scim", "observability_mode"}))
+		if !(*body.FeatureName == "logs" || *body.FeatureName == "tool_io_logs" || *body.FeatureName == "session_capture" || *body.FeatureName == "authz_challenge_logging" || *body.FeatureName == "sso" || *body.FeatureName == "scim" || *body.FeatureName == "hooks_browser_login" || *body.FeatureName == "hooks_fail_open" || *body.FeatureName == "custom_model_keys" || *body.FeatureName == "skills" || *body.FeatureName == "skill_capture_metadata_only" || *body.FeatureName == "ai_platform_push_integrations" || *body.FeatureName == "platform_mcp" || *body.FeatureName == "customer_managed_encryption_keys" || *body.FeatureName == "remote_session_auto_refresh") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", *body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "sso", "scim", "hooks_browser_login", "hooks_fail_open", "custom_model_keys", "skills", "skill_capture_metadata_only", "ai_platform_push_integrations", "platform_mcp", "customer_managed_encryption_keys", "remote_session_auto_refresh"}))
 		}
 	}
 	if body.FeatureName != nil {

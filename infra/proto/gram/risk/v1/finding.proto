@@ -29,6 +29,26 @@ message Finding {
   string source = 15; // Detection source (e.g. "gitleaks", "presidio")
   double confidence = 16; // 0.0-1.0 confidence score
   string dead_letter_reason = 17; // Non-empty => dead-letter sentinel, not a real finding
+  string content_part_id = 18;
+
+  // Set only when this message re-publishes an already-persisted finding to
+  // record a manual false-positive dismissal/undo (risk.markResultsFalsePositive
+  // / risk.unmarkResultsFalsePositive). Empty on every finding produced by a
+  // scanner. Must be UTC RFC3339 when present, e.g. 2023-01-01T00:00:00Z.
+  string false_positive_at = 19;
+
+  // Reveal metadata: which text start_pos/end_pos index. One of content,
+  // scan_surface, tool_args, json_path, derived or none; empty means
+  // unknown/legacy, where reveal falls back to a verified candidate cascade.
+  string surface = 20;
+  // Scanner field name the finding was detected in (e.g. content, tool.args),
+  // copied from the matched span. Empty when the scanner records no spans.
+  string field = 21;
+  // gjson path of the extracted value within field for json_path extractions.
+  string path = 22;
+  // Recorded tool call id anchoring the finding when the scanned text belongs
+  // to a tool call. Empty when not applicable or unknown.
+  string tool_call_id = 23;
 
   option (gcp.pubsub.v1.topic) = {
     retention_hint: {
