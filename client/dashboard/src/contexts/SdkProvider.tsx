@@ -3,7 +3,6 @@ import { isProjectOverviewQueryKey } from "@/components/project/projectOverviewQ
 import {
   capturePreservedStorage,
   clearStorageForLogout,
-  restorePreservedStorage,
   type PreservedStorage,
 } from "@/lib/logout-storage";
 import { getApiBaseURL } from "@/lib/utils";
@@ -43,8 +42,10 @@ export const SdkProvider = ({
     // Values held across the logout round-trip. The logout response tells the
     // browser to wipe storage for the origin, which happens before the response
     // hook below runs, so anything meant to outlive the session has to be read
-    // off localStorage before the request is sent.
-    let preservedAcrossLogout: PreservedStorage = [];
+    // off localStorage before the request is sent. Keyed by request so
+    // overlapping logouts — a double-clicked menu item — each restore their own
+    // snapshot rather than racing over one slot.
+    const preservedAcrossLogout = new WeakMap<Request, PreservedStorage>();
 
     const httpClient = new HTTPClient({
       fetcher: (request) => {
@@ -69,7 +70,7 @@ export const SdkProvider = ({
 
     httpClient.addHook("beforeRequest", (request) => {
       if (new URL(request.url).pathname === LOGOUT_PATH) {
-        preservedAcrossLogout = capturePreservedStorage();
+        preservedAcrossLogout.set(request, capturePreservedStorage());
       }
     });
 
@@ -89,11 +90,10 @@ export const SdkProvider = ({
       document.cookie = "gram_admin_override=; path=/; max-age=0;";
       // Still clear explicitly: Clear-Site-Data is a no-op on origins the
       // browser does not treat as trustworthy, and on engines that don't
-      // implement it. Where it did apply, this finds storage already empty and
-      // the restore puts the preserved entries back either way.
-      clearStorageForLogout();
-      restorePreservedStorage(preservedAcrossLogout);
-      preservedAcrossLogout = [];
+      // implement it. Where it did apply, storage is already empty and the
+      // pre-request snapshot holds the only copy of the preserved entries.
+      clearStorageForLogout(preservedAcrossLogout.get(request));
+      preservedAcrossLogout.delete(request);
     });
 
     const gram = new Gram({

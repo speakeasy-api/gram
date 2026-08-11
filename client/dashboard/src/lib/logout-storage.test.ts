@@ -132,6 +132,28 @@ describe("clearStorageForLogout", () => {
     expect(window.localStorage.getItem("preferredProject")).toBeNull();
   });
 
+  // The logout response hook clears a store the browser may already have
+  // emptied, so the entries it keeps have to come from the snapshot rather than
+  // from a re-read of storage.
+  it("keeps entries from a supplied snapshot when storage is already empty", () => {
+    const preserved = [
+      [PREFERRED_THEME_STORAGE_KEY, "dark"],
+      ["gram:org-favorites:<ORG_ID>", '["<PROJECT_ID>"]'],
+    ] as const;
+    window.localStorage.setItem("preferredProject", "project-slug");
+    window.localStorage.clear();
+
+    clearStorageForLogout(preserved);
+
+    expect(window.localStorage.getItem(PREFERRED_THEME_STORAGE_KEY)).toBe(
+      "dark",
+    );
+    expect(window.localStorage.getItem("gram:org-favorites:<ORG_ID>")).toBe(
+      '["<PROJECT_ID>"]',
+    );
+    expect(window.localStorage.getItem("preferredProject")).toBeNull();
+  });
+
   it("captures nothing but the preserved keys", () => {
     window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "dark");
     window.localStorage.setItem("pylon_user_email", "user@example.com");

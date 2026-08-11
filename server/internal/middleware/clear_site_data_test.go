@@ -110,6 +110,40 @@ func TestClearSiteDataOnLogout_IgnoresStatusAfterCommit(t *testing.T) {
 	require.Empty(t, rec.Header().Get("Clear-Site-Data"))
 }
 
+// net/http keeps the final status open after an informational response, so a
+// 103 must not consume the writer's one shot at setting the directive.
+func TestClearSiteDataOnLogout_SetsDirectiveAfterEarlyHints(t *testing.T) {
+	t.Parallel()
+
+	rec := httptest.NewRecorder()
+	handler := ClearSiteDataOnLogout(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusEarlyHints)
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/rpc/auth.logout", nil))
+
+	// Only the header is asserted: httptest.ResponseRecorder records the first
+	// WriteHeader it sees, so rec.Code reports the 103 that a real server would
+	// have sent as an informational response ahead of the final status.
+	require.Equal(t, `"cookies", "storage"`, rec.Header().Get("Clear-Site-Data"))
+}
+
+// 101 is terminal, not informational: nothing follows it, and a protocol switch
+// is not a logout.
+func TestClearSiteDataOnLogout_OmitsDirectiveOnSwitchingProtocols(t *testing.T) {
+	t.Parallel()
+
+	rec := httptest.NewRecorder()
+	handler := ClearSiteDataOnLogout(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusSwitchingProtocols)
+	}))
+
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/rpc/auth.logout", nil))
+
+	require.Empty(t, rec.Header().Get("Clear-Site-Data"))
+}
+
 func TestClearSiteDataOnLogout_SetsDirectiveBeforeFlush(t *testing.T) {
 	t.Parallel()
 

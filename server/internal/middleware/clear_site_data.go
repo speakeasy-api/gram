@@ -21,6 +21,13 @@ type clearSiteDataWriter struct {
 }
 
 func (w *clearSiteDataWriter) WriteHeader(code int) {
+	// 1xx other than 101 is informational: net/http sends it and leaves the
+	// final status open, so the directive stays pending for the next call.
+	if code >= 100 && code < 200 && code != 101 {
+		w.ResponseWriter.WriteHeader(code)
+		return
+	}
+
 	if !w.wroteHeader {
 		w.wroteHeader = true
 		if code >= 200 && code < 300 {
