@@ -1,4 +1,5 @@
 import { Eye, EyeOff, Loader2, Lock } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
   useCallback,
   useEffect,
@@ -173,10 +174,18 @@ export function RevealAllToggle({
 export function MaskedMatch({
   resultId,
   matchRedacted,
+  tone = "default",
 }: {
   resultId: string | undefined;
   matchRedacted: string | undefined;
+  /**
+   * "contrast" renders for a dark code-block backdrop (the Watchdog drawer's
+   * evidence card): the masked state becomes a red redaction chip and the
+   * revealed value flips to the backdrop's inverse text color.
+   */
+  tone?: "default" | "contrast";
 }): JSX.Element {
+  const contrast = tone === "contrast";
   const { hasScope } = useRBAC();
   const canReveal = hasScope(REVEAL_SCOPE);
   const ctx = useRevealAll();
@@ -207,7 +216,12 @@ export function MaskedMatch({
   if (!canReveal) {
     return (
       <SimpleTooltip tooltip={REVEAL_DENIED_REASON}>
-        <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
+        <span
+          className={cn(
+            "inline-flex items-center gap-1 text-xs",
+            contrast ? "text-background/70" : "text-muted-foreground",
+          )}
+        >
           <Lock className="h-3 w-3" />
           <span>Hidden</span>
         </span>
@@ -219,7 +233,12 @@ export function MaskedMatch({
     return (
       <button
         type="button"
-        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs disabled:opacity-60"
+        className={cn(
+          "inline-flex items-center gap-1 text-xs disabled:opacity-60",
+          contrast
+            ? "bg-destructive px-2 py-0.5 font-mono tracking-wide text-white uppercase hover:bg-destructive/80"
+            : "text-muted-foreground hover:text-foreground",
+        )}
         disabled={isLoading}
         onClick={(e) => {
           e.stopPropagation();
@@ -240,13 +259,23 @@ export function MaskedMatch({
   return (
     <span className="inline-flex max-w-full min-w-0 items-center gap-1">
       <SimpleTooltip tooltip={value}>
-        <span className="min-w-0 overflow-x-auto font-mono text-xs whitespace-nowrap">
+        <span
+          className={cn(
+            "min-w-0 overflow-x-auto font-mono text-xs whitespace-nowrap",
+            contrast && "text-background",
+          )}
+        >
           {value}
         </span>
       </SimpleTooltip>
       <button
         type="button"
-        className="text-muted-foreground hover:text-foreground shrink-0"
+        className={cn(
+          "shrink-0",
+          contrast
+            ? "text-background/60 hover:text-background"
+            : "text-muted-foreground hover:text-foreground",
+        )}
         onClick={(e) => {
           e.stopPropagation();
           setRevealed(false);

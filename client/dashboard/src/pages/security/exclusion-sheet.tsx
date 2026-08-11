@@ -18,14 +18,8 @@ import { Switch } from "@/components/ui/Switch";
 import { TextArea } from "@/components/ui/Textarea";
 import { Text } from "@/components/ui/Text";
 import { Button } from "@/components/ui/Button";
-import { invalidateAllListChats } from "@gram/client/react-query/listChats.js";
 import { useRiskCreateExclusionMutation } from "@gram/client/react-query/riskCreateExclusion.js";
-import { invalidateAllRiskListExclusions } from "@gram/client/react-query/riskListExclusions.js";
 import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
-import { invalidateAllRiskListResults } from "@gram/client/react-query/riskListResults.js";
-import { invalidateAllRiskListResultsByChat } from "@gram/client/react-query/riskListResultsByChat.js";
-import { invalidateAllRiskListResultsForAgent } from "@gram/client/react-query/riskListResultsForAgent.js";
-import { invalidateAllRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { useRiskSuggestExclusionMutation } from "@gram/client/react-query/riskSuggestExclusion.js";
 import { useRiskUpdateExclusionMutation } from "@gram/client/react-query/riskUpdateExclusion.js";
 import type { RiskExclusion } from "@gram/client/models/components/riskexclusion.js";
@@ -33,8 +27,9 @@ import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Sparkles } from "lucide-react";
-import type { JSX } from "react";
+import type { JSX, ReactNode } from "react";
 import { useState } from "react";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { BUILTIN_RULE_ID_LIST } from "./detection-rules-data";
 import {
@@ -49,6 +44,7 @@ import {
 } from "./exclusion-options";
 import { hasRevealableEvent, REVEAL_SCOPE, useUnmaskedMatch } from "./unmask";
 import { useRBAC } from "@/hooks/useRBAC";
+import { invalidateExclusionSurfaces } from "./exclusion-invalidation";
 
 const GLOBAL_SCOPE = "__global__";
 
@@ -71,9 +67,16 @@ export type ExclusionSheetState =
 export function ExclusionEditor({
   state,
   onDone,
+  secondaryAction,
+  embedded,
 }: {
   state: ExclusionSheetState;
   onDone: () => void;
+  /** Optional extra control rendered beside the save button — see
+   * {@link ExclusionFormProps.secondaryAction}. */
+  secondaryAction?: ReactNode;
+  /** See {@link ExclusionFormProps.embedded}. */
+  embedded?: boolean;
 }): JSX.Element {
   const queryClient = useQueryClient();
   const { data: policyData } = useRiskListPolicies();
@@ -83,23 +86,7 @@ export function ExclusionEditor({
     (p) => p.policyType !== "prompt_based",
   );
 
-  // Saving an exclusion suppresses/restores findings retroactively, so refresh
-  // the exclusion list AND every risk-results surface (chat detail, agent,
-  // overview) so stale findings disappear without a manual reload. Note the
-  // server applies the exclusion asynchronously (Temporal reconcile), so the
-  // refetched results lag; hosts that need instant feedback hide the originating
-  // finding optimistically on `onDone`.
-  const invalidate = () =>
-    Promise.all([
-      invalidateAllRiskListExclusions(queryClient),
-      invalidateAllRiskListResults(queryClient),
-      invalidateAllRiskListResultsByChat(queryClient),
-      invalidateAllRiskListResultsForAgent(queryClient),
-      invalidateAllRiskOverview(queryClient),
-      // The Agent Sessions list shows per-session risk counts, so refresh it too
-      // (lags the async reconcile like the other surfaces).
-      invalidateAllListChats(queryClient),
-    ]);
+  const invalidate = () => invalidateExclusionSurfaces(queryClient);
 
   const createMutation = useRiskCreateExclusionMutation({
     onSuccess: () => {
@@ -134,6 +121,8 @@ export function ExclusionEditor({
       policies={policies}
       state={state}
       submitting={submitting}
+      secondaryAction={secondaryAction}
+      embedded={embedded}
       onSubmit={({ fields, scope, enabled }) => {
         const riskPolicyId = scope === GLOBAL_SCOPE ? undefined : scope;
         if (editing) {
@@ -217,6 +206,12 @@ interface ExclusionFormProps {
     scope: string;
     enabled: boolean;
   }) => void;
+  /** Optional extra control rendered beside the save button (e.g. the
+   * Watchdog drawer's Back button when the editor is embedded in place). */
+  secondaryAction?: ReactNode;
+  /** Embedded hosts (the Watchdog drawer) control their own horizontal
+   * inset, so the form drops the standalone sheet's px-6 padding. */
+  embedded?: boolean;
 }
 
 function ExclusionForm({
@@ -224,6 +219,8 @@ function ExclusionForm({
   state,
   submitting,
   onSubmit,
+  secondaryAction,
+  embedded = false,
 }: ExclusionFormProps) {
   const editing = state.mode === "edit" ? state.exclusion : null;
   const results = state.mode === "create" ? (state.results ?? []) : [];
@@ -335,7 +332,12 @@ function ExclusionForm({
 
   return (
     <>
-      <div className="flex-1 space-y-5 overflow-y-auto px-6 py-2">
+      <div
+        className={cn(
+          "flex-1 space-y-5 overflow-y-auto py-2",
+          !embedded && "px-6",
+        )}
+      >
         {options.length > 1 && (
           <div className="space-y-2">
             <Label>What should we stop flagging?</Label>
@@ -451,7 +453,15 @@ function ExclusionForm({
         )}
       </div>
 
-      <SheetFooter className="px-6 pb-6">
+      <SheetFooter
+        className={cn(
+          "pb-6",
+          !embedded && "px-6",
+          embedded && "px-0",
+          secondaryAction && "flex-row items-center justify-between",
+        )}
+      >
+        {secondaryAction}
         {/* An exact rule stays unsavable until the reveal resolves — there is
             no client-side stand-in for the plaintext to write it against. */}
         <Button
