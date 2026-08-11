@@ -1,6 +1,13 @@
 import { Text } from "@/components/ui/Text";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
-import { Building2, ChevronRight, FolderOpen, Plug } from "lucide-react";
+import {
+  Blocks,
+  Building2,
+  ChevronRight,
+  FolderOpen,
+  Plug,
+  Terminal,
+} from "lucide-react";
 import { Link } from "react-router";
 
 // Fallback for resource ids we cannot resolve to a display name (deleted
@@ -33,7 +40,7 @@ export function ResourceLink({
     { slug?: string; name?: string; projectId: string }
   >;
 }): JSX.Element {
-  const { resourceKind, resourceId } = challenge;
+  const { resourceKind, resourceId, projectId } = challenge;
 
   if (!resourceKind || !resourceId) {
     return (
@@ -78,6 +85,30 @@ export function ResourceLink({
           : null;
     } else {
       label = resourceId;
+    }
+  } else if (resourceKind === "skill") {
+    IconEl = Terminal;
+    // Skill scopes are project-scoped: the resource id is the project id. Fall
+    // back to the bucket's projectId if that lookup misses.
+    const proj =
+      projectMap.get(resourceId) ??
+      (projectId ? projectMap.get(projectId) : undefined);
+    if (proj) {
+      label = proj.name;
+      to = `/${orgSlug}/projects/${proj.slug}/skills`;
+    }
+  } else if (resourceKind === "environment") {
+    IconEl = Blocks;
+    // Environment checks carry either the project id or a specific environment
+    // id as the resource id, always with the project id on the bucket. There is
+    // no org-wide environment lookup to resolve an environment id to a slug, so
+    // link to the project's environments list.
+    const proj =
+      projectMap.get(resourceId) ??
+      (projectId ? projectMap.get(projectId) : undefined);
+    if (proj) {
+      label = proj.name;
+      to = `/${orgSlug}/projects/${proj.slug}/environments`;
     }
   }
 
