@@ -101,6 +101,8 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
 	assembler := evidence.NewAssembler(
 		packagemeta.NewClient(notFoundRegistry{}),
 		telemetryrepo.New(chConn),
