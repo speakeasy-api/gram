@@ -579,7 +579,6 @@ const ROUTE_STRUCTURE = {
     title: "Watchdog",
     url: "watchdog",
     icon: "radar",
-    stage: "preview",
     component: Watchdog,
   },
   riskOverview: {

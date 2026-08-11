@@ -263,7 +263,7 @@ function WatchdogContent(): JSX.Element {
 
   return (
     <Page.Section>
-      <Page.Section.Title stage="preview">Watchdog</Page.Section.Title>
+      <Page.Section.Title>Watchdog</Page.Section.Title>
       <Page.Section.Description>
         Your riskiest AI usage, clustered and ranked
         {subtitleSummary ? ` — ${subtitleSummary}` : ""} across {rangeLabel}.
