@@ -233,10 +233,19 @@ export function SignalDrawer({
   const { dismiss, isOptimisticallyDismissed } = useDismissFinding();
   const [exclusionState, setExclusionState] =
     useState<ExclusionSheetState | null>(null);
+  // Set when leaving the exclusion editor so the remounting detail view
+  // slides back in from the left — but never on the drawer's first open,
+  // where the Sheet's own slide already animates the content.
+  const [returningFromEditor, setReturningFromEditor] = useState(false);
   const [pendingDismissAll, setPendingDismissAll] = useState<
     RiskResult[] | null
   >(null);
   const [collecting, setCollecting] = useState(false);
+
+  const closeEditor = () => {
+    setExclusionState(null);
+    setReturningFromEditor(true);
+  };
 
   const ruleId = signal?.ruleId ?? "";
   // The list endpoint's rule filter is substring-match, so an id that is a
@@ -298,6 +307,7 @@ export function SignalDrawer({
         onOpenChange={(open) => {
           if (!open) {
             setExclusionState(null);
+            setReturningFromEditor(false);
             setPendingDismissAll(null);
             onClose();
           }
@@ -329,13 +339,10 @@ export function SignalDrawer({
                 <div className="flex min-h-0 flex-1 flex-col px-4 pb-6">
                   <ExclusionEditor
                     state={exclusionState}
-                    onDone={() => setExclusionState(null)}
+                    onDone={closeEditor}
                     embedded
                     secondaryAction={
-                      <Button
-                        variant="tertiary"
-                        onClick={() => setExclusionState(null)}
-                      >
+                      <Button variant="tertiary" onClick={closeEditor}>
                         <Button.LeftIcon>
                           <Icon name="arrow-left" className="size-4" />
                         </Button.LeftIcon>
@@ -348,192 +355,204 @@ export function SignalDrawer({
             )}
           {signal && !exclusionState && (
             <RevealAllProvider>
-              <SheetHeader>
-                <div className="flex items-baseline gap-2">
-                  <span
-                    className="font-display text-2xl leading-none font-thin"
-                    style={{
-                      color: SCORE_TEXT_COLOR[scoreToRating(signal.riskScore)],
-                    }}
-                  >
-                    {signal.riskScore.toFixed(1)}
-                  </span>
-                  <Text small muted className="uppercase">
-                    {signal.severity}
-                  </Text>
-                </div>
-                <SheetTitle>{getRuleTitleFallback(signal.ruleId)}</SheetTitle>
-                <SheetDescription>
-                  {signalDescription(signal, pendingDismissAll !== null)}
-                </SheetDescription>
-              </SheetHeader>
-              <div className="flex flex-1 flex-col gap-6 px-4 pb-6">
-                {/* Clicking "Mark false positive" swaps the action buttons
+              {/* Mirrors the editor's entry: coming back slides the detail
+                  view in from the left. First open animates via the Sheet
+                  itself, so the class only applies after leaving the editor. */}
+              <div
+                className={cn(
+                  "flex min-h-0 flex-1 flex-col",
+                  returningFromEditor &&
+                    "animate-in slide-in-from-left duration-300 ease-in-out",
+                )}
+              >
+                <SheetHeader>
+                  <div className="flex items-baseline gap-2">
+                    <span
+                      className="font-display text-2xl leading-none font-thin"
+                      style={{
+                        color:
+                          SCORE_TEXT_COLOR[scoreToRating(signal.riskScore)],
+                      }}
+                    >
+                      {signal.riskScore.toFixed(1)}
+                    </span>
+                    <Text small muted className="uppercase">
+                      {signal.severity}
+                    </Text>
+                  </div>
+                  <SheetTitle>{getRuleTitleFallback(signal.ruleId)}</SheetTitle>
+                  <SheetDescription>
+                    {signalDescription(signal, pendingDismissAll !== null)}
+                  </SheetDescription>
+                </SheetHeader>
+                <div className="flex flex-1 flex-col gap-6 px-4 pb-6">
+                  {/* Clicking "Mark false positive" swaps the action buttons
                     for an inline confirmation — the rest of the signal
                     detail stays visible; no modal, no view change. */}
-                {pendingDismissAll ? (
-                  <FalsePositiveConfirm
-                    count={pendingDismissAll.length}
-                    onConfirm={confirmDismissAll}
-                    onCancel={() => setPendingDismissAll(null)}
-                  />
-                ) : (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button variant="primary" onClick={openSignalExclusion}>
-                      <Button.Text>Create exclusion rule</Button.Text>
-                    </Button>
-                    {/* Deliberately the only filled action: exclusion is the
+                  {pendingDismissAll ? (
+                    <FalsePositiveConfirm
+                      count={pendingDismissAll.length}
+                      onConfirm={confirmDismissAll}
+                      onCancel={() => setPendingDismissAll(null)}
+                    />
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button variant="primary" onClick={openSignalExclusion}>
+                        <Button.Text>Create exclusion rule</Button.Text>
+                      </Button>
+                      {/* Deliberately the only filled action: exclusion is the
                         recommended path, false positive stays low-emphasis. */}
-                    <Button
-                      variant="tertiary"
-                      disabled={collecting}
-                      onClick={() => void collectAllFindings()}
-                    >
-                      {collecting && (
-                        <Button.LeftIcon>
-                          <Loader2 className="size-4 animate-spin" />
-                        </Button.LeftIcon>
-                      )}
-                      <Button.Text>Mark false positive</Button.Text>
-                    </Button>
-                  </div>
-                )}
-                {/* While the confirmation is up, everything below it sits
+                      <Button
+                        variant="tertiary"
+                        disabled={collecting}
+                        onClick={() => void collectAllFindings()}
+                      >
+                        {collecting && (
+                          <Button.LeftIcon>
+                            <Loader2 className="size-4 animate-spin" />
+                          </Button.LeftIcon>
+                        )}
+                        <Button.Text>Mark false positive</Button.Text>
+                      </Button>
+                    </div>
+                  )}
+                  {/* While the confirmation is up, everything below it sits
                     under a dark scrim and is inert — the decision is the
                     only actionable thing in the drawer. */}
-                <div className="relative flex-1">
-                  {pendingDismissAll !== null && (
-                    // Negative insets cancel the body's px-4/pb-6 padding and
-                    // the gap under the divider so the scrim bleeds to the
-                    // drawer's edges with no light border around it.
-                    <div className="bg-foreground/50 absolute -inset-x-4 -top-6 -bottom-6 z-10" />
-                  )}
-                  <div
-                    className={cn(
-                      "space-y-6",
-                      pendingDismissAll !== null &&
-                        "pointer-events-none select-none",
+                  <div className="relative flex-1">
+                    {pendingDismissAll !== null && (
+                      // Negative insets cancel the body's px-4/pb-6 padding and
+                      // the gap under the divider so the scrim bleeds to the
+                      // drawer's edges with no light border around it.
+                      <div className="bg-foreground/50 absolute -inset-x-4 -top-6 -bottom-6 z-10" />
                     )}
-                    aria-hidden={pendingDismissAll !== null}
-                  >
-                    <Text small muted>
-                      First seen {signal.firstSeen.toLocaleString()} · last{" "}
-                      {signal.lastSeen.toLocaleString()}
-                    </Text>
+                    <div
+                      className={cn(
+                        "space-y-6",
+                        pendingDismissAll !== null &&
+                          "pointer-events-none select-none",
+                      )}
+                      aria-hidden={pendingDismissAll !== null}
+                    >
+                      <Text small muted>
+                        First seen {signal.firstSeen.toLocaleString()} · last{" "}
+                        {signal.lastSeen.toLocaleString()}
+                      </Text>
 
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                      <StatCell label="Users">{signal.users}</StatCell>
-                      <StatCell label="Findings">
-                        {signal.findings.toLocaleString()}
-                      </StatCell>
-                      <StatCell label="Teams">
-                        {signal.teams > 0 ? signal.teams : "-"}
-                      </StatCell>
-                      <StatCell label="Trend">
-                        <SignalTrend
-                          findings={signal.findings}
-                          previousFindings={signal.previousFindings}
-                        />
-                      </StatCell>
-                    </div>
-
-                    {signal.topUsers.length > 0 && (
-                      <>
-                        <Separator />
-                        <div className="space-y-2">
-                          <Text small muted className="font-medium uppercase">
-                            Top affected users
-                          </Text>
-                          <ExpandableList
-                            key={`users-${signal.key}`}
-                            items={signal.topUsers}
-                            itemLabel="users"
-                            renderItem={(user) => (
-                              <div
-                                key={`${user.externalUserId}|${user.email}`}
-                                className="flex items-center gap-3"
-                              >
-                                <Avatar className="size-7">
-                                  <AvatarFallback>
-                                    {userInitials(user.email)}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <div className="min-w-0 flex-1">
-                                  <Text small className="truncate">
-                                    {user.email}
-                                  </Text>
-                                  {user.team && (
-                                    <Text small muted className="truncate">
-                                      {user.team}
-                                    </Text>
-                                  )}
-                                </div>
-                                <Text
-                                  small
-                                  muted
-                                  className="shrink-0 tabular-nums"
-                                >
-                                  {user.findings.toLocaleString()} findings
-                                </Text>
-                              </div>
-                            )}
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        <StatCell label="Users">{signal.users}</StatCell>
+                        <StatCell label="Findings">
+                          {signal.findings.toLocaleString()}
+                        </StatCell>
+                        <StatCell label="Teams">
+                          {signal.teams > 0 ? signal.teams : "-"}
+                        </StatCell>
+                        <StatCell label="Trend">
+                          <SignalTrend
+                            findings={signal.findings}
+                            previousFindings={signal.previousFindings}
                           />
-                        </div>
-                        <Separator />
-                      </>
-                    )}
-
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Text small muted className="font-medium uppercase">
-                          Evidence · redacted
-                        </Text>
-                        <RevealAllToggle />
+                        </StatCell>
                       </div>
-                      {evidenceQuery.isLoading && (
-                        <Text small muted>
-                          Loading evidence…
-                        </Text>
+
+                      {signal.topUsers.length > 0 && (
+                        <>
+                          <Separator />
+                          <div className="space-y-2">
+                            <Text small muted className="font-medium uppercase">
+                              Top affected users
+                            </Text>
+                            <ExpandableList
+                              key={`users-${signal.key}`}
+                              items={signal.topUsers}
+                              itemLabel="users"
+                              renderItem={(user) => (
+                                <div
+                                  key={`${user.externalUserId}|${user.email}`}
+                                  className="flex items-center gap-3"
+                                >
+                                  <Avatar className="size-7">
+                                    <AvatarFallback>
+                                      {userInitials(user.email)}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="min-w-0 flex-1">
+                                    <Text small className="truncate">
+                                      {user.email}
+                                    </Text>
+                                    {user.team && (
+                                      <Text small muted className="truncate">
+                                        {user.team}
+                                      </Text>
+                                    )}
+                                  </div>
+                                  <Text
+                                    small
+                                    muted
+                                    className="shrink-0 tabular-nums"
+                                  >
+                                    {user.findings.toLocaleString()} findings
+                                  </Text>
+                                </div>
+                              )}
+                            />
+                          </div>
+                          <Separator />
+                        </>
                       )}
-                      {evidenceQuery.isError && (
-                        <div className="flex items-center gap-2">
-                          <Text small muted>
-                            Failed to load evidence.
+
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Text small muted className="font-medium uppercase">
+                            Evidence · redacted
                           </Text>
-                          <Button
-                            variant="tertiary"
-                            size="sm"
-                            onClick={() => void evidenceQuery.refetch()}
-                          >
-                            <Button.Text>Retry</Button.Text>
-                          </Button>
+                          <RevealAllToggle />
                         </div>
-                      )}
-                      {!evidenceQuery.isLoading &&
-                        !evidenceQuery.isError &&
-                        evidence.length === 0 && (
+                        {evidenceQuery.isLoading && (
                           <Text small muted>
-                            No evidence rows in this window.
+                            Loading evidence…
                           </Text>
                         )}
-                      <ExpandableList
-                        key={`evidence-${signal.key}`}
-                        items={evidence}
-                        itemLabel="findings"
-                        renderItem={(result) => (
-                          <EvidenceRow
-                            key={result.id}
-                            result={result}
-                            onExclude={(r) =>
-                              setExclusionState({
-                                mode: "create",
-                                results: [r],
-                              })
-                            }
-                            onDismiss={(r) => dismiss([r])}
-                          />
+                        {evidenceQuery.isError && (
+                          <div className="flex items-center gap-2">
+                            <Text small muted>
+                              Failed to load evidence.
+                            </Text>
+                            <Button
+                              variant="tertiary"
+                              size="sm"
+                              onClick={() => void evidenceQuery.refetch()}
+                            >
+                              <Button.Text>Retry</Button.Text>
+                            </Button>
+                          </div>
                         )}
-                      />
+                        {!evidenceQuery.isLoading &&
+                          !evidenceQuery.isError &&
+                          evidence.length === 0 && (
+                            <Text small muted>
+                              No evidence rows in this window.
+                            </Text>
+                          )}
+                        <ExpandableList
+                          key={`evidence-${signal.key}`}
+                          items={evidence}
+                          itemLabel="findings"
+                          renderItem={(result) => (
+                            <EvidenceRow
+                              key={result.id}
+                              result={result}
+                              onExclude={(r) =>
+                                setExclusionState({
+                                  mode: "create",
+                                  results: [r],
+                                })
+                              }
+                              onDismiss={(r) => dismiss([r])}
+                            />
+                          )}
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
