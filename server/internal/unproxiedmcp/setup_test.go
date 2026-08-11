@@ -78,9 +78,6 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	auditLogger := audit.NewLogger()
 
 	// servicePolicy blocks loopback / private ranges so validateServerURL
@@ -91,7 +88,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		guardian.WithResolver(newUnproxiedMCPMockResolver()),
 	)
 
-	svc := unproxiedmcp.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), servicePolicy, auditLogger)
+	svc := unproxiedmcp.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), servicePolicy, auditLogger)
 
 	return ctx, &testInstance{
 		service: svc,

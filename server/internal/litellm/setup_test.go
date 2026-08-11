@@ -59,6 +59,7 @@ func TestMain(m *testing.M) {
 type realTestInstance struct {
 	service   *Service
 	hooks     *hooks.Service
+	cache     cache.Cache
 	conn      *pgxpool.Pool
 	chConn    clickhouse.Conn
 	telemetry *telemetry.Logger
@@ -121,7 +122,7 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		telemetry.NewUserInfoResolver(logger, conn, cache.NewRedisCacheAdapter(redisClient)),
 		telemetry.NewNoopLogPublisher(logger),
 	)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 	assetStorage := assetstest.NewTestBlobStore(t)
 	chatWriter, shutdownWriter := chat.NewChatMessageWriter(logger, conn, assetStorage)
@@ -150,6 +151,7 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		captureEnabledFeatures{},
 		nil,
 		scanner,
+		nil,
 		risk.NewPolicyBypassEvaluator(logger, conn),
 		spendGate,
 		shadowmcp.NewClient(logger, conn, cacheAdapter, serverURL),
@@ -182,6 +184,7 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 	return ctx, &realTestInstance{
 		service:   service,
 		hooks:     hookService,
+		cache:     cacheAdapter,
 		conn:      conn,
 		chConn:    chConn,
 		telemetry: telemetryLogger,

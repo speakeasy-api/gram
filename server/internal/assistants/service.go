@@ -401,6 +401,7 @@ type ServiceCore struct {
 	wakeCanceller     WakeCanceller
 	chatWriter        *chat.ChatMessageWriter
 	assetStorage      assets.BlobStore
+	assetSigningKey   string
 	envLoader         toolconfig.EnvironmentLoader
 	slackImages       slackImageFetcher
 	dashboardIngestor DashboardIngestor
@@ -449,6 +450,7 @@ func NewServiceCore(
 		wakeCanceller:     nil,
 		chatWriter:        nil,
 		assetStorage:      nil,
+		assetSigningKey:   "",
 		envLoader:         nil,
 		slackImages:       nil,
 		dashboardIngestor: nil,
@@ -1675,18 +1677,12 @@ type RecycleAssistantRuntimeImagesParams struct {
 // the currently configured runtime image, so deploys absorb the image-pull +
 // reboot cost while runtimes are idle instead of the next turn paying it.
 // Busy or failed rows are not chased — the per-admission path catches them
-// lazily.
-//
-// This is the in-place roll for backends that reuse idle runtimes (Fly). A
-// non-reuse backend (GKE) has no in-place swap and rolls onto a new image by
-// terminating idle runtimes instead (the warm-TTL expiry stops them, which
-// deletes the claim, and the next /turn re-admits onto a fresh warm-pool pod
-// already running the new image), so this sweep is a no-op for it.
+// lazily. The roll mechanism is the backend's RecycleImage: Fly updates the
+// machine in place; GKE deletes the claim and re-claims a warm-pool pod. An
+// active-but-regularly-used runtime never goes idle long enough for the
+// inactivity janitor to reap it, so without this sweep it would stay on its
+// admission-time image across deploys indefinitely.
 func (s *ServiceCore) RecycleActiveRuntimeImages(ctx context.Context, params RecycleAssistantRuntimeImagesParams) (RecycleAssistantRuntimeImagesResult, error) {
-	if !s.runtime.ReusesIdleRuntimes() {
-		return RecycleAssistantRuntimeImagesResult{Recycled: 0, Skipped: 0, Errors: 0}, nil
-	}
-
 	queries := assistantrepo.New(s.db)
 	rows, err := queries.ListActiveAssistantRuntimes(ctx, runtimeStateActive)
 	if err != nil {
@@ -2754,10 +2750,13 @@ func (s *ServiceCore) processEventTurn(
 			return nil, fmt.Errorf("decode assistant turn: %w", err)
 		}
 		actorUserID = turnUserID(assistant, thread, event)
-		// Best-effort: image attachments on the triggering Slack message ride
-		// along as vision content. Failures degrade to the metadata-only turn.
-		if thread.SourceKind == sourceKindSlack {
+		// Best-effort: files attached to the triggering message ride along as
+		// vision/text content. Failures degrade to the metadata-only turn.
+		switch thread.SourceKind {
+		case sourceKindSlack:
 			inputParts = s.slackTurnImageParts(ctx, thread, event)
+		case sourceKindDashboard:
+			inputParts = s.dashboardTurnAttachmentParts(ctx, assistant.ProjectID, event)
 		}
 	}
 	prompt, err = insertAssistantEnvironmentChange(prompt, notice)
@@ -3079,7 +3078,7 @@ Two MCP auth events may appear in thread, each as <message-context> block with E
 
 - EventType "assistant_mcp_auth_required" carries AuthURL. Surface AuthURL to owner verbatim (don't shorten/summarize/rewrite). Reference MCP server by MCPSlug, not MCPServerID. Never expose AuthURL to non-owners or in any channel readable by non-owners. If no owner identity is recorded on this surface, deliver the URL privately to the requester but say explicitly that it should be completed by the assistant's owner, so an unexpected prompt isn't mistaken for a failure. If owner identity is recorded and the requester is not the owner, don't surface the URL to them — tell them (without URL) that only the owner can complete auth, naming the owner, and still deliver the AuthURL to the owner privately when this surface can reach them (per the output preferences below). If owner identity is recorded but no private route to the owner exists, stop without posting the URL. The per-surface output preferences below describe how to deliver the URL on this surface.
 
-- EventType "assistant_mcp_auth" reports result. Status "success" + still need server → call mcp_force_reconnect with server_id = MCPServerID, then continue task. Status "failed" → inform the user the auth attempt failed, include ErrorDescription if present.`
+- EventType "assistant_mcp_auth" reports result. Status "success" + still need server → call tool_search (it reconnects newly authorized servers and returns their tools), then continue task. Status "failed" → inform the user the auth attempt failed, include ErrorDescription if present.`
 
 func composeInstructions(base string, thread assistantThreadRecord, skills []assistantSkillSnapshot) (string, error) {
 	adapter, err := getSourceAdapter(thread.SourceKind)

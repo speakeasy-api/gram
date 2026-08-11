@@ -310,6 +310,64 @@ func (s *Service) GetIssuerDeletePreflight(ctx context.Context, payload *orgissu
 	}, nil
 }
 
+// GetIssuerDuplicatePreflight reports the issuers an organization administrator
+// can already see that describe a given upstream authorization server, so a
+// create or edit form can warn before adding a second record for one issuer.
+//
+// The organization arm is the wide one — every record in the organization,
+// project-specific ones included — rather than the organization-level-only arm
+// the project tier uses. An org administrator holds org:read across the whole
+// organization, and the project-specific rows are the most useful thing this can
+// report: an administrator adding an organization-level issuer most needs to
+// know that several projects already configured the same URL separately, since
+// those are exactly what MigrateIssuer consolidates.
+//
+// The answer does not depend on whether the issuer being created will be
+// organization-level or project-scoped. Both are written by CreateIssuer under
+// the same org:admin grant, and narrowing the project-scoped case would hide
+// duplicates the same caller can see a moment later in the issuer listing.
+func (s *Service) GetIssuerDuplicatePreflight(ctx context.Context, payload *orgissuersgen.GetIssuerDuplicatePreflightPayload) (*types.RemoteSessionIssuerDuplicatePreflight, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+
+	canonical, err := parseCanonicalIssuerURL(conv.PtrValOrEmpty(payload.Issuer, ""))
+	if err != nil {
+		return emptyIssuerDuplicatePreflight(), nil
+	}
+
+	candidates, err := repo.New(s.db).ListOrganizationRemoteSessionIssuersByIssuerURL(ctx, repo.ListOrganizationRemoteSessionIssuersByIssuerURLParams{
+		Issuers:        canonical.matchCandidates(),
+		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+		IncludeGlobal:  true,
+		PerTierLimit:   maxIssuerDuplicateMatchesPerTier,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list organization remote session issuers by issuer url").LogError(ctx, logger)
+	}
+
+	rows := make([]issuerDuplicateCandidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		rows = append(rows, issuerDuplicateCandidate{
+			id:          candidate.ID,
+			slug:        candidate.Slug,
+			name:        conv.FromPGTextOrEmpty[string](candidate.Name),
+			issuerURL:   candidate.Issuer,
+			tier:        scopeOfTenancy(candidate.ProjectID, candidate.OrganizationID),
+			projectName: candidate.ProjectName,
+		})
+	}
+
+	return buildIssuerDuplicatePreflight(rows), nil
+}
+
 // UpdateIssuer patches any issuer in the caller's organization.
 func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.UpdateIssuerPayload) (*types.RemoteSessionIssuer, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)

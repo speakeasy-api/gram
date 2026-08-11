@@ -1499,6 +1499,253 @@ func DecodeGetRemoteSessionIssuerResponse(decoder func(*http.Response) goahttp.D
 	}
 }
 
+// BuildGetRemoteSessionIssuerDuplicatePreflightRequest instantiates a HTTP
+// request object with method and path set to call the "remoteSessionIssuers"
+// service "getRemoteSessionIssuerDuplicatePreflight" endpoint
+func (c *Client) BuildGetRemoteSessionIssuerDuplicatePreflightRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetRemoteSessionIssuerDuplicatePreflightRemoteSessionIssuersPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("remoteSessionIssuers", "getRemoteSessionIssuerDuplicatePreflight", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetRemoteSessionIssuerDuplicatePreflightRequest returns an encoder for
+// requests sent to the remoteSessionIssuers
+// getRemoteSessionIssuerDuplicatePreflight server.
+func EncodeGetRemoteSessionIssuerDuplicatePreflightRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*remotesessionissuers.GetRemoteSessionIssuerDuplicatePreflightPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("remoteSessionIssuers", "getRemoteSessionIssuerDuplicatePreflight", "*remotesessionissuers.GetRemoteSessionIssuerDuplicatePreflightPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		if p.Issuer != nil {
+			values.Add("issuer", *p.Issuer)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetRemoteSessionIssuerDuplicatePreflightResponse returns a decoder for
+// responses returned by the remoteSessionIssuers
+// getRemoteSessionIssuerDuplicatePreflight endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeGetRemoteSessionIssuerDuplicatePreflightResponse may return the
+// following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetRemoteSessionIssuerDuplicatePreflightResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetRemoteSessionIssuerDuplicatePreflightResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "getRemoteSessionIssuerDuplicatePreflight", err)
+			}
+			err = ValidateGetRemoteSessionIssuerDuplicatePreflightResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "getRemoteSessionIssuerDuplicatePreflight", err)
+			}
+			res := NewGetRemoteSessionIssuerDuplicatePreflightRemoteSessionIssuerDuplicatePreflightOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetRemoteSessionIssuerDuplicatePreflightUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "getRemoteSessionIssuerDuplicatePreflight", err)
+			}
+			err = ValidateGetRemoteSessionIssuerDuplicatePreflightUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "getRemoteSessionIssuerDuplicatePreflight", err)
+			}
+			return nil, NewGetRemoteSessionIssuerDuplicatePreflightUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetRemoteSessionIssuerDuplicatePreflightForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "getRemoteSessionIssuerDuplicatePreflight", err)
+			}
+			err = ValidateGetRemoteSessionIssuerDuplicatePreflightForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "getRemoteSessionIssuerDuplicatePreflight", err)
+			}
+			return nil, NewGetRemoteSessionIssuerDuplicatePreflightForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetRemoteSessionIssuerDuplicatePreflightBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "getRemoteSessionIssuerDuplicatePreflight", err)
+			}
+			err = ValidateGetRemoteSessionIssuerDuplicatePreflightBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "getRemoteSessionIssuerDuplicatePreflight", err)
+			}
+			return nil, NewGetRemoteSessionIssuerDuplicatePreflightBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetRemoteSessionIssuerDuplicatePreflightNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "getRemoteSessionIssuerDuplicatePreflight", err)
+			}
+			err = ValidateGetRemoteSessionIssuerDuplicatePreflightNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "getRemoteSessionIssuerDuplicatePreflight", err)
+			}
+			return nil, NewGetRemoteSessionIssuerDuplicatePreflightNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetRemoteSessionIssuerDuplicatePreflightConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "getRemoteSessionIssuerDuplicatePreflight", err)
+			}
+			err = ValidateGetRemoteSessionIssuerDuplicatePreflightConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "getRemoteSessionIssuerDuplicatePreflight", err)
+			}
+			return nil, NewGetRemoteSessionIssuerDuplicatePreflightConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetRemoteSessionIssuerDuplicatePreflightUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "getRemoteSessionIssuerDuplicatePreflight", err)
+			}
+			err = ValidateGetRemoteSessionIssuerDuplicatePreflightUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "getRemoteSessionIssuerDuplicatePreflight", err)
+			}
+			return nil, NewGetRemoteSessionIssuerDuplicatePreflightUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetRemoteSessionIssuerDuplicatePreflightInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "getRemoteSessionIssuerDuplicatePreflight", err)
+			}
+			err = ValidateGetRemoteSessionIssuerDuplicatePreflightInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "getRemoteSessionIssuerDuplicatePreflight", err)
+			}
+			return nil, NewGetRemoteSessionIssuerDuplicatePreflightInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetRemoteSessionIssuerDuplicatePreflightInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "getRemoteSessionIssuerDuplicatePreflight", err)
+				}
+				err = ValidateGetRemoteSessionIssuerDuplicatePreflightInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessionIssuers", "getRemoteSessionIssuerDuplicatePreflight", err)
+				}
+				return nil, NewGetRemoteSessionIssuerDuplicatePreflightInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetRemoteSessionIssuerDuplicatePreflightUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "getRemoteSessionIssuerDuplicatePreflight", err)
+				}
+				err = ValidateGetRemoteSessionIssuerDuplicatePreflightUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteSessionIssuers", "getRemoteSessionIssuerDuplicatePreflight", err)
+				}
+				return nil, NewGetRemoteSessionIssuerDuplicatePreflightUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("remoteSessionIssuers", "getRemoteSessionIssuerDuplicatePreflight", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetRemoteSessionIssuerDuplicatePreflightGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteSessionIssuers", "getRemoteSessionIssuerDuplicatePreflight", err)
+			}
+			err = ValidateGetRemoteSessionIssuerDuplicatePreflightGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteSessionIssuers", "getRemoteSessionIssuerDuplicatePreflight", err)
+			}
+			return nil, NewGetRemoteSessionIssuerDuplicatePreflightGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("remoteSessionIssuers", "getRemoteSessionIssuerDuplicatePreflight", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildDeleteRemoteSessionIssuerRequest instantiates a HTTP request object
 // with method and path set to call the "remoteSessionIssuers" service
 // "deleteRemoteSessionIssuer" endpoint
@@ -1779,6 +2026,22 @@ func unmarshalRemoteSessionIssuerResponseBodyToTypesRemoteSessionIssuer(v *Remot
 		for i, val := range v.TokenEndpointAuthMethodsSupported {
 			res.TokenEndpointAuthMethodsSupported[i] = val
 		}
+	}
+
+	return res
+}
+
+// unmarshalRemoteSessionIssuerDuplicateMatchResponseBodyToTypesRemoteSessionIssuerDuplicateMatch
+// builds a value of type *types.RemoteSessionIssuerDuplicateMatch from a value
+// of type *RemoteSessionIssuerDuplicateMatchResponseBody.
+func unmarshalRemoteSessionIssuerDuplicateMatchResponseBodyToTypesRemoteSessionIssuerDuplicateMatch(v *RemoteSessionIssuerDuplicateMatchResponseBody) *types.RemoteSessionIssuerDuplicateMatch {
+	res := &types.RemoteSessionIssuerDuplicateMatch{
+		ID:          *v.ID,
+		Slug:        *v.Slug,
+		Name:        *v.Name,
+		Issuer:      *v.Issuer,
+		Tier:        *v.Tier,
+		ProjectName: *v.ProjectName,
 	}
 
 	return res

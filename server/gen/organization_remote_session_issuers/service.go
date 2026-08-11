@@ -35,6 +35,24 @@ type Service interface {
 	// Authoritative impact summary for deleting a remote_session_issuer:
 	// associated client count and affected MCP server names. Requires org:read.
 	GetIssuerDeletePreflight(context.Context, *GetIssuerDeletePreflightPayload) (res *OrganizationIssuerDeletePreflight, err error)
+	// Report the existing remote_session_issuers that already describe an upstream
+	// issuer URL, so a create or edit form can warn before it duplicates one.
+	// Requires org:read.
+
+	// Covers every issuer in the caller's organization — organization-level and
+	// project-specific alike — plus the platform catalog. The project-specific
+	// rows are the point: an organization administrator about to add an
+	// organization-level issuer most needs to know that several of their projects
+	// already configured the same URL separately, because those are exactly the
+	// records migrateIssuer can consolidate. The answer does not depend on whether
+	// the issuer being created is organization-level or project-scoped; an org
+	// administrator holds org:read either way.
+
+	// Advisory only. Duplicating an issuer URL is legitimate, so nothing here
+	// blocks a write and no lock is taken. Matching uses the same canonicalization
+	// as getRemoteSessionIssuer, and a URL that cannot be parsed as an issuer
+	// identifier returns no matches rather than an error.
+	GetIssuerDuplicatePreflight(context.Context, *GetIssuerDuplicatePreflightPayload) (res *types.RemoteSessionIssuerDuplicatePreflight, err error)
 	// Update any remote_session_issuer (organizational or project-specific) in the
 	// caller's organization. Requires org:admin.
 	UpdateIssuer(context.Context, *UpdateIssuerPayload) (res *types.RemoteSessionIssuer, err error)
@@ -102,7 +120,7 @@ const ServiceName = "organizationRemoteSessionIssuers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [11]string{"createIssuer", "listIssuers", "getIssuer", "getIssuerDeletePreflight", "updateIssuer", "deleteIssuer", "moveIssuer", "getIssuerMigratePreflight", "migrateIssuer", "fetchIssuerMetadata", "refreshIssuerMetadata"}
+var MethodNames = [12]string{"createIssuer", "listIssuers", "getIssuer", "getIssuerDeletePreflight", "getIssuerDuplicatePreflight", "updateIssuer", "deleteIssuer", "moveIssuer", "getIssuerMigratePreflight", "migrateIssuer", "fetchIssuerMetadata", "refreshIssuerMetadata"}
 
 // CreateIssuerPayload is the payload type of the
 // organizationRemoteSessionIssuers service createIssuer method.
@@ -187,6 +205,16 @@ type FetchIssuerMetadataPayload struct {
 type GetIssuerDeletePreflightPayload struct {
 	// The remote_session_issuer id.
 	ID           string
+	SessionToken *string
+	ApikeyToken  *string
+}
+
+// GetIssuerDuplicatePreflightPayload is the payload type of the
+// organizationRemoteSessionIssuers service getIssuerDuplicatePreflight method.
+type GetIssuerDuplicatePreflightPayload struct {
+	// The upstream issuer URL being entered (e.g. https://login.linear.app). Empty
+	// or unparseable returns no matches.
+	Issuer       *string
 	SessionToken *string
 	ApikeyToken  *string
 }

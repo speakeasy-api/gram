@@ -187,6 +187,10 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	// context so validateAuthNonce() can verify it.
 	server.Callback = callbackNonceBindingMiddleware(server.Callback)
 
+	// Wrap Logout handler: have the browser drop the origin's cookies and
+	// client-side storage once the session has been invalidated server-side.
+	server.Logout = middleware.ClearSiteDataOnLogout(server.Logout)
+
 	srv.Mount(mux, server)
 }
 
@@ -756,10 +760,10 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	trial := loadActiveTrial(
+	trial := loadTrial(
 		ctx,
 		authCtx.ActiveOrganizationID,
-		trialsRepo.New(s.db).GetActiveTrial,
+		trialsRepo.New(s.db).GetSessionTrial,
 		s.logger,
 	)
 
@@ -888,10 +892,14 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 	}, nil
 }
 
-func loadActiveTrial(
+// loadTrial returns the organization's trial unless it converted, including
+// trials that have ended or been demoted so the dashboard can tell an expired
+// trial apart from an organization that never trialed. A lookup failure is
+// logged and reported as no trial rather than failing the whole session.
+func loadTrial(
 	ctx context.Context,
 	organizationID string,
-	getTrial func(context.Context, string) (trialsRepo.GetActiveTrialRow, error),
+	getTrial func(context.Context, string) (trialsRepo.GetSessionTrialRow, error),
 	logger *slog.Logger,
 ) *gen.Trial {
 	trial, err := getTrial(ctx, organizationID)
@@ -901,7 +909,7 @@ func loadActiveTrial(
 	case err != nil:
 		logger.ErrorContext(
 			ctx,
-			"error loading active trial; continuing without trial status",
+			"error loading trial; continuing without trial status",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(organizationID),
 		)

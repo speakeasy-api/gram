@@ -90,6 +90,45 @@ func BuildCreateUserSessionIssuerCimdClientPayload(userSessionIssuersCimdClients
 	return v, nil
 }
 
+// BuildVerifyURLPayload builds the payload for the
+// userSessionIssuersCimdClients verifyURL endpoint from CLI flags.
+func BuildVerifyURLPayload(userSessionIssuersCimdClientsVerifyURLBody string, userSessionIssuersCimdClientsVerifyURLSessionToken string, userSessionIssuersCimdClientsVerifyURLApikeyToken string, userSessionIssuersCimdClientsVerifyURLProjectSlugInput string) (*usersessionissuerscimdclients.VerifyURLPayload, error) {
+	var err error
+	var body VerifyURLRequestBody
+	{
+		err = json.Unmarshal([]byte(userSessionIssuersCimdClientsVerifyURLBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"client_id_metadata_uri\": \"abc123\"\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if userSessionIssuersCimdClientsVerifyURLSessionToken != "" {
+			sessionToken = &userSessionIssuersCimdClientsVerifyURLSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if userSessionIssuersCimdClientsVerifyURLApikeyToken != "" {
+			apikeyToken = &userSessionIssuersCimdClientsVerifyURLApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if userSessionIssuersCimdClientsVerifyURLProjectSlugInput != "" {
+			projectSlugInput = &userSessionIssuersCimdClientsVerifyURLProjectSlugInput
+		}
+	}
+	v := &usersessionissuerscimdclients.VerifyURLPayload{
+		ClientIDMetadataURI: body.ClientIDMetadataURI,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildListUserSessionIssuerCimdClientsPayload builds the payload for the
 // userSessionIssuersCimdClients listUserSessionIssuerCimdClients endpoint from
 // CLI flags.

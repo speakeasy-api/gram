@@ -4645,6 +4645,8 @@ CREATE TABLE IF NOT EXISTS risk_results (
   risk_policy_version BIGINT NOT NULL,
   chat_message_id uuid,
   chat_content_part_id uuid,
+  -- Anchor for findings scanned off a captured skill manifest rather than chat.
+  skill_version_id uuid,
   source TEXT NOT NULL,
 
   found BOOLEAN NOT NULL,
@@ -4687,7 +4689,8 @@ CREATE TABLE IF NOT EXISTS risk_results (
   CONSTRAINT risk_results_risk_policy_id_fkey FOREIGN KEY (risk_policy_id) REFERENCES risk_policies(id) ON DELETE CASCADE,
   CONSTRAINT risk_results_chat_message_id_fkey FOREIGN KEY (chat_message_id) REFERENCES chat_messages(id) ON DELETE CASCADE,
   CONSTRAINT risk_results_chat_content_part_id_fkey FOREIGN KEY (chat_content_part_id) REFERENCES chat_content_parts(id) ON DELETE CASCADE,
-  CONSTRAINT risk_results_anchor_check CHECK ((chat_message_id IS NULL) <> (chat_content_part_id IS NULL))
+  CONSTRAINT risk_results_skill_version_id_fkey FOREIGN KEY (skill_version_id) REFERENCES skill_versions(id) ON DELETE CASCADE,
+  CONSTRAINT risk_results_anchor_check CHECK (num_nonnulls(chat_message_id, chat_content_part_id, skill_version_id) = 1)
 ) WITH (
   -- This table is append-heavy and rarely updated, so the only autovacuum
   -- trigger that ever fires is the insert one. With the global 0.2 scale
@@ -4714,6 +4717,16 @@ ON risk_results (project_id, chat_message_id);
 
 CREATE INDEX IF NOT EXISTS risk_results_project_chat_content_part_idx
 ON risk_results (project_id, chat_content_part_id);
+
+-- Leads with skill_version_id so the ON DELETE CASCADE from skill_versions
+-- doesn't seq-scan this table. Partial because the column is NULL on every
+-- chat-anchored row, which is nearly all of them. UNIQUE because one skill
+-- version is scanned at most once per policy version: the writer gate is not
+-- atomic against concurrent uploads of the same content, and this collapses
+-- that race to one row while allowing rescans after a policy version bump.
+CREATE UNIQUE INDEX IF NOT EXISTS risk_results_skill_version_policy_version_key
+ON risk_results (skill_version_id, risk_policy_id, risk_policy_version)
+WHERE skill_version_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS risk_results_project_found_idx
 ON risk_results (project_id, created_at DESC)
@@ -4954,6 +4967,315 @@ ON risk_policy_challenges (project_id);
 CREATE INDEX IF NOT EXISTS risk_policy_challenges_risk_policy_id_idx
 ON risk_policy_challenges (risk_policy_id);
 
+-- MCP approval workflow.
+--
+-- Distinct from risk_policy_bypass_requests, which grants one person passage
+-- past one block. An approval request asks whether a server is allowed for a
+-- project at all: durable, carrying an evidence trail and a re-review
+-- lifecycle. A block still mints a bypass request; an admin may promote one
+-- into an approval request, and an employee may file one directly without ever
+-- hitting a block.
+--
+-- Scoped to a project rather than an organization, matching risk_policies and
+-- the shadow-MCP enforcement path a decision reconciles into. How widely an
+-- approval applies within the project is the decision's blast radius, recorded
+-- as granted_principal_urns.
+CREATE TABLE IF NOT EXISTS mcp_approval_requests (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+
+  -- Target namespace, e.g. server_url or stdio_command.
+  target_kind TEXT NOT NULL,
+  -- What the requester named, verbatim, so a request stays readable even when
+  -- identity resolution finds nothing.
+  target_raw TEXT NOT NULL,
+  -- Canonical key deduplicating requests for the same server within a project.
+  target_key TEXT NOT NULL,
+
+  -- Resolved artifact identity, e.g. npm:@scope/pkg@1.2.3,
+  -- github:owner/repo@<sha>, or a registry server specifier. NULL until
+  -- resolution runs, and permanently NULL for a server we cannot identify —
+  -- an unresolved request is a legitimate outcome, not an error state.
+  artifact_ref TEXT,
+  -- Whether the requested invocation pinned a version. Source analysis is only
+  -- meaningful against a pinned artifact, so this gates what may be presented
+  -- as applying to the server the requester will actually run.
+  version_pinned BOOLEAN NOT NULL DEFAULT FALSE,
+
+  -- Set when this request was promoted from a risk-policy bypass request.
+  risk_policy_bypass_request_id uuid,
+
+  status TEXT NOT NULL DEFAULT 'requested',
+
+  -- Latest gather of every deterministic signal: provenance, requested
+  -- authority (OAuth scopes, demanded secrets, transport), declared per-tool
+  -- capability, maturity, and existing usage in this organization.
+  --
+  -- A cache of current state, overwritten freely on re-gather. The copy a
+  -- decision rested on is frozen onto the decision itself, so nothing is lost
+  -- by refreshing this.
+  --
+  -- JSONB rather than columns because it is only ever read back whole for one
+  -- request and the signal set grows as sources are added; normalising it
+  -- would mean a migration every time we surface one more fact.
+  current_evidence JSONB NOT NULL DEFAULT '{}'::jsonb,
+  -- Payload shape version, so an old snapshot stays interpretable.
+  evidence_version INTEGER NOT NULL DEFAULT 1,
+  evidence_collected_at timestamptz,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT mcp_approval_requests_pkey PRIMARY KEY (id),
+  CONSTRAINT mcp_approval_requests_current_evidence_check CHECK (jsonb_typeof(current_evidence) = 'object'),
+  CONSTRAINT mcp_approval_requests_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_approval_requests_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_approval_requests_bypass_request_id_fkey FOREIGN KEY (risk_policy_bypass_request_id) REFERENCES risk_policy_bypass_requests (id) ON DELETE SET NULL
+);
+
+COMMENT ON TABLE mcp_approval_requests IS 'One review per MCP server per project. Re-requests reopen the same row so decisions accumulate as history, giving "have we decided on this before?" for free.';
+COMMENT ON COLUMN mcp_approval_requests.artifact_ref IS 'Resolved immutable artifact identity. NULL means unidentified, which must surface as unknown rather than as an absence of findings.';
+COMMENT ON COLUMN mcp_approval_requests.version_pinned IS 'False for a floating invocation such as an unpinned npx command, where anything scanned may not be what runs.';
+
+-- Foreign-key target that lets every child pin itself to the same project as
+-- the request it belongs to. Without it a child row could name one project
+-- while its request named another, and a project-scoped read would return a
+-- row belonging to a different tenant. Declared as a unique index rather than
+-- a table constraint per the conventions for FK-target keys.
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_approval_requests_id_project_id_key
+ON mcp_approval_requests (id, project_id);
+
+-- One row per person asking for the same server. Ten people wanting the same
+-- connector is one review with ten requesters attached, not ten reviews.
+CREATE TABLE IF NOT EXISTS mcp_approval_request_requesters (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  mcp_approval_request_id uuid NOT NULL,
+
+  user_id TEXT NOT NULL,
+  user_email TEXT,
+  -- Why they want it. The one input no amount of automated evidence supplies.
+  note TEXT,
+
+  requested_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT mcp_approval_request_requesters_pkey PRIMARY KEY (id),
+  CONSTRAINT mcp_approval_request_requesters_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_approval_request_requesters_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  -- Composite so the row cannot claim one project while its request belongs
+  -- to another. The service derives project_id from the auth context, but a
+  -- server-derived value is worthless if nothing forces the stored rows to
+  -- agree, so the mismatch is made unrepresentable here rather than assumed.
+  CONSTRAINT mcp_approval_request_requesters_request_id_fkey FOREIGN KEY (mcp_approval_request_id, project_id) REFERENCES mcp_approval_requests (id, project_id) ON DELETE CASCADE
+);
+
+COMMENT ON TABLE mcp_approval_request_requesters IS 'Who asked for a server and why. Separate from the request so demand is visible without duplicating reviews.';
+
+-- Output of the admin-triggered research agent. Declared before the decisions
+-- table so the decision may reference the report it rested on.
+CREATE TABLE IF NOT EXISTS mcp_research_reports (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  mcp_approval_request_id uuid NOT NULL,
+
+  status TEXT NOT NULL DEFAULT 'running',
+
+  -- Structured findings. Each claim carries a provenance tier (observed,
+  -- independently reported, or vendor claim) and its citations, so nothing the
+  -- agent read can reach the admin as an unattributed assertion.
+  report JSONB NOT NULL DEFAULT '{}'::jsonb,
+  report_version INTEGER NOT NULL DEFAULT 1,
+
+  -- Reproducibility. A report is part of an audit trail and re-runs are
+  -- additive, so a reader must be able to tell which run a decision rested on
+  -- and what produced it.
+  model TEXT,
+  prompt_version TEXT,
+  requested_by TEXT,
+
+  started_at timestamptz,
+  completed_at timestamptz,
+  error TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT mcp_research_reports_pkey PRIMARY KEY (id),
+  CONSTRAINT mcp_research_reports_report_check CHECK (jsonb_typeof(report) = 'object'),
+  CONSTRAINT mcp_research_reports_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_research_reports_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  -- Composite so the report cannot claim one project while its request
+  -- belongs to another.
+  CONSTRAINT mcp_research_reports_request_id_fkey FOREIGN KEY (mcp_approval_request_id, project_id) REFERENCES mcp_approval_requests (id, project_id) ON DELETE CASCADE
+);
+
+COMMENT ON TABLE mcp_research_reports IS 'Research-agent output for an approval request. Findings are gathered and cited, never adjudicated — the admin decides.';
+
+-- Lets a decision pin the report it cited to the same request it decided.
+-- Without it the report reference would only prove the report exists, and a
+-- decision could attribute research about one server to another.
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_research_reports_id_request_id_key
+ON mcp_research_reports (id, mcp_approval_request_id);
+
+-- Decision history. The application only ever appends: a re-review adds a
+-- decision rather than replacing one, so the sequence of decisions on a server
+-- is the institutional memory that a chat channel does not preserve.
+--
+-- That is a convention the schema does not enforce. The soft-delete and
+-- updated_at columns are writable like anywhere else, so a reader must not
+-- assume rows here are immutable at the database level.
+CREATE TABLE IF NOT EXISTS mcp_approval_decisions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  project_id uuid NOT NULL,
+  mcp_approval_request_id uuid NOT NULL,
+
+  -- approved or denied. Allowed values are validated in application code.
+  decision TEXT NOT NULL,
+  decided_by TEXT NOT NULL,
+  -- Why. This is the artifact an admin cites when telling an engineer no, and
+  -- the reason the whole workflow is worth switching to.
+  rationale TEXT,
+
+  -- The evidence as it stood when the decision was made, frozen rather than
+  -- re-read later. Deliberately a copy of the request's current_evidence: the
+  -- request refreshes, this must not, or the record stops showing what the
+  -- reviewer actually saw.
+  evidence_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb,
+  -- Carries no default: the writer must copy the version off the request it
+  -- snapshotted. Defaulting would let a v2 payload be recorded as v1 whenever
+  -- the column was omitted, and a snapshot mislabelled that way is parsed with
+  -- the wrong rules forever — silently, since interpreting old payloads is the
+  -- only thing this column exists for.
+  evidence_version INTEGER NOT NULL,
+
+  mcp_research_report_id uuid,
+
+  -- Resolved principals the approval covers — a single requester, a team, or
+  -- the whole organization are all expressed as a URN set. Recording the
+  -- resolved grant rather than a mode keeps the audit trail honest about who
+  -- was actually given access.
+  granted_principal_urns TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+
+  decided_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
+
+  CONSTRAINT mcp_approval_decisions_pkey PRIMARY KEY (id),
+  CONSTRAINT mcp_approval_decisions_evidence_snapshot_check CHECK (jsonb_typeof(evidence_snapshot) = 'object'),
+  CONSTRAINT mcp_approval_decisions_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_approval_decisions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  -- Composite so the decision cannot claim one project while its request
+  -- belongs to another.
+  CONSTRAINT mcp_approval_decisions_request_id_fkey FOREIGN KEY (mcp_approval_request_id, project_id) REFERENCES mcp_approval_requests (id, project_id) ON DELETE CASCADE,
+  -- Composite so a decision can only cite research about the request it
+  -- decided. Referencing the report id alone would prove only that the report
+  -- exists, letting the audit trail attribute research about one server to a
+  -- decision about another. The report reference stays nullable and MATCH
+  -- SIMPLE skips the check entirely while it is NULL, so a decision made
+  -- without research is unconstrained.
+  --
+  -- CASCADE rather than SET NULL because the request id is part of the key and
+  -- NOT NULL: setting the pair to NULL would fail, and Postgres cannot null
+  -- just one column of a composite foreign key without a column list that
+  -- Atlas does not emit. In practice this never fires on its own — reports are
+  -- soft-deleted, so a report row only disappears when its request does, which
+  -- is already deleting these decisions.
+  CONSTRAINT mcp_approval_decisions_research_report_fkey FOREIGN KEY (mcp_research_report_id, mcp_approval_request_id) REFERENCES mcp_research_reports (id, mcp_approval_request_id) ON DELETE CASCADE
+);
+
+COMMENT ON TABLE mcp_approval_decisions IS 'Append-only approve/deny history with the rationale and the evidence it rested on.';
+COMMENT ON COLUMN mcp_approval_decisions.granted_principal_urns IS 'Resolved blast radius of the approval. Empty for a denial.';
+
+-- Dedupes reviews for the same server. target_key is only canonical within its
+-- namespace, so target_kind is part of the key: a stdio command and a URL that
+-- normalize to the same string are different servers, and keying without the
+-- namespace would either collapse them into one review or reject the second
+-- outright.
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_approval_requests_project_id_target_key
+ON mcp_approval_requests (project_id, target_kind, target_key)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS mcp_approval_requests_project_status_updated_idx
+ON mcp_approval_requests (project_id, status, updated_at DESC)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS mcp_approval_requests_artifact_ref_idx
+ON mcp_approval_requests (artifact_ref)
+WHERE deleted IS FALSE AND artifact_ref IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_approval_request_requesters_request_id_user_id_key
+ON mcp_approval_request_requesters (mcp_approval_request_id, user_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS mcp_research_reports_request_id_created_at_idx
+ON mcp_research_reports (mcp_approval_request_id, created_at DESC)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS mcp_approval_decisions_request_id_decided_at_idx
+ON mcp_approval_decisions (mcp_approval_request_id, decided_at DESC)
+WHERE deleted IS FALSE;
+
+-- Non-partial indexes backing the ON DELETE foreign keys. The RI cascade
+-- trigger matches on the referencing column alone, with no `deleted IS FALSE`
+-- predicate, so it cannot use the partial indexes above and would seq-scan
+-- without these. That matters most on the request-id columns: deleting a
+-- project cascades to every approval request in it, and each one then scans
+-- the child tables in turn.
+CREATE INDEX IF NOT EXISTS mcp_approval_requests_organization_id_idx
+ON mcp_approval_requests (organization_id);
+
+CREATE INDEX IF NOT EXISTS mcp_approval_requests_project_id_idx
+ON mcp_approval_requests (project_id);
+
+CREATE INDEX IF NOT EXISTS mcp_approval_requests_bypass_request_id_idx
+ON mcp_approval_requests (risk_policy_bypass_request_id);
+
+CREATE INDEX IF NOT EXISTS mcp_approval_request_requesters_organization_id_idx
+ON mcp_approval_request_requesters (organization_id);
+
+CREATE INDEX IF NOT EXISTS mcp_approval_request_requesters_project_id_idx
+ON mcp_approval_request_requesters (project_id);
+
+CREATE INDEX IF NOT EXISTS mcp_approval_request_requesters_request_id_idx
+ON mcp_approval_request_requesters (mcp_approval_request_id);
+
+CREATE INDEX IF NOT EXISTS mcp_research_reports_organization_id_idx
+ON mcp_research_reports (organization_id);
+
+CREATE INDEX IF NOT EXISTS mcp_research_reports_project_id_idx
+ON mcp_research_reports (project_id);
+
+CREATE INDEX IF NOT EXISTS mcp_research_reports_request_id_idx
+ON mcp_research_reports (mcp_approval_request_id);
+
+CREATE INDEX IF NOT EXISTS mcp_approval_decisions_organization_id_idx
+ON mcp_approval_decisions (organization_id);
+
+CREATE INDEX IF NOT EXISTS mcp_approval_decisions_project_id_idx
+ON mcp_approval_decisions (project_id);
+
+CREATE INDEX IF NOT EXISTS mcp_approval_decisions_request_id_idx
+ON mcp_approval_decisions (mcp_approval_request_id);
+
+CREATE INDEX IF NOT EXISTS mcp_approval_decisions_research_report_id_idx
+ON mcp_approval_decisions (mcp_research_report_id);
+
 CREATE TABLE IF NOT EXISTS tool_call_blocks (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
@@ -5066,13 +5388,17 @@ WHERE processed_at IS NULL AND dead_lettered IS FALSE;
 -- makes the inline attempts/retry_after/locked_until columns affordable here:
 -- unlike the outbox/outbox_relays pair above, there is no large append-only
 -- table for the updates to bloat.
+--
+-- Enqueueing runs inside the caller's transaction, so everything this table
+-- does per row is paid for by unrelated business logic. Hence the primary key
+-- being the only index, and the absence of a foreign key on organization_id.
 CREATE TABLE IF NOT EXISTS publish_outbox (
-  id BIGINT NOT NULL GENERATED BY DEFAULT AS IDENTITY,
+  id BIGINT NOT NULL GENERATED BY DEFAULT AS IDENTITY (CACHE 32),
   public_id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
 
   topic TEXT NOT NULL,
-  message BYTEA NOT NULL,
+  message BYTEA COMPRESSION lz4 NOT NULL,
   attributes JSONB NOT NULL DEFAULT '{}'::jsonb,
 
   attempts INT NOT NULL DEFAULT 0,
@@ -5084,8 +5410,7 @@ CREATE TABLE IF NOT EXISTS publish_outbox (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
-  CONSTRAINT publish_outbox_pkey PRIMARY KEY (id),
-  CONSTRAINT publish_outbox_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE
+  CONSTRAINT publish_outbox_pkey PRIMARY KEY (id)
 ) WITH (
   fillfactor = 80,
   autovacuum_vacuum_scale_factor = 0.05,
@@ -5094,6 +5419,8 @@ CREATE TABLE IF NOT EXISTS publish_outbox (
 );
 
 COMMENT ON TABLE publish_outbox IS 'Transactional outbox of pending Pub/Sub publishes. Rows are deleted once published, so the table is near-empty in steady state; permanent failures move to publish_outbox_dead_letters.';
+COMMENT ON COLUMN publish_outbox.public_id IS 'Stable id a producer can put inside its own message body. Deliberately unindexed: nothing looks a row up by it, so an index here would buy nothing and cost a uniqueness check on the caller''s transaction. Collisions are prevented by minting uuidv7, not by the database.';
+COMMENT ON COLUMN publish_outbox.organization_id IS 'Owning organization, carried through to the published message. Deliberately not a foreign key: the check would take a KEY SHARE lock on the organization row for every enqueue, and a stream of those against one busy org generates multixacts on a row that other writers update. Rows live seconds and the relay never joins to the organization, so an org deleted mid-flight leaves rows that publish and then delete themselves. Nothing downstream may reference the organization either: publish_outbox_dead_letters drops its foreign key for the same reason, since a row that outlived its organization still has to be able to reach it.';
 COMMENT ON COLUMN publish_outbox.topic IS 'Proto full name of the topic-declaring message, e.g. "gram.webhooks.v1.Event". Resolved through the outbox topic registry at publish time.';
 COMMENT ON COLUMN publish_outbox.message IS 'proto.Marshal of that message, published verbatim. Topic proto changes must stay additive: a row marshaled by one binary may be published after the topic schema has rolled forward.';
 COMMENT ON COLUMN publish_outbox.attributes IS 'Pub/Sub message attributes. Carries the producer traceparent so the trace survives the database hop. content-type and schema are derived at publish time and cannot be overridden from here.';
@@ -5101,16 +5428,24 @@ COMMENT ON COLUMN publish_outbox.attempts IS 'Incremented when a row is claimed,
 COMMENT ON COLUMN publish_outbox.locked_until IS 'Claim lease held by the draining relay. Deliberately absent from every index predicate: predicate columns are HOT-blocking, so indexing this would force a new index tuple on every claim.';
 COMMENT ON COLUMN publish_outbox.lease_token IS 'Identifies the claim currently holding the row, minted by the drainer. Settlement matches on it so a drain that outlived its lease cannot delete, dead-letter or release a row another drainer has since claimed. NULL means unclaimed. Unindexed, like locked_until, so claiming stays a HOT update.';
 
-CREATE UNIQUE INDEX IF NOT EXISTS publish_outbox_public_id_key
-ON publish_outbox (public_id);
-
--- No partial index on outbox table's retry_after/locked_until on purpose. The
--- table holds only undelivered rows so a plain primary-key walk is cheap, and a
--- predicate over those columns would make them HOT-blocking on claim UPDATE.
+-- The primary key is deliberately the only index on this table: every index
+-- here is maintained inside whatever transaction happened to enqueue the
+-- message. No index on public_id, which nothing looks a row up by, and no
+-- partial index on retry_after/locked_until — the table holds only undelivered
+-- rows so a plain primary-key walk is cheap, and a predicate over those columns
+-- would make them HOT-blocking on claim UPDATE.
 
 -- Terminal, replayable record of messages that can never be published: an
 -- unregistered topic, an oversized payload, or a row that exhausted its retry
 -- budget. Bounded by a scheduled GC rather than retained forever.
+--
+-- This table has to accept every row publish_outbox accepted, so it carries no
+-- foreign key either. Dead-lettering moves a row between the two tables in one
+-- statement; if this side enforced a reference publish_outbox does not, a row
+-- whose organization had since been deleted could never leave the queue. It
+-- would fail the move on every attempt, and because one statement moves the
+-- whole batch, it would take the rest of that batch's dead letters down with
+-- it. The scheduled GC, not a cascade, is what bounds this table.
 CREATE TABLE IF NOT EXISTS publish_outbox_dead_letters (
   id BIGINT NOT NULL GENERATED BY DEFAULT AS IDENTITY,
   public_id uuid NOT NULL,
@@ -5126,8 +5461,7 @@ CREATE TABLE IF NOT EXISTS publish_outbox_dead_letters (
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
-  CONSTRAINT publish_outbox_dead_letters_pkey PRIMARY KEY (id),
-  CONSTRAINT publish_outbox_dead_letters_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata(id) ON DELETE CASCADE
+  CONSTRAINT publish_outbox_dead_letters_pkey PRIMARY KEY (id)
 );
 
 COMMENT ON COLUMN publish_outbox_dead_letters.enqueued_at IS 'created_at of the originating publish_outbox row, preserved so the delay before giving up stays visible after the row moves.';

@@ -9,6 +9,7 @@ import { adminRemoteSessionsDeleteGlobalIssuer } from "../funcs/adminRemoteSessi
 import { adminRemoteSessionsFetchGlobalIssuerMetadata } from "../funcs/adminRemoteSessionsFetchGlobalIssuerMetadata.js";
 import { adminRemoteSessionsGetGlobalClient } from "../funcs/adminRemoteSessionsGetGlobalClient.js";
 import { adminRemoteSessionsGetGlobalIssuer } from "../funcs/adminRemoteSessionsGetGlobalIssuer.js";
+import { adminRemoteSessionsGetGlobalIssuerDuplicatePreflight } from "../funcs/adminRemoteSessionsGetGlobalIssuerDuplicatePreflight.js";
 import { adminRemoteSessionsGetGlobalIssuerMigratePreflight } from "../funcs/adminRemoteSessionsGetGlobalIssuerMigratePreflight.js";
 import { adminRemoteSessionsListGlobalClients } from "../funcs/adminRemoteSessionsListGlobalClients.js";
 import { adminRemoteSessionsListGlobalIssuerConvergenceCandidates } from "../funcs/adminRemoteSessionsListGlobalIssuerConvergenceCandidates.js";
@@ -24,6 +25,7 @@ import { MigrateRemoteSessionIssuerResult } from "../models/components/migratere
 import { RemoteSessionClient } from "../models/components/remotesessionclient.js";
 import { RemoteSessionIssuer } from "../models/components/remotesessionissuer.js";
 import { RemoteSessionIssuerDraft } from "../models/components/remotesessionissuerdraft.js";
+import { RemoteSessionIssuerDuplicatePreflight } from "../models/components/remotesessionissuerduplicatepreflight.js";
 import { RemoteSessionIssuerRefresh } from "../models/components/remotesessionissuerrefresh.js";
 import {
   CreateGlobalRemoteSessionClientRequest,
@@ -53,6 +55,10 @@ import {
   GetGlobalRemoteSessionIssuerRequest,
   GetGlobalRemoteSessionIssuerSecurity,
 } from "../models/operations/getglobalremotesessionissuer.js";
+import {
+  GetGlobalRemoteSessionIssuerDuplicatePreflightRequest,
+  GetGlobalRemoteSessionIssuerDuplicatePreflightSecurity,
+} from "../models/operations/getglobalremotesessionissuerduplicatepreflight.js";
 import {
   GetGlobalRemoteSessionIssuerMigratePreflightRequest,
   GetGlobalRemoteSessionIssuerMigratePreflightSecurity,
@@ -218,6 +224,31 @@ export class AdminRemoteSessions extends ClientSDK {
     options?: RequestOptions,
   ): Promise<GlobalRemoteSessionIssuer> {
     return unwrapAsync(adminRemoteSessionsGetGlobalIssuer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getGlobalIssuerDuplicatePreflight adminRemoteSessions
+   *
+   * @remarks
+   * Report the global remote_session_issuers that already describe an upstream issuer URL, so the catalog create and edit forms can warn before curating a second entry for the same authorization server. Requires platform admin.
+   *
+   * Scoped to the global partition only. Tenant issuers naming the same URL are deliberately not reported here — listGlobalIssuerConvergenceCandidates is the surface for those, and it is keyed on a global issuer that already exists.
+   *
+   * The global tier is unique on slug but not on issuer, so nothing prevents a duplicate catalog entry and this warning is the only thing that will catch one. Advisory all the same: it never blocks the write. Matching uses the same canonicalization as the tenant-facing preflights, and an unparseable URL returns no matches rather than an error.
+   */
+  async getGlobalIssuerDuplicatePreflight(
+    request?: GetGlobalRemoteSessionIssuerDuplicatePreflightRequest | undefined,
+    security?:
+      | GetGlobalRemoteSessionIssuerDuplicatePreflightSecurity
+      | undefined,
+    options?: RequestOptions,
+  ): Promise<RemoteSessionIssuerDuplicatePreflight> {
+    return unwrapAsync(adminRemoteSessionsGetGlobalIssuerDuplicatePreflight(
       this,
       request,
       security,

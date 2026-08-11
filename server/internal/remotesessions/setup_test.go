@@ -87,9 +87,6 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 	redisCache := cache.NewRedisCacheAdapter(redisClient)
@@ -111,7 +108,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		testenv.NewMeterProvider(t),
 		conn,
 		sessionManager,
-		authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
+		authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
 		enc,
 		envEntries,
 		guardianPolicy,

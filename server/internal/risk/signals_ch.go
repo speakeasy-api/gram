@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
@@ -159,22 +160,22 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 
 	topUsersByRule := signalTopUsersByRule(userRows)
 
+	// Policy scores are configuration, not findings — the one deliberate
+	// Postgres read on this path. The operator's configured policy score is
+	// the base severity for every signal the policy matched; category
+	// defaults only cover findings with no policy attribution.
+	policyScores, err := s.riskPolicyScores(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load risk policy scores").LogError(ctx, s.logger)
+	}
+
 	// Previous-window scores first: the aggregates include rules active only
 	// in the previous window (findings_cur = 0) purely as input to this
-	// comparison. Each previous-window score is the same formula minus the
-	// recency and growth bonuses, which describe the current window only.
+	// comparison.
 	prevScores := make([]float64, 0, len(aggregates))
 	for _, agg := range aggregates {
 		if agg.FindingsPrev > 0 {
-			prevScores = append(prevScores, signalScore(signalScoreInputs{
-				category:         agg.Category,
-				avgConfidence:    agg.AvgConfidencePrev,
-				findings:         agg.FindingsPrev,
-				users:            agg.UsersPrev,
-				lastSeen:         time.Time{},
-				windowEnd:        time.Time{},
-				previousFindings: 0,
-			}))
+			prevScores = append(prevScores, signalScore(maxPolicyScore(agg.PolicyIDsPrev, policyScores), agg.Category))
 		}
 	}
 
@@ -188,15 +189,7 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 	signals := make([]*gen.RiskSignal, 0, len(aggregates))
 	scores := make([]float64, 0, len(aggregates))
 	for _, agg := range aggregates {
-		score := signalScore(signalScoreInputs{
-			category:         agg.Category,
-			avgConfidence:    agg.AvgConfidence,
-			findings:         agg.FindingsCur,
-			users:            agg.UsersCur,
-			lastSeen:         agg.LastSeen,
-			windowEnd:        to,
-			previousFindings: agg.FindingsPrev,
-		})
+		score := signalScore(maxPolicyScore(agg.PolicyIDsCur, policyScores), agg.Category)
 		scores = append(scores, score)
 
 		topUsers := topUsersByRule[agg.RuleID]
@@ -418,4 +411,34 @@ func signalExposure(aggregates []chrepo.RiskSignalAggregate) []*gen.RiskExposure
 		return cmp.Compare(a.Category, b.Category)
 	})
 	return out
+}
+
+// riskPolicyScores maps every non-deleted policy id in the project to its
+// configured 0.1-10 score. Includes disabled policies on purpose: findings
+// written while a policy was enabled keep that policy's severity after it is
+// switched off.
+func (s *Service) riskPolicyScores(ctx context.Context, projectID uuid.UUID) (map[string]float64, error) {
+	policies, err := s.repo.ListRiskPolicies(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("list risk policies: %w", err)
+	}
+	scores := make(map[string]float64, len(policies))
+	for _, p := range policies {
+		scores[p.ID.String()] = p.Score
+	}
+	return scores, nil
+}
+
+// maxPolicyScore resolves a signal's base severity from the policies that
+// matched its findings: the highest configured score wins when several
+// policies contributed. Zero when no id resolves, which sends signalScore to
+// the category fallback.
+func maxPolicyScore(policyIDs []string, scores map[string]float64) float64 {
+	var best float64
+	for _, id := range policyIDs {
+		if s, ok := scores[id]; ok && s > best {
+			best = s
+		}
+	}
+	return best
 }

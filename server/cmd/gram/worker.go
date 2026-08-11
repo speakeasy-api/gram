@@ -549,11 +549,11 @@ func newWorkerCommand() *cli.Command {
 			authzEngine := authz.NewEngine(
 				logger,
 				db,
-				chDB,
 				challengeLoggingEnabled,
 				workos.NewStubClient(),
-				authz.EngineOpts{DevMode: c.String("environment") == "local"},
-			)
+				authz.EngineOpts{
+					DevMode: c.String("environment") == "local",
+				})
 
 			workosClient, workosAvailable, err := newWorkOSClient(guardianPolicy, c)
 			if err != nil {
@@ -788,6 +788,7 @@ func newWorkerCommand() *cli.Command {
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
 			assistantsCore.SetAssetStorage(assetStorage)
+			assistantsCore.SetAssetSigningKey(c.String(usersessions.JWTSigningKeyFlag))
 			assistantsCore.SetSlackImageInlining(env, slackapi.NewClient("", guardianPolicy.PooledClient()))
 			assistantsCore.SetFeatureProvider(featureFlags)
 			assistantsSvc := assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv}, ratelimit.NewRedisStore(redisClient))

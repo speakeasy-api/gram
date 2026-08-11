@@ -1,4 +1,10 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  render as rtlRender,
+  screen,
+} from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { emptySession } from "@/contexts/Auth";
 
@@ -15,6 +21,10 @@ vi.mock("@/contexts/Auth", async (importOriginal) => {
 });
 
 import { TrialStatusCard } from "./trial-status-card";
+
+// The card links to the in-app upgrade gate, so Link needs router context.
+const render = (ui: React.ReactElement) =>
+  rtlRender(ui, { wrapper: MemoryRouter });
 
 const activeTrial = {
   startedAt: new Date("2026-08-05T00:00:00.000Z"),
@@ -59,6 +69,9 @@ describe("TrialStatusCard", () => {
     render(<TrialStatusCard />);
 
     expect(screen.getByText("1 day left")).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Talk to sales about upgrading" }),
+    ).toBeTruthy();
   });
 
   it("renders nothing without a trial", () => {
@@ -69,12 +82,22 @@ describe("TrialStatusCard", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("renders nothing once the trial has expired", () => {
+  it("renders the ended state once the trial has expired", () => {
     vi.setSystemTime(new Date("2026-08-19T00:00:00.000Z"));
 
-    const { container } = render(<TrialStatusCard />);
+    render(<TrialStatusCard />);
 
-    expect(container.firstChild).toBeNull();
+    expect(screen.getByText("Your trial has ended")).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Talk to sales about upgrading" }),
+    ).toBeTruthy();
+    const progressBar = screen.getByRole("progressbar", {
+      name: "Trial ended",
+    });
+    expect(progressBar.getAttribute("aria-valuenow")).toBe("100");
+    expect(progressBar.firstElementChild?.getAttribute("style")).toBe(
+      "width: 100%;",
+    );
   });
 
   it.each([
@@ -103,10 +126,10 @@ describe("TrialStatusCard", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("removes the card when the trial expires without a parent rerender", async () => {
+  it("shows the ended state when the trial expires without a parent rerender", async () => {
     vi.setSystemTime(new Date("2026-08-18T23:59:59.999Z"));
 
-    const { container } = render(<TrialStatusCard />);
+    render(<TrialStatusCard />);
 
     expect(screen.getByText("1 day left")).toBeTruthy();
 
@@ -114,7 +137,13 @@ describe("TrialStatusCard", () => {
       await vi.advanceTimersByTimeAsync(1);
     });
 
-    expect(container.firstChild).toBeNull();
+    expect(screen.getByText("Your trial has ended")).toBeTruthy();
+    expect(
+      screen.getByRole("progressbar", { name: "Trial ended" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Talk to sales about upgrading" }),
+    ).toBeTruthy();
   });
 
   it("updates the displayed day at a day boundary without a parent rerender", async () => {
@@ -153,10 +182,10 @@ describe("TrialStatusCard", () => {
 
   it("changes the brand color as the trial progresses", () => {
     const colorByDay = [
-      [1, "bg-[var(--color-base-black)]"],
-      [5, "bg-[var(--color-brand-c)]"],
-      [9, "bg-[var(--color-brand-ruby)]"],
-      [13, "bg-[var(--color-brand-swift)]"],
+      [1, "bg-(--color-base-black)"],
+      [5, "bg-(--color-brand-c)"],
+      [9, "bg-(--color-brand-ruby)"],
+      [13, "bg-(--color-brand-swift)"],
     ] as const;
 
     for (const [day, colorClass] of colorByDay) {
@@ -187,14 +216,13 @@ describe("TrialStatusCard", () => {
     ).toBe(true);
   });
 
-  it("opens the Sales conversation safely in a new tab", () => {
+  it("sends the Sales conversation to the in-app upgrade gate", () => {
     render(<TrialStatusCard />);
 
+    // In-app rather than the marketing site: the gate prefills the booking
+    // form from the session, so it stays in the same tab.
     const salesLink = screen.getByRole("link", { name: "Talk to sales" });
-    expect(salesLink.getAttribute("href")).toBe(
-      "https://www.speakeasy.com/talk-to-us",
-    );
-    expect(salesLink.getAttribute("target")).toBe("_blank");
-    expect(salesLink.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(salesLink.getAttribute("href")).toBe("/talk-to-us");
+    expect(salesLink.getAttribute("target")).toBeNull();
   });
 });

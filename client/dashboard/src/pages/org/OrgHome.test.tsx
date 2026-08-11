@@ -37,10 +37,6 @@ vi.mock("@/components/ui/ContextMenu", () => ({
 vi.mock("@/components/auditlogs/feed", () => ({
   ActionIconTile: () => null,
 }));
-vi.mock("@/pages/access/ChallengesTab", () => ({
-  ChallengesEmptyState: () => null,
-}));
-
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({
     id: "org-1",
@@ -124,13 +120,18 @@ vi.mock("@/components/ui/Icon", () => ({
   Icon: () => null,
 }));
 
+import { TooltipProvider } from "@/components/ui/Tooltip";
 import OrgHome from "./OrgHome";
 
 afterEach(cleanup);
 
 describe("OrgHome", () => {
   it("does not wrap project list rows in a full-height element", () => {
-    render(<OrgHome />);
+    render(
+      <TooltipProvider>
+        <OrgHome />
+      </TooltipProvider>,
+    );
 
     const projectName = screen.getByText("Project One");
     expect(projectName.closest(".h-full")).toBeNull();

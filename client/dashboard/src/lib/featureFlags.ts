@@ -11,6 +11,7 @@ export const FEATURE_FLAGS = {
   newCostsPage: "gram-new-costs-page",
   promptPolicies: "gram-prompt-policies",
   rbac: "gram-rbac",
+  riskWatchdog: "gram-risk-watchdog",
   tunneledMcp: "gram-tunneled-mcp",
   userSessionsDashboard: "user-sessions-dashboard",
 } as const;

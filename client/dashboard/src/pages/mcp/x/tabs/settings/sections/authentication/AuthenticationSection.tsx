@@ -13,13 +13,15 @@ import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionI
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { useMemo, useState, type ReactNode } from "react";
 import { SettingsInlineEmptyState } from "../../SettingsInlineEmptyState";
-import { SettingsSection } from "../../SettingsSection";
+import { SettingsSection } from "@/components/detail/settings-section";
 import { AttachRemoteIdentityProviderSheet } from "./AttachRemoteIdentityProviderSheet";
 import { AuthenticationSetupActions } from "./AuthenticationSetupActions";
 import { type AuthTarget, useMcpServerAuthTarget } from "./authTarget";
 import { DeleteRemoteIdentityProviderDialog } from "./DeleteRemoteIdentityProviderDialog";
 import { ModifyRemoteIdentityProviderSheet } from "./ModifyRemoteIdentityProviderSheet";
 import { RemoteIdentityProvidersField } from "./RemoteIdentityProvidersField";
+import { CimdAdmissionModeField } from "./CimdAdmissionModeField";
+import { CimdCustomClientsField } from "./CimdCustomClientsField";
 import { UserSessionDurationField } from "./UserSessionDurationField";
 import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
 import {
@@ -211,9 +213,20 @@ export function AuthenticationSectionBody({
   } else if (isUserSessionIssuerError || !userSessionIssuer) {
     authenticationFields = <AuthenticationLoadErrorField />;
   } else {
+    // The custom-URL list only means anything in the modes that consult it.
+    // Keyed on the SAVED effective mode, not an unsaved draft in the mode
+    // field, so the list never claims to apply before the policy does.
+    const admitsCustomUrls =
+      userSessionIssuer.clientIdMetadataAdmissionMode === "presets" ||
+      userSessionIssuer.clientIdMetadataAdmissionMode === "reporting";
+
     authenticationFields = (
       <>
         <UserSessionDurationField userSessionIssuer={userSessionIssuer} />
+        <CimdAdmissionModeField userSessionIssuer={userSessionIssuer} />
+        {admitsCustomUrls && (
+          <CimdCustomClientsField userSessionIssuer={userSessionIssuer} />
+        )}
         <RemoteIdentityProvidersField
           associatedIssuers={associatedIssuers}
           isLoading={

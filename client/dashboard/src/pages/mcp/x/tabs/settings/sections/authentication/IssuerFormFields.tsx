@@ -65,12 +65,25 @@ function RedirectURICallout(): JSX.Element {
 
 // IssuerUrlField is the single Issuer URL input. Split out from the Endpoints
 // section so callers can render a Slug field between them.
+//
+// `onIssuerUrlSettled` fires on blur, once the operator has stopped typing.
+// Callers use it to run the duplicate preflight: these sheets make no automatic
+// network calls while typing, and blur is what keeps that true.
+//
+// `duplicateWarning` is a slot rather than something this component fetches, so
+// every surface renders the warning in the same place — directly under the
+// field it is about — while each tier keeps its own scope and its own idea of
+// what "use the existing one instead" means.
 export function IssuerUrlField({
   issuerUrl,
   onIssuerUrlChange,
+  onIssuerUrlSettled,
+  duplicateWarning,
 }: {
   issuerUrl: string;
   onIssuerUrlChange: (value: string) => void;
+  onIssuerUrlSettled?: (value: string) => void;
+  duplicateWarning?: JSX.Element | null;
 }): JSX.Element {
   return (
     <Stack gap={2}>
@@ -78,11 +91,13 @@ export function IssuerUrlField({
       <Input
         value={issuerUrl}
         onChange={onIssuerUrlChange}
+        onBlur={() => onIssuerUrlSettled?.(issuerUrl)}
         placeholder="https://login.example.com"
       />
       <Text muted small>
         Issuer URL of the upstream authorization server.
       </Text>
+      {duplicateWarning}
     </Stack>
   );
 }

@@ -8,6 +8,7 @@ import {
   CircleIcon,
   CopyIcon,
   DownloadIcon,
+  Mic,
   PencilIcon,
   Search,
   Settings2,
@@ -54,6 +55,7 @@ import {
   ComposerAttachments,
   UserMessageAttachments,
 } from "@/elements/components/assistant-ui/attachment";
+import { AttachmentDropZone } from "@/elements/components/assistant-ui/attachment-dropzone";
 import { FollowOnSuggestions } from "@/elements/components/assistant-ui/follow-on-suggestions";
 import { MarkdownText } from "@/elements/components/assistant-ui/markdown-text";
 import { MentionedToolsBadges } from "@/elements/components/assistant-ui/mentioned-tools-badges";
@@ -78,6 +80,7 @@ import { useReplayContext } from "@/elements/contexts/ReplayContext";
 import { useThreadMeta } from "@/elements/contexts/ThreadMetaContext";
 import { useAuth } from "@/elements/hooks/useAuth";
 import { useDensity } from "@/elements/hooks/useDensity";
+import { useDictationLevels } from "@/elements/hooks/useDictationLevels";
 import { useElements } from "@/elements/hooks/useElements";
 import { isLocalThreadId } from "@/elements/hooks/useGramThreadListAdapter";
 import { useRadius } from "@/elements/hooks/useRadius";
@@ -85,6 +88,7 @@ import { useRecordCassette } from "@/elements/hooks/useRecordCassette";
 import { useThemeProps } from "@/elements/hooks/useThemeProps";
 import { useToolMentions } from "@/elements/hooks/useToolMentions";
 import { getApiUrl } from "@/elements/lib/api";
+import { dictationAdapter } from "@/elements/lib/dictation";
 import { EASE_OUT_QUINT } from "@/elements/lib/easing";
 import { groupAssistantMessageParts } from "@/elements/lib/messagePartGrouping";
 import {
@@ -92,7 +96,11 @@ import {
   trailingAnnotationLine,
 } from "@/elements/lib/toolCallAnnotation";
 import { MODELS } from "@/elements/lib/models";
-import type { ComposerSkill, SkillContextConfig } from "@/elements/types";
+import type {
+  ComposerSkill,
+  ComposerSlashCommand,
+  SkillContextConfig,
+} from "@/elements/types";
 import {
   type MentionableTool,
   toolSetToMentionableTools,
@@ -156,6 +164,7 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
   // caller can view (e.g. via an admin-level read grant) but didn't create,
   // so there's no valid action to leave available.
   const composerHidden = useThreadMeta(chatId ?? undefined)?.readOnly ?? false;
+  const isReplay = useReplayContext()?.isReplay ?? false;
 
   const apiUrl = getApiUrl(config);
   const auth = useAuth({
@@ -215,63 +224,72 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
     >
       <LazyMotion features={domAnimation}>
         <MotionConfig reducedMotion="user">
-          <ThreadPrimitive.Root
-            className={cn(
-              "aui-root aui-thread-root @container relative flex h-full flex-col bg-background",
-              themeProps.className,
-              className,
-            )}
+          <AttachmentDropZone
+            // Every state that takes the composer away also refuses drops,
+            // or files queue into a composer the user cannot reach.
+            disabled={
+              composerHidden || (showFeedback && isResolved) || isReplay
+            }
+            className="flex h-full min-h-0 flex-1 flex-col"
           >
-            <ConnectionStatusIndicatorSafe />
-            <ThreadPrimitive.Viewport
+            <ThreadPrimitive.Root
               className={cn(
-                "aui-thread-viewport relative mx-auto flex w-full flex-1 flex-col overflow-x-auto overflow-y-scroll pb-0!",
-                d("p-lg"),
+                "aui-root aui-thread-root @container relative flex h-full w-full flex-col bg-background",
+                themeProps.className,
+                className,
               )}
             >
-              <ThreadPrimitive.If empty>
-                {components.ThreadWelcome ? (
-                  <components.ThreadWelcome />
-                ) : (
-                  <ThreadWelcome />
+              <ConnectionStatusIndicatorSafe />
+              <ThreadPrimitive.Viewport
+                className={cn(
+                  "aui-thread-viewport relative mx-auto flex w-full flex-1 flex-col overflow-x-auto overflow-y-scroll pb-0!",
+                  d("p-lg"),
                 )}
-              </ThreadPrimitive.If>
+              >
+                <ThreadPrimitive.If empty>
+                  {components.ThreadWelcome ? (
+                    <components.ThreadWelcome />
+                  ) : (
+                    <ThreadWelcome />
+                  )}
+                </ThreadPrimitive.If>
 
-              {showDangerousApiKeyWarning && <DangerousApiKeyWarning />}
+                {showDangerousApiKeyWarning && <DangerousApiKeyWarning />}
 
-              <ThreadPrimitive.Messages
-                components={{
-                  UserMessage: components.UserMessage ?? UserMessage,
-                  EditComposer: components.EditComposer ?? EditComposer,
-                  AssistantMessage:
-                    components.AssistantMessage ?? AssistantMessage,
-                }}
-              />
-
-              <ThreadPrimitive.If empty={false} running={false}>
-                <FollowOnSuggestions />
-              </ThreadPrimitive.If>
-
-              <ThreadPrimitive.If empty={false}>
-                <div className="aui-thread-viewport-spacer min-h-8 grow" />
-              </ThreadPrimitive.If>
-
-              {!composerHidden && <Composer showFeedback={showFeedback} />}
-            </ThreadPrimitive.Viewport>
-
-            {/* Resolution overlay - subtle readonly effect */}
-            <AnimatePresence>
-              {showFeedback && isResolved && (
-                <m.div
-                  className="pointer-events-none absolute inset-0 z-50 bg-background/40"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.3, ease: EASE_OUT_QUINT }}
+                <ThreadPrimitive.Messages
+                  components={{
+                    UserMessage: components.UserMessage ?? UserMessage,
+                    EditComposer: components.EditComposer ?? EditComposer,
+                    AssistantMessage:
+                      components.AssistantMessage ?? AssistantMessage,
+                  }}
                 />
-              )}
-            </AnimatePresence>
-          </ThreadPrimitive.Root>
+
+                <ThreadPrimitive.If empty={false} running={false}>
+                  <FollowOnSuggestions />
+                </ThreadPrimitive.If>
+
+                <ThreadPrimitive.If empty={false}>
+                  <div className="aui-thread-viewport-spacer min-h-8 grow" />
+                </ThreadPrimitive.If>
+
+                {!composerHidden && <Composer showFeedback={showFeedback} />}
+              </ThreadPrimitive.Viewport>
+
+              {/* Resolution overlay - subtle readonly effect */}
+              <AnimatePresence>
+                {showFeedback && isResolved && (
+                  <m.div
+                    className="pointer-events-none absolute inset-0 z-50 bg-background/40"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.3, ease: EASE_OUT_QUINT }}
+                  />
+                )}
+              </AnimatePresence>
+            </ThreadPrimitive.Root>
+          </AttachmentDropZone>
         </MotionConfig>
       </LazyMotion>
     </ChatResolutionContext.Provider>
@@ -585,9 +603,21 @@ const ComposerFeedback: FC = () => {
 
 interface ComposerProps {
   showFeedback?: boolean;
+  /** Standalone hosts (entry-point composers with no message list above them)
+   *  pass false: there is no viewport to scroll back down to, and the composer
+   *  must not claim the run state of a conversation it doesn't own. */
+  showThreadAffordances?: boolean;
+  /** Grab focus on mount. True inside a thread, where typing is the only thing
+   *  to do; false on landing pages, where stealing focus hijacks the scroll
+   *  position and the keyboard from the rest of the page. */
+  autoFocus?: boolean;
 }
 
-const Composer: FC<ComposerProps> = ({ showFeedback = false }) => {
+export const Composer: FC<ComposerProps> = ({
+  showFeedback = false,
+  showThreadAffordances = true,
+  autoFocus = true,
+}) => {
   const { config, mcpTools } = useElements();
   const { isResolved, setUnresolved } = useChatResolution();
   const r = useRadius();
@@ -595,6 +625,8 @@ const Composer: FC<ComposerProps> = ({ showFeedback = false }) => {
   const replayCtx = useReplayContext();
 
   const isReplay = replayCtx?.isReplay ?? false;
+  const isDictating = useAuiState(({ composer }) => composer.dictation != null);
+  const isComposerEmpty = useAuiState(({ composer }) => composer.text === "");
   const composerConfig = config.composer ?? {
     placeholder: "Send a message...",
     attachments: true,
@@ -609,6 +641,37 @@ const Composer: FC<ComposerProps> = ({ showFeedback = false }) => {
       composerConfig.toolMentions.enabled !== false);
 
   const composerRootRef = useRef<HTMLFormElement>(null);
+
+  // Slash commands: typing `/` turns the draft into a command query. Picking
+  // one REPLACES the draft and sends, so the raw "/…" text is never submitted.
+  const aui = useAui();
+  const composerText = useAuiState(({ composer }) => composer.text);
+  const slashCommands = composerConfig.slashCommands ?? [];
+  const slashQuery = composerText.startsWith("/")
+    ? composerText.slice(1).trim().toLowerCase()
+    : null;
+  const slashMatches = useMemo(() => {
+    if (slashQuery === null) return [];
+    if (!slashQuery) return slashCommands;
+    return slashCommands.filter(
+      (command) =>
+        command.title.toLowerCase().includes(slashQuery) ||
+        (command.label?.toLowerCase().includes(slashQuery) ?? false),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- slashCommands is a config array, compared by content below
+  }, [slashQuery, slashCommands]);
+  const [activeSlashIndex, setActiveSlashIndex] = useState(0);
+  const slashOpen = slashMatches.length > 0;
+
+  useEffect(() => {
+    setActiveSlashIndex(0);
+  }, [slashQuery]);
+
+  const runSlashCommand = (command: ComposerSlashCommand) => {
+    const composer = aui.composer();
+    composer.setText(command.prompt);
+    composer.send();
+  };
 
   if (components.Composer) {
     return <components.Composer />;
@@ -626,10 +689,12 @@ const Composer: FC<ComposerProps> = ({ showFeedback = false }) => {
       {/* Floating overlay above the opaque composer: keeps the message list
           scrolling all the way down to the composer instead of being cut off
           by a band of background behind the feedback pill. */}
-      <div className="aui-composer-overlay pointer-events-none absolute inset-x-0 bottom-full z-20 flex justify-center pb-3">
-        {showFeedback && <ComposerFeedback />}
-        <ThreadScrollToBottom />
-      </div>
+      {showThreadAffordances && (
+        <div className="aui-composer-overlay pointer-events-none absolute inset-x-0 bottom-full z-20 flex justify-center pb-3">
+          {showFeedback && <ComposerFeedback />}
+          <ThreadScrollToBottom />
+        </div>
+      )}
       {showFeedback && isResolved ? (
         <m.div
           className="aui-composer-resolved flex min-h-[118px] flex-col items-center justify-center gap-2 border-t border-input px-1"
@@ -652,33 +717,173 @@ const Composer: FC<ComposerProps> = ({ showFeedback = false }) => {
       ) : (
         <ComposerPrimitive.Root
           ref={composerRootRef}
+          // Capture: the menu owns Up/Down/Enter while it is open, before the
+          // textarea inserts a newline or the composer sends the raw query.
+          onKeyDownCapture={(event) => {
+            if (!slashOpen) return;
+            if (event.key === "ArrowDown") {
+              event.preventDefault();
+              setActiveSlashIndex((i) => (i + 1) % slashMatches.length);
+            } else if (event.key === "ArrowUp") {
+              event.preventDefault();
+              setActiveSlashIndex(
+                (i) => (i - 1 + slashMatches.length) % slashMatches.length,
+              );
+            } else if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              event.stopPropagation();
+              const command = slashMatches[activeSlashIndex];
+              if (command) runSlashCommand(command);
+            } else if (event.key === "Escape") {
+              event.preventDefault();
+              aui.composer().setText("");
+            }
+          }}
+          // Lets compact hosts (the docked pill) restyle the composer while
+          // dictation is live — there is no room there for both the transcript
+          // and the level trail.
+          data-dictating={isDictating ? "true" : undefined}
+          // Hosts that paint their own placeholder (the landing surfaces cycle
+          // through example prompts) need to know when the draft is empty.
+          data-empty={isComposerEmpty ? "true" : undefined}
           className={cn(
-            "aui-composer-root group/input-group relative flex min-h-[118px] w-full flex-col border border-input bg-background px-1 pt-2 shadow-xs transition-[color,box-shadow] outline-none has-[textarea:focus-visible]:border-ring has-[textarea:focus-visible]:ring-1 has-[textarea:focus-visible]:ring-ring/5 dark:bg-background",
+            "aui-composer-root group/input-group relative flex min-h-[118px] w-full flex-col border border-black/8 bg-background px-1.5 pt-3 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_10px_28px_-16px_rgba(0,0,0,0.18)] transition-[color,border-color,box-shadow] outline-none has-[textarea:focus-visible]:border-black/15 dark:border-white/10 dark:bg-background dark:has-[textarea:focus-visible]:border-white/20",
             r("xl"),
             isReplay && "pointer-events-none opacity-50",
           )}
         >
-          {composerConfig.attachments && <ComposerAttachments />}
+          {(composerConfig.attachments ?? true) !== false && (
+            <ComposerAttachments />
+          )}
+
+          {slashOpen && (
+            <ComposerSlashCommandMenu
+              commands={slashMatches}
+              activeIndex={activeSlashIndex}
+              onHover={setActiveSlashIndex}
+              onSelect={runSlashCommand}
+            />
+          )}
 
           {toolMentionsEnabled && <ComposerToolMentions tools={mcpTools} />}
 
           <ComposerSkillContextBadges />
 
+          {/* Speech lands in the input as the recognizer finalizes it, which
+              reads as text writing itself. Hide the draft while the session is
+              live and show a single "Listening…" label instead; the text is
+              revealed intact the moment dictation stops. */}
+          {isDictating && (
+            <span
+              aria-hidden="true"
+              className={cn(
+                "aui-composer-listening pointer-events-none absolute px-4 pt-0.5 text-muted-foreground",
+                d("text-base"),
+              )}
+            >
+              Listening…
+            </span>
+          )}
           <ComposerPrimitive.Input
             placeholder={composerConfig.placeholder}
             className={cn(
-              "aui-composer-input mb-1 max-h-32 w-full resize-none bg-transparent px-3.5 pt-1.5 pb-3 text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-0",
+              "aui-composer-input mb-1 max-h-32 w-full resize-none bg-transparent px-4 pt-0.5 pb-3 text-foreground outline-none placeholder:text-muted-foreground/70 focus-visible:ring-0",
               d("h-input"),
               d("text-base"),
+              isDictating && "invisible",
             )}
             rows={1}
-            autoFocus={!isReplay}
+            autoFocus={autoFocus && !isReplay}
             disabled={isReplay}
             aria-label="Message input"
           />
-          <ComposerAction />
+          <ComposerAction showRunState={showThreadAffordances} />
         </ComposerPrimitive.Root>
       )}
+    </div>
+  );
+};
+
+/**
+ * Live feedback while dictating: finalized speech lands in the input, interim
+ * words only exist in the transcript primitive until the recognizer commits.
+ */
+const DICTATION_BAR_COUNT = 28;
+
+/**
+ * The scrolling level trail shown left of the mic while dictating: newest
+ * sample sits next to the button, so speech visibly flows into it.
+ */
+const ComposerDictationWave: FC = () => {
+  // The recognizer's interim transcript is the speech signal — see
+  // useDictationLevels for why this doesn't tap the microphone directly.
+  const transcript = useAuiState(
+    ({ composer }) => composer.dictation?.transcript,
+  );
+  const levels = useDictationLevels(transcript, DICTATION_BAR_COUNT);
+
+  return (
+    <div
+      aria-hidden="true"
+      className="aui-composer-dictation-wave mr-1 flex h-[34px] items-center gap-[3px]"
+    >
+      {levels.map((level, index) => (
+        <span
+          key={index}
+          className="aui-composer-dictation-bar w-[2px] shrink-0 rounded-full bg-muted-foreground/60"
+          // Floor of 2px keeps the row reading as a dotted line while silent,
+          // exactly like the reference. No CSS transition: the value already
+          // updates every frame, and a transition would only damp the peaks.
+          style={{ height: `${(2 + level * 16).toFixed(1)}px` }}
+        />
+      ))}
+    </div>
+  );
+};
+
+/**
+ * Command list shown above the composer while the draft is a `/` query.
+ * Selection is owned by the composer so Enter and click resolve to the same
+ * row; rows use onMouseDown-prevent so clicking one doesn't blur the input
+ * (which would clear the query before the click lands).
+ */
+const ComposerSlashCommandMenu: FC<{
+  commands: ComposerSlashCommand[];
+  activeIndex: number;
+  onHover: (index: number) => void;
+  onSelect: (command: ComposerSlashCommand) => void;
+}> = ({ commands, activeIndex, onHover, onSelect }) => {
+  const r = useRadius();
+  return (
+    <div
+      role="listbox"
+      className={cn(
+        "aui-composer-slash-menu absolute bottom-full left-0 z-50 mb-2 max-h-64 w-full overflow-y-auto border border-input bg-background shadow-md",
+        r("lg"),
+      )}
+    >
+      {commands.map((command, index) => (
+        <button
+          key={command.title}
+          type="button"
+          role="option"
+          aria-selected={index === activeIndex}
+          onMouseDown={(event) => event.preventDefault()}
+          onMouseEnter={() => onHover(index)}
+          onClick={() => onSelect(command)}
+          className={cn(
+            "aui-composer-slash-item flex w-full items-baseline gap-2 px-3 py-2 text-left text-sm",
+            index === activeIndex && "bg-muted",
+          )}
+        >
+          <span className="truncate text-foreground">{command.title}</span>
+          {command.label && (
+            <span className="truncate text-xs text-muted-foreground">
+              {command.label}
+            </span>
+          )}
+        </button>
+      ))}
     </div>
   );
 };
@@ -850,9 +1055,6 @@ const ComposerCassetteRecorder: FC = () => {
   );
 };
 
-// Sentinel for the "All" pseudo-category in the tool-mention picker.
-const TOOL_MENTION_ALL_CATEGORY = "__all__";
-
 function humanizeToolCategory(raw: string): string {
   const cleaned = raw.replace(/[-_]+/g, " ").trim();
   if (!cleaned) return "Tools";
@@ -878,23 +1080,34 @@ interface ToolCategory {
   tools: MentionableTool[];
 }
 
-// A discoverable counterpart to the type-`@` autocomplete: a composer button
-// that opens a searchable, category-grouped picker of the available tools and
-// inserts an @mention for the chosen one. Inserts through the composer runtime
-// so it stays in sync with the autocomplete's own textarea handling. Hidden when
-// tool mentions are disabled or there are no tools.
-const ComposerToolMentionPicker: FC = () => {
+/** Rail entry for the skills half of the context picker. */
+const CONTEXT_SKILLS_SECTION = "__skills__";
+/** Rail entry that lists every tool, ungrouped. */
+const CONTEXT_ALL_TOOLS_SECTION = "__all_tools__";
+
+/**
+ * One "Add context" control over both things a message can carry: skills and
+ * tool mentions.
+ *
+ * These were two adjacent buttons, both drawn as an `@`, which read as the
+ * same affordance twice. They stay distinct underneath — picking a skill
+ * toggles it on the composer's skill context, picking a tool writes an
+ * `@mention` into the draft — but the user makes one trip to one list.
+ */
+const ComposerContextPicker: FC = () => {
   const { config, mcpTools, mcpToolsLoading } = useElements();
   const aui = useAui();
   // Read the composer text from the same reactive source the tool-mention
   // badges parse, so an inserted mention renders a pill just like the type-`@`
   // autocomplete does.
   const composerText = useAuiState(({ composer }) => composer.text);
+  const skillContext = config.composer?.skillContext;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [activeCategory, setActiveCategory] = useState(
-    TOOL_MENTION_ALL_CATEGORY,
-  );
+  const deferredQuery = useDeferredValue(query);
+  // Null until the user picks a rail entry, so the default can follow what
+  // actually loaded rather than latching whatever was there on first render.
+  const [section, setSection] = useState<string | null>(null);
 
   const composerConfig = config.composer;
   const toolMentionsEnabled =
@@ -921,26 +1134,90 @@ const ComposerToolMentionPicker: FC = () => {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [tools]);
 
-  // Show the button while tools are still loading (so it appears immediately
-  // rather than popping in once the async MCP list resolves) or once there are
-  // tools — but hide it when the list has loaded and is empty, so we don't
-  // expose a dead-end control.
-  if (!toolMentionsEnabled || (!mcpToolsLoading && tools.length === 0)) {
+  // Both halves stay visible while their source is still loading, so the
+  // button appears immediately rather than popping in once the async list
+  // resolves — but a half that loaded empty is dropped, and a button with
+  // nothing behind it at all is not rendered.
+  const hasSkills =
+    !!skillContext && (skillContext.skills.length > 0 || skillContext.loading);
+  const hasTools = toolMentionsEnabled && (tools.length > 0 || mcpToolsLoading);
+  if (!hasSkills && !hasTools) {
     return null;
   }
 
-  const normalizedQuery = query.trim().toLowerCase();
-  const inActiveCategory =
-    activeCategory === TOOL_MENTION_ALL_CATEGORY
+  // A picked rail entry can stop existing under the user — tools refresh and
+  // lose a category, or a half loads empty. Fall back rather than leave the
+  // pane pointed at something that is no longer there.
+  const sectionExists =
+    section === CONTEXT_SKILLS_SECTION
+      ? hasSkills
+      : section === CONTEXT_ALL_TOOLS_SECTION
+        ? hasTools
+        : hasTools && categories.some((category) => category.name === section);
+  const activeSection =
+    section !== null && sectionExists
+      ? section
+      : hasSkills
+        ? CONTEXT_SKILLS_SECTION
+        : CONTEXT_ALL_TOOLS_SECTION;
+  const normalizedQuery = deferredQuery.trim().toLowerCase();
+  const searching = normalizedQuery !== "";
+
+  const selectedIDs = new Set(skillContext?.selectedSkillIds ?? []);
+  const maxSelected = skillContext?.maxSelected ?? 10;
+
+  const matchingSkills = (skillContext?.skills ?? []).filter(
+    (skill) =>
+      !searching ||
+      skill.displayName.toLowerCase().includes(normalizedQuery) ||
+      skill.name.toLowerCase().includes(normalizedQuery) ||
+      (skill.summary?.toLowerCase().includes(normalizedQuery) ?? false),
+  );
+
+  // A search spans both halves; the rail only narrows the browse view.
+  const toolsInSection =
+    searching || activeSection === CONTEXT_ALL_TOOLS_SECTION
       ? tools
-      : (categories.find((c) => c.name === activeCategory)?.tools ?? []);
-  const visibleTools = normalizedQuery
-    ? inActiveCategory.filter(
-        (tool) =>
-          tool.name.toLowerCase().includes(normalizedQuery) ||
-          (tool.description?.toLowerCase().includes(normalizedQuery) ?? false),
-      )
-    : inActiveCategory;
+      : (categories.find((c) => c.name === activeSection)?.tools ?? []);
+  const matchingTools = toolsInSection.filter(
+    (tool) =>
+      !searching ||
+      tool.name.toLowerCase().includes(normalizedQuery) ||
+      (tool.description?.toLowerCase().includes(normalizedQuery) ?? false),
+  );
+
+  const reset = () => {
+    setQuery("");
+    setSection(null);
+  };
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) {
+      reset();
+    }
+  };
+
+  const toggleSkill = (skillID: string) => {
+    if (!skillContext) return;
+    if (selectedIDs.has(skillID)) {
+      skillContext.onSelectedSkillIdsChange(
+        skillContext.selectedSkillIds.filter((id) => id !== skillID),
+      );
+      setOpen(false);
+      reset();
+      return;
+    }
+    if (skillContext.selectedSkillIds.length >= maxSelected) {
+      return;
+    }
+    skillContext.onSelectedSkillIdsChange([
+      ...skillContext.selectedSkillIds,
+      skillID,
+    ]);
+    setOpen(false);
+    reset();
+  };
 
   const insertMention = (toolName: string) => {
     const base =
@@ -949,118 +1226,210 @@ const ComposerToolMentionPicker: FC = () => {
         : composerText;
     aui.composer().setText(`${base}@${toolName} `);
     setOpen(false);
-    setQuery("");
+    reset();
   };
 
-  const handleOpenChange = (next: boolean) => {
-    setOpen(next);
-    if (!next) {
-      setQuery("");
-      setActiveCategory(TOOL_MENTION_ALL_CATEGORY);
-    }
-  };
+  const showSkills = hasSkills && (!searching || matchingSkills.length > 0);
+  const showTools = hasTools && (!searching || matchingTools.length > 0);
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button
+          type="button"
           variant="ghost"
           size="icon"
           data-state={open ? "open" : "closed"}
-          className="aui-composer-tool-mention-picker flex w-fit items-center gap-2 rounded-full px-2.5 py-1 text-xs font-semibold data-[state=open]:bg-muted-foreground/15 dark:border-muted-foreground/15 dark:hover:bg-muted-foreground/30"
-          aria-label="Mention a tool"
+          className="aui-composer-context-picker flex w-fit items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold data-[state=open]:bg-muted-foreground/15 dark:border-muted-foreground/15 dark:hover:bg-muted-foreground/30"
+          aria-label="Add context"
         >
-          <AtSign className="size-5 stroke-[1.5px]" />
+          <AtSign className="size-4 stroke-[1.5px]" />
+          <span className="aui-composer-context-picker-label">Add context</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent
         side="top"
         align="start"
-        className="aui-composer-tool-mention-popover w-[420px] overflow-hidden p-0"
+        className="aui-composer-context-popover w-[420px] overflow-hidden p-0"
+        onEscapeKeyDown={(event) => {
+          if (query !== "") {
+            event.preventDefault();
+            setQuery("");
+          }
+        }}
       >
         <div className="flex items-center gap-2 border-b border-input px-3 py-2">
           <Search className="size-4 shrink-0 text-muted-foreground" />
           <input
             autoFocus
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search tools…"
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={
+              hasSkills && hasTools
+                ? "Search skills and tools…"
+                : hasSkills
+                  ? "Search skills…"
+                  : "Search tools…"
+            }
             className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
-            aria-label="Search tools"
+            aria-label="Search context"
           />
         </div>
         <div className="flex h-72">
-          <div className="w-36 shrink-0 overflow-y-auto border-r border-input p-2">
-            <div className="px-2 pb-1 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
-              Categories
-            </div>
-            <button
-              type="button"
-              onClick={() => setActiveCategory(TOOL_MENTION_ALL_CATEGORY)}
-              className={cn(
-                "flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs transition-colors",
-                activeCategory === TOOL_MENTION_ALL_CATEGORY
-                  ? "bg-muted font-medium text-foreground"
-                  : "text-muted-foreground hover:bg-muted/60",
-              )}
-            >
-              <span className="truncate">All</span>
-              <span className="ml-2 shrink-0 tabular-nums opacity-60">
-                {tools.length}
-              </span>
-            </button>
-            {categories.map((category) => (
-              <button
-                key={category.name}
-                type="button"
-                onClick={() => setActiveCategory(category.name)}
-                className={cn(
-                  "flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs transition-colors",
-                  activeCategory === category.name
-                    ? "bg-muted font-medium text-foreground"
-                    : "text-muted-foreground hover:bg-muted/60",
-                )}
-              >
-                <span className="truncate">{category.name}</span>
-                <span className="ml-2 shrink-0 tabular-nums opacity-60">
-                  {category.tools.length}
-                </span>
-              </button>
-            ))}
-          </div>
-          <div className="min-w-0 flex-1 overflow-y-auto p-2">
-            {visibleTools.length === 0 ? (
-              <div className="px-2 py-6 text-center text-xs text-muted-foreground">
-                {mcpToolsLoading ? "Loading tools…" : "No tools found"}
-              </div>
-            ) : (
-              visibleTools.map((tool) => (
+          {/* The rail is a browse aid only; a search reaches across both
+              halves, so it is hidden while one is running. */}
+          {!searching && (
+            <div className="w-36 shrink-0 overflow-y-auto border-r border-input p-2">
+              {hasSkills && (
                 <button
-                  key={tool.id}
                   type="button"
-                  onClick={() => insertMention(tool.name)}
-                  className="flex w-full items-start gap-2 rounded px-2 py-1.5 text-left transition-colors hover:bg-muted"
+                  onClick={() => setSection(CONTEXT_SKILLS_SECTION)}
+                  className={cn(
+                    "flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs transition-colors",
+                    activeSection === CONTEXT_SKILLS_SECTION
+                      ? "bg-muted font-medium text-foreground"
+                      : "text-muted-foreground hover:bg-muted/60",
+                  )}
                 >
-                  <Wrench className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-foreground">
-                      {tool.name}
-                    </span>
-                    {tool.description && (
-                      <span className="line-clamp-2 text-xs text-muted-foreground">
-                        {tool.description}
-                      </span>
-                    )}
+                  <span className="truncate">Skills</span>
+                  <span className="ml-2 shrink-0 tabular-nums opacity-60">
+                    {skillContext?.skills.length ?? 0}
                   </span>
                 </button>
-              ))
+              )}
+              {hasTools && (
+                <>
+                  <div className="px-2 pt-2 pb-1 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                    Tools
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSection(CONTEXT_ALL_TOOLS_SECTION)}
+                    className={cn(
+                      "flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs transition-colors",
+                      activeSection === CONTEXT_ALL_TOOLS_SECTION
+                        ? "bg-muted font-medium text-foreground"
+                        : "text-muted-foreground hover:bg-muted/60",
+                    )}
+                  >
+                    <span className="truncate">All</span>
+                    <span className="ml-2 shrink-0 tabular-nums opacity-60">
+                      {tools.length}
+                    </span>
+                  </button>
+                  {categories.map((category) => (
+                    <button
+                      key={category.name}
+                      type="button"
+                      onClick={() => setSection(category.name)}
+                      className={cn(
+                        "flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs transition-colors",
+                        activeSection === category.name
+                          ? "bg-muted font-medium text-foreground"
+                          : "text-muted-foreground hover:bg-muted/60",
+                      )}
+                    >
+                      <span className="truncate">{category.name}</span>
+                      <span className="ml-2 shrink-0 tabular-nums opacity-60">
+                        {category.tools.length}
+                      </span>
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+          <div className="min-w-0 flex-1 overflow-y-auto">
+            {searching && !showSkills && !showTools && (
+              <div className="px-2 py-6 text-center text-xs text-muted-foreground">
+                {/* A search that outruns the fetch has nothing to match yet;
+                    saying "nothing found" there reports absence when the
+                    answer is simply not back. */}
+                {skillContext?.loading || mcpToolsLoading
+                  ? "Loading…"
+                  : "Nothing found"}
+              </div>
             )}
+            {showSkills &&
+              (searching || activeSection === CONTEXT_SKILLS_SECTION) && (
+                <>
+                  {searching && (
+                    <div className="px-4 pt-3 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                      Skills
+                    </div>
+                  )}
+                  <ContextSkillResults
+                    skillContext={skillContext}
+                    visibleSkills={matchingSkills}
+                    selectedIDs={selectedIDs}
+                    maxSelected={maxSelected}
+                    onToggle={toggleSkill}
+                  />
+                </>
+              )}
+            {showTools &&
+              (searching || activeSection !== CONTEXT_SKILLS_SECTION) && (
+                <>
+                  {searching && (
+                    <div className="px-4 pt-3 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                      Tools
+                    </div>
+                  )}
+                  <ContextToolResults
+                    tools={matchingTools}
+                    loading={mcpToolsLoading}
+                    onSelect={insertMention}
+                  />
+                </>
+              )}
           </div>
         </div>
       </PopoverContent>
     </Popover>
   );
 };
+
+function ContextToolResults({
+  tools,
+  loading,
+  onSelect,
+}: {
+  tools: MentionableTool[];
+  loading: boolean;
+  onSelect: (toolName: string) => void;
+}): React.ReactElement {
+  if (tools.length === 0) {
+    return (
+      <div className="px-2 py-6 text-center text-xs text-muted-foreground">
+        {loading ? "Loading tools…" : "No tools found"}
+      </div>
+    );
+  }
+  return (
+    <div className="p-2">
+      {tools.map((tool) => (
+        <button
+          key={tool.id}
+          type="button"
+          onClick={() => onSelect(tool.name)}
+          className="flex w-full items-start gap-2 rounded px-2 py-1.5 text-left transition-colors hover:bg-muted"
+        >
+          <Wrench className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium text-foreground">
+              {tool.name}
+            </span>
+            {tool.description && (
+              <span className="line-clamp-2 text-xs text-muted-foreground">
+                {tool.description}
+              </span>
+            )}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
 
 const ComposerSkillContextBadges: FC = () => {
   const skillContext = useElements().config.composer?.skillContext;
@@ -1100,127 +1469,27 @@ const ComposerSkillContextBadges: FC = () => {
   );
 };
 
-const ComposerSkillContextPicker: FC = () => {
-  const skillContext = useElements().config.composer?.skillContext;
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const deferredQuery = useDeferredValue(query);
-
-  if (!skillContext) {
-    return null;
-  }
-
-  const selectedIDs = new Set(skillContext.selectedSkillIds);
-  const normalizedQuery = deferredQuery.trim().toLowerCase();
-  const visibleSkills = normalizedQuery
-    ? skillContext.skills.filter(
-        (skill) =>
-          skill.displayName.toLowerCase().includes(normalizedQuery) ||
-          skill.name.toLowerCase().includes(normalizedQuery) ||
-          (skill.summary?.toLowerCase().includes(normalizedQuery) ?? false),
-      )
-    : skillContext.skills;
-  const maxSelected = skillContext.maxSelected ?? 10;
-
-  const handleOpenChange = (next: boolean) => {
-    setOpen(next);
-    if (!next) {
-      setQuery("");
-    }
-  };
-
-  const toggleSkill = (skillID: string) => {
-    if (selectedIDs.has(skillID)) {
-      skillContext.onSelectedSkillIdsChange(
-        skillContext.selectedSkillIds.filter((id) => id !== skillID),
-      );
-      setOpen(false);
-      setQuery("");
-      return;
-    }
-    if (skillContext.selectedSkillIds.length >= maxSelected) {
-      return;
-    }
-    skillContext.onSelectedSkillIdsChange([
-      ...skillContext.selectedSkillIds,
-      skillID,
-    ]);
-    setOpen(false);
-    setQuery("");
-  };
-
-  return (
-    <Popover open={open} onOpenChange={handleOpenChange}>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          data-state={open ? "open" : "closed"}
-          className="aui-composer-skill-context-picker flex w-fit items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold data-[state=open]:bg-muted-foreground/15 dark:border-muted-foreground/15 dark:hover:bg-muted-foreground/30"
-          aria-label="Add skill context"
-        >
-          <AtSign className="size-4 stroke-[1.5px]" />
-          <span className="aui-composer-skill-context-picker-label">
-            Add context
-          </span>
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent
-        side="top"
-        align="start"
-        className="aui-composer-skill-context-popover w-[360px] overflow-hidden p-0"
-        onEscapeKeyDown={(event) => {
-          if (query !== "") {
-            event.preventDefault();
-            setQuery("");
-          }
-        }}
-      >
-        <div className="flex items-center gap-2 border-b border-input px-3 py-2">
-          <Search className="size-4 shrink-0 text-muted-foreground" />
-          <input
-            autoFocus
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search skills…"
-            className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
-            aria-label="Search skills"
-          />
-        </div>
-        <SkillContextPickerResults
-          skillContext={skillContext}
-          visibleSkills={visibleSkills}
-          selectedIDs={selectedIDs}
-          maxSelected={maxSelected}
-          onToggle={toggleSkill}
-        />
-      </PopoverContent>
-    </Popover>
-  );
-};
-
-function SkillContextPickerResults({
+function ContextSkillResults({
   skillContext,
   visibleSkills,
   selectedIDs,
   maxSelected,
   onToggle,
 }: {
-  skillContext: SkillContextConfig;
+  skillContext: SkillContextConfig | undefined;
   visibleSkills: ComposerSkill[];
   selectedIDs: Set<string>;
   maxSelected: number;
   onToggle: (skillID: string) => void;
 }): React.ReactElement {
-  if (skillContext.loading) {
+  if (skillContext?.loading) {
     return (
       <div className="px-3 py-8 text-center text-xs text-muted-foreground">
         Loading skills…
       </div>
     );
   }
-  if (skillContext.error) {
+  if (skillContext?.error) {
     return (
       <div className="px-3 py-8 text-center text-xs text-muted-foreground">
         Unable to load skills
@@ -1272,62 +1541,148 @@ function SkillContextPickerResults({
   );
 }
 
-const ComposerAction: FC = () => {
+/**
+ * Push-to-talk mic. Rendered only when the browser exposes the Web Speech API —
+ * without an adapter the primitive's click handler is null, so the button would
+ * look live but do nothing.
+ */
+const ComposerDictate: FC = () => {
+  const r = useRadius();
+  // `composer.dictation` holds the live session and is undefined otherwise.
+  const isDictating = useAuiState(({ composer }) => composer.dictation != null);
+
+  if (isDictating) {
+    return (
+      <>
+        <ComposerDictationWave />
+        <ComposerPrimitive.StopDictation asChild>
+          <TooltipIconButton
+            tooltip="Stop dictation"
+            side="bottom"
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "aui-composer-dictate size-[34px] bg-blue-600 p-1 text-white hover:bg-blue-600/85 hover:text-white",
+              r("full"),
+            )}
+            aria-label="Stop dictation"
+          >
+            <Mic className="aui-composer-dictate-icon size-5 stroke-[1.5px]" />
+          </TooltipIconButton>
+        </ComposerPrimitive.StopDictation>
+      </>
+    );
+  }
+
+  return (
+    <ComposerPrimitive.Dictate asChild>
+      <TooltipIconButton
+        tooltip="Dictate message"
+        side="bottom"
+        type="button"
+        variant="ghost"
+        size="icon"
+        className={cn("aui-composer-dictate size-[34px] p-1", r("full"))}
+        aria-label="Dictate message"
+      >
+        <Mic className="aui-composer-dictate-icon size-5 stroke-[1.5px]" />
+      </TooltipIconButton>
+    </ComposerPrimitive.Dictate>
+  );
+};
+
+const ComposerAction: FC<{ showRunState?: boolean }> = ({
+  showRunState = true,
+}) => {
   const { config } = useElements();
   const r = useRadius();
-  const composerConfig = config.composer ?? { attachments: true };
+  const composerConfig = config.composer ?? {};
+  // `?? true`, not a default object: a config that sets any other composer key
+  // (placeholder, skillContext) would otherwise leave `attachments` undefined
+  // and silently drop the attach button.
+  const attachmentsEnabled = composerConfig.attachments ?? true;
   return (
-    <div className="aui-composer-action-wrapper relative mx-1 mt-2 mb-2 flex items-center justify-between">
-      <div className="aui-composer-action-wrapper-inner flex items-center text-muted-foreground">
-        {composerConfig.attachments ? (
+    <div className="aui-composer-action-wrapper relative mx-1.5 mt-1 mb-2 flex items-center justify-between">
+      <div className="aui-composer-action-wrapper-inner flex items-center gap-0.5 text-muted-foreground">
+        {attachmentsEnabled ? (
           <ComposerAddAttachment />
         ) : (
           <div className="aui-composer-add-attachment-placeholder" />
         )}
 
-        <ComposerToolMentionPicker />
-
-        <ComposerSkillContextPicker />
-
-        {config.model?.showModelPicker && !config.languageModel && (
-          <ComposerModelPicker />
-        )}
+        <ComposerContextPicker />
 
         {CASSETTE_RECORDING_ENABLED && <ComposerCassetteRecorder />}
       </div>
 
-      <ThreadPrimitive.If running={false}>
-        <ComposerPrimitive.Send asChild>
-          <TooltipIconButton
-            tooltip="Send message"
-            side="bottom"
-            type="submit"
-            variant="default"
-            size="icon"
-            className={cn("aui-composer-send size-[34px] p-1", r("full"))}
-            aria-label="Send message"
-          >
-            <ArrowUpIcon className="aui-composer-send-icon size-5" />
-          </TooltipIconButton>
-        </ComposerPrimitive.Send>
-      </ThreadPrimitive.If>
+      {/* Claude's ordering: composition tools on the left, model + voice +
+          send on the right, closest to where the eye lands after typing. */}
+      <div className="aui-composer-action-send-group flex items-center gap-1.5">
+        {config.model?.showModelPicker && !config.languageModel && (
+          <ComposerModelPicker />
+        )}
 
-      <ThreadPrimitive.If running>
-        <ComposerPrimitive.Cancel asChild>
-          <Button
-            type="button"
-            variant="default"
-            size="icon"
-            className={cn(
-              "aui-composer-cancel size-[34px] border border-muted-foreground/60 hover:bg-primary/75 dark:border-muted-foreground/90",
-              r("full"),
-            )}
-            aria-label="Stop generating"
-          >
-            <Square className="aui-composer-cancel-icon size-3.5 fill-white dark:fill-black" />
-          </Button>
-        </ComposerPrimitive.Cancel>
-      </ThreadPrimitive.If>
+        {dictationAdapter && <ComposerDictate />}
+
+        {/* A standalone entry-point composer (chat home, project home, the
+            docked pill) shares the runtime with whatever conversation is
+            already streaming, but it does not OWN that run: showing its stop
+            button there offers to cancel a turn the user cannot even see. It
+            always shows send, and starts a fresh thread instead. */}
+        {!showRunState && (
+          <ComposerPrimitive.Send asChild>
+            <TooltipIconButton
+              tooltip="Send message"
+              side="bottom"
+              type="submit"
+              variant="default"
+              size="icon"
+              className={cn("aui-composer-send size-[34px] p-1", r("full"))}
+              aria-label="Send message"
+            >
+              <ArrowUpIcon className="aui-composer-send-icon size-5" />
+            </TooltipIconButton>
+          </ComposerPrimitive.Send>
+        )}
+
+        {showRunState && (
+          <ThreadPrimitive.If running={false}>
+            <ComposerPrimitive.Send asChild>
+              <TooltipIconButton
+                tooltip="Send message"
+                side="bottom"
+                type="submit"
+                variant="default"
+                size="icon"
+                className={cn("aui-composer-send size-[34px] p-1", r("full"))}
+                aria-label="Send message"
+              >
+                <ArrowUpIcon className="aui-composer-send-icon size-5" />
+              </TooltipIconButton>
+            </ComposerPrimitive.Send>
+          </ThreadPrimitive.If>
+        )}
+
+        {showRunState && (
+          <ThreadPrimitive.If running>
+            <ComposerPrimitive.Cancel asChild>
+              <Button
+                type="button"
+                variant="default"
+                size="icon"
+                className={cn(
+                  "aui-composer-cancel size-[34px] border border-muted-foreground/60 hover:bg-primary/75 dark:border-muted-foreground/90",
+                  r("full"),
+                )}
+                aria-label="Stop generating"
+              >
+                <Square className="aui-composer-cancel-icon size-3.5 fill-white dark:fill-black" />
+              </Button>
+            </ComposerPrimitive.Cancel>
+          </ThreadPrimitive.If>
+        )}
+      </div>
     </div>
   );
 };
@@ -1492,6 +1847,14 @@ const UserMessage: FC = () => {
   const r = useRadius();
   const { config } = useElements();
   const allowEdit = config.allowMessageEdit !== false;
+  // An attachment-only turn carries no text part (or an empty one). Without
+  // this the bubble still renders as an empty coloured pill under the file,
+  // and the edit affordance offers to edit nothing.
+  const hasText = useAuiState(({ message }) =>
+    message.parts.some(
+      (part) => part.type === "text" && part.text.trim() !== "",
+    ),
+  );
   return (
     <MessagePrimitive.Root asChild>
       <div
@@ -1502,15 +1865,17 @@ const UserMessage: FC = () => {
 
         <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
           <UserMessageHeader />
-          <div
-            className={cn(
-              "aui-user-message-content bg-primary text-primary-foreground ml-auto w-fit px-5 py-2.5 wrap-break-word",
-              r("xl"),
-            )}
-          >
-            <MessagePrimitive.Parts components={{ Text: UserMessageText }} />
-          </div>
-          {allowEdit && (
+          {hasText && (
+            <div
+              className={cn(
+                "aui-user-message-content bg-primary text-primary-foreground ml-auto w-fit px-5 py-2.5 wrap-break-word",
+                r("xl"),
+              )}
+            >
+              <MessagePrimitive.Parts components={{ Text: UserMessageText }} />
+            </div>
+          )}
+          {allowEdit && hasText && (
             <div className="aui-user-action-bar-wrapper absolute top-1/2 left-0 -translate-x-full -translate-y-1/2 pr-2">
               <UserActionBar />
             </div>

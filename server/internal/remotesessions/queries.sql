@@ -973,8 +973,20 @@ RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_
 -- Best-effort refresh-grant keepalive. Each hourly workflow chain drains
 -- cross-project batches. Claiming stamps an independent attempt clock before
 -- any network call, so failed sessions rotate out for 24 hours instead of
--- pinning the oldest batch. The organization product feature is UI-only; the
--- persisted per-session preference is the runtime opt-in.
+-- pinning the oldest batch.
+--
+-- Eligibility is the organization's automatic-refresh policy applied to the
+-- session's own preference, so the policy the dashboard shows is the policy the
+-- keepalive runs:
+--
+--   * remote_session_auto_refresh_enforced -> every eligible session, whatever
+--     its stored preference.
+--   * remote_session_auto_refresh -> subjects choose, so auto_refresh decides.
+--   * neither -> refresh is off for the organization, and a preference left
+--     over from an earlier policy does not resurrect it.
+--
+-- Preferences are read, never rewritten, so restoring the opt-in policy
+-- restores each subject's original choice.
 
 -- name: ClaimDueRemoteSessionRefreshCandidates :many
 WITH due AS (
@@ -993,7 +1005,23 @@ WITH due AS (
       s.last_refresh_attempt_at IS NULL
       OR s.last_refresh_attempt_at <= @attempt_cutoff::timestamptz
     )
-    AND s.auto_refresh IS TRUE
+    AND (
+      EXISTS (
+        SELECT 1 FROM organization_features AS orgf
+        WHERE orgf.organization_id = p.organization_id
+          AND orgf.feature_name = 'remote_session_auto_refresh_enforced'
+          AND orgf.deleted IS FALSE
+      )
+      OR (
+        s.auto_refresh IS TRUE
+        AND EXISTS (
+          SELECT 1 FROM organization_features AS orgf
+          WHERE orgf.organization_id = p.organization_id
+            AND orgf.feature_name = 'remote_session_auto_refresh'
+            AND orgf.deleted IS FALSE
+        )
+      )
+    )
     AND EXISTS (
       SELECT 1 FROM remote_session_client_user_session_issuers AS link
       WHERE link.remote_session_client_id = c.id
@@ -1039,7 +1067,27 @@ WHERE s.id = @id
   AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > @now_ts::timestamptz)
   AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > @now_ts::timestamptz)
   AND s.updated_at <= @keepalive_cutoff::timestamptz
-  AND s.auto_refresh IS TRUE
+  -- The organization's automatic-refresh policy applied to this session's own
+  -- preference. This predicate is spelled out again in
+  -- ClaimDueRemoteSessionRefreshCandidates; the two must agree, and
+  -- TestRefreshSweep_ClaimAndRecheckAgreeOnPolicy fails if they drift.
+  AND (
+    EXISTS (
+      SELECT 1 FROM organization_features AS orgf
+      WHERE orgf.organization_id = p.organization_id
+        AND orgf.feature_name = 'remote_session_auto_refresh_enforced'
+        AND orgf.deleted IS FALSE
+    )
+    OR (
+      s.auto_refresh IS TRUE
+      AND EXISTS (
+        SELECT 1 FROM organization_features AS orgf
+        WHERE orgf.organization_id = p.organization_id
+          AND orgf.feature_name = 'remote_session_auto_refresh'
+          AND orgf.deleted IS FALSE
+      )
+    )
+  )
   AND EXISTS (
     SELECT 1 FROM remote_session_client_user_session_issuers AS link
     WHERE link.remote_session_client_id = c.id
@@ -1098,6 +1146,106 @@ WHERE (
   AND i.deleted IS FALSE
   AND (sqlc.narg('cursor')::uuid IS NULL OR i.id < sqlc.narg('cursor')::uuid)
 ORDER BY i.id DESC
+LIMIT sqlc.arg('limit_value');
+
+-- name: ListOrganizationRemoteSessionIssuersByIssuerURL :many
+-- Every issuer an organization administrator can see that already describes a
+-- given upstream authorization server: the whole organization partition
+-- (organization-level AND project-specific alike) plus the platform catalog.
+-- Feeds the org-tier duplicate preflight.
+--
+-- The organization arm is deliberately the wide one, with no `project_id IS
+-- NULL` qualifier, unlike arm two of ListRemoteSessionIssuersByIssuerURL. That
+-- narrow arm exists because a project caller must not learn what a sibling
+-- project configured; an org administrator already holds org:read over the whole
+-- organization, and project-specific duplicates are the most useful thing this
+-- can report, being precisely the rows migrateIssuer consolidates. Tenancy still
+-- comes from the issuer's OWN organization_id, so a project row predating that
+-- column is missed — matching every other org-scoped read, and under-reporting a
+-- warning is the safe direction.
+--
+-- Bounded per tier via ROW_NUMBER rather than by one LIMIT, and that is the
+-- whole reason for the window function. A single budget is spent in arrival
+-- order, so one project holding many records on a URL would push the
+-- organization-level and platform rows past the cut, discarding the two most
+-- useful things this can report. Some bound is necessary because tenants control
+-- this row count and this runs from a form. The tier expression must keep
+-- agreeing with scopeOf in Go, which ranks the result by the same ladder.
+--
+-- Matching is literal equality against a caller-supplied candidate set, not a
+-- normalizing expression: remote_session_issuers_issuer_idx is on the raw
+-- column, so wrapping `issuer` in anything turns this into a sequential scan.
+-- ORDER BY rides created_at, not id, because generate_uuidv7 carries only
+-- millisecond resolution and ties sort randomly.
+WITH candidates AS (
+    SELECT
+        i.id,
+        i.slug,
+        i.name,
+        i.issuer,
+        i.project_id,
+        i.organization_id,
+        COALESCE(p.name, '')::text AS project_name,
+        CASE
+            WHEN i.project_id IS NOT NULL THEN 2
+            WHEN i.organization_id IS NOT NULL THEN 1
+            ELSE 0
+        END AS tier,
+        ROW_NUMBER() OVER (
+            PARTITION BY CASE
+                WHEN i.project_id IS NOT NULL THEN 2
+                WHEN i.organization_id IS NOT NULL THEN 1
+                ELSE 0
+            END
+            ORDER BY i.created_at ASC, i.id ASC
+        ) AS tier_rank
+    FROM remote_session_issuers AS i
+    LEFT JOIN projects AS p ON p.id = i.project_id
+    WHERE i.issuer = ANY(@issuers::text[])
+      AND (
+        i.organization_id = @organization_id
+        OR (@include_global::boolean AND i.project_id IS NULL AND i.organization_id IS NULL)
+      )
+      AND i.deleted IS FALSE
+)
+SELECT
+    id,
+    slug,
+    name,
+    issuer,
+    project_id,
+    organization_id,
+    project_name
+FROM candidates
+WHERE tier_rank <= @per_tier_limit::int
+-- The caller's display order, so its ranking pass is a no-op here rather than
+-- load-bearing. tier_rank is the within-tier created_at ordinal.
+ORDER BY tier ASC, tier_rank ASC;
+
+-- name: ListGlobalRemoteSessionIssuersByIssuerURL :many
+-- Global issuers describing a given upstream authorization server. Feeds the
+-- platform-tier duplicate preflight, which warns a platform administrator
+-- before they curate a second catalog entry for one authorization server (the
+-- global tier is unique on slug, but not on issuer).
+--
+-- Scoped to the global partition explicitly, matching every other query in that
+-- block, rather than reusing ListRemoteSessionIssuersByIssuerURL with a NULL
+-- project_id. That would return the same rows today only because `project_id =
+-- NULL` is NULL and never TRUE — a tenancy boundary resting on three-valued
+-- logic that nothing in the SQL states, which a plausible rewrite to `IS NOT
+-- DISTINCT FROM` would silently turn into a listing of every issuer in the
+-- database.
+--
+-- Matching is literal equality against a caller-supplied candidate set for the
+-- same index reason as the queries above. Every row here is one tier, so
+-- created_at ordering is the whole order.
+SELECT *
+FROM remote_session_issuers
+WHERE issuer = ANY(@issuers::text[])
+  AND project_id IS NULL
+  AND organization_id IS NULL
+  AND deleted IS FALSE
+ORDER BY created_at ASC, id ASC
 LIMIT sqlc.arg('limit_value');
 
 -- name: GetOrganizationRemoteSessionIssuerByID :one

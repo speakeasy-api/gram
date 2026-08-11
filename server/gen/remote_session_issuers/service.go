@@ -57,6 +57,20 @@ type Service interface {
 	// unusual spelling may not be found and a duplicate is created instead, which
 	// is the safe direction to fail.
 	GetRemoteSessionIssuer(context.Context, *GetRemoteSessionIssuerPayload) (res *types.RemoteSessionIssuer, err error)
+	// Report the existing remote_session_issuers that already describe an upstream
+	// issuer URL, so a create or edit form can warn before it duplicates one.
+	// Covers this project's own issuers plus those inherited from the organization
+	// and the platform catalog.
+
+	// Advisory only. Duplicating an issuer URL is legitimate — a project may want
+	// its own record so it can attach different documentation, branding or scopes
+	// — so nothing here blocks a write, and no lock is taken. A create that races
+	// another create still produces two records, which is a supported state.
+
+	// Matching uses the same canonicalization as getRemoteSessionIssuer. A URL
+	// that cannot be parsed as an issuer identifier returns no matches rather than
+	// an error, because a partially typed URL is the normal state of a form field.
+	GetRemoteSessionIssuerDuplicatePreflight(context.Context, *GetRemoteSessionIssuerDuplicatePreflightPayload) (res *types.RemoteSessionIssuerDuplicatePreflight, err error)
 	// Soft-delete a remote_session_issuer. Blocked if any remote_session_clients
 	// still reference it.
 	DeleteRemoteSessionIssuer(context.Context, *DeleteRemoteSessionIssuerPayload) (err error)
@@ -82,7 +96,7 @@ const ServiceName = "remoteSessionIssuers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"fetchRemoteSessionIssuerMetadata", "refreshRemoteSessionIssuerMetadata", "createRemoteSessionIssuer", "updateRemoteSessionIssuer", "listRemoteSessionIssuers", "getRemoteSessionIssuer", "deleteRemoteSessionIssuer"}
+var MethodNames = [8]string{"fetchRemoteSessionIssuerMetadata", "refreshRemoteSessionIssuerMetadata", "createRemoteSessionIssuer", "updateRemoteSessionIssuer", "listRemoteSessionIssuers", "getRemoteSessionIssuer", "getRemoteSessionIssuerDuplicatePreflight", "deleteRemoteSessionIssuer"}
 
 // CreateRemoteSessionIssuerPayload is the payload type of the
 // remoteSessionIssuers service createRemoteSessionIssuer method.
@@ -157,6 +171,17 @@ type DeleteRemoteSessionIssuerPayload struct {
 type FetchRemoteSessionIssuerMetadataPayload struct {
 	// Issuer URL to fetch metadata for (e.g. https://login.linear.com).
 	Issuer           string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// GetRemoteSessionIssuerDuplicatePreflightPayload is the payload type of the
+// remoteSessionIssuers service getRemoteSessionIssuerDuplicatePreflight method.
+type GetRemoteSessionIssuerDuplicatePreflightPayload struct {
+	// The upstream issuer URL being entered (e.g. https://login.linear.app). Empty
+	// or unparseable returns no matches.
+	Issuer           *string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string

@@ -17,7 +17,6 @@ import { Avatar, AvatarFallback } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { MiniCard } from "@/components/ui/CardMini";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { CodeSnippet } from "@/components/ui/CodeSnippet";
 import {
@@ -39,9 +38,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/ContextMenu";
 import { CopyButton } from "@/components/ui/CopyButton";
-import { DashboardCard } from "@/components/ui/DashboardCard";
 import { Dialog } from "@/components/ui/Dialog";
-import { DotCard } from "@/components/ui/DotCard";
 import { DotRow } from "@/components/ui/DotRow";
 import { DotTable } from "@/components/ui/DotTable";
 import {
@@ -50,7 +47,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
-import { Editable } from "@/components/ui/Editable";
 import {
   Field,
   FieldDescription,
@@ -65,7 +61,6 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/HoverCard";
 import { Icon } from "@/components/ui/Icon";
-import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
 import {
   InputGroup,
@@ -115,7 +110,7 @@ import {
 } from "@/components/ui/Tabs";
 import { TextArea } from "@/components/ui/Textarea";
 import { ThemeSwitcher } from "@/components/ui/ThemeSwitcher";
-import { ToggleButton } from "@/components/ui/ToggleButton";
+import { ToggleButton } from "@/components/ui/SegmentedControl";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/ToggleGroup";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
@@ -207,15 +202,6 @@ export const Row = ({ name, origin, children }) => {
   <Button size="sm">sm</Button>
   <Button size="md">md</Button>
   <Button size="lg">lg</Button>
-</Row>
-
-<Row name="IconButton" origin="DS">
-  <IconButton icon="plus" aria-label="Add" />
-  <IconButton
-    icon="trash"
-    aria-label="Delete"
-    variant="destructive-secondary"
-  />
 </Row>
 
 <Row name="CopyButton" origin="Gram">
@@ -376,12 +362,6 @@ export const Row = ({ name, origin, children }) => {
   </div>
 </Row>
 
-<Row name="Editable" origin="Gram">
-  <Editable onClick={() => {}}>
-    <span className="text-lg font-medium">Petstore</span>
-  </Editable>
-</Row>
-
 ## Overlays
 
 <Row name="Tooltip" origin="DS">
@@ -502,28 +482,11 @@ export const Row = ({ name, origin, children }) => {
   </div>
 </Row>
 
-<Row name="MiniCard" origin="Gram">
+<Row name="Card.Dashboard" origin="Gram">
   <div className="w-80">
-    <MiniCard>
-      <MiniCard.Title>Petstore</MiniCard.Title>
-      <MiniCard.Description>12 tools · 3 environments</MiniCard.Description>
-    </MiniCard>
-  </div>
-</Row>
-
-<Row name="DashboardCard" origin="Gram">
-  <div className="w-80">
-    <DashboardCard title="Tool calls">
+    <Card.Dashboard title="Tool calls">
       <div className="text-3xl font-semibold tabular-nums">12,480</div>
-    </DashboardCard>
-  </div>
-</Row>
-
-<Row name="DotCard" origin="Gram">
-  <div className="w-96">
-    <DotCard icon={<Icon name="server" className="size-6" />}>
-      <div className="p-4 text-sm">Petstore</div>
-    </DotCard>
+    </Card.Dashboard>
   </div>
 </Row>
 
@@ -638,5 +601,5 @@ export const Row = ({ name, origin, children }) => {
   </XYFade>
 </Row>
 
-Sidebar, Toolbar and Modal own the whole page frame, so they live in their own
+Sidebar and Toolbar own the whole page frame, so they live in their own
 stories rather than in this gallery.

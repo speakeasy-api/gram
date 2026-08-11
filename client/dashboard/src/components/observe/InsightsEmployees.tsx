@@ -5,7 +5,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/Popover";
-import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
+import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
@@ -512,58 +512,54 @@ export function InsightsEmployeesContent(): JSX.Element {
             <EmployeesLoadingState isInsightsOpen={isInsightsOpen} />
           ) : (
             <>
-              <MetricCardGroup>
-                <MetricCard
+              <StatTileGroup>
+                <StatTile
                   title={isUnattributedView ? "Unknown users" : "Employees"}
                   value={totalEmployees}
                   tone="information"
                   icon="user"
-                  accentColor="blue"
                   subtext={
                     isUnattributedView
                       ? "Usage not matched to a member"
                       : "Organization members"
                   }
                 />
-                <MetricCard
+                <StatTile
                   title="Enrolled"
                   value={enrolledEmployees}
                   tone="success"
                   displayValue={isUnattributedView ? "-" : undefined}
                   icon="circle-check"
-                  accentColor="green"
                   subtext={
                     isUnattributedView
                       ? "Not applicable to unknown users"
                       : "Platform activity present"
                   }
                 />
-                <MetricCard
+                <StatTile
                   title="Not Enrolled"
                   value={notEnrolledEmployees}
                   tone={notEnrolledEmployees > 0 ? "destructive" : "neutral"}
                   displayValue={isUnattributedView ? "-" : undefined}
                   icon="triangle-alert"
-                  accentColor="orange"
                   subtext={
                     isUnattributedView
                       ? "Not applicable to unknown users"
                       : "No platform activity found"
                   }
                 />
-                <MetricCard
+                <StatTile
                   title="Token Count"
                   value={totalTokenCount}
                   tone="information"
                   icon="gauge"
-                  accentColor="purple"
                   subtext={
                     isUnattributedView
                       ? undefined
                       : `${enrollmentRate.toFixed(0)}% enrolled`
                   }
                 />
-              </MetricCardGroup>
+              </StatTileGroup>
 
               <EmployeeTable
                 key={view}

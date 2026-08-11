@@ -413,6 +413,52 @@ func TestListChats_OrgAdmin_FilterByExternalUserID(t *testing.T) {
 	require.Equal(t, "ext-123", conv.PtrValOr(result.Chats[0].ExternalUserID, ""))
 }
 
+// TestListChats_OrgAdmin_FilterByUserID verifies that an org admin can narrow
+// results to a specific Gram user via the payload filter.
+func TestListChats_OrgAdmin_FilterByUserID(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+
+	seedChat(t, ctx, ti, "user-aaa", "", "chat for user-aaa")
+	seedChat(t, ctx, ti, "user-bbb", "", "chat for user-bbb")
+	seedChat(t, ctx, ti, "", "ext-ccc", "chat for ext-ccc")
+
+	userID := "user-aaa"
+	payload := defaultPayload()
+	payload.UserID = &userID
+
+	result, err := ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, "user-aaa", conv.PtrValOr(result.Chats[0].UserID, ""))
+}
+
+// TestListChats_RegularUser_PayloadUserIDIsIgnored verifies that a caller
+// without project-wide visibility stays scoped to their own chats even when
+// naming another user in the payload filter.
+func TestListChats_RegularUser_PayloadUserIDIsIgnored(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := authztest.WithExactGrants(t, initSessionCtx(t, ti))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	seedChat(t, ctx, ti, authCtx.UserID, "", "own chat")
+	seedChat(t, ctx, ti, "other-user-id", "", "other users chat")
+
+	otherUser := "other-user-id"
+	payload := defaultPayload()
+	payload.UserID = &otherUser
+
+	result, err := ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, authCtx.UserID, conv.PtrValOr(result.Chats[0].UserID, ""))
+}
+
 // TestListChats_Filter_Search verifies that the search filter matches chats by title substring.
 func TestListChats_Filter_Search(t *testing.T) {
 	t.Parallel()

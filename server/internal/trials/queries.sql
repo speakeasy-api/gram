@@ -17,6 +17,16 @@ WHERE organization_id = @organization_id
   AND demoted_at IS NULL
   AND ends_at > now();
 
+-- name: GetSessionTrial :one
+-- Backs the trial status the dashboard renders for a session. Ended and demoted
+-- rows are deliberately kept so the dashboard can tell the user their trial
+-- ended, while converted rows are dropped so a paying customer never sees
+-- trial UI.
+SELECT organization_id, created_at, ends_at
+FROM trials
+WHERE organization_id = @organization_id
+  AND converted_at IS NULL;
+
 -- name: InsertTrialFixture :exec
 -- Test-only fixture for exercising active trial lifecycle states.
 INSERT INTO trials (organization_id, tier, created_at, ends_at, converted_at, demoted_at)

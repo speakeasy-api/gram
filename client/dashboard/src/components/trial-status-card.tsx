@@ -1,41 +1,23 @@
 import { Icon } from "@/components/ui/Icon";
 import { Text } from "@/components/ui/Text";
 import { useSession } from "@/contexts/Auth";
-import { getTrialStatus, MILLISECONDS_PER_DAY } from "@/lib/trial-status";
+import {
+  getTrialLifecycleFromDates,
+  getTrialStatusFromDates,
+  isValidDate,
+  MILLISECONDS_PER_DAY,
+} from "@/lib/trial-status";
 import { useEffect, useState } from "react";
+import { Link } from "react-router";
 
-const SALES_URL = "https://www.speakeasy.com/talk-to-us";
+// The in-app upgrade gate, which prefills the booking form from the session.
+// The marketing site's /talk-to-us cannot.
+const SALES_PATH = "/talk-to-us";
 
-const BLACK_PROGRESS_CLASS = "bg-[var(--color-base-black)]";
-const DEEP_GREEN_PROGRESS_CLASS = "bg-[var(--color-brand-c)]";
-const ORANGE_PROGRESS_CLASS = "bg-[var(--color-brand-ruby)]";
-const RED_PROGRESS_CLASS = "bg-[var(--color-brand-swift)]";
-
-function isValidDate(value: unknown): value is Date {
-  return value instanceof Date && Number.isFinite(value.getTime());
-}
-
-function getTrialStatusFromDates(
-  trial: { startedAt: Date; endsAt: Date } | null | undefined,
-  now: Date,
-) {
-  if (
-    trial === null ||
-    trial === undefined ||
-    !isValidDate(trial.startedAt) ||
-    !isValidDate(trial.endsAt)
-  ) {
-    return null;
-  }
-
-  return getTrialStatus(
-    {
-      startedAt: trial.startedAt.toISOString(),
-      endsAt: trial.endsAt.toISOString(),
-    },
-    now,
-  );
-}
+const BLACK_PROGRESS_CLASS = "bg-(--color-base-black)";
+const DEEP_GREEN_PROGRESS_CLASS = "bg-(--color-brand-c)";
+const ORANGE_PROGRESS_CLASS = "bg-(--color-brand-ruby)";
+const RED_PROGRESS_CLASS = "bg-(--color-brand-swift)";
 
 function getTrialProgressColorClass(
   dayNumber: number,
@@ -62,6 +44,7 @@ export function TrialStatusCard(): React.ReactNode {
   const { trial } = useSession();
   const [now, setNow] = useState(() => new Date());
   const status = getTrialStatusFromDates(trial, now);
+  const lifecycle = getTrialLifecycleFromDates(trial, now);
   const startedAt = isValidDate(trial?.startedAt)
     ? trial.startedAt.getTime()
     : undefined;
@@ -104,18 +87,32 @@ export function TrialStatusCard(): React.ReactNode {
     return () => window.clearTimeout(timer);
   }, [dayNumber, endsAt, nowTime, remainingDays, startedAt]);
 
-  if (status === null) {
+  if (status === null && lifecycle !== "expired") {
     return null;
   }
 
-  const daysLeft = status.remainingDays;
-  const daysLeftLabel = `${daysLeft} day${daysLeft === 1 ? "" : "s"} left`;
-  const progressValue = Number((status.progress * 100).toFixed(2));
-  const progressLabel = `Day ${status.dayNumber} of ${status.totalDays}`;
-  const progressColorClass = getTrialProgressColorClass(
-    status.dayNumber,
-    status.totalDays,
-  );
+  const daysLeft = status?.remainingDays;
+  const daysLeftLabel =
+    daysLeft === undefined
+      ? undefined
+      : `${daysLeft} day${daysLeft === 1 ? "" : "s"} left`;
+  let progressValue = 100;
+  let progressLabel = "Trial ended";
+  let progressColorClass = RED_PROGRESS_CLASS;
+
+  if (status !== null) {
+    progressValue = Number((status.progress * 100).toFixed(2));
+    progressLabel = `Day ${status.dayNumber} of ${status.totalDays}`;
+    progressColorClass = getTrialProgressColorClass(
+      status.dayNumber,
+      status.totalDays,
+    );
+  }
+
+  let salesLinkLabel = "Talk to sales";
+  if (status === null || status.remainingDays <= 1) {
+    salesLinkLabel = "Talk to sales about upgrading";
+  }
 
   return (
     <div className="border-border border bg-card p-3 group-data-[collapsible=icon]:hidden">
@@ -124,12 +121,16 @@ export function TrialStatusCard(): React.ReactNode {
           <Text mono small className="uppercase">
             Trial
           </Text>
-          <Text mono small className="text-muted">
-            Day {status.dayNumber}/{status.totalDays}
-          </Text>
+          {status !== null && (
+            <Text mono small className="text-muted">
+              Day {status.dayNumber}/{status.totalDays}
+            </Text>
+          )}
         </div>
         <div className="flex flex-col gap-1">
-          <Text className="text-base">{daysLeftLabel}</Text>
+          <Text className="text-base">
+            {status === null ? "Your trial has ended" : daysLeftLabel}
+          </Text>
           <div
             role="progressbar"
             aria-label={progressLabel}
@@ -145,15 +146,13 @@ export function TrialStatusCard(): React.ReactNode {
             />
           </div>
         </div>
-        <a
-          href={SALES_URL}
-          target="_blank"
-          rel="noopener noreferrer"
+        <Link
+          to={SALES_PATH}
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
-          Talk to sales
+          {salesLinkLabel}
           <Icon name="arrow-right" className="size-3" aria-hidden="true" />
-        </a>
+        </Link>
       </div>
     </div>
   );

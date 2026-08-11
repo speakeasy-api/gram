@@ -7,7 +7,7 @@ import { Children, isValidElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { shadowMCPPolicyInventoryQueryKey } from "@/components/shadow-mcp/useShadowMCPPolicyInventory";
 import { TooltipProvider } from "@/components/ui/Tooltip";
-import { StandardPolicyEditor } from "./PolicyDetail";
+import { PolicyNew, StandardPolicyEditor } from "./PolicyDetail";
 
 const mocks = vi.hoisted(() => ({
   saveDisabledRenders: [] as boolean[],
@@ -16,6 +16,9 @@ const mocks = vi.hoisted(() => ({
   step: "action" as string | null,
   mutateCreate: vi.fn(),
   mutateUpdate: vi.fn(),
+  kind: null as string | null,
+  category: null as string | null,
+  detectorSelections: [] as Array<{ category: string; selected: boolean }>,
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -23,7 +26,17 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 
 vi.mock("@/components/page-layout", () => ({
-  Page: () => null,
+  Page: Object.assign(({ children }: { children?: ReactNode }) => children, {
+    Header: Object.assign(
+      ({ children }: { children?: ReactNode }) => children,
+      { Breadcrumbs: () => null },
+    ),
+    Body: ({ children }: { children?: ReactNode }) => children,
+  }),
+}));
+
+vi.mock("@/components/require-scope", () => ({
+  RequireScope: ({ children }: { children: ReactNode }) => children,
 }));
 
 vi.mock("@/contexts/Sdk", () => ({
@@ -35,7 +48,11 @@ vi.mock("@/routes", () => ({
 }));
 
 vi.mock("nuqs", () => ({
-  useQueryState: () => [mocks.step, vi.fn()],
+  useQueryState: (name: string) => {
+    if (name === "kind") return [mocks.kind, vi.fn()];
+    if (name === "category") return [mocks.category, vi.fn()];
+    return [mocks.step, vi.fn()];
+  },
 }));
 
 vi.mock("@/components/shadow-mcp/ShadowMCPPolicyServerSelector", () => ({
@@ -77,10 +94,22 @@ vi.mock("./use-cel-status", () => ({
 vi.mock("./PolicyCenter", () => ({
   ActionPicker: () => null,
   CustomizeRulesSheet: () => null,
-  DetectorCard: () => null,
   PolicyAudiencePicker: () => null,
   RuleSelectList: () => null,
   ScopeCard: () => null,
+}));
+
+vi.mock("./DetectorCard", () => ({
+  DetectorCard: ({
+    category,
+    selected,
+  }: {
+    category: string;
+    selected: boolean;
+  }) => {
+    mocks.detectorSelections.push({ category, selected });
+    return null;
+  },
 }));
 
 vi.mock("@/pages/chatLogs/ChatTranscript", () => ({
@@ -188,10 +217,36 @@ describe("StandardPolicyEditor cached Shadow MCP inventory", () => {
     mocks.selectionRenders.length = 0;
     mocks.modeRenders.length = 0;
     mocks.step = "action";
+    mocks.kind = null;
+    mocks.category = null;
+    mocks.detectorSelections.length = 0;
     vi.clearAllMocks();
     vi.mocked(useSdkClient).mockReturnValue({
       access: { listShadowMCPInventory: vi.fn() },
     } as unknown as ReturnType<typeof useSdkClient>);
+  });
+
+  it("preselects the prompt injection detector from the setup link", () => {
+    mocks.kind = "standard";
+    mocks.category = "prompt_injection";
+    mocks.step = null;
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <PolicyNew />
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(
+      mocks.detectorSelections.find(
+        (selection) => selection.category === "prompt_injection",
+      )?.selected,
+    ).toBe(true);
   });
 
   it("keeps save blocked until cached inventory preselection initializes", async () => {
