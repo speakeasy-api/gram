@@ -265,8 +265,8 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 
 	// Visibility scoping: callers holding an unrestricted chat:read grant and the
 	// managed-assistant runtime see all project sessions (optionally narrowed by
-	// an explicit external user id); everyone else is restricted to their own
-	// sessions.
+	// the external user id and user id filters); everyone else is restricted to
+	// their own sessions.
 	externalUserID, userID, err := s.chatVisibilityScope(ctx, authCtx, payload.ExternalUserID, payload.UserID)
 	if err != nil {
 		return nil, err
