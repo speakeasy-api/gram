@@ -53,13 +53,14 @@ func TestClearSiteDataOnLogout_SetsDirectiveOnImplicitOK(t *testing.T) {
 	t.Parallel()
 
 	rec := httptest.NewRecorder()
+	var writeErr error
 	handler := ClearSiteDataOnLogout(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, err := w.Write([]byte(`{"session_cookie":""}`))
-		require.NoError(t, err)
+		_, writeErr = w.Write([]byte(`{"session_cookie":""}`))
 	}))
 
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/rpc/auth.logout", nil))
 
+	require.NoError(t, writeErr)
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, `"cookies", "storage"`, rec.Header().Get("Clear-Site-Data"))
 }
