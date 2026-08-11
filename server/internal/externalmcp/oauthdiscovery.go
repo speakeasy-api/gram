@@ -368,8 +368,16 @@ func fetchJSON[T any](ctx context.Context, logger *slog.Logger, guardianPolicy *
 		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
+	// Bounded read against a user-supplied host: an endless or oversized body
+	// must fail as a size error, not hold memory or masquerade as a decode
+	// failure on truncated JSON.
+	body, err := readBoundedBody(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
 	var result T
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(body, &result); err != nil {
 		return nil, fmt.Errorf("decode: %w", err)
 	}
 

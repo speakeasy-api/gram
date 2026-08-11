@@ -30,6 +30,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -207,6 +208,22 @@ const (
 	GapCatalogLookup    = "catalog_lookup_failed"
 )
 
+// GappedOnAllRemoteSources reports that this gather failed on every source
+// that consults the network about a remote server — the authority probe, the
+// tool-declarations probe, and the registry catalog lookup. A document in this
+// state carries nothing a fresh gather could not, so a refresh that produced
+// one has learned nothing and must not replace a document that did better.
+// Always false for non-remote targets, which have no remote sources to gap on.
+func (d Document) GappedOnAllRemoteSources() bool {
+	if d.Identity.Kind != string(identity.KindRemote) {
+		return false
+	}
+
+	return slices.Contains(d.Gaps, GapAuthorityProbe) &&
+		slices.Contains(d.Gaps, GapToolDeclarations) &&
+		slices.Contains(d.Gaps, GapCatalogLookup)
+}
+
 // PackageLookup is the slice of the package-metadata client the assembler
 // needs. *packagemeta.Client satisfies it.
 type PackageLookup interface {
@@ -232,7 +249,7 @@ type ToolProber interface {
 // the entry's tool declarations, which cost an extra registry round trip;
 // when false, a match carries provenance only. *catalog.Source satisfies it.
 type CatalogLookup interface {
-	LookupCatalog(ctx context.Context, serverURL string, includeTools bool) (*catalog.Match, error)
+	Lookup(ctx context.Context, serverURL string, includeTools bool) (*catalog.Match, error)
 }
 
 var _ CatalogLookup = (*catalog.Source)(nil)
@@ -486,7 +503,7 @@ func (a *Assembler) lookupCatalog(ctx context.Context, serverURL string, documen
 	// Tool declarations are only requested when the server itself refused to
 	// answer: the details fetch is an extra registry round trip whose result
 	// would otherwise be discarded in favor of the server's own words.
-	match, err := a.catalog.LookupCatalog(lookupCtx, serverURL, !serverDeclared)
+	match, err := a.catalog.Lookup(lookupCtx, serverURL, !serverDeclared)
 	if err != nil {
 		document.Gaps = append(document.Gaps, GapCatalogLookup)
 		if !serverDeclared {

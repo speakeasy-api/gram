@@ -61,7 +61,7 @@ func (quietProbes) ListToolDeclarations(_ context.Context, _ string) ([]capabili
 	return nil, nil
 }
 
-func (quietProbes) LookupCatalog(_ context.Context, _ string, _ bool) (*catalog.Match, error) {
+func (quietProbes) Lookup(_ context.Context, _ string, _ bool) (*catalog.Match, error) {
 	return nil, nil
 }
 
@@ -340,7 +340,7 @@ func (failingProbes) ListToolDeclarations(_ context.Context, _ string) ([]capabi
 	return nil, errors.New("server refused unauthenticated tools/list")
 }
 
-func (failingProbes) LookupCatalog(_ context.Context, _ string, _ bool) (*catalog.Match, error) {
+func (failingProbes) Lookup(_ context.Context, _ string, _ bool) (*catalog.Match, error) {
 	return nil, errors.New("registry unreachable")
 }
 
@@ -374,7 +374,7 @@ func (declaringProbes) ListToolDeclarations(_ context.Context, _ string) ([]capa
 	}, nil
 }
 
-func (declaringProbes) LookupCatalog(_ context.Context, _ string, _ bool) (*catalog.Match, error) {
+func (declaringProbes) Lookup(_ context.Context, _ string, _ bool) (*catalog.Match, error) {
 	return &catalog.Match{
 		Registry:  "Test Registry",
 		Specifier: "com.example/server",
@@ -399,7 +399,7 @@ func (cataloguedOnlyProbes) ListToolDeclarations(_ context.Context, _ string) ([
 	return nil, errors.New("server refused unauthenticated tools/list")
 }
 
-func (cataloguedOnlyProbes) LookupCatalog(_ context.Context, _ string, _ bool) (*catalog.Match, error) {
+func (cataloguedOnlyProbes) Lookup(_ context.Context, _ string, _ bool) (*catalog.Match, error) {
 	readOnly := true
 	return &catalog.Match{
 		Registry:  "Test Registry",
@@ -452,6 +452,62 @@ func TestAssemble_RegistryCopyFillsCapabilitiesWhenServerRefuses(t *testing.T) {
 
 	gaps, _ := doc["gaps"].([]any)
 	require.NotContains(t, gaps, "tool_declarations_probe_failed")
+}
+
+// cataloguedNoToolMetadata stands in for a server that refuses
+// unauthenticated tools/list and whose registry entry matched but carried no
+// tool metadata: the details fetch succeeded, Tools stayed nil.
+type cataloguedNoToolMetadata struct{}
+
+func (cataloguedNoToolMetadata) DiscoverAuthority(_ context.Context, _ string) (*authority.Declaration, error) {
+	return nil, nil
+}
+
+func (cataloguedNoToolMetadata) ListToolDeclarations(_ context.Context, _ string) ([]capability.Declaration, error) {
+	return nil, errors.New("server refused unauthenticated tools/list")
+}
+
+func (cataloguedNoToolMetadata) Lookup(_ context.Context, _ string, _ bool) (*catalog.Match, error) {
+	return &catalog.Match{
+		Registry:  "Test Registry",
+		Specifier: "com.example/server",
+		Provenance: provenance.Provenance{
+			Catalogued: true, Official: false, Status: "active", IsLatest: true,
+			PublishedAt: time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC), UpdatedAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
+			VisitorsLastWeek: 0, VisitorsLastFourWeeks: 0, VisitorsTotal: 0,
+		},
+		Tools: nil,
+	}, nil
+}
+
+// A matched registry entry without tool metadata must not read as "the
+// registry declared zero tools": no capability section, no source label, and
+// the tool-declarations gap lands — declarations were consulted nowhere.
+func TestAssemble_RegistryWithoutToolMetadataIsAGap(t *testing.T) {
+	t.Parallel()
+
+	assembler := evidence.NewAssembler(
+		&fakePackages{metadata: nil, err: nil},
+		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
+		cataloguedNoToolMetadata{},
+		cataloguedNoToolMetadata{},
+		cataloguedNoToolMetadata{},
+	)
+
+	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("https://mcp.example.com/mcp"))
+	require.NoError(t, err)
+	doc := decode(t, raw)
+
+	prov, ok := doc["provenance"].(map[string]any)
+	require.True(t, ok, "provenance stands on the list entry even without tool metadata")
+	require.Equal(t, true, prov["catalogued"])
+
+	require.NotContains(t, doc, "capabilities")
+	require.NotContains(t, doc, "capabilities_source")
+
+	gaps, ok := doc["gaps"].([]any)
+	require.True(t, ok)
+	require.Contains(t, gaps, "tool_declarations_probe_failed")
 }
 
 // A catalog lookup that finds no entry is checked-and-absent: the provenance
@@ -561,7 +617,7 @@ func (authorityFailsToolsAnswer) ListToolDeclarations(_ context.Context, _ strin
 	}}, nil
 }
 
-func (authorityFailsToolsAnswer) LookupCatalog(_ context.Context, _ string, _ bool) (*catalog.Match, error) {
+func (authorityFailsToolsAnswer) Lookup(_ context.Context, _ string, _ bool) (*catalog.Match, error) {
 	return nil, nil
 }
 

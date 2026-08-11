@@ -40,7 +40,11 @@ type Match struct {
 	Provenance provenance.Provenance
 
 	// Tools is the entry's declared tool list. Nil when the details fetch
-	// failed; a catalogued server with no tools is an empty slice.
+	// failed, and also when it succeeded without carrying tool metadata for
+	// the matched remote — the registry not publishing declarations is
+	// unknown, never "declared zero tools". A catalogued server whose
+	// registry entry genuinely declared an empty tool list is an empty
+	// slice.
 	Tools []capability.Declaration
 }
 
@@ -59,8 +63,7 @@ func New(logger *slog.Logger, db *pgxpool.Pool, client *externalmcp.RegistryClie
 	}
 }
 
-// LookupCatalog finds the registry entry whose remote endpoint matches
-// serverURL.
+// Lookup finds the registry entry whose remote endpoint matches serverURL.
 //
 // A nil match with a nil error means every registry answered and none
 // catalogues the URL — checked-and-absent, distinct from a lookup failure. A
@@ -68,7 +71,7 @@ func New(logger *slog.Logger, db *pgxpool.Pool, client *externalmcp.RegistryClie
 // nil: provenance comes from the already-fetched list entry and stands on its
 // own. includeTools false skips the details fetch entirely, for callers that
 // already have the server's own declarations and want provenance only.
-func (s *Source) LookupCatalog(ctx context.Context, serverURL string, includeTools bool) (*Match, error) {
+func (s *Source) Lookup(ctx context.Context, serverURL string, includeTools bool) (*Match, error) {
 	canonical, ok := shadowmcp.CanonicalizeInventoryURL(serverURL)
 	if !ok {
 		return nil, nil
@@ -136,7 +139,17 @@ func (s *Source) LookupCatalog(ctx context.Context, serverURL string, includeToo
 // declarations maps the registry's tool definitions onto the capability
 // package's declaration shape. Absent annotations stay nil — an unannotated
 // tool must never read as declared-safe.
+//
+// A nil details.Tools stays nil: the details fetch succeeds without tool
+// metadata whenever the registry lacks the tools extension for the matched
+// remote, and mapping that onto an empty slice would turn "the registry
+// published no declarations" into "the registry declared zero tools". Only a
+// genuinely-declared empty list comes back as an empty slice.
 func declarations(details *externalmcp.ServerDetails) []capability.Declaration {
+	if details.Tools == nil {
+		return nil
+	}
+
 	out := make([]capability.Declaration, 0, len(details.Tools))
 	for _, tool := range details.Tools {
 		out = append(out, capability.Declaration{

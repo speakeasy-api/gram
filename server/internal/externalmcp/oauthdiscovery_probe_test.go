@@ -1,6 +1,7 @@
 package externalmcp
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -49,4 +50,29 @@ func TestDiscoverOAuthMetadata_UnreachableHostIsProbeIncomplete(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, OAuthVersionNone, result.Version)
 	require.True(t, result.ProbeIncomplete, "an unreachable host must not read as published-nothing")
+}
+
+// Discovery runs against user-supplied hosts, so a body past the cap is
+// refused with a size error — held memory stays bounded, and the failure
+// names its cause instead of surfacing as a decode error on truncated JSON.
+func TestFetchJSON_OversizedBodyIsRefused(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"resource": "`))
+		chunk := bytes.Repeat([]byte("a"), 1<<20)
+		for range 33 {
+			_, _ = w.Write(chunk)
+		}
+		_, _ = w.Write([]byte(`"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+
+	_, err = fetchJSON[protectedResourceMetadata](t.Context(), testenv.NewLogger(t), policy, server.URL+"/meta")
+	require.Error(t, err)
+	require.ErrorContains(t, err, "limit")
 }

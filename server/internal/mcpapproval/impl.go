@@ -78,8 +78,11 @@ const statusUnreviewed = "unreviewed"
 // Each source inside the assembler carries its own tighter deadline, so one
 // unreachable registry costs its own budget and lands in the document's gaps
 // rather than holding the admission for this whole window; this bound only
-// matters if every source is slow at once.
-const gatherTimeout = 10 * time.Second
+// matters if every source is slow at once. It is sized above the sum of the
+// sequential per-source budgets (a remote target consults four sources at 3s
+// each), so a gather where every earlier source times out still reaches the
+// catalog lookup instead of losing it to the backstop.
+const gatherTimeout = 14 * time.Second
 
 // statusFor maps a decision onto the status its request moves to.
 var statusFor = map[string]string{
@@ -580,7 +583,11 @@ func (s *Service) GetRequest(ctx context.Context, payload *gen.GetRequestPayload
 // Nothing org-authored is written and frozen decision snapshots are never
 // touched, which is also why no audit event is emitted. Unlike intake, where a
 // failed gather must not lose the admission, an explicit refresh that gathered
-// nothing reports the failure instead of silently keeping stale evidence.
+// nothing reports the failure instead of silently keeping stale evidence —
+// both when the assembler itself errors and when the gather ran but gapped on
+// every remote source while the stored document did not: an all-gaps document
+// carries strictly less than what it would replace, so the write is skipped
+// and the failure surfaced.
 func (s *Service) RefreshEvidence(ctx context.Context, payload *gen.RefreshEvidencePayload) (*gen.ApprovalRequestDetail, error) {
 	projectID, _, err := s.project(ctx, authz.ScopeMCPApprovalRead)
 	if err != nil {
@@ -616,6 +623,20 @@ func (s *Service) RefreshEvidence(ctx context.Context, payload *gen.RefreshEvide
 		return nil, oops.E(oops.CodeUnexpected, err, "error gathering evidence").LogError(ctx, s.logger)
 	}
 
+	// A gather that gapped on every remote source learned nothing a reader
+	// does not already know from the gaps alone. Writing it over a stored
+	// document that did consult those sources would clobber real evidence
+	// with a page of failures, so the refresh reports the outage instead —
+	// unless no gather has ever landed (EvidenceCollectedAt unset) or the
+	// stored document is equally gapped or from an older shape, where the
+	// fresh gather is at least as informative.
+	if fresh, decodeErr := evidence.DecodeDocument(document, evidence.Version); decodeErr == nil && fresh.GappedOnAllRemoteSources() && row.EvidenceCollectedAt.Valid {
+		stored, storedErr := evidence.DecodeDocument(row.CurrentEvidence, int(row.EvidenceVersion))
+		if storedErr == nil && !stored.GappedOnAllRemoteSources() {
+			return nil, oops.E(oops.CodeUnexpected, nil, "every remote evidence source was unreachable; keeping the existing evidence").LogError(ctx, s.logger)
+		}
+	}
+
 	// Compare-and-set against the gather that was current when this refresh
 	// started: two concurrent refreshes race the network for seconds, and an
 	// unconditional write would let whichever finished last — not whichever
@@ -632,7 +653,7 @@ func (s *Service) RefreshEvidence(ctx context.Context, payload *gen.RefreshEvide
 		return nil, oops.E(oops.CodeUnexpected, err, "error storing evidence").LogError(ctx, s.logger)
 	}
 	if written == 0 {
-		s.logger.InfoContext(ctx, "discarded refresh gather superseded by a concurrent write")
+		s.logger.InfoContext(ctx, "discarded refresh gather superseded by a concurrent write", attr.SlogMCPApprovalRequestID(requestID.String()))
 	}
 
 	return s.requestDetail(ctx, projectID, requestID)
