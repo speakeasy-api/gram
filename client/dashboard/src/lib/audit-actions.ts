@@ -59,6 +59,9 @@ export const AUDIT_ACTIONS = [
   "mcp-server:delete",
   "mcp-server:update",
   "mcp-server:update-tool-metadata",
+  "mcp_approval_request:approve",
+  "mcp_approval_request:create",
+  "mcp_approval_request:deny",
   "mcp_collection:attach_server",
   "mcp_collection:create",
   "mcp_collection:delete",
@@ -315,6 +318,13 @@ export function staticActionPhrase(action: AuditAction): string {
       return "deleted MCP server";
     case "mcp-server:update-tool-metadata":
       return "updated tool metadata on MCP server";
+
+    case "mcp_approval_request:approve":
+      return "approved MCP access to";
+    case "mcp_approval_request:create":
+      return "requested MCP access to";
+    case "mcp_approval_request:deny":
+      return "denied MCP access to";
 
     case "mcp_collection:create":
       return "created collection";
