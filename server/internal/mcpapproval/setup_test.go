@@ -98,9 +98,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	authContext.ProjectID = &projectID
 	ctx = contextvalues.SetAuthContext(ctx, authContext)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 
 	assembler := evidence.NewAssembler(
