@@ -78,7 +78,9 @@ export function ShadowMCPInventoryReviewCell({
   server: ShadowMCPInventoryServer;
 }): JSX.Element {
   const request = server.approvalRequest;
-  if (!request) {
+  // An unreviewed dossier holds evidence but is not a review state: nobody
+  // asked and nothing was decided, so it reads the same as no review.
+  if (!request || request.status === "unreviewed") {
     return (
       <Text muted small>
         —

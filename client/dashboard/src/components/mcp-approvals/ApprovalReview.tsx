@@ -69,12 +69,23 @@ export function ApprovalReview({
         <ResearchReports reports={detail.researchReports} />
       </div>
       <aside className="space-y-5">
-        <RequestSummary
-          status={detail.request.status}
-          createdAt={detail.request.createdAt}
-          versionPinned={detail.request.versionPinned}
-        />
-        <Requesters requesters={detail.requesters} />
+        {/* An unreviewed dossier is evidence without a review: no status to
+            report, nobody waiting. The request card and requester list only
+            exist once someone actually asks or decides. */}
+        {detail.request.status === "unreviewed" ? (
+          <p className="text-muted-foreground text-sm">
+            No one has asked for this server and no decision has been recorded.
+          </p>
+        ) : (
+          <>
+            <RequestSummary
+              status={detail.request.status}
+              createdAt={detail.request.createdAt}
+              versionPinned={detail.request.versionPinned}
+            />
+            <Requesters requesters={detail.requesters} />
+          </>
+        )}
         <PriorDecisions decisions={detail.decisions} />
         {showDecide && detail.request.status === "requested" && (
           <section className="space-y-2">

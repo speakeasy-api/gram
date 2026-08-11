@@ -43,7 +43,6 @@ const REVIEW_FILTER_OPTIONS = [
   { value: "requested", label: "Awaiting decision" },
   { value: "approved", label: "Approved" },
   { value: "denied", label: "Denied" },
-  { value: "unreviewed", label: "Review initiated" },
   { value: "none", label: "No review" },
 ];
 
@@ -61,18 +60,21 @@ function observedDate(date: Date | undefined): Date | undefined {
   return date;
 }
 
-/** Pending decisions sort first; the rest follow the review lifecycle. */
+/**
+ * Pending decisions sort first; the rest follow the review lifecycle. An
+ * unreviewed dossier is a storage detail, not a state — it ranks with "no
+ * review".
+ */
 function reviewSortRank(server: ShadowMCPInventoryServer): number {
   switch (server.approvalRequest?.status) {
     case "requested":
       return 0;
-    case "unreviewed":
-      return 2;
     case "approved":
     case "denied":
       return 1;
+    case "unreviewed":
     case undefined:
-      return 3;
+      return 2;
   }
 }
 
@@ -81,7 +83,12 @@ function matchesReviewFilter(
   review: string | undefined,
 ): boolean {
   if (!review) return true;
-  if (review === "none") return server.approvalRequest === undefined;
+  if (review === "none") {
+    return (
+      server.approvalRequest === undefined ||
+      server.approvalRequest.status === "unreviewed"
+    );
+  }
   return server.approvalRequest?.status === review;
 }
 
