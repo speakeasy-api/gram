@@ -1098,9 +1098,10 @@ func newStartCommand() *cli.Command {
 				)
 			})
 			mux.Use(middleware.RouteLabelerMiddleware)
-			// Must stay below otelhttp: it stamps attributes onto the span
+			// Must stay below otelhttp: they stamp attributes onto the span
 			// otelhttp opened for the request.
 			mux.Use(middleware.HookDeviceTelemetry)
+			mux.Use(middleware.MCPProtocolVersionTelemetry)
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger))
 			mux.Use(middleware.NewRecovery(logger))
 			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url"), chatSessionsManager))
