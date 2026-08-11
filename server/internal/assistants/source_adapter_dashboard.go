@@ -21,6 +21,7 @@ type dashboardEventPayload struct {
 	Text         string                      `json:"text"`
 	UserID       string                      `json:"user_id,omitempty"`
 	SkillContext []dashboardTurnSkillContext `json:"skill_context,omitempty"`
+	Attachments  []dashboardTurnAttachment   `json:"attachments,omitempty"`
 }
 
 type dashboardAdapter struct{}
@@ -115,6 +116,16 @@ func (dashboardAdapter) DecodeTurn(event assistantThreadEventRecord) (string, er
 		fmt.Fprintf(&b, "UserID: %s\n", payload.UserID)
 	}
 	b.WriteString("</message-context>\n")
+	// Metadata only, and no minted URLs: DecodeTurn must stay byte-stable
+	// across replay. The file bytes (and any download link) ride along as
+	// input content parts built at turn dispatch.
+	if len(payload.Attachments) > 0 {
+		b.WriteString("\n<attachments>\n")
+		for _, attachment := range payload.Attachments {
+			fmt.Fprintf(&b, "- %s (%s, %d bytes)\n", attachment.Name, attachment.ContentType, attachment.ContentLength)
+		}
+		b.WriteString("</attachments>\n")
+	}
 	for _, skill := range payload.SkillContext {
 		if skill.SkillID == uuid.Nil || skill.ResolvedVersionID == uuid.Nil || skill.Name == "" || skill.Content == "" {
 			return "", fmt.Errorf("dashboard turn contains invalid skill context")

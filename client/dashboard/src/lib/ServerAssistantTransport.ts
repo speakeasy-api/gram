@@ -2,6 +2,7 @@ import { assistantsSendMessage } from "@gram/client/funcs/assistantsSendMessage"
 import { chatLoad } from "@gram/client/funcs/chatLoad";
 import type { GramCore } from "@gram/client/core";
 import { sleep, type ElementsTransportContext } from "@/elements";
+import { chatAttachmentAssetId } from "@/elements/lib/attachmentUpload";
 import { streamTurn } from "@/lib/turnStream";
 import {
   type ChatTransport,
@@ -113,7 +114,21 @@ export function createServerAssistantTransport(
           .map((p) => p.text)
           .join("")
           .trim() ?? "";
-      if (!text) {
+      // File parts carry the URL our attachment adapter minted at upload time;
+      // the asset id in that URL is what the assistant runtime reads the file
+      // back from.
+      const attachments =
+        latest?.parts
+          .filter((p) => p.type === "file")
+          .map((p) => ({
+            assetId: chatAttachmentAssetId(p.url),
+            name: p.filename,
+          }))
+          .filter(
+            (a): a is { assetId: string; name: string | undefined } =>
+              a.assetId !== null,
+          ) ?? [];
+      if (!text && attachments.length === 0) {
         throw new Error("No user message to send.");
       }
       const skillIds = deps.getSkillIds?.() ?? [];
@@ -220,6 +235,7 @@ export function createServerAssistantTransport(
                 chatId: chatId ?? undefined,
                 idempotencyKey: latest?.id,
                 skillIds: skillIds.length > 0 ? skillIds : undefined,
+                attachments: attachments.length > 0 ? attachments : undefined,
               },
             },
             undefined,

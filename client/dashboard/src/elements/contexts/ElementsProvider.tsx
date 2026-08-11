@@ -7,6 +7,10 @@ import {
 import { useMCPTools } from "@/elements/hooks/useMCPTools";
 import { useToolApproval } from "@/elements/hooks/useToolApproval";
 import { getApiUrl } from "@/elements/lib/api";
+import {
+  CHAT_ATTACHMENT_ACCEPT,
+  createChatAttachmentAdapter,
+} from "@/elements/lib/attachmentUpload";
 import { initErrorTracking, trackError } from "@/elements/lib/errorTracking";
 import { DEFAULT_MODEL } from "@/elements/lib/models";
 import {
@@ -29,6 +33,7 @@ import { Plugin } from "@/elements/types/plugins";
 import {
   AssistantRuntimeProvider,
   AssistantTool,
+  type AttachmentAdapter,
   useAuiState,
   useRemoteThreadListRuntime,
 } from "@assistant-ui/react";
@@ -619,6 +624,28 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
 
   const frontendTools = config.tools?.frontendTools ?? {};
 
+  // Composer attachments upload to Gram as soon as they are picked; the
+  // transport turns the resulting assets into turn attachments. `false`
+  // disables them (the composer also hides the button in that case).
+  const attachmentsConfig = config.composer?.attachments ?? true;
+  const attachmentAdapter = useMemo(() => {
+    if (!attachmentsConfig) return undefined;
+    const accept =
+      typeof attachmentsConfig === "object" && attachmentsConfig.accept?.length
+        ? attachmentsConfig.accept.join(",")
+        : CHAT_ATTACHMENT_ACCEPT;
+    const maxBytes =
+      typeof attachmentsConfig === "object"
+        ? attachmentsConfig.maxSize
+        : undefined;
+    return createChatAttachmentAdapter({
+      apiUrl,
+      getHeaders: getValidHeaders,
+      accept,
+      ...(maxBytes ? { maxBytes } : {}),
+    });
+  }, [attachmentsConfig, apiUrl, getValidHeaders]);
+
   // Create combined executable tools for direct tool execution (ActionButton)
   // Uses a simplified type that focuses on the execute function
   type ExecutableToolSet = Record<
@@ -659,6 +686,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
         localIdToUuidMap={localIdToUuidMapRef.current}
         currentRemoteIdRef={currentRemoteIdRef}
         executableTools={executableTools}
+        attachmentAdapter={attachmentAdapter}
         currentChatId={currentChatId}
         setCurrentChatId={setCurrentChatId}
       >
@@ -674,6 +702,7 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
       runtimeRef={runtimeRef}
       frontendTools={frontendTools}
       executableTools={executableTools}
+      attachmentAdapter={attachmentAdapter}
       currentChatId={currentChatId}
     >
       {children}
@@ -701,6 +730,7 @@ interface ElementsProviderWithHistoryProps {
   localIdToUuidMap: Map<string, string>;
   currentRemoteIdRef: React.RefObject<string | null>;
   executableTools: ExecutableToolSet;
+  attachmentAdapter: AttachmentAdapter | undefined;
   currentChatId: string | null;
   setCurrentChatId: (chatId: string | null) => void;
 }
@@ -738,6 +768,7 @@ const ElementsProviderWithHistory = ({
   localIdToUuidMap,
   currentRemoteIdRef,
   executableTools,
+  attachmentAdapter,
   currentChatId,
   setCurrentChatId,
 }: ElementsProviderWithHistoryProps) => {
@@ -762,9 +793,12 @@ const ElementsProviderWithHistory = ({
     return useChatRuntime({
       transport,
       sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
-      adapters: { dictation: dictationAdapter },
+      adapters: {
+        dictation: dictationAdapter,
+        ...(attachmentAdapter ? { attachments: attachmentAdapter } : {}),
+      },
     });
-  }, [transport]);
+  }, [transport, attachmentAdapter]);
 
   const runtime = useRemoteThreadListRuntime({
     adapter: threadListAdapter,
@@ -838,6 +872,7 @@ interface ElementsProviderWithoutHistoryProps {
   runtimeRef: React.RefObject<ReturnType<typeof useChatRuntime> | null>;
   frontendTools: Record<string, AssistantTool>;
   executableTools: ExecutableToolSet;
+  attachmentAdapter: AttachmentAdapter | undefined;
   currentChatId: string | null;
 }
 
@@ -848,12 +883,16 @@ const ElementsProviderWithoutHistory = ({
   runtimeRef,
   frontendTools,
   executableTools,
+  attachmentAdapter,
   currentChatId,
 }: ElementsProviderWithoutHistoryProps) => {
   const runtime = useChatRuntime({
     transport,
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
-    adapters: { dictation: dictationAdapter },
+    adapters: {
+      dictation: dictationAdapter,
+      ...(attachmentAdapter ? { attachments: attachmentAdapter } : {}),
+    },
   });
 
   // Populate runtimeRef so transport can access thread context

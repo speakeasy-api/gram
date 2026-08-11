@@ -150,6 +150,7 @@ type dashboardTriggerEvent struct {
 	CorrelationID  string          `json:"correlation_id,omitempty" cel:"correlation_id"`
 	IdempotencyKey string          `json:"idempotency_key,omitempty" cel:"idempotency_key"`
 	SkillContext   json.RawMessage `json:"skill_context,omitempty"`
+	Attachments    json.RawMessage `json:"attachments,omitempty"`
 }
 
 type cronTriggerEvent struct {
@@ -377,7 +378,7 @@ func newDashboardDefinition() Definition {
 			if err := json.Unmarshal(payload, &event); err != nil {
 				return nil, fmt.Errorf("decode dashboard message: %w", err)
 			}
-			if event.Text == "" {
+			if event.Text == "" && len(event.Attachments) == 0 {
 				return nil, fmt.Errorf("dashboard message text is required")
 			}
 			if event.UserID == "" {
