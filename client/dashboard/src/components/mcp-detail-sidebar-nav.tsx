@@ -1,8 +1,8 @@
 import {
-  McpSidebarInfoLabel,
-  McpSidebarNavShell,
-  type McpSidebarNavItem,
-} from "@/components/mcp-sidebar-nav-shell";
+  DetailSidebarInfoLabel,
+  DetailSidebarNav,
+  type DetailSidebarNavItem,
+} from "@/components/detail/detail-sidebar-nav";
 import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Text } from "@/components/ui/Text";
@@ -67,7 +67,7 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
   const canViewTeamAccess =
     !!toolset && hasScope("org:read") && hasScope("mcp:read", toolset.id);
 
-  const items: McpSidebarNavItem[] = [
+  const items: DetailSidebarNavItem[] = [
     {
       key: "overview",
       title: "Overview",
@@ -153,13 +153,13 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <McpSidebarInfoLabel>Visibility</McpSidebarInfoLabel>
+        <DetailSidebarInfoLabel>Visibility</DetailSidebarInfoLabel>
         <MCPStatusDropdown toolset={toolset} />
       </div>
 
       {mcpUrl && (
         <div className="flex flex-col gap-1">
-          <McpSidebarInfoLabel>URL</McpSidebarInfoLabel>
+          <DetailSidebarInfoLabel>URL</DetailSidebarInfoLabel>
           <div className="flex items-start gap-1">
             <Text
               variant="small"
@@ -179,7 +179,7 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
       )}
 
       <div className="flex flex-col gap-1">
-        <McpSidebarInfoLabel>Tools</McpSidebarInfoLabel>
+        <DetailSidebarInfoLabel>Tools</DetailSidebarInfoLabel>
         <Text variant="small">{toolset.tools?.length ?? 0}</Text>
       </div>
 
@@ -212,7 +212,7 @@ export function McpDetailSidebarNav(): React.JSX.Element | null {
   );
 
   return (
-    <McpSidebarNavShell
+    <DetailSidebarNav
       backHref={routes.mcp.href()}
       cardContent={cardContent}
       items={items}

@@ -36,7 +36,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useMcpEndpointSlugValidation } from "../../../useMcpEndpointSlugValidation";
 import { SettingsInlineEmptyState } from "../SettingsInlineEmptyState";
-import { SettingsSection } from "../SettingsSection";
+import { SettingsSection } from "@/components/detail/settings-section";
 
 const ADDRESS_INPUT_GROUP_CLASSNAME = "";
 const ADDRESS_SLUG_INPUT_CLASSNAME = "font-mono pl-0! font-bold";

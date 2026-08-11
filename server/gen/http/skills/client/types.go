@@ -340,6 +340,8 @@ type GetResponseBody struct {
 	Drift *SkillDriftResponseBody `form:"drift,omitempty" json:"drift,omitempty" xml:"drift,omitempty"`
 	// The number of active, non-deleted assistants using the skill.
 	AssistantCount *int64 `form:"assistant_count,omitempty" json:"assistant_count,omitempty" xml:"assistant_count,omitempty"`
+	// Open prompt-injection findings for the current skill version.
+	PromptInjectionFindings []*SkillPromptInjectionFindingResponseBody `form:"prompt_injection_findings,omitempty" json:"prompt_injection_findings,omitempty" xml:"prompt_injection_findings,omitempty"`
 }
 
 // ListUnknownActivationsResponseBody is the type of the "skills" service
@@ -4887,6 +4889,17 @@ type SkillDriftResponseBody struct {
 	IndeterminateMachines *int64 `form:"indeterminate_machines,omitempty" json:"indeterminate_machines,omitempty" xml:"indeterminate_machines,omitempty"`
 }
 
+// SkillPromptInjectionFindingResponseBody is used to define fields on response
+// body types.
+type SkillPromptInjectionFindingResponseBody struct {
+	// The rule that produced the finding.
+	RuleID *string `form:"rule_id,omitempty" json:"rule_id,omitempty" xml:"rule_id,omitempty"`
+	// Why the current skill version was flagged.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The classifier confidence from 0 to 1.
+	Confidence *float64 `form:"confidence,omitempty" json:"confidence,omitempty" xml:"confidence,omitempty"`
+}
+
 // UnknownSkillActivationResponseBody is used to define fields on response body
 // types.
 type UnknownSkillActivationResponseBody struct {
@@ -7261,6 +7274,14 @@ func NewGetSkillResultOK(body *GetResponseBody) *skills.GetSkillResult {
 		v.SightingTimeline[i] = unmarshalSkillSightingTimelinePointResponseBodyToSkillsSkillSightingTimelinePoint(val)
 	}
 	v.Drift = unmarshalSkillDriftResponseBodyToSkillsSkillDrift(body.Drift)
+	v.PromptInjectionFindings = make([]*skills.SkillPromptInjectionFinding, len(body.PromptInjectionFindings))
+	for i, val := range body.PromptInjectionFindings {
+		if val == nil {
+			v.PromptInjectionFindings[i] = nil
+			continue
+		}
+		v.PromptInjectionFindings[i] = unmarshalSkillPromptInjectionFindingResponseBodyToSkillsSkillPromptInjectionFinding(val)
+	}
 
 	return v
 }
@@ -9239,6 +9260,9 @@ func ValidateGetResponseBody(body *GetResponseBody) (err error) {
 	if body.AssistantCount == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("assistant_count", "body"))
 	}
+	if body.PromptInjectionFindings == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_injection_findings", "body"))
+	}
 	if body.Skill != nil {
 		if err2 := ValidateSkillResponseBody(body.Skill); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -9264,6 +9288,13 @@ func ValidateGetResponseBody(body *GetResponseBody) (err error) {
 	if body.Drift != nil {
 		if err2 := ValidateSkillDriftResponseBody(body.Drift); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	for _, e := range body.PromptInjectionFindings {
+		if e != nil {
+			if err2 := ValidateSkillPromptInjectionFindingResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -15431,6 +15462,31 @@ func ValidateSkillDriftResponseBody(body *SkillDriftResponseBody) (err error) {
 	}
 	for _, e := range body.TargetVersionIds {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.target_version_ids[*]", e, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateSkillPromptInjectionFindingResponseBody runs the validations defined
+// on SkillPromptInjectionFindingResponseBody
+func ValidateSkillPromptInjectionFindingResponseBody(body *SkillPromptInjectionFindingResponseBody) (err error) {
+	if body.RuleID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("rule_id", "body"))
+	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	if body.Confidence == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("confidence", "body"))
+	}
+	if body.Confidence != nil {
+		if *body.Confidence < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.confidence", *body.Confidence, 0, true))
+		}
+	}
+	if body.Confidence != nil {
+		if *body.Confidence > 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.confidence", *body.Confidence, 1, false))
+		}
 	}
 	return
 }

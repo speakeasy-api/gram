@@ -265,9 +265,9 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 
 	// Visibility scoping: callers holding an unrestricted chat:read grant and the
 	// managed-assistant runtime see all project sessions (optionally narrowed by
-	// an explicit external user id); everyone else is restricted to their own
-	// sessions.
-	externalUserID, userID, err := s.chatVisibilityScope(ctx, authCtx, payload.ExternalUserID)
+	// the external user id and user id filters); everyone else is restricted to
+	// their own sessions.
+	externalUserID, userID, err := s.chatVisibilityScope(ctx, authCtx, payload.ExternalUserID, payload.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -575,7 +575,7 @@ func (s *Service) ListSources(ctx context.Context, payload *gen.ListSourcesPaylo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	externalUserID, userID, err := s.chatVisibilityScope(ctx, authCtx, nil)
+	externalUserID, userID, err := s.chatVisibilityScope(ctx, authCtx, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -626,11 +626,12 @@ func parseSourceFilter(source string) []string {
 // chatVisibilityScope resolves the (external_user_id, user_id) scoping shared by
 // the chat listing endpoints. Callers holding an unrestricted chat:read grant
 // (only admins do) and the managed-assistant runtime see all project sessions
-// (optionally narrowed by an explicit external user id); everyone else is
-// restricted to their own sessions. Both empty means "all chats in the project".
-// Visibility is never a hard gate on the route — when the chat:read check can't
-// be made we fall back to own-sessions rather than failing.
-func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalues.AuthContext, payloadExternalUserID *string) (string, string, error) {
+// (optionally narrowed by the payload's external user id and user id filters);
+// everyone else is restricted to their own sessions. Both empty means "all
+// chats in the project". Visibility is never a hard gate on the route — when
+// the chat:read check can't be made we fall back to own-sessions rather than
+// failing.
+func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalues.AuthContext, payloadExternalUserID, payloadUserID *string) (string, string, error) {
 	// An assistant principal is set only on the assistant runtime path and only
 	// the managed-assistant platform toolset surfaces chat tools, so treat it as
 	// admin-equivalent for project-wide visibility.
@@ -673,7 +674,7 @@ func (s *Service) chatVisibilityScope(ctx context.Context, authCtx *contextvalue
 	case authCtx.ExternalUserID != "":
 		return authCtx.ExternalUserID, "", nil
 	case canReadAllSessions, isAssistantCall:
-		return conv.PtrValOr(payloadExternalUserID, ""), "", nil
+		return conv.PtrValOr(payloadExternalUserID, ""), conv.PtrValOr(payloadUserID, ""), nil
 	default:
 		if authCtx.UserID == "" {
 			return "", "", oops.C(oops.CodeUnauthorized)
@@ -2258,7 +2259,7 @@ func (s *Service) loadMessageContentFields(ctx context.Context, chatID uuid.UUID
 		defer func() { _ = reader.Close() }()
 
 		// Limit read size to prevent memory issues
-		limitedReader := io.LimitReader(reader, maxAssetReadSize)
+		limitedReader := io.LimitReader(reader, MaxAssetReadSize)
 		data, err := io.ReadAll(limitedReader)
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to read message content from asset storage",
@@ -2276,7 +2277,7 @@ func (s *Service) loadMessageContentFields(ctx context.Context, chatID uuid.UUID
 }
 
 func (s *Service) loadContentPartContent(ctx context.Context, chatID uuid.UUID, contentPartID uuid.UUID, contentAssetURL string) string {
-	content, err := blobio.ReadAllString(ctx, s.assetStorage, contentAssetURL, maxAssetReadSize)
+	content, err := blobio.ReadAllString(ctx, s.assetStorage, contentAssetURL, MaxAssetReadSize)
 	if err != nil {
 		s.logger.WarnContext(ctx, "failed to read content part from asset storage",
 			attr.SlogError(err),
@@ -2391,9 +2392,10 @@ const (
 	// their content stored in the asset storage.
 	maxInlineContentSize = 128 * 1024 // 128 KiB
 
-	// maxAssetReadSize is the maximum size of message content that will be
-	// read from asset storage to prevent memory issues.
-	maxAssetReadSize = 20 * 1024 * 1024 // 20 MiB
+	// MaxAssetReadSize is the maximum size of message content that will be
+	// read from asset storage to prevent memory issues. Exported so history
+	// replay (assistants) bounds its reads of the same assets identically.
+	MaxAssetReadSize = 20 * 1024 * 1024 // 20 MiB
 
 	// defaultLoadChatLimit / maxLoadChatLimit bound the keyset page size for
 	// loadChat. Mirrors the Default/Maximum in the Goa design; clamped again here
@@ -2449,6 +2451,9 @@ func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, asset
 				preps[i] = rowPrep{jsonData: nil, path: "", err: fmt.Errorf("marshal message content: %w", err)}
 				return nil
 			}
+			// Sanitize before hashing so the asset path (and the dedup key
+			// derived from it) addresses the bytes actually stored.
+			jsonData = sanitizeContentJSON(jsonData)
 			hash := sha256.Sum256(jsonData)
 			hashHex := hex.EncodeToString(hash[:])
 			assetPath := path.Join(row.projectID.String(), "chats", row.chatID.String(), hashHex+".json")

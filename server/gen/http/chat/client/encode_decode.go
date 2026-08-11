@@ -61,6 +61,9 @@ func EncodeListChatsRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 		if p.ExternalUserID != nil {
 			values.Add("external_user_id", *p.ExternalUserID)
 		}
+		if p.UserID != nil {
+			values.Add("user_id", *p.UserID)
+		}
 		if p.Source != nil {
 			values.Add("source", *p.Source)
 		}

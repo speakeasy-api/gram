@@ -1,4 +1,4 @@
-import { Page } from "@/components/page-layout";
+import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -85,14 +85,7 @@ type SelectedRule =
 export default function DetectionRules(): JSX.Element {
   return (
     <RequireScope scope="org:admin" level="page">
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs />
-        </Page.Header>
-        <Page.Body>
-          <DetectionRulesContent />
-        </Page.Body>
-      </Page>
+      <DetectionRulesContent />
     </RequireScope>
   );
 }
@@ -150,49 +143,46 @@ function DetectionRulesContent() {
 
   return (
     <>
-      <Page.Section>
-        <Page.Section.Title stage="beta">Detection Rules</Page.Section.Title>
-        <Page.Section.Description>
-          Reusable built-in and custom rules your policies use to flag — or
-          exempt — messages.
-        </Page.Section.Description>
-        <Page.Section.CTA>
+      <ResourceListPage
+        title="Detection Rules"
+        stage="beta"
+        description="Reusable built-in and custom rules your policies use to flag — or exempt — messages."
+        primaryAction={
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
             Custom Detection Rule
           </Button>
-        </Page.Section.CTA>
-        <Page.Section.Body>
-          <div className="space-y-8">
-            {customRulesLoading && (
-              <div className="text-muted-foreground text-sm">
-                Loading custom rules...
-              </div>
-            )}
-            {customRulesError && (
-              <div className="text-destructive text-sm">
-                Failed to load custom rules.
-              </div>
-            )}
-            {customRules.length > 0 && (
-              <CustomRulesSection
-                rules={customRules}
-                expanded={expanded === "custom"}
-                onToggle={() =>
-                  setExpanded(expanded === "custom" ? null : "custom")
-                }
-                onSelect={(rule) => setSelected({ kind: "custom", rule })}
-              />
-            )}
-
-            <BuiltinRulesSection
-              expanded={expanded}
-              onToggle={(cat) => setExpanded(expanded === cat ? null : cat)}
-              onSelect={(rule) => setSelected({ kind: "builtin", rule })}
+        }
+      >
+        <div className="space-y-8">
+          {customRulesLoading && (
+            <div className="text-muted-foreground text-sm">
+              Loading custom rules...
+            </div>
+          )}
+          {customRulesError && (
+            <div className="text-destructive text-sm">
+              Failed to load custom rules.
+            </div>
+          )}
+          {customRules.length > 0 && (
+            <CustomRulesSection
+              rules={customRules}
+              expanded={expanded === "custom"}
+              onToggle={() =>
+                setExpanded(expanded === "custom" ? null : "custom")
+              }
+              onSelect={(rule) => setSelected({ kind: "custom", rule })}
             />
-          </div>
-        </Page.Section.Body>
-      </Page.Section>
+          )}
+
+          <BuiltinRulesSection
+            expanded={expanded}
+            onToggle={(cat) => setExpanded(expanded === cat ? null : cat)}
+            onSelect={(rule) => setSelected({ kind: "builtin", rule })}
+          />
+        </div>
+      </ResourceListPage>
 
       <RuleDetailSheet
         selection={selected}

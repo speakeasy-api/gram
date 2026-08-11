@@ -80,9 +80,6 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	// The database is cloned per test but Redis is shared across the package, so
 	// tests that kept the default organization id would also share the
 	// entitlement cache — one test toggling the feature would flake its parallel
@@ -105,7 +102,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	authCtx.ActiveOrganizationID = orgID
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	auditLogger := audit.NewLogger()
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 	svc := externalkeys.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, auditLogger, features)

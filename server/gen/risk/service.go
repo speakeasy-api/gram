@@ -74,6 +74,10 @@ type Service interface {
 	// Get per-rule_id finding counts for a category within a time window. Powers
 	// the per-category drill-down chart on /risk-overview.
 	GetRiskRuleBreakdown(context.Context, *GetRiskRuleBreakdownPayload) (res *RiskRuleBreakdownResult, err error)
+	// Get clustered risk signals — findings grouped by rule and ranked by severity
+	// score — plus window-level KPI stats and the exposure breakdown by category.
+	// Powers the Watchdog page. Served from the ClickHouse findings store.
+	GetRiskSignals(context.Context, *GetRiskSignalsPayload) (res *RiskSignalsResult, err error)
 	// Get the analysis status of a risk policy including progress and workflow
 	// state.
 	GetRiskPolicyStatus(context.Context, *GetRiskPolicyStatusPayload) (res *types.RiskPolicyStatus, err error)
@@ -186,7 +190,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [46]string{"createRiskPolicy", "listRiskPolicies", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "markRiskResultsFalsePositive", "unmarkRiskResultsFalsePositive", "listDismissedRiskResults", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "suggestExclusion", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
+var MethodNames = [47]string{"createRiskPolicy", "listRiskPolicies", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "markRiskResultsFalsePositive", "unmarkRiskResultsFalsePositive", "listDismissedRiskResults", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskSignals", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "suggestExclusion", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
 
 // AcknowledgeRiskPolicyChallengePayload is the payload type of the risk
 // service acknowledgeRiskPolicyChallenge method.
@@ -570,6 +574,19 @@ type GetRiskRuleBreakdownPayload struct {
 	// overview.
 	From *string
 	// Exclusive end of the window. Defaults to now.
+	To *string
+}
+
+// GetRiskSignalsPayload is the payload type of the risk service getRiskSignals
+// method.
+type GetRiskSignalsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Inclusive start of the signals window. Defaults to the start of the 7-day
+	// calendar window ending at to.
+	From *string
+	// Exclusive end of the signals window. Defaults to now.
 	To *string
 }
 
@@ -959,6 +976,15 @@ type RiskCategoryDefinition struct {
 	RecommendedScopeApplicable bool
 }
 
+type RiskExposureSlice struct {
+	// Canonical risk category key.
+	Category string
+	// Deduplicated finding count for this category in the window.
+	Findings int64
+	// Fraction of the window's findings in this category (0-1).
+	Share float64
+}
+
 type RiskOverviewCategory struct {
 	// Policy category key.
 	Category string
@@ -1069,6 +1095,93 @@ type RiskRuleBreakdownResult struct {
 	Rules []*RiskRuleBreakdownEntry
 	// Total findings across all rules in this category and window.
 	Total int64
+}
+
+// One clustered risk signal: all live findings for a single rule in the
+// window, with a heuristic severity score and trend/spread stats.
+type RiskSignal struct {
+	// Stable client identity for the signal. Currently 'rule:<rule_id>'.
+	Key string
+	// Rule identifier the signal clusters on (e.g. 'secret.aws_access_token',
+	// 'pii.email_address').
+	RuleID string
+	// Canonical risk category of the rule (secrets, pii, ...).
+	Category string
+	// Representative finding description for this rule. Empty when findings carry
+	// no description.
+	Description string
+	// Detector sources that produced findings in this signal (gitleaks, presidio,
+	// prompt_injection, ...).
+	DetectionSources []string
+	// Source apps (chat surfaces) the findings were observed in. Empty until app
+	// attribution is recorded on findings.
+	Apps []string
+	// Severity rating derived from the risk score.
+	Severity string
+	// Heuristic severity score on the 0.1-10 scale used across risk surfaces.
+	RiskScore float64
+	// Deduplicated finding count in the window.
+	Findings int64
+	// Finding count in the equal-length window immediately before from.
+	PreviousFindings int64
+	// Distinct users with at least one finding in the window.
+	Users int64
+	// Distinct teams with at least one finding in the window. Zero until team
+	// attribution is recorded on findings.
+	Teams int64
+	// Event time of the earliest finding in the window.
+	FirstSeen string
+	// Event time of the latest finding in the window.
+	LastSeen string
+	// Top users by finding count within the signal.
+	TopUsers []*RiskSignalTopUser
+	// Deduplicated finding counts per equal-width time bucket across the window,
+	// oldest bucket first. Powers the per-signal trend sparkline.
+	Sparkline []int64
+}
+
+type RiskSignalTopUser struct {
+	// User email, or Unknown user when unavailable.
+	Email string
+	// External user identifier as recorded on chats, when known. Empty when the
+	// finding cannot be attributed to an external user.
+	ExternalUserID string
+	// WorkOS directory department of the user when known; empty otherwise.
+	Team string
+	// Finding count for this user within the signal and window.
+	Findings int64
+}
+
+// RiskSignalsResult is the result type of the risk service getRiskSignals
+// method.
+type RiskSignalsResult struct {
+	// Inclusive start of the signals window.
+	From string
+	// Exclusive end of the signals window.
+	To string
+	// Heuristic organization risk score on the 0.1-10 scale, blended from the top
+	// signal scores and finding volume. Zero when the window has no findings.
+	OrgRiskScore float64
+	// Organization risk score computed the same way over the equal-length window
+	// immediately before from.
+	PreviousOrgRiskScore float64
+	// Deduplicated findings in the 24 hours ending at to.
+	Findings24h int64
+	// Deduplicated findings in the 24 hours before that.
+	PreviousFindings24h int64
+	// Signals with at least one live finding in the window.
+	OpenSignals int64
+	// Signals rated critical in the window.
+	CriticalSignals int64
+	// Distinct users with at least one finding in the window.
+	UsersExposed int64
+	// Distinct users with at least one finding in the equal-length window
+	// immediately before from.
+	PreviousUsersExposed int64
+	// Finding counts by category, largest first.
+	Exposure []*RiskExposureSlice
+	// Signals ranked by risk score, highest first.
+	Signals []*RiskSignal
 }
 
 // RiskUnmaskResultResult is the result type of the risk service

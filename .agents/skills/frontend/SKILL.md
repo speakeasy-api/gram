@@ -427,7 +427,67 @@ The `@/components/ui/link` wrapper sets `target="_blank"` when `external` is tru
 
 ### Building a new page (required pattern)
 
-Every new dashboard page follows the same skeleton — no exceptions, no bespoke headers:
+**First choice: a page template.** Do not hand-roll the `Page` frame. Pick the template that matches the page's shape from `@/components/page-templates` and fill in data — it owns the frame, breadcrumbs, scope gate, the single header, and the loading/empty/error branches (which is what stops the "three-branch header" duplication). Full recipes: `client/dashboard/src/components/page-templates/README.md`.
+
+| Page shape                                                                 | Template                       |
+| -------------------------------------------------------------------------- | ------------------------------ |
+| collection: search/filter + table or card grid + empty state               | `ResourceListPage`             |
+| one entity: hero + sections (rail wired via app sidebar)                   | `DetailPage`                   |
+| tabs that are _different resources_ (not one entity's sections)            | `TabbedPage`                   |
+| a single create/edit `<form>`                                              | `FormPage`                     |
+| stacked titled config sections (or a prose column via `variant="content"`) | `SettingsPage`                 |
+| dashboard: stat row + summary/chart cards                                  | `OverviewPage`                 |
+| fullbleed analytics/observe surface (sticky filters + big table/charts)    | `WorkbenchPage`                |
+| multi-step flow                                                            | `WizardPage`                   |
+| auth / standalone, outside the app shell                                   | `CenteredPage`                 |
+| genuine bespoke app canvas (chat, playground, builder)                     | `FullBleedPage` (escape hatch) |
+
+```tsx
+import { ResourceListPage } from "@/components/page-templates";
+
+// Gate the DATA-OWNING component from outside so its query never fires for
+// unauthorized users. A data hook called in the same component that renders the
+// template runs BEFORE the template's own `scope` gate — so wrap it here.
+export default function Environments(): JSX.Element {
+  return (
+    <RequireScope scope="project:read" level="page">
+      <EnvironmentsInner />
+    </RequireScope>
+  );
+}
+
+function EnvironmentsInner(): JSX.Element {
+  const q = useEnvironments(); // runs only after the page gate above passes
+  const rows = q.data ?? [];
+  // Write affordances get their OWN component-level gate — the page scope is
+  // read, so an any-of page scope must never be what hides a write button.
+  const newButton = (
+    <RequireScope scope="project:write" level="component">
+      <Button>New environment</Button>
+    </RequireScope>
+  );
+  return (
+    <ResourceListPage
+      title="Environments"
+      description="One-line purpose."
+      primaryAction={rows.length > 0 ? newButton : undefined}
+      isLoading={q.isPending}
+      isEmpty={rows.length === 0}
+      empty={{
+        icon: "blocks",
+        heading: "No environments yet",
+        action: newButton,
+      }}
+    >
+      <Table columns={columns} data={rows} rowKey={(r) => r.id} />
+    </ResourceListPage>
+  );
+}
+```
+
+**Scope gating (important):** wrap the data-owning component in `RequireScope` (the view scope, e.g. `project:read`) and call data hooks inside it, so the query never fires for unauthorized users. The templates also accept a `scope` prop, but it only gates _rendering_ — a hook in the same component that renders the template runs before that gate, so prefer the outer wrapper for anything that fetches. Gate write-only affordances (create/delete buttons, mutation tabs) with their own `level="component"` `RequireScope` for the write scope; never rely on an any-of page scope to hide them.
+
+Only a page that fits **none** of the templates falls back to the raw skeleton (and it still must render the header exactly once — no bespoke `<h1>`):
 
 ```tsx
 import { Page } from "@/components/page-layout";
@@ -440,9 +500,8 @@ export default function MyNewPage(): JSX.Element {
       </Page.Header>
       <Page.Body>
         <Page.Section>
-          {/* Renders the area eyebrow (OBSERVE/SECURE/CONNECT/DISTRIBUTE/
-              ORGANIZATION, derived from the URL) above a thin serif title
-              automatically. Pass area="..." to override, area="" to suppress. */}
+          {/* Area eyebrow (OBSERVE/SECURE/CONNECT/DISTRIBUTE/ORGANIZATION, from
+              the URL) over a thin serif title. area="…" overrides, area="" suppresses. */}
           <Page.Section.Title>My New Page</Page.Section.Title>
           <Page.Section.Description>One-line purpose.</Page.Section.Description>
           <Page.Section.Body>{/* content */}</Page.Section.Body>
@@ -456,28 +515,43 @@ export default function MyNewPage(): JSX.Element {
 Checklist for the content below the title:
 
 - **One page title per page.** Secondary sections get `text-eyebrow` overlines (utility groupings, table/list sections) or a smaller serif `text-display-xs` (content subsections with their own body) — never a second eyebrow + full-size serif stack.
-- Stat rows → `MetricCard` in `MetricCard.Group` with explicit `tone`s:
+- Stat rows → `StatRow` from `@/components/stat-row` (a `MetricCard.Group` with a built-in `isLoading` → skeleton swap); pass `metrics` with explicit `tone`s. Drop to raw `MetricCard` in `MetricCard.Group` only for a bespoke row.
 
   ```tsx
-  <MetricCard.Group>
-    <MetricCard label="Total rules" value={total} tone="information" />
-    <MetricCard
-      label="Violations"
-      value={violations}
-      tone={violations > 0 ? "destructive" : "neutral"}
-      delta="+3"
-      description="last 7 days"
-    />
-  </MetricCard.Group>
+  <StatRow
+    isLoading={q.isPending}
+    metrics={[
+      { label: "Total rules", value: total, tone: "information" },
+      {
+        label: "Violations",
+        value: n,
+        tone: n > 0 ? "destructive" : "neutral",
+        delta: "+3",
+        description: "last 7 days",
+      },
+    ]}
+  />
   ```
 
 - Tables → design-system `Table` (headers come out as eyebrows for free); hand-rolled grids use `text-eyebrow` header labels.
 - List/filter controls → `Page.Toolbar` (see the `page-toolbar` skill), mono uppercase segments for mode switches.
-- Empty states → the `EmptyState` component exported from `@/components/page-layout` (graphic + heading + description + CTA) for full-page voids; inline ones follow the same idiom by hand: square dashed hairline frame, square hairline icon tile (no gray circle blobs), sentence-case CTA.
+- Empty states → **`InlineEmptyState`** from `@/components/inline-empty-state` (`icon`/`graphic` + `heading` + `description` + `action`, `orientation="horizontal"` variant) for empty regions inside a page; `EmptyState` from `@/components/page-layout` for full-page voids. **Never hand-roll** the `border-dashed` + `rounded-full` icon-blob block — `InlineEmptyState` is the square-hairline-tile idiom and the templates' `empty` prop routes through it.
+- Chart/summary panels → `ChartCard` from `@/components/chart/ChartCard` (titled panel with loading/error states); the detail-column width wrapper is `DetailBody` from `@/components/detail-body` (never re-type `max-w-[1270px] px-8 py-8`).
 - Loading → content-shaped skeletons (`SkeletonTable`, geometry-matched rows), never a lone spinner or a premature empty state.
 - Cards white (`bg-card`), page gutter gray, hairline borders, no shadows/gradients/washes, square corners — per the styling rules below.
 
 A page that renders its own `<h1>` instead of this pattern is a defect; if a custom header is unavoidable, it must still render `<PageEyebrow />` + `text-display-sm font-thin`.
+
+### Design-system inventory (consolidated — don't import the removed ones)
+
+The primitive shelf was consolidated; these imports are gone or moved. Reaching for a removed one is a defect:
+
+- **`MetricCard`** — one primitive only: `@/components/ui/MetricCard` (`label`/`value`/`tone`). The analytics tile that formats numbers/thresholds/deltas is **`StatTile`** (`@/components/chart/stat-tile`, `StatTile`/`StatTileGroup`) — _not_ a second `MetricCard`.
+- **Password inputs** — no `PrivateInput`; use `<Input type="password" reveal />` (the `reveal` prop adds the show/hide eye toggle).
+- **`DashboardCard`** — now `Card.Dashboard` (`title`/`action`/`tooltip` + children).
+- **`ToggleButton`** — imported from `@/components/ui/SegmentedControl` (re-homed); use `SegmentedControl` for a full option group.
+- **`Modal` / `IconButton`** — removed. Use `Dialog` for modals; `Button` with the `icon` prop for icon-only buttons.
+- **Detail-page shared bones** live in `@/components/detail/`: `SettingsSection`/`DangerSettingsSection` (`settings-section`, also re-exported from the `page-templates` barrel) and `DetailSidebarNav`/`DetailSidebarInfoLabel` (`detail-sidebar-nav`) — not under `pages/mcp/...` and not `Mcp`-prefixed.
 
 ### Styling and Design System
 
