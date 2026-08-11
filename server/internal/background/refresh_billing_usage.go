@@ -124,6 +124,15 @@ func RefreshBillingUsageWorkflow(ctx workflow.Context, input RefreshBillingUsage
 		return workflow.NewContinueAsNewError(ctx, RefreshBillingUsageWorkflow, nextInput)
 	}
 
+	// The initial organization lookup can burn several minutes of the run
+	// when it retries, and the in-loop guard below only runs after a batch
+	// completes — so check the budget once before the first batch too, or a
+	// slow lookup could start a batch that cannot finish within the run
+	// timeout.
+	if startIndex < len(orgIDs) && shouldContinueRefreshBillingUsageAsNew(ctx) {
+		return continueAsNew(startIndex)
+	}
+
 	for i := startIndex; i < len(orgIDs); i += refreshBillingUsageBatchSize {
 		end := min(i+refreshBillingUsageBatchSize, len(orgIDs))
 		batch := orgIDs[i:end]

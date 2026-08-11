@@ -151,6 +151,71 @@ func TestRefreshBillingUsageWorkflow_ContinuesAsNewNearRunTimeout(t *testing.T) 
 	require.Zero(t, nextInput.FailedOrgCount)
 }
 
+func TestRefreshBillingUsageWorkflow_ContinuesAsNewBeforeFirstBatchWhenBudgetExhausted(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	// A run timeout smaller than the batch worst-case window means there is
+	// never room for a first batch: the workflow must continue as new right
+	// after loading organizations instead of starting a batch it cannot
+	// finish within the run timeout.
+	env.SetWorkflowRunTimeout(refreshBillingUsageBatchWorstCaseRetryWindow - time.Minute)
+
+	orgIDs := make([]string, 2*refreshBillingUsageBatchSize)
+	for i := range orgIDs {
+		orgIDs[i] = "org_" + strconv.Itoa(i)
+	}
+
+	getAllCallCount := 0
+	env.RegisterActivityWithOptions(
+		func(_ context.Context) ([]string, error) {
+			getAllCallCount++
+			return orgIDs, nil
+		},
+		activity.RegisterOptions{Name: "GetAllOrganizations"},
+	)
+
+	refreshCallCount := 0
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ []string) error {
+			refreshCallCount++
+			return nil
+		},
+		activity.RegisterOptions{Name: "RefreshBillingUsage"},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ []string) error {
+			return nil
+		},
+		activity.RegisterOptions{Name: "SnapshotBillingCycleUsage"},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ []string) error {
+			return nil
+		},
+		activity.RegisterOptions{Name: "ForwardTokenUsageToPostHog"},
+	)
+
+	env.ExecuteWorkflow(RefreshBillingUsageWorkflow, RefreshBillingUsageInput{
+		OrgIDs:           nil,
+		StartIndex:       0,
+		FailedBatchCount: 0,
+		FailedOrgCount:   0,
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	var continueAsNewErr *workflow.ContinueAsNewError
+	require.ErrorAs(t, env.GetWorkflowError(), &continueAsNewErr)
+	require.Equal(t, 1, getAllCallCount)
+	require.Zero(t, refreshCallCount, "no batch may start without a full worst-case retry window remaining")
+
+	var nextInput RefreshBillingUsageInput
+	require.NoError(t, converter.GetDefaultDataConverter().FromPayloads(continueAsNewErr.Input, &nextInput))
+	require.Equal(t, orgIDs, nextInput.OrgIDs)
+	require.Zero(t, nextInput.StartIndex, "the continued run must resume from the batch that never started")
+}
+
 func TestRefreshBillingUsageWorkflow_FailingBatchDoesNotAbortRun(t *testing.T) {
 	t.Parallel()
 
