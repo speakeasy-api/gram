@@ -24,7 +24,19 @@ const IMAGE_PLACEHOLDER_RE = /^\[image omitted:[^\]]*\]$/gm;
 // cannot read inline, a signed download URL. Both are written for the model
 // only — rendered, they fill the transcript with file dumps and long tokens.
 const MACHINE_BLOCK_RE =
-  /<(attachment-context|attachment-downloads-context|attachment-downloads)>\n?([\s\S]*?)<\/\1>\n?/g;
+  /<(attachment-context|attachment-downloads-context|attachment-downloads)>\n?([\s\S]*)<\/\1>\n?/g;
+const MACHINE_BLOCK_START_RE =
+  /^\s*<(attachment-context|attachment-downloads-context|attachment-downloads)>/;
+
+/**
+ * True when a content part is entirely a machine block. An attached text file
+ * can itself contain the closing tag, which would end a non-greedy match early
+ * and spill the rest of the file into the transcript — so a part that opens
+ * with one of these tags is dropped whole rather than pattern-matched inside.
+ */
+export function isMachineAttachmentPart(text: string): boolean {
+  return MACHINE_BLOCK_START_RE.test(text);
+}
 
 export interface ReplayedAttachment {
   /** Empty for turns sent before the asset reference was recorded. */
@@ -74,6 +86,9 @@ export function toCompleteAttachments(
   attachments: ReplayedAttachment[],
   apiUrl: string,
 ): CompleteAttachment[] {
+  // Without the API origin the serve URL would be a relative path the preview
+  // cannot authenticate against, so there is nothing to show.
+  if (!apiUrl) return [];
   // Turns sent before the block recorded an asset reference have nothing to
   // point a card at. They are dropped rather than rendered as an empty card:
   // the two replay paths build cards from this content, and only one of them

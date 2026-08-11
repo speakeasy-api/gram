@@ -20,6 +20,7 @@ import (
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 )
 
@@ -376,6 +377,33 @@ func TestSendMessageRejectsEmptyMessageWithoutAttachments(t *testing.T) {
 	_, err = svc.SendMessage(ctx, &gen.SendMessagePayload{
 		AssistantID: managed.ID.String(),
 		Message:     "",
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+// Attachment resolution is project-scoped: an asset id leaked from another
+// project must not become an attachment on this project's turn.
+func TestSendMessageRejectsCrossProjectAttachment(t *testing.T) {
+	t.Parallel()
+
+	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_send_message_cross_project")
+	ctx = authztest.WithExactGrants(t, ctx, projectReadGrant(projectID))
+	managed, err := svc.core.EnableManagedAssistant(ctx, "org-test", projectID, "user-test")
+	require.NoError(t, err)
+	svc.core.SetDashboardIngestor(&fakeDashboardIngestor{core: svc.core, assistantID: managed.ID})
+
+	otherProject, err := projectsRepo.New(conn).CreateProject(ctx, projectsRepo.CreateProjectParams{
+		Name:           "Other",
+		Slug:           "project-other-attachment",
+		OrganizationID: "org-test",
+	})
+	require.NoError(t, err)
+	foreignAsset := createChatAttachmentFixture(t, conn, otherProject.ID, "secret.pdf", "application/pdf")
+
+	_, err = svc.SendMessage(ctx, &gen.SendMessagePayload{
+		AssistantID: managed.ID.String(),
+		Message:     "read this",
+		Attachments: []*gen.SendMessageAttachment{{AssetID: foreignAsset.String(), Name: nil}},
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }

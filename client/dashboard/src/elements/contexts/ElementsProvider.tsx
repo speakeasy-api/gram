@@ -629,30 +629,42 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
   // transport turns the resulting assets into turn attachments. `false`
   // disables them (the composer also hides the button in that case).
   const attachmentsConfig = config.composer?.attachments ?? true;
+  // Normalised to primitives before the memo: a host that rebuilds an
+  // equivalent config object on every render would otherwise mint a new
+  // adapter, change the runtime hook's identity, and rebuild the thread
+  // runtimes — taking any in-flight optimistic message with them.
+  const attachmentsEnabled = attachmentsConfig !== false;
+  const attachmentAccept =
+    typeof attachmentsConfig === "object" && attachmentsConfig.accept?.length
+      ? attachmentsConfig.accept.join(",")
+      : CHAT_ATTACHMENT_ACCEPT;
+  // A host asking for more than the endpoint accepts would let the user pick a
+  // file that only fails once uploaded, so the configured size is clamped to
+  // the server's cap (and a nonsense value ignored).
+  const configuredMaxSize =
+    typeof attachmentsConfig === "object"
+      ? attachmentsConfig.maxSize
+      : undefined;
+  const attachmentMaxBytes =
+    configuredMaxSize && configuredMaxSize > 0
+      ? Math.min(configuredMaxSize, CHAT_ATTACHMENT_MAX_BYTES)
+      : undefined;
+
   const attachmentAdapter = useMemo(() => {
-    if (!attachmentsConfig) return undefined;
-    const accept =
-      typeof attachmentsConfig === "object" && attachmentsConfig.accept?.length
-        ? attachmentsConfig.accept.join(",")
-        : CHAT_ATTACHMENT_ACCEPT;
-    // A host asking for more than the endpoint accepts would let the user
-    // pick a file that only fails once uploaded, so the configured size is
-    // clamped to the server's cap (and a nonsense value ignored).
-    const configuredMaxSize =
-      typeof attachmentsConfig === "object"
-        ? attachmentsConfig.maxSize
-        : undefined;
-    const maxBytes =
-      configuredMaxSize && configuredMaxSize > 0
-        ? Math.min(configuredMaxSize, CHAT_ATTACHMENT_MAX_BYTES)
-        : undefined;
+    if (!attachmentsEnabled) return undefined;
     return createChatAttachmentAdapter({
       apiUrl,
       getHeaders: getValidHeaders,
-      accept,
-      ...(maxBytes ? { maxBytes } : {}),
+      accept: attachmentAccept,
+      ...(attachmentMaxBytes ? { maxBytes: attachmentMaxBytes } : {}),
     });
-  }, [attachmentsConfig, apiUrl, getValidHeaders]);
+  }, [
+    attachmentsEnabled,
+    attachmentAccept,
+    attachmentMaxBytes,
+    apiUrl,
+    getValidHeaders,
+  ]);
 
   // Create combined executable tools for direct tool execution (ActionButton)
   // Uses a simplified type that focuses on the execute function

@@ -20,6 +20,7 @@ import type {
 import { UIMessage } from "ai";
 
 import {
+  isMachineAttachmentPart,
   parseReplayedAttachments,
   stripReplayedAttachmentText,
   toCompleteAttachments,
@@ -306,11 +307,11 @@ function convertGramMessageToThreadMessage(
       role: "user",
       createdAt,
       content: replayed.length
-        ? content.map((part) =>
-            part.type === "text"
-              ? { ...part, text: stripReplayedAttachmentText(part.text) }
-              : part,
-          )
+        ? content.flatMap((part): ThreadUserMessagePart[] => {
+            if (part.type !== "text") return [part];
+            if (isMachineAttachmentPart(part.text)) return [];
+            return [{ ...part, text: stripReplayedAttachmentText(part.text) }];
+          })
         : content,
       attachments: apiUrl ? toCompleteAttachments(replayed, apiUrl) : [],
       metadata: baseMetadata,
@@ -515,6 +516,7 @@ function withReplayedAttachments(
 
   const cleaned: UIMessagePart[] = parts.flatMap((part): UIMessagePart[] => {
     if (part.type !== "text") return [part];
+    if (isMachineAttachmentPart(part.text)) return [];
     const stripped = stripReplayedAttachmentText(part.text);
     return stripped ? [{ ...part, text: stripped }] : [];
   });

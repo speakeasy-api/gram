@@ -141,7 +141,9 @@ func (s *ServiceCore) dashboardTurnAttachmentParts(ctx context.Context, projectI
 			continue
 		}
 		remaining -= int64(len(data))
-		if int64(len(data)) < attachment.ContentLength {
+		// Hitting the read cap means bytes were left behind even when the
+		// stored length says otherwise (stale or zero metadata), so link it.
+		if int64(len(data)) < attachment.ContentLength || int64(len(data)) >= limit {
 			needsLink[attachment.AssetID] = struct{}{}
 		}
 

@@ -48,22 +48,24 @@ export const AttachmentDropZone: FC<{
     if (depth.current === 0) setIsDragging(false);
   }, []);
 
+  // `preventDefault` runs even when attachments are off: without it the browser
+  // handles the drop itself and navigates away from the chat to the file.
   const onDragOver = useCallback(
     (event: React.DragEvent) => {
-      if (disabled || !hasFiles(event)) return;
-      // Required, or the browser opens the file instead of firing `drop`.
+      if (!hasFiles(event)) return;
       event.preventDefault();
-      event.dataTransfer.dropEffect = "copy";
+      event.dataTransfer.dropEffect = disabled ? "none" : "copy";
     },
     [disabled],
   );
 
   const onDrop = useCallback(
     (event: React.DragEvent) => {
-      if (disabled || !hasFiles(event)) return;
+      if (!hasFiles(event)) return;
       event.preventDefault();
       depth.current = 0;
       setIsDragging(false);
+      if (disabled) return;
       for (const file of Array.from(event.dataTransfer.files)) {
         void aui.composer.addAttachment(file);
       }
