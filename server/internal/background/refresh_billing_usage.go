@@ -84,8 +84,10 @@ func RefreshBillingUsageWorkflow(ctx workflow.Context, input RefreshBillingUsage
 
 	var a *Activities
 	orgIDs := input.OrgIDs
+	didLookupOrgs := false
 	// Initial call to workflow - no orgs yet, need to fetch them
 	if len(orgIDs) == 0 {
+		didLookupOrgs = true
 		err := workflow.ExecuteActivity(ctx, a.GetAllOrganizations).Get(ctx, &orgIDs)
 		if err != nil {
 			logger.Error("Failed to get all organizations", "error", err)
@@ -128,8 +130,13 @@ func RefreshBillingUsageWorkflow(ctx workflow.Context, input RefreshBillingUsage
 	// when it retries, and the in-loop guard below only runs after a batch
 	// completes — so check the budget once before the first batch too, or a
 	// slow lookup could start a batch that cannot finish within the run
-	// timeout.
-	if startIndex < len(orgIDs) && shouldContinueRefreshBillingUsageAsNew(ctx) {
+	// timeout. Only runs that performed the lookup are checked: a continued
+	// run starts with orgs in hand and near-zero elapsed time, so letting it
+	// continue as new here would repeat the same start index forever if the
+	// run timeout were ever configured at or below the worst-case window.
+	// Skipping the check instead guarantees every continued run processes at
+	// least one batch before the in-loop guard can trigger.
+	if didLookupOrgs && startIndex < len(orgIDs) && shouldContinueRefreshBillingUsageAsNew(ctx) {
 		return continueAsNew(startIndex)
 	}
 

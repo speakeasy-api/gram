@@ -216,6 +216,61 @@ func TestRefreshBillingUsageWorkflow_ContinuesAsNewBeforeFirstBatchWhenBudgetExh
 	require.Zero(t, nextInput.StartIndex, "the continued run must resume from the batch that never started")
 }
 
+func TestRefreshBillingUsageWorkflow_ContinuedRunAlwaysMakesProgress(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	// A run timeout at or below the batch worst-case window makes the budget
+	// check report "no room" from the very start of every run. A continued
+	// run (orgs already loaded) must still process at least one batch under
+	// that configuration, or back-to-back continue-as-new calls with an
+	// unchanged start index would livelock the workflow with zero progress.
+	env.SetWorkflowRunTimeout(refreshBillingUsageBatchWorstCaseRetryWindow - time.Minute)
+
+	orgIDs := make([]string, 2*refreshBillingUsageBatchSize)
+	for i := range orgIDs {
+		orgIDs[i] = "org_" + strconv.Itoa(i)
+	}
+
+	refreshCallCount := 0
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ []string) error {
+			refreshCallCount++
+			return nil
+		},
+		activity.RegisterOptions{Name: "RefreshBillingUsage"},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ []string) error {
+			return nil
+		},
+		activity.RegisterOptions{Name: "SnapshotBillingCycleUsage"},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ []string) error {
+			return nil
+		},
+		activity.RegisterOptions{Name: "ForwardTokenUsageToPostHog"},
+	)
+
+	env.ExecuteWorkflow(RefreshBillingUsageWorkflow, RefreshBillingUsageInput{
+		OrgIDs:           orgIDs,
+		StartIndex:       0,
+		FailedBatchCount: 0,
+		FailedOrgCount:   0,
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	var continueAsNewErr *workflow.ContinueAsNewError
+	require.ErrorAs(t, env.GetWorkflowError(), &continueAsNewErr)
+	require.GreaterOrEqual(t, refreshCallCount, 1, "a continued run must process at least one batch before continuing as new")
+
+	var nextInput RefreshBillingUsageInput
+	require.NoError(t, converter.GetDefaultDataConverter().FromPayloads(continueAsNewErr.Input, &nextInput))
+	require.Positive(t, nextInput.StartIndex, "the continued run must advance the start index")
+}
+
 func TestRefreshBillingUsageWorkflow_FailingBatchDoesNotAbortRun(t *testing.T) {
 	t.Parallel()
 
