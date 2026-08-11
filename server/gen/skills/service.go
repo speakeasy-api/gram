@@ -253,6 +253,8 @@ type GetSkillResult struct {
 	Drift *SkillDrift
 	// The number of active, non-deleted assistants using the skill.
 	AssistantCount int64
+	// Open prompt-injection findings for the current skill version.
+	PromptInjectionFindings []*SkillPromptInjectionFinding
 }
 
 // ListDistributionsPayload is the payload type of the skills service
@@ -582,6 +584,17 @@ type SkillFeedbackTimelinePoint struct {
 	// The start of the UTC day.
 	BucketStart   string
 	FeedbackCount int64
+}
+
+// A prompt-injection finding for the current skill version. Raw matched
+// content is intentionally omitted.
+type SkillPromptInjectionFinding struct {
+	// The rule that produced the finding.
+	RuleID string
+	// Why the current skill version was flagged.
+	Description string
+	// The classifier confidence from 0 to 1.
+	Confidence float64
 }
 
 // A UTC-day activation bucket for one attributed skill version.

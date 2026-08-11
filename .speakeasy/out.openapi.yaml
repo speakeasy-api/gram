@@ -59444,6 +59444,11 @@ components:
           $ref: '#/components/schemas/SkillDrift'
         latest_version:
           $ref: '#/components/schemas/SkillVersion'
+        prompt_injection_findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillPromptInjectionFinding'
+          description: Open prompt-injection findings for the current skill version.
         sighting_timeline:
           type: array
           items:
@@ -59458,6 +59463,7 @@ components:
         - sighting_timeline
         - drift
         - assistant_count
+        - prompt_injection_findings
     GetToolUsageFilterOptionsPayload:
       type: object
       properties:
@@ -69722,6 +69728,26 @@ components:
         - session_cost_usd
         - scored_sessions
         - estimated_minutes_saved
+    SkillPromptInjectionFinding:
+      type: object
+      properties:
+        confidence:
+          type: number
+          description: The classifier confidence from 0 to 1.
+          format: double
+          minimum: 0
+          maximum: 1
+        description:
+          type: string
+          description: Why the current skill version was flagged.
+        rule_id:
+          type: string
+          description: The rule that produced the finding.
+      description: A prompt-injection finding for the current skill version. Raw matched content is intentionally omitted.
+      required:
+        - rule_id
+        - description
+        - confidence
     SkillShareLink:
       type: object
       properties:

@@ -35,6 +35,7 @@ const testState = vi.hoisted(() => ({
     activationCount: number;
   }>,
   latestVersion: undefined as Record<string, unknown> | undefined,
+  promptInjectionFindings: [] as Array<Record<string, unknown>>,
   version: {
     id: "version_latest",
     skillId: "skill_a",
@@ -130,6 +131,7 @@ vi.mock("@gram/client/react-query/skill.js", () => ({
         windowEnd: new Date("2026-07-16T00:00:00Z"),
       },
       sightingTimeline: testState.sightingTimeline,
+      promptInjectionFindings: testState.promptInjectionFindings,
     },
   }),
   invalidateAllSkill: testState.invalidateSkill,
@@ -307,6 +309,7 @@ beforeEach(() => {
   testState.versions = [testState.version];
   testState.sightingTimeline = [];
   testState.latestVersion = testState.version;
+  testState.promptInjectionFindings = [];
 });
 
 afterEach(cleanup);
@@ -340,6 +343,27 @@ describe("SkillDetail", () => {
       expect(gate.getAttribute("data-scope")).toBe("skill:write");
       expect(gate.getAttribute("data-resource-id")).toBe("project_a");
     }
+  });
+
+  it("shows current-version prompt injection flags without raw content", () => {
+    testState.promptInjectionFindings = [
+      {
+        ruleId: "prompt_injection",
+        description: "Attempts to override trusted instructions.",
+        confidence: 0.98,
+        match: "raw manifest must not render",
+      },
+    ];
+
+    render(<SkillDetail />);
+
+    expect(screen.getByText("Prompt injection flags")).toBeTruthy();
+    expect(screen.getByText("prompt_injection")).toBeTruthy();
+    expect(
+      screen.getByText("Attempts to override trusted instructions."),
+    ).toBeTruthy();
+    expect(screen.getByText("98%")).toBeTruthy();
+    expect(screen.queryByText("raw manifest must not render")).toBeNull();
   });
 
   it("lists validation errors for an invalid historical version", () => {

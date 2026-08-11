@@ -18,6 +18,10 @@ import type {
 import { useSkillEfficacyInsights } from "@gram/client/react-query/skillEfficacyInsights.js";
 import { useSkillTags } from "@gram/client/react-query/skillTags.js";
 import {
+  invalidateAllRiskListPolicies,
+  useRiskListPolicies,
+} from "@gram/client/react-query/riskListPolicies.js";
+import {
   useSkills,
   useSkillsInfinite,
 } from "@gram/client/react-query/skills.js";
@@ -28,6 +32,7 @@ import { sortTableData } from "@/components/ui/Table/sorting";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { useRoutes } from "@/routes";
 import { useQueryState } from "nuqs";
+import { useQueryClient } from "@tanstack/react-query";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
 import { toast } from "sonner";
@@ -110,6 +115,7 @@ function noResultsMessage(active: boolean, incomplete: boolean): string {
 export default function SkillsList(): JSX.Element {
   const routes = useRoutes();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const filters = useFilterState(SKILL_FILTERS);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortDescriptor | null>(null);
@@ -486,6 +492,7 @@ export default function SkillsList(): JSX.Element {
           insightsQuery.refetch(),
           openSuggestions.query.refetch(),
           tagsQuery.refetch(),
+          invalidateAllRiskListPolicies(queryClient),
         ]);
       }}
       isRefreshing={
@@ -497,6 +504,10 @@ export default function SkillsList(): JSX.Element {
       }
     >
       <div className="space-y-4">
+        <RequireScope scope="org:admin" level="section">
+          <SkillPromptInjectionPolicyCard />
+        </RequireScope>
+
         {draining && (
           <Text small muted role="status" aria-live="polite">
             Loading all skills to finish this view...
@@ -617,6 +628,69 @@ export default function SkillsList(): JSX.Element {
         onOpenChange={setDialogOpen}
       />
     </ResourceListPage>
+  );
+}
+
+function SkillPromptInjectionPolicyCard(): JSX.Element | null {
+  const routes = useRoutes();
+  const policiesQuery = useRiskListPolicies(undefined, undefined, {
+    throwOnError: false,
+  });
+  if (policiesQuery.error && !policiesQuery.data) {
+    return (
+      <div className="space-y-2">
+        <ErrorAlert
+          title="Unable to load prompt injection policy"
+          error={policiesQuery.error}
+        />
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => void policiesQuery.refetch()}
+        >
+          Retry policy status
+        </Button>
+      </div>
+    );
+  }
+  if (!policiesQuery.data) return null;
+
+  const policy = policiesQuery.data.policies.find(
+    (candidate) =>
+      candidate.enabled && candidate.sources.includes("prompt_injection"),
+  );
+  const action = policy ? (
+    <routes.policyCenter.detail.Link params={[policy.id]}>
+      <Button size="sm" variant="secondary">
+        View policy
+      </Button>
+    </routes.policyCenter.detail.Link>
+  ) : (
+    <routes.policyCenter.new.Link
+      queryParams={{ kind: "standard", category: "prompt_injection" }}
+    >
+      <Button size="sm" variant="secondary">
+        Set up scanning
+      </Button>
+    </routes.policyCenter.new.Link>
+  );
+
+  return (
+    <div className="border-border bg-muted/20 flex flex-wrap items-center justify-between gap-4 border p-4">
+      <div className="space-y-1">
+        <Text variant="subheading">
+          {policy
+            ? "Prompt injection scanning configured"
+            : "Set up prompt injection scanning"}
+        </Text>
+        <Text small muted>
+          {policy
+            ? "Captured skill manifests are checked by an enabled policy."
+            : "Add a policy to check future captured skill manifests for hidden instructions."}
+        </Text>
+      </div>
+      {action}
+    </div>
   );
 }
 

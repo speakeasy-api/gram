@@ -20,6 +20,7 @@ import {
 } from "@/components/detail/settings-section";
 import { useRoutes } from "@/routes";
 import type { SkillVersion } from "@gram/client/models/components/skillversion.js";
+import type { SkillPromptInjectionFinding } from "@gram/client/models/components/skillpromptinjectionfinding.js";
 import { useSkill } from "@gram/client/react-query/skill.js";
 import { useSkillVersionsInfinite } from "@gram/client/react-query/skillVersions.js";
 import { Badge } from "@/components/ui/Badge";
@@ -71,6 +72,30 @@ const SKILL_SECTION_IDS: readonly string[] = [
   SKILL_VERSIONS_SECTION_ID,
   SKILL_TIMELINE_SECTION_ID,
   SKILL_DANGER_SECTION_ID,
+];
+
+const promptInjectionFindingColumns: Column<SkillPromptInjectionFinding>[] = [
+  {
+    key: "rule",
+    header: "Rule",
+    width: "220px",
+    render: (finding) => (
+      <span className="font-mono text-sm">{finding.ruleId}</span>
+    ),
+  },
+  {
+    key: "description",
+    header: "Description",
+    render: (finding) => <Text small>{finding.description}</Text>,
+  },
+  {
+    key: "confidence",
+    header: "Confidence",
+    width: "120px",
+    render: (finding) => (
+      <Text small>{Math.round(finding.confidence * 100)}%</Text>
+    ),
+  },
 ];
 
 function versionAnchorLabel(
@@ -292,6 +317,33 @@ function SkillDetailSections({
           skillId={skillId}
           latestVersion={latestVersion}
         />
+      )}
+
+      {skillQueryData.promptInjectionFindings.length > 0 && (
+        <SettingsSection>
+          <SettingsSection.Header>
+            <SettingsSection.Title>
+              Prompt injection flags
+            </SettingsSection.Title>
+            <SettingsSection.Description>
+              Findings detected in the current skill version.
+            </SettingsSection.Description>
+          </SettingsSection.Header>
+          <SettingsSection.Panel>
+            <SettingsSection.Body>
+              <div className="overflow-x-auto">
+                <Table
+                  columns={promptInjectionFindingColumns}
+                  data={skillQueryData.promptInjectionFindings}
+                  rowKey={(finding) =>
+                    `${finding.ruleId}:${finding.description}:${finding.confidence}`
+                  }
+                  className="min-w-[640px]"
+                />
+              </div>
+            </SettingsSection.Body>
+          </SettingsSection.Panel>
+        </SettingsSection>
       )}
 
       <SkillInsightsSection

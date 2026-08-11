@@ -103,6 +103,35 @@ func (q *Queries) CountPublishOutboxRows(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countSkillScanRecords = `-- name: CountSkillScanRecords :one
+SELECT count(*)
+FROM risk_results rr
+JOIN skill_versions sv ON sv.id = rr.skill_version_id
+JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = $1
+  AND s.name = $2
+  AND (
+    NOT $3::boolean
+    OR (rr.source = 'prompt_injection' AND rr.found IS TRUE)
+  )
+`
+
+type CountSkillScanRecordsParams struct {
+	ProjectID uuid.UUID
+	SkillName string
+	FoundOnly bool
+}
+
+// Test-only fixture: counts recorded scans of a version of the named skill.
+// found_only narrows the count to prompt-injection findings; otherwise every
+// recorded scan counts, clean coverage rows included.
+func (q *Queries) CountSkillScanRecords(ctx context.Context, arg CountSkillScanRecordsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countSkillScanRecords, arg.ProjectID, arg.SkillName, arg.FoundOnly)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createOrganizationMetadataFixture = `-- name: CreateOrganizationMetadataFixture :exec
 INSERT INTO organization_metadata (
     id,
