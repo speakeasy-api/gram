@@ -107,15 +107,21 @@ class CumulativeWebSpeechDictationAdapter implements DictationAdapter {
       cancel: () => recognition.abort(),
       onSpeechStart: (callback) => {
         speechStartCallbacks.add(callback);
-        return () => speechStartCallbacks.delete(callback);
+        return () => {
+          speechStartCallbacks.delete(callback);
+        };
       },
       onSpeechEnd: (callback) => {
         speechEndCallbacks.add(callback);
-        return () => speechEndCallbacks.delete(callback);
+        return () => {
+          speechEndCallbacks.delete(callback);
+        };
       },
       onSpeech: (callback) => {
         speechCallbacks.add(callback);
-        return () => speechCallbacks.delete(callback);
+        return () => {
+          speechCallbacks.delete(callback);
+        };
       },
     };
 

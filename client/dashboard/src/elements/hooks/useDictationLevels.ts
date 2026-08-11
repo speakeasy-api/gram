@@ -24,10 +24,9 @@ export function useDictationLevels(
   transcript: string | undefined,
   sampleCount: number,
 ): number[] {
-  const [levels, setLevels] = useState<number[]>(() =>
-    new Array<number>(sampleCount).fill(0),
-  );
-  const historyRef = useRef<number[]>(new Array<number>(sampleCount).fill(0));
+  const emptyTrail = () => Array.from<number>({ length: sampleCount }).fill(0);
+  const [levels, setLevels] = useState<number[]>(emptyTrail);
+  const historyRef = useRef<number[]>(emptyTrail());
   // Read inside the animation frame so a transcript change doesn't restart it.
   const transcriptRef = useRef(transcript);
   const lastSeenRef = useRef(transcript);
