@@ -22,11 +22,11 @@ import type { RiskSignal } from "@gram/client/models/components/risksignal.js";
 import { useRiskCreateExclusionMutation } from "@gram/client/react-query/riskCreateExclusion.js";
 import { useRiskSignals } from "@gram/client/react-query/riskSignals.js";
 import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { getRuleTitleFallback } from "../risk-utils";
+import { getRuleTitleFallback, scoreToRating } from "../risk-utils";
 import { invalidateExclusionSurfaces } from "../exclusion-invalidation";
 import { useDismissFinding } from "../useDismissFinding";
 import {
@@ -63,9 +63,6 @@ const GROUP_MODES = new Set<SignalGroupMode>(
   GROUP_OPTIONS.map((option) => option.value),
 );
 
-const LIVE_WINDOW_MS = 24 * 60 * 60 * 1000;
-const LIVE_TICK_MS = 60_000;
-
 export default function Watchdog(): JSX.Element {
   return (
     <RequireScope scope="org:admin" level="page">
@@ -83,7 +80,6 @@ export default function Watchdog(): JSX.Element {
 
 function WatchdogContent(): JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams();
-  const live = searchParams.get("live") === "1";
   const selectedSignalKey = searchParams.get("signal");
   const groupModeParam = searchParams.get("group");
   const groupMode: SignalGroupMode = GROUP_MODES.has(
@@ -103,31 +99,7 @@ function WatchdogContent(): JSX.Element {
     clearCustomRange,
   } = useDateRangeFilter("1d");
 
-  // Live mode is a self-advancing 24h window: a minute interval recomputes
-  // from/to, which re-keys the query and refetches. No push infra involved.
-  const [liveWindow, setLiveWindow] = useState<{ from: Date; to: Date } | null>(
-    null,
-  );
-  useEffect(() => {
-    if (!live) {
-      setLiveWindow(null);
-      return;
-    }
-    const compute = () => {
-      const now = new Date();
-      setLiveWindow({
-        from: new Date(now.getTime() - LIVE_WINDOW_MS),
-        to: now,
-      });
-    };
-    compute();
-    const id = setInterval(compute, LIVE_TICK_MS);
-    return () => clearInterval(id);
-  }, [live]);
-  const window = useMemo(
-    () => (live && liveWindow ? liveWindow : { from, to }),
-    [live, liveWindow, from, to],
-  );
+  const window = useMemo(() => ({ from, to }), [from, to]);
 
   const setUrlParam = (key: string, value: string | null) => {
     setSearchParams(
@@ -266,31 +238,18 @@ function WatchdogContent(): JSX.Element {
     selection.clear();
   };
 
-  const rangeLabel = live
-    ? "live (last 24 hours)"
-    : formatDateRangeLabel(dateRange, customRangeLabel);
+  const rangeLabel = formatDateRangeLabel(dateRange, customRangeLabel);
 
   const controls = (
     <span className="flex items-center gap-2">
-      <Button
-        variant={live ? "primary" : "tertiary"}
-        size="sm"
-        onClick={() => setUrlParam("live", live ? null : "1")}
-      >
-        <Button.Text>Live</Button.Text>
-      </Button>
       <TimeRangePicker
         preset={customRange ? null : dateRange}
         customRange={customRange}
         customRangeLabel={customRangeLabel}
         availablePresets={WATCHDOG_PRESETS}
-        // Picking a range exits Live mode. The `live` removal must ride the
-        // same search-param update as the range change: two setter calls in
-        // one handler would each start from the pre-click params, and the
-        // later one would resurrect live=1.
-        onPresetChange={(preset) => setDateRangeParam(preset, { live: null })}
+        onPresetChange={(preset) => setDateRangeParam(preset)}
         onCustomRangeChange={(rangeFrom, rangeTo, label) =>
-          setCustomRangeParam(rangeFrom, rangeTo, label, { live: null })
+          setCustomRangeParam(rangeFrom, rangeTo, label)
         }
         onClearCustomRange={clearCustomRange}
       />
@@ -491,7 +450,7 @@ function SeverityChip({
       aria-pressed={active}
       onClick={onToggle}
       className={cn(
-        "inline-flex cursor-pointer items-center gap-2 rounded-sm border px-3 py-1.5 font-mono text-xs tracking-wide uppercase transition-opacity",
+        "inline-flex h-10 cursor-pointer items-center gap-2 rounded-sm border px-3 font-mono text-xs tracking-wide uppercase transition-opacity",
         !active && "opacity-40",
       )}
       style={{ borderColor: color, color }}
@@ -500,6 +459,21 @@ function SeverityChip({
       {severity}
     </button>
   );
+}
+
+/** MetricCard tone for the org risk score, mirroring the signal table's
+ * severity coding: red for high/critical bands, amber for medium, plain
+ * ink for low. */
+function riskScoreTone(score: number): "destructive" | "warning" | "neutral" {
+  switch (scoreToRating(score)) {
+    case "critical":
+    case "high":
+      return "destructive";
+    case "medium":
+      return "warning";
+    case "low":
+      return "neutral";
+  }
 }
 
 function exclusionsDialogDescription(count: number): string {
@@ -602,7 +576,7 @@ function KPIRow({
         displayValue={data.orgRiskScore.toFixed(1)}
         previousValue={data.previousOrgRiskScore}
         invertDelta
-        tone="information"
+        tone={riskScoreTone(data.orgRiskScore)}
         icon="gauge"
         comparisonLabel="vs previous period"
         subtext={
@@ -616,14 +590,14 @@ function KPIRow({
         value={data.findings24h}
         previousValue={data.previousFindings24h}
         invertDelta
-        tone="information"
+        tone="neutral"
         icon="flag"
         comparisonLabel="vs previous 24h"
       />
       <MetricCard
         title="Open signals"
         value={data.openSignals}
-        tone="information"
+        tone="neutral"
         icon="radar"
         accentColor={data.criticalSignals > 0 ? "red" : undefined}
         subtext={`${data.criticalSignals} critical`}
@@ -633,7 +607,7 @@ function KPIRow({
         value={data.usersExposed}
         previousValue={data.previousUsersExposed}
         invertDelta
-        tone="information"
+        tone="neutral"
         icon="users"
         comparisonLabel="vs previous period"
       />

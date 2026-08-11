@@ -378,8 +378,10 @@ export function SignalDrawer({
                     <Button variant="primary" onClick={openSignalExclusion}>
                       <Button.Text>Create exclusion rule</Button.Text>
                     </Button>
+                    {/* Deliberately the only filled action: exclusion is the
+                        recommended path, false positive stays low-emphasis. */}
                     <Button
-                      variant="secondary"
+                      variant="tertiary"
                       disabled={collecting}
                       onClick={() => void collectAllFindings()}
                     >
