@@ -31,7 +31,7 @@ import { useSkill } from "@gram/client/react-query/skill.js";
 import { useSkillVersionsInfinite } from "@gram/client/react-query/skillVersions.js";
 import { Badge } from "@/components/ui/Badge";
 import { type Column, Table } from "@/components/ui/Table";
-import { AlertTriangle, ChevronRight } from "lucide-react";
+import { ChevronRight, CircleAlert } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import {
@@ -226,11 +226,11 @@ function SkillDetailSections({
 
   return (
     <>
-      <SkillPluginBanner skill={skill} />
-
       <PromptInjectionBanner
         findings={skillQueryData.promptInjectionFindings}
       />
+
+      <SkillPluginBanner skill={skill} />
 
       <SettingsSection>
         <SettingsSection.Header>
@@ -626,12 +626,12 @@ function PromptInjectionBanner({
       ? "A prompt injection finding was detected in the current skill version."
       : `${findings.length} prompt injection findings were detected in the current skill version.`;
   return (
-    <StatusBanner tone="warning">
+    <StatusBanner tone="destructive">
       <Collapsible open={expanded} onOpenChange={setExpanded}>
         <div className="flex flex-col gap-3 p-6">
           <div className="flex items-center gap-2">
-            <AlertTriangle className="text-warning-foreground h-4 w-4 shrink-0" />
-            <Text className="text-warning-foreground text-base font-semibold">
+            <CircleAlert className="text-destructive h-4 w-4 shrink-0" />
+            <Text className="text-destructive text-base font-semibold">
               Prompt injection flagged
             </Text>
           </div>
