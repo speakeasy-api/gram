@@ -228,10 +228,18 @@ func RedactCommand(raw string) string {
 	fields := strings.Fields(raw)
 	out := make([]string, 0, len(fields))
 
+	// Environment assignments are only legal before the command word, and
+	// package specs only appear after one, as arguments. Tracking that
+	// boundary is what lets `TOKEN==secret npx …` redact as an assignment
+	// whose value starts with `=` while `uvx authlib==1.3.0` keeps its
+	// version pin.
+	inEnvPrefix := true
+
 	for i := 0; i < len(fields); i++ {
 		field := fields[i]
 
 		if strings.HasPrefix(field, "-") {
+			inEnvPrefix = false
 			// A short option can carry its value attached in the curl style
 			// (`-HX-Api-Key:…`, `-H"Authorization: …"`). Only the two-rune
 			// flag is examined: long flags attach values with `=`, which the
@@ -268,10 +276,14 @@ func RedactCommand(raw string) string {
 			continue
 		}
 
-		if name, value, ok := secretEnvAssignment(field); ok {
+		if name, value, ok := secretEnvAssignment(field, inEnvPrefix); ok {
 			out = append(out, name+"="+redactedValue)
 			i = skipOpenQuote(fields, i, value)
 			continue
+		}
+
+		if !envAssignmentShaped(field) {
+			inEnvPrefix = false
 		}
 
 		if u, ok := absoluteHTTPURL(unquoted(field)); ok {
@@ -368,28 +380,24 @@ func unquoted(s string) string {
 }
 
 // secretEnvAssignment reports whether a token is a NAME=value environment
-// prefix whose name marks it as credential-bearing, returning the name to keep
-// and the value consumed so far. A token whose left side is not a valid
+// assignment whose name marks it as credential-bearing, returning the name to
+// keep and the value consumed so far. A token whose left side is not a valid
 // environment-variable name is never treated as one.
-func secretEnvAssignment(field string) (string, string, bool) {
-	name, value, found := strings.Cut(field, "=")
-	if !found || name == "" {
+func secretEnvAssignment(field string, inEnvPrefix bool) (string, string, bool) {
+	if !envAssignmentShaped(field) {
 		return "", "", false
 	}
 
-	// A pypi exact spec (`authlib==1.3.0`) cuts to a value that starts with
-	// another `=`. That token is a package spec, not an assignment, and
-	// redacting it would strip the version pin off any package whose name
-	// happens to contain a secret marker.
-	if strings.HasPrefix(value, "=") {
-		return "", "", false
-	}
+	name, value, _ := strings.Cut(field, "=")
 
-	for _, r := range name {
-		isWord := r == '_' || (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
-		if !isWord {
-			return "", "", false
-		}
+	// As a command argument, a token that cuts to a value starting with
+	// another `=` is a pypi exact spec (`authlib==1.3.0`), not an assignment,
+	// and redacting it would strip the version pin off any package whose name
+	// happens to contain a secret marker. Before the command word no package
+	// spec can appear, so there `TOKEN==secret` is a real assignment whose
+	// value starts with `=` and is still redacted.
+	if !inEnvPrefix && strings.HasPrefix(value, "=") {
+		return "", "", false
 	}
 
 	if !isSecretFlag(name) {
@@ -397,6 +405,24 @@ func secretEnvAssignment(field string) (string, string, bool) {
 	}
 
 	return name, value, true
+}
+
+// envAssignmentShaped reports whether a token has the NAME=… shape of a shell
+// environment assignment: a non-empty name of word characters followed by `=`.
+func envAssignmentShaped(field string) bool {
+	name, _, found := strings.Cut(field, "=")
+	if !found || name == "" {
+		return false
+	}
+
+	for _, r := range name {
+		isWord := r == '_' || (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
+		if !isWord {
+			return false
+		}
+	}
+
+	return true
 }
 
 // redactedURL renders a URL with everything that is per-install or secret

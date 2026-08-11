@@ -629,6 +629,22 @@ func TestRedactCommand_PyPIExactSpecIsNotAnEnvAssignment(t *testing.T) {
 	require.True(t, identity.Resolve(got).VersionPinned)
 }
 
+// Before the command word no package spec can appear, so a credential whose
+// value happens to start with `=` (`TOKEN==secret cmd`) is a real environment
+// assignment and must still redact — the PyPI-spec exemption only applies to
+// command arguments.
+func TestRedactCommand_EnvPrefixDoubleEqualsStillRedacts(t *testing.T) {
+	t.Parallel()
+
+	got := identity.RedactCommand("MY_TOKEN==fabricated-abc npx -y @scope/server")
+	require.Equal(t, "MY_TOKEN=<redacted> npx -y @scope/server", got)
+
+	// A non-secret assignment before the command keeps the prefix position:
+	// the secret assignment after it still redacts.
+	chained := identity.RedactCommand("NODE_ENV=production MY_TOKEN==fabricated-def npx -y @scope/server")
+	require.Equal(t, "NODE_ENV=production MY_TOKEN=<redacted> npx -y @scope/server", chained)
+}
+
 // Rotated secrets must not split one server into two reviews: the same
 // command with different tokens redacts to the same string.
 func TestRedactCommand_RotatedTokensRedactIdentically(t *testing.T) {
