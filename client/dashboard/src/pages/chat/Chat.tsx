@@ -3,13 +3,14 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent,
   type ReactElement,
 } from "react";
 import { Link, Outlet, useNavigate, useParams } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { useAui, useAuiState } from "@assistant-ui/react";
-import { ActiveChatTitle, Chat } from "@/elements";
+import { ActiveChatTitle, Chat, ChatComposer } from "@/elements";
 import {
   ChevronLeft,
   Home,
@@ -160,7 +161,8 @@ export function ChatLanding({
   const { user } = useSession();
   const navigate = useNavigate();
   const routes = useRoutes();
-  const { sendPrompt, assistantNeedsAdmin } = useInsightsState();
+  const { sendPrompt, assistantNeedsAdmin, assistantReady } =
+    useInsightsState();
   const [value, setValue] = useState("");
   const [inputFocused, setInputFocused] = useState(false);
   const [activeCommand, setActiveCommand] = useState(0);
@@ -259,6 +261,35 @@ export function ChatLanding({
           <p className="border-border bg-card text-muted-foreground border px-4 py-3 text-sm">
             Ask an admin to enable the Project Assistant for this project.
           </p>
+        ) : assistantReady ? (
+          // The real AUI composer, bound to the shared runtime: sending happens
+          // in the runtime itself, so this entry point has dictation,
+          // attachments, tool mentions and skill context like every other one.
+          // Navigation to the conversation view is driven by the first message
+          // landing in the thread, not by this component sending.
+          // `gram-chat-landing` is read from inside the Elements shadow root
+          // via :host-context, so it must sit on an ancestor of the host — not
+          // on anything ChatComposer renders inside it.
+          <div
+            className="gram-chat-landing border-border bg-card border"
+            // Cycling example prompts ride in as custom properties: they
+            // inherit into the Elements shadow root, so the placeholder can
+            // crossfade without re-rendering the composer (see
+            // CHAT_LANDING_COMPOSER_CSS).
+            style={
+              {
+                "--gram-composer-placeholder": JSON.stringify(placeholder),
+                "--gram-composer-placeholder-opacity": placeholderVisible
+                  ? 1
+                  : 0,
+              } as CSSProperties
+            }
+          >
+            <ChatComposer />
+            <StartFreshThread />
+            <SeedComposerDraft value={value} onSeeded={() => setValue("")} />
+            <NavigateOnFirstMessage />
+          </div>
         ) : (
           <form
             onSubmit={(e) => {
@@ -337,6 +368,78 @@ export function ChatLanding({
       )}
     </div>
   );
+}
+
+/**
+ * Carries a draft typed into the fallback input over to the shared composer.
+ *
+ * The fallback renders only until the assistant runtime is ready; the two
+ * controls keep their drafts in different places, so without this a message
+ * typed during that window vanishes when the composer swaps in. Runs after
+ * StartFreshThread so the text lands on the new thread, not the old one.
+ */
+function SeedComposerDraft({
+  value,
+  onSeeded,
+}: {
+  value: string;
+  onSeeded: () => void;
+}): null {
+  const aui = useAui();
+  const seededRef = useRef(false);
+  useEffect(() => {
+    if (seededRef.current || !value.trim()) return;
+    seededRef.current = true;
+    aui.composer().setText(value);
+    onSeeded();
+  }, [aui, value, onSeeded]);
+  return null;
+}
+
+/**
+ * The landing widgets always start a NEW conversation: they share one runtime
+ * with the dock, and the dock is the only surface that deliberately continues
+ * an existing chat. Without this, opening /chat (or project home) after a dock
+ * conversation would drop the next message into that thread.
+ */
+function StartFreshThread(): null {
+  const aui = useAui();
+  // Switch unconditionally, exactly once, as soon as the thread list has
+  // loaded. Reacting to "the thread has messages" instead would fire on the
+  // user's OWN send — switching the just-sent message out from under them and
+  // leaving an empty /chat/new. Thread ids are minted lazily
+  // (deferThreadIdMinting), so a visit that sends nothing costs no server chat.
+  const listLoading = useAuiState(({ threads }) => threads.isLoading);
+  const switchedRef = useRef(false);
+  useEffect(() => {
+    if (switchedRef.current || listLoading) return;
+    switchedRef.current = true;
+    aui.threads().switchToNewThread();
+  }, [aui, listLoading]);
+  return null;
+}
+
+/**
+ * Drops into the full-page conversation when the landing composer sends. The
+ * composer submits through the runtime directly, so there is no submit handler
+ * to navigate from — the turn starting is the signal. `/chat/new` then syncs
+ * to `/chat/:id` once the server mints the id.
+ */
+function NavigateOnFirstMessage(): null {
+  const navigate = useNavigate();
+  const routes = useRoutes();
+  // A run starting is the signal. Watching the message count instead would
+  // also fire when an existing conversation hydrates into the shared runtime
+  // (history loading grows the count), bouncing the user into a chat they
+  // never opened; `isRunning` only goes true for an actual stream.
+  const isRunning = useAuiState(({ thread }) => thread.isRunning);
+  const wasRunningRef = useRef(isRunning);
+  useEffect(() => {
+    const justStarted = isRunning && !wasRunningRef.current;
+    wasRunningRef.current = isRunning;
+    if (justStarted) void navigate(routes.chat.conversation.href("new"));
+  }, [isRunning, navigate, routes]);
+  return null;
 }
 
 /**
