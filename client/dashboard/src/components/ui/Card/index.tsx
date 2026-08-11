@@ -300,6 +300,8 @@ type CardDashboardProps = {
   action?: ReactNode;
   children: ReactNode;
   tooltip?: string;
+  /** Body classes, e.g. `p-0` for content that should reach the card edges. */
+  bodyClassName?: string;
 };
 
 /**
@@ -312,6 +314,7 @@ function CardDashboard({
   action,
   children,
   tooltip,
+  bodyClassName,
 }: CardDashboardProps): JSX.Element {
   return (
     <div className="bg-card text-card-foreground relative flex h-full w-full flex-col border">
@@ -332,7 +335,7 @@ function CardDashboard({
         </div>
         {action}
       </div>
-      <div className="px-6 py-5">{children}</div>
+      <div className={cn("px-6 py-5", bodyClassName)}>{children}</div>
     </div>
   );
 }

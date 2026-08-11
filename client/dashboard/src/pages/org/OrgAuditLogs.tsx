@@ -31,8 +31,11 @@ import React, {
   type ReactNode,
 } from "react";
 import { Link } from "react-router";
+import { Link as TextLink } from "@/components/ui/Link";
 import {
   formatAuditAction,
+  formatAuditActionLabel,
+  formatSubjectLabel,
   getActorLabel,
   renderVerb,
 } from "@/lib/audit-log-format";
@@ -123,14 +126,21 @@ function truncateMiddle(value: string, start = 18, end = 16) {
 }
 
 const SUBJECT_MONO_CLASS = "font-mono text-xs text-muted-foreground";
+// Same mono treatment minus the colour, so the design-system link palette wins.
+const SUBJECT_LINK_CLASS = "font-mono text-xs";
 
 // A subject rendered as a link to its detail page. Centralizes the mono styling
 // and hover affordance so every linked subject looks identical.
 function SubjectLink({ to, children }: { to: string; children: ReactNode }) {
   return (
-    <Link to={to} className={cn(SUBJECT_MONO_CLASS, "hover:underline")}>
-      {children}
-    </Link>
+    <TextLink
+      asChild
+      size="xs"
+      underline={false}
+      className={SUBJECT_LINK_CLASS}
+    >
+      <Link to={to}>{children}</Link>
+    </TextLink>
   );
 }
 
@@ -161,7 +171,11 @@ function renderSubject(log: AuditLog, orgSlug: string) {
 
   const href = subjectHref(log, orgSlug);
   if (href) {
-    return <SubjectLink to={href}>{subjectLinkText(log)}</SubjectLink>;
+    return (
+      <SubjectLink to={href}>
+        {formatSubjectLabel(subjectLinkText(log), log.subjectType)}
+      </SubjectLink>
+    );
   }
 
   if (log.subjectType === "asset") {
@@ -174,7 +188,7 @@ function renderSubject(log: AuditLog, orgSlug: string) {
             "inline-block max-w-[34ch] truncate align-bottom",
           )}
         >
-          {truncateMiddle(subjectLabel)}
+          {truncateMiddle(formatSubjectLabel(subjectLabel, log.subjectType))}
         </span>
       </SimpleTooltip>
     );
@@ -194,7 +208,11 @@ function renderSubject(log: AuditLog, orgSlug: string) {
     return null;
   }
 
-  return <span className={monoClass}>{getSubjectLabel(log)}</span>;
+  return (
+    <span className={monoClass}>
+      {formatSubjectLabel(getSubjectLabel(log), log.subjectType)}
+    </span>
+  );
 }
 
 function hasDiff(log: AuditLog): boolean {
@@ -227,7 +245,6 @@ function AuditLogRow({
 
   const actorLabel = getActorLabel(log);
   const verbText = renderVerb(log);
-  const subjectLink = subjectHref(log, orgSlug);
 
   const rowContent = (
     <div className="group flex items-center gap-3 px-4 py-2.5">
@@ -252,18 +269,9 @@ function AuditLogRow({
           </button>
         )}
       </div>
-      <span className="text-muted-foreground shrink-0 font-mono text-xs">
+      <span className="text-muted-foreground w-[5.5rem] shrink-0 text-right font-mono text-xs tabular-nums">
         {formatTimeOnly(log.createdAt, timestampMode)}
       </span>
-      {subjectLink && (
-        <Link
-          to={subjectLink}
-          aria-label={`Open ${getSubjectLabel(log)}`}
-          className="text-muted-foreground hover:text-foreground focus-visible:text-foreground shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-        >
-          <Icon name="arrow-right" className="size-4" />
-        </Link>
-      )}
     </div>
   );
 
@@ -448,7 +456,7 @@ function OrgAuditLogsInner() {
     () =>
       (facetsData?.actions ?? []).map((option) => ({
         ...option,
-        displayName: formatAuditAction(option.value),
+        displayName: formatAuditActionLabel(option.value),
       })),
     [facetsData?.actions],
   );
