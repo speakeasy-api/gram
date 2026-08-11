@@ -82,7 +82,15 @@ const SUBJECT_LINK_CLASS = "font-mono text-xs";
 
 // A subject rendered as a link to its detail page. Centralizes the mono styling
 // and hover affordance so every linked subject looks identical.
-function SubjectLink({ to, children }: { to: string; children: ReactNode }) {
+function SubjectLink({
+  to,
+  title,
+  children,
+}: {
+  to: string;
+  title?: string;
+  children: ReactNode;
+}) {
   return (
     <TextLink
       asChild
@@ -90,7 +98,9 @@ function SubjectLink({ to, children }: { to: string; children: ReactNode }) {
       underline={false}
       className={SUBJECT_LINK_CLASS}
     >
-      <Link to={to}>{children}</Link>
+      <Link to={to} title={title}>
+        {children}
+      </Link>
     </TextLink>
   );
 }
@@ -118,9 +128,12 @@ function renderSubject(log: AuditLog, orgSlug: string) {
 
   const href = subjectHref(log, orgSlug);
   if (href) {
+    // The humanized label drops most of the identifier, so keep the raw value
+    // reachable on hover the way the asset subject below does.
+    const raw = subjectLinkText(log);
     return (
-      <SubjectLink to={href}>
-        {formatSubjectLabel(subjectLinkText(log), log.subjectType)}
+      <SubjectLink to={href} title={raw}>
+        {formatSubjectLabel(raw, log.subjectType)}
       </SubjectLink>
     );
   }

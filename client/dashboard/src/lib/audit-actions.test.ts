@@ -1,5 +1,5 @@
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   AUDIT_ACTIONS,
@@ -7,8 +7,24 @@ import {
   staticActionPhrase,
 } from "./audit-actions";
 
-// vitest runs from client/dashboard.
-const AUDIT_PKG = join(process.cwd(), "../../server/internal/audit");
+// Walk up from the working directory to the repo root, so the guard resolves
+// whether vitest is invoked from client/dashboard or from the repo root.
+function findAuditPkg(): string {
+  let dir = process.cwd();
+  for (;;) {
+    const candidate = join(dir, "server/internal/audit");
+    if (existsSync(candidate)) return candidate;
+    const parent = dirname(dir);
+    if (parent === dir) {
+      throw new Error(
+        `could not locate server/internal/audit above ${process.cwd()}`,
+      );
+    }
+    dir = parent;
+  }
+}
+
+const AUDIT_PKG = findAuditPkg();
 
 /** Every `Foo Action = "resource:verb"` constant declared in the Go package. */
 function goAuditActions(): string[] {

@@ -488,15 +488,19 @@ function ProjectList({ children }: { children: React.ReactNode }) {
  */
 function SectionDivider({ label, inset }: { label: string; inset: boolean }) {
   return (
-    <div
-      className={cn("flex items-center gap-3 pt-5 pb-2", inset && "px-4")}
-      aria-hidden="true"
-    >
-      <div className="bg-border h-px w-6 shrink-0" />
-      <Text muted small className="text-muted-foreground/80 shrink-0">
+    <div className={cn("flex items-center gap-3 pt-5 pb-2", inset && "px-4")}>
+      <div aria-hidden="true" className="bg-border h-px w-6 shrink-0" />
+      {/* A real heading, not decoration: it is the only thing distinguishing
+          the favourites group from the rest of the list for screen readers. */}
+      <Text
+        as="h3"
+        muted
+        small
+        className="text-muted-foreground/80 shrink-0 font-normal"
+      >
         {label}
       </Text>
-      <div className="bg-border h-px flex-1" />
+      <div aria-hidden="true" className="bg-border h-px flex-1" />
     </div>
   );
 }
@@ -983,7 +987,10 @@ function RecentActivityCompact({ logs }: { logs: AuditLog[] }) {
                   {log.subjectDisplayName && (
                     <>
                       {" "}
-                      <span className="text-foreground font-medium">
+                      <span
+                        className="text-foreground font-medium"
+                        title={log.subjectDisplayName}
+                      >
                         {formatSubjectLabel(
                           log.subjectDisplayName,
                           log.subjectType,
