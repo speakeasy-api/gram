@@ -40,6 +40,7 @@ import { BlockPage } from "./pages/blocks/BlockDetail";
 import { SHARED_SKILL_BASE_PATH } from "./pages/skills/share-link";
 import { SharedSkillPage } from "./pages/skills/SharedSkillPage";
 import SwitchOrg from "./pages/demo/SwitchOrg";
+import TalkToUs from "./pages/demo/TalkToUs";
 import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
 
 export default function App(): JSX.Element {
@@ -335,6 +336,12 @@ const RouteProvider = () => {
         {routesWithSubroutes(unauthenticatedRoutes)}
         <Route path="/switch-org" element={<LoginCheck />}>
           <Route index element={<SwitchOrg />} />
+        </Route>
+        {/* Outside the app layout because it is a full-page gate, but behind
+            LoginCheck: an expired trial still has a session, and a logged-out
+            visitor has no trial to talk about. */}
+        <Route path="/talk-to-us" element={<LoginCheck />}>
+          <Route index element={<TalkToUs />} />
         </Route>
         <Route
           path="/shadow-mcp/request"
