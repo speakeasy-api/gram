@@ -124,7 +124,7 @@ export function overageLines(
 // negative, which prices as free, not as a rebate.
 export function paygLines(
   monthlyTokens: number,
-  rateAdjustPct: number = 0,
+  rateAdjustPct = 0,
 ): TierLine[] {
   const rateMultiplier = Math.max(0, 1 + rateAdjustPct / 100);
   return graduatedLines(
