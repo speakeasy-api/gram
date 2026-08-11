@@ -25,6 +25,18 @@ const MESH_VARIATIONS = [
   { angle: 75, focalPoint: "20% 100%" },
 ] as const;
 
+const SEEDED_BRAND_COLORS = [
+  "var(--color-brand-red-200)",
+  "var(--color-brand-red-400)",
+  "var(--color-brand-red-600)",
+  "var(--color-brand-green-200)",
+  "var(--color-brand-green-400)",
+  "var(--color-brand-green-600)",
+  "var(--color-brand-blue-200)",
+  "var(--color-brand-blue-400)",
+  "var(--color-brand-blue-600)",
+] as const;
+
 function hashSeed(seed: string): number {
   let hash = 2166136261;
   for (let index = 0; index < seed.length; index++) {
@@ -34,12 +46,28 @@ function hashSeed(seed: string): number {
   return hash >>> 0;
 }
 
-function meshVariation(seed: string | undefined) {
-  if (!seed) return MESH_VARIATIONS[0];
-  return (
-    MESH_VARIATIONS[hashSeed(seed) % MESH_VARIATIONS.length] ??
-    MESH_VARIATIONS[0]
-  );
+function meshTreatment(seed: string | undefined) {
+  if (!seed) {
+    const variation = MESH_VARIATIONS[0];
+    return {
+      variation,
+      gradient: `linear-gradient(${variation.angle}deg, ${RAINBOW_EDGE_STOPS})`,
+    };
+  }
+
+  const hash = hashSeed(seed);
+  const color =
+    SEEDED_BRAND_COLORS[hash % SEEDED_BRAND_COLORS.length] ??
+    SEEDED_BRAND_COLORS[0];
+  const variation =
+    MESH_VARIATIONS[
+      Math.floor(hash / SEEDED_BRAND_COLORS.length) % MESH_VARIATIONS.length
+    ] ?? MESH_VARIATIONS[0];
+
+  return {
+    variation,
+    gradient: `linear-gradient(${variation.angle}deg, ${color} 0%, ${color} 48%, transparent 78%)`,
+  };
 }
 
 /**
@@ -55,11 +83,11 @@ const GRAIN_TEXTURE_URL =
  * `bg-gradient-to-br from-card to-background`); the layers sit at -z-10 so
  * content stays above them, and clip themselves so the host doesn't need
  * `overflow-hidden` (which would clip popovers like the composer's slash
- * menu).
+ * menu). Passing a seed replaces the rainbow with one stable brand color and
+ * edge composition, allowing repeated cards to keep distinct identities.
  */
 export function BrandMeshLayers({ seed }: { seed?: string }): ReactElement {
-  const variation = meshVariation(seed);
-  const gradient = `linear-gradient(${variation.angle}deg, ${RAINBOW_EDGE_STOPS})`;
+  const { variation, gradient } = meshTreatment(seed);
   const mask = `radial-gradient(85% 120% at ${variation.focalPoint}, #000 0%, rgba(0,0,0,0.6) 40%, transparent 72%)`;
 
   return (
