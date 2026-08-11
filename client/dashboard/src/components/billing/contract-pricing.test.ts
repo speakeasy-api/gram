@@ -122,6 +122,13 @@ describe("paygDeltaMessage", () => {
     expect(paygDeltaMessage(-5000, 10)).toMatch(/check the platform fee/);
   });
 
+  it("keeps the modelling-error warning for out-of-window swings", () => {
+    // paygLines ignores swings at or past -100% and prices at list rates,
+    // so the message must not credit an adjustment that was never applied.
+    expect(paygDeltaMessage(-5000, -100)).toMatch(/check the platform fee/);
+    expect(paygDeltaMessage(-5000, -150)).toMatch(/check the platform fee/);
+  });
+
   it("reports an exact tie as identical pricing", () => {
     expect(paygDeltaMessage(0, 0)).toMatch(/identically/);
   });
