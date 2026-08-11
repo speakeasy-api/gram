@@ -62,8 +62,8 @@ const useFileSrc = (file: File | undefined) => {
 /**
  * Resolves an image attachment that lives behind Gram's authenticated serve
  * endpoint. A replayed thread has no `File` to make an object URL from, and the
- * URL cannot go straight into `<img src>` because the request needs session
- * headers — so fetch it and hand the preview a blob URL instead.
+ * stored URL cannot be used as an image source directly because the request
+ * needs session headers — so fetch it and hand the preview a blob URL instead.
  */
 const useAuthenticatedSrc = (url: string | undefined) => {
   const { config } = useElements();
@@ -221,11 +221,16 @@ const AttachmentThumb: FC = () => {
 
   return (
     <Avatar className="aui-attachment-tile-avatar h-full w-full rounded-none">
-      <AvatarImage
-        src={src}
-        alt="Attachment preview"
-        className="aui-attachment-tile-image object-cover"
-      />
+      {/* Only once a source resolves: a replayed image is fetched
+          asynchronously, and an image element with no source renders as a
+          broken-image box instead of the fallback icon. */}
+      {src && (
+        <AvatarImage
+          src={src}
+          alt="Attachment preview"
+          className="aui-attachment-tile-image object-cover"
+        />
+      )}
       <AvatarFallback delayMs={isImage ? 200 : 0}>
         <FileText className="aui-attachment-tile-fallback-icon size-8 text-muted-foreground" />
       </AvatarFallback>

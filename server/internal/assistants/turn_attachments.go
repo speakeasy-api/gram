@@ -150,7 +150,8 @@ func (s *ServiceCore) dashboardTurnAttachmentParts(ctx context.Context, projectI
 				Type: contentPartTypeImageURL,
 				Text: "",
 				ImageURL: &runtimeImageURL{
-					URL: fmt.Sprintf("data:%s;base64,%s", attachment.ContentType, base64.StdEncoding.EncodeToString([]byte(data))),
+					URL:    fmt.Sprintf("data:%s;base64,%s", attachment.ContentType, base64.StdEncoding.EncodeToString([]byte(data))),
+					Detail: "",
 				},
 			})
 			continue
