@@ -1,0 +1,984 @@
+server/internal/trials/queries.sql
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 20-29
+server/internal/scanners/promptinjection/openrouter/judge.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 115-119,144-146,185,189-192,209-210,214,216,231,244
+server/internal/xmcp/wellknown_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 199-203
+server/cmd/workos-backfill/global_roles.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-125
+client/dashboard/src/components/detail-body.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-48
+server/internal/chat/summarize_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 15-16,19,139,183,208-347
+server/internal/remotesessions/tokenservice.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 7,13-15,95-110,178-245
+  s_6cd0b3509a4ad1::t_80d248a540833f 246
+hooks/relay/client.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 30-34
+client/dashboard/src/pages/security/DetectionRules.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,88,146-150,155-175,177-185
+server/internal/risk/signals_internal_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-131
+client/dashboard/src/pages/demo/components/DemoBookingFlow.test.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 27,34-38,80-112
+  s_6cd0b3509a4ad1::t_2f500e3313683c 113
+server/clickhouse/migrations/atlas.sum
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,92-93
+server/internal/platformtools/types.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 6,11,63-68
+client/dashboard/src/pages/plugins/PluginSkillsSection.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 28
+server/internal/background/activities.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 69,159,206,358,371-374,376-394
+server/internal/platformmcp/operation_budget.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-82
+server/internal/litellm/setup_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 153
+client/dashboard/src/contexts/Telemetry.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 11,227-264
+  s_6cd0b3509a4ad1::t_cd36df5ab2749d 265-266
+server/internal/aiintegrations/chatgpt_conversation_import.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 485
+server/cmd/gram/platform_mcp.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-174
+server/internal/auth/assistanttokens/manager_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 182-245
+server/internal/platformmcp/tool_lifecycle.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-57
+server/internal/platformmcp/localfixture/config_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-56
+client/dashboard/src/components/sessions/useDrainedPages.test.ts
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-104
+server/internal/thirdparty/workos/stub.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 24-25,61-62,271-278,341-366
+server/migrations/20260810123455_platform-mcp-registration-state.sql
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-168
+server/clickhouse/local/golang_migrate/20260805161427_risk-findings-user-email.up.sql
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1
+hooks/relay/spool.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 66-73,87
+server/internal/background/activities/chat_resolutions/analyze_segment.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 122,154,165,197
+server/internal/feature/flags.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 49-52,70-73
+server/internal/mcp/authnchallenge.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 133-159
+.mise-tasks/backfill/workos.sh
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-8
+server/clickhouse/local/golang_migrate/atlas.sum
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,87-88
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/PublishingSection.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 9-12
+server/internal/chat/content_sanitizer_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-72
+server/internal/platformmcp/registration_integration_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-769
+client/dashboard/src/pages/platform-admin/Onboarding.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-104
+server/internal/auth/callback_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 6,641,654-669
+  s_6cd0b3509a4ad1::t_51b7fa7c0c4518 670-671
+server/internal/risk/signals_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-257
+.agents/skills/writing-skills/SKILL.md
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 14
+server/CHANGELOG.md
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 3-43
+server/internal/authz/scopes.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 45,72-78,112,198-199,233
+server/internal/risk/signals_ch.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-421
+server/internal/scanners/promptinjection/openrouter/judge_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 108,120,188
+server/internal/trialemails/service.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-202
+client/dashboard/src/pages/budgets/Budgets.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,230-231,239,251,263,276
+client/dashboard/src/components/observe/InsightsEmployeeDetail.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 2,18,523-524,530,542,550,558,571
+client/dashboard/src/components/ui/Input/index.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 2,32-36,52,57,60-61,114,153,194-208
+client/dashboard/src/pages/security/exclusion-sheet.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 32-33,45-51,53,56-62,129,229-260,262,294-300,311,319-326,338-372,392-427,429-444,455-461
+server/internal/platformtools/slack/serve_file.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-76
+server/internal/assistants/mcp_auth_handler_callback_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-21
+server/internal/platformtools/slack/tool_get_file_url_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-101
+client/dashboard/src/components/page-templates/detail-page.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-185
+server/internal/assistants/service_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 937,942,949,954,958,1017-1019,1899-1902,1905,1908,1911,1915-1919,1925,1928-1929,1933-1934,2385,2387,2391,2456-2515
+  s_6cd0b3509a4ad1::t_ded92675aa20c3 2516
+server/internal/skills/queries.sql
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1311-1335
+CLAUDE.md
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 119
+server/internal/risk/chrepo/signals.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-300
+server/internal/urn/platform_mcp_registration_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-46
+client/dashboard/src/components/observe/InsightsAgents.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 11,532-533,540,552,559,570
+client/dashboard/src/pages/platform-admin/AdminSection.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-57
+server/internal/platformmcp/adapters.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 16,280,284,288,292,306,313-320,322,336,347-353
+server/internal/access/impl.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 270,621,1272-1273,1275,1278,1306-1307,1310,1314,1327
+client/dashboard/src/pages/chatLogs/ChatDetailPanel.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 79,1412
+server/design/usersessionclients/design.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 137,139
+server/internal/assistants/service_self_heal_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 103-104,114,117,191
+server/internal/chat/set_pinned_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 31,36,49,53,84,108-143
+server/internal/background/activities/chat_resolutions/errors.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 103-106
+server/internal/platformmcp/operation_budget_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-59
+server/internal/platformmcp/telemetry_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-45
+server/internal/risk/finding_ch_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 528,532,538,572-605,809-867
+  s_6cd0b3509a4ad1::t_77c2b343c14145 868-869
+agents/runner/src/tools/mod.rs
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 2
+server/internal/thirdparty/loops/client_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 9,14,242-409
+  s_6cd0b3509a4ad1::t_c695183f7b5aa8 410
+server/internal/usersessions/clienthandlers.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 64-66,76-85,88,119-121,132-163
+client/dashboard/src/pages/access/RolesTab.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 38-39,46-48,132-133,141-143,145,156,172,176,205,207,217,299,313
+client/dashboard/src/components/stacked-time-series-panel.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 22
+client/dashboard/src/pages/org/OrgWebhooks.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,20-22,41-45,83,117
+client/dashboard/src/pages/skills/SkillsList.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 3,20-23,35,118,454-509,511-515,517-531,533-539,541-555,557-584,586-588,590-592,594-617,619-620,622-693
+server/internal/aiintegrations/chatgpt_conversation_import_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 135,164
+server/internal/mcpservers/queries.sql
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 91-121
+server/internal/platformmcp/readiness_service.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-146
+client/dashboard/src/components/page-templates/page-templates.mdx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-222
+server/internal/hooks/setup_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 204
+client/dashboard/src/pages/org/OrgAuditLogs.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 6,408,768-781,783-812,814-823,826-831,833-859,863-878,880-884,886,888-909,911-968,971-972,974-1031,1034-1042,1045
+docs/runbooks/workos-backfill.md
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-322
+server/internal/background/trial_emails_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-82
+client/dashboard/src/pages/security/unmask.ts
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-44
+server/internal/k8s/ingress_provisioner_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 69-76
+  s_6cd0b3509a4ad1::t_bf871a3b93f4f3 66-68
+client/dashboard/src/pages/demo/components/DemoBookingFlow.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 59-91,134,136,139-141,152-159,164-166,174
+server/internal/platformmcp/setup_resources_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-30
+server/internal/thirdparty/workos/client.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 209-210
+client/dashboard/src/pages/org/OrgLogs.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,17,140-144,303-304
+server/package.json
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 3
+server/internal/assistants/runtime_local_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 498-505
+server/migrations/atlas.sum
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,325-330
+server/internal/access/rbac_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 92
+client/dashboard/src/components/sessions/ClientSourceBadge.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 14-15,31-36
+server/internal/audit/platformmcpregistrations.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-131
+server/internal/platformmcp/localfixture/registry.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-100
+server/internal/chat/load_chat_apikey_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 61-63,65,81,231
+server/internal/platformmcp/oauthhttp_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 128-139
+server/internal/platformmcp/remotesessionprovider/adapter.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-369
+client/dashboard/src/pages/org/UserSessions.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 10,67,256-278,280-305,307-310,314-321,323,326-343,345-360
+docs/rbac.md
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 87,93-97,121-122,126,549-550
+server/internal/authz/grant_surface_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 17-21
+server/internal/platformmcp/registration_service.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-238
+client/dashboard/src/pages/skills/SkillFeedbackSection.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,14,249-250,257,264,276,286
+server/cmd/workos-backfill/main.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-2851
+server/internal/auth/register_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 57-61
+.mise-tasks/seed.mts
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1837-1841,1848,1855,1862,1869,1877,1880-1882,1888,1891,1893-1894,1900,2033,2067,2151-2228,2232-2239,2247-2259,2305-2310,2314-2353,2372-2373,2383-2386,5478-5482
+server/internal/mcp/authnchallenge_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 24,117-204,553-675,997-1044
+  s_6cd0b3509a4ad1::t_fb639031697359 1045
+client/dashboard/src/components/skill-detail-sidebar-nav.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 2-5,77,86,131,142,150,165
+client/dashboard/src/pages/security/RiskOverviewCategoryDetail.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,187-188,248-249,256
+client/dashboard/src/components/chart/stat-tile.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-176
+server/internal/mcp/resolved_mcp_endpoint_internal_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-77
+client/dashboard/src/components/page-header.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 81
+server/internal/platformmcp/registration_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-119
+server/internal/usersessions/listusersessionclients_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 5,13,15,147-221
+  s_6cd0b3509a4ad1::t_9849ba2baf6a32 222-223
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/ToolFilteringSection.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 25-28
+client/dashboard/src/components/page-templates/form-page.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-61
+client/dashboard/src/components/page-templates/README.md
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-163
+server/internal/platformtools/usersessions/tools.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 67-74,85,90-93
+server/internal/hooks/impl.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 32,59-65,207,232
+client/dashboard/src/pages/demo/SwitchOrg.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 44,46-47,52,54-55,62,68,127,139,147-148,151
+client/dashboard/src/components/org-sidebar.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 93-99,129-132,246-277,284-285
+client/dashboard/src/pages/org/OrgIdentity.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,289,302-324,326-362
+client/dashboard/src/pages/security/useSetupExclusionRule.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,3,11-14,23-26
+server/internal/assistants/runtime_fly_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1126-1133
+client/dashboard/src/components/ui/Table/index.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 408-412
+server/internal/mcpservers/impl.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 39,489-490,515
+client/dashboard/src/pages/security/RiskEventsPage.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,6-8
+server/internal/thirdparty/slack/api/files_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-182
+server/internal/assistants/mcp_auth_handler.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 23,39-45,72-88,154,158,172,175-176,178-186,188,192-207,213,234,240,286-289,302,318-324,401-612,614,629,694-699
+server/internal/remotesessions/challenge.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 180,224
+server/internal/thirdparty/workos/user.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 31-32
+server/internal/background/triggers/slack.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 69-84,194,217,238,259,280,301,437,495-498,719
+server/internal/chat/upsert_external_chat_title_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 49
+client/dashboard/src/pages/skills/SkillSharingControl.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,190,252
+client/dashboard/src/pages/org/external-services/ExternalServices.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 2,49-61,75-81,85-90,135-138,147-162
+server/internal/urn/platform_mcp_registration.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-157
+client/dashboard/src/components/trial-status-card.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 4-8,10,12-14,16-19,129-130,135
+go.mod
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 73,109
+server/internal/background/analyze_chat_resolutions.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 80-81
+client/dashboard/src/pages/toolBuilder/CustomTools.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,30,41-51,54-67
+client/dashboard/src/components/sessions/UserSessionClientsList.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-2,5-35,38-39,42-46,50-59,64,68-219,221-233,237-264,267,271,273-313,315-327,331-366
+  s_6cd0b3509a4ad1::t_bd4a245b93abf7 367
+server/internal/database/models.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 130-146,1459-1482,1522-1554,1572-1588,1729-1732,1848,2005
+server/internal/mcp/authnchallenge_authorize.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 128-133,141-145,246-251,263-274
+server/internal/mcp/authnchallenge_consent.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 32,398-401,403-419,424-438,502-513,542-585,587-599,602-604,607-612,614-617,620-621,624
+.agents/skills/clickhouse/SKILL.md
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 3,6-12,17-18,26,32,36,40,42,107-112
+server/internal/hooks/ingest_hooks.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 280-281,310-320,410
+server/internal/platformmcp/tool_catalog.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-131
+server/internal/platformmcp/tool_registration.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-54
+server/internal/thirdparty/workos/connection.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 5,94-145
+  s_6cd0b3509a4ad1::t_17fa24ee985d73 146
+client/dashboard/src/pages/playground/PlaygroundAuth.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 3,274-277
+server/internal/assistants/runtime_backend.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 15-41,56-60,62-65
+server/internal/platformmcp/provider_adapter.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-130
+client/dashboard/src/components/page-templates/overview-page.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-74
+client/dashboard/src/pages/demo/TalkToUs.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-131
+client/dashboard/src/pages/security/RiskOverviewUserDetail.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,142-143,152,159
+client/dashboard/src/pages/chatLogs/ChatLogs.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,6-8
+server/internal/organizations/setup_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 101,105-127,169-170,176,224-225,231,278-279,286
+server/cmd/gram/platform_mcp_local_fixture.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-40
+server/cmd/workos-backfill/directory_sync.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-431
+server/internal/assistants/turn_images.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-161
+.mise-tasks/smoke/platform-mcp.sh
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 3-6,10-27
+client/dashboard/src/pages/demo/upgrade-gate-copy.ts
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-63
+client/dashboard/.storybook/preview.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 31
+client/dashboard/src/components/mcp-server-x-sidebar-nav.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 2-5,199,263,266,269,274,280,301,363
+client/dashboard/src/pages/home/Home.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 5-9,49-54
+server/internal/aiintegrations/codex_cloud_import_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 144,201,303,323,382
+server/internal/externalmcp/oauthdiscovery.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 6,9,32,117-119,121,131-133,135,149-151,153,160,179-181,183,189,200,208,270-277,295-299,303,309-318,336-436
+client/dashboard/src/components/trial-status-card.test.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-7,25-28,166-169,200,203-204,206-207
+server/internal/audit/events.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 38
+server/internal/mcp/resolved_mcp_endpoint.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 247-256
+client/dashboard/src/contexts/AuthProvider.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 16,54,62-67,126,130,132-134,138-146
+  s_6cd0b3509a4ad1::t_65f91826e3643d 147
+client/dashboard/src/pages/security/exclusion-options.test.ts
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-115
+hooks/relay/drain.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 5-6,16,196,199-273,275,466,469
+server/internal/auth/setup_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 49-69,98,193-194,197,259-260,263,278
+server/design/usersessions/design.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 171-173,178
+client/dashboard/src/pages/platform-admin/Overview.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-160
+server/internal/assistants/runtime_local.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 300,456,468
+client/dashboard/src/pages/org/OrgApiKeys.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 3,26-28,30-32,181-203,206-220,222-237
+client/dashboard/src/pages/deployments/Deployments.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,30-43,45-53,215,222-229,312,333-344
+  s_6cd0b3509a4ad1::t_56fb745524f79d 345-347
+server/internal/chat/generate_title_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 34,52,76,107,125-128,149-207,209-212
+server/internal/platformmcp/repo/models.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 28-51,78-110,127-143
+client/dashboard/src/pages/platform-remote-identity-providers/PlatformRemoteIdentityProviders.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 2,48-69,133-136,143-171
+client/dashboard/CHANGELOG.md
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 3-35
+server/internal/trialemails/notifier.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-25
+server/internal/platformmcp/catalog.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-172
+server/internal/projects/impl.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 32,298
+server/internal/platformmcp/registration_service_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-382
+client/dashboard/src/components/sessions/ClientsAndSessionsTab.test.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 10,14-24,29-30,36,50-53,110-129,134-161,181,186-188,193-194,211-224,352-354,372-375,392-413,415-417,419-421,424-425,428-438,440-446,451-453,455-634,640-710,712-735
+client/dashboard/src/pages/integrations/Integrations.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 61-68
+client/dashboard/src/components/project/ActivityTimelineCard.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 3,26,102
+client/dashboard/src/pages/org/OrgDomains.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 2,66-68,745-748,1261
+server/internal/platformmcp/oauthhttp.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 144,403-414,744-748
+  s_6cd0b3509a4ad1::t_378706e50dc464 749
+server/internal/trialemails/service_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-405
+server/internal/background/trial_emails.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-126
+server/internal/platformmcp/remotesessionprovider/vertical_integration_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-401
+hooks/relay/skills.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 18,35-36,39-41,46,49,69-71,76-77,80,85,88-91,93-94,101,104-105,110-111,113,118,135-137
+client/dashboard/src/components/inline-empty-state.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-98
+server/internal/skills/impl.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1045,1059-1070,1134-1137
+client/dashboard/src/components/observe/InsightsEmployees.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 2,8,515-516,527,539,551,562
+client/dashboard/src/pages/remote-identity-providers/RemoteIdentityProviders.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,59-61,166-169,178-179,181,183-184,193-194,196-206,208,210-211,220-274
+server/internal/assistants/runtime_fly.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 101-108,605-609,834,847-850,863,866
+server/internal/assistants/runtime_gke_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 21,24,138-145,232-395
+  s_6cd0b3509a4ad1::t_74585f3db47309 396
+server/internal/hooks/upload_skill_content.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 11-13,15-16,20-21,24-25,82-83,93-96,99-152
+  s_6cd0b3509a4ad1::t_2efe81a98a84bb 153
+server/internal/aiintegrations/codex_cloud_import.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 561
+server/internal/platformmcp/gate.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 67,69,78-130
+server/internal/platformmcp/runtime_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 21,47,74,97-99,102,121,135
+server/internal/access/queries.sql
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 540-546,548-549,556,572-603
+server/internal/hooks/account_attribution_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 447,497
+client/dashboard/src/pages/security/SecurityOverview.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,14,374,378,389,400,413,421,549,551
+server/internal/assistants/provisioning.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 174-179
+client/dashboard/src/components/brand-mesh.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 3-6,10-12,14-47,49-69,84-85,87-90,97-99
+client/dashboard/src/components/billing/tum-usage-card.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 6
+client/dashboard/src/pages/skills/SkillActivitySections.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 5
+hooks/relay/skillupload.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 5-6,10,16-20,29-33,51,56,59,67-68,71-72
+client/dashboard/src/pages/demo/BookDemo.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 34,44
+server/clickhouse/migrations/20260805161421_risk-findings-user-email.sql
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1
+server/internal/assistants/turn_images_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-134
+client/dashboard/src/components/ui/TablePagination/index.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-60
+server/internal/auth/e2e_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 175-176,179
+client/dashboard/src/pages/login/components/auth-shell.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 81,90-94,98,103,108-111,114-119,123-129,135-137,142-143,147,152-153
+client/dashboard/src/pages/org/OrgAIIntegrations.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,11-17,25-33
+client/dashboard/src/components/ui/Card/index.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 4,239-240,255,280-285,298-339,349
+client/dashboard/src/pages/org/OrgSkills.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,7-14
+server/internal/assistants/runtime_content_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-228
+server/internal/chat/delete_chat_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 53,61,74,77-140
+server/internal/outbox/events/catalog_gen.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 42
+server/internal/chat/heal_deleted_chat_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 74,78,87
+server/internal/platformmcp/localfixture/mcp_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-152
+server/internal/assistants/runtime_router.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 78,85
+server/internal/auth/assistanttokens/manager.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 52-69,73-86,165-168,170-183,191,209-222
+server/internal/platformmcp/readiness_service_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-95
+server/migrations/20260810204321_remote-session-issuers-add-revocation-endpoint.sql
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-2
+client/dashboard/src/pages/security/PolicyCenter.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 3,580,889-895,899-930,932-933,935-978,980-1001
+server/internal/mcp/authnchallenge_consent_internal_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-198
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/DangerZoneSection.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 29
+server/internal/platformmcp/provider_authorization_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-63
+server/internal/access/listscopes_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 20
+client/dashboard/src/components/detail/detail-sidebar-nav.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-148
+client/dashboard/vite.config.ts
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 254
+client/dashboard/src/pages/plugins/Plugins.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 4,289-293,297-331,333-340,342-344,346-351,353-358,360-398,400-426,428-440,442-517
+server/internal/usersessions/queries.sql
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 154-175,329
+server/cmd/gram/start.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 103,135,138,349-354,490-494,684-686,880,980-981,1168,1204,1243,1245,1314-1334,1528
+client/dashboard/src/pages/costs/Costs.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,49-58,84-119
+server/internal/access/trial_admins_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-164
+server/cmd/workos-backfill/backfill_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-1430
+client/dashboard/src/components/built-in-mcp-sidebar-nav.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 2-5,32,53,57,76,83
+hooks/relay/spool_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 274
+server/internal/hooks/queries.sql
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 90-115
+server/internal/chat/content_sanitizer.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-79
+client/dashboard/src/components/page-templates/wizard-page.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-106
+client/dashboard/src/components/sessions/useDrainedPages.ts
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-62
+server/clickhouse/local/golang_migrate/20260805105902_risk-findings-app-team-attribution.up.sql
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-2
+server/internal/organizations/queries.sql
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 342-349
+server/internal/assistants/compaction_persist_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 63-65,70,81,83,102,132,139
+server/internal/assistants/source_adapter_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 53-82
+server/internal/platformmcp/queries.sql
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 389-959
+server/internal/access/listusergrants_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 33
+server/internal/assistants/service.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 15,24,27-28,47,403-405,451-453,481-488,1453-1458,1678-1682,1917,1966,1978-1997,2301-2304,2736,2751-2755,2765-2772,3472-3473,3475,3480,3491,3501,3521-3584
+  s_6cd0b3509a4ad1::t_2e415f77bc1dbe 3585
+server/internal/chat/turnstream_http.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 11,53-60
+server/internal/outbox/events/catalog_gen.yaml
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1789-1792
+  s_6cd0b3509a4ad1::t_783d0d1ad58ae7 1786-1788
+agents/runner/src/runtime.rs
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 8-11,42,94,124,309,403-410,515,592,680,826,853,897-898,901,921-983,989,993-995,1026,1031-1034,1045,1075,1159-1242
+client/dashboard/src/pages/collections/CreateCollection.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,3,46-48,206-228,230-244,246-282,284-295,297-312,314-319,321-334,336-366,371,374-376,378-386,389,391-408,410-412
+client/dashboard/src/components/sessions/session-filters.test.ts
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-53
+client/dashboard/src/pages/skills/SkillDetail.test.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 38,134,312,348-375
+  s_6cd0b3509a4ad1::t_b714a7635ed531 376
+server/internal/platformmcp/localfixture/configurator.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-348
+server/internal/thirdparty/slack/api/client.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 151-156,165
+client/dashboard/src/components/detail/settings-section.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-203
+server/internal/externalmcp/registryclient.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 34,46,64-81
+  s_6cd0b3509a4ad1::t_b135172d6604bc 82-83
+server/internal/hooks/skill_injection_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-316
+client/dashboard/src/pages/sources/remote-mcp/CreateRemoteMcp.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,9,20,72-76,176
+server/internal/chat/queries_scoping_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-126
+server/migrations/20260810163823_assistant-mcp-oauth-clients.sql
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-26
+server/clickhouse/migrations/20260805105857_risk-findings-app-team-attribution.sql
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-2
+server/internal/chat/chat_write_authorization_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-221
+server/internal/background/activities/generate_chat_title.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 68-73,75,115-117
+agents/runner/src/tools/inspect_asset.rs
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-262
+server/internal/auth/trial_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 13,19,22-23
+server/internal/assistants/compaction_persist.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 96-99,122-125,144
+server/internal/background/triggers/slack_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 380-432
+server/internal/externalmcp/oauthdiscovery_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 4,103,106-248
+server/internal/projects/queries.sql
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 20-27
+server/migrations/20260811105106_publish-outbox-insert-path.sql
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-12
+server/internal/platformtools/runtime/service.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 10,17,69-78,108-109
+client/dashboard/src/components/mcp-detail-sidebar-nav.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 2-5,70,156,162,182,215
+server/cmd/tools/migrations/riskfindings/source.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 115-119,148-152
+server/internal/usersessions/getusersessionclient_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 12,46-80
+  s_6cd0b3509a4ad1::t_cc57a41359f95a 81-82
+client/dashboard/.storybook/main.ts
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 7-8
+client/dashboard/src/pages/environments/Environments.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 2,28-30,75-85,88-112
+client/dashboard/src/pages/settings/Settings.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,20-25,27,29-46
+client/dashboard/src/routes.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 87-90,1083-1108
+server/internal/authz/grant_surface.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 44
+server/clickhouse/local/golang_migrate/20260805105902_risk-findings-app-team-attribution.down.sql
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-2
+server/clickhouse/local/golang_migrate/20260805161427_risk-findings-user-email.down.sql
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1
+client/dashboard/src/components/stat-row.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-43
+client/dashboard/package.json
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 4
+client/dashboard/src/pages/sources/tunneled-mcp/CreateTunneledMcp.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 2,14,47,81-86,130,135-139,218
+client/dashboard/src/lib/trial-status.ts
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 10-25,28,46-67,82-131
+server/internal/assistants/queries.sql
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 503-509,1364-1499
+client/dashboard/src/components/page-templates/scaffold.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-125
+client/dashboard/src/components/page-templates/full-bleed-page.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-46
+server/internal/platformmcp/telemetry.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-120
+client/dashboard/src/pages/skills/SkillInsightsSection.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 23
+server/internal/scanners/promptinjection/scanner.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 6,21,24-34,53-54,58,79-80,82,84-86,93-101,105-114
+  s_6cd0b3509a4ad1::t_60e85e4ffb1ed0 115
+server/internal/platformmcp/localfixture/oauth.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-362
+server/design/access/design.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 709,723,729,767,1135
+server/internal/organizations/invitecallback_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-152
+server/cmd/gram/worker.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 73,76,788-789,823-824,866
+client/dashboard/src/components/plugin-detail-sidebar-nav.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 3-6,78,86,133,156,160,167,208
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 16
+client/dashboard/src/pages/chat/Chat.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 38-41,84
+client/dashboard/src/App.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 8,14,24,43,169-201,280-293,306,340-344
+  s_6cd0b3509a4ad1::t_64fc45c64f1311 345
+client/dashboard/src/pages/sources/unproxied-mcp/CreateUnproxiedMcp.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,10,25-34,38,82-91,191
+server/internal/background/activities/workos_client.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-13
+hooks/relay/relay_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 778-783,835,838-839,867-868,924-925,932-933,936,944-955
+client/dashboard/src/pages/security/SecurityOverview.test.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 14-16,56,60-63
+server/internal/authz/checks.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 84-89,94-100
+  s_6cd0b3509a4ad1::t_fe26649c220676 101-102
+server/internal/background/activities/chat_resolutions/get_user_feedback.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 52-55,60-63
+client/dashboard/src/lib/user-session-client-source.ts
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 29-31,34,38,44
+client/dashboard/src/pages/team/Team.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 3,221-223,848-871,874-886,888-892,894-897,899-914,917-928,930-944,946-951,953-958,960-969,971-976,978-996,999-1042
+server/migrations/20260810205917_risk-results-skill-version-anchor.sql
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-14
+server/internal/platformmcp/tool_readiness.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-102
+client/dashboard/src/pages/mcp/overview/MCPOverviewTab.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,156,163,171,184,193,204
+server/design/risk/design.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 704-736,1957-2023
+server/internal/remotesessions/queries.sql
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 56-117,461-470,1234-1244
+  s_6cd0b3509a4ad1::t_c7ab688ba81ed3 1245
+server/internal/outbox/events/audit_log.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 50
+server/internal/platformmcp/localfixture/oauth_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-303
+server/internal/platformmcp/provider_adapter_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-142
+server/internal/platformtools/slack/tool_get_file_url.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-129
+server/internal/platformmcp/catalog_cursor_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-80
+client/dashboard/src/pages/prompts/Prompts.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,22,29-38,41-58
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/ServerUrlSection.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 39
+agents/runner/src/server.rs
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 4,18-25,51,176
+client/dashboard/src/components/project/ProjectDashboard.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 2,489,493,505,517,526,537,545,558,562,603,605,643,650,717,719,749,753,769,771,787
+server/internal/management/readmodel/readmodel.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-99
+server/internal/platformtools/registry.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 180-181,275-276,309-310
+  s_6cd0b3509a4ad1::t_39d20243a374ec 179
+server/internal/assistants/source_adapter_slack.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 37-49,136-146,151-165
+server/internal/hooks/ingest_hooks_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1030,1104
+server/internal/platformmcp/localfixture/registry_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-85
+client/dashboard/src/pages/sources/tunneled-mcp/TunneledMcpSetupTabs.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 2,480
+server/internal/thirdparty/loops/client.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 13,17,19,26-29,36-93,132-151,226-354,359-374
+  s_6cd0b3509a4ad1::t_db0696a9d11c90 375
+hooks/relay/skills_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 16-18,20,22-24,28-29,36-37,39-41,51-53,65,67,69-75,79,84-85,89-90,94-95
+.agents/skills/frontend/SKILL.md
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 430-490,503-504,518,521-533,538-539,545-554
+  s_6cd0b3509a4ad1::t_4eab6d95a9b8c9 555
+server/internal/platformmcp/catalog_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-80
+client/dashboard/src/components/sessions/session-filters.ts
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-121
+hooks/relay/envelope.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 143-153
+agents/runner/src/wire.rs
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 24-29,71,78-131,174-279
+client/dashboard/src/components/sessions/UserSessionsList.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-3,5-41,44-46,49-55,57-69,71-215,217-229,234-258,261,264-269,271-312,314-326,330-365
+  s_6cd0b3509a4ad1::t_d88232339de228 366-367
+server/internal/mcp/authnchallenge_authorize_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 8,80-174,281-317
+  s_6cd0b3509a4ad1::t_1050b061e4b6ba 318-319
+server/internal/mcp/authnchallenge_idp_callback.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 89-95,103-135,198-199
+server/cmd/workos-backfill/backfill_user.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-203
+hooks/relay/skillupload_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 14,17-19,24-25,29-30,32,34-35,39,46-47,49,53-55,57,60-61,73-79
+  s_6cd0b3509a4ad1::t_f1d84f1e0bfb7b 80
+server/internal/mv/usersessionclient.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 19-22,40
+server/internal/organizations/impl.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 50,106,117,119-121,135,1516-1525
+  s_6cd0b3509a4ad1::t_d45392c2e9fa11 1526
+server/internal/platformmcp/gate_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 26,35,58-145
+  s_6cd0b3509a4ad1::t_41311fb2ea07cf 146-147
+server/internal/background/activities/generate_chat_title_skip_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 95,148-150,153
+server/internal/risk/finding_ch.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 19,78-85,179,181-186,188,192-194,203-205,209-211,274-276,301-305,309,313-316,330-333,337
+server/cmd/workos-backfill/cloudsql.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-384
+server/internal/remotesessions/tokenservice_resolve_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 131-197
+server/internal/chat/message_capture_strategy.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 6,13,83-89,98-103,108,164-168,176,519-527
+client/dashboard/src/components/app-layout.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 57-59,253-261,263
+server/internal/platformmcp/provider_authorization.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-59
+client/dashboard/src/components/mcp-server-readiness-bar.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 19
+server/internal/chat/impl.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 685-703,712-720,749-755,758,766-776,779-784,787-808,816,832-835,1848-1853,1856-1858,1913-1926,1930-1931,1957-1958,1992-1998,2001-2003,2006-2013,2177-2178,2261,2279,2394-2397,2453-2455
+server/internal/mcp/authnchallenge_internal_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-24
+server/internal/background/activities/queries.sql
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 146,159
+server/internal/platformmcp/runtime.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 66,73
+server/internal/platformmcp/registration.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-733
+server/internal/background/worker.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 60,103-105,167,218,262,346,437,549
+server/internal/chat/sources.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 45,47-50,68
+server/internal/platformmcp/localfixture/configurator_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-172
+agents/runner/Cargo.toml
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 58
+server/internal/chat/queries.sql
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 84-85,88,96-100,148-154,159-162,174-178,300,739,793,800,834,851,863,889,918-919,928,933-934,947,954,964,981,988,996,1022,1068,1092-1094,1102,1137,1140-1145,1153-1163,1167-1168,1172-1176,1180,1256,1267-1268,1271-1273,1278-1282,1290-1300,1306
+client/dashboard/src/components/editable-text.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 3-70
+client/dashboard/src/pages/catalog/Catalog.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,138-142,154-207,209-211,213-264,283
+client/dashboard/src/pages/security/PolicyDetail.shadow-mcp.test.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 10,19-21,29-39,51-55,102-114,220-222,229-249
+  s_6cd0b3509a4ad1::t_fc48c2e1716d76 250-251
+server/internal/testenv/queries.sql
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 317-352,361-375
+server/internal/platformmcp/localfixture/config.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-196
+client/dashboard/src/pages/assistants/onboarding/tools/components.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 54
+server/internal/mv/usersession.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 36-43,54,59-62
+client/dashboard/src/pages/shadow-mcp/ShadowMCP.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,36-45,64-90,92-93
+client/dashboard/src/pages/skills/SkillDetail.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 3-8,26,29,34,229-232,617-665
+  s_6cd0b3509a4ad1::t_264f9763fb17b4 666-668
+server/cmd/gram/platform_mcp_local_fixture_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-107
+server/internal/mcp/wellknown_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 214-218
+server/internal/assistants/runtime_gke.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 41-49,188-208,210-223,225-286,290-291,293-294,296-316,318,320-324,326,328,360,374,384,417-421,426,431-439,441,443,450,462,525-529,534-566
+client/dashboard/src/components/page-templates/index.ts
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-38
+client/dashboard/src/components/ui/all-components.mdx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 113,485,487,489,604
+client/dashboard/src/pages/platform-admin/rbac-override-state.ts
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-213
+client/dashboard/src/pages/plugins/PluginDetail.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,19,581-582,589,598,606,627
+server/database/schema.sql
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1403-1406,1591-1594,3842-3845,4056-4059,4191-4194,4240-4291,4648-4649,4692-4693,4721-4730,5082-5085,5087,5092,5104,5113-5114,5122-5127,5132-5139,5155,6037-6257
+server/internal/auth/info_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 129-133,135-137,140-142,146-147,150-152,155,159,163-166,170-189
+  s_6cd0b3509a4ad1::t_e8299fb82742ea 190
+server/internal/mcp/authnchallenge_well_known.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 75-88,450-458,460,463
+server/internal/background/activities/chat_resolutions/delete_chat_resolutions.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 24-25,29-32
+server/design/skills/design.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1204-1215,1225-1226
+client/dashboard/src/pages/platform-admin/Features.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-481
+server/internal/k8s/ingress_provisioner.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 207-212
+  s_6cd0b3509a4ad1::t_9533a2090f9e47 204-206
+server/cmd/workos-backfill/backfill.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-577
+server/internal/platformmcp/remotesessionprovider/adapter_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-123
+.gitignore
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 119-121
+client/dashboard/src/components/ui/SegmentedControl/index.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 77-108
+server/internal/chat/message_capture_strategy_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 17,851-900
+  s_6cd0b3509a4ad1::t_899ed0699b6413 901
+client/dashboard/src/pages/collections/Collections.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,17-19,30-44
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 111,285-292,294-298,306-309,3467,3470,3513
+server/internal/assistants/runtime_router_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 29-31,54,82-83,131
+server/internal/auth/impl.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 49,122,142,145-147,167,347-350,759,762,891-895,898,908
+server/internal/hooks/ingest_org_settings_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 76
+client/dashboard/src/components/sessions/ClientsAndSessionsTab.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,4-12,14,21,28-31,53,57-114,122,130,134-141,145-147,152-153,156-196,207,212-220,227-228,232-236
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/BrandingSection.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 24-27
+server/internal/risk/impl.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 3071-3072,3074
+server/internal/testenv/testrepo/models.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 121
+server/internal/platformmcp/lifecycle.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-621
+client/dashboard/src/components/page-templates/resource-list-page.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-230
+server/internal/platformmcp/localfixture/mcp.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-192
+server/internal/platformmcp/tools.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 7,71-77,88-110,122-155,163,175-214
+  s_6cd0b3509a4ad1::t_379cc8fbfbb129 215
+server/internal/thirdparty/slack/api/files.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-212
+server/migrations/20260811105118_publish-outbox-lz4-seq-cache.sql
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-12
+client/dashboard/src/pages/skills/SuggestedSkillEditSection.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 8
+client/dashboard/src/pages/platform-admin/RbacOverride.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-282
+.agents/recommended-skills.json
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 4-13
+server/clickhouse/schema.sql
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1327-1338
+client/dashboard/src/pages/assistants/Assistants.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 2,7-10,79,155-174,291-295
+server/internal/assistants/runtime_telemetry.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 132,134
+server/internal/platformmcp/catalog_cursor.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-81
+client/dashboard/src/components/page-templates/settings-page.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-73
+agents/runner/src/compaction.rs
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 44-46,56,614-618,626,634,640,665,680-686,688,693-707,1000,1002,1004-1007,1009,1015,1028-1062
+client/dashboard/src/lib/initials.ts
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-13
+client/dashboard/src/components/page-templates/centered-page.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-14
+server/internal/aiintegrations/compliance_import_db_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 58,73
+client/dashboard/src/components/page-templates/index.stories.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-359
+server/internal/risk/signals.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-143
+server/internal/thirdparty/workos/queries.sql
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 133-135
+hooks/relay/runner.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 232,236
+client/dashboard/knip.config.ts
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 26-29
+server/internal/aiintegrations/compliance_import.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 228,434
+server/internal/assistants/mcp_auth_handler_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-312
+server/internal/skills/prompt_injection_findings_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-86
+client/dashboard/src/pages/platform-admin/PlatformAdminGate.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-26
+server/internal/platformmcp/setup_http_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-162
+client/dashboard/src/pages/demo/upgrade-gate-copy.test.ts
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-90
+hooks/relay/skillcapture_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 4-5,62-63,66-68,70-74,117,149,160-161,163,240,262-263,265,272,275-284
+hooks/relay/drain_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 93,119,136,139,143-144,450-520
+server/internal/platformmcp/lifecycle_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-88
+client/dashboard/src/components/page-templates/tabbed-page.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-118
+server/internal/risk/queries.sql
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 492-494,502-503,506-507,512-513,524-525,573,718,812,1018-1083,1110-1113,1178-1180,1273-1275,1533-1535,1544,1548-1549,1771-1783,1787,1792-1794,1807-1834,1850-1855,1865-1880
+client/dashboard/src/pages/skills/SkillsList.page.test.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 46-51,82-105,108-120,269-270,304-306,470-475,488-544
+server/internal/platformmcp/setup_http.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-171
+server/internal/platformtools/slack/serve_file_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-125
+server/internal/risk/repo/models.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 147
+server/internal/assistants/runtime.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 144,146-149,158,162,219,224-375,383-391
+server/internal/risk/chrepo/queries.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 55-63,155-157,224-226
+server/internal/remotesessions/repo/models.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 61
+client/dashboard/src/pages/logs/Logs.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1,6-8
+client/dashboard/src/components/observe/InsightsTools.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 57,2022,2038,2045,2051,2057,2063,2071
+client/dashboard/src/pages/security/RiskEvents.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 345-346
+client/dashboard/src/components/page-templates/workbench-page.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-47
+server/internal/chat/list_chats_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 146-148,151,170-179
+  s_6cd0b3509a4ad1::t_4309cff00cac90 180-182
+server/internal/platformmcp/setup_resources.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-67
+server/internal/chat/submit_feedback_test.go
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-135
+client/dashboard/src/lib/trial-status.test.ts
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 2-7,16-20,132-254
+client/dashboard/src/pages/security/exclusion-options.ts
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 1-114
+client/dashboard/src/pages/security/risk-ui.tsx
+  s_6cd0b3509a4ad1::t_cf167964ae7b1b 29-34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "e0c282446050e8a6e1f90e7a01674097c51aa1f9",
+  "prompts": {},
+  "sessions": {
+    "s_6cd0b3509a4ad1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fd754-8571-7ca3-9b80-f41a12ff308a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
