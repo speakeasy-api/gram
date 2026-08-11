@@ -186,14 +186,15 @@ jobs:
           # Components whose docker build jobs are skipped this run still need
           # a preview image tag; each entry names the image and the
           # .github/filters.yaml keys whose paths gate its builds. The
-          # dashboard image is built by docker-build-client whenever client OR
-          # server changes.
+          # dashboard and admin dashboard images are both built by
+          # docker-build-client whenever client OR server changes.
           components='[]'
           add() {
             components=$(jq -c --arg component "$1" --arg filters "$2" '. + [{component: $component, filters: $filters}]' <<< "$components")
           }
           [[ "$SERVER" == "true" ]] || add gram server
           [[ "$SERVER" == "true" || "$CLIENT" == "true" ]] || add gram-dashboard "server client"
+          [[ "$SERVER" == "true" || "$CLIENT" == "true" ]] || add gram-admin-dashboard "server client"
           [[ "$PYSTREAMS" == "true" ]] || add gram-pystreams pystreams
           echo "components=$components" >> "$GITHUB_OUTPUT"
 
@@ -1471,7 +1472,8 @@ jobs:
   docker-build-client:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes]
-    # Build dashboard docker image when server OR client changes exist (needed for preview environments)
+    # Build the dashboard and admin docker images when server OR client changes
+    # exist (the dashboard image is needed for preview environments)
     if: |
       !cancelled() &&
       (needs.changes.outputs.client == 'true' || needs.changes.outputs.server == 'true')
@@ -1563,6 +1565,28 @@ jobs:
           file: client/dashboard/Dockerfile
           git-auth-token: ${{ secrets.BOT_REPO_TOKEN }}
           cache-key: gram/dashboard-image
+
+      # The Gram admin dashboard. It ships as its own image because it is
+      # served from the admin origin (same host as the admin API) rather than
+      # the app origin. The `pnpm build` step above already produced its dist,
+      # so this only packages it; it needs no CDN asset upload.
+      # The image name must stay in step with adminDashboard.repository in the
+      # deployment Helm chart. "gram-admin" would be ambiguous: the admin API
+      # itself runs from the main "gram" image, not from an image of its own.
+      - name: Build and Push Admin Dashboard image to GCR
+        id: build-admin-dashboard
+        uses: ./.github/workflows/composite/build-push
+        with:
+          hub-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          hub-token: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ${{ env.REGISTRY }}
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+          image: ${{ env.DOCKER_REPOSITORY_OWNER }}/gram-admin-dashboard
+          context: ./client/admin
+          file: client/admin/Dockerfile
+          git-auth-token: ${{ secrets.BOT_REPO_TOKEN }}
+          cache-key: gram/admin-dashboard-image
 
       - name: Prune PNPM store
         if: success()
@@ -1669,6 +1693,10 @@ jobs:
       - name: Lint
         run: pnpm lint
         working-directory: client/dashboard
+
+      - name: Lint admin
+        run: pnpm lint
+        working-directory: client/admin
 
       - name: Knip (dead code / unused deps)
         run: pnpm knip
