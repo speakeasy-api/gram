@@ -16,6 +16,11 @@ run = "mise run start:admin"
 ready_cmd = "mise run check:daemon --name {{name}}"
 depends = ["mock-oidc"]
 
+[daemons.admin-dashboard]
+run = "mise run start:admin-dashboard"
+ready_cmd = "mise run check:daemon --name {{name}}"
+depends = ["admin"]
+
 [daemons.mock-oidc]
 run = "mise run start:mock-oidc"
 ready_cmd = "mise run check:daemon --name {{name}}"

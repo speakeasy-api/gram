@@ -21,6 +21,27 @@ if [ ! -f "mise.local.toml" ]; then
   exit 1
 fi
 
+# GRAM_ADMIN_SERVER_URL is now the browser-facing admin origin, meaning the
+# admin dashboard dev server, not the admin API. A worktree initialised before
+# that still carries a generated declaration pinned to the API port, and
+# --preserve below would keep it, leaving the OIDC redirect pointing at an
+# origin that serves no SPA. Clear it, plus the origin allowlist derived from
+# it, so the remap pass re-emits both against GRAM_ADMIN_DASHBOARD_PORT.
+#
+# As with PRESIDIO below, the `{{env.GRAM_ADMIN_PORT}}` template is the proof
+# the pair was machine generated: only `zero:remap-ports` writes that literal,
+# copied verbatim from the old mise.toml value. A hand-pinned admin URL lacks
+# the marker and is left entirely alone.
+if grep -E '^GRAM_ADMIN_SERVER_URL[[:space:]]*=' mise.local.toml \
+     | grep -qF '{{env.GRAM_ADMIN_PORT}}'; then
+  for key in GRAM_ADMIN_SERVER_URL GRAM_ADMIN_ALLOWED_ORIGINS; do
+    if grep -qE "^${key}[[:space:]]*=" mise.local.toml; then
+      mise unset --file mise.local.toml "$key"
+    fi
+  done
+  echo "✅ Cleared the stale admin origin declarations; re-mapped below."
+fi
+
 echo "⏳ Syncing port mappings..."
 added=0
 remap=$(mise run zero:remap-ports --preserve --format flat --file -)
