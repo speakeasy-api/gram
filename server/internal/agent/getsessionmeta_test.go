@@ -84,10 +84,12 @@ func TestGetSessionMeta_OwnerMatchAndEcho(t *testing.T) {
 	require.Equal(t, "fix flaky auth test", *byID[ownedUUID].Title)
 }
 
-// Personal-account sessions are excluded from every server path (portability
-// privacy rule): local user-initiated flows may move them, but the server
-// never serves their metadata.
-func TestGetSessionMeta_PersonalAccountExcluded(t *testing.T) {
+// Personal-account sessions resolve for their owner like any other session
+// (Q2 decision, 2026-08-10):
+// the caller is the authenticated owner reading their own metadata. Owner
+// matching still applies — this test pins the inclusion so a future privacy
+// tightening is a deliberate choice, not silent drift.
+func TestGetSessionMeta_PersonalAccountIncludedForOwner(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAgentService(t)
@@ -126,7 +128,10 @@ func TestGetSessionMeta_PersonalAccountExcluded(t *testing.T) {
 		SessionIds: []string{sessionID},
 	})
 	require.NoError(t, err)
-	require.Empty(t, res.Sessions, "personal-account sessions must not resolve through the server")
+	require.Len(t, res.Sessions, 1, "the owner's personal-account sessions resolve like any other")
+	require.Equal(t, chatID.String(), res.Sessions[0].ChatID)
+	require.NotNil(t, res.Sessions[0].Title)
+	require.Equal(t, "personal side project", *res.Sessions[0].Title)
 }
 
 // The whole surface stays dark until the organization is enrolled in the

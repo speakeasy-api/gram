@@ -291,16 +291,11 @@ func (q *Queries) ListDeviceAgentSyncs(ctx context.Context, organizationID strin
 const listOwnedChatSessionMeta = `-- name: ListOwnedChatSessionMeta :many
 SELECT c.id, c.title, c.updated_at
 FROM chats c
-LEFT JOIN user_accounts ua
-  ON ua.id = c.user_account_id
- AND ua.organization_id = c.organization_id
- AND ua.deleted_at IS NULL
 WHERE c.id = ANY($1::uuid[])
   AND c.project_id = $2
   AND c.organization_id = $3
   AND c.user_id = $4::text
   AND c.deleted IS FALSE
-  AND COALESCE(ua.account_type, '') <> 'personal'
 `
 
 type ListOwnedChatSessionMetaParams struct {
@@ -318,9 +313,12 @@ type ListOwnedChatSessionMetaRow struct {
 
 // Session-picker metadata for captured agent sessions, strictly owner-matched:
 // only chats whose user_id is the authenticated per-user-key owner, in the
-// key's enrolled project. Personal-account sessions are excluded — they are
-// reachable only through local, user-initiated flows, never via server
-// endpoints (session-portability privacy rule Q2).
+// key's enrolled project. Personal-account sessions are included (decision on
+// session-portability question Q2, 2026-08-10): the caller is the
+// authenticated owner reading their own metadata. Revisit before any endpoint
+// serves session CONTENT or admin-facing listings — personal-account
+// ownership attribution is partly device-bridge-inferred, which is acceptable
+// for titles but not for transcripts.
 func (q *Queries) ListOwnedChatSessionMeta(ctx context.Context, arg ListOwnedChatSessionMetaParams) ([]ListOwnedChatSessionMetaRow, error) {
 	rows, err := q.db.Query(ctx, listOwnedChatSessionMeta,
 		arg.ChatIds,

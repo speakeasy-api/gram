@@ -184,8 +184,7 @@ type GetSessionMetaPayload struct {
 // method.
 type GetSessionMetaResult struct {
 	// Metadata for the requested sessions that exist and are owned by the calling
-	// user. Requested ids with no captured chat, another owner, or a
-	// personal-account classification are omitted.
+	// user. Requested ids with no captured chat or another owner are omitted.
 	Sessions []*AgentSessionMeta
 }
 

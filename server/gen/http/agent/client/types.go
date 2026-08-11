@@ -107,8 +107,7 @@ type UpdateConfigurationResponseBody struct {
 // "getSessionMeta" endpoint HTTP response body.
 type GetSessionMetaResponseBody struct {
 	// Metadata for the requested sessions that exist and are owned by the calling
-	// user. Requested ids with no captured chat, another owner, or a
-	// personal-account classification are omitted.
+	// user. Requested ids with no captured chat or another owner are omitted.
 	Sessions []*AgentSessionMetaResponseBody `form:"sessions,omitempty" json:"sessions,omitempty" xml:"sessions,omitempty"`
 }
 

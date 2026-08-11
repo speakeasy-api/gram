@@ -290,5 +290,5 @@ var AgentSessionMetaModel = Type("AgentSessionMeta", func() {
 
 var GetSessionMetaResult = Type("GetSessionMetaResult", func() {
 	Required("sessions")
-	Attribute("sessions", ArrayOf(AgentSessionMetaModel), "Metadata for the requested sessions that exist and are owned by the calling user. Requested ids with no captured chat, another owner, or a personal-account classification are omitted.")
+	Attribute("sessions", ArrayOf(AgentSessionMetaModel), "Metadata for the requested sessions that exist and are owned by the calling user. Requested ids with no captured chat or another owner are omitted.")
 })

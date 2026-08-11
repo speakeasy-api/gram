@@ -60148,7 +60148,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AgentSessionMeta'
-          description: Metadata for the requested sessions that exist and are owned by the calling user. Requested ids with no captured chat, another owner, or a personal-account classification are omitted.
+          description: Metadata for the requested sessions that exist and are owned by the calling user. Requested ids with no captured chat or another owner are omitted.
       required:
         - sessions
     GetSetupDocsResponseBody:

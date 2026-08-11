@@ -41,8 +41,9 @@ func (s *Service) requireSessionPortability(ctx context.Context, organizationID 
 // user owns. Per-user keys only: session metadata is per-user chat data, so
 // the fleet-shared org install key is refused outright — serving it there
 // would let any key holder enumerate any employee's session titles via the
-// vouched-email path (the DNO-383 blast-radius concern). Owner matching and
-// the personal-account exclusion live in the query.
+// vouched-email path (the DNO-383 blast-radius concern). Owner matching lives
+// in the query; personal-account sessions are included for the owner (Q2
+// decision) — revisit before serving content, not just titles.
 func (s *Service) GetSessionMeta(ctx context.Context, payload *gen.GetSessionMetaPayload) (*gen.GetSessionMetaResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
