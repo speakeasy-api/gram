@@ -9,8 +9,9 @@ use tokio::net::TcpListener;
 use tokio::sync::{Mutex, Notify};
 use tracing::Instrument;
 
+use crate::mcp_actor::McpCmd;
 use crate::runtime::{
-    AppState, DEFAULT_THREAD_IDLE_TTL, McpCmd, build_host, ensure_thread, snapshot_threads,
+    AppState, DEFAULT_THREAD_IDLE_TTL, build_host, ensure_thread, snapshot_threads,
 };
 use crate::telemetry::SpanIdentity;
 
