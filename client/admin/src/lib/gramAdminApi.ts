@@ -42,7 +42,16 @@ export async function gramAdminFetch<T>(
     // silently when the user already has a Google session. The gram admin
     // backend falls back to interactive login if Google returns
     // error=login_required (see Callback in server/internal/admin/impl.go).
-    const returnTo = encodeURIComponent(window.location.href);
+    //
+    // return_to must stay a relative path. sanitizeReturnTo in
+    // server/internal/admin/oauth.go keeps an absolute URL only when its origin
+    // is listed in GRAM_ADMIN_ALLOWED_ORIGINS, which is empty by default, so an
+    // absolute return_to silently loses the page the operator was on. The hash
+    // is left out because the app routes with BrowserRouter, so the route is
+    // entirely in the path and query.
+    const returnTo = encodeURIComponent(
+      window.location.pathname + window.location.search,
+    );
     window.location.href = `/admin/auth.login?return_to=${returnTo}&prompt=none`;
     // Caller never sees a resolved value; throw to unwind the in-flight call.
     throw new GramAdminError(401, null, "redirecting to admin login");

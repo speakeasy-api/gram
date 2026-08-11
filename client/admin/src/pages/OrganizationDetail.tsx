@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable as Table, type Column } from "@/components/data-table";
+import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { cn } from "@/lib/utils";
 import {
   getOrganization,
@@ -94,8 +95,13 @@ export function OrganizationDetail(): JSX.Element {
 
 const accountTypeOptions = ["free", "pro", "enterprise"];
 
+function yesNo(v: boolean): string {
+  return v ? "yes" : "no";
+}
+
 function OrgDetailsCard({ org }: { org: AdminOrganization }) {
   const qc = useQueryClient();
+  const [confirm, confirmDialog] = useConfirmDialog();
   const [accountType, setAccountType] = useState(org.account_type);
   const [whitelisted, setWhitelisted] = useState(org.whitelisted);
 
@@ -125,6 +131,27 @@ function OrgDetailsCard({ org }: { org: AdminOrganization }) {
   const handleCancel = () => {
     setAccountType(org.account_type);
     setWhitelisted(org.whitelisted);
+  };
+
+  const handleSave = async () => {
+    const changes: string[] = [];
+    if (accountType !== org.account_type) {
+      changes.push(`Account type: ${org.account_type} → ${accountType}`);
+    }
+    if (whitelisted !== org.whitelisted) {
+      changes.push(
+        `Whitelisted: ${yesNo(org.whitelisted)} → ${yesNo(whitelisted)}`,
+      );
+    }
+
+    const confirmed = await confirm({
+      title: `Update ${org.name}?`,
+      description: changes.join(". ") + ".",
+      confirmLabel: "Save",
+    });
+    if (confirmed) {
+      mut.mutate();
+    }
   };
 
   return (
@@ -196,7 +223,9 @@ function OrgDetailsCard({ org }: { org: AdminOrganization }) {
             variant="default"
             size="xs"
             disabled={mut.isPending}
-            onClick={() => mut.mutate()}
+            onClick={() => {
+              void handleSave();
+            }}
           >
             {mut.isPending ? "Saving..." : "Save"}
           </Button>
@@ -215,6 +244,8 @@ function OrgDetailsCard({ org }: { org: AdminOrganization }) {
           )}
         </div>
       )}
+
+      {confirmDialog}
     </div>
   );
 }
