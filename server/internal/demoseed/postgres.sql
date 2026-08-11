@@ -82,6 +82,11 @@ DECLARE
   demo_org  CONSTANT text := 'org_gram_demo_workspace';
   proj_a    CONSTANT uuid := 'dec0de00-0000-4000-a000-000000000001';
   policy_a  CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f001';
+  policy_pi CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f002';
+  policy_ds CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f003';
+  policy_sm CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f004';
+  policy_ai CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f005';
+  policy_cr CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f006';
 
   asset_id     CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000a001';
   deploy_id    CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000d001';
@@ -613,19 +618,92 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
      now() - interval '8 hours', now() - interval '8 hours', 'unresolved_hash');
 
   ------------------------------------------------------------------
-  -- Risk policies (one per project so both overview pages count an active
-  -- policy) + chats + transcripts + findings. Chats spread over the trailing
-  -- ~12 days; every 7th chat carries a gitleaks finding whose match string
-  -- appears inside a tool_result message. Odd chats mirror the ClickHouse
-  -- Claude provenance: their tool messages carry call_demo_<i>_<k> ids that
-  -- join the tool_result telemetry rows, and user messages carry
+  -- Risk policies + chats + transcripts + findings. Chats spread over the
+  -- trailing ~12 days; every 3rd chat carries a finding. Odd chats mirror the
+  -- ClickHouse Claude provenance: their tool messages carry call_demo_<i>_<k>
+  -- ids that join the tool_result telemetry rows, and user messages carry
   -- demo-prompt-<i>-<turn> ids that join the api_request rows.
+  --
+  -- The policy set is derived from the OWASP Top 10 for LLM Apps (2025), the
+  -- OWASP Agentic Security Initiative threat taxonomy, and the MCP security
+  -- best practices — each row notes the item it maps to. Findings all hang off
+  -- policy_a (the only one whose sources match the seeded finding rotation);
+  -- the rest are configuration-only, which is what a real posture looks like.
+  --
+  -- `sources` values must be in validateSources (internal/risk/impl.go);
+  -- cli_destructive / destructive_tool / account_identity are flag-only
+  -- (validateSourceAction). A postflight assert below checks the source names.
   ------------------------------------------------------------------
   INSERT INTO risk_policies (id, project_id, organization_id, name, policy_type,
-                             sources, enabled, action, audience_type, auto_name, version)
+                             sources, presidio_entities, analyzer_config,
+                             custom_rule_ids, message_types, scope_exempt,
+                             enabled, action, audience_type,
+                             shadow_mcp_disposition, auto_name, score, version)
   VALUES
+    -- OWASP LLM02 sensitive information disclosure.
     (policy_a, proj_a, demo_org, 'Acme secrets & PII policy', 'standard',
-     '{regex,presidio}', TRUE, 'flag', 'everyone', TRUE, 1);
+     '{gitleaks,presidio}', '{CREDIT_CARD,EMAIL_ADDRESS,PHONE_NUMBER,US_SSN}',
+     '{}'::jsonb, '{}', NULL, NULL,
+     TRUE, 'flag', 'everyone', NULL, TRUE, 8.0, 1),
+    -- OWASP LLM01 prompt injection + ASI01 agent goal hijack; LLM07 covers the
+    -- system-prompt-extraction half of the same category.
+    (policy_pi, proj_a, demo_org, 'Acme prompt injection guardrail', 'standard',
+     '{prompt_injection}', NULL, '{}'::jsonb, '{}',
+     '{user_message,tool_response}', NULL,
+     TRUE, 'warn', 'everyone', NULL, FALSE, 9.1, 1),
+    -- OWASP LLM06 excessive agency + ASI05 unexpected code execution. Both
+    -- sources are flag-only, hence action = flag. The exemption keeps
+    -- read-only tool calls out of the policy entirely.
+    (policy_ds, proj_a, demo_org, 'Acme destructive command guardrail', 'standard',
+     '{cli_destructive,destructive_tool}', NULL, '{}'::jsonb, '{}',
+     '{tool_request}',
+     'tool_calls.size() > 0 && tool_calls.all(t, t.function.matchGlob("*get*") || t.function.matchGlob("*list*"))',
+     TRUE, 'flag', 'everyone', NULL, FALSE, 8.6, 1),
+    -- MCP security best practices: unapproved / unsandboxed MCP servers.
+    -- Name matches shadowMCPPolicyAutoName so the UI reads consistently.
+    (policy_sm, proj_a, demo_org, 'Shadow MCP Server Policy', 'standard',
+     '{shadow_mcp}', NULL, '{}'::jsonb, '{}', '{tool_request}', NULL,
+     TRUE, 'block', 'everyone', 'block_all', TRUE, 9.0, 1),
+    -- OWASP ASI03 identity/privilege misuse: agent sessions on a personal or
+    -- off-domain AI account. flag-only source.
+    (policy_ai, proj_a, demo_org, 'Acme non-corporate account policy', 'standard',
+     '{account_identity}', NULL,
+     '{"account_identity": {"approved_email_domains": ["demo.getgram.ai"]}}'::jsonb,
+     '{}', NULL, NULL,
+     TRUE, 'flag', 'everyone', NULL, FALSE, 5.5, 1),
+    -- Custom CEL rules only (no built-in source): OWASP LLM02 credential-file
+    -- reads, CI/CD env-secret dumps, and MCP-best-practice SSRF targets.
+    (policy_cr, proj_a, demo_org, 'Acme agent guardrails', 'standard',
+     '{}', NULL, '{}'::jsonb,
+     '{custom.sensitive_file_read,custom.env_secret_dump,custom.ssrf_metadata_endpoint}',
+     '{tool_request}', NULL,
+     TRUE, 'block', 'everyone', NULL, FALSE, 9.3, 1);
+
+  -- Custom CEL detection rules behind policy_cr; also the only data on the
+  -- Detection Rules page. detection_expr supersedes the legacy regex /
+  -- match_config columns, so both stay NULL. Escape-free matchers only:
+  -- matchRegex swallows an invalid pattern as "no match" (celenv.go), while
+  -- matchText is a case-insensitive literal substring. Compile-checked by
+  -- TestSeedCELCompiles.
+  INSERT INTO risk_custom_detection_rules
+    (id, project_id, organization_id, rule_id, title, description,
+     detection_expr, severity)
+  VALUES
+    (demo.det_uuid('gram-demo-riskrule-1'), proj_a, demo_org,
+     'custom.sensitive_file_read', 'Credential file access',
+     'Agent reads of SSH keys, cloud credentials, or dotenv files outside the project (OWASP LLM02).',
+     'tool_calls.exists(t, t.args.get("file_path").matchText("/.ssh/") || t.args.get("file_path").matchText("/.aws/credentials") || t.args.get("command").matchText("/.ssh/id_") || t.args.get("command").matchText("/.aws/credentials"))',
+     'high'),
+    (demo.det_uuid('gram-demo-riskrule-2'), proj_a, demo_org,
+     'custom.env_secret_dump', 'Environment secret dump',
+     'Agent dumping the process environment, where CI/CD tokens and API keys live (OWASP LLM02).',
+     'tool_calls.exists(t, t.args.get("command").matchText("printenv") || t.args.get("command").matchText("/proc/self/environ") || t.args.get("command").matchText("env | curl"))',
+     'critical'),
+    (demo.det_uuid('gram-demo-riskrule-3'), proj_a, demo_org,
+     'custom.ssrf_metadata_endpoint', 'SSRF to internal endpoint',
+     'Agent-controlled requests to cloud metadata or loopback addresses (MCP security best practices).',
+     'tool_calls.exists(t, t.args.get("url").matchText("169.254.169.254") || t.args.get("url").matchText("http://localhost") || t.args.get("command").matchText("169.254.169.254"))',
+     'critical');
 
   FOR i IN 1 .. bulk_chats LOOP
     chat_id := demo.det_uuid('gram-demo-chat-' || i);
@@ -854,6 +932,31 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   IF tool_count <> array_length(tool_names, 1) THEN
     RAISE EXCEPTION 'demo seed postflight: expected % http tools, found %',
       array_length(tool_names, 1), tool_count;
+  END IF;
+
+  -- Both checks guard an opaque string that fails silently: an unrecognized
+  -- source disables scanning for the policy ('regex' shipped that way once),
+  -- and a custom_rule_id with no rule row makes the policy a no-op. The source
+  -- list mirrors validateSources (internal/risk/impl.go); the seed inserts
+  -- past it.
+  SELECT count(*) INTO stray FROM risk_policies p
+  WHERE p.organization_id = demo_org AND p.deleted IS FALSE
+    AND EXISTS (
+      SELECT 1 FROM unnest(p.sources) s
+      WHERE s <> ALL (ARRAY['gitleaks', 'presidio', 'shadow_mcp', 'destructive_tool',
+                            'cli_destructive', 'prompt_injection', 'account_identity']));
+  IF stray > 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % risk policies carry an unrecognized source', stray;
+  END IF;
+
+  SELECT count(*) INTO stray
+  FROM risk_policies p, unnest(p.custom_rule_ids) cid
+  WHERE p.organization_id = demo_org AND p.deleted IS FALSE
+    AND NOT EXISTS (
+      SELECT 1 FROM risk_custom_detection_rules r
+      WHERE r.project_id = p.project_id AND r.rule_id = cid AND r.deleted IS FALSE);
+  IF stray > 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % policy custom_rule_ids have no rule row', stray;
   END IF;
 
   SELECT count(*) INTO stray
