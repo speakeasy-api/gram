@@ -83,10 +83,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
+	mcpapprovaladvisories "github.com/speakeasy-api/gram/server/internal/mcpapproval/advisories"
 	mcpapprovalcatalog "github.com/speakeasy-api/gram/server/internal/mcpapproval/catalog"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/domainmeta"
 	mcpapprovalevidence "github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/packagemeta"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/remoteprobe"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
 	"github.com/speakeasy-api/gram/server/internal/mcpclient"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
@@ -318,6 +321,11 @@ func newStartCommand() *cli.Command {
 			Name:    "openrouter-provisioning-key",
 			Usage:   "Provisioning key for OpenRouter to create new API keys for orgs - https://openrouter.ai/settings/provisioning-keys",
 			EnvVars: []string{"OPENROUTER_PROVISIONING_KEY"},
+		},
+		&cli.StringFlag{
+			Name:    "github-evidence-token",
+			Usage:   "GitHub API token for MCP evidence repository lookups; unset falls back to the small unauthenticated per-IP budget, after which lookups land in evidence gaps",
+			EnvVars: []string{"GRAM_GITHUB_EVIDENCE_TOKEN"},
 		},
 		&cli.StringFlag{
 			Name:    "temporal-address",
@@ -1320,6 +1328,9 @@ func newStartCommand() *cli.Command {
 			mcpApprovalService := mcpapproval.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger,
 				mcpapprovalevidence.NewAssembler(
 					packagemeta.NewClient(guardianPolicy.PooledClient()),
+					repometa.NewClient(guardianPolicy.PooledClient(), repometa.WithToken(c.String("github-evidence-token"))),
+					mcpapprovaladvisories.NewClient(guardianPolicy.PooledClient()),
+					domainmeta.NewClient(guardianPolicy.PooledClient()),
 					telemetryrepo.New(chDB),
 					remoteProber,
 					remoteProber,

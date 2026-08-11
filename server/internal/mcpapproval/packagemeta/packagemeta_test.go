@@ -319,3 +319,71 @@ func TestLookup_NPMRejectsPathSmugglingNames(t *testing.T) {
 
 	require.Empty(t, path(), "an invalid name must never produce a registry request")
 }
+
+// The declared repository and homepage ride along for the code-host lookup;
+// npm publishes repository as an object on most packages and a string
+// shorthand on some.
+func TestLookup_NPMRepositoryAndHomepage(t *testing.T) {
+	t.Parallel()
+
+	object := `{
+	  "name": "@scope/mcp-server", "dist-tags": {"latest": "1.0.0"}, "time": {}, "versions": {},
+	  "repository": {"type": "git", "url": "git+https://github.com/acme/mcp-server.git"},
+	  "homepage": "https://somevendor.io"
+	}`
+	server, _ := serve(t, http.StatusOK, object)
+	client := packagemeta.NewClient(server.Client(), packagemeta.WithNPMBaseURL(server.URL))
+
+	got, err := client.Lookup(t.Context(), identity.RegistryNPM, "@scope/mcp-server")
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	require.Equal(t, "git+https://github.com/acme/mcp-server.git", got.RepositoryURL)
+	require.Equal(t, "https://somevendor.io", got.HomepageURL)
+
+	shorthand := `{
+	  "name": "@scope/mcp-server", "dist-tags": {"latest": "1.0.0"}, "time": {}, "versions": {},
+	  "repository": "github:acme/mcp-server"
+	}`
+	server2, _ := serve(t, http.StatusOK, shorthand)
+	client2 := packagemeta.NewClient(server2.Client(), packagemeta.WithNPMBaseURL(server2.URL))
+
+	got2, err := client2.Lookup(t.Context(), identity.RegistryNPM, "@scope/mcp-server")
+	require.NoError(t, err)
+	require.NotNil(t, got2)
+	require.Equal(t, "github:acme/mcp-server", got2.RepositoryURL)
+	require.Empty(t, got2.HomepageURL)
+}
+
+// PyPI's project URLs are free-form labels: the conventional repository
+// labels win, and a code-host URL under any label is the fallback.
+func TestLookup_PyPIRepositoryAndHomepage(t *testing.T) {
+	t.Parallel()
+
+	labelled := `{
+	  "info": {"name": "mcp-server", "version": "1.0.0",
+	    "home_page": "",
+	    "project_urls": {"Homepage": "https://somevendor.io", "Source": "https://github.com/acme/mcp-server"}},
+	  "releases": {}
+	}`
+	server, _ := serve(t, http.StatusOK, labelled)
+	client := packagemeta.NewClient(server.Client(), packagemeta.WithPyPIBaseURL(server.URL))
+
+	got, err := client.Lookup(t.Context(), identity.RegistryPyPI, "mcp-server")
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	require.Equal(t, "https://github.com/acme/mcp-server", got.RepositoryURL)
+	require.Equal(t, "https://somevendor.io", got.HomepageURL)
+
+	fallback := `{
+	  "info": {"name": "mcp-server", "version": "1.0.0",
+	    "project_urls": {"Docs": "https://docs.somevendor.io", "Tracker": "https://github.com/acme/mcp-server/issues"}},
+	  "releases": {}
+	}`
+	server2, _ := serve(t, http.StatusOK, fallback)
+	client2 := packagemeta.NewClient(server2.Client(), packagemeta.WithPyPIBaseURL(server2.URL))
+
+	got2, err := client2.Lookup(t.Context(), identity.RegistryPyPI, "mcp-server")
+	require.NoError(t, err)
+	require.NotNil(t, got2)
+	require.Equal(t, "https://github.com/acme/mcp-server/issues", got2.RepositoryURL)
+}

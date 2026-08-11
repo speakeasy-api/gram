@@ -13,13 +13,16 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/advisories"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/authority"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/capability"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/catalog"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/domainmeta"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/identity"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/packagemeta"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/provenance"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -47,6 +50,26 @@ type fakePackages struct {
 
 func (f *fakePackages) Lookup(_ context.Context, _ identity.Registry, _ string) (*packagemeta.Metadata, error) {
 	return f.metadata, f.err
+}
+
+// quietRepos, quietAdvisories, and quietDomains answer the auxiliary lookups
+// with "nothing to consult", so no section and no gap.
+type quietRepos struct{}
+
+func (quietRepos) Lookup(_ context.Context, _ string) (*repometa.Stats, error) {
+	return nil, nil
+}
+
+type quietAdvisories struct{}
+
+func (quietAdvisories) Query(_ context.Context, _ identity.Registry, _ string, _ string) (*advisories.Report, error) {
+	return nil, nil
+}
+
+type quietDomains struct{}
+
+func (quietDomains) Lookup(_ context.Context, _ string) (*domainmeta.Registration, error) {
+	return nil, nil
 }
 
 // quietProbes stands in for the remote probes: discovery finds nothing and
@@ -85,7 +108,7 @@ func TestAssemble_PackageReference(t *testing.T) {
 			VersionCount:  3, MaintainerCount: 2, Deprecated: false, DeprecationReason: "",
 		},
 		err: nil,
-	}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{}, quietProbes{})
+	}, quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{}, quietProbes{})
 
 	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y @scope/mcp-server@1.2.3"))
 	require.NoError(t, err)
@@ -112,7 +135,7 @@ func TestAssemble_RemoteReferenceCarriesExposure(t *testing.T) {
 
 	first := time.Date(2026, 5, 2, 0, 0, 0, 0, time.UTC)
 	last := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
-	assembler := evidence.NewAssembler(&fakePackages{metadata: nil, err: nil}, &fakeTraffic{
+	assembler := evidence.NewAssembler(&fakePackages{metadata: nil, err: nil}, quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{
 		row: &telemetryrepo.ShadowMCPInventoryURLRow{
 			CanonicalServerURL: "https://mcp.example.com/sse", URLHost: "mcp.example.com",
 			ServerName: "example", ServerNameOverride: "", FirstSeen: first, LastSeen: last,
@@ -144,14 +167,14 @@ func TestAssemble_NotPublishedVersusGap(t *testing.T) {
 
 	reference := identity.Resolve("npx -y @scope/unknown-server")
 
-	clean := evidence.NewAssembler(&fakePackages{metadata: nil, err: nil}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{}, quietProbes{})
+	clean := evidence.NewAssembler(&fakePackages{metadata: nil, err: nil}, quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{}, quietProbes{})
 	raw, err := clean.Assemble(t.Context(), uuid.New(), reference)
 	require.NoError(t, err)
 	doc := decode(t, raw)
 	require.Equal(t, true, doc["package_not_published"])
 	require.NotContains(t, doc, "gaps")
 
-	failing := evidence.NewAssembler(&fakePackages{metadata: nil, err: errors.New("registry down")}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{}, quietProbes{})
+	failing := evidence.NewAssembler(&fakePackages{metadata: nil, err: errors.New("registry down")}, quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{}, quietProbes{})
 	raw, err = failing.Assemble(t.Context(), uuid.New(), reference)
 	require.NoError(t, err, "one source failing must not lose the gather")
 	doc = decode(t, raw)
@@ -165,7 +188,7 @@ func TestAssemble_NotPublishedVersusGap(t *testing.T) {
 func TestAssemble_ExposureFailureIsAGap(t *testing.T) {
 	t.Parallel()
 
-	assembler := evidence.NewAssembler(&fakePackages{metadata: nil, err: nil}, &fakeTraffic{
+	assembler := evidence.NewAssembler(&fakePackages{metadata: nil, err: nil}, quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{
 		row: nil, usage: nil, rowErr: errors.New("clickhouse down"), usageErr: nil,
 	}, quietProbes{}, quietProbes{}, quietProbes{})
 
@@ -183,7 +206,7 @@ func TestAssemble_ExposureFailureIsAGap(t *testing.T) {
 func TestAssemble_UnresolvedIsStillADocument(t *testing.T) {
 	t.Parallel()
 
-	assembler := evidence.NewAssembler(&fakePackages{metadata: nil, err: nil}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{}, quietProbes{})
+	assembler := evidence.NewAssembler(&fakePackages{metadata: nil, err: nil}, quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{}, quietProbes{})
 
 	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("./run-my-server --local"))
 	require.NoError(t, err)
@@ -204,7 +227,7 @@ func TestAssemble_MCPRemoteCommandReachesExposure(t *testing.T) {
 	t.Parallel()
 
 	first := time.Date(2026, 5, 2, 0, 0, 0, 0, time.UTC)
-	assembler := evidence.NewAssembler(&fakePackages{metadata: nil, err: nil}, &fakeTraffic{
+	assembler := evidence.NewAssembler(&fakePackages{metadata: nil, err: nil}, quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{
 		row: &telemetryrepo.ShadowMCPInventoryURLRow{
 			CanonicalServerURL: "https://mcp.example.com/sse", URLHost: "mcp.example.com",
 			ServerName: "example", ServerNameOverride: "", FirstSeen: first, LastSeen: first,
@@ -233,7 +256,7 @@ func TestAssemble_WithRealPackageClient(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	client := packagemeta.NewClient(server.Client(), packagemeta.WithNPMBaseURL(server.URL))
-	assembler := evidence.NewAssembler(client, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{}, quietProbes{})
+	assembler := evidence.NewAssembler(client, quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{}, quietProbes{})
 
 	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y p@1.0.0"))
 	require.NoError(t, err)
@@ -249,7 +272,7 @@ func TestAssemble_WithRealPackageClient(t *testing.T) {
 func TestDecodeDocument_RoundTripAndVersionGate(t *testing.T) {
 	t.Parallel()
 
-	assembler := evidence.NewAssembler(&fakePackages{metadata: nil, err: nil}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{}, quietProbes{})
+	assembler := evidence.NewAssembler(&fakePackages{metadata: nil, err: nil}, quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil}, quietProbes{}, quietProbes{}, quietProbes{})
 	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y @scope/mcp-server@1.2.3"))
 	require.NoError(t, err)
 
@@ -280,7 +303,7 @@ func TestAssemble_UnreachableSourceIsBoundedAndBecomesAGap(t *testing.T) {
 
 	assembler := evidence.NewAssembler(
 		blockingPackages{},
-		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
+		quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
 		quietProbes{},
 		quietProbes{},
 		quietProbes{},
@@ -426,7 +449,7 @@ func TestAssemble_RegistryCopyFillsCapabilitiesWhenServerRefuses(t *testing.T) {
 
 	assembler := evidence.NewAssembler(
 		&fakePackages{metadata: nil, err: nil},
-		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
+		quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
 		cataloguedOnlyProbes{},
 		cataloguedOnlyProbes{},
 		cataloguedOnlyProbes{},
@@ -488,7 +511,7 @@ func TestAssemble_RegistryWithoutToolMetadataIsAGap(t *testing.T) {
 
 	assembler := evidence.NewAssembler(
 		&fakePackages{metadata: nil, err: nil},
-		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
+		quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
 		cataloguedNoToolMetadata{},
 		cataloguedNoToolMetadata{},
 		cataloguedNoToolMetadata{},
@@ -518,7 +541,7 @@ func TestAssemble_UncataloguedServerReadsAsCheckedAndAbsent(t *testing.T) {
 
 	assembler := evidence.NewAssembler(
 		&fakePackages{metadata: nil, err: nil},
-		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
+		quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
 		quietProbes{},
 		failingProbes{},
 		quietProbes{},
@@ -543,7 +566,7 @@ func TestAssemble_RemoteProbesFillAuthorityAndCapabilities(t *testing.T) {
 
 	assembler := evidence.NewAssembler(
 		&fakePackages{metadata: nil, err: nil},
-		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
+		quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
 		declaringProbes{},
 		declaringProbes{},
 		declaringProbes{},
@@ -578,7 +601,7 @@ func TestAssemble_FailedProbesAreGaps(t *testing.T) {
 
 	assembler := evidence.NewAssembler(
 		&fakePackages{metadata: nil, err: nil},
-		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
+		quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
 		failingProbes{},
 		failingProbes{},
 		failingProbes{},
@@ -629,7 +652,7 @@ func TestAssemble_FailedAuthorityProbeIsNotMaskedByUnauthenticatedListing(t *tes
 
 	assembler := evidence.NewAssembler(
 		&fakePackages{metadata: nil, err: nil},
-		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
+		quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
 		authorityFailsToolsAnswer{},
 		authorityFailsToolsAnswer{},
 		authorityFailsToolsAnswer{},
@@ -646,4 +669,277 @@ func TestAssemble_FailedAuthorityProbeIsNotMaskedByUnauthenticatedListing(t *tes
 
 	// The capability section still carries the answered listing.
 	require.Equal(t, "server", doc["capabilities_source"])
+}
+
+// fakeRepos, fakeAdvisories, and fakeDomains return canned auxiliary-lookup
+// results.
+type fakeRepos struct {
+	stats *repometa.Stats
+	err   error
+}
+
+func (f *fakeRepos) Lookup(_ context.Context, _ string) (*repometa.Stats, error) {
+	return f.stats, f.err
+}
+
+type fakeAdvisories struct {
+	report *advisories.Report
+	err    error
+}
+
+func (f *fakeAdvisories) Query(_ context.Context, _ identity.Registry, _ string, _ string) (*advisories.Report, error) {
+	return f.report, f.err
+}
+
+type fakeDomains struct {
+	registration *domainmeta.Registration
+	err          error
+}
+
+func (f *fakeDomains) Lookup(_ context.Context, _ string) (*domainmeta.Registration, error) {
+	return f.registration, f.err
+}
+
+// packageWithRepo is a registry answer that declares a source repository.
+func packageWithRepo() *fakePackages {
+	return &fakePackages{
+		metadata: &packagemeta.Metadata{
+			Registry: identity.RegistryNPM, Name: "@scope/mcp-server",
+			RepositoryURL: "https://github.com/acme/mcp-server",
+		},
+		err: nil,
+	}
+}
+
+func TestAssemble_RepositoryAndAdvisories(t *testing.T) {
+	t.Parallel()
+
+	assembler := evidence.NewAssembler(
+		packageWithRepo(),
+		&fakeRepos{stats: &repometa.Stats{
+			Host: "github.com", Owner: "acme", Name: "mcp-server",
+			Stars: 412, Forks: 37, OpenIssues: 9, Archived: true,
+			CreatedAt:        time.Date(2023, 5, 1, 0, 0, 0, 0, time.UTC),
+			PushedAt:         time.Date(2026, 7, 30, 0, 0, 0, 0, time.UTC),
+			ContributorCount: 23,
+		}, err: nil},
+		&fakeAdvisories{report: &advisories.Report{
+			Ecosystem: "npm", Package: "@scope/mcp-server", KnownCount: 2,
+			Advisories: []advisories.Advisory{
+				{ID: "GHSA-bbbb-2222", Summary: "command injection", Severity: "CRITICAL", Published: time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC)},
+				{ID: "GHSA-aaaa-1111", Summary: "prototype pollution", Severity: "HIGH", Published: time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC)},
+			},
+		}, err: nil},
+		quietDomains{},
+		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
+		quietProbes{}, quietProbes{}, quietProbes{},
+	)
+
+	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y @scope/mcp-server@1.2.3"))
+	require.NoError(t, err)
+	doc := decode(t, raw)
+
+	repository, ok := doc["repository"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "https://github.com/acme/mcp-server", repository["url"])
+	require.Equal(t, "acme", repository["owner"])
+	require.InDelta(t, float64(412), repository["stars"], 0)
+	require.Equal(t, true, repository["archived"])
+	require.Equal(t, "2026-07-30T00:00:00Z", repository["pushed_at"])
+	require.InDelta(t, float64(23), repository["contributor_count"], 0)
+
+	advisorySection, ok := doc["advisories"].(map[string]any)
+	require.True(t, ok)
+	require.InDelta(t, float64(2), advisorySection["known_count"], 0)
+	items, ok := advisorySection["advisories"].([]any)
+	require.True(t, ok)
+	require.Len(t, items, 2)
+	first, ok := items[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "GHSA-bbbb-2222", first["id"])
+	require.Equal(t, "CRITICAL", first["severity"])
+
+	require.NotContains(t, doc, "gaps")
+}
+
+// OSV answering with nothing on file is checked-and-clean: the section is
+// present with a zero count, distinct from a failed query.
+func TestAssemble_CleanAdvisoriesAreAFinding(t *testing.T) {
+	t.Parallel()
+
+	assembler := evidence.NewAssembler(
+		&fakePackages{metadata: nil, err: nil},
+		quietRepos{},
+		&fakeAdvisories{report: &advisories.Report{Ecosystem: "npm", Package: "@scope/mcp-server", KnownCount: 0, Advisories: nil, Version: ""}, err: nil},
+		quietDomains{},
+		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
+		quietProbes{}, quietProbes{}, quietProbes{},
+	)
+
+	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y @scope/mcp-server"))
+	require.NoError(t, err)
+	doc := decode(t, raw)
+
+	advisorySection, ok := doc["advisories"].(map[string]any)
+	require.True(t, ok)
+	require.InDelta(t, float64(0), advisorySection["known_count"], 0)
+	require.NotContains(t, doc, "gaps")
+}
+
+// A declared repository the host does not know is checked-and-absent, and a
+// telling signal for a published package.
+func TestAssemble_RepositoryNotFound(t *testing.T) {
+	t.Parallel()
+
+	assembler := evidence.NewAssembler(
+		packageWithRepo(),
+		&fakeRepos{stats: nil, err: nil},
+		quietAdvisories{},
+		quietDomains{},
+		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
+		quietProbes{}, quietProbes{}, quietProbes{},
+	)
+
+	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y @scope/mcp-server"))
+	require.NoError(t, err)
+	doc := decode(t, raw)
+
+	require.Equal(t, true, doc["repository_not_found"])
+	require.NotContains(t, doc, "repository")
+	require.NotContains(t, doc, "gaps")
+}
+
+// A repository on a host the client does not consult is not checked at all:
+// no section, no not-found, no gap.
+func TestAssemble_UnsupportedRepositoryHostIsNotConsulted(t *testing.T) {
+	t.Parallel()
+
+	assembler := evidence.NewAssembler(
+		&fakePackages{
+			metadata: &packagemeta.Metadata{
+				Registry: identity.RegistryNPM, Name: "@scope/mcp-server",
+				RepositoryURL: "https://gitlab.com/acme/mcp-server",
+			},
+			err: nil,
+		},
+		&fakeRepos{stats: nil, err: errors.New("must not be called")},
+		quietAdvisories{},
+		quietDomains{},
+		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
+		quietProbes{}, quietProbes{}, quietProbes{},
+	)
+
+	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y @scope/mcp-server"))
+	require.NoError(t, err)
+	doc := decode(t, raw)
+
+	require.NotContains(t, doc, "repository")
+	require.NotContains(t, doc, "repository_not_found")
+	require.NotContains(t, doc, "gaps")
+}
+
+// Failed auxiliary lookups land in gaps, never as clean absences.
+func TestAssemble_RepositoryAndAdvisoryFailuresAreGaps(t *testing.T) {
+	t.Parallel()
+
+	assembler := evidence.NewAssembler(
+		packageWithRepo(),
+		&fakeRepos{stats: nil, err: errors.New("rate limited")},
+		&fakeAdvisories{report: nil, err: errors.New("osv down")},
+		quietDomains{},
+		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
+		quietProbes{}, quietProbes{}, quietProbes{},
+	)
+
+	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y @scope/mcp-server"))
+	require.NoError(t, err)
+	doc := decode(t, raw)
+
+	gaps, ok := doc["gaps"].([]any)
+	require.True(t, ok)
+	require.Contains(t, gaps, "repository_lookup_failed")
+	require.Contains(t, gaps, "advisory_lookup_failed")
+	require.NotContains(t, doc, "repository")
+	require.NotContains(t, doc, "advisories")
+}
+
+func TestAssemble_DomainRegistration(t *testing.T) {
+	t.Parallel()
+
+	assembler := evidence.NewAssembler(
+		&fakePackages{metadata: nil, err: nil},
+		quietRepos{},
+		quietAdvisories{},
+		&fakeDomains{registration: &domainmeta.Registration{
+			Domain:       "somevendor.io",
+			RegisteredAt: time.Date(2019, 3, 12, 0, 0, 0, 0, time.UTC),
+			Registrar:    "Example Registrar, Inc.",
+		}, err: nil},
+		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
+		quietProbes{}, quietProbes{}, quietProbes{},
+	)
+
+	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("https://mcp.somevendor.io/sse"))
+	require.NoError(t, err)
+	doc := decode(t, raw)
+
+	domain, ok := doc["domain"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "somevendor.io", domain["domain"])
+	require.Equal(t, "2019-03-12T00:00:00Z", domain["registered_at"])
+	require.Equal(t, "Example Registrar, Inc.", domain["registrar"])
+	require.NotContains(t, domain, "unregistered")
+}
+
+// The registry knowing no such domain is odd for a host that answers traffic,
+// and it is recorded as its own signal rather than dropped.
+func TestAssemble_UnregisteredDomain(t *testing.T) {
+	t.Parallel()
+
+	assembler := evidence.NewAssembler(
+		&fakePackages{metadata: nil, err: nil},
+		quietRepos{},
+		quietAdvisories{},
+		&fakeDomains{registration: nil, err: nil},
+		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
+		quietProbes{}, quietProbes{}, quietProbes{},
+	)
+
+	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("https://mcp.somevendor.io/sse"))
+	require.NoError(t, err)
+	doc := decode(t, raw)
+
+	domain, ok := doc["domain"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, true, domain["unregistered"])
+}
+
+// A failed RDAP lookup is a gap; and a package reference, having no domain,
+// never consults RDAP at all.
+func TestAssemble_DomainFailureIsAGap(t *testing.T) {
+	t.Parallel()
+
+	failing := &fakeDomains{registration: nil, err: errors.New("rdap down")}
+
+	remote := evidence.NewAssembler(
+		&fakePackages{metadata: nil, err: nil},
+		quietRepos{}, quietAdvisories{}, failing,
+		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
+		quietProbes{}, quietProbes{}, quietProbes{},
+	)
+	raw, err := remote.Assemble(t.Context(), uuid.New(), identity.Resolve("https://mcp.somevendor.io/sse"))
+	require.NoError(t, err)
+	gaps, ok := decode(t, raw)["gaps"].([]any)
+	require.True(t, ok)
+	require.Contains(t, gaps, "domain_lookup_failed")
+
+	pkg := evidence.NewAssembler(
+		&fakePackages{metadata: nil, err: nil},
+		quietRepos{}, quietAdvisories{}, failing,
+		&fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
+		quietProbes{}, quietProbes{}, quietProbes{},
+	)
+	raw, err = pkg.Assemble(t.Context(), uuid.New(), identity.Resolve("npx -y @scope/mcp-server"))
+	require.NoError(t, err)
+	require.NotContains(t, decode(t, raw), "domain")
 }

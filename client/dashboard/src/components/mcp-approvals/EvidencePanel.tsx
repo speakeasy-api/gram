@@ -5,13 +5,16 @@ import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useState } from "react";
 import type {
+  EvidenceAdvisories,
   EvidenceAuthority,
   EvidenceCapability,
   EvidenceDocument,
+  EvidenceDomain,
   EvidenceExposure,
   EvidenceIdentity,
   EvidencePackage,
   EvidenceProvenance,
+  EvidenceRepository,
 } from "./evidence";
 import { gapLabel } from "./evidence";
 
@@ -50,7 +53,11 @@ export function EvidencePanel({
           nothing is verified behavior.
         </p>
       )}
-      <TrustSection identity={document.identity} pkg={document.package} />
+      <TrustSection
+        identity={document.identity}
+        pkg={document.package}
+        domain={document.domain}
+      />
       <AuthoritySection authority={document.authority} />
       <DeclaredCapabilitySection
         capabilities={document.capabilities}
@@ -61,6 +68,12 @@ export function EvidencePanel({
         notPublished={document.packageNotPublished}
         packageName={document.identity.packageName}
         provenance={document.provenance}
+        identityKind={document.identity.kind}
+        repository={document.repository}
+        repositoryNotFound={document.repositoryNotFound}
+      />
+      <AdvisoriesSection
+        advisories={document.advisories}
         identityKind={document.identity.kind}
       />
       <ExposureSection
@@ -179,9 +192,11 @@ function identityKindLabel(identity: EvidenceIdentity): string {
 function TrustSection({
   identity,
   pkg,
+  domain,
 }: {
   identity: EvidenceIdentity;
   pkg: EvidencePackage | undefined;
+  domain: EvidenceDomain | undefined;
 }): JSX.Element {
   if (identity.kind === "unresolved") {
     return (
@@ -218,10 +233,31 @@ function TrustSection({
   if (pkg?.maintainerCount !== undefined) {
     facts.push({ label: "Registry maintainers", value: pkg.maintainerCount });
   }
+  if (domain?.registeredAt) {
+    facts.push({
+      label: "Domain registered",
+      value: (
+        <HumanizeDateTime
+          date={new Date(domain.registeredAt)}
+          includeTime={false}
+        />
+      ),
+    });
+  }
+  if (domain?.registrar) {
+    facts.push({ label: "Registrar", value: domain.registrar });
+  }
 
   return (
     <EvidenceGroup question="Who am I trusting?">
       <FactList facts={facts} />
+      {domain?.unregistered && (
+        <div className="border-warning border px-2.5 py-1.5 text-xs">
+          The domain registry reports no registration for{" "}
+          <span className="font-mono">{domain.domain}</span> — unusual for a
+          host that answers traffic.
+        </div>
+      )}
       {identity.kind === "remote" && !identity.registrableDomain && (
         <UnknownBlock>
           No registrable public domain — nothing links this host to a known
@@ -541,12 +577,16 @@ function MaturitySection({
   packageName,
   provenance,
   identityKind,
+  repository,
+  repositoryNotFound,
 }: {
   pkg: EvidencePackage | undefined;
   notPublished: boolean;
   packageName: string | undefined;
   provenance: EvidenceProvenance | undefined;
   identityKind: EvidenceIdentity["kind"];
+  repository: EvidenceRepository | undefined;
+  repositoryNotFound: boolean;
 }): JSX.Element {
   if (identityKind === "remote" && provenance) {
     if (!provenance.catalogued) {
@@ -636,6 +676,161 @@ function MaturitySection({
         </div>
       )}
       <FactList facts={facts} />
+      {repository && <RepositoryFacts repository={repository} />}
+      {repositoryNotFound && (
+        <div className="border-warning border px-2.5 py-1.5 text-xs">
+          The publisher declares a source repository that does not exist on the
+          code host — the package's provenance cannot be traced to any source.
+        </div>
+      )}
+    </EvidenceGroup>
+  );
+}
+
+/**
+ * The declared repository's public track record. Everything here is about the
+ * repository the publisher chose to name — nothing verifies that repository
+ * builds this package, so a popular repository must not read as vouching for
+ * the artifact.
+ */
+function RepositoryFacts({
+  repository,
+}: {
+  repository: EvidenceRepository;
+}): JSX.Element {
+  const facts: Array<{ label: string; value: React.ReactNode }> = [
+    {
+      label: "Declared repository",
+      value: `${repository.owner}/${repository.name}`,
+    },
+  ];
+  if (repository.stars !== undefined) {
+    facts.push({ label: "Stars", value: repository.stars });
+  }
+  if (repository.forks !== undefined) {
+    facts.push({ label: "Forks", value: repository.forks });
+  }
+  if (
+    repository.contributorCount !== undefined &&
+    repository.contributorCount > 0
+  ) {
+    facts.push({ label: "Contributors", value: repository.contributorCount });
+  }
+  if (repository.openIssues !== undefined) {
+    facts.push({ label: "Open issues and PRs", value: repository.openIssues });
+  }
+  if (repository.createdAt) {
+    facts.push({
+      label: "Repository created",
+      value: (
+        <HumanizeDateTime
+          date={new Date(repository.createdAt)}
+          includeTime={false}
+        />
+      ),
+    });
+  }
+  if (repository.pushedAt) {
+    facts.push({
+      label: "Last commit pushed",
+      value: (
+        <HumanizeDateTime
+          date={new Date(repository.pushedAt)}
+          includeTime={false}
+        />
+      ),
+    });
+  }
+
+  return (
+    <>
+      {repository.archived && (
+        <div className="border-warning border px-2.5 py-1.5 text-xs">
+          The declared repository is archived — its owner froze it against
+          further commits and issues.
+        </div>
+      )}
+      <FactList facts={facts} />
+      <p className="text-muted-foreground text-xs">
+        The repository is the publisher's claim; nothing verifies it builds the
+        package that installs.
+      </p>
+    </>
+  );
+}
+
+/**
+ * OSV's answer gets its own group: checked-and-clean, advisories-found, and
+ * could-not-check are three different answers, and collapsing any two of them
+ * is exactly what this panel exists to prevent. Only package references are
+ * queried — a remote endpoint has no package to look up, and no section
+ * renders at all.
+ */
+function AdvisoriesSection({
+  advisories,
+  identityKind,
+}: {
+  advisories: EvidenceAdvisories | undefined;
+  identityKind: EvidenceIdentity["kind"];
+}): JSX.Element | null {
+  if (identityKind !== "package") return null;
+
+  if (!advisories) {
+    return (
+      <EvidenceGroup question="Does anything published say it's vulnerable?">
+        <UnknownBlock>
+          No advisory database was consulted — published vulnerabilities are
+          unknown.
+        </UnknownBlock>
+      </EvidenceGroup>
+    );
+  }
+
+  if (advisories.knownCount === 0) {
+    return (
+      <EvidenceGroup question="Does anything published say it's vulnerable?">
+        <div className="border-border border px-2.5 py-1.5 text-xs">
+          OSV lists no published advisories for this package. Checked today and
+          clean — not a guarantee, and it says nothing about unreported issues.
+        </div>
+      </EvidenceGroup>
+    );
+  }
+
+  const sampled = advisories.advisories.length;
+  return (
+    <EvidenceGroup question="Does anything published say it's vulnerable?">
+      <div className="border-destructive border px-2.5 py-1.5 text-xs">
+        <span className="font-medium">
+          {advisories.knownCount === 1
+            ? "1 published advisory names this package"
+            : `${advisories.knownCount} published advisories name this package`}
+        </span>
+        {sampled < advisories.knownCount && (
+          <span className="text-muted-foreground">
+            {" "}
+            — most recent {sampled} shown
+          </span>
+        )}
+      </div>
+      <ul className="space-y-1">
+        {advisories.advisories.map((advisory) => (
+          <li
+            key={advisory.id}
+            className="border-border border px-2.5 py-1.5 text-xs"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-mono">{advisory.id}</span>
+              {advisory.severity && (
+                <Badge variant="destructive">{advisory.severity}</Badge>
+              )}
+            </div>
+            {advisory.summary && (
+              <p className="text-muted-foreground mt-0.5">{advisory.summary}</p>
+            )}
+          </li>
+        ))}
+      </ul>
     </EvidenceGroup>
   );
 }
