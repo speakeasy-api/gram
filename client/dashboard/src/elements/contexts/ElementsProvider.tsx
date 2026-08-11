@@ -9,6 +9,7 @@ import { useToolApproval } from "@/elements/hooks/useToolApproval";
 import { getApiUrl } from "@/elements/lib/api";
 import {
   CHAT_ATTACHMENT_ACCEPT,
+  CHAT_ATTACHMENT_MAX_BYTES,
   createChatAttachmentAdapter,
 } from "@/elements/lib/attachmentUpload";
 import { initErrorTracking, trackError } from "@/elements/lib/errorTracking";
@@ -634,9 +635,16 @@ const ElementsProviderInner = ({ children, config }: ElementsProviderProps) => {
       typeof attachmentsConfig === "object" && attachmentsConfig.accept?.length
         ? attachmentsConfig.accept.join(",")
         : CHAT_ATTACHMENT_ACCEPT;
-    const maxBytes =
+    // A host asking for more than the endpoint accepts would let the user
+    // pick a file that only fails once uploaded, so the configured size is
+    // clamped to the server's cap (and a nonsense value ignored).
+    const configuredMaxSize =
       typeof attachmentsConfig === "object"
         ? attachmentsConfig.maxSize
+        : undefined;
+    const maxBytes =
+      configuredMaxSize && configuredMaxSize > 0
+        ? Math.min(configuredMaxSize, CHAT_ATTACHMENT_MAX_BYTES)
         : undefined;
     return createChatAttachmentAdapter({
       apiUrl,

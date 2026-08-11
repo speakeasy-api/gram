@@ -27,6 +27,9 @@ import {
   AvatarFallback,
 } from "@/elements/components/ui/avatar";
 import { TooltipIconButton } from "@/elements/components/assistant-ui/tooltip-icon-button";
+import { getApiUrl } from "@/elements/lib/api";
+import { useAuth } from "@/elements/hooks/useAuth";
+import { useElements } from "@/elements/hooks/useElements";
 import { cn } from "@/lib/utils";
 import { attachmentTypeLabel } from "./attachment.helpers";
 
@@ -50,19 +53,73 @@ const useFileSrc = (file: File | undefined) => {
   return src;
 };
 
+/**
+ * Resolves an image attachment that lives behind Gram's authenticated serve
+ * endpoint. A replayed thread has no `File` to make an object URL from, and the
+ * URL cannot go straight into `<img src>` because the request needs session
+ * headers — so fetch it and hand the preview a blob URL instead.
+ */
+const useAuthenticatedSrc = (url: string | undefined) => {
+  const { config } = useElements();
+  const apiUrl = getApiUrl(config);
+  const auth = useAuth({ auth: config.api, projectSlug: config.projectSlug });
+  const [src, setSrc] = useState<string | undefined>(undefined);
+  const ensureValidHeaders = auth.ensureValidHeaders;
+
+  useEffect(() => {
+    if (!url || !url.startsWith(`${apiUrl}/rpc/assets.serveChatAttachment`)) {
+      setSrc(undefined);
+      return;
+    }
+
+    let objectUrl: string | undefined;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch(url, {
+          headers: await ensureValidHeaders(),
+        });
+        if (!response.ok) return;
+        const blob = await response.blob();
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setSrc(objectUrl);
+      } catch {
+        // Preview is best-effort: the card falls back to its file icon.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [url, apiUrl, ensureValidHeaders]);
+
+  return src;
+};
+
 const useAttachmentSrc = () => {
-  const { file, src } = useAuiState(
-    useShallow(({ attachment }): { file?: File; src?: string } => {
-      if (attachment.type !== "image") return {};
-      if (attachment.file) return { file: attachment.file };
-      const src = attachment.content?.filter((c) => c.type === "image")[0]
-        ?.image;
-      if (!src) return {};
-      return { src };
-    }),
+  const { file, src, fileUrl } = useAuiState(
+    useShallow(
+      ({ attachment }): { file?: File; src?: string; fileUrl?: string } => {
+        if (attachment.type !== "image") return {};
+        if (attachment.file) return { file: attachment.file };
+        const src = attachment.content?.filter((c) => c.type === "image")[0]
+          ?.image;
+        if (src) return { src };
+        // Replayed attachments carry the asset's serve URL on a file part.
+        const fileUrl = attachment.content?.filter((c) => c.type === "file")[0]
+          ?.data;
+        if (!fileUrl) return {};
+        return { fileUrl };
+      },
+    ),
   );
 
-  return useFileSrc(file) ?? src;
+  // Both hooks run unconditionally — `??` would short-circuit the second.
+  const objectSrc = useFileSrc(file);
+  const authenticatedSrc = useAuthenticatedSrc(fileUrl);
+  return objectSrc ?? src ?? authenticatedSrc;
 };
 
 type AttachmentPreviewProps = {

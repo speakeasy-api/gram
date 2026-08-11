@@ -54,8 +54,9 @@ interface UploadChatAttachmentInit {
 
 /**
  * Uploads one file to Gram and returns the asset it was stored as. The endpoint
- * takes the raw bytes as the request body — the content type and length headers
- * are the payload, so no multipart encoding is involved.
+ * takes the raw bytes as the request body, so no multipart encoding is
+ * involved. `Content-Length` is a forbidden header name in browsers — it is
+ * stripped and recomputed from the body, so it is not set here.
  */
 export async function uploadChatAttachment({
   apiUrl,
@@ -68,7 +69,6 @@ export async function uploadChatAttachment({
     headers: {
       ...headers,
       "Content-Type": chatAttachmentContentType(file),
-      "Content-Length": String(file.size),
     },
     body: file,
     signal,

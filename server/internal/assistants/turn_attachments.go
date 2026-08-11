@@ -84,6 +84,7 @@ func (s *ServiceCore) resolveDashboardTurnAttachments(ctx context.Context, proje
 		}
 		resolved = append(resolved, dashboardTurnAttachment{
 			AssetID:       row.ID,
+			ProjectID:     projectID,
 			Name:          name,
 			ContentType:   row.ContentType,
 			ContentLength: row.ContentLength,
@@ -155,9 +156,11 @@ func (s *ServiceCore) dashboardTurnAttachmentParts(ctx context.Context, projectI
 			continue
 		}
 
+		// Compare against the stored length, not the read limit: a file of
+		// exactly `limit` bytes arrives whole and must not claim otherwise.
 		truncated := ""
-		if int64(len(data)) >= limit {
-			truncated = "\n… (truncated)"
+		if int64(len(data)) < attachment.ContentLength {
+			truncated = "\n… (truncated — the full file is linked below)"
 		}
 		// `*-context` tag: Elements folds a leading context block into a
 		// collapsed disclosure, so the file's bytes stay available to the model
@@ -168,11 +171,13 @@ func (s *ServiceCore) dashboardTurnAttachmentParts(ctx context.Context, projectI
 			ImageURL: nil,
 		})
 	}
-	// Files whose bytes are not in the turn — formats the completions protocol
-	// cannot carry (PDFs, audio) and documents too large to inline (a full
-	// OpenAPI spec) — are announced with a short-lived download URL so the
-	// assistant can fetch them or hand them to a tool. Minted here rather than
-	// in DecodeTurn because the prompt must stay byte-stable across replay.
+	// Files whose bytes did not all make it into the turn are announced with a
+	// short-lived download URL: formats the completions protocol cannot carry
+	// (PDFs, audio) have nothing inline, and a document past the inline cap (a
+	// full OpenAPI spec) keeps its leading excerpt AND gets the link, so the
+	// model has immediate context plus a way to read the rest. Minted here
+	// rather than in DecodeTurn because the prompt must stay byte-stable
+	// across replay.
 	if links := s.dashboardTurnAttachmentLinks(ctx, projectID, payload.Attachments, needsLink); len(links) > 0 {
 		var b strings.Builder
 		b.WriteString("<attachment-downloads-context>\n")
@@ -220,7 +225,17 @@ func (s *ServiceCore) chatAttachmentURLs(ctx context.Context, projectID uuid.UUI
 // fetchable for files whose bytes it could not carry. Returns nil when no
 // signing key is configured.
 func (s *ServiceCore) dashboardTurnAttachmentLinks(ctx context.Context, projectID uuid.UUID, attachments []dashboardTurnAttachment, wanted map[uuid.UUID]struct{}) map[uuid.UUID]string {
-	if s.assetSigningKey == "" || s.serverURL == nil || len(wanted) == 0 {
+	if s.assetSigningKey == "" || len(wanted) == 0 {
+		return nil
+	}
+	// The runner is the one that fetches this, so address the server the way
+	// the runtime reaches it — in local development that is the host alias the
+	// container can resolve, not the browser's localhost.
+	base := s.runtime.ServerURL()
+	if base == nil {
+		base = s.serverURL
+	}
+	if base == nil {
 		return nil
 	}
 	links := make(map[uuid.UUID]string, len(wanted))
@@ -234,7 +249,7 @@ func (s *ServiceCore) dashboardTurnAttachmentLinks(ctx context.Context, projectI
 				attr.SlogError(err), attr.SlogAssetID(attachment.AssetID.String()))
 			continue
 		}
-		link := s.serverURL.JoinPath(assetssrv.ServeChatAttachmentSignedAssetsPath())
+		link := base.JoinPath(assetssrv.ServeChatAttachmentSignedAssetsPath())
 		link.RawQuery = url.Values{"token": {token}}.Encode()
 		links[attachment.AssetID] = link.String()
 	}

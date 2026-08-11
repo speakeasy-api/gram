@@ -118,13 +118,18 @@ func (dashboardAdapter) DecodeTurn(event assistantThreadEventRecord) (string, er
 	b.WriteString("</message-context>\n")
 	// Metadata only, and no minted URLs: DecodeTurn must stay byte-stable
 	// across replay. The file bytes (and any download link) ride along as
-	// input content parts built at turn dispatch.
+	// input content parts built at turn dispatch. The `*-context` tag keeps
+	// the list out of the user's chat bubble when the thread is reopened —
+	// Elements folds leading context blocks into a collapsed disclosure.
 	if len(payload.Attachments) > 0 {
-		b.WriteString("\n<attachments>\n")
+		b.WriteString("\n<attachments-context>\n")
 		for _, attachment := range payload.Attachments {
-			fmt.Fprintf(&b, "- %s (%s, %d bytes)\n", attachment.Name, attachment.ContentType, attachment.ContentLength)
+			// The asset reference travels with the metadata so a reopened
+			// thread can rebuild the same attachment cards the composer
+			// showed; serving the bytes needs both ids.
+			fmt.Fprintf(&b, "- %s (%s, %d bytes) id=%s project=%s\n", attachment.Name, attachment.ContentType, attachment.ContentLength, attachment.AssetID, attachment.ProjectID)
 		}
-		b.WriteString("</attachments>\n")
+		b.WriteString("</attachments-context>\n")
 	}
 	for _, skill := range payload.SkillContext {
 		if skill.SkillID == uuid.Nil || skill.ResolvedVersionID == uuid.Nil || skill.Name == "" || skill.Content == "" {

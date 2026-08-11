@@ -355,6 +355,19 @@ func newWakeDefinition() Definition {
 	}
 }
 
+// countRawJSONArray reports how many elements an undecoded JSON array holds,
+// treating anything that is not an array (absent, null, malformed) as empty.
+func countRawJSONArray(raw json.RawMessage) int {
+	if len(raw) == 0 {
+		return 0
+	}
+	var elements []json.RawMessage
+	if err := json.Unmarshal(raw, &elements); err != nil {
+		return 0
+	}
+	return len(elements)
+}
+
 func newDashboardDefinition() Definition {
 	schema := buildInputSchema[dashboardTriggerConfig]()
 	compiled := mustCompileSchema(schema)
@@ -378,7 +391,10 @@ func newDashboardDefinition() Definition {
 			if err := json.Unmarshal(payload, &event); err != nil {
 				return nil, fmt.Errorf("decode dashboard message: %w", err)
 			}
-			if event.Text == "" && len(event.Attachments) == 0 {
+			// `Attachments` is raw JSON, so its length is a byte count: `[]`
+			// and `null` would both pass a `len != 0` check and let a turn
+			// through with neither text nor files.
+			if event.Text == "" && countRawJSONArray(event.Attachments) == 0 {
 				return nil, fmt.Errorf("dashboard message text is required")
 			}
 			if event.UserID == "" {

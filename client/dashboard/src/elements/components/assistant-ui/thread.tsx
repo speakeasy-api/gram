@@ -164,6 +164,7 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
   // caller can view (e.g. via an admin-level read grant) but didn't create,
   // so there's no valid action to leave available.
   const composerHidden = useThreadMeta(chatId ?? undefined)?.readOnly ?? false;
+  const isReplay = useReplayContext()?.isReplay ?? false;
 
   const apiUrl = getApiUrl(config);
   const auth = useAuth({
@@ -224,7 +225,11 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
       <LazyMotion features={domAnimation}>
         <MotionConfig reducedMotion="user">
           <AttachmentDropZone
-            disabled={composerHidden}
+            // Every state that takes the composer away also refuses drops,
+            // or files queue into a composer the user cannot reach.
+            disabled={
+              composerHidden || (showFeedback && isResolved) || isReplay
+            }
             className="flex h-full min-h-0 flex-1 flex-col"
           >
             <ThreadPrimitive.Root

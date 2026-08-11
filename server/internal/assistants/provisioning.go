@@ -344,7 +344,10 @@ type DashboardAttachmentInput struct {
 // storage URL are re-resolved from the project's assets when the turn runs, so
 // a stale or tampered payload cannot point the runtime at another blob.
 type dashboardTurnAttachment struct {
-	AssetID       uuid.UUID `json:"asset_id"`
+	AssetID uuid.UUID `json:"asset_id"`
+	// ProjectID scopes the asset: serving the bytes back to a reopened thread
+	// needs both ids, and DecodeTurn has no project context of its own.
+	ProjectID     uuid.UUID `json:"project_id"`
 	Name          string    `json:"name"`
 	ContentType   string    `json:"content_type"`
 	ContentLength int64     `json:"content_length"`

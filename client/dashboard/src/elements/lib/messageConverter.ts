@@ -19,6 +19,12 @@ import type {
 } from "@assistant-ui/react";
 import { UIMessage } from "ai";
 
+import {
+  parseReplayedAttachments,
+  stripReplayedAttachmentText,
+  toCompleteAttachments,
+} from "@/elements/lib/replayedAttachments";
+
 /**
  * A single text part of a multi-modal chat message.
  */
@@ -274,6 +280,7 @@ function buildSystemContentParts(msg: GramChatMessage): [TextMessagePart] {
  */
 function convertGramMessageToThreadMessage(
   msg: GramChatMessage,
+  apiUrl?: string,
 ): ThreadMessage {
   const createdAt = parseDate(msg.created_at);
 
@@ -287,12 +294,25 @@ function convertGramMessageToThreadMessage(
   };
 
   if (msg.role === "user") {
+    // A replayed turn carries its attachments as metadata inside the text.
+    // Rebuild the cards from it and drop that machine text, so a reopened
+    // thread renders the same way it did when the message was sent.
+    const content = buildUserContentParts(msg);
+    const replayed = parseReplayedAttachments(
+      content.map((part) => (part.type === "text" ? part.text : "")).join("\n"),
+    );
     return {
       id: msg.id,
       role: "user",
       createdAt,
-      content: buildUserContentParts(msg),
-      attachments: [],
+      content: replayed.length
+        ? content.map((part) =>
+            part.type === "text"
+              ? { ...part, text: stripReplayedAttachmentText(part.text) }
+              : part,
+          )
+        : content,
+      attachments: apiUrl ? toCompleteAttachments(replayed, apiUrl) : [],
       metadata: baseMetadata,
     };
   }
@@ -336,6 +356,7 @@ function convertGramMessageToThreadMessage(
  */
 export function convertGramMessagesToExported(
   messages: GramChatMessage[],
+  apiUrl?: string,
 ): ExportedMessageRepository {
   if (messages.length === 0) {
     return { messages: [], headId: null };
@@ -353,7 +374,7 @@ export function convertGramMessagesToExported(
       continue;
     }
 
-    const threadMessage = convertGramMessageToThreadMessage(msg);
+    const threadMessage = convertGramMessageToThreadMessage(msg, apiUrl);
     exportedMessages.push({
       message: threadMessage,
       parentId: prevId,
@@ -368,7 +389,10 @@ export function convertGramMessagesToExported(
   };
 }
 
-export function convertGramMessagesToUIMessages(messages: GramChatMessage[]): {
+export function convertGramMessagesToUIMessages(
+  messages: GramChatMessage[],
+  apiUrl?: string,
+): {
   headId: string | null;
   messages: { parentId: string | null; message: UIMessage }[];
 } {
@@ -433,9 +457,9 @@ export function convertGramMessagesToUIMessages(messages: GramChatMessage[]): {
           message: {
             id: msg.id,
             role: "user",
-            parts: convertGramMessagePartsToUIMessageParts(
-              msg,
-              toolCallResults,
+            parts: withReplayedAttachments(
+              convertGramMessagePartsToUIMessageParts(msg, toolCallResults),
+              apiUrl,
             ),
           },
         });
@@ -467,6 +491,51 @@ export function convertGramMessagesToUIMessages(messages: GramChatMessage[]): {
     messages: uiMessages,
     headId: prevId,
   };
+}
+
+/**
+ * Rebuilds a replayed user turn so it renders the way it did when sent: the
+ * persisted `<attachments-context>` block (and the sanitizer's image
+ * placeholder) come out of the visible text, and each file it describes goes
+ * back as a `file` part — which assistant-ui renders as an attachment card.
+ */
+type UIMessagePart = UIMessage["parts"][number];
+
+function withReplayedAttachments(
+  parts: UIMessage["parts"],
+  apiUrl?: string,
+): UIMessagePart[] {
+  const text = parts
+    .map((part) => (part.type === "text" ? part.text : ""))
+    .join("\n");
+  const replayed = parseReplayedAttachments(text);
+  if (replayed.length === 0) {
+    return parts;
+  }
+
+  const cleaned: UIMessagePart[] = parts.flatMap((part): UIMessagePart[] => {
+    if (part.type !== "text") return [part];
+    const stripped = stripReplayedAttachmentText(part.text);
+    return stripped ? [{ ...part, text: stripped }] : [];
+  });
+
+  const fileParts = toCompleteAttachments(replayed, apiUrl ?? "").flatMap(
+    (attachment) =>
+      attachment.content.flatMap((content) =>
+        content.type === "file"
+          ? [
+              {
+                type: "file" as const,
+                url: content.data,
+                mediaType: content.mimeType,
+                filename: attachment.name,
+              },
+            ]
+          : [],
+      ),
+  );
+
+  return [...cleaned, ...fileParts];
 }
 
 /**

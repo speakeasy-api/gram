@@ -44,7 +44,7 @@ func TestDashboardDecodeTurnRendersAttachmentMetadata(t *testing.T) {
 		NormalizedPayloadJSON: payload,
 	})
 	require.NoError(t, err)
-	require.Contains(t, prompt, "<attachments>")
+	require.Contains(t, prompt, "<attachments-context>")
 	require.Contains(t, prompt, "- report.pdf (application/pdf, 2048 bytes)")
 	require.Contains(t, prompt, "what is in here?")
 

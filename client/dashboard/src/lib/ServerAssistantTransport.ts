@@ -11,6 +11,9 @@ import {
   type UIMessageStreamWriter,
 } from "ai";
 
+/** Matches the `attachments` MaxLength on assistants.sendMessage. */
+const MAX_TURN_ATTACHMENTS = 5;
+
 const DEFAULT_POLL_INTERVAL_MS = 1500;
 const DEFAULT_POLL_TIMEOUT_MS = 600_000;
 const MAX_CONSECUTIVE_POLL_FAILURES = 3;
@@ -130,6 +133,13 @@ export function createServerAssistantTransport(
           ) ?? [];
       if (!text && attachments.length === 0) {
         throw new Error("No user message to send.");
+      }
+      // The endpoint caps a turn at five files. Saying so here beats letting
+      // the send fail with a validation error after the user has typed.
+      if (attachments.length > MAX_TURN_ATTACHMENTS) {
+        throw new Error(
+          `You can attach up to ${MAX_TURN_ATTACHMENTS} files to a message. Remove ${attachments.length - MAX_TURN_ATTACHMENTS} to send.`,
+        );
       }
       const skillIds = deps.getSkillIds?.() ?? [];
 

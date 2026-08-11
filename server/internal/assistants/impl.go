@@ -300,6 +300,10 @@ func (s *Service) SendMessage(ctx context.Context, payload *gen.SendMessagePaylo
 
 	attachments := make([]DashboardAttachmentInput, 0, len(payload.Attachments))
 	for _, attachment := range payload.Attachments {
+		// A JSON `null` inside the array survives decoding as a nil element.
+		if attachment == nil {
+			return nil, oops.E(oops.CodeBadRequest, nil, "attachment entries cannot be null")
+		}
 		assetID, err := uuid.Parse(attachment.AssetID)
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid attachment asset id").LogError(ctx, s.logger)
