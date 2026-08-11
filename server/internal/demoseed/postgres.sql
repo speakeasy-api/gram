@@ -653,11 +653,12 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
      TRUE, 'warn', 'everyone', NULL, FALSE, 9.1, 1),
     -- OWASP LLM06 excessive agency + ASI05 unexpected code execution. Both
     -- sources are flag-only, hence action = flag. The exemption keeps
-    -- read-only tool calls out of the policy entirely.
+    -- read-only tool calls out of the policy entirely: the verbs cover every
+    -- tool_names entry except process_refund, the only mutating one.
     (policy_ds, proj_a, demo_org, 'Acme destructive command guardrail', 'standard',
      '{cli_destructive,destructive_tool}', NULL, '{}'::jsonb, '{}',
      '{tool_request}',
-     'tool_calls.size() > 0 && tool_calls.all(t, t.function.matchGlob("*get*") || t.function.matchGlob("*list*"))',
+     'tool_calls.size() > 0 && tool_calls.all(t, ["get","list","search","query","fetch","check"].exists(v, t.function.matchText(v)))',
      TRUE, 'flag', 'everyone', NULL, FALSE, 8.6, 1),
     -- MCP security best practices: unapproved / unsandboxed MCP servers.
     -- Name matches shadowMCPPolicyAutoName so the UI reads consistently.
