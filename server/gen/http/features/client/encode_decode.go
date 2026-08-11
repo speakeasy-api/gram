@@ -469,3 +469,227 @@ func DecodeSetProductFeatureResponse(decoder func(*http.Response) goahttp.Decode
 		}
 	}
 }
+
+// BuildSetRemoteSessionAutoRefreshPolicyRequest instantiates a HTTP request
+// object with method and path set to call the "features" service
+// "setRemoteSessionAutoRefreshPolicy" endpoint
+func (c *Client) BuildSetRemoteSessionAutoRefreshPolicyRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetRemoteSessionAutoRefreshPolicyFeaturesPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("features", "setRemoteSessionAutoRefreshPolicy", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetRemoteSessionAutoRefreshPolicyRequest returns an encoder for
+// requests sent to the features setRemoteSessionAutoRefreshPolicy server.
+func EncodeSetRemoteSessionAutoRefreshPolicyRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*features.SetRemoteSessionAutoRefreshPolicyPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("features", "setRemoteSessionAutoRefreshPolicy", "*features.SetRemoteSessionAutoRefreshPolicyPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewSetRemoteSessionAutoRefreshPolicyRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("features", "setRemoteSessionAutoRefreshPolicy", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetRemoteSessionAutoRefreshPolicyResponse returns a decoder for
+// responses returned by the features setRemoteSessionAutoRefreshPolicy
+// endpoint. restoreBody controls whether the response body should be restored
+// after having been read.
+// DecodeSetRemoteSessionAutoRefreshPolicyResponse may return the following
+// errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetRemoteSessionAutoRefreshPolicyResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetRemoteSessionAutoRefreshPolicyUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("features", "setRemoteSessionAutoRefreshPolicy", err)
+			}
+			err = ValidateSetRemoteSessionAutoRefreshPolicyUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("features", "setRemoteSessionAutoRefreshPolicy", err)
+			}
+			return nil, NewSetRemoteSessionAutoRefreshPolicyUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetRemoteSessionAutoRefreshPolicyForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("features", "setRemoteSessionAutoRefreshPolicy", err)
+			}
+			err = ValidateSetRemoteSessionAutoRefreshPolicyForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("features", "setRemoteSessionAutoRefreshPolicy", err)
+			}
+			return nil, NewSetRemoteSessionAutoRefreshPolicyForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetRemoteSessionAutoRefreshPolicyBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("features", "setRemoteSessionAutoRefreshPolicy", err)
+			}
+			err = ValidateSetRemoteSessionAutoRefreshPolicyBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("features", "setRemoteSessionAutoRefreshPolicy", err)
+			}
+			return nil, NewSetRemoteSessionAutoRefreshPolicyBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetRemoteSessionAutoRefreshPolicyNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("features", "setRemoteSessionAutoRefreshPolicy", err)
+			}
+			err = ValidateSetRemoteSessionAutoRefreshPolicyNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("features", "setRemoteSessionAutoRefreshPolicy", err)
+			}
+			return nil, NewSetRemoteSessionAutoRefreshPolicyNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetRemoteSessionAutoRefreshPolicyConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("features", "setRemoteSessionAutoRefreshPolicy", err)
+			}
+			err = ValidateSetRemoteSessionAutoRefreshPolicyConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("features", "setRemoteSessionAutoRefreshPolicy", err)
+			}
+			return nil, NewSetRemoteSessionAutoRefreshPolicyConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetRemoteSessionAutoRefreshPolicyUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("features", "setRemoteSessionAutoRefreshPolicy", err)
+			}
+			err = ValidateSetRemoteSessionAutoRefreshPolicyUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("features", "setRemoteSessionAutoRefreshPolicy", err)
+			}
+			return nil, NewSetRemoteSessionAutoRefreshPolicyUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetRemoteSessionAutoRefreshPolicyInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("features", "setRemoteSessionAutoRefreshPolicy", err)
+			}
+			err = ValidateSetRemoteSessionAutoRefreshPolicyInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("features", "setRemoteSessionAutoRefreshPolicy", err)
+			}
+			return nil, NewSetRemoteSessionAutoRefreshPolicyInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetRemoteSessionAutoRefreshPolicyInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("features", "setRemoteSessionAutoRefreshPolicy", err)
+				}
+				err = ValidateSetRemoteSessionAutoRefreshPolicyInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("features", "setRemoteSessionAutoRefreshPolicy", err)
+				}
+				return nil, NewSetRemoteSessionAutoRefreshPolicyInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetRemoteSessionAutoRefreshPolicyUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("features", "setRemoteSessionAutoRefreshPolicy", err)
+				}
+				err = ValidateSetRemoteSessionAutoRefreshPolicyUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("features", "setRemoteSessionAutoRefreshPolicy", err)
+				}
+				return nil, NewSetRemoteSessionAutoRefreshPolicyUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("features", "setRemoteSessionAutoRefreshPolicy", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetRemoteSessionAutoRefreshPolicyGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("features", "setRemoteSessionAutoRefreshPolicy", err)
+			}
+			err = ValidateSetRemoteSessionAutoRefreshPolicyGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("features", "setRemoteSessionAutoRefreshPolicy", err)
+			}
+			return nil, NewSetRemoteSessionAutoRefreshPolicyGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("features", "setRemoteSessionAutoRefreshPolicy", resp.StatusCode, string(body))
+		}
+	}
+}

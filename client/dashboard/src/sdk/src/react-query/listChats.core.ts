@@ -54,6 +54,7 @@ export function buildListChatsQuery(
     queryKey: queryKeyListChats({
       search: request?.search,
       externalUserId: request?.externalUserId,
+      userId: request?.userId,
       source: request?.source,
       assistantId: request?.assistantId,
       sourceKind: request?.sourceKind,
@@ -98,6 +99,7 @@ export function queryKeyListChats(
   parameters: {
     search?: string | undefined;
     externalUserId?: string | undefined;
+    userId?: string | undefined;
     source?: string | undefined;
     assistantId?: string | undefined;
     sourceKind?: string | undefined;

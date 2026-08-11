@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { ResourceListPage } from "@/components/page-templates";
 import { DotRow } from "@/components/ui/DotRow";
 import { DotTable } from "@/components/ui/DotTable";
 import { Text } from "@/components/ui/Text";
@@ -44,18 +45,28 @@ export function PlatformRemoteIdentityProvidersRoot(): JSX.Element {
 }
 
 export function PlatformRemoteIdentityProvidersPage(): JSX.Element {
-  return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <PlatformAdminOnly feature="Platform Remote Identity Providers">
-          <PlatformRemoteIdentityProvidersOverview />
-        </PlatformAdminOnly>
-      </Page.Body>
-    </Page>
-  );
+  const isPlatformAdmin = useIsPlatformAdmin();
+
+  // The platform-admin flag is not an RBAC scope, so it can't ride the
+  // ResourceListPage `scope` gate. Non-admins get the framed refusal (keeping
+  // breadcrumbs); admins fall through to the list template, which renders its
+  // own frame.
+  if (!isPlatformAdmin) {
+    return (
+      <Page>
+        <Page.Header>
+          <Page.Header.Breadcrumbs />
+        </Page.Header>
+        <Page.Body>
+          <PlatformAdminOnly feature="Platform Remote Identity Providers">
+            {null}
+          </PlatformAdminOnly>
+        </Page.Body>
+      </Page>
+    );
+  }
+
+  return <PlatformRemoteIdentityProvidersOverview />;
 }
 
 function PlatformRemoteIdentityProvidersOverview() {
@@ -119,52 +130,45 @@ function PlatformRemoteIdentityProvidersOverview() {
 
   return (
     <>
-      <Page.Section>
-        <Page.Section.Title>
-          Platform Remote Identity Providers
-        </Page.Section.Title>
-        <Page.Section.CTA>
+      <ResourceListPage
+        title="Platform Remote Identity Providers"
+        description="Well-known upstream identity providers curated by Speakeasy and inherited by every organization. Editing one here changes it for every tenant that has adopted it."
+        primaryAction={
           <Button size="sm" onClick={() => setCreateOpen(true)}>
             <Button.LeftIcon>
               <Plus />
             </Button.LeftIcon>
             <Button.Text>New Platform Provider</Button.Text>
           </Button>
-        </Page.Section.CTA>
-        <Page.Section.Description className="max-w-2xl">
-          Well-known upstream identity providers curated by Speakeasy and
-          inherited by every organization. Editing one here changes it for every
-          tenant that has adopted it.
-        </Page.Section.Description>
-        <Page.Section.Body>
-          <PlatformIssuerTable
-            items={items}
-            isLoading={isLoading}
-            isError={isError}
-            onDelete={setDeleteTarget}
-            onRefreshMetadata={(item) =>
-              refreshMetadata.mutate({
-                request: { riskIDRequestBody: { id: item.issuer.id } },
-              })
-            }
-            refreshPending={refreshMetadata.isPending}
-          />
-          {hasNextPage && (
-            <div className="flex justify-center pt-2">
-              <Button
-                variant="tertiary"
-                size="sm"
-                disabled={isFetchingNextPage}
-                onClick={() => void fetchNextPage()}
-              >
-                <Button.Text>
-                  {isFetchingNextPage ? "Loading…" : "Load more"}
-                </Button.Text>
-              </Button>
-            </div>
-          )}
-        </Page.Section.Body>
-      </Page.Section>
+        }
+      >
+        <PlatformIssuerTable
+          items={items}
+          isLoading={isLoading}
+          isError={isError}
+          onDelete={setDeleteTarget}
+          onRefreshMetadata={(item) =>
+            refreshMetadata.mutate({
+              request: { riskIDRequestBody: { id: item.issuer.id } },
+            })
+          }
+          refreshPending={refreshMetadata.isPending}
+        />
+        {hasNextPage && (
+          <div className="flex justify-center pt-2">
+            <Button
+              variant="tertiary"
+              size="sm"
+              disabled={isFetchingNextPage}
+              onClick={() => void fetchNextPage()}
+            >
+              <Button.Text>
+                {isFetchingNextPage ? "Loading…" : "Load more"}
+              </Button.Text>
+            </Button>
+          </div>
+        )}
+      </ResourceListPage>
 
       <CreatePlatformIssuerSheet
         open={createOpen}

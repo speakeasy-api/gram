@@ -23,6 +23,7 @@ var _ = Service("chat", func() {
 			security.ChatSessionsTokenPayload()
 			Attribute("search", String, "Search query (searches chat ID, user ID, user name, and title)")
 			Attribute("external_user_id", String, "Filter by external user ID")
+			Attribute("user_id", String, "Filter by Gram user ID")
 			Attribute("source", String, "Filter by agent source. Comma-separated list of exact source values (e.g. 'claude-code,Codex,playground') matched against each session's inferred source; empty for no filter. Use chat.listSources to discover the available values.")
 			Attribute("assistant_id", String, "Filter to chats produced by this assistant", func() {
 				Format(FormatUUID)
@@ -72,6 +73,7 @@ var _ = Service("chat", func() {
 			GET("/rpc/chat.list")
 			Param("search")
 			Param("external_user_id")
+			Param("user_id")
 			Param("source")
 			Param("assistant_id")
 			Param("source_kind")

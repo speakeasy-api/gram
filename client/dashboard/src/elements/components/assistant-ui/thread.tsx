@@ -8,6 +8,7 @@ import {
   CircleIcon,
   CopyIcon,
   DownloadIcon,
+  Mic,
   PencilIcon,
   Search,
   Settings2,
@@ -78,6 +79,7 @@ import { useReplayContext } from "@/elements/contexts/ReplayContext";
 import { useThreadMeta } from "@/elements/contexts/ThreadMetaContext";
 import { useAuth } from "@/elements/hooks/useAuth";
 import { useDensity } from "@/elements/hooks/useDensity";
+import { useDictationLevels } from "@/elements/hooks/useDictationLevels";
 import { useElements } from "@/elements/hooks/useElements";
 import { isLocalThreadId } from "@/elements/hooks/useGramThreadListAdapter";
 import { useRadius } from "@/elements/hooks/useRadius";
@@ -85,6 +87,7 @@ import { useRecordCassette } from "@/elements/hooks/useRecordCassette";
 import { useThemeProps } from "@/elements/hooks/useThemeProps";
 import { useToolMentions } from "@/elements/hooks/useToolMentions";
 import { getApiUrl } from "@/elements/lib/api";
+import { dictationAdapter } from "@/elements/lib/dictation";
 import { EASE_OUT_QUINT } from "@/elements/lib/easing";
 import { groupAssistantMessageParts } from "@/elements/lib/messagePartGrouping";
 import {
@@ -92,7 +95,11 @@ import {
   trailingAnnotationLine,
 } from "@/elements/lib/toolCallAnnotation";
 import { MODELS } from "@/elements/lib/models";
-import type { ComposerSkill, SkillContextConfig } from "@/elements/types";
+import type {
+  ComposerSkill,
+  ComposerSlashCommand,
+  SkillContextConfig,
+} from "@/elements/types";
 import {
   type MentionableTool,
   toolSetToMentionableTools,
@@ -585,9 +592,21 @@ const ComposerFeedback: FC = () => {
 
 interface ComposerProps {
   showFeedback?: boolean;
+  /** Standalone hosts (entry-point composers with no message list above them)
+   *  pass false: there is no viewport to scroll back down to, and the composer
+   *  must not claim the run state of a conversation it doesn't own. */
+  showThreadAffordances?: boolean;
+  /** Grab focus on mount. True inside a thread, where typing is the only thing
+   *  to do; false on landing pages, where stealing focus hijacks the scroll
+   *  position and the keyboard from the rest of the page. */
+  autoFocus?: boolean;
 }
 
-const Composer: FC<ComposerProps> = ({ showFeedback = false }) => {
+export const Composer: FC<ComposerProps> = ({
+  showFeedback = false,
+  showThreadAffordances = true,
+  autoFocus = true,
+}) => {
   const { config, mcpTools } = useElements();
   const { isResolved, setUnresolved } = useChatResolution();
   const r = useRadius();
@@ -595,6 +614,8 @@ const Composer: FC<ComposerProps> = ({ showFeedback = false }) => {
   const replayCtx = useReplayContext();
 
   const isReplay = replayCtx?.isReplay ?? false;
+  const isDictating = useAuiState(({ composer }) => composer.dictation != null);
+  const isComposerEmpty = useAuiState(({ composer }) => composer.text === "");
   const composerConfig = config.composer ?? {
     placeholder: "Send a message...",
     attachments: true,
@@ -609,6 +630,37 @@ const Composer: FC<ComposerProps> = ({ showFeedback = false }) => {
       composerConfig.toolMentions.enabled !== false);
 
   const composerRootRef = useRef<HTMLFormElement>(null);
+
+  // Slash commands: typing `/` turns the draft into a command query. Picking
+  // one REPLACES the draft and sends, so the raw "/…" text is never submitted.
+  const aui = useAui();
+  const composerText = useAuiState(({ composer }) => composer.text);
+  const slashCommands = composerConfig.slashCommands ?? [];
+  const slashQuery = composerText.startsWith("/")
+    ? composerText.slice(1).trim().toLowerCase()
+    : null;
+  const slashMatches = useMemo(() => {
+    if (slashQuery === null) return [];
+    if (!slashQuery) return slashCommands;
+    return slashCommands.filter(
+      (command) =>
+        command.title.toLowerCase().includes(slashQuery) ||
+        (command.label?.toLowerCase().includes(slashQuery) ?? false),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- slashCommands is a config array, compared by content below
+  }, [slashQuery, slashCommands]);
+  const [activeSlashIndex, setActiveSlashIndex] = useState(0);
+  const slashOpen = slashMatches.length > 0;
+
+  useEffect(() => {
+    setActiveSlashIndex(0);
+  }, [slashQuery]);
+
+  const runSlashCommand = (command: ComposerSlashCommand) => {
+    const composer = aui.composer();
+    composer.setText(command.prompt);
+    composer.send();
+  };
 
   if (components.Composer) {
     return <components.Composer />;
@@ -626,10 +678,12 @@ const Composer: FC<ComposerProps> = ({ showFeedback = false }) => {
       {/* Floating overlay above the opaque composer: keeps the message list
           scrolling all the way down to the composer instead of being cut off
           by a band of background behind the feedback pill. */}
-      <div className="aui-composer-overlay pointer-events-none absolute inset-x-0 bottom-full z-20 flex justify-center pb-3">
-        {showFeedback && <ComposerFeedback />}
-        <ThreadScrollToBottom />
-      </div>
+      {showThreadAffordances && (
+        <div className="aui-composer-overlay pointer-events-none absolute inset-x-0 bottom-full z-20 flex justify-center pb-3">
+          {showFeedback && <ComposerFeedback />}
+          <ThreadScrollToBottom />
+        </div>
+      )}
       {showFeedback && isResolved ? (
         <m.div
           className="aui-composer-resolved flex min-h-[118px] flex-col items-center justify-center gap-2 border-t border-input px-1"
@@ -652,33 +706,171 @@ const Composer: FC<ComposerProps> = ({ showFeedback = false }) => {
       ) : (
         <ComposerPrimitive.Root
           ref={composerRootRef}
+          // Capture: the menu owns Up/Down/Enter while it is open, before the
+          // textarea inserts a newline or the composer sends the raw query.
+          onKeyDownCapture={(event) => {
+            if (!slashOpen) return;
+            if (event.key === "ArrowDown") {
+              event.preventDefault();
+              setActiveSlashIndex((i) => (i + 1) % slashMatches.length);
+            } else if (event.key === "ArrowUp") {
+              event.preventDefault();
+              setActiveSlashIndex(
+                (i) => (i - 1 + slashMatches.length) % slashMatches.length,
+              );
+            } else if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              event.stopPropagation();
+              const command = slashMatches[activeSlashIndex];
+              if (command) runSlashCommand(command);
+            } else if (event.key === "Escape") {
+              event.preventDefault();
+              aui.composer().setText("");
+            }
+          }}
+          // Lets compact hosts (the docked pill) restyle the composer while
+          // dictation is live — there is no room there for both the transcript
+          // and the level trail.
+          data-dictating={isDictating ? "true" : undefined}
+          // Hosts that paint their own placeholder (the landing surfaces cycle
+          // through example prompts) need to know when the draft is empty.
+          data-empty={isComposerEmpty ? "true" : undefined}
           className={cn(
-            "aui-composer-root group/input-group relative flex min-h-[118px] w-full flex-col border border-input bg-background px-1 pt-2 shadow-xs transition-[color,box-shadow] outline-none has-[textarea:focus-visible]:border-ring has-[textarea:focus-visible]:ring-1 has-[textarea:focus-visible]:ring-ring/5 dark:bg-background",
+            "aui-composer-root group/input-group relative flex min-h-[118px] w-full flex-col border border-black/8 bg-background px-1.5 pt-3 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_10px_28px_-16px_rgba(0,0,0,0.18)] transition-[color,border-color,box-shadow] outline-none has-[textarea:focus-visible]:border-black/15 dark:border-white/10 dark:bg-background dark:has-[textarea:focus-visible]:border-white/20",
             r("xl"),
             isReplay && "pointer-events-none opacity-50",
           )}
         >
           {composerConfig.attachments && <ComposerAttachments />}
 
+          {slashOpen && (
+            <ComposerSlashCommandMenu
+              commands={slashMatches}
+              activeIndex={activeSlashIndex}
+              onHover={setActiveSlashIndex}
+              onSelect={runSlashCommand}
+            />
+          )}
+
           {toolMentionsEnabled && <ComposerToolMentions tools={mcpTools} />}
 
           <ComposerSkillContextBadges />
 
+          {/* Speech lands in the input as the recognizer finalizes it, which
+              reads as text writing itself. Hide the draft while the session is
+              live and show a single "Listening…" label instead; the text is
+              revealed intact the moment dictation stops. */}
+          {isDictating && (
+            <span
+              aria-hidden="true"
+              className={cn(
+                "aui-composer-listening pointer-events-none absolute px-4 pt-0.5 text-muted-foreground",
+                d("text-base"),
+              )}
+            >
+              Listening…
+            </span>
+          )}
           <ComposerPrimitive.Input
             placeholder={composerConfig.placeholder}
             className={cn(
-              "aui-composer-input mb-1 max-h-32 w-full resize-none bg-transparent px-3.5 pt-1.5 pb-3 text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-0",
+              "aui-composer-input mb-1 max-h-32 w-full resize-none bg-transparent px-4 pt-0.5 pb-3 text-foreground outline-none placeholder:text-muted-foreground/70 focus-visible:ring-0",
               d("h-input"),
               d("text-base"),
+              isDictating && "invisible",
             )}
             rows={1}
-            autoFocus={!isReplay}
+            autoFocus={autoFocus && !isReplay}
             disabled={isReplay}
             aria-label="Message input"
           />
-          <ComposerAction />
+          <ComposerAction showRunState={showThreadAffordances} />
         </ComposerPrimitive.Root>
       )}
+    </div>
+  );
+};
+
+/**
+ * Live feedback while dictating: finalized speech lands in the input, interim
+ * words only exist in the transcript primitive until the recognizer commits.
+ */
+const DICTATION_BAR_COUNT = 28;
+
+/**
+ * The scrolling level trail shown left of the mic while dictating: newest
+ * sample sits next to the button, so speech visibly flows into it.
+ */
+const ComposerDictationWave: FC = () => {
+  // The recognizer's interim transcript is the speech signal — see
+  // useDictationLevels for why this doesn't tap the microphone directly.
+  const transcript = useAuiState(
+    ({ composer }) => composer.dictation?.transcript,
+  );
+  const levels = useDictationLevels(transcript, DICTATION_BAR_COUNT);
+
+  return (
+    <div
+      aria-hidden="true"
+      className="aui-composer-dictation-wave mr-1 flex h-[34px] items-center gap-[3px]"
+    >
+      {levels.map((level, index) => (
+        <span
+          key={index}
+          className="aui-composer-dictation-bar w-[2px] shrink-0 rounded-full bg-muted-foreground/60"
+          // Floor of 2px keeps the row reading as a dotted line while silent,
+          // exactly like the reference. No CSS transition: the value already
+          // updates every frame, and a transition would only damp the peaks.
+          style={{ height: `${(2 + level * 16).toFixed(1)}px` }}
+        />
+      ))}
+    </div>
+  );
+};
+
+/**
+ * Command list shown above the composer while the draft is a `/` query.
+ * Selection is owned by the composer so Enter and click resolve to the same
+ * row; rows use onMouseDown-prevent so clicking one doesn't blur the input
+ * (which would clear the query before the click lands).
+ */
+const ComposerSlashCommandMenu: FC<{
+  commands: ComposerSlashCommand[];
+  activeIndex: number;
+  onHover: (index: number) => void;
+  onSelect: (command: ComposerSlashCommand) => void;
+}> = ({ commands, activeIndex, onHover, onSelect }) => {
+  const r = useRadius();
+  return (
+    <div
+      role="listbox"
+      className={cn(
+        "aui-composer-slash-menu absolute bottom-full left-0 z-50 mb-2 max-h-64 w-full overflow-y-auto border border-input bg-background shadow-md",
+        r("lg"),
+      )}
+    >
+      {commands.map((command, index) => (
+        <button
+          key={command.title}
+          type="button"
+          role="option"
+          aria-selected={index === activeIndex}
+          onMouseDown={(event) => event.preventDefault()}
+          onMouseEnter={() => onHover(index)}
+          onClick={() => onSelect(command)}
+          className={cn(
+            "aui-composer-slash-item flex w-full items-baseline gap-2 px-3 py-2 text-left text-sm",
+            index === activeIndex && "bg-muted",
+          )}
+        >
+          <span className="truncate text-foreground">{command.title}</span>
+          {command.label && (
+            <span className="truncate text-xs text-muted-foreground">
+              {command.label}
+            </span>
+          )}
+        </button>
+      ))}
     </div>
   );
 };
@@ -1106,7 +1298,13 @@ const ComposerSkillContextPicker: FC = () => {
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
 
-  if (!skillContext) {
+  // Nothing to attach → no affordance. An "Add context" button that opens an
+  // empty list is worse than no button, and the project may simply have no
+  // skills yet. Still shown while loading, so it doesn't flicker in.
+  if (
+    !skillContext ||
+    (skillContext.skills.length === 0 && !skillContext.loading)
+  ) {
     return null;
   }
 
@@ -1272,13 +1470,66 @@ function SkillContextPickerResults({
   );
 }
 
-const ComposerAction: FC = () => {
+/**
+ * Push-to-talk mic. Rendered only when the browser exposes the Web Speech API —
+ * without an adapter the primitive's click handler is null, so the button would
+ * look live but do nothing.
+ */
+const ComposerDictate: FC = () => {
+  const r = useRadius();
+  // `composer.dictation` holds the live session and is undefined otherwise.
+  const isDictating = useAuiState(({ composer }) => composer.dictation != null);
+
+  if (isDictating) {
+    return (
+      <>
+        <ComposerDictationWave />
+        <ComposerPrimitive.StopDictation asChild>
+          <TooltipIconButton
+            tooltip="Stop dictation"
+            side="bottom"
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "aui-composer-dictate size-[34px] bg-blue-600 p-1 text-white hover:bg-blue-600/85 hover:text-white",
+              r("full"),
+            )}
+            aria-label="Stop dictation"
+          >
+            <Mic className="aui-composer-dictate-icon size-5 stroke-[1.5px]" />
+          </TooltipIconButton>
+        </ComposerPrimitive.StopDictation>
+      </>
+    );
+  }
+
+  return (
+    <ComposerPrimitive.Dictate asChild>
+      <TooltipIconButton
+        tooltip="Dictate message"
+        side="bottom"
+        type="button"
+        variant="ghost"
+        size="icon"
+        className={cn("aui-composer-dictate size-[34px] p-1", r("full"))}
+        aria-label="Dictate message"
+      >
+        <Mic className="aui-composer-dictate-icon size-5 stroke-[1.5px]" />
+      </TooltipIconButton>
+    </ComposerPrimitive.Dictate>
+  );
+};
+
+const ComposerAction: FC<{ showRunState?: boolean }> = ({
+  showRunState = true,
+}) => {
   const { config } = useElements();
   const r = useRadius();
   const composerConfig = config.composer ?? { attachments: true };
   return (
-    <div className="aui-composer-action-wrapper relative mx-1 mt-2 mb-2 flex items-center justify-between">
-      <div className="aui-composer-action-wrapper-inner flex items-center text-muted-foreground">
+    <div className="aui-composer-action-wrapper relative mx-1.5 mt-1 mb-2 flex items-center justify-between">
+      <div className="aui-composer-action-wrapper-inner flex items-center gap-0.5 text-muted-foreground">
         {composerConfig.attachments ? (
           <ComposerAddAttachment />
         ) : (
@@ -1289,45 +1540,76 @@ const ComposerAction: FC = () => {
 
         <ComposerSkillContextPicker />
 
+        {CASSETTE_RECORDING_ENABLED && <ComposerCassetteRecorder />}
+      </div>
+
+      {/* Claude's ordering: composition tools on the left, model + voice +
+          send on the right, closest to where the eye lands after typing. */}
+      <div className="aui-composer-action-send-group flex items-center gap-1.5">
         {config.model?.showModelPicker && !config.languageModel && (
           <ComposerModelPicker />
         )}
 
-        {CASSETTE_RECORDING_ENABLED && <ComposerCassetteRecorder />}
+        {dictationAdapter && <ComposerDictate />}
+
+        {/* A standalone entry-point composer (chat home, project home, the
+            docked pill) shares the runtime with whatever conversation is
+            already streaming, but it does not OWN that run: showing its stop
+            button there offers to cancel a turn the user cannot even see. It
+            always shows send, and starts a fresh thread instead. */}
+        {!showRunState && (
+          <ComposerPrimitive.Send asChild>
+            <TooltipIconButton
+              tooltip="Send message"
+              side="bottom"
+              type="submit"
+              variant="default"
+              size="icon"
+              className={cn("aui-composer-send size-[34px] p-1", r("full"))}
+              aria-label="Send message"
+            >
+              <ArrowUpIcon className="aui-composer-send-icon size-5" />
+            </TooltipIconButton>
+          </ComposerPrimitive.Send>
+        )}
+
+        {showRunState && (
+          <ThreadPrimitive.If running={false}>
+            <ComposerPrimitive.Send asChild>
+              <TooltipIconButton
+                tooltip="Send message"
+                side="bottom"
+                type="submit"
+                variant="default"
+                size="icon"
+                className={cn("aui-composer-send size-[34px] p-1", r("full"))}
+                aria-label="Send message"
+              >
+                <ArrowUpIcon className="aui-composer-send-icon size-5" />
+              </TooltipIconButton>
+            </ComposerPrimitive.Send>
+          </ThreadPrimitive.If>
+        )}
+
+        {showRunState && (
+          <ThreadPrimitive.If running>
+            <ComposerPrimitive.Cancel asChild>
+              <Button
+                type="button"
+                variant="default"
+                size="icon"
+                className={cn(
+                  "aui-composer-cancel size-[34px] border border-muted-foreground/60 hover:bg-primary/75 dark:border-muted-foreground/90",
+                  r("full"),
+                )}
+                aria-label="Stop generating"
+              >
+                <Square className="aui-composer-cancel-icon size-3.5 fill-white dark:fill-black" />
+              </Button>
+            </ComposerPrimitive.Cancel>
+          </ThreadPrimitive.If>
+        )}
       </div>
-
-      <ThreadPrimitive.If running={false}>
-        <ComposerPrimitive.Send asChild>
-          <TooltipIconButton
-            tooltip="Send message"
-            side="bottom"
-            type="submit"
-            variant="default"
-            size="icon"
-            className={cn("aui-composer-send size-[34px] p-1", r("full"))}
-            aria-label="Send message"
-          >
-            <ArrowUpIcon className="aui-composer-send-icon size-5" />
-          </TooltipIconButton>
-        </ComposerPrimitive.Send>
-      </ThreadPrimitive.If>
-
-      <ThreadPrimitive.If running>
-        <ComposerPrimitive.Cancel asChild>
-          <Button
-            type="button"
-            variant="default"
-            size="icon"
-            className={cn(
-              "aui-composer-cancel size-[34px] border border-muted-foreground/60 hover:bg-primary/75 dark:border-muted-foreground/90",
-              r("full"),
-            )}
-            aria-label="Stop generating"
-          >
-            <Square className="aui-composer-cancel-icon size-3.5 fill-white dark:fill-black" />
-          </Button>
-        </ComposerPrimitive.Cancel>
-      </ThreadPrimitive.If>
     </div>
   );
 };

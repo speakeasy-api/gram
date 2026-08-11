@@ -48,11 +48,13 @@ type sessionCacheDeadlineRecorder struct {
 }
 
 func (r *sessionCacheDeadlineRecorder) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
-	deadline, ok := ctx.Deadline()
-	if ok {
-		r.remaining <- time.Until(deadline)
-	} else {
-		r.remaining <- 0
+	if strings.HasPrefix(key, "session:metadata:") {
+		deadline, ok := ctx.Deadline()
+		if ok {
+			r.remaining <- time.Until(deadline)
+		} else {
+			r.remaining <- 0
+		}
 	}
 	if err := r.Cache.Set(ctx, key, value, ttl); err != nil {
 		return fmt.Errorf("set cache: %w", err)
@@ -627,6 +629,38 @@ func TestCanonicalChatTitle_TruncatesByRunes(t *testing.T) {
 	title := canonicalChatTitle(payload, "")
 	require.True(t, utf8.ValidString(title))
 	require.Len(t, []rune(title), 80)
+}
+
+func TestCanonicalAgentTurnIDAcceptsLegacyCodexTurnID(t *testing.T) {
+	t.Parallel()
+
+	payload := canonicalIngestPayload("codex", "prompt.submitted", "codex-session")
+	payload.Session.TurnID = new("turn-1")
+	require.Equal(t, "codex:turn-1", canonicalAgentTurnID(payload))
+}
+
+func TestCanonicalAgentTurnIDExtractsLegacyOpenCodeMessageID(t *testing.T) {
+	t.Parallel()
+
+	payload := canonicalIngestPayload("opencode", "prompt.submitted", "opencode-session")
+	payload.Raw = json.RawMessage(`{"input":{"messageID":"msg-input"},"output":{"message":{"id":"msg-output"}}}`)
+	require.Equal(t, "opencode:msg-output", canonicalAgentTurnID(payload))
+}
+
+func TestCanonicalAgentTurnIDRejectsSpoofedProviderPrefix(t *testing.T) {
+	t.Parallel()
+
+	payload := canonicalIngestPayload("custom-adapter", "prompt.submitted", "custom-session")
+	payload.Session.TurnID = new("agent-turn:v1:opencode:msg-1")
+	require.Empty(t, canonicalAgentTurnID(payload))
+}
+
+func TestCanonicalAgentTurnIDRejectsProviderWithoutSharedIdentity(t *testing.T) {
+	t.Parallel()
+
+	payload := canonicalIngestPayload("claude", "prompt.submitted", "claude-session")
+	payload.Session.TurnID = new("turn-1")
+	require.Empty(t, canonicalAgentTurnID(payload))
 }
 
 func TestIngest_SkillActivationIsAcceptedAsFeatureEvent(t *testing.T) {

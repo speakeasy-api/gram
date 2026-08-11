@@ -7,12 +7,14 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/memory"
@@ -64,6 +66,16 @@ func WithSlackHTTPClient(client *guardian.HTTPClient) Option {
 	}
 }
 
+// WithFileURLMinting enables tools that mint short-lived asset download URLs
+// (e.g. platform_slack_get_file_url) by supplying the sealing client and the
+// public base URL the minted URLs point at.
+func WithFileURLMinting(enc *encryption.Client, serverURL *url.URL) Option {
+	return func(c *config) {
+		c.deps.Encryption = enc
+		c.deps.ServerURL = serverURL
+	}
+}
+
 func WithExternalTools(extras []platformtools.ExternalTool) Option {
 	return func(c *config) {
 		c.extras = extras
@@ -93,6 +105,8 @@ func NewService(
 			Audit:            auditLogger,
 			TriggerApp:       nil,
 			SlackHTTPClient:  nil,
+			Encryption:       nil,
+			ServerURL:        nil,
 		},
 		extras:         nil,
 		featureChecker: nil,

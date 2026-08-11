@@ -1,41 +1,22 @@
 import { Icon } from "@/components/ui/Icon";
 import { Text } from "@/components/ui/Text";
 import { useSession } from "@/contexts/Auth";
-import { getTrialStatus, MILLISECONDS_PER_DAY } from "@/lib/trial-status";
+import {
+  getTrialStatusFromDates,
+  isValidDate,
+  MILLISECONDS_PER_DAY,
+} from "@/lib/trial-status";
 import { useEffect, useState } from "react";
+import { Link } from "react-router";
 
-const SALES_URL = "https://www.speakeasy.com/talk-to-us";
+// The in-app upgrade gate, which prefills the booking form from the session.
+// The marketing site's /talk-to-us cannot.
+const SALES_PATH = "/talk-to-us";
 
-const BLACK_PROGRESS_CLASS = "bg-[var(--color-base-black)]";
-const DEEP_GREEN_PROGRESS_CLASS = "bg-[var(--color-brand-c)]";
-const ORANGE_PROGRESS_CLASS = "bg-[var(--color-brand-ruby)]";
-const RED_PROGRESS_CLASS = "bg-[var(--color-brand-swift)]";
-
-function isValidDate(value: unknown): value is Date {
-  return value instanceof Date && Number.isFinite(value.getTime());
-}
-
-function getTrialStatusFromDates(
-  trial: { startedAt: Date; endsAt: Date } | null | undefined,
-  now: Date,
-) {
-  if (
-    trial === null ||
-    trial === undefined ||
-    !isValidDate(trial.startedAt) ||
-    !isValidDate(trial.endsAt)
-  ) {
-    return null;
-  }
-
-  return getTrialStatus(
-    {
-      startedAt: trial.startedAt.toISOString(),
-      endsAt: trial.endsAt.toISOString(),
-    },
-    now,
-  );
-}
+const BLACK_PROGRESS_CLASS = "bg-(--color-base-black)";
+const DEEP_GREEN_PROGRESS_CLASS = "bg-(--color-brand-c)";
+const ORANGE_PROGRESS_CLASS = "bg-(--color-brand-ruby)";
+const RED_PROGRESS_CLASS = "bg-(--color-brand-swift)";
 
 function getTrialProgressColorClass(
   dayNumber: number,
@@ -145,15 +126,13 @@ export function TrialStatusCard(): React.ReactNode {
             />
           </div>
         </div>
-        <a
-          href={SALES_URL}
-          target="_blank"
-          rel="noopener noreferrer"
+        <Link
+          to={SALES_PATH}
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           Talk to sales
           <Icon name="arrow-right" className="size-3" aria-hidden="true" />
-        </a>
+        </Link>
       </div>
     </div>
   );

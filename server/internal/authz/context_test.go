@@ -21,9 +21,7 @@ func TestPrepareContext_loadsUserGrants(t *testing.T) {
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	chConn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -33,7 +31,7 @@ func TestPrepareContext_loadsUserGrants(t *testing.T) {
 	seedConnectedUser(t, ctx, conn, authCtx.ActiveOrganizationID, authCtx.UserID, "test@example.com", "Test User", "user_workos_test", "membership_test")
 	seedGrant(t, ctx, conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ScopeProjectRead, WildcardResource)
 
-	ctx, err = engine.PrepareContext(ctx)
+	ctx, err := engine.PrepareContext(ctx)
 	require.NoError(t, err)
 
 	_, ok = GrantsFromContext(ctx)
@@ -46,16 +44,14 @@ func TestPrepareContext_rejectsInvalidUserPrincipal(t *testing.T) {
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	chConn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	authCtx.UserID = urn.AllUsersPrincipalID
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	_, err = engine.PrepareContext(ctx)
+	_, err := engine.PrepareContext(ctx)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
@@ -67,9 +63,7 @@ func TestPrepareContext_skipsNonSessionAuth(t *testing.T) {
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	chConn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -77,7 +71,7 @@ func TestPrepareContext_skipsNonSessionAuth(t *testing.T) {
 	authCtx.APIKeyID = "api-key-123"
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	ctx, err = engine.PrepareContext(ctx)
+	ctx, err := engine.PrepareContext(ctx)
 	require.NoError(t, err)
 
 	_, ok = GrantsFromContext(ctx)
@@ -89,16 +83,14 @@ func TestPrepareContext_sessionWithoutActiveOrganizationGetsNoGrants(t *testing.
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	chConn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	authCtx.ActiveOrganizationID = ""
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
-	ctx, err = engine.PrepareContext(ctx)
+	ctx, err := engine.PrepareContext(ctx)
 	require.NoError(t, err)
 
 	grants, ok := GrantsFromContext(ctx)
@@ -111,9 +103,7 @@ func TestPrepareContext_loadsAssistantPrincipalGrants(t *testing.T) {
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	chConn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -128,7 +118,7 @@ func TestPrepareContext_loadsAssistantPrincipalGrants(t *testing.T) {
 	seedConnectedUser(t, ctx, conn, authCtx.ActiveOrganizationID, authCtx.UserID, "owner@example.com", "Owner", "user_workos_owner", "membership_owner")
 	seedGrant(t, ctx, conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ScopeProjectRead, WildcardResource)
 
-	ctx, err = engine.PrepareContext(ctx)
+	ctx, err := engine.PrepareContext(ctx)
 	require.NoError(t, err)
 
 	_, ok = GrantsFromContext(ctx)
@@ -141,9 +131,7 @@ func TestShouldEnforce_assistantPrincipalOnEnterpriseOrgEnforces(t *testing.T) {
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	chConn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -166,9 +154,7 @@ func TestShouldEnforce_assistantPrincipalOnNonEnterpriseOrgEnforces(t *testing.T
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	chConn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -190,9 +176,7 @@ func TestPrepareContext_loadsGrantsForNonEnterpriseOrgs(t *testing.T) {
 
 	ctx := enterpriseTestCtx(t.Context())
 	conn := newTestDB(t)
-	chConn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -203,7 +187,7 @@ func TestPrepareContext_loadsGrantsForNonEnterpriseOrgs(t *testing.T) {
 	seedActiveOrganizationUser(t, ctx, conn, authCtx.ActiveOrganizationID, authCtx.UserID)
 	seedGrant(t, ctx, conn, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID), ScopeProjectRead, WildcardResource)
 
-	ctx, err = engine.PrepareContext(ctx)
+	ctx, err := engine.PrepareContext(ctx)
 	require.NoError(t, err)
 
 	grants, ok := GrantsFromContext(ctx)

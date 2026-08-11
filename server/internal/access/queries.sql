@@ -537,20 +537,23 @@ WHERE our.organization_id = @organization_id
   AND users.email <> ''
 ORDER BY users.email, users.id;
 
--- name: ListOrgAdminEmails :many
--- Returns email addresses of users with the admin role in the organization.
--- Used for sending access request notifications to org admins. Anchored on
--- organization_user_relationships so only active members are notified, and
--- joined on workos_user_id because organization_role_assignments.user_id is
--- nullable during the WorkOS-to-Gram backfill window.
+-- name: ListActiveOrganizationAdmins :many
+-- Returns a best-effort notification audience of active organization
+-- administrators and their Loops contact fields. This is not an authorization
+-- decision or a delivery guarantee; callers use the admins available when the
+-- notification is sent.
+-- Resolve roles only through the internal user ID. WorkOS role assignments
+-- are not treated as internal authorization state until they are linked.
 SELECT DISTINCT
+  users.id,
+  users.display_name,
   users.email
 FROM organization_user_relationships AS our
 JOIN users
   ON users.id = our.user_id
 JOIN organization_role_assignments AS ora
   ON ora.organization_id = our.organization_id
-  AND ora.workos_user_id = users.workos_id
+  AND ora.user_id = users.id
   AND ora.deleted_at IS NULL
 LEFT JOIN organization_roles
   ON ora.role_urn = 'role:organization:' || organization_roles.id::text
@@ -566,7 +569,38 @@ WHERE our.organization_id = @organization_id
   AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) = 'admin'
   AND users.deleted_at IS NULL
   AND users.email <> ''
-ORDER BY users.email;
+ORDER BY users.email, users.id;
+
+-- name: GetActiveOrganizationAdmin :one
+-- Returns one active organization administrator and their Loops contact fields.
+-- Resolve roles only through the internal user ID. WorkOS role assignments
+-- are not treated as internal authorization state until they are linked.
+SELECT DISTINCT
+  users.id,
+  users.display_name,
+  users.email
+FROM organization_user_relationships AS our
+JOIN users
+  ON users.id = our.user_id
+JOIN organization_role_assignments AS ora
+  ON ora.organization_id = our.organization_id
+  AND ora.user_id = users.id
+  AND ora.deleted_at IS NULL
+LEFT JOIN organization_roles
+  ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+  AND organization_roles.organization_id = ora.organization_id
+  AND organization_roles.deleted IS FALSE
+  AND organization_roles.workos_deleted IS FALSE
+LEFT JOIN global_roles
+  ON ora.role_urn = 'role:global:' || global_roles.id::text
+  AND global_roles.deleted IS FALSE
+  AND global_roles.workos_deleted IS FALSE
+WHERE our.organization_id = @organization_id
+  AND our.user_id = @user_id
+  AND our.deleted IS FALSE
+  AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) = 'admin'
+  AND users.deleted_at IS NULL
+  AND users.email <> '';
 
 -- name: ListMemberRolePrincipalsByWorkosUser :many
 SELECT

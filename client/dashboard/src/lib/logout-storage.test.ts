@@ -4,8 +4,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { PREFERRED_THEME_STORAGE_KEY } from "./local-storage-keys";
 import {
+  capturePreservedStorage,
   clearLegacyUserStorage,
   clearStorageForLogout,
+  restorePreservedStorage,
 } from "./logout-storage";
 
 function createStorage(): Storage {
@@ -104,5 +106,69 @@ describe("clearStorageForLogout", () => {
 
     expect(() => clearStorageForLogout()).not.toThrow();
     expect(() => clearLegacyUserStorage()).not.toThrow();
+  });
+
+  // The logout response carries Clear-Site-Data, so the browser empties
+  // localStorage before any response handler runs. Capture/restore is what
+  // survives that wipe.
+  it("restores captured entries into storage the browser already emptied", () => {
+    window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "dark");
+    window.localStorage.setItem(
+      "gram:org-favorites:<ORG_ID>",
+      '["<PROJECT_ID>"]',
+    );
+    window.localStorage.setItem("preferredProject", "project-slug");
+
+    const preserved = capturePreservedStorage();
+    window.localStorage.clear();
+    restorePreservedStorage(preserved);
+
+    expect(window.localStorage.getItem(PREFERRED_THEME_STORAGE_KEY)).toBe(
+      "dark",
+    );
+    expect(window.localStorage.getItem("gram:org-favorites:<ORG_ID>")).toBe(
+      '["<PROJECT_ID>"]',
+    );
+    expect(window.localStorage.getItem("preferredProject")).toBeNull();
+  });
+
+  // The logout response hook clears a store the browser may already have
+  // emptied, so the entries it keeps have to come from the snapshot rather than
+  // from a re-read of storage.
+  it("keeps entries from a supplied snapshot when storage is already empty", () => {
+    const preserved = [
+      [PREFERRED_THEME_STORAGE_KEY, "dark"],
+      ["gram:org-favorites:<ORG_ID>", '["<PROJECT_ID>"]'],
+    ] as const;
+    window.localStorage.setItem("preferredProject", "project-slug");
+    window.localStorage.clear();
+
+    clearStorageForLogout(preserved);
+
+    expect(window.localStorage.getItem(PREFERRED_THEME_STORAGE_KEY)).toBe(
+      "dark",
+    );
+    expect(window.localStorage.getItem("gram:org-favorites:<ORG_ID>")).toBe(
+      '["<PROJECT_ID>"]',
+    );
+    expect(window.localStorage.getItem("preferredProject")).toBeNull();
+  });
+
+  it("captures nothing but the preserved keys", () => {
+    window.localStorage.setItem(PREFERRED_THEME_STORAGE_KEY, "dark");
+    window.localStorage.setItem("pylon_user_email", "user@example.com");
+
+    expect(capturePreservedStorage()).toEqual([
+      [PREFERRED_THEME_STORAGE_KEY, "dark"],
+    ]);
+  });
+
+  it("degrades to a no-op when storage is blocked around a logout", () => {
+    blockStorageAccess();
+
+    expect(capturePreservedStorage()).toEqual([]);
+    expect(() =>
+      restorePreservedStorage([[PREFERRED_THEME_STORAGE_KEY, "dark"]]),
+    ).not.toThrow();
   });
 });

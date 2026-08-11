@@ -47,6 +47,7 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	telemrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	userrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 	svix "github.com/svix/svix-webhooks/go"
@@ -102,6 +103,7 @@ type Service struct {
 	features  orgFeatureChecker
 	hooks     HookEventReader // optional; nil disables verifyOnboardingHooksSetup
 	email     *email.Service
+	trial     trialemails.Notifier
 	serverURL string // API server URL; used to build invite links
 	siteURL   string // frontend URL; used for post-callback browser redirects
 	audit     *audit.Logger
@@ -112,8 +114,11 @@ var _ gen.Service = (*Service)(nil)
 
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, invite InviteIdentityProvider, features orgFeatureChecker, hooks HookEventReader, authzEngine *authz.Engine, emailService *email.Service, serverURL string, siteURL string, auditLogger *audit.Logger, svix *svix.Svix) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionMgr *sessions.Manager, orgs OrganizationProvider, invite InviteIdentityProvider, features orgFeatureChecker, hooks HookEventReader, authzEngine *authz.Engine, emailService *email.Service, trialNotifier trialemails.Notifier, serverURL string, siteURL string, auditLogger *audit.Logger, svix *svix.Svix) *Service {
 	logger = logger.With(attr.SlogComponent("organizations"))
+	if trialNotifier == nil {
+		trialNotifier = trialemails.NoopNotifier{}
+	}
 
 	return &Service{
 		logger:    logger,
@@ -127,6 +132,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		features:  features,
 		hooks:     hooks,
 		email:     emailService,
+		trial:     trialNotifier,
 		serverURL: serverURL,
 		siteURL:   siteURL,
 		audit:     auditLogger,
@@ -1506,6 +1512,17 @@ func (s *Service) handleInviteCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	span.AddEvent("invite.callback.invitation_accepted")
+
+	if invite.RoleSlug.Valid && invite.RoleSlug.String == authz.SystemRoleAdmin {
+		if err := s.trial.AdminAdded(ctx, invite.OrganizationID, gramUserID); err != nil {
+			s.logger.ErrorContext(ctx, "invite callback: failed to notify trial admin added",
+				attr.SlogError(err),
+				attr.SlogOrganizationID(invite.OrganizationID),
+				attr.SlogUserID(gramUserID),
+				attr.SlogOrganizationInviteID(invite.ID.String()),
+			)
+		}
+	}
 
 	// Create a Gram session directly. The invitee is already authenticated
 	// by Magic Auth, and the WorkOS session ID is stored for logout revocation.
