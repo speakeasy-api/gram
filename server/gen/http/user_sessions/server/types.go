@@ -825,6 +825,10 @@ type UserSessionResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 	// Slug of the user_session_issuer that gated this session.
 	IssuerSlug string `form:"issuer_slug" json:"issuer_slug" xml:"issuer_slug"`
+	// The user_session_client this session was issued through. Null for sessions
+	// with no bound client. Unlike client_name, this identifies the registration
+	// unambiguously, so it is what a per-client drill-down should match on.
+	UserSessionClientID *string `form:"user_session_client_id,omitempty" json:"user_session_client_id,omitempty" xml:"user_session_client_id,omitempty"`
 	// Name of the MCP client that established the session, if known.
 	// Client-controlled and unverified; do not present it as an identity.
 	ClientName *string `form:"client_name,omitempty" json:"client_name,omitempty" xml:"client_name,omitempty"`
@@ -836,6 +840,9 @@ type UserSessionResponseBody struct {
 	SubjectType string `form:"subject_type" json:"subject_type" xml:"subject_type"`
 	// Resolved human-readable name of the subject, if known.
 	SubjectDisplayName *string `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
+	// Avatar URL for the subject when it resolves to a Gram user with one. Null
+	// for API key and anonymous subjects, and for users who have no photo.
+	SubjectPhotoURL *string `form:"subject_photo_url,omitempty" json:"subject_photo_url,omitempty" xml:"subject_photo_url,omitempty"`
 	// When the session was revoked, if it has been.
 	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
 }

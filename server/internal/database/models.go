@@ -127,6 +127,23 @@ type AssistantDashboardMessage struct {
 	CreatedAt pgtype.Timestamptz
 }
 
+type AssistantMcpOauthClient struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+	AssistantID           uuid.UUID
+	OauthServerIssuer     string
+	RedirectUri           string
+	ClientID              pgtype.Text
+	ClientSecretEncrypted pgtype.Text
+	ClientSecretExpiresAt pgtype.Timestamptz
+	RegistrationOwner     uuid.NullUUID
+	RegistrationStartedAt pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	DeletedAt             pgtype.Timestamptz
+	Deleted               bool
+}
+
 type AssistantMcpServer struct {
 	ID            uuid.UUID
 	AssistantID   uuid.UUID
@@ -1439,6 +1456,30 @@ type PlatformMcpAuthorizationGrant struct {
 	UpdatedAt             pgtype.Timestamptz
 }
 
+type PlatformMcpCatalogRegistration struct {
+	ID                     uuid.UUID
+	OrganizationID         string
+	ProjectID              uuid.UUID
+	SourceKind             string
+	CatalogProvider        string
+	CatalogReference       string
+	Status                 string
+	RemoteMcpServerID      uuid.NullUUID
+	RemoteMcpServerOwned   bool
+	UserSessionIssuerID    uuid.NullUUID
+	UserSessionIssuerOwned bool
+	McpServerID            uuid.NullUUID
+	McpServerOwned         bool
+	McpEndpointID          uuid.NullUUID
+	McpEndpointOwned       bool
+	ConnectionID           uuid.UUID
+	ConnectionGeneration   uuid.UUID
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
+}
+
 type PlatformMcpConnection struct {
 	ID               uuid.UUID
 	OrganizationID   string
@@ -1478,6 +1519,39 @@ type PlatformMcpOnboardingMilestone struct {
 	CreatedAt            pgtype.Timestamptz
 }
 
+type PlatformMcpOperationReceipt struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	ProjectID            uuid.UUID
+	RegistrationID       uuid.NullUUID
+	ConnectionID         uuid.UUID
+	ConnectionGeneration uuid.UUID
+	Operation            string
+	IdempotencyKey       string
+	InputHash            string
+	Status               string
+	ResultCode           pgtype.Text
+	ExpiresAt            pgtype.Timestamptz
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+}
+
+type PlatformMcpReadiness struct {
+	ID                               uuid.UUID
+	OrganizationID                   string
+	ProjectID                        uuid.UUID
+	RegistrationID                   uuid.UUID
+	ConnectionID                     uuid.UUID
+	ConnectionGeneration             uuid.UUID
+	ProviderAuthorizationFingerprint string
+	State                            string
+	EvidenceCode                     pgtype.Text
+	CheckedAt                        pgtype.Timestamptz
+	ExpiresAt                        pgtype.Timestamptz
+	CreatedAt                        pgtype.Timestamptz
+	UpdatedAt                        pgtype.Timestamptz
+}
+
 type PlatformMcpSession struct {
 	ID                   uuid.UUID
 	OrganizationID       string
@@ -1491,6 +1565,23 @@ type PlatformMcpSession struct {
 	RotatedAt            pgtype.Timestamptz
 	RevokedAt            pgtype.Timestamptz
 	ReplacedBySessionID  uuid.NullUUID
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+}
+
+type PlatformMcpSetupHandoff struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	ProjectID            uuid.UUID
+	RegistrationID       uuid.UUID
+	ConnectionID         uuid.UUID
+	ConnectionGeneration uuid.UUID
+	ProviderKey          string
+	Intent               string
+	HandoffHash          string
+	ExpiresAt            pgtype.Timestamptz
+	RedeemedAt           pgtype.Timestamptz
+	InvalidatedAt        pgtype.Timestamptz
 	CreatedAt            pgtype.Timestamptz
 	UpdatedAt            pgtype.Timestamptz
 }
@@ -1635,8 +1726,10 @@ type PromptTemplate struct {
 
 // Transactional outbox of pending Pub/Sub publishes. Rows are deleted once published, so the table is near-empty in steady state; permanent failures move to publish_outbox_dead_letters.
 type PublishOutbox struct {
-	ID             int64
-	PublicID       uuid.UUID
+	ID int64
+	// Stable id a producer can put inside its own message body. Deliberately unindexed: nothing looks a row up by it, so an index here would buy nothing and cost a uniqueness check on the caller's transaction. Collisions are prevented by minting uuidv7, not by the database.
+	PublicID uuid.UUID
+	// Owning organization, carried through to the published message. Deliberately not a foreign key: the check would take a KEY SHARE lock on the organization row for every enqueue, and a stream of those against one busy org generates multixacts on a row that other writers update. Rows live seconds and the relay never joins to the organization, so an org deleted mid-flight leaves rows that publish and then delete themselves. Nothing downstream may reference the organization either: publish_outbox_dead_letters drops its foreign key for the same reason, since a row that outlived its organization still has to be able to reach it.
 	OrganizationID string
 	// Proto full name of the topic-declaring message, e.g. "gram.webhooks.v1.Event". Resolved through the outbox topic registry at publish time.
 	Topic string
@@ -1752,6 +1845,7 @@ type RemoteSessionIssuer struct {
 	Issuer                            string
 	AuthorizationEndpoint             pgtype.Text
 	TokenEndpoint                     pgtype.Text
+	RevocationEndpoint                pgtype.Text
 	RegistrationEndpoint              pgtype.Text
 	JwksUri                           pgtype.Text
 	ServiceDocumentation              pgtype.Text
@@ -1908,6 +2002,7 @@ type RiskResult struct {
 	RiskPolicyVersion   int64
 	ChatMessageID       uuid.NullUUID
 	ChatContentPartID   uuid.NullUUID
+	SkillVersionID      uuid.NullUUID
 	Source              string
 	Found               bool
 	RuleID              pgtype.Text

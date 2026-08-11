@@ -1201,6 +1201,18 @@ var RecordSkillResult = Type("RecordSkillResult", func() {
 	Required("skill", "version", "created_skill", "created_version")
 })
 
+var SkillPromptInjectionFinding = Type("SkillPromptInjectionFinding", func() {
+	Description("A prompt-injection finding for the current skill version. Raw matched content is intentionally omitted.")
+
+	Attribute("rule_id", String, "The rule that produced the finding.")
+	Attribute("description", String, "Why the current skill version was flagged.")
+	Attribute("confidence", Float64, "The classifier confidence from 0 to 1.", func() {
+		Minimum(0)
+		Maximum(1)
+	})
+	Required("rule_id", "description", "confidence")
+})
+
 var GetSkillResult = Type("GetSkillResult", func() {
 	Description("An active skill and its current version.")
 
@@ -1210,7 +1222,8 @@ var GetSkillResult = Type("GetSkillResult", func() {
 	Attribute("sighting_timeline", ArrayOf(SkillSightingTimelinePoint), "Daily activations by attributed version in the adoption window.")
 	Attribute("drift", SkillDrift, "Active-machine version convergence.")
 	Attribute("assistant_count", Int64, "The number of active, non-deleted assistants using the skill.")
-	Required("skill", "adoption", "sighting_timeline", "drift", "assistant_count")
+	Attribute("prompt_injection_findings", ArrayOf(SkillPromptInjectionFinding), "Open prompt-injection findings for the current skill version.")
+	Required("skill", "adoption", "sighting_timeline", "drift", "assistant_count", "prompt_injection_findings")
 })
 
 var ListSkillsResult = Type("ListSkillsResult", func() {

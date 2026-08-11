@@ -46,6 +46,27 @@ func (noopCancelScheduler) ScheduleCancelAssistantsSubscription(ctx context.Cont
 	return nil
 }
 
+type fakeTrialNotifier struct {
+	trialStartedErr error
+	trialStarted    []string
+}
+
+func (f *fakeTrialNotifier) TrialStarted(_ context.Context, organizationID string) error {
+	f.trialStarted = append(f.trialStarted, organizationID)
+	if f.trialStartedErr != nil {
+		return f.trialStartedErr
+	}
+	return nil
+}
+
+func (f *fakeTrialNotifier) AdminAdded(context.Context, string, string) error {
+	return nil
+}
+
+func (f *fakeTrialNotifier) TrialInactive(context.Context, string) error {
+	return nil
+}
+
 func TestMain(m *testing.M) {
 	res, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true, Redis: true, ClickHouse: true})
 	if err != nil {
@@ -74,6 +95,7 @@ type testInstance struct {
 	mockAuthServer   *httptest.Server
 	authConfigs      auth.AuthConfigurations
 	nonceStore       cache.Cache
+	trialNotifier    *fakeTrialNotifier
 }
 
 // MockUserInfo represents the user info used by the mock OIDC server
@@ -168,9 +190,11 @@ func newTestAuthServiceWithWorkOSClient(t *testing.T, userInfo *MockUserInfo, wo
 
 	nonceStore := cache.NewRedisCacheAdapter(redisClient)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nonceStore, authzProvisioner, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger())
+	trialNotifier := &fakeTrialNotifier{}
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nonceStore, authzProvisioner, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger(), trialNotifier)
 	result := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
 	result.authorizer = auth.New(logger, conn, sessionManager, authzEngine)
+	result.trialNotifier = trialNotifier
 
 	return ctx, result
 }
@@ -232,9 +256,11 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 
 	nonceStore := cache.NewRedisCacheAdapter(redisClient)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nonceStore, authzProvisioner, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger())
+	trialNotifier := &fakeTrialNotifier{}
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nonceStore, authzProvisioner, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger(), trialNotifier)
 	result := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
 	result.authorizer = auth.New(logger, conn, sessionManager, authzEngine)
+	result.trialNotifier = trialNotifier
 
 	return ctx, result
 }
@@ -249,6 +275,7 @@ func newTestAuthServiceResult(_ *testing.T, svc *auth.Service, conn *pgxpool.Poo
 		mockAuthServer:   mockServer,
 		authConfigs:      authConfigs,
 		nonceStore:       nonceStore,
+		trialNotifier:    nil,
 	}
 }
 

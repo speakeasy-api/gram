@@ -1,5 +1,46 @@
 # server
 
+## 1.8.0
+
+### Minor Changes
+
+- 4c6fc7f: Widen the assistant runtime's message representation from plain strings to structured text|image content parts, end to end through the Go runtime and the Rust runner. Message content is now a string-or-parts union on both sides of the runner wire protocol (back-compat in both directions), history replay prefers the structured content captured at store time over the plain-text projection, turn requests gain an optional `input_parts` field, and chat persistence strips inline `data:` image bytes to text placeholders before anything is written at rest. Behavior-neutral groundwork: nothing produces image parts yet.
+- a85b554: Fetch Slack images server-side and inject them as vision content in assistant turns. Image attachments on a triggering Slack message (up to 4 files, 8 MiB total per turn) are downloaded concurrently through the authenticated Slack API, validated by magic-byte sniffing against an image allowlist (png/jpeg/gif/webp, 10 MiB per file), and attached to the turn as `image_url` input parts with `data:` URIs. For images referenced later in a thread, the assistant gains a generic `inspect_asset` runner tool that fetches any directly reachable image URL, validates it, and attaches it to the conversation as a user message; a new `platform_slack_get_file_url` tool bridges Slack's credentialed downloads by minting a short-lived, sealed download URL served by the Gram server's Slack file proxy. Image bytes live only in the live inference path — persistence continues to sanitize `data:` URIs to text placeholders at rest.
+- 91f8234: An organization whose enterprise trial has ended now lands on a page that says so and books an upgrade call, instead of the generic book-a-demo screen a company that had never heard of Gram sees. Anyone still inside a trial can reach the same page from the sidebar countdown to upgrade early.
+- c95b913: Add the `risk.getSignals` endpoint and finding attribution ingest backing the internal Watchdog page.
+- 3705830: Scan captured skill manifests for prompt injection at capture time and show current-version findings on skill details. Admins can configure the existing Prompt Injection policy from the Skills page. A completed judgement records either a finding or clean coverage; unavailable judgements are retried on a later activation and never become durable clean results. Scanning never fails the upload. Coverage is usage-based rather than catalog-based, so a version no agent ever loads is never judged.
+- ca5adf0: Carry Slack file attachment metadata through trigger ingestion into the assistant turn context. Message events that share files (e.g. the `file_share` subtype) now surface each attachment's id, name, mimetype, and size in the turn's message-context block, and the `files` list is addressable from Slack trigger CEL filters. Metadata only — file contents are not fetched.
+
+### Patch Changes
+
+- 85f9ddc: Assistant runtimes on the GKE backend now roll onto the configured runtime image automatically. Previously a claimed sandbox kept its admission-time image forever unless the assistant went idle long enough for the inactivity janitor, so regularly used assistants never picked up deployed runner changes — and even a fresh claim could adopt a warm-pool pod pre-warmed on an older image. The deploy-time image recycle sweep now covers GKE runtimes (idle-gated claim re-adoption), turn admission recycles a stale claim lazily and drains stale warm-pool pods with bounded retries, and persisted runtime metadata records the pod's actual image instead of the configured one.
+- 2e00c71: Custom domain ingresses now route /shared/skills to the Gram server, so public skill share pages resolve on custom domains instead of returning an edge 404. Existing domains pick up the new route on their next ingress re-apply (e.g. saving domain settings).
+- 6102452: Send lifecycle emails to organization admins when Enterprise trials start and approach expiration through the Loops workflow integration.
+
+## 1.7.0
+
+### Minor Changes
+
+- 5027338: The MCP server Clients and Sessions tab now leads with active session and client counts, and renders both listings as searchable, filterable, sortable tables paginated ten rows at a time, with member avatars and creation dates on sessions. The clients table reports how many active sessions each client holds, backed by a new `active_session_count` field on the user session clients API, and clicking that count narrows both listings to that client behind a clear-filter bar.
+- 374394a: The user-session OAuth authorization server now emits the RFC 9207 `iss` parameter on every authorization response, success and error alike, and advertises `authorization_response_iss_parameter_supported` in its metadata document. This satisfies the MCP 2026-07-28 Authorization Response Validation requirement and lets MCP clients holding concurrent flows against several authorization servers detect a mix-up attack.
+
+### Patch Changes
+
+- 19ca2a8: Keep shadow MCP risk finding descriptions generic instead of naming the tool that was called.
+- 1fa0caf: Surface that Claude Cowork still needs its own manual setup step when Device
+  Agent is selected on the "Instrument agents" onboarding step — Device Agent
+  only covers coding assistants running on the developer's machine, not
+  Cowork's cloud sandbox. The new note links straight into the Manual Setup
+  flow for Cowork.
+
+  Also aligns MDM vendor wording with the Iru rebrand ("Iru (formerly Kandji)")
+  across the Device Agent setup page and Codex onboarding copy, matching the
+  naming already used on the MDM integrations page.
+
+  Conversation events (`UserPromptSubmit`/`Stop`) are now also written to
+  ClickHouse telemetry so the onboarding "Confirm traffic" feed shows prompts
+  and assistant replies, not only tool calls.
+
 ## 1.6.0
 
 ### Minor Changes

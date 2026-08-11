@@ -23,6 +23,7 @@ type testOrganizationSlugResolver struct {
 
 type recordingRolloutProvider struct {
 	groups map[string]string
+	err    error
 }
 
 func (r testOrganizationSlugResolver) OrganizationSlug(_ context.Context, _ string) (string, error) {
@@ -31,7 +32,7 @@ func (r testOrganizationSlugResolver) OrganizationSlug(_ context.Context, _ stri
 
 func (r *recordingRolloutProvider) IsFlagEnabled(_ context.Context, _ feature.Flag, _ string, groups map[string]string) (bool, error) {
 	r.groups = groups
-	return true, nil
+	return true, r.err
 }
 
 func (r *recordingRolloutProvider) IsFlagEnabledLocal(ctx context.Context, flag feature.Flag, distinctID string, groups, _ map[string]string) (bool, error) {
@@ -52,6 +53,96 @@ func (c testCapabilityChecker) IsFeatureEnabled(_ context.Context, _ string, cap
 		return false, errors.New("unexpected capability")
 	}
 	return c.enabled, c.err
+}
+
+func TestCatalogRegistrationGateRequiresMainAndMutationGates(t *testing.T) {
+	t.Parallel()
+
+	const organizationID = "organization-1"
+	const organizationSlug = "organization-slug"
+	const projectSlug = "project-slug"
+
+	newMainGate := func(enabled bool, err error) *testGate {
+		return &testGate{enabled: enabled, err: err}
+	}
+
+	t.Run("allows both gates", func(t *testing.T) {
+		t.Parallel()
+
+		rollout := &feature.InMemory{}
+		rollout.SetFlag(feature.FlagPlatformMCPCatalogRegistration, organizationID, true)
+		enabled, err := NewCatalogRegistrationGate(newMainGate(true, nil), rollout, testOrganizationSlugResolver{slug: organizationSlug}).Enabled(t.Context(), organizationID, projectSlug)
+
+		require.NoError(t, err)
+		require.True(t, enabled)
+	})
+
+	t.Run("does not evaluate mutation rollout when main gate is disabled", func(t *testing.T) {
+		t.Parallel()
+
+		rollout := &recordingRolloutProvider{}
+		enabled, err := NewCatalogRegistrationGate(newMainGate(false, nil), rollout, testOrganizationSlugResolver{slug: organizationSlug}).Enabled(t.Context(), organizationID, projectSlug)
+
+		require.NoError(t, err)
+		require.False(t, enabled)
+		require.Nil(t, rollout.groups)
+	})
+
+	t.Run("propagates main gate errors", func(t *testing.T) {
+		t.Parallel()
+
+		enabled, err := NewCatalogRegistrationGate(newMainGate(false, errors.New("unavailable")), &feature.InMemory{}, testOrganizationSlugResolver{slug: organizationSlug}).Enabled(t.Context(), organizationID, projectSlug)
+
+		require.ErrorContains(t, err, "check platform mcp gate")
+		require.False(t, enabled)
+	})
+
+	t.Run("fails closed when registration rollout is disabled", func(t *testing.T) {
+		t.Parallel()
+
+		enabled, err := NewCatalogRegistrationGate(newMainGate(true, nil), &feature.InMemory{}, testOrganizationSlugResolver{slug: organizationSlug}).Enabled(t.Context(), organizationID, projectSlug)
+
+		require.NoError(t, err)
+		require.False(t, enabled)
+	})
+
+	t.Run("fails closed when registration rollout errors", func(t *testing.T) {
+		t.Parallel()
+
+		enabled, err := NewCatalogRegistrationGate(newMainGate(true, nil), &recordingRolloutProvider{err: errors.New("unavailable")}, testOrganizationSlugResolver{slug: organizationSlug}).Enabled(t.Context(), organizationID, projectSlug)
+
+		require.ErrorContains(t, err, "check platform mcp catalog registration rollout")
+		require.False(t, enabled)
+	})
+
+	t.Run("fails closed when organization slug resolution errors", func(t *testing.T) {
+		t.Parallel()
+
+		enabled, err := NewCatalogRegistrationGate(newMainGate(true, nil), &feature.InMemory{}, testOrganizationSlugResolver{err: errors.New("unavailable")}).Enabled(t.Context(), organizationID, projectSlug)
+
+		require.ErrorContains(t, err, "resolve platform mcp rollout organization")
+		require.False(t, enabled)
+	})
+
+	t.Run("requires explicit project slug", func(t *testing.T) {
+		t.Parallel()
+
+		enabled, err := NewCatalogRegistrationGate(newMainGate(true, nil), &feature.InMemory{}, testOrganizationSlugResolver{slug: organizationSlug}).Enabled(t.Context(), organizationID, "")
+
+		require.ErrorIs(t, err, ErrUnavailable)
+		require.False(t, enabled)
+	})
+
+	t.Run("passes organization and project rollout groups", func(t *testing.T) {
+		t.Parallel()
+
+		rollout := &recordingRolloutProvider{}
+		enabled, err := NewCatalogRegistrationGate(newMainGate(true, nil), rollout, testOrganizationSlugResolver{slug: organizationSlug}).Enabled(t.Context(), organizationID, projectSlug)
+
+		require.NoError(t, err)
+		require.True(t, enabled)
+		require.Equal(t, feature.OrgProjectGroups(organizationSlug, projectSlug), rollout.groups)
+	})
 }
 
 func TestOrganizationGateRequiresBothGates(t *testing.T) {

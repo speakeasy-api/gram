@@ -1,11 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { getTrialStatus } from "./trial-status";
+import {
+  getTrialLifecycle,
+  getTrialLifecycleFromDates,
+  getTrialStatus,
+  getTrialStatusFromDates,
+} from "./trial-status";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const trial = (startedAt: string, endsAt: string) => ({
   startedAt,
   endsAt,
+});
+
+const dateTrial = (startedAt: string, endsAt: string) => ({
+  startedAt: new Date(startedAt),
+  endsAt: new Date(endsAt),
 });
 
 describe("getTrialStatus", () => {
@@ -117,5 +127,128 @@ describe("getTrialStatus", () => {
     ],
   ])("returns null for invalid trial input: %j", (invalidTrial, now) => {
     expect(getTrialStatus(invalidTrial, now)).toBeNull();
+  });
+});
+
+describe("getTrialLifecycle", () => {
+  it("reports an in-progress trial as active", () => {
+    expect(
+      getTrialLifecycle(
+        trial("2026-08-01T00:00:00.000Z", "2026-08-15T00:00:00.000Z"),
+        new Date("2026-08-07T12:00:00.000Z"),
+      ),
+    ).toBe("active");
+  });
+
+  it("reports a trial that has not started yet as active", () => {
+    expect(
+      getTrialLifecycle(
+        trial("2026-08-01T00:00:00.000Z", "2026-08-15T00:00:00.000Z"),
+        new Date("2026-07-31T00:00:00.000Z"),
+      ),
+    ).toBe("active");
+  });
+
+  it("stays active in the final instant before expiry", () => {
+    expect(
+      getTrialLifecycle(
+        trial("2026-08-01T00:00:00.000Z", "2026-08-15T00:00:00.000Z"),
+        new Date("2026-08-14T23:59:59.999Z"),
+      ),
+    ).toBe("active");
+  });
+
+  it("reports expired at exact expiry", () => {
+    expect(
+      getTrialLifecycle(
+        trial("2026-08-01T00:00:00.000Z", "2026-08-15T00:00:00.000Z"),
+        new Date("2026-08-15T00:00:00.000Z"),
+      ),
+    ).toBe("expired");
+  });
+
+  it("reports a long-finished trial as expired", () => {
+    expect(
+      getTrialLifecycle(
+        trial("2026-08-01T00:00:00.000Z", "2026-08-15T00:00:00.000Z"),
+        new Date("2026-09-30T00:00:00.000Z"),
+      ),
+    ).toBe("expired");
+  });
+
+  it.each([
+    [undefined, new Date("2026-08-01T00:00:00.000Z")],
+    [null, new Date("2026-08-01T00:00:00.000Z")],
+    [trial("not-a-date", "2026-08-15T00:00:00.000Z"), new Date()],
+    [trial("2026-08-01T00:00:00.000Z", "not-a-date"), new Date()],
+    [
+      trial("2026-08-01T00:00:00.000Z", "2026-08-15T00:00:00.000Z"),
+      new Date(Number.NaN),
+    ],
+    [
+      trial("2026-08-15T00:00:00.000Z", "2026-08-01T00:00:00.000Z"),
+      new Date("2026-08-01T00:00:00.000Z"),
+    ],
+    [
+      trial("2026-08-01T00:00:00.000Z", "2026-08-01T00:00:00.000Z"),
+      new Date("2026-08-01T00:00:00.000Z"),
+    ],
+  ])("returns none for unusable trial input: %j", (invalidTrial, now) => {
+    expect(getTrialLifecycle(invalidTrial, now)).toBe("none");
+  });
+});
+
+describe("getTrialStatusFromDates", () => {
+  it("derives the status from Date-shaped trial fields", () => {
+    expect(
+      getTrialStatusFromDates(
+        dateTrial("2026-08-01T00:00:00.000Z", "2026-08-15T00:00:00.000Z"),
+        new Date("2026-08-07T12:00:00.000Z"),
+      ),
+    ).toEqual({
+      dayNumber: 7,
+      totalDays: 14,
+      remainingDays: 8,
+      progress: 13 / 28,
+    });
+  });
+
+  it.each([
+    [undefined],
+    [null],
+    [{ startedAt: new Date(Number.NaN), endsAt: new Date() }],
+    [{ startedAt: new Date(), endsAt: new Date(Number.NaN) }],
+  ])("returns null for unusable trial input: %j", (invalidTrial) => {
+    expect(
+      getTrialStatusFromDates(invalidTrial, new Date("2026-08-07T12:00:00Z")),
+    ).toBeNull();
+  });
+});
+
+describe("getTrialLifecycleFromDates", () => {
+  it.each([
+    ["2026-08-07T12:00:00.000Z", "active"],
+    ["2026-08-15T00:00:00.000Z", "expired"],
+  ])("classifies a Date-shaped trial at %s as %s", (now, expected) => {
+    expect(
+      getTrialLifecycleFromDates(
+        dateTrial("2026-08-01T00:00:00.000Z", "2026-08-15T00:00:00.000Z"),
+        new Date(now),
+      ),
+    ).toBe(expected);
+  });
+
+  it.each([
+    [undefined],
+    [null],
+    [{ startedAt: new Date(Number.NaN), endsAt: new Date() }],
+    [{ startedAt: new Date(), endsAt: new Date(Number.NaN) }],
+  ])("returns none for unusable trial input: %j", (invalidTrial) => {
+    expect(
+      getTrialLifecycleFromDates(
+        invalidTrial,
+        new Date("2026-08-07T12:00:00Z"),
+      ),
+    ).toBe("none");
   });
 });

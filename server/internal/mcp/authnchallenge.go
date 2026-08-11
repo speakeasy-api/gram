@@ -130,6 +130,33 @@ func (a AuthnChallengeState) CacheKey() string { return "authnChallenge:" + a.ID
 // TTL implements cache.CacheableObject.
 func (a AuthnChallengeState) TTL() time.Duration { return 10 * time.Minute }
 
+// mintOriginOr returns the public origin this challenge was minted under: the
+// mint-time snapshot when present, the supplied fallback otherwise.
+//
+// Every URL a resuming handler builds — the consent redirect and the RFC 9207
+// `iss` on the authorization response — hangs off this origin rather than off
+// the resuming request, because a challenge can be resumed on an origin other
+// than the one it was minted under. HandleIDPCallback is mounted at the global
+// server URL and carries no customdomains.Context at all, and the upstream
+// remote-session login returns the user to the platform origin, so even the
+// consent POST — which does carry a custom-domain context — can be serving a
+// challenge minted under a different one. A client that recorded
+// https://<custom-domain>/mcp/<slug> as the issuer rejects a response carrying
+// the platform origin and is forbidden from displaying the error it discarded,
+// so a wrong origin here surfaces as nothing at all.
+//
+// The fallback is per-caller because the right one differs: a handler holding
+// the request's custom-domain context falls back to that origin, while
+// HandleIDPCallback can only fall back to the server default. It covers states
+// carrying no snapshot at all, the one case where the true mint origin is
+// unrecoverable.
+func (a AuthnChallengeState) mintOriginOr(fallback string) string {
+	if a.Endpoint.BaseURL == "" {
+		return fallback
+	}
+	return a.Endpoint.BaseURL
+}
+
 // UserSessionGrant is the short-lived OAuth authorization grant minted by
 // HandleConsent's POST and consumed by HandleToken's authorization_code
 // grant. Stored in Redis under

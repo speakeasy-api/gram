@@ -78,6 +78,7 @@ const breadcrumbSubstitutions = {
   "ai-integrations": "AI Integrations",
   "api-keys": "API Keys",
   "mdm-integrations": "MDM Integrations",
+  rbac: "RBAC Override",
   jamf: "Jamf Pro",
   slack: "Assistants",
 };

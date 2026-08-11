@@ -53,6 +53,68 @@ VALUES (
 )
 RETURNING *;
 
+-- name: CreateLocalFixtureGlobalRemoteSessionIssuer :one
+-- The local Platform MCP fixture owns this fixed global issuer identity. The
+-- caller first holds LockRemoteSessionIssuerForClientBinding on the fixed ID and
+-- validates an existing active row. A previously deleted fixture identity is
+-- resurrected so local setup remains recoverable after an administrator delete.
+INSERT INTO remote_session_issuers (
+    id,
+    project_id,
+    organization_id,
+    slug,
+    issuer,
+    name,
+    authorization_endpoint,
+    token_endpoint,
+    registration_endpoint,
+    scopes_supported,
+    grant_types_supported,
+    response_types_supported,
+    token_endpoint_auth_methods_supported,
+    client_id_metadata_document_supported,
+    oidc,
+    passthrough
+)
+VALUES (
+    @id,
+    NULL,
+    NULL,
+    @slug,
+    @issuer,
+    @name,
+    @authorization_endpoint,
+    @token_endpoint,
+    @registration_endpoint,
+    @scopes_supported,
+    @grant_types_supported,
+    @response_types_supported,
+    @token_endpoint_auth_methods_supported,
+    FALSE,
+    FALSE,
+    FALSE
+)
+ON CONFLICT (id) DO UPDATE
+SET
+    slug = EXCLUDED.slug,
+    issuer = EXCLUDED.issuer,
+    name = EXCLUDED.name,
+    authorization_endpoint = EXCLUDED.authorization_endpoint,
+    token_endpoint = EXCLUDED.token_endpoint,
+    registration_endpoint = EXCLUDED.registration_endpoint,
+    scopes_supported = EXCLUDED.scopes_supported,
+    grant_types_supported = EXCLUDED.grant_types_supported,
+    response_types_supported = EXCLUDED.response_types_supported,
+    token_endpoint_auth_methods_supported = EXCLUDED.token_endpoint_auth_methods_supported,
+    client_id_metadata_document_supported = FALSE,
+    oidc = FALSE,
+    passthrough = FALSE,
+    deleted_at = NULL,
+    updated_at = clock_timestamp()
+WHERE remote_session_issuers.project_id IS NULL
+  AND remote_session_issuers.organization_id IS NULL
+RETURNING *;
+
 -- name: GetRemoteSessionIssuerByID :one
 -- Project-scoped read of the project's own issuers, plus each inherited tier the
 -- caller opts in to. Each inherited arm is gated by its own boolean:
@@ -394,6 +456,16 @@ SELECT client_id_metadata_uri, scope
 FROM remote_session_clients
 WHERE id = @id
   AND client_id_metadata_uri IS NOT NULL
+  AND deleted IS FALSE;
+
+-- name: GetLocalFixtureOrganizationRemoteSessionClient :one
+-- The local Platform MCP fixture owns at most one organization-scoped public
+-- client for its global issuer. Project-owned and global clients are excluded.
+SELECT *
+FROM remote_session_clients
+WHERE organization_id = @organization_id
+  AND remote_session_issuer_id = @remote_session_issuer_id
+  AND project_id IS NULL
   AND deleted IS FALSE;
 
 -- name: GetRemoteSessionClientByID :one
@@ -1158,6 +1230,18 @@ WHERE c.id = @id
   AND (i.organization_id = @organization_id OR c.organization_id = @organization_id)
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE;
+
+-- name: RotateLocalFixtureOrganizationRemoteSessionClient :one
+UPDATE remote_session_clients
+SET
+    client_id = @client_id,
+    client_id_issued_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND remote_session_issuer_id = @remote_session_issuer_id
+  AND deleted IS FALSE
+RETURNING *;
 
 -- name: UpdateOrganizationRemoteSessionClient :one
 -- Patch a client's fields. The handler encrypts a rotated client_secret before

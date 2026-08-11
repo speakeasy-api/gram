@@ -1,6 +1,6 @@
 import { ChevronRight } from "lucide-react";
 import { Link } from "react-router";
-import { DashboardCard } from "@/components/ui/DashboardCard";
+import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ActionIconTile } from "@/components/auditlogs/feed";
 import { subjectHref } from "@/components/auditlogs/subject-href";
@@ -23,7 +23,7 @@ export function ActivityTimelineCard({
   const { orgSlug } = useSlugs();
 
   return (
-    <DashboardCard
+    <Card.Dashboard
       title="Activity Timeline"
       tooltip="Recent administrative activity in this project — changes to sources, MCP server changes, API key rotations, environment edits, and access role updates. Grouped by day, most recent first."
       action={
@@ -99,7 +99,7 @@ export function ActivityTimelineCard({
           ))}
         </div>
       )}
-    </DashboardCard>
+    </Card.Dashboard>
   );
 }
 

@@ -318,6 +318,48 @@ func (q *Queries) GetMCPServerByIDAndProjectID(ctx context.Context, arg GetMCPSe
 	return i, err
 }
 
+const getMCPServerByLiveProjectForOrganization = `-- name: GetMCPServerByLiveProjectForOrganization :one
+SELECT m.id, m.project_id, m.name, m.slug, m.environment_id, m.user_session_issuer_id, m.remote_mcp_server_id, m.tunneled_mcp_server_id, m.toolset_id, m.unproxied_mcp_server_id, m.tool_variations_group_id, m.visibility, m.created_at, m.updated_at, m.deleted_at, m.deleted
+FROM mcp_servers AS m
+JOIN projects AS p
+  ON p.id = m.project_id
+ AND p.organization_id = $1
+ AND p.deleted IS FALSE
+WHERE m.id = $2
+  AND m.project_id = $3
+  AND m.deleted IS FALSE
+`
+
+type GetMCPServerByLiveProjectForOrganizationParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) GetMCPServerByLiveProjectForOrganization(ctx context.Context, arg GetMCPServerByLiveProjectForOrganizationParams) (McpServer, error) {
+	row := q.db.QueryRow(ctx, getMCPServerByLiveProjectForOrganization, arg.OrganizationID, arg.ID, arg.ProjectID)
+	var i McpServer
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.EnvironmentID,
+		&i.UserSessionIssuerID,
+		&i.RemoteMcpServerID,
+		&i.TunneledMcpServerID,
+		&i.ToolsetID,
+		&i.UnproxiedMcpServerID,
+		&i.ToolVariationsGroupID,
+		&i.Visibility,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getMCPServerBySlug = `-- name: GetMCPServerBySlug :one
 SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
@@ -387,6 +429,62 @@ func (q *Queries) ListMCPServerToolMetadata(ctx context.Context, arg ListMCPServ
 			&i.DestructiveHint,
 			&i.IdempotentHint,
 			&i.OpenWorldHint,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMCPServersByLiveProjectForOrganizationLimited = `-- name: ListMCPServersByLiveProjectForOrganizationLimited :many
+SELECT m.id, m.project_id, m.name, m.slug, m.environment_id, m.user_session_issuer_id, m.remote_mcp_server_id, m.tunneled_mcp_server_id, m.toolset_id, m.unproxied_mcp_server_id, m.tool_variations_group_id, m.visibility, m.created_at, m.updated_at, m.deleted_at, m.deleted
+FROM mcp_servers AS m
+JOIN projects AS p
+  ON p.id = m.project_id
+ AND p.organization_id = $1
+ AND p.deleted IS FALSE
+WHERE m.project_id = $2
+  AND m.deleted IS FALSE
+ORDER BY m.id ASC
+LIMIT $3
+`
+
+type ListMCPServersByLiveProjectForOrganizationLimitedParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	LimitValue     int32
+}
+
+func (q *Queries) ListMCPServersByLiveProjectForOrganizationLimited(ctx context.Context, arg ListMCPServersByLiveProjectForOrganizationLimitedParams) ([]McpServer, error) {
+	rows, err := q.db.Query(ctx, listMCPServersByLiveProjectForOrganizationLimited, arg.OrganizationID, arg.ProjectID, arg.LimitValue)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpServer
+	for rows.Next() {
+		var i McpServer
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Slug,
+			&i.EnvironmentID,
+			&i.UserSessionIssuerID,
+			&i.RemoteMcpServerID,
+			&i.TunneledMcpServerID,
+			&i.ToolsetID,
+			&i.UnproxiedMcpServerID,
+			&i.ToolVariationsGroupID,
+			&i.Visibility,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -480,6 +578,57 @@ func (q *Queries) ListMCPServersByProjectID(ctx context.Context, arg ListMCPServ
 		arg.ToolsetID,
 		arg.UnproxiedMcpServerID,
 	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpServer
+	for rows.Next() {
+		var i McpServer
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Slug,
+			&i.EnvironmentID,
+			&i.UserSessionIssuerID,
+			&i.RemoteMcpServerID,
+			&i.TunneledMcpServerID,
+			&i.ToolsetID,
+			&i.UnproxiedMcpServerID,
+			&i.ToolVariationsGroupID,
+			&i.Visibility,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMCPServersByProjectIDLimited = `-- name: ListMCPServersByProjectIDLimited :many
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
+FROM mcp_servers
+WHERE project_id = $1
+  AND deleted IS FALSE
+ORDER BY id ASC
+LIMIT $2
+`
+
+type ListMCPServersByProjectIDLimitedParams struct {
+	ProjectID  uuid.UUID
+	LimitValue int32
+}
+
+func (q *Queries) ListMCPServersByProjectIDLimited(ctx context.Context, arg ListMCPServersByProjectIDLimitedParams) ([]McpServer, error) {
+	rows, err := q.db.Query(ctx, listMCPServersByProjectIDLimited, arg.ProjectID, arg.LimitValue)
 	if err != nil {
 		return nil, err
 	}

@@ -15,6 +15,7 @@ import { PolicyBypassRequests } from "./policybypassrequests.js";
 import { PolicyChallenges } from "./policychallenges.js";
 import { Results } from "./results.js";
 import { Rules } from "./rules.js";
+import { Signals } from "./signals.js";
 
 export class Risk extends ClientSDK {
   private _policyChallenges?: PolicyChallenges;
@@ -57,6 +58,11 @@ export class Risk extends ClientSDK {
   private _overview?: Overview;
   get overview(): Overview {
     return (this._overview ??= new Overview(this._options));
+  }
+
+  private _signals?: Signals;
+  get signals(): Signals {
+    return (this._signals ??= new Signals(this._options));
   }
 
   private _categories?: Categories;

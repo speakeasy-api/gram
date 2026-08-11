@@ -211,6 +211,11 @@ func TestHandleGetAuthorizationServer_IssuerGatedToolsetBackend(t *testing.T) {
 	expectedIssuer := "http://0.0.0.0/mcp/" + slug
 	require.Equal(t, expectedIssuer, metadata["issuer"])
 	require.Equal(t, expectedIssuer+"/authorize", metadata["authorization_endpoint"])
+
+	// RFC 9207 §3. Asserted per surface because the route base is baked into
+	// the issuer that the `iss` authorization-response parameter has to match,
+	// so a regression can land on one surface while the other stays correct.
+	require.Equal(t, true, metadata["authorization_response_iss_parameter_supported"])
 }
 
 // TestHandleGetAuthorizationServer_IssuerGatedRemoteBackend_DanglingIssuerFK

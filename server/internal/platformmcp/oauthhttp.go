@@ -141,6 +141,7 @@ func (s *OAuthHTTP) Attach(mux interface {
 	mux.Handle("POST", "/platform-mcp/select-organization", handlerFunc(s.OrganizationSelectionHandler()))
 	mux.Handle("GET", "/platform-mcp/connect", handlerFunc(s.ConnectHandler()))
 	mux.Handle("POST", "/platform-mcp/connect", handlerFunc(s.ConnectHandler()))
+	mux.Handle("GET", "/platform-mcp/provider-setup-complete", handlerFunc(s.ProviderSetupCompleteHandler()))
 	mux.Handle("POST", "/platform-mcp/token", handlerFunc(s.TokenHandler()))
 	mux.Handle("POST", "/platform-mcp/revoke", handlerFunc(s.RevokeHandler()))
 }
@@ -397,6 +398,18 @@ func (s *OAuthHTTP) selectedOrganization(ctx context.Context, challenge oauthCha
 		}
 	}
 	return OrganizationOption{}, ErrForbidden
+}
+
+// ProviderSetupCompleteHandler is the fixed server-owned landing page after a
+// reviewed remote-session provider callback persists its tokens. It carries no
+// provider identity, tokens, state, or handoff values.
+func (s *OAuthHTTP) ProviderSetupCompleteHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = fmt.Fprint(w, `<!doctype html><title>Provider connected</title><p>Provider authorization is complete. You can close this window.</p><script>window.close()</script>`)
+	})
 }
 
 func (s *OAuthHTTP) ConnectHandler() http.Handler {
@@ -726,6 +739,12 @@ func (s *OAuthHTTP) Issuer() string {
 
 func (s *OAuthHTTP) Audience() string {
 	return s.audience
+}
+
+// ProviderSetupCompletionURL is the only callback landing page accepted for
+// Platform MCP provider authorization. It is server-owned and carries no state.
+func (s *OAuthHTTP) ProviderSetupCompletionURL() string {
+	return s.url("provider-setup-complete")
 }
 
 func (s *OAuthHTTP) ProtectedResourceURL() string {

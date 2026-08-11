@@ -5820,6 +5820,19 @@ func marshalSkillsSkillDriftToSkillDriftResponseBody(v *skills.SkillDrift) *Skil
 	return res
 }
 
+// marshalSkillsSkillPromptInjectionFindingToSkillPromptInjectionFindingResponseBody
+// builds a value of type *SkillPromptInjectionFindingResponseBody from a value
+// of type *skills.SkillPromptInjectionFinding.
+func marshalSkillsSkillPromptInjectionFindingToSkillPromptInjectionFindingResponseBody(v *skills.SkillPromptInjectionFinding) *SkillPromptInjectionFindingResponseBody {
+	res := &SkillPromptInjectionFindingResponseBody{
+		RuleID:      v.RuleID,
+		Description: v.Description,
+		Confidence:  v.Confidence,
+	}
+
+	return res
+}
+
 // marshalSkillsUnknownSkillActivationToUnknownSkillActivationResponseBody
 // builds a value of type *UnknownSkillActivationResponseBody from a value of
 // type *skills.UnknownSkillActivation.

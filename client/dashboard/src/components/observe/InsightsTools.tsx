@@ -54,7 +54,7 @@ import { Icon } from "@/components/ui/Icon";
 import { ChartCard } from "@/components/chart/ChartCard";
 import { ACCENT_RED, TOOLTIP } from "@/components/chart/palette";
 import { useSeriesColors } from "@/components/chart/useSeriesColors";
-import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
+import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { formatChartZoomRangeLabel } from "@/components/chart/chartUtils";
 import { useChartZoom } from "@/components/chart/useChartZoom";
 import { useExpandedChart } from "@/hooks/useExpandedChart";
@@ -2019,7 +2019,7 @@ function HooksAnalytics({
 
   return (
     <div className="space-y-4">
-      <MetricCardGroup className={cn(expandedChart && "hidden")}>
+      <StatTileGroup className={cn(expandedChart && "hidden")}>
         {summaryIsError && !summaryData ? (
           <div className="w-full">
             <ErrorAlert
@@ -2035,45 +2035,40 @@ function HooksAnalytics({
           </>
         ) : (
           <>
-            <MetricCard
+            <StatTile
               title="Avg Success Rate"
               value={kpis?.avgSuccessRate ?? 0}
               tone="success"
               format="percent"
               icon="circle-check"
-              accentColor="green"
             />
-            <MetricCard
+            <StatTile
               title="Total Events"
               value={kpis?.totalEvents ?? 0}
               tone="information"
               icon="activity"
-              accentColor="purple"
             />
-            <MetricCard
+            <StatTile
               title="Active Users"
               value={kpis?.activeUsers ?? 0}
               tone="information"
               icon="users"
-              accentColor="yellow"
             />
-            <MetricCard
+            <StatTile
               title="Active Targets"
               value={kpis?.activeTargets ?? 0}
               tone="information"
               icon="monitor"
-              accentColor="blue"
             />
-            <MetricCard
+            <StatTile
               title="Unique Tools"
               value={kpis?.uniqueTools ?? 0}
               tone="information"
               icon="wrench"
-              accentColor="orange"
             />
           </>
         )}
-      </MetricCardGroup>
+      </StatTileGroup>
 
       <div
         className={cn(

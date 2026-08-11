@@ -735,6 +735,7 @@ func marshalTypesUserSessionClientToUserSessionClientResponseBody(v *types.UserS
 		ClientSecretExpiresAt: v.ClientSecretExpiresAt,
 		CreatedAt:             v.CreatedAt,
 		UpdatedAt:             v.UpdatedAt,
+		ActiveSessionCount:    v.ActiveSessionCount,
 	}
 	if v.RedirectUris != nil {
 		res.RedirectUris = make([]string, len(v.RedirectUris))

@@ -60,12 +60,73 @@ func (q *Queries) CountOutboxEntriesByEventType(ctx context.Context, eventType s
 	return count, err
 }
 
+const countPlatformMCPSetupMilestoneFixture = `-- name: CountPlatformMCPSetupMilestoneFixture :one
+SELECT count(*)
+FROM platform_mcp_onboarding_milestones
+WHERE organization_id = $1
+  AND project_id = $2
+  AND mcp_key = $3
+  AND attempt_id = $4
+  AND milestone = $5
+`
+
+type CountPlatformMCPSetupMilestoneFixtureParams struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	McpKey         string
+	AttemptID      uuid.NullUUID
+	Milestone      string
+}
+
+// Test-only count for idempotent Platform MCP setup evidence.
+func (q *Queries) CountPlatformMCPSetupMilestoneFixture(ctx context.Context, arg CountPlatformMCPSetupMilestoneFixtureParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countPlatformMCPSetupMilestoneFixture,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.McpKey,
+		arg.AttemptID,
+		arg.Milestone,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countPublishOutboxRows = `-- name: CountPublishOutboxRows :one
 SELECT COUNT(*) FROM publish_outbox
 `
 
 func (q *Queries) CountPublishOutboxRows(ctx context.Context) (int64, error) {
 	row := q.db.QueryRow(ctx, countPublishOutboxRows)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countSkillScanRecords = `-- name: CountSkillScanRecords :one
+SELECT count(*)
+FROM risk_results rr
+JOIN skill_versions sv ON sv.id = rr.skill_version_id
+JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = $1
+  AND s.name = $2
+  AND (
+    NOT $3::boolean
+    OR (rr.source = 'prompt_injection' AND rr.found IS TRUE)
+  )
+`
+
+type CountSkillScanRecordsParams struct {
+	ProjectID uuid.UUID
+	SkillName string
+	FoundOnly bool
+}
+
+// Test-only fixture: counts recorded scans of a version of the named skill.
+// found_only narrows the count to prompt-injection findings; otherwise every
+// recorded scan counts, clean coverage rows included.
+func (q *Queries) CountSkillScanRecords(ctx context.Context, arg CountSkillScanRecordsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countSkillScanRecords, arg.ProjectID, arg.SkillName, arg.FoundOnly)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -165,6 +226,30 @@ WHERE device_integration_config_id = $1
 
 func (q *Queries) DisableDeviceIntegrationSchedulesFixture(ctx context.Context, deviceIntegrationConfigID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, disableDeviceIntegrationSchedulesFixture, deviceIntegrationConfigID)
+	return err
+}
+
+const expirePlatformMCPSetupHandoffFixture = `-- name: ExpirePlatformMCPSetupHandoffFixture :exec
+UPDATE platform_mcp_setup_handoffs
+SET expires_at = clock_timestamp() - interval '1 second'
+WHERE id = $1
+`
+
+// Test-only fixture to verify expired setup handoffs cannot be redeemed.
+func (q *Queries) ExpirePlatformMCPSetupHandoffFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, expirePlatformMCPSetupHandoffFixture, id)
+	return err
+}
+
+const expireRemoteSessionAccessTokenFixture = `-- name: ExpireRemoteSessionAccessTokenFixture :exec
+UPDATE remote_sessions
+SET access_expires_at = clock_timestamp() - interval '1 minute'
+WHERE id = $1
+`
+
+// Test-only fixture forcing the shared remote-session refresh path.
+func (q *Queries) ExpireRemoteSessionAccessTokenFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, expireRemoteSessionAccessTokenFixture, id)
 	return err
 }
 
@@ -341,6 +426,36 @@ func (q *Queries) GetOutboxRelayState(ctx context.Context, outboxID int64) (GetO
 		&i.LastError,
 	)
 	return i, err
+}
+
+const getPlatformMCPReadinessFingerprintFixture = `-- name: GetPlatformMCPReadinessFingerprintFixture :one
+SELECT provider_authorization_fingerprint
+FROM platform_mcp_readiness
+WHERE registration_id = $1
+ORDER BY checked_at DESC, id DESC
+LIMIT 1
+`
+
+// Test-only inspection of the non-secret identity fingerprint persisted by Platform MCP.
+func (q *Queries) GetPlatformMCPReadinessFingerprintFixture(ctx context.Context, registrationID uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPReadinessFingerprintFixture, registrationID)
+	var provider_authorization_fingerprint string
+	err := row.Scan(&provider_authorization_fingerprint)
+	return provider_authorization_fingerprint, err
+}
+
+const getPlatformMCPSetupHandoffHashFixture = `-- name: GetPlatformMCPSetupHandoffHashFixture :one
+SELECT handoff_hash
+FROM platform_mcp_setup_handoffs
+WHERE id = $1
+`
+
+// Test-only inspection of the one-way setup credential persisted by Platform MCP.
+func (q *Queries) GetPlatformMCPSetupHandoffHashFixture(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPSetupHandoffHashFixture, id)
+	var handoff_hash string
+	err := row.Scan(&handoff_hash)
+	return handoff_hash, err
 }
 
 const getPrincipalGrantEffectFixture = `-- name: GetPrincipalGrantEffectFixture :one
@@ -949,7 +1064,7 @@ func (q *Queries) ListPublishOutboxRows(ctx context.Context) ([]ListPublishOutbo
 }
 
 const listRiskResultsAll = `-- name: ListRiskResultsAll :many
-SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, chat_content_part_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, spans, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
+SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, chat_content_part_id, skill_version_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, spans, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
 FROM risk_results
 WHERE project_id = $1
   AND risk_policy_id = $2
@@ -981,6 +1096,7 @@ func (q *Queries) ListRiskResultsAll(ctx context.Context, arg ListRiskResultsAll
 			&i.RiskPolicyVersion,
 			&i.ChatMessageID,
 			&i.ChatContentPartID,
+			&i.SkillVersionID,
 			&i.Source,
 			&i.Found,
 			&i.RuleID,

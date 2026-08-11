@@ -1,5 +1,38 @@
 # dashboard
 
+## 0.105.0
+
+### Minor Changes
+
+- 6228ad5: Introduce a paint-by-numbers page-template layer so dashboard pages share one structure. Adds `ResourceListPage`, `DetailPage`, `TabbedPage`, `FormPage`, `SettingsPage`, `OverviewPage`, `WorkbenchPage`, `WizardPage`, `CenteredPage`, and a `FullBleedPage` escape hatch (in `@/components/page-templates`), plus composite widgets `InlineEmptyState`, `StatRow`, `SummaryCard`, and `DetailBody`. Migrates ~34 pages onto the templates.
+
+  Consolidates the design-system primitives: removes the dead `Modal`/`IconButton` subsystem, folds `PrivateInput` into `Input` (new `reveal` prop), `DashboardCard` into `Card.Dashboard`, `ToggleButton` into the `SegmentedControl` module, and `Editable` into `editable-text`; renames the analytics tile `chart/MetricCard` to `StatTile` so `MetricCard` is the sole primitive; and promotes the shared detail-page primitives (`SettingsSection`, `DetailSidebarNav`) out of the mcp path into `@/components/detail`.
+
+- 91f8234: An organization whose enterprise trial has ended now lands on a page that says so and books an upgrade call, instead of the generic book-a-demo screen a company that had never heard of Gram sees. Anyone still inside a trial can reach the same page from the sidebar countdown to upgrade early.
+- 3705830: Scan captured skill manifests for prompt injection at capture time and show current-version findings on skill details. Admins can configure the existing Prompt Injection policy from the Skills page. A completed judgement records either a finding or clean coverage; unavailable judgements are retried on a later activation and never become durable clean results. Scanning never fails the upload. Coverage is usage-based rather than catalog-based, so a version no agent ever loads is never judged.
+
+## 0.104.0
+
+### Minor Changes
+
+- 5027338: The MCP server Clients and Sessions tab now leads with active session and client counts, and renders both listings as searchable, filterable, sortable tables paginated ten rows at a time, with member avatars and creation dates on sessions. The clients table reports how many active sessions each client holds, backed by a new `active_session_count` field on the user session clients API, and clicking that count narrows both listings to that client behind a clear-filter bar.
+
+### Patch Changes
+
+- 1fa0caf: Surface that Claude Cowork still needs its own manual setup step when Device
+  Agent is selected on the "Instrument agents" onboarding step — Device Agent
+  only covers coding assistants running on the developer's machine, not
+  Cowork's cloud sandbox. The new note links straight into the Manual Setup
+  flow for Cowork.
+
+  Also aligns MDM vendor wording with the Iru rebrand ("Iru (formerly Kandji)")
+  across the Device Agent setup page and Codex onboarding copy, matching the
+  naming already used on the MDM integrations page.
+
+  Conversation events (`UserPromptSubmit`/`Stop`) are now also written to
+  ClickHouse telemetry so the onboarding "Confirm traffic" feed shows prompts
+  and assistant replies, not only tool calls.
+
 ## 0.103.0
 
 ### Minor Changes

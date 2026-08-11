@@ -1,4 +1,4 @@
-import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
+import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import {
   formatDateRangeLabel,
   useDateRangeFilter,
@@ -184,12 +184,8 @@ function RiskOverviewCategoryDetailContent() {
   const handleSetupExclusionSelected = useCallback(() => {
     const selected = selection.selectedItems;
     if (selected.length === 0) return;
-    // Deliberately doesn't clear the selection (unlike handleDismissSelected):
-    // a batch AI suggestion takes a few seconds, and clearing here would
-    // collapse the bulk bar mid-request, hiding the spinner on "Setup
-    // exclusion rule" with no visible feedback until the sheet opens. Leaving
-    // the selection also means Clear/retry still works if the sheet is
-    // cancelled.
+    // Deliberately doesn't clear the selection (unlike handleDismissSelected)
+    // so retrying still works if the sheet is canceled.
     exclusionRule.open(selected);
   }, [selection, exclusionRule]);
 
@@ -249,15 +245,15 @@ function RiskOverviewCategoryDetailContent() {
         <Page.Section.CTA>{controls}</Page.Section.CTA>
         <Page.Section.Body>
           <div className="space-y-6">
-            <MetricCardGroup>
-              <MetricCard
+            <StatTileGroup>
+              <StatTile
                 title="Findings"
                 value={findingsCount}
                 tone={findingsCount > 0 ? "destructive" : "neutral"}
                 format="compact"
                 icon="flag"
               />
-            </MetricCardGroup>
+            </StatTileGroup>
             <RuleBreakdown
               rules={ruleBreakdownQuery.data?.rules ?? []}
               isLoading={ruleBreakdownQuery.isLoading}
@@ -287,7 +283,6 @@ function RiskOverviewCategoryDetailContent() {
                     onClick: handleSetupExclusionSelected,
                   },
                 ]}
-                loading={exclusionRule.isSuggesting}
                 leftOffsetPx={32}
                 heightPx={headerMeasure.height}
               />

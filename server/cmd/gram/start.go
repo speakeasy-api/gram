@@ -33,7 +33,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
-	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 
 	"github.com/speakeasy-api/gram/server/internal/about"
 	"github.com/speakeasy-api/gram/server/internal/access"
@@ -101,6 +100,7 @@ import (
 	platformdocs "github.com/speakeasy-api/gram/server/internal/platformtools/docs"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	platformskills "github.com/speakeasy-api/gram/server/internal/platformtools/skills"
+	platformslack "github.com/speakeasy-api/gram/server/internal/platformtools/slack"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/projects"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -132,8 +132,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
+	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	"github.com/speakeasy-api/gram/server/internal/triggers"
 	"github.com/speakeasy-api/gram/server/internal/unproxiedmcp"
 
@@ -344,6 +346,12 @@ func newStartCommand() *cli.Command {
 			EnvVars: []string{"GRAM_SINGLE_PROCESS"},
 			Value:   false,
 		},
+		&cli.BoolFlag{
+			Name:    platformMCPLocalFixtureFlag,
+			Usage:   "Enable the synthetic local-only Platform MCP reviewed-provider fixture",
+			EnvVars: []string{"GRAM_PLATFORM_MCP_LOCAL_FIXTURE"},
+			Value:   false,
+		},
 		&cli.StringFlag{
 			Name:     "pylon-verification-secret",
 			Usage:    "The identity verification secret for pylon",
@@ -478,6 +486,11 @@ func newStartCommand() *cli.Command {
 				attr.SlogServiceEnv(serviceEnv),
 			)
 			slog.SetDefault(logger)
+
+			platformFixture, err := platformMCPLocalFixtureConfigFromCLI(serviceEnv, c.Bool(platformMCPLocalFixtureFlag), c.String("server-url"))
+			if err != nil {
+				return fmt.Errorf("invalid Platform MCP local fixture configuration: %w", err)
+			}
 
 			if serviceEnv == "local" {
 				scanners.EnableRuleIDFormatEnforcement()
@@ -668,6 +681,9 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to parse site url: %w", err)
 			}
+			trialEmailNotifier := &background.TemporalTrialEmailNotifier{TemporalEnv: temporalEnv}
+			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
+			trialEmailsService := trialemails.NewService(db, loopsWorkflowClient, logger, siteURL.String())
 
 			tigrisStore, shutdown, err := newTigrisStore(ctx, c, logger)
 			if err != nil {
@@ -861,6 +877,7 @@ func newStartCommand() *cli.Command {
 				auditLogger,
 				platformtoolsruntime.WithTriggerTools(triggerApp),
 				platformtoolsruntime.WithSlackHTTPClient(guardianPolicy.PooledClient()),
+				platformtoolsruntime.WithFileURLMinting(encryptionClient, serverURL),
 				platformtoolsruntime.WithFeatureChecker(platformFeatureChecker),
 				platformtoolsruntime.WithExternalTools(assistantPlatformExtras),
 			)
@@ -960,6 +977,8 @@ func newStartCommand() *cli.Command {
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
+			assistantsCore.SetAssetStorage(assetStorage)
+			assistantsCore.SetSlackImageInlining(env, slackapi.NewClient("", guardianPolicy.PooledClient()))
 			assistantsCore.SetFeatureProvider(featureFlags)
 			assistantsSvc := assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv}, ratelimit.NewRedisStore(redisClient))
 			triggerApp.RegisterDispatcher(assistantsSvc)
@@ -1146,6 +1165,7 @@ func newStartCommand() *cli.Command {
 			}
 
 			about.Attach(mux, about.NewService(logger, tracerProvider, guardianPolicy))
+			platformslack.NewFileProxy(logger, encryptionClient, guardianPolicy.PooledClient()).Attach(mux)
 			external.AttachWebhookHandler(mux, external.NewWebhookHandler(logger, tracerProvider, newWorkOSWebhooksClient(c), temporalEnv))
 			roleManager := access.NewRoleManager(logger, db, roleClient, auditLogger)
 			access.Attach(mux, access.NewService(logger, tracerProvider, db, chDB, sessionManager, roleManager, authzEngine, auditLogger, emailService, siteURL))
@@ -1181,6 +1201,7 @@ func newStartCommand() *cli.Command {
 				productFeatures,
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				riskScanner,
+				hookPIScanner,
 				policyBypass,
 				spendGate,
 				shadowMCPClient,
@@ -1219,8 +1240,9 @@ func newStartCommand() *cli.Command {
 				authzProvisioner,
 				productfeatures.SeedEnterpriseTrialBundleTx,
 				auditLogger,
+				trialEmailNotifier,
 			))
-			organizationsService := organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, identityResolver, productFeatures, telemetryrepo.New(chDB), authzEngine, emailService, serverURL.String(), siteURL.String(), auditLogger, svixClient)
+			organizationsService := organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, identityResolver, productFeatures, telemetryrepo.New(chDB), authzEngine, emailService, trialEmailNotifier, serverURL.String(), siteURL.String(), auditLogger, svixClient)
 			organizations.Attach(mux, organizationsService)
 			pluginsGitHub, err := plugins.NewGitHubConfig(plugins.GitHubConfigInput{
 				Client:         ghClient,
@@ -1289,40 +1311,28 @@ func newStartCommand() *cli.Command {
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, authzEngine, serverURL))
 			collections.Attach(mux, collections.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, serverURL))
-			platformOrganizationSlugs := platformmcp.NewPostgresOrganizationSlugResolver(db)
-			platformGate := platformmcp.NewOrganizationGate(productFeatures, featureFlags, platformOrganizationSlugs)
-			platformAuthorizer := platformmcp.NewLiveOrgAdminAuthorizer(db, authzEngine)
-			platformOAuth, err := platformmcp.NewOAuthHTTP(platformmcp.OAuthHTTPConfig{
-				BaseURL:       serverURL,
-				Environment:   c.String("environment"),
-				Cache:         cache.NewRedisCacheAdapter(redisClient),
-				Store:         platformmcp.NewPostgresOAuthStore(db),
-				Identity:      identityResolver,
-				Gate:          platformGate,
-				Authorizer:    platformAuthorizer,
-				Organizations: platformmcp.NewLiveOrganizationSelector(db, platformAuthorizer),
-				Signer:        sessiontokens.NewSigner(c.String(usersessions.JWTSigningKeyFlag)),
-				Encryption:    encryptionClient,
-			})
-			if err != nil {
-				return fmt.Errorf("create platform mcp oauth service: %w", err)
+			if err := configurePlatformMCP(ctx, platformMCPConfig{
+				Logger:                 logger,
+				MeterProvider:          meterProvider,
+				Mux:                    mux,
+				DB:                     db,
+				Redis:                  redisClient,
+				ServerURL:              serverURL,
+				Environment:            c.String("environment"),
+				JWTSigningKey:          c.String(usersessions.JWTSigningKeyFlag),
+				ProductFeatures:        productFeatures,
+				FeatureFlags:           featureFlags,
+				Authz:                  authzEngine,
+				Encryption:             encryptionClient,
+				Identity:               identityResolver,
+				Sessions:               sessionManager,
+				Registry:               mcpRegistryClient,
+				GuardianPolicy:         guardianPolicy,
+				RemoteChallengeManager: remoteChallengeManager,
+				LocalFixture:           platformFixture,
+			}); err != nil {
+				return err
 			}
-			platformAuthenticator, err := platformmcp.NewJWTAuthenticator(sessiontokens.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), db, encryptionClient, platformOAuth.Issuer(), platformOAuth.Audience())
-			if err != nil {
-				return fmt.Errorf("create platform mcp authenticator: %w", err)
-			}
-			platformRuntime := platformmcp.NewRuntime(
-				logger,
-				platformAuthenticator,
-				platformGate,
-				platformAuthorizer,
-				platformOAuth.ProtectedResourceURL(),
-				platformmcp.NewPostgresReader(db),
-				platformmcp.NewPostgresReadinessRecorder(db),
-			)
-
-			platformOAuth.Attach(mux)
-			o11y.AttachHandler(mux, "POST", platformmcp.Path, platformRuntime.Handler().ServeHTTP)
 			mcp.Attach(mux, mcpService, mcpMetadataService)
 			chat.Attach(mux, chatService)
 			variations.Attach(mux, variations.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
@@ -1515,6 +1525,7 @@ func newStartCommand() *cli.Command {
 						ProductFeatures:     productFeatures,
 						PluginPublisher:     pluginPublisher,
 						Publishers:          publishers,
+						TrialEmailsService:  trialEmailsService,
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))

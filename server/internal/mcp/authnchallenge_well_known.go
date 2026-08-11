@@ -72,6 +72,20 @@ type oauthAuthorizationServerMetadata struct {
 	TokenEndpointAuthMethodsSupported    []string `json:"token_endpoint_auth_methods_supported"`
 	CodeChallengeMethodsSupported        []string `json:"code_challenge_methods_supported"`
 	RefreshTokenExpirationTypesSupported []string `json:"refresh_token_expiration_types_supported"`
+
+	// AuthorizationResponseIssParameterSupported advertises RFC 9207 §3. Always
+	// true: every authorization response on this surface carries `iss`
+	// (RFC 9207 §2), and an omitted field means false to a client, so the
+	// value tracks a property of the surface rather than any configuration.
+	//
+	// The coupling with emission is asymmetric. A client seeing `iss` without
+	// the flag compares it anyway, which is what lets this document lag behind
+	// the responses it describes by up to the cache TTL below. A client seeing
+	// the flag without `iss` rejects the response outright, which is what
+	// makes turning this off — or serving it from a build whose response paths
+	// omit `iss` — a client-visible break.
+	AuthorizationResponseIssParameterSupported bool `json:"authorization_response_iss_parameter_supported"`
+
 	// ClientIDMetadataDocumentSupported advertises inbound CIMD support
 	// (draft-ietf-oauth-client-id-metadata-document-02 §6). Emitted as true
 	// only when the issuer organization's gram-user-session-cimd flag is
@@ -433,20 +447,21 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 		cimdSupported = conv.PtrEmpty(true)
 	}
 	return writeJSONMetadata(ctx, w, r, s.logger, oauthAuthorizationServerMetadata{
-		Issuer:                            urls.Issuer,
-		AuthorizationEndpoint:             urls.Authorize,
-		TokenEndpoint:                     urls.Token,
-		RegistrationEndpoint:              urls.Register,
-		RevocationEndpoint:                urls.Revoke,
-		ScopesSupported:                   nil,
-		ResponseTypesSupported:            usersessions.SupportedResponseTypes,
-		GrantTypesSupported:               usersessions.SupportedGrantTypes,
-		TokenEndpointAuthMethodsSupported: usersessions.SupportedAuthMethods,
-		CodeChallengeMethodsSupported:     usersessions.SupportedCodeChallengeMethods,
+		AuthorizationEndpoint:                      urls.Authorize,
+		AuthorizationResponseIssParameterSupported: true,
+		ClientIDMetadataDocumentSupported:          cimdSupported,
+		CodeChallengeMethodsSupported:              usersessions.SupportedCodeChallengeMethods,
+		GrantTypesSupported:                        usersessions.SupportedGrantTypes,
+		Issuer:                                     urls.Issuer,
 		RefreshTokenExpirationTypesSupported: []string{
 			"authorization",
 		},
-		ClientIDMetadataDocumentSupported: cimdSupported,
+		RegistrationEndpoint:              urls.Register,
+		ResponseTypesSupported:            usersessions.SupportedResponseTypes,
+		RevocationEndpoint:                urls.Revoke,
+		ScopesSupported:                   nil,
+		TokenEndpoint:                     urls.Token,
+		TokenEndpointAuthMethodsSupported: usersessions.SupportedAuthMethods,
 	})
 }
 
