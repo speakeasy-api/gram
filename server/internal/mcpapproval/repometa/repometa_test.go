@@ -31,7 +31,7 @@ func serve(t *testing.T, contributorsLink string) (*httptest.Server, func() []st
 	var paths []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
-		paths = append(paths, r.URL.Path)
+		paths = append(paths, r.URL.RequestURI())
 		mu.Unlock()
 
 		if r.URL.Path == "/repos/acme/mcp-server/contributors" {
@@ -55,12 +55,19 @@ func serve(t *testing.T, contributorsLink string) (*httptest.Server, func() []st
 func TestLookup(t *testing.T) {
 	t.Parallel()
 
-	server, _ := serve(t, `<https://api.github.com/repos/acme/mcp-server/contributors?per_page=1&anon=false&page=23>; rel="last"`)
+	server, requestedPaths := serve(t, `<https://api.github.com/repos/acme/mcp-server/contributors?per_page=1&anon=false&page=23>; rel="last"`)
 	client := repometa.NewClient(server.Client(), repometa.WithBaseURL(server.URL))
 
 	got, err := client.Lookup(t.Context(), "https://github.com/acme/mcp-server")
 	require.NoError(t, err)
 	require.NotNil(t, got)
+
+	// The contributor count rides a one-item page: the count is only real if
+	// the pagination query actually went out that way.
+	require.Equal(t, []string{
+		"/repos/acme/mcp-server",
+		"/repos/acme/mcp-server/contributors?per_page=1&anon=false",
+	}, requestedPaths())
 
 	require.Equal(t, "github.com", got.Host)
 	require.Equal(t, "acme", got.Owner)

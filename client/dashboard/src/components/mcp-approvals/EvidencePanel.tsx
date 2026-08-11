@@ -447,49 +447,44 @@ function DeclaredCapabilitySection({
 /** How many tool rows show before the rest collapses behind the toggle. */
 const TOOL_PREVIEW_COUNT = 3;
 
-function ToolList({
-  capabilities,
+/**
+ * A bordered, hairline-divided list whose tail collapses behind a
+ * "Show all N {noun}" toggle once it exceeds the preview count.
+ */
+function CollapsibleList<T>({
+  items,
+  itemKey,
+  renderItem,
+  itemClassName,
+  noun,
+  previewCount = TOOL_PREVIEW_COUNT,
 }: {
-  capabilities: EvidenceCapability[];
+  items: T[];
+  itemKey: (item: T) => string;
+  renderItem: (item: T) => React.ReactNode;
+  itemClassName: string;
+  /** Plural label for the toggle, e.g. "tools". */
+  noun: string;
+  previewCount?: number;
 }): JSX.Element {
   const [expanded, setExpanded] = useState(false);
-  const collapsible = capabilities.length > TOOL_PREVIEW_COUNT;
+  const collapsible = items.length > previewCount;
   const visible =
-    collapsible && !expanded
-      ? capabilities.slice(0, TOOL_PREVIEW_COUNT)
-      : capabilities;
+    collapsible && !expanded ? items.slice(0, previewCount) : items;
 
   return (
     <div className="border-border border">
       <ul className="divide-border divide-y">
-        {visible.map((tool) => (
-          <li
-            key={tool.tool}
-            className="flex flex-wrap items-center justify-between gap-2 px-3 py-1 text-xs"
-          >
-            <span className="font-mono">{tool.tool}</span>
-            {tool.unannotated ? (
-              <span className="text-muted-foreground italic">
-                declares nothing — authority unknown
-              </span>
-            ) : (
-              <span className="flex flex-wrap justify-end gap-1">
-                {[...tool.declared, ...tool.schemaImplied].map((value) => (
-                  <span
-                    key={value}
-                    className="border-border text-muted-foreground border px-1.5 py-px"
-                  >
-                    {capabilityLabel(value)}
-                  </span>
-                ))}
-              </span>
-            )}
+        {visible.map((item) => (
+          <li key={itemKey(item)} className={itemClassName}>
+            {renderItem(item)}
           </li>
         ))}
       </ul>
       {collapsible && (
         <button
           type="button"
+          aria-expanded={expanded}
           onClick={() => setExpanded((current) => !current)}
           className="text-muted-foreground hover:text-foreground border-border flex w-full items-center justify-center gap-1 border-t px-3 py-1 text-xs"
         >
@@ -500,13 +495,49 @@ function ToolList({
             </>
           ) : (
             <>
-              Show all {capabilities.length} tools
+              Show all {items.length} {noun}
               <ChevronDown className="size-3" />
             </>
           )}
         </button>
       )}
     </div>
+  );
+}
+
+function ToolList({
+  capabilities,
+}: {
+  capabilities: EvidenceCapability[];
+}): JSX.Element {
+  return (
+    <CollapsibleList
+      items={capabilities}
+      itemKey={(tool) => tool.tool}
+      itemClassName="flex flex-wrap items-center justify-between gap-2 px-3 py-1 text-xs"
+      noun="tools"
+      renderItem={(tool) => (
+        <>
+          <span className="font-mono">{tool.tool}</span>
+          {tool.unannotated ? (
+            <span className="text-muted-foreground italic">
+              declares nothing — authority unknown
+            </span>
+          ) : (
+            <span className="flex flex-wrap justify-end gap-1">
+              {[...tool.declared, ...tool.schemaImplied].map((value) => (
+                <span
+                  key={value}
+                  className="border-border text-muted-foreground border px-1.5 py-px"
+                >
+                  {capabilityLabel(value)}
+                </span>
+              ))}
+            </span>
+          )}
+        </>
+      )}
+    />
   );
 }
 
@@ -830,58 +861,31 @@ function AdvisoriesSection({
   );
 }
 
-/** How many advisory rows show before the rest collapses behind the toggle. */
-const ADVISORY_PREVIEW_COUNT = 3;
-
 function AdvisoryList({
   advisories,
 }: {
   advisories: EvidenceAdvisoryItem[];
 }): JSX.Element {
-  const [expanded, setExpanded] = useState(false);
-  const collapsible = advisories.length > ADVISORY_PREVIEW_COUNT;
-  const visible =
-    collapsible && !expanded
-      ? advisories.slice(0, ADVISORY_PREVIEW_COUNT)
-      : advisories;
-
   return (
-    <div className="border-border border">
-      <ul className="divide-border divide-y">
-        {visible.map((advisory) => (
-          <li key={advisory.id} className="px-3 py-1.5 text-xs">
-            <div className="flex items-center justify-between gap-3">
-              <span className="font-mono">{advisory.id}</span>
-              {advisory.severity && (
-                <Badge variant="destructive">{advisory.severity}</Badge>
-              )}
-            </div>
-            {advisory.summary && (
-              <p className="text-muted-foreground mt-0.5">{advisory.summary}</p>
+    <CollapsibleList
+      items={advisories}
+      itemKey={(advisory) => advisory.id}
+      itemClassName="px-3 py-1.5 text-xs"
+      noun="advisories"
+      renderItem={(advisory) => (
+        <>
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-mono">{advisory.id}</span>
+            {advisory.severity && (
+              <Badge variant="destructive">{advisory.severity}</Badge>
             )}
-          </li>
-        ))}
-      </ul>
-      {collapsible && (
-        <button
-          type="button"
-          onClick={() => setExpanded((current) => !current)}
-          className="text-muted-foreground hover:text-foreground border-border flex w-full items-center justify-center gap-1 border-t px-3 py-1 text-xs"
-        >
-          {expanded ? (
-            <>
-              Show fewer
-              <ChevronUp className="size-3" />
-            </>
-          ) : (
-            <>
-              Show all {advisories.length} advisories
-              <ChevronDown className="size-3" />
-            </>
+          </div>
+          {advisory.summary && (
+            <p className="text-muted-foreground mt-0.5">{advisory.summary}</p>
           )}
-        </button>
+        </>
       )}
-    </div>
+    />
   );
 }
 

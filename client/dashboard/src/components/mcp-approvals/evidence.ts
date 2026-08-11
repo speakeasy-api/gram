@@ -270,11 +270,17 @@ export function parseEvidenceDocument(
 
   let advisoriesSection: EvidenceAdvisories | undefined;
   const advisoriesRecord = asRecord(root["advisories"]);
-  if (advisoriesRecord) {
+  // A section without a numeric count is a document this parser does not
+  // understand; dropping it renders "not consulted" — the conservative
+  // unknown — rather than coercing a partial section into checked-and-clean.
+  const knownCount = advisoriesRecord
+    ? num(advisoriesRecord, "known_count")
+    : undefined;
+  if (advisoriesRecord && knownCount !== undefined) {
     advisoriesSection = {
       ecosystem: str(advisoriesRecord, "ecosystem"),
       package: str(advisoriesRecord, "package"),
-      knownCount: num(advisoriesRecord, "known_count") ?? 0,
+      knownCount,
       advisories: advisoryItems(advisoriesRecord["advisories"]),
     };
   }

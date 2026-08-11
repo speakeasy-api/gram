@@ -92,8 +92,8 @@ type Client struct {
 // Option overrides a client default.
 type Option func(*Client)
 
-// WithBaseURL points lookups at a different host, for a GitHub Enterprise
-// instance or a test server.
+// WithBaseURL points lookups at a different host, for a test server. Only
+// repositories on github.com are recognized regardless of the endpoint.
 func WithBaseURL(base string) Option {
 	return func(c *Client) { c.baseURL = strings.TrimSuffix(base, "/") }
 }

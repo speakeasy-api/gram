@@ -148,14 +148,16 @@ func (c *Client) Lookup(ctx context.Context, domain string) (*Registration, erro
 		Registrar:    "",
 	}
 
+	// The first *parseable* registration event wins: a malformed date on one
+	// event must not hide a valid date on a later one.
 	for _, event := range doc.Events {
 		if event.Action != "registration" {
 			continue
 		}
 		if parsed, err := time.Parse(time.RFC3339, event.Date); err == nil {
 			registration.RegisteredAt = parsed
+			break
 		}
-		break
 	}
 
 	for _, entity := range doc.Entities {

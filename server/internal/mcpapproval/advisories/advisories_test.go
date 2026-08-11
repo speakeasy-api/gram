@@ -136,3 +136,57 @@ func TestQuery_SampleIsBounded(t *testing.T) {
 	require.Equal(t, 25, got.KnownCount)
 	require.Len(t, got.Advisories, 10)
 }
+
+// Paginated results are followed to the end: the count covers every page, and
+// a page carrying only a continuation token is never mistaken for clean.
+func TestQuery_FollowsPagination(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	var tokens []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		var body map[string]any
+		_ = json.Unmarshal(raw, &body)
+		token, _ := body["page_token"].(string)
+		mu.Lock()
+		tokens = append(tokens, token)
+		mu.Unlock()
+
+		switch token {
+		case "":
+			// The first page can even be token-only, which is a continuation.
+			_, _ = w.Write([]byte(`{"next_page_token": "t1"}`))
+		case "t1":
+			_, _ = w.Write([]byte(`{"vulns": [{"id": "GHSA-aaaa-1111", "published": "2024-02-01T00:00:00Z"}], "next_page_token": "t2"}`))
+		default:
+			_, _ = w.Write([]byte(`{"vulns": [{"id": "GHSA-bbbb-2222", "published": "2026-01-15T00:00:00Z"}]}`))
+		}
+	}))
+	t.Cleanup(server.Close)
+	client := advisories.NewClient(server.Client(), advisories.WithBaseURL(server.URL))
+
+	got, err := client.Query(t.Context(), identity.RegistryNPM, "mcp-server", "")
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	require.Equal(t, 2, got.KnownCount)
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Equal(t, []string{"", "t1", "t2"}, tokens)
+}
+
+// A result set that never stops paginating is an error — recorded as a gap —
+// rather than a partially counted report presented as the whole truth.
+func TestQuery_UnboundedPaginationIsAnError(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"vulns": [{"id": "GHSA-aaaa-1111", "published": "2024-02-01T00:00:00Z"}], "next_page_token": "again"}`))
+	}))
+	t.Cleanup(server.Close)
+	client := advisories.NewClient(server.Client(), advisories.WithBaseURL(server.URL))
+
+	_, err := client.Query(t.Context(), identity.RegistryNPM, "mcp-server", "")
+	require.Error(t, err)
+}

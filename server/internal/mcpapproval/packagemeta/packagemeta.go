@@ -426,21 +426,30 @@ func (c *Client) lookupPyPI(ctx context.Context, name string) (*Metadata, error)
 
 // pypiRepository finds the declared source repository among the project URLs,
 // whose labels are free-form. The conventional labels are tried first; failing
-// those, any URL hosted on a known code host is taken. Keys are walked in
-// sorted order so repeated gathers of the same document extract the same URL.
+// those, any URL hosted on a known code host is taken — even one under a
+// label like "Tracker", since a code-host subpath still names the repository
+// it lives in and the parse folds it to the repository root. Keys are walked
+// in sorted order so repeated gathers of the same document extract the same
+// URL, and empty values never shadow a URL under another label.
 func pypiRepository(doc pypiDocument) string {
 	keys := slices.Sorted(maps.Keys(doc.Info.ProjectURLs))
 
 	for _, label := range []string{"repository", "source", "source code", "code"} {
 		for _, key := range keys {
-			if strings.EqualFold(strings.TrimSpace(key), label) {
-				return strings.TrimSpace(doc.Info.ProjectURLs[key])
+			if !strings.EqualFold(strings.TrimSpace(key), label) {
+				continue
+			}
+			if value := strings.TrimSpace(doc.Info.ProjectURLs[key]); value != "" {
+				return value
 			}
 		}
 	}
 
 	for _, key := range keys {
 		trimmed := strings.TrimSpace(doc.Info.ProjectURLs[key])
+		if trimmed == "" {
+			continue
+		}
 		if u, err := url.Parse(trimmed); err == nil {
 			host := strings.ToLower(u.Hostname())
 			if host == "github.com" || host == "gitlab.com" || host == "bitbucket.org" {
