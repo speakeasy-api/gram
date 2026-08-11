@@ -1,21 +1,25 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
 import {
+  PageTabsList,
   PageTabsTrigger,
   Tabs,
   TabsContent,
-  TabsList,
-} from "@/components/ui/tabs";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Tabs";
 import { useOrganization } from "@/contexts/Auth";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { useOrgRoutes } from "@/routes";
-import { Alert } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
-import { Link, Navigate, useLocation, useNavigate } from "react-router";
+import {
+  Link,
+  Navigate,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from "react-router";
 import { ChallengesTab } from "./ChallengesTab";
+import { GrantAccessDialog } from "./GrantAccessDialog";
 import { MembersTab } from "./MembersTab";
 import { RolesTab } from "./RolesTab";
 
@@ -33,16 +37,10 @@ const tabDisplayNames: Record<string, string> = {
 
 export default function Access(): JSX.Element {
   const location = useLocation();
-  const telemetry = useTelemetry();
-  const isRbacEnabled = telemetry.isFeatureEnabled("gram-rbac") ?? false;
 
   const pathSegments = location.pathname.split("/");
   const lastSegment = pathSegments[pathSegments.length - 1];
   const shouldRedirect = lastSegment === "access";
-
-  if (!isRbacEnabled) {
-    return <Navigate to=".." replace />;
-  }
 
   if (shouldRedirect) {
     return <Navigate to="roles" replace />;
@@ -68,6 +66,21 @@ export default function Access(): JSX.Element {
 function AccessInner() {
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Access request emails deep-link here with ?grant_user=<id>&scope=<scope>
+  // to open a pre-filled one-click grant dialog.
+  const grantUserId = searchParams.get("grant_user");
+  const grantScope = searchParams.get("scope");
+  const grantResourceId = searchParams.get("resource_id") || undefined;
+
+  const closeGrantDialog = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("grant_user");
+    next.delete("scope");
+    next.delete("resource_id");
+    setSearchParams(next, { replace: true });
+  };
   const organization = useOrganization();
   const orgRoutes = useOrgRoutes();
   const { data: rolesData } = useRoles();
@@ -89,15 +102,13 @@ function AccessInner() {
 
   return (
     <>
-      <div className="-mt-4">
-        <Heading variant="h4" className="mb-2">
-          Roles &amp; Permissions
-        </Heading>
-        <Type variant="body" className="text-muted-foreground mb-2">
+      <Page.Section>
+        <Page.Section.Title>Roles &amp; Permissions</Page.Section.Title>
+        <Page.Section.Description>
           Manage access control for your team by defining roles and assigning
           permissions. View past authorization challenges.
-        </Type>
-      </div>
+        </Page.Section.Description>
+      </Page.Section>
 
       {organization.scimEnabled && (
         <Alert variant="info" dismissible={false} className="mb-6 text-sm">
@@ -114,7 +125,7 @@ function AccessInner() {
 
       <Tabs value={currentTab} onValueChange={handleTabChange}>
         <div className="border-border -mx-8 border-b px-8">
-          <TabsList className="h-auto justify-start gap-4 rounded-none bg-transparent p-0 text-sm">
+          <PageTabsList>
             <PageTabsTrigger value="roles">
               Roles{roleCount != null ? ` (${roleCount})` : ""}
             </PageTabsTrigger>
@@ -124,7 +135,7 @@ function AccessInner() {
             <PageTabsTrigger value="challenges">
               Authorization Challenges
             </PageTabsTrigger>
-          </TabsList>
+          </PageTabsList>
         </div>
 
         <TabsContent value="roles" className="mt-6">
@@ -139,6 +150,15 @@ function AccessInner() {
           <ChallengesTab />
         </TabsContent>
       </Tabs>
+
+      {grantUserId && grantScope && (
+        <GrantAccessDialog
+          userId={grantUserId}
+          scope={grantScope}
+          resourceId={grantResourceId}
+          onClose={closeGrantDialog}
+        />
+      )}
     </>
   );
 }

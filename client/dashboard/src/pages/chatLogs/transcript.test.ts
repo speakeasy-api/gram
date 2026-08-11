@@ -1,11 +1,25 @@
 import { describe, expect, it } from "vitest";
 import {
+  argsToString,
   buildDisplayItems,
+  displayItemContainsMessage,
   displayItemRows,
   type DisplayItem,
   type ToolRow,
   type TranscriptRow,
 } from "./transcript";
+
+describe("argsToString", () => {
+  it("omits blank argument payloads instead of rendering an empty section", () => {
+    expect(argsToString("")).toBeUndefined();
+    expect(argsToString("  \n")).toBeUndefined();
+  });
+
+  it("preserves non-empty strings and serializes objects", () => {
+    expect(argsToString("{}")).toBe("{}");
+    expect(argsToString({ query: "status" })).toBe('{\n  "query": "status"\n}');
+  });
+});
 
 function toolRow(id: string, seq: number, generation = 1): ToolRow {
   return {
@@ -30,6 +44,7 @@ function messageRow(id: string, seq: number, generation = 1): TranscriptRow {
       content: "hello",
       createdAt: new Date(0),
     } as never,
+    attachments: [],
     generation,
   };
 }
@@ -105,5 +120,16 @@ describe("displayItemRows", () => {
     });
     const loadMore = items.find((i) => i.type === "loadMore")!;
     expect(displayItemRows(loadMore)).toEqual([]);
+  });
+});
+
+describe("displayItemContainsMessage", () => {
+  it("finds a raw tool-result message inside a grouped display item", () => {
+    const items = buildDisplayItems({
+      rows: [toolRow("a", 1), toolRow("b", 3)],
+    });
+
+    expect(displayItemContainsMessage(group(items), "b-result")).toBe(true);
+    expect(displayItemContainsMessage(group(items), "missing")).toBe(false);
   });
 });

@@ -112,6 +112,186 @@ paths:
       x-speakeasy-name-override: ingest
       x-speakeasy-react-hook:
         name: IngestHookEvent
+  /rpc/hooks.skillFeedback:
+    post:
+      description: Records agent-volunteered feedback about a distributed skill.
+      operationId: skillFeedback
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SkillFeedbackPayload'
+        required: true
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: skillFeedback hooks
+      tags:
+        - hooks
+      x-speakeasy-name-override: skillFeedback
+  /rpc/hooks.uploadSkillContent:
+    post:
+      description: Uploads skill manifest content requested by the unified hook ingest endpoint.
+      operationId: uploadSkillContent
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadSkillContentPayload'
+        required: true
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: uploadSkillContent hooks
+      tags:
+        - hooks
+      x-speakeasy-name-override: uploadSkillContent
 components:
   schemas:
     Error:
@@ -162,12 +342,20 @@ components:
           items:
             $ref: '#/components/schemas/HookMCPData'
           description: Configured MCP server snapshot captured at session start or configuration change. Transport credentials must be redacted by the sender.
+        mcp_inventory_collected:
+          type: boolean
+          description: Whether the sender was able to read the agent's MCP server list for this session. True with an empty mcp_inventory means the agent genuinely has no servers configured; absent or false means the list could not be read (no agent binary, a failed probe) and the inventory says nothing about what the session can reach. Enforcement that treats a missing inventory as proof of absence must consult this first.
         message:
           $ref: '#/components/schemas/HookMessageData'
         notification:
           $ref: '#/components/schemas/HookNotificationData'
         prompt:
           $ref: '#/components/schemas/HookPromptData'
+        prompt_attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/HookPromptAttachmentEntry'
+          description: Transcript-derived prompt attachment content (Claude Stop/SubagentStop/SessionEnd).
         skill:
           $ref: '#/components/schemas/HookSkillData'
         tool_call:
@@ -189,6 +377,7 @@ components:
             - session.started
             - session.updated
             - session.ended
+            - mcp.inventory
             - prompt.submitted
             - tool.requested
             - tool.completed
@@ -299,6 +488,50 @@ components:
           type: string
           description: Notification type.
       description: Local agent notification payload.
+    HookPromptAttachmentEntry:
+      type: object
+      properties:
+        attachment_kind:
+          type: string
+          description: Provider attachment kind, such as file or directory.
+        content:
+          type: string
+          description: Attachment text visible to the model.
+        display_path:
+          type: string
+          description: Provider display path for the attachment, when available.
+        entry_uuid:
+          type: string
+          description: Provider transcript entry UUID. Used as the stable attachment identifier.
+        file_path:
+          type: string
+          description: Absolute provider-reported file or directory path, when available.
+        num_lines:
+          type: integer
+          description: Number of lines included in the attachment window, when reported.
+          format: int64
+        prompt_id:
+          type: string
+          description: Prompt identifier of the user turn this attachment belongs to, when the transcript parent chain resolves.
+        prompt_sha256:
+          type: string
+          description: Lowercase hex SHA-256 of the trimmed prompt text stored for the parent user message, when available.
+        start_line:
+          type: integer
+          description: First one-based source line included in the attachment window, when reported.
+          format: int64
+        timestamp:
+          type: string
+          description: Provider transcript timestamp for this attachment, when available.
+        total_lines:
+          type: integer
+          description: Total source file lines, when reported.
+          format: int64
+      description: Transcript-derived content that a provider attached to a submitted prompt, such as Claude Code @file and @directory mentions.
+      required:
+        - entry_uuid
+        - attachment_kind
+        - content
     HookPromptData:
       type: object
       properties:
@@ -312,9 +545,23 @@ components:
         name:
           type: string
           description: Activated skill name.
+          maxLength: 256
+        raw_sha256:
+          type: string
+          description: SHA-256 of the raw skill manifest, if available.
+          maxLength: 128
         source:
           type: string
           description: Skill source or namespace, if available.
+          maxLength: 256
+        source_level:
+          type: string
+          description: Scope where the skill was resolved, if available.
+          maxLength: 64
+        source_path:
+          type: string
+          description: Local path where the skill was resolved, if available.
+          maxLength: 4096
       description: Skill activation payload.
       required:
         - name
@@ -420,6 +667,58 @@ components:
         - schema_version
         - source
         - event
+    SkillFeedbackPayload:
+      type: object
+      properties:
+        note:
+          type: string
+          description: Optional concise context about the outcome.
+          maxLength: 4000
+        outcome:
+          type: string
+          description: How the skill affected the task.
+          enum:
+            - helped
+            - partially_helped
+            - did_not_help
+            - misleading
+            - harmful
+        schema_version:
+          type: string
+          description: Contract version.
+          enum:
+            - hook.skill-feedback.v1
+        skill:
+          type: string
+          description: Canonical name of the skill that was used.
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          minLength: 1
+          maxLength: 64
+      description: Agent-volunteered feedback about a distributed skill.
+      required:
+        - schema_version
+        - skill
+        - outcome
+    UploadSkillContentPayload:
+      type: object
+      properties:
+        content:
+          type: string
+          description: Raw UTF-8 skill manifest content. The server rejects content whose UTF-8 encoding exceeds 65,536 bytes.
+        raw_sha256:
+          type: string
+          description: Lowercase SHA-256 of the raw content.
+          pattern: ^[0-9a-f]{64}$
+        schema_version:
+          type: string
+          description: Contract version.
+          enum:
+            - hook.skill-content.v1
+      description: Content for a skill manifest requested by a prior hook ingest response.
+      required:
+        - schema_version
+        - raw_sha256
+        - content
   securitySchemes:
     admin_auth_header_Authorization:
       type: apiKey
@@ -473,6 +772,8 @@ tags:
     description: Manages audit logs in Gram.
   - name: auth
     description: Managed auth for gram producers and dashboard.
+  - name: businessMemories
+    description: Inspect and semantically search business memories.
   - name: chat
     description: Managed chats for gram AI consumers.
   - name: chatSessions
@@ -481,12 +782,16 @@ tags:
     description: Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for a per-user [agent,hooks] API key.
   - name: deployments
     description: Manages deployments of tools from upstream sources.
+  - name: deviceIntegrations
+    description: 'Manage organization-level device integrations: MDM inventory sources and compliance evidence sinks.'
   - name: domains
     description: Manage custom domains for gram.
   - name: environments
     description: Managing toolset environments.
   - name: externalCredentials
     description: Manage organization-level external credentials — how Gram authenticates into a customer's AWS or GCP account.
+  - name: externalKeys
+    description: Manage organization-level external keys — externally-managed AWS or GCP KMS keys Gram signs with.
   - name: mcpRegistries
     description: External MCP registry operations
   - name: collections
@@ -503,6 +808,8 @@ tags:
     description: Explore third-party tools in Gram.
   - name: keys
     description: Managing system api keys.
+  - name: litellm
+    description: Receives LiteLLM Generic Guardrail callbacks and OpenTelemetry exports.
   - name: mcpEndpoints
     description: Managing MCP endpoints, the url-friendly slug identifiers that address MCP servers.
   - name: mcpMetadata
@@ -517,6 +824,10 @@ tags:
     description: Manage per-organization forwarding of inbound OTEL hook payloads to a customer-owned endpoint.
   - name: packages
     description: Manages packages in Gram.
+  - name: adminChatAnalysis
+    description: Platform-admin management of an organization's chat session analysis settings. Speakeasy-staff only; every method requires the platform-admin flag.
+  - name: adminExternalCredentials
+    description: Platform-admin management of platform external_credentials — how Gram authenticates into a cloud provider to reach a platform KMS key. Shared across every organization (organization_id NULL, project_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
   - name: plugins
     description: Manage distributable plugin bundles of MCP servers and hooks.
   - name: features
@@ -543,8 +854,12 @@ tags:
     description: Dashboard API for interacting with resources.
   - name: risk
     description: Manage risk analysis policies and view scan results.
+  - name: skillEfficacy
+    description: Manage organization-wide skill efficacy sampling settings.
   - name: skills
     description: Manage project skills and their immutable versions. Methods are gated by the skills product feature and skill read or write scopes.
+  - name: spendRules
+    description: Manage budget rules, view budget events, and preview actor targeting.
   - name: telemetry
     description: Fetch telemetry data for tools in Gram.
   - name: templates
@@ -559,14 +874,18 @@ tags:
     description: Manage project trigger instances and static trigger definitions.
   - name: tunneledMcp
     description: Managing customer-hosted tunneled MCP servers.
+  - name: unproxiedMcp
+    description: Managing unproxied MCP servers. These are vendor MCP servers that Speakeasy lists and can attach to a plugin but never proxies, so there is no OAuth callback or upstream allowlisting involved.
   - name: usage
     description: Read usage for gram.
   - name: userSessionClients
-    description: Operator visibility into DCR'd MCP clients (user_session_clients). Read + revoke; registrations are written by /mcp/{slug}/register.
+    description: Operator visibility into MCP clients registered against a user-session issuer (user_session_clients). Read + revoke. Registrations are written by /mcp/{slug}/register (RFC 7591 DCR) or resolved from a Client ID Metadata Document on /mcp/{slug}/authorize (CIMD); client_id_metadata_uri distinguishes the two.
   - name: userSessionConsents
     description: Operator visibility into user_session_consents — persistent consent records per (subject, user_session_client). List + revoke.
   - name: userSessionIssuers
     description: Manage user_session_issuer records — Gram-side authorization-server configuration that issues user sessions for an MCP server.
+  - name: userSessionIssuersCimdClients
+    description: 'Manage the CIMD (OAuth Client ID Metadata Document) clients a user_session_issuer admits: the read-only preset catalog Gram curates, plus per-issuer custom document URLs.'
   - name: userSessions
     description: Operator visibility into issued user_sessions. List + revoke; sessions are written by /mcp/{slug}/token.
   - name: variations

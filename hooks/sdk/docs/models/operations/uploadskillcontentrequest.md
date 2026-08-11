@@ -1,0 +1,10 @@
+# UploadSkillContentRequest
+
+
+## Fields
+
+| Field                                                                                        | Type                                                                                         | Required                                                                                     | Description                                                                                  |
+| -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `GramKey`                                                                                    | `*string`                                                                                    | :heavy_minus_sign:                                                                           | API Key header                                                                               |
+| `GramProject`                                                                                | `*string`                                                                                    | :heavy_minus_sign:                                                                           | project header                                                                               |
+| `Body`                                                                                       | [components.UploadSkillContentPayload](../../models/components/uploadskillcontentpayload.md) | :heavy_check_mark:                                                                           | N/A                                                                                          |

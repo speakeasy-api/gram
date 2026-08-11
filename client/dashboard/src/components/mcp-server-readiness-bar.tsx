@@ -1,4 +1,4 @@
-import { Type } from "@/components/ui/type";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { ChevronDown } from "lucide-react";
 import * as React from "react";
@@ -16,7 +16,7 @@ export type ReadinessCheck = {
 // of brand-colored segments (one per check) that expands into per-check rows
 // linking to the sub-page where that check can be resolved. Mirrors the
 // "Essentials" checklist pattern from the production dashboard, restyled to
-// match Gram's existing sidebar card language (McpSidebarNavShell's card)
+// match Gram's existing sidebar card language (DetailSidebarNav's card)
 // instead of copying its pill/badge treatment verbatim.
 export function McpServerReadinessBar({
   checks,
@@ -32,7 +32,7 @@ export function McpServerReadinessBar({
   const remaining = checks.length - readyCount;
 
   return (
-    <div className="bg-card border-border dark:bg-neutral-950 flex flex-col rounded-lg border shadow-md">
+    <div className="bg-card border-border dark:bg-neutral-950 flex flex-col border shadow-md">
       <button
         type="button"
         onClick={() => setExpanded((prev) => !prev)}
@@ -60,11 +60,11 @@ export function McpServerReadinessBar({
             )}
           />
         </div>
-        <Type variant="small" muted className="text-xs">
+        <Text variant="small" muted className="text-xs">
           {allReady
             ? "This MCP server is ready to be used."
             : `This MCP server needs ${remaining} more step${remaining > 1 ? "s" : ""} before it's ready.`}
-        </Type>
+        </Text>
       </button>
 
       {expanded && (
@@ -81,12 +81,12 @@ export function McpServerReadinessBar({
                   )}
                 />
                 <div className="flex min-w-0 flex-1 flex-col">
-                  <Type variant="small" className="font-medium">
+                  <Text variant="small" className="font-medium">
                     {check.label}
-                  </Type>
-                  <Type variant="small" muted className="text-xs">
+                  </Text>
+                  <Text variant="small" muted className="text-xs">
                     {check.description}
-                  </Type>
+                  </Text>
                 </div>
               </div>
             );

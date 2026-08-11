@@ -1,23 +1,30 @@
+import { useMcpMetadataMetadataForm } from "@/components/mcp_install_page/useMcpMetadataForm";
 import { RequireScope } from "@/components/require-scope";
+import { Button } from "@/components/ui/Button";
 import {
   Field,
   FieldDescription,
   FieldError,
   FieldLabel,
-} from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+} from "@/components/ui/Field";
+import { Input } from "@/components/ui/Input";
+import { Stack } from "@/components/ui/Stack";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
+import { useGetMcpMetadata } from "@gram/client/react-query/getMcpMetadata.js";
 import { invalidateAllGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
-import { Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
-import { FooterSaveButtonContent, SettingsSection } from "../SettingsSection";
+import {
+  FooterSaveButton,
+  SettingsSection,
+} from "@/components/detail/settings-section";
 
 // The display name shares the mcp_servers.name column, whose CHECK caps length
 // at 40 (see schema.sql / MCP_SERVER_NAME_MAX_LENGTH on the legacy page).
@@ -40,42 +47,87 @@ export function BrandingSection({
   const update = useUpdateMcpServerMutation();
   const navigate = useNavigate();
   const routes = useRoutes();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const metadataResult = useGetMcpMetadata(
+    { mcpServerId: mcpServer.id },
+    undefined,
+    {
+      retry: (failureCount, err) => {
+        if (err instanceof GramError && err.statusCode === 404) {
+          return false;
+        }
+        return failureCount < 3;
+      },
+      throwOnError: false,
+    },
+  );
+  const metadataIs404 =
+    metadataResult.error instanceof GramError &&
+    metadataResult.error.statusCode === 404;
+  // Anything other than a confirmed "no metadata yet" 404 means the form's
+  // local draft (seeded from this) can't be trusted as a complete picture of
+  // the current record. Saving before this resolves would spread undefined
+  // branding/install-page fields into a full-record upsert and wipe out real
+  // values that just hadn't loaded yet.
+  const metadataUnresolved =
+    metadataResult.isLoading ||
+    (metadataResult.isError && !metadataIs404) ||
+    metadataResult.isRefetchError;
+  const metadataForm = useMcpMetadataMetadataForm(
+    { kind: "mcp_server", mcpServerId: mcpServer.id },
+    metadataResult.data?.metadata,
+  );
 
   const trimmedDraft = nameDraft.trim();
-  const dirty = trimmedDraft !== (mcpServer.name ?? "").trim();
+  const nameDirty = trimmedDraft !== (mcpServer.name ?? "").trim();
+  const dirty = nameDirty || metadataForm.brandingDirty;
+  const saving = update.isPending || metadataForm.isLoading;
   const saveDisabled =
     !dirty ||
     trimmedDraft === "" ||
     trimmedDraft.length > NAME_MAX_LENGTH ||
-    update.isPending;
+    saving ||
+    (metadataUnresolved && metadataForm.brandingDirty);
   const characterCount = `${nameDraft.length} of ${NAME_MAX_LENGTH} characters used`;
 
   const handleSave = async () => {
     try {
-      const updated = await update.mutateAsync({
-        request: {
-          updateMcpServerForm: {
-            id: mcpServer.id,
-            name: trimmedDraft,
-            remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
-            tunneledMcpServerId: mcpServer.tunneledMcpServerId ?? undefined,
-            toolsetId: mcpServer.toolsetId ?? undefined,
-            environmentId: mcpServer.environmentId ?? undefined,
-            toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
-            visibility: mcpServer.visibility,
+      if (metadataForm.brandingDirty) {
+        await metadataForm.saveAsync();
+      }
+
+      if (nameDirty) {
+        const updated = await update.mutateAsync({
+          request: {
+            updateMcpServerForm: {
+              id: mcpServer.id,
+              name: trimmedDraft,
+              remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
+              tunneledMcpServerId: mcpServer.tunneledMcpServerId ?? undefined,
+              toolsetId: mcpServer.toolsetId ?? undefined,
+              unproxiedMcpServerId: mcpServer.unproxiedMcpServerId ?? undefined,
+              environmentId: mcpServer.environmentId ?? undefined,
+              toolVariationsGroupId:
+                mcpServer.toolVariationsGroupId ?? undefined,
+              visibility: mcpServer.visibility,
+            },
           },
-        },
-      });
-      // The server recomputes slug on every update, so a name change produces
-      // a new slug. Replace the route param with the new slug *before*
-      // invalidating queries so the refetch uses the new lookup args and the
-      // page-level not-found guard doesn't bounce the user back to /mcp.
-      const nextParam = mcpServerRouteParam(updated);
-      void navigate(routes.mcp.x.settings.href(nextParam), { replace: true });
-      await Promise.all([
-        invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
-        invalidateAllMcpServers(queryClient, { refetchType: "all" }),
-      ]);
+        });
+        // The server recomputes slug on every update, so a name change
+        // produces a new slug. Replace the route param with the new slug
+        // *before* invalidating queries so the refetch uses the new lookup
+        // args and the page-level not-found guard doesn't bounce the user
+        // back to /mcp.
+        const nextParam = mcpServerRouteParam(updated);
+        void navigate(routes.mcp.x.settings.href(nextParam), {
+          replace: true,
+        });
+        await Promise.all([
+          invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
+          invalidateAllMcpServers(queryClient, { refetchType: "all" }),
+        ]);
+      }
       toast.success("MCP server updated");
     } catch (error) {
       const message =
@@ -95,6 +147,51 @@ export function BrandingSection({
       </SettingsSection.Header>
       <SettingsSection.Panel>
         <SettingsSection.Body>
+          <Field className="max-w-md">
+            <FieldLabel>Icon</FieldLabel>
+            <Stack direction="horizontal" gap={3} align="center">
+              {metadataForm.logoUploadHandlers.renderFilePreview() ?? (
+                <div className="bg-muted text-muted-foreground flex h-16 w-16 shrink-0 items-center justify-center text-xs">
+                  No icon
+                </div>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/gif,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (file) {
+                    metadataForm.logoUploadHandlers
+                      .onUpload(file)
+                      .catch((error: unknown) => {
+                        toast.error(
+                          error instanceof Error
+                            ? error.message
+                            : "Failed to upload icon",
+                        );
+                      });
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={metadataUnresolved}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Button.Text>Upload icon</Button.Text>
+              </Button>
+            </Stack>
+            {metadataUnresolved && !metadataResult.isLoading && (
+              <FieldDescription className="text-destructive pl-1 text-xs">
+                Couldn't load current branding settings. Refresh the page before
+                making changes.
+              </FieldDescription>
+            )}
+          </Field>
           <Field
             data-invalid={update.isError ? true : undefined}
             className="max-w-md"
@@ -110,7 +207,7 @@ export function BrandingSection({
               maxLength={NAME_MAX_LENGTH}
               aria-invalid={update.isError}
             />
-            {dirty && (
+            {nameDirty && (
               <FieldDescription className="pl-1 text-xs">
                 {characterCount}
               </FieldDescription>
@@ -124,14 +221,11 @@ export function BrandingSection({
           </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
             <RequireScope scope="mcp:write" level="component">
-              <Button
-                variant="primary"
-                size="md"
+              <FooterSaveButton
+                pending={saving}
                 disabled={saveDisabled}
                 onClick={() => void handleSave()}
-              >
-                <FooterSaveButtonContent pending={update.isPending} />
-              </Button>
+              />
             </RequireScope>
           </SettingsSection.FooterActions>
         </SettingsSection.Footer>

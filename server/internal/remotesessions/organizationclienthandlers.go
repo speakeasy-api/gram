@@ -276,11 +276,26 @@ func (s *Service) CreateClient(ctx context.Context, payload *orgclientsgen.Creat
 
 	txRepo := repo.New(dbtx)
 
+	// Serialize against migrateIssuer and against DeleteGlobalIssuer before
+	// reading the issuer. Without it a concurrent migration could soft-delete
+	// this issuer between the read and the insert, leaving a client bound to a
+	// tombstoned issuer, and a concurrent global-issuer delete could count zero
+	// clients and delete the issuer out from under this insert. The project-level
+	// create paths have always taken this lock; these org-admin paths did not,
+	// which was a pre-existing gap against migrateIssuer independent of platform
+	// issuers. See the full rationale in validateNewClientIssuers.
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock remote session issuer for client binding").LogError(ctx, logger)
+	}
+
 	// Reject an issuer that isn't in the caller's organization so a client can't
-	// be registered against another tenant's issuer.
+	// be registered against another tenant's issuer. Platform issuers resolve
+	// too: the client row is owned by this organization, only the issuer is
+	// shared.
 	issuer, err := txRepo.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
 		ID:             issuerID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+		IncludeGlobal:  true,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -345,8 +360,10 @@ func (s *Service) CreateClient(ctx context.Context, payload *orgclientsgen.Creat
 // project_id — an organization-level client every project in the org can attach.
 // For a project-specific issuer a supplied project_id must match the issuer's
 // own project so the client stays reachable from it. An organization-level
-// client can therefore only arise from an organization-level issuer. Must run
-// inside the create transaction. Shared by CreateClient and CreateCimdClient.
+// client therefore arises from an issuer that carries no project of its own:
+// an organization-level issuer, or a platform issuer from the shared catalog
+// (whose project_id is likewise NULL). Must run inside the create transaction.
+// Shared by CreateClient and CreateCimdClient.
 func (s *Service) resolveOrganizationClientProject(ctx context.Context, dbtx pgx.Tx, logger *slog.Logger, issuer repo.RemoteSessionIssuer, payloadProjectID *string, organizationID string) (uuid.NullUUID, error) {
 	clientProjectID := issuer.ProjectID
 	if payloadProjectID != nil && strings.TrimSpace(*payloadProjectID) != "" {
@@ -403,11 +420,20 @@ func (s *Service) CreateCimdClient(ctx context.Context, payload *orgclientsgen.C
 
 	txRepo := repo.New(dbtx)
 
+	// Serialize against migrateIssuer and DeleteGlobalIssuer before reading the
+	// issuer; see the matching lock in CreateClient for the full rationale.
+	if err := txRepo.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock remote session issuer for client binding").LogError(ctx, logger)
+	}
+
 	// Reject an issuer that isn't in the caller's organization so a client can't
-	// be registered against another tenant's issuer.
+	// be registered against another tenant's issuer. Platform issuers resolve
+	// too: the client row is owned by this organization, only the issuer is
+	// shared.
 	issuer, err := txRepo.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
 		ID:             issuerID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
+		IncludeGlobal:  true,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

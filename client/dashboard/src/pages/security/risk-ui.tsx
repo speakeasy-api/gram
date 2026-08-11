@@ -7,34 +7,31 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useRiskUnmaskResultMutation } from "@gram/client/react-query/riskUnmaskResult.js";
 import { CodeBlock } from "@/components/code";
-import { Dialog } from "@/components/ui/dialog";
+import { Dialog } from "@/components/ui/Dialog";
 import { RULE_CATEGORY_META } from "./policy-data";
 import {
   getCategoryForFinding,
   getRuleTitleFallback,
+  isJudgeSource,
   SEVERITY_RATING_LABEL,
   scoreToRating,
   type SeverityRating,
 } from "./risk-utils";
-import { Badge } from "@speakeasy-api/moonshine";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Badge } from "@/components/ui/Badge";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import {
   RevealAllContext,
   useRevealAll,
   type RevealAllContextValue,
 } from "./reveal-all-context";
 import { useRBAC } from "@/hooks/useRBAC";
-import type { Scope } from "@gram/client/models/components/rolegrant.js";
-
-// Revealing a flagged secret exposes the raw value captured from agent/chat
-// traffic, so it is gated behind the same `chat:read` scope that grants access
-// to other members' session transcripts. hasScope short-circuits to true when
-// RBAC is disabled, preserving existing behavior for non-RBAC orgs.
-const REVEAL_SCOPE: Scope = "chat:read";
-const REVEAL_DENIED_REASON =
-  "You need the chat:read scope to reveal flagged values.";
+import {
+  hasRevealableEvent,
+  REVEAL_DENIED_REASON,
+  REVEAL_SCOPE,
+  useUnmaskedMatch,
+} from "./unmask";
 
 export function CategoryLabel({
   source,
@@ -63,16 +60,23 @@ export function CategoryLabel({
 // hasn't seen this rule before. The backend may roll out new gitleaks,
 // presidio, or prompt_injection rules independently of the dashboard, so
 // every snake_case id needs to display legibly without a code change.
+//
+// Renders as the secondary line under a CategoryLabel, so it renders nothing
+// when there is no rule worth naming: judge sources own a single rule whose
+// name restates the category badge above it, and a finding with no rule id has
+// nothing to show. Omitting the line is what keeps the merged cell clean; a
+// placeholder would read as missing data.
 export function RuleLabel({
+  source,
   ruleId,
 }: {
   source?: string;
   ruleId?: string;
-}): JSX.Element {
-  const label = ruleId ? getRuleTitleFallback(ruleId) : "-";
+}): JSX.Element | null {
+  if (!ruleId || isJudgeSource(source)) return null;
   return (
-    <span className="font-mono text-xs" title={ruleId}>
-      {label}
+    <span className="truncate font-mono text-xs" title={ruleId}>
+      {getRuleTitleFallback(ruleId)}
     </span>
   );
 }
@@ -112,35 +116,6 @@ export function SeverityBadge({
     </SimpleTooltip>
   );
 }
-
-// Numeric severity, rendered as a color-coded pill. Used in list/table columns
-// where the raw score is more useful than the qualitative label — the number
-// carries the exact value while the band color (shared with SeverityBadge) makes
-// severity scannable at a glance.
-export function SeverityScore({
-  score,
-  className,
-}: {
-  score: number | undefined;
-  className?: string;
-}): JSX.Element {
-  if (score == null) {
-    return <span className="text-muted-foreground text-sm">-</span>;
-  }
-  // Rate on the rounded value we actually display, so a score sitting just below
-  // a band boundary (e.g. 3.96 → shown as "4.0") never renders the number in a
-  // color that disagrees with the band its displayed value falls in.
-  const displayed = Math.round(score * 10) / 10;
-  const rating = scoreToRating(displayed);
-  return (
-    <SimpleTooltip tooltip={`${SEVERITY_RATING_LABEL[rating]} severity`}>
-      <Badge variant={SEVERITY_BADGE_VARIANT[rating]} className={className}>
-        <Badge.Text className="tabular-nums">{displayed.toFixed(1)}</Badge.Text>
-      </Badge>
-    </SimpleTooltip>
-  );
-}
-
 export function RevealAllProvider({
   children,
 }: {
@@ -185,7 +160,7 @@ export function RevealAllToggle({
         aria-label={revealAll ? "Hide all matches" : "Reveal all matches"}
         className={
           className ??
-          "border-border hover:bg-muted text-muted-foreground inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm transition-colors"
+          "border-border hover:bg-muted text-muted-foreground inline-flex h-9 items-center gap-2 border px-3 text-sm transition-colors"
         }
       >
         {revealAll ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
@@ -193,28 +168,6 @@ export function RevealAllToggle({
       </button>
     </SimpleTooltip>
   );
-}
-
-// useUnmaskedMatch backs a single MaskedMatch row: it calls risk.unmaskResult
-// on reveal and caches the plaintext locally so re-toggling visibility (or a
-// second "reveal all" pass) never re-fetches or re-audits an already-seen
-// value. Each reveal is a real, audited server call — there is no client-side
-// stand-in for the plaintext until this resolves.
-function useUnmaskedMatch(resultId: string): {
-  value: string | null;
-  isLoading: boolean;
-  reveal: () => void;
-} {
-  const { mutate, isPending } = useRiskUnmaskResultMutation();
-  const [value, setValue] = useState<string | null>(null);
-  const reveal = useCallback(() => {
-    if (value !== null || isPending) return;
-    mutate(
-      { request: { riskIDRequestBody: { id: resultId } } },
-      { onSuccess: (res) => setValue(res.match) },
-    );
-  }, [mutate, resultId, value, isPending]);
-  return { value, isLoading: isPending, reveal };
 }
 
 export function MaskedMatch({
@@ -313,35 +266,67 @@ function prettyJSON(s: string): string {
   }
 }
 
-// EventMatchDialog is the reveal surface for llm_judge / prompt_injection
+// A judge rationale rendered for a cell that has no reveal affordance. Clamped
+// to two lines rather than one: a rationale is a sentence or two, and a
+// single-line clip leaves only the first few words.
+function RationaleText({ text }: { text: string }): JSX.Element {
+  return (
+    <span className="line-clamp-2 min-w-0 text-xs" title={text}>
+      {text}
+    </span>
+  );
+}
+
+// EventMatchDialog is the evidence cell for llm_judge / prompt_injection
 // findings, whose "match" is the entire flagged event (a JSON payload with
-// tool calls), not a one-line substring. It reuses the same audited, chat:read
-// -gated reveal as MaskedMatch, but presents the payload in a scrollable Dialog
-// instead of the cramped inline cell.
+// tool calls), not a one-line substring. The cell shows the judge's rationale
+// (`risk_results.description`) inline, and opens the payload in a scrollable
+// Dialog behind the same audited, chat:read-gated reveal as MaskedMatch.
+//
+// The rationale itself is not gated: it's model-authored prose about the
+// finding, and the chat transcript's RiskBadge already renders it
+// unconditionally. Only the underlying event content needs chat:read.
 export function EventMatchDialog({
   resultId,
   matchRedacted,
+  rationale,
 }: {
   resultId: string | undefined;
   matchRedacted: string | undefined;
+  rationale: string | undefined;
 }): JSX.Element {
   const { hasScope } = useRBAC();
   const canReveal = hasScope(REVEAL_SCOPE);
   const [open, setOpen] = useState(false);
   const { value, isLoading, reveal } = useUnmaskedMatch(resultId ?? "");
 
-  if (!resultId || !matchRedacted) return <span>-</span>;
+  const summary = rationale?.trim() ? rationale.trim() : null;
 
-  // Without chat:read the value can never be revealed — render a static,
-  // non-interactive placeholder rather than an inert trigger.
+  if (!resultId || !hasRevealableEvent(matchRedacted)) {
+    return summary ? <RationaleText text={summary} /> : <span>-</span>;
+  }
+
+  // Without chat:read the event payload can never be revealed, so there's no
+  // trigger to render. The rationale still stands on its own.
   if (!canReveal) {
     return (
-      <SimpleTooltip tooltip={REVEAL_DENIED_REASON}>
-        <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
-          <Lock className="h-3 w-3" />
-          <span>Hidden</span>
-        </span>
-      </SimpleTooltip>
+      <span className="flex min-w-0 items-center gap-1.5">
+        <SimpleTooltip tooltip={REVEAL_DENIED_REASON}>
+          <Lock
+            role="img"
+            aria-label={REVEAL_DENIED_REASON}
+            className="text-muted-foreground h-3 w-3 shrink-0"
+          />
+        </SimpleTooltip>
+        {/* The rationale reads as ordinary text, so without a label the lock is
+         * the only signal that the event itself is withheld. With no rationale
+         * to show, fall back to the same "Hidden" text MaskedMatch uses. */}
+        {summary ? (
+          <RationaleText text={summary} />
+        ) : (
+          <span className="text-muted-foreground text-xs">Hidden</span>
+        )}
+      </span>
     );
   }
 
@@ -356,11 +341,22 @@ export function EventMatchDialog({
       <Dialog.Trigger asChild>
         <button
           type="button"
-          className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs"
+          className="text-muted-foreground hover:text-foreground flex min-w-0 items-center gap-1.5 text-left"
           onClick={(e) => e.stopPropagation()}
+          title={
+            summary
+              ? `${summary}\n\nClick to view the flagged event.`
+              : undefined
+          }
         >
-          <EyeOff className="h-3 w-3" />
-          <span>Click to reveal</span>
+          <EyeOff className="h-3 w-3 shrink-0" />
+          {summary ? (
+            <span className="text-foreground line-clamp-2 min-w-0 text-xs">
+              {summary}
+            </span>
+          ) : (
+            <span className="text-xs">Click to reveal</span>
+          )}
         </button>
       </Dialog.Trigger>
       <Dialog.Content className="sm:max-w-2xl">
@@ -370,6 +366,14 @@ export function EventMatchDialog({
             The full event content that was flagged for this finding.
           </Dialog.Description>
         </Dialog.Header>
+        {summary ? (
+          <div className="bg-muted/40 space-y-1 border p-3">
+            <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+              Why this was flagged
+            </div>
+            <p className="text-sm">{summary}</p>
+          </div>
+        ) : null}
         {value === null ? (
           <div className="text-muted-foreground flex items-center gap-2 py-8 text-sm">
             <Loader2 className="h-4 w-4 animate-spin" />

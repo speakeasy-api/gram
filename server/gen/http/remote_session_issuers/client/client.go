@@ -17,9 +17,13 @@ import (
 
 // Client lists the remoteSessionIssuers service endpoint HTTP clients.
 type Client struct {
-	// DiscoverRemoteSessionIssuer Doer is the HTTP client used to make requests to
-	// the discoverRemoteSessionIssuer endpoint.
-	DiscoverRemoteSessionIssuerDoer goahttp.Doer
+	// FetchRemoteSessionIssuerMetadata Doer is the HTTP client used to make
+	// requests to the fetchRemoteSessionIssuerMetadata endpoint.
+	FetchRemoteSessionIssuerMetadataDoer goahttp.Doer
+
+	// RefreshRemoteSessionIssuerMetadata Doer is the HTTP client used to make
+	// requests to the refreshRemoteSessionIssuerMetadata endpoint.
+	RefreshRemoteSessionIssuerMetadataDoer goahttp.Doer
 
 	// CreateRemoteSessionIssuer Doer is the HTTP client used to make requests to
 	// the createRemoteSessionIssuer endpoint.
@@ -62,29 +66,31 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		DiscoverRemoteSessionIssuerDoer: doer,
-		CreateRemoteSessionIssuerDoer:   doer,
-		UpdateRemoteSessionIssuerDoer:   doer,
-		ListRemoteSessionIssuersDoer:    doer,
-		GetRemoteSessionIssuerDoer:      doer,
-		DeleteRemoteSessionIssuerDoer:   doer,
-		RestoreResponseBody:             restoreBody,
-		scheme:                          scheme,
-		host:                            host,
-		decoder:                         dec,
-		encoder:                         enc,
+		FetchRemoteSessionIssuerMetadataDoer:   doer,
+		RefreshRemoteSessionIssuerMetadataDoer: doer,
+		CreateRemoteSessionIssuerDoer:          doer,
+		UpdateRemoteSessionIssuerDoer:          doer,
+		ListRemoteSessionIssuersDoer:           doer,
+		GetRemoteSessionIssuerDoer:             doer,
+		DeleteRemoteSessionIssuerDoer:          doer,
+		RestoreResponseBody:                    restoreBody,
+		scheme:                                 scheme,
+		host:                                   host,
+		decoder:                                dec,
+		encoder:                                enc,
 	}
 }
 
-// DiscoverRemoteSessionIssuer returns an endpoint that makes HTTP requests to
-// the remoteSessionIssuers service discoverRemoteSessionIssuer server.
-func (c *Client) DiscoverRemoteSessionIssuer() goa.Endpoint {
+// FetchRemoteSessionIssuerMetadata returns an endpoint that makes HTTP
+// requests to the remoteSessionIssuers service
+// fetchRemoteSessionIssuerMetadata server.
+func (c *Client) FetchRemoteSessionIssuerMetadata() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeDiscoverRemoteSessionIssuerRequest(c.encoder)
-		decodeResponse = DecodeDiscoverRemoteSessionIssuerResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeFetchRemoteSessionIssuerMetadataRequest(c.encoder)
+		decodeResponse = DecodeFetchRemoteSessionIssuerMetadataResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildDiscoverRemoteSessionIssuerRequest(ctx, v)
+		req, err := c.BuildFetchRemoteSessionIssuerMetadataRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -92,9 +98,34 @@ func (c *Client) DiscoverRemoteSessionIssuer() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.DiscoverRemoteSessionIssuerDoer.Do(req)
+		resp, err := c.FetchRemoteSessionIssuerMetadataDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("remoteSessionIssuers", "discoverRemoteSessionIssuer", err)
+			return nil, goahttp.ErrRequestError("remoteSessionIssuers", "fetchRemoteSessionIssuerMetadata", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RefreshRemoteSessionIssuerMetadata returns an endpoint that makes HTTP
+// requests to the remoteSessionIssuers service
+// refreshRemoteSessionIssuerMetadata server.
+func (c *Client) RefreshRemoteSessionIssuerMetadata() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRefreshRemoteSessionIssuerMetadataRequest(c.encoder)
+		decodeResponse = DecodeRefreshRemoteSessionIssuerMetadataResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRefreshRemoteSessionIssuerMetadataRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RefreshRemoteSessionIssuerMetadataDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteSessionIssuers", "refreshRemoteSessionIssuerMetadata", err)
 		}
 		return decodeResponse(resp)
 	}

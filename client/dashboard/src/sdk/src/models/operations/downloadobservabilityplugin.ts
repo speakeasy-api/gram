@@ -21,6 +21,7 @@ export const Platform = {
   Claude: "claude",
   Cursor: "cursor",
   Codex: "codex",
+  Opencode: "opencode",
 } as const;
 /**
  * Target platform.

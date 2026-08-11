@@ -103,6 +103,31 @@ func TestClaimHookIdempotency_Guard(t *testing.T) {
 	assert.True(t, ti.service.claimHookIdempotency(ctx, "   ", false), "blank token always proceeds")
 }
 
+func TestClaimBlockedPromptTelemetryDedupesSessionPrompt(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	sessionID := uuid.NewString()
+	prompt := "please do the blocked thing"
+	payload := &gen.ClaudePayload{
+		SessionID: &sessionID,
+		Prompt:    &prompt,
+	}
+
+	require.True(t, ti.service.claimBlockedPromptTelemetry(ctx, payload), "first blocked prompt writes telemetry")
+	require.False(t, ti.service.claimBlockedPromptTelemetry(ctx, payload), "same session and prompt is duplicate telemetry")
+
+	otherPrompt := "please do a different blocked thing"
+	require.True(t, ti.service.claimBlockedPromptTelemetry(ctx, &gen.ClaudePayload{
+		SessionID: &sessionID,
+		Prompt:    &otherPrompt,
+	}), "different prompt gets its own telemetry claim")
+	require.True(t, ti.service.claimBlockedPromptTelemetry(ctx, &gen.ClaudePayload{
+		SessionID: nil,
+		Prompt:    &prompt,
+	}), "missing session fails open")
+}
+
 // TestHookDuplicateContextFlag verifies the flag that gates the block-path
 // write side-effects (block-reason telemetry, shadow-MCP findings) on a
 // redelivery: untagged contexts are live, tagged ones are duplicates.

@@ -38,6 +38,7 @@ type CustomRulesAnalysis struct {
 	xxx_hidden_Kind              *string                          `protobuf:"bytes,9,opt,name=kind"`
 	xxx_hidden_ToolCalls         *[]*CustomRulesAnalysis_ToolCall `protobuf:"bytes,10,rep,name=tool_calls,json=toolCalls"`
 	xxx_hidden_CustomRuleIds     []string                         `protobuf:"bytes,11,rep,name=custom_rule_ids,json=customRuleIds"`
+	xxx_hidden_ContentPartId     *string                          `protobuf:"bytes,12,opt,name=content_part_id,json=contentPartId"`
 	XXX_raceDetectHookData       protoimpl.RaceDetectHookData
 	XXX_presence                 [1]uint32
 	unknownFields                protoimpl.UnknownFields
@@ -172,49 +173,59 @@ func (x *CustomRulesAnalysis) GetCustomRuleIds() []string {
 	return nil
 }
 
+func (x *CustomRulesAnalysis) GetContentPartId() string {
+	if x != nil {
+		if x.xxx_hidden_ContentPartId != nil {
+			return *x.xxx_hidden_ContentPartId
+		}
+		return ""
+	}
+	return ""
+}
+
 func (x *CustomRulesAnalysis) SetRequestId(v string) {
 	x.xxx_hidden_RequestId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 12)
 }
 
 func (x *CustomRulesAnalysis) SetChatMessageId(v string) {
 	x.xxx_hidden_ChatMessageId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 12)
 }
 
 func (x *CustomRulesAnalysis) SetProjectId(v string) {
 	x.xxx_hidden_ProjectId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 12)
 }
 
 func (x *CustomRulesAnalysis) SetOrganizationId(v string) {
 	x.xxx_hidden_OrganizationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 12)
 }
 
 func (x *CustomRulesAnalysis) SetRiskPolicyId(v string) {
 	x.xxx_hidden_RiskPolicyId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 12)
 }
 
 func (x *CustomRulesAnalysis) SetRiskPolicyVersion(v int64) {
 	x.xxx_hidden_RiskPolicyVersion = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 12)
 }
 
 func (x *CustomRulesAnalysis) SetCreatedAt(v string) {
 	x.xxx_hidden_CreatedAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 12)
 }
 
 func (x *CustomRulesAnalysis) SetContent(v string) {
 	x.xxx_hidden_Content = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 12)
 }
 
 func (x *CustomRulesAnalysis) SetKind(v string) {
 	x.xxx_hidden_Kind = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 12)
 }
 
 func (x *CustomRulesAnalysis) SetToolCalls(v []*CustomRulesAnalysis_ToolCall) {
@@ -223,6 +234,11 @@ func (x *CustomRulesAnalysis) SetToolCalls(v []*CustomRulesAnalysis_ToolCall) {
 
 func (x *CustomRulesAnalysis) SetCustomRuleIds(v []string) {
 	x.xxx_hidden_CustomRuleIds = v
+}
+
+func (x *CustomRulesAnalysis) SetContentPartId(v string) {
+	x.xxx_hidden_ContentPartId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 12)
 }
 
 func (x *CustomRulesAnalysis) HasRequestId() bool {
@@ -288,6 +304,13 @@ func (x *CustomRulesAnalysis) HasKind() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 8)
 }
 
+func (x *CustomRulesAnalysis) HasContentPartId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 11)
+}
+
 func (x *CustomRulesAnalysis) ClearRequestId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_RequestId = nil
@@ -333,6 +356,11 @@ func (x *CustomRulesAnalysis) ClearKind() {
 	x.xxx_hidden_Kind = nil
 }
 
+func (x *CustomRulesAnalysis) ClearContentPartId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 11)
+	x.xxx_hidden_ContentPartId = nil
+}
+
 type CustomRulesAnalysis_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
@@ -347,6 +375,7 @@ type CustomRulesAnalysis_builder struct {
 	Kind              *string
 	ToolCalls         []*CustomRulesAnalysis_ToolCall
 	CustomRuleIds     []string
+	ContentPartId     *string
 }
 
 func (b0 CustomRulesAnalysis_builder) Build() *CustomRulesAnalysis {
@@ -354,43 +383,47 @@ func (b0 CustomRulesAnalysis_builder) Build() *CustomRulesAnalysis {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.RequestId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 12)
 		x.xxx_hidden_RequestId = b.RequestId
 	}
 	if b.ChatMessageId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 12)
 		x.xxx_hidden_ChatMessageId = b.ChatMessageId
 	}
 	if b.ProjectId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 12)
 		x.xxx_hidden_ProjectId = b.ProjectId
 	}
 	if b.OrganizationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 12)
 		x.xxx_hidden_OrganizationId = b.OrganizationId
 	}
 	if b.RiskPolicyId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 12)
 		x.xxx_hidden_RiskPolicyId = b.RiskPolicyId
 	}
 	if b.RiskPolicyVersion != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 12)
 		x.xxx_hidden_RiskPolicyVersion = *b.RiskPolicyVersion
 	}
 	if b.CreatedAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 12)
 		x.xxx_hidden_CreatedAt = b.CreatedAt
 	}
 	if b.Content != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 12)
 		x.xxx_hidden_Content = b.Content
 	}
 	if b.Kind != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 12)
 		x.xxx_hidden_Kind = b.Kind
 	}
 	x.xxx_hidden_ToolCalls = &b.ToolCalls
 	x.xxx_hidden_CustomRuleIds = b.CustomRuleIds
+	if b.ContentPartId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 12)
+		x.xxx_hidden_ContentPartId = b.ContentPartId
+	}
 	return m0
 }
 
@@ -510,7 +543,7 @@ var File_gram_risk_v1_custom_rules_analysis_proto protoreflect.FileDescriptor
 
 const file_gram_risk_v1_custom_rules_analysis_proto_rawDesc = "" +
 	"\n" +
-	"(gram/risk/v1/custom_rules_analysis.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\x84\x04\n" +
+	"(gram/risk/v1/custom_rules_analysis.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xac\x04\n" +
 	"\x13CustomRulesAnalysis\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12&\n" +
@@ -527,7 +560,8 @@ const file_gram_risk_v1_custom_rules_analysis_proto_rawDesc = "" +
 	"\n" +
 	"tool_calls\x18\n" +
 	" \x03(\v2*.gram.risk.v1.CustomRulesAnalysis.ToolCallR\ttoolCalls\x12&\n" +
-	"\x0fcustom_rule_ids\x18\v \x03(\tR\rcustomRuleIds\x1a<\n" +
+	"\x0fcustom_rule_ids\x18\v \x03(\tR\rcustomRuleIds\x12&\n" +
+	"\x0fcontent_part_id\x18\f \x01(\tR\rcontentPartId\x1a<\n" +
 	"\bToolCall\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
 	"\targuments\x18\x02 \x01(\tR\targuments:\n" +

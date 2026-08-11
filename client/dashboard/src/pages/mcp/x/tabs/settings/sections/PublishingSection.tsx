@@ -1,11 +1,15 @@
 import { RequireScope } from "@/components/require-scope";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Type } from "@/components/ui/type";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Text } from "@/components/ui/Text";
 import { usePublishing } from "@/pages/mcp/usePublishing";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import { Button, Stack } from "@speakeasy-api/moonshine";
-import { FooterSaveButtonContent, SettingsSection } from "../SettingsSection";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
+import {
+  FooterSaveButton,
+  SettingsSection,
+} from "@/components/detail/settings-section";
 
 export function PublishingSection({
   mcpServer,
@@ -14,11 +18,17 @@ export function PublishingSection({
   mcpServer: McpServer;
   endpoints: McpEndpoint[];
 }): JSX.Element {
-  // A server is publishable once it serves traffic (visibility != disabled) and
-  // has at least one endpoint to address it — mirroring the server-side attach
-  // validation in collections.attachServerToCollection.
+  // Unproxied servers are addressed directly by their vendor URL and never
+  // have an mcp_endpoints row (there's no Gram-managed endpoint to create for
+  // them, see ServerUrlSection, which is hidden for these servers), so they
+  // don't need one to be publishable.
+  const isUnproxied = !!mcpServer.unproxiedMcpServerId;
+  // A server is publishable once it serves traffic (visibility != disabled)
+  // and, for Gram-addressed servers, has at least one endpoint, mirroring the
+  // server-side attach validation in collections.attachServerToCollection.
   const canPublish =
-    mcpServer.visibility !== "disabled" && endpoints.length > 0;
+    mcpServer.visibility !== "disabled" &&
+    (isUnproxied || endpoints.length > 0);
   const disabledMessage =
     mcpServer.visibility === "disabled"
       ? "Enable this MCP server before publishing it to a collection."
@@ -38,21 +48,21 @@ export function PublishingSection({
   let body: React.ReactNode;
   if (!canPublish) {
     body = (
-      <Type muted small>
+      <Text muted small>
         {disabledMessage}
-      </Type>
+      </Text>
     );
   } else if (isLoading) {
     body = (
-      <Type muted small>
+      <Text muted small>
         Loading collections...
-      </Type>
+      </Text>
     );
   } else if (collections.length === 0) {
     body = (
-      <Type muted small>
+      <Text muted small>
         No collections available.
-      </Type>
+      </Text>
     );
   } else {
     body = (
@@ -68,13 +78,13 @@ export function PublishingSection({
               onCheckedChange={() => toggleCollection(collection.id)}
             />
             <Stack direction="vertical" gap={0}>
-              <Type small className="font-medium">
+              <Text small className="font-medium">
                 {collection.name}
-              </Type>
+              </Text>
               {collection.description && (
-                <Type muted small>
+                <Text muted small>
                   {collection.description}
-                </Type>
+                </Text>
               )}
             </Stack>
           </label>
@@ -118,14 +128,11 @@ export function PublishingSection({
                 >
                   <Button.Text>Discard</Button.Text>
                 </Button>
-                <Button
-                  variant="primary"
-                  size="md"
+                <FooterSaveButton
+                  pending={isSaving}
                   disabled={isSaving}
                   onClick={() => void handleSave()}
-                >
-                  <FooterSaveButtonContent pending={isSaving} />
-                </Button>
+                />
               </SettingsSection.FooterActions>
             )}
           </SettingsSection.Footer>

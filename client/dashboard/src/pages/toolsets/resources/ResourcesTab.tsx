@@ -1,6 +1,6 @@
 import { CardContextMenu } from "@/components/card-context-menu";
 import { RequireScope } from "@/components/require-scope";
-import { Card, Cards } from "@/components/ui/card";
+import { Card, Cards } from "@/components/ui/Card";
 import {
   Command,
   CommandEmpty,
@@ -8,19 +8,20 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "@/components/ui/command";
-import { Action, MoreActions } from "@/components/ui/more-actions";
+} from "@/components/ui/Command";
+import { Action, MoreActions } from "@/components/ui/MoreActions";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Popover";
+import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useLatestDeployment, useListResources } from "@/hooks/toolTypes";
 import { Resource, Toolset } from "@/lib/toolTypes";
 import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
-import { Dialog, Stack } from "@speakeasy-api/moonshine";
+import { Dialog } from "@/components/ui/Dialog";
+import { Stack } from "@/components/ui/Stack";
 import { Newspaper } from "lucide-react";
 import { useMemo, useState } from "react";
 import { GettingStartedInstructions } from "@/components/functions/GettingStartedInstructions";
@@ -155,7 +156,7 @@ function ResourceCard({
       <Card>
         <Card.Header>
           <Stack direction="horizontal" gap={2} align="center">
-            <div className="bg-muted shrink-0 rounded-md p-2">
+            <div className="bg-muted shrink-0 p-2">
               <Newspaper
                 className="text-muted-foreground size-5"
                 strokeWidth={1.5}
@@ -209,7 +210,7 @@ function ResourceSelectPopover({
           <Card className="hover:bg-muted/50 cursor-pointer transition-colors">
             <Card.Header>
               <Stack direction="horizontal" gap={2} align="center">
-                <div className="bg-muted shrink-0 rounded-md p-2">
+                <div className="bg-muted shrink-0 p-2">
                   <Newspaper
                     className="text-muted-foreground size-5"
                     strokeWidth={1.5}
@@ -255,19 +256,19 @@ function ResourceSelectPopover({
                         strokeWidth={1.5}
                       />
                       <Stack gap={0.5} className="min-w-0 flex-1">
-                        <Type small className="font-medium">
+                        <Text small className="font-medium">
                           {resource.name}
-                        </Type>
-                        <Type small muted className="truncate">
+                        </Text>
+                        <Text small muted className="truncate">
                           {resource.description || "No description"}
-                        </Type>
-                        <Type
+                        </Text>
+                        <Text
                           small
                           muted
                           className="truncate font-mono text-xs"
                         >
                           {resource.uri}
-                        </Type>
+                        </Text>
                       </Stack>
                     </div>
                   </CommandItem>

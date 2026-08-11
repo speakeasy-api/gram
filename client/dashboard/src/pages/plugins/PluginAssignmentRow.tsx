@@ -1,4 +1,4 @@
-import { Type } from "@/components/ui/type";
+import { Text } from "@/components/ui/Text";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import {
@@ -50,17 +50,17 @@ export function PluginAssignmentRow({
 
   return (
     <div className="flex items-center gap-3 py-3">
-      <div className="bg-muted text-muted-foreground flex h-9 w-9 shrink-0 items-center justify-center rounded-lg">
+      <div className="bg-muted text-muted-foreground flex h-9 w-9 shrink-0 items-center justify-center">
         <IconComponent className="h-4 w-4" />
       </div>
       <div className="min-w-0">
-        <Type as="div" className="truncate font-medium">
+        <Text as="div" className="truncate font-medium">
           {label}
-        </Type>
+        </Text>
         {description && (
-          <Type as="div" small muted className="truncate">
+          <Text as="div" small muted className="truncate">
             {description}
-          </Type>
+          </Text>
         )}
       </div>
     </div>

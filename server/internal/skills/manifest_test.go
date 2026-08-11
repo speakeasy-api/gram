@@ -821,3 +821,62 @@ func TestParseSkillManifestCanonicalHashPreimage(t *testing.T) {
 	digest := sha256.Sum256(preimage)
 	require.Equal(t, hex.EncodeToString(digest[:]), manifest.CanonicalSHA256)
 }
+
+func TestValidateSkillSuggestionCanonicalizesChangedContent(t *testing.T) {
+	t.Parallel()
+
+	baseContent := "---\nname: suggested-skill\ndescription: Base.\n---\n\nbase\n"
+	base, err := parseSkillManifest(baseContent)
+	require.NoError(t, err)
+
+	validated, err := ValidateSkillSuggestion(
+		"---\ndescription: Changed.\nname: suggested-skill\n---\n\nchanged\n",
+		"suggested-skill",
+		base.CanonicalSHA256,
+	)
+	require.NoError(t, err)
+	require.Contains(t, validated.Content, "description: Changed.")
+	require.NotEqual(t, base.CanonicalSHA256, validated.CanonicalSHA256)
+	canonical, err := parseSkillManifest(validated.Content)
+	require.NoError(t, err)
+	require.Equal(t, validated.CanonicalSHA256, canonical.CanonicalSHA256)
+}
+
+func TestValidateSkillSuggestionRejectsInvalidManifest(t *testing.T) {
+	t.Parallel()
+
+	baseContent := "---\nname: suggested-skill\ndescription: Base.\n---\n"
+	base, err := parseSkillManifest(baseContent)
+	require.NoError(t, err)
+
+	_, err = ValidateSkillSuggestion("---\nname: suggested-skill\n---\n", "suggested-skill", base.CanonicalSHA256)
+	require.ErrorContains(t, err, "not spec-valid")
+	require.ErrorContains(t, err, `field="description" code="required" message="description is required"`)
+}
+
+func TestValidateSkillSuggestionRejectsWrongName(t *testing.T) {
+	t.Parallel()
+
+	baseContent := "---\nname: suggested-skill\ndescription: Base.\n---\n"
+	base, err := parseSkillManifest(baseContent)
+	require.NoError(t, err)
+
+	_, err = ValidateSkillSuggestion(
+		"---\nname: other-skill\ndescription: Changed.\n---\n",
+		"suggested-skill",
+		base.CanonicalSHA256,
+	)
+	require.ErrorContains(t, err, `name "other-skill" does not match skill "suggested-skill"`)
+}
+
+func TestValidateSkillSuggestionRejectsCanonicalNoOp(t *testing.T) {
+	t.Parallel()
+
+	baseContent := "---\nname: suggested-skill\ndescription: Base.\nmetadata:\n  owner: team\n---\n\nbody\n"
+	base, err := parseSkillManifest(baseContent)
+	require.NoError(t, err)
+	equivalent := "---\nmetadata: {owner: team}\ndescription: 'Base.'\nname: suggested-skill\n---\n\nbody\n"
+
+	_, err = ValidateSkillSuggestion(equivalent, "suggested-skill", base.CanonicalSHA256)
+	require.ErrorContains(t, err, "content is unchanged from base")
+}

@@ -7,20 +7,19 @@ import (
 	"sync"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	gatewayclient "sigs.k8s.io/gateway-api/pkg/client/clientset/versioned"
 )
 
 type KubernetesClients struct {
-	Clientset             *kubernetes.Clientset
-	DynamicClient         dynamic.Interface
-	gatewayClient         gatewayclient.Interface
-	logger                *slog.Logger
-	namespace             string
-	enabled               bool
-	securityPolicyEnabled bool
+	Clientset      kubernetes.Interface
+	DynamicClient  dynamic.Interface
+	logger         *slog.Logger
+	namespace      string
+	backendService string
+	enabled        bool
 }
 
 var (
@@ -29,22 +28,19 @@ var (
 )
 
 // InitializeK8sClient initializes and returns KubernetesClients singleton.
-//
-// gatewayIPAllowlistEnabled gates the Envoy Gateway SecurityPolicy reconcile
-// used for gateway-kind custom domain IP allow listing. Keep it off until the
-// Envoy Gateway SecurityPolicy CRD is installed in the target namespaces; the
-// ingress path is unaffected.
-func InitializeK8sClient(ctx context.Context, logger *slog.Logger, env string, gatewayIPAllowlistEnabled bool) (*KubernetesClients, error) {
+// namespace and backendService override where custom domain ingresses are
+// created and which service they route to; empty values fall back to the
+// historical gram-<env> and gram-server defaults.
+func InitializeK8sClient(ctx context.Context, logger *slog.Logger, env string, namespace string, backendService string) (*KubernetesClients, error) {
 	// not supporting k8s client in local dev mode currently
 	if env == "local" {
 		return &KubernetesClients{
-			Clientset:             nil,
-			DynamicClient:         nil,
-			gatewayClient:         nil,
-			logger:                logger.With(attr.SlogComponent("k8s_client")),
-			enabled:               false,
-			securityPolicyEnabled: false,
-			namespace:             "",
+			Clientset:      nil,
+			DynamicClient:  nil,
+			logger:         logger.With(attr.SlogComponent("k8s_client")),
+			enabled:        false,
+			namespace:      "",
+			backendService: "",
 		}, nil
 	}
 
@@ -67,20 +63,13 @@ func InitializeK8sClient(ctx context.Context, logger *slog.Logger, env string, g
 			return
 		}
 
-		gatewayClient, err := gatewayclient.NewForConfig(config)
-		if err != nil {
-			initErr = fmt.Errorf("failed to create gateway client: %w", err)
-			return
-		}
-
 		k8sClients = &KubernetesClients{
-			Clientset:             clientset,
-			DynamicClient:         dynamicClient,
-			gatewayClient:         gatewayClient,
-			logger:                logger,
-			enabled:               true,
-			securityPolicyEnabled: gatewayIPAllowlistEnabled,
-			namespace:             fmt.Sprintf("gram-%s", env),
+			Clientset:      clientset,
+			DynamicClient:  dynamicClient,
+			logger:         logger,
+			enabled:        true,
+			namespace:      conv.Default(namespace, fmt.Sprintf("gram-%s", env)),
+			backendService: conv.Default(backendService, "gram-server"),
 		}
 
 		logger.InfoContext(ctx, "Kubernetes clients initialized successfully.")
@@ -95,8 +84,5 @@ func (k *KubernetesClients) Provisioner(kind ProvisionerKind) CustomDomainProvis
 	if !k.enabled {
 		return &StubProvisioner{kind: kind, logger: k.logger, calls: nil}
 	}
-	if kind == ProvisionerKindGateway {
-		return &GatewayProvisioner{client: k.gatewayClient, dynamic: k.DynamicClient, securityPolicyEnabled: k.securityPolicyEnabled, namespace: k.namespace, logger: k.logger}
-	}
-	return &IngressProvisioner{clientset: k.Clientset, namespace: k.namespace, logger: k.logger}
+	return &IngressProvisioner{clientset: k.Clientset, namespace: k.namespace, backendService: k.backendService, logger: k.logger}
 }

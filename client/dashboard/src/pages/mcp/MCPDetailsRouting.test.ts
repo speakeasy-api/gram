@@ -56,15 +56,14 @@ describe("activeTabFromPath", () => {
 
 describe("initialTabFromHash", () => {
   it("maps an unknown hash to overview", () => {
-    expect(initialTabFromHash("#nope", true)).toBe("overview");
+    expect(initialTabFromHash("#nope")).toBe("overview");
   });
 
-  it("keeps team access behind the RBAC feature flag", () => {
-    expect(initialTabFromHash("#team-access", false)).toBe("overview");
-    expect(initialTabFromHash("#team-access", true)).toBe("team-access");
+  it("supports team access", () => {
+    expect(initialTabFromHash("#team-access")).toBe("team-access");
   });
 
   it("reads a valid hash directly", () => {
-    expect(initialTabFromHash("#authentication", true)).toBe("authentication");
+    expect(initialTabFromHash("#authentication")).toBe("authentication");
   });
 });

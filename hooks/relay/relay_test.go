@@ -520,6 +520,114 @@ func TestCursorModelResponseRelaysMessage(t *testing.T) {
 	require.Equal(t, int64(5), *last.Data.Usage.OutputTokens)
 }
 
+func TestCursorSessionEndRelaysCanonicalLifecycle(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+	payload := []byte(`{"hook_event_name":"sessionEnd","conversation_id":"sess-cursor-end","status":"completed"}`)
+
+	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderCursor, payload, "--variant=cli")
+
+	require.Equal(t, 0, res.ExitCode)
+	require.Equal(t, 1, fs.count())
+	last := fs.last()
+	require.Equal(t, components.TypeSessionEnded, last.Event.Type)
+	require.NotNil(t, last.Session)
+	require.NotNil(t, last.Session.ID)
+	require.Equal(t, "sess-cursor-end", *last.Session.ID)
+}
+
+func TestCodexSessionEndRelaysCanonicalLifecycle(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+	payload := []byte(`{"session_id":"sess-codex-end","cwd":"/work/repo","hook_event_name":"SessionEnd","reason":"other"}`)
+
+	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderCodex, payload, "--variant=cli")
+
+	require.Equal(t, 0, res.ExitCode)
+	require.Equal(t, 1, fs.count())
+	last := fs.last()
+	require.Equal(t, components.TypeSessionEnded, last.Event.Type)
+	require.NotNil(t, last.Session)
+	require.NotNil(t, last.Session.ID)
+	require.Equal(t, "sess-codex-end", *last.Session.ID)
+}
+
+// TestOpenCodeStopRelaysFinalMessage covers the assistant-message path for
+// opencode: the shim splices the transcript's final assistant text into the
+// session.idle input as finalMessage, and it must reach the server as
+// assistant.responded, or transcripts show only tool calls. The prompt is
+// delivered first so the stop event never triggers the runner's
+// prompt-backfill, which keys off machine-global session markers and would
+// make the event count depend on prior runs.
+func TestOpenCodeStopRelaysFinalMessage(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+	prompt := []byte(`{"seq":1,"hook":"chat.message","input":{},"output":{"message":{"sessionID":"ses_oc_stop"},"parts":[{"type":"text","text":"hi"}]}}`)
+	payload := []byte(`{"seq":2,"hook":"session.idle","input":{"sessionID":"ses_oc_stop","finalMessage":"final answer"},"output":null}`)
+
+	agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderOpenCode, prompt)
+	require.Equal(t, 1, fs.count())
+
+	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderOpenCode, payload)
+
+	require.Equal(t, 0, res.ExitCode)
+	require.Equal(t, 2, fs.count())
+	last := fs.last()
+	require.Equal(t, components.TypeAssistantResponded, last.Event.Type)
+	require.NotNil(t, last.Session)
+	require.NotNil(t, last.Session.ID)
+	require.Equal(t, "ses_oc_stop", *last.Session.ID)
+	require.NotNil(t, last.Data)
+	require.NotNil(t, last.Data.Message)
+	require.NotNil(t, last.Data.Message.Text)
+	require.Equal(t, "final answer", *last.Data.Message.Text)
+	require.NotNil(t, last.Data.Message.Role)
+	require.Equal(t, "assistant", *last.Data.Message.Role)
+}
+
+// TestOpenCodeToolErrorRelaysToolFailed covers the failed-tool path for
+// opencode: tool.execute.after does not fire on error, so the shim forwards
+// the error-state tool part from message.part.updated and it must reach the
+// server as tool.failed. The prompt is delivered first so the tool-error
+// event never triggers the runner's prompt-backfill, which keys off
+// machine-global session markers and would make the event count depend on
+// prior runs.
+func TestOpenCodeToolErrorRelaysToolFailed(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+	prompt := []byte(`{"seq":1,"hook":"chat.message","input":{},"output":{"message":{"sessionID":"ses_oc_err"},"parts":[{"type":"text","text":"hi"}]}}`)
+	payload := []byte(`{"seq":2,"hook":"message.part.updated","input":{"part":{"id":"prt-1","sessionID":"ses_oc_err","messageID":"msg-1","type":"tool","callID":"call-1","tool":"read","state":{"status":"error","input":{"filePath":"/tmp/missing.txt"},"error":"File not found"}}},"output":null}`)
+
+	agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderOpenCode, prompt)
+	require.Equal(t, 1, fs.count())
+
+	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderOpenCode, payload)
+
+	require.Equal(t, 0, res.ExitCode)
+	require.Equal(t, 2, fs.count())
+	last := fs.last()
+	require.Equal(t, components.TypeToolFailed, last.Event.Type)
+	require.NotNil(t, last.Session)
+	require.NotNil(t, last.Session.ID)
+	require.Equal(t, "ses_oc_err", *last.Session.ID)
+	require.NotNil(t, last.Data)
+	require.NotNil(t, last.Data.ToolCall)
+	require.NotNil(t, last.Data.ToolCall.Name)
+	require.Equal(t, "read", *last.Data.ToolCall.Name)
+	require.Equal(t, "File not found", last.Data.ToolCall.Error)
+}
+
+func TestStopEventsRemainPerTurn(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+
+	invoke(t, cfg, agenthooks.ProviderCursor, "cursor/stop.json")
+	require.Equal(t, components.TypeUsageReported, fs.last().Event.Type)
+
+	invoke(t, cfg, agenthooks.ProviderCodex, "codex/stop.json")
+	require.Equal(t, components.TypeAssistantResponded, fs.last().Event.Type)
+}
+
 // TestLoginCommandCarriesConfig pins the nudge → login contract: the sign-in
 // command must reference the plugin's speakeasy.json so the minted credential
 // matches the server/project the hook path authenticates against.
@@ -553,12 +661,12 @@ func TestWritePluginMatchesPublishedEventSets(t *testing.T) {
 		{
 			provider: "cursor",
 			path:     filepath.Join("hooks", "hooks.json"),
-			want:     []string{"afterAgentResponse", "afterAgentThought", "afterMCPExecution", "beforeMCPExecution", "beforeSubmitPrompt", "postToolUse", "postToolUseFailure", "preToolUse", "sessionStart", "stop"},
+			want:     []string{"afterAgentResponse", "afterAgentThought", "afterMCPExecution", "beforeMCPExecution", "beforeSubmitPrompt", "postToolUse", "postToolUseFailure", "preToolUse", "sessionEnd", "sessionStart", "stop"},
 		},
 		{
 			provider: "codex",
 			path:     "hooks.json",
-			want:     []string{"PermissionRequest", "PostToolUse", "PreToolUse", "SessionStart", "Stop", "UserPromptSubmit"},
+			want:     []string{"PermissionRequest", "PostToolUse", "PreToolUse", "SessionEnd", "SessionStart", "Stop", "UserPromptSubmit"},
 		},
 	}
 	for _, tt := range tests {
@@ -590,9 +698,37 @@ func TestWritePluginMatchesPublishedEventSets(t *testing.T) {
 	}
 }
 
-func TestClaudeConfigChangeIsRelayed(t *testing.T) {
+func TestWritePluginOpenCodeRendersShim(t *testing.T) {
+	dir := t.TempDir()
+	err := WritePlugin(t.Context(), "opencode", dir, PluginConfig{
+		ServerURL:    "https://gram.test",
+		ProjectSlug:  "default",
+		OrgID:        "org-1",
+		HooksAPIKey:  "shared-key",
+		BrowserLogin: false,
+		BinaryPath:   "/tmp/speakeasy-hooks",
+	})
+	require.NoError(t, err)
+
+	shim, err := os.ReadFile(filepath.Join(dir, ".opencode", "plugin", "agenthooks.ts"))
+	require.NoError(t, err)
+	require.Contains(t, string(shim), `"/tmp/speakeasy-hooks"`)
+	require.Contains(t, string(shim), "--config="+filepath.Join(dir, configFileName))
+	require.Contains(t, string(shim), "--provider=opencode")
+
+	var cfg FileConfig
+	b, err := os.ReadFile(filepath.Join(dir, configFileName))
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(b, &cfg))
+	require.Equal(t, "https://gram.test", cfg.ServerURL)
+}
+
+func TestClaudeConfigChangeIsRelayedAfterMCPInventory(t *testing.T) {
 	fs := newFakeServer(t, nil)
 	cfg := authedConfig(t, fs.URL)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("TMPDIR", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
 	t.Setenv("PATH", t.TempDir())
 	payload := []byte(`{"session_id":"session-1","hook_event_name":"ConfigChange","source":"project_settings"}`)
@@ -600,93 +736,15 @@ func TestClaudeConfigChangeIsRelayed(t *testing.T) {
 	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderClaudeCode, payload, "--variant=cli")
 
 	require.Equal(t, 0, res.ExitCode)
-	require.Equal(t, 1, fs.count())
-	require.Equal(t, components.TypeSessionUpdated, fs.last().Event.Type)
-	require.Equal(t, "ConfigChange", *fs.last().Source.RawEventName)
-	require.Nil(t, fs.last().Data, "a missing Claude CLI must fail open without inventory")
-}
-
-func TestParseClaudeMCPInventory(t *testing.T) {
-	entries := parseClaudeMCPInventory(strings.Join([]string{
-		"Checking MCP server health...",
-		"remote: https://user:password@mcp.example.com/sse?api_key=secret&workspace=acme (SSE) - connected",
-		"plugin:linear:issues: npx -y mcp-remote https://linear.example.com/mcp?token=secret (STDIO) - connected",
-		"claude.ai Notion (Acme): https://mcp.notion.com/mcp (HTTP) - needs authentication",
-	}, "\n"))
-
-	require.Len(t, entries, 3)
-	require.Equal(t, "remote", entries[0].Name)
-	require.Equal(t, "https://user:password@mcp.example.com/sse?api_key=secret&workspace=acme", entries[0].URL)
-	require.Empty(t, entries[0].Command)
-	require.Equal(t, "issues", entries[1].Name)
-	require.Equal(t, "npx -y mcp-remote https://linear.example.com/mcp?token=secret", entries[1].Command)
-	require.Equal(t, "Notion (Acme)", entries[2].Name)
-}
-
-func TestClaudeSessionStartRelaysRedactedMCPInventory(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("fake claude executable uses a POSIX shell")
-	}
-
-	binDir := t.TempDir()
-	claudePath := filepath.Join(binDir, "claude")
-	require.NoError(t, os.WriteFile(claudePath, []byte("#!/bin/sh\npwd > \"$FAKE_CLAUDE_CWD_FILE\"\nprintf '%s\\n' \"$FAKE_CLAUDE_MCP_LIST\"\n"), 0o700))
-	t.Setenv("PATH", binDir)
-	cwdFile := filepath.Join(t.TempDir(), "cwd")
-	t.Setenv("FAKE_CLAUDE_CWD_FILE", cwdFile)
-	t.Setenv("FAKE_CLAUDE_MCP_LIST", strings.Join([]string{
-		"remote: https://user:password@mcp.example.com/sse?api_key=secret&workspace=acme (SSE) - connected",
-		"local: env GITHUB_TOKEN=ghp_secret local-mcp --auth token (STDIO) - connected",
-		"malformed: https://user:leaked@example.com/%zz?token=leaked (HTTP) - connected",
-	}, "\n"))
-
-	fs := newFakeServer(t, nil)
-	cfg := authedConfig(t, fs.URL)
-	cwd := t.TempDir()
-	payload := []byte(`{"session_id":"session-inventory","cwd":"` + cwd + `","hook_event_name":"SessionStart","source":"startup"}`)
-
-	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderClaudeCode, payload, "--variant=cli")
-
-	require.Equal(t, 0, res.ExitCode)
-	require.Equal(t, 1, fs.count())
-	require.NotNil(t, fs.last().Data)
-	require.Len(t, fs.last().Data.McpInventory, 2)
-	require.Equal(t, "remote", *fs.last().Data.McpInventory[0].ServerName)
-	require.Equal(t, "https://mcp.example.com/sse?api_key=%2A%2A%2A&workspace=acme", *fs.last().Data.McpInventory[0].URL)
-	require.NotContains(t, *fs.last().Data.McpInventory[0].URL, "password")
-	require.Equal(t, "env GITHUB_TOKEN=*** local-mcp --auth ***", *fs.last().Data.McpInventory[1].Command)
-	invocationCWD, err := os.ReadFile(cwdFile)
-	require.NoError(t, err)
-	require.Equal(t, cwd, strings.TrimSpace(string(invocationCWD)))
-}
-
-func TestClaudeConfigChangeCollectsFreshMCPInventory(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("fake claude executable uses a POSIX shell")
-	}
-
-	binDir := t.TempDir()
-	claudePath := filepath.Join(binDir, "claude")
-	require.NoError(t, os.WriteFile(claudePath, []byte("#!/bin/sh\nprintf '%s\\n' \"$FAKE_CLAUDE_MCP_LIST\"\n"), 0o700))
-	t.Setenv("PATH", binDir)
-
-	fs := newFakeServer(t, nil)
-	cfg := authedConfig(t, fs.URL)
-	runner := NewRunner(cfg)
-	cwd := t.TempDir()
-	payload := []byte(`{"session_id":"session-inventory-refresh","cwd":"` + cwd + `","hook_event_name":"ConfigChange","source":"project_settings"}`)
-
-	t.Setenv("FAKE_CLAUDE_MCP_LIST", "first: https://first.example.com/mcp (HTTP) - connected")
-	first := agenthookstest.Invoke(t, runner, agenthooks.ProviderClaudeCode, payload, "--variant=cli")
-	require.Equal(t, 0, first.ExitCode)
-
-	t.Setenv("FAKE_CLAUDE_MCP_LIST", "second: https://second.example.com/mcp (HTTP) - connected")
-	second := agenthookstest.Invoke(t, runner, agenthooks.ProviderClaudeCode, payload, "--variant=cli")
-	require.Equal(t, 0, second.ExitCode)
-
 	require.Equal(t, 2, fs.count())
-	require.Equal(t, "https://first.example.com/mcp", *fs.requests[0].Data.McpInventory[0].URL)
-	require.Equal(t, "https://second.example.com/mcp", *fs.requests[1].Data.McpInventory[0].URL)
+	require.Equal(t, components.TypeMcpInventory, fs.requests[0].Event.Type)
+	require.NotNil(t, fs.requests[0].Data)
+	require.NotNil(t, fs.requests[0].Data.McpInventory)
+	require.Empty(t, fs.requests[0].Data.McpInventory)
+	configChange := fs.last()
+	require.Equal(t, components.TypeSessionUpdated, configChange.Event.Type)
+	require.Equal(t, "ConfigChange", *configChange.Source.RawEventName)
+	require.Nil(t, configChange.Data)
 }
 
 // TestLoginCommandQuotesUnsafePaths ensures the nudge command survives shell
@@ -717,10 +775,12 @@ func TestNudgeEmittedOncePerSession(t *testing.T) {
 }
 
 // TestEnvelopeCodexSkillInference mirrors the bash senders' best-effort Codex
-// skill detection: a reader tool opening skills/<name>/SKILL.md and an
-// explicit $skill-name prompt mention (validated against the skill roots on
-// disk) both attach data.skill while the event keeps its true type on the
-// wire — a reclassified event would skip the server's tool/prompt policy scan.
+// skill detection: a reader tool opening skills/<name>/SKILL.md attaches
+// data.skill to the completed read (whose output carries the manifest the
+// content registry hashes), an explicit $skill-name prompt mention (validated
+// against the skill roots on disk) attaches it to the prompt event, and both
+// keep the event's true type on the wire — a reclassified event would skip
+// the server's tool/prompt policy scan.
 func TestEnvelopeCodexSkillInference(t *testing.T) {
 	t.Setenv("TMPDIR", t.TempDir())
 	dir := t.TempDir()
@@ -772,11 +832,11 @@ func TestEnvelopeCodexSkillInference(t *testing.T) {
 
 	got := envelope(`{"hook_event_name":"PreToolUse","session_id":"sess-skill","tool_name":"Bash","tool_input":{"command":"sed -n 1,240p ` + repo + `/.agents/skills/repo-skill/SKILL.md"},"tool_use_id":"call_1"}`)
 	require.Equal(t, components.TypeToolRequested, got.Event.Type, "a detected skill read must keep its true event type")
-	require.Equal(t, "repo-skill", skillOf(got), "a SKILL.md path in a reader tool input must resolve the skill name")
+	require.Empty(t, skillOf(got), "the requested read has no content yet and must not count as the activation")
 
 	got = envelope(`{"hook_event_name":"PostToolUse","session_id":"sess-skill","tool_name":"Bash","tool_input":{"command":"sed -n 1,240p ` + repo + `/.agents/skills/repo-skill/SKILL.md"},"tool_response":{"output":"ok"},"tool_use_id":"call_1"}`)
-	require.Equal(t, components.TypeToolCompleted, got.Event.Type)
-	require.Empty(t, skillOf(got), "completions must not re-report the activation")
+	require.Equal(t, components.TypeToolCompleted, got.Event.Type, "a detected skill read must keep its true event type")
+	require.Equal(t, "repo-skill", skillOf(got), "the completed read reports the activation exactly once")
 
 	got = envelope(`{"hook_event_name":"PermissionRequest","session_id":"sess-skill","tool_name":"Bash","tool_input":{"command":"cat ` + repo + `/.agents/skills/repo-skill/SKILL.md"},"permission_type":"exec"}`)
 	require.Equal(t, components.TypeToolRequested, got.Event.Type)
@@ -804,9 +864,95 @@ func TestEnvelopeCodexSkillInference(t *testing.T) {
 	got = envelope(`{"hook_event_name":"UserPromptSubmit","session_id":"sess-skill","prompt":"use $sys-skill","cwd":"` + cwd + `"}`)
 	require.Equal(t, "sys-skill", skillOf(got), "bundled skills under a .system subdirectory must resolve by bare name")
 
-	got = envelope(`{"hook_event_name":"PreToolUse","session_id":"sess-skill","tool_name":"Bash","tool_input":{"command":"cat /opt/codex/skills/.system/imagegen/SKILL.md"},"tool_use_id":"call_3"}`)
-	require.Equal(t, components.TypeToolRequested, got.Event.Type)
+	got = envelope(`{"hook_event_name":"PostToolUse","session_id":"sess-skill","tool_name":"Bash","tool_input":{"command":"cat /opt/codex/skills/.system/imagegen/SKILL.md"},"tool_response":{"output":"ok"},"tool_use_id":"call_3"}`)
+	require.Equal(t, components.TypeToolCompleted, got.Event.Type)
 	require.Equal(t, "imagegen", skillOf(got), "reads of .system skill paths must infer the bare skill name")
+}
+
+func TestEnvelopeCursorSkillInference(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	sequence := 0
+	payload := func(nativeName, toolName string, toolInput any) []byte {
+		t.Helper()
+		sequence++
+		input := map[string]any{
+			"conversation_id": "cursor-skill-" + strconv.Itoa(sequence),
+			"hook_event_name": nativeName,
+			"tool_name":       toolName,
+			"tool_input":      toolInput,
+			"tool_use_id":     "call-" + strconv.Itoa(sequence),
+		}
+		if nativeName == "beforeReadFile" {
+			input["file_path"] = toolInput
+			delete(input, "tool_name")
+			delete(input, "tool_input")
+		}
+		if nativeName == "postToolUse" {
+			input["tool_response"] = map[string]any{"output": "ok"}
+		}
+		b, err := json.Marshal(input)
+		require.NoError(t, err)
+		return b
+	}
+	envelope := func(input []byte) components.IngestRequestBody {
+		t.Helper()
+		runner := agenthooks.New(agenthooks.WithDedupDir(t.TempDir()), agenthooks.WithoutBackfill())
+		var got components.IngestRequestBody
+		runner.OnToolPre(func(_ context.Context, e *agenthooks.ToolPreEvent) (agenthooks.ToolPreDecision, error) {
+			got = buildEnvelope(e, "test-host")
+			return agenthooks.NoDecision(), nil
+		})
+		runner.OnToolPost(func(_ context.Context, e *agenthooks.ToolPostEvent) (agenthooks.ToolPostDecision, error) {
+			got = buildEnvelope(e, "test-host")
+			return agenthooks.Observed(), nil
+		})
+		res := agenthookstest.Invoke(t, runner, agenthooks.ProviderCursor, input, "--variant=cli")
+		require.Equal(t, 0, res.ExitCode)
+		require.Equal(t, schemaVersion, got.SchemaVersion, "the payload must reach a tool handler")
+		return got
+	}
+	skillOf := func(got components.IngestRequestBody) string {
+		if got.Data == nil || got.Data.Skill == nil {
+			return ""
+		}
+		return got.Data.Skill.Name
+	}
+
+	workspacePath := filepath.Join(home, ".cursor", "skills", "workspace-skill", "SKILL.md")
+	got := envelope(payload("postToolUse", "Read", map[string]any{"file_path": workspacePath}))
+	require.Equal(t, components.TypeToolCompleted, got.Event.Type)
+	require.Equal(t, "workspace-skill", skillOf(got))
+
+	pluginRoot := filepath.Join(t.TempDir(), "arbitrary", "plugin")
+	pluginPath := filepath.Join(pluginRoot, "skills", "plugin-skill", "SKILL.md")
+	require.NoError(t, os.MkdirAll(filepath.Join(pluginRoot, ".cursor-plugin"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(pluginRoot, ".cursor-plugin", "plugin.json"), []byte(`{}`), 0o644))
+	got = envelope(payload("postToolUse", "Read", map[string]any{"file_path": pluginPath}))
+	require.Equal(t, components.TypeToolCompleted, got.Event.Type)
+	require.Equal(t, "plugin-skill", skillOf(got))
+
+	got = envelope(payload("postToolUse", "Read", map[string]any{"path": workspacePath}))
+	require.Equal(t, "workspace-skill", skillOf(got), "legacy Cursor payloads use path instead of file_path")
+
+	got = envelope(payload("beforeReadFile", "", workspacePath))
+	require.Equal(t, components.TypeToolRequested, got.Event.Type)
+	require.Equal(t, "ReadFile", *got.Data.ToolCall.Name)
+	require.Empty(t, skillOf(got), "the duplicate beforeReadFile is normalized to ReadFile")
+
+	got = envelope(payload("preToolUse", "Read", map[string]any{"file_path": workspacePath}))
+	require.Equal(t, components.TypeToolRequested, got.Event.Type)
+	require.Empty(t, skillOf(got), "the requested read has no content yet and must not count as the activation")
+
+	require.Empty(t, skillOf(envelope(payload("postToolUse", "Bash", map[string]any{"file_path": workspacePath}))))
+	require.Empty(t, skillOf(envelope(payload("postToolUse", "Read", map[string]any{"file_path": filepath.Join(filepath.Dir(workspacePath), "README.md")}))))
+	require.Empty(t, skillOf(envelope(payload("postToolUse", "Read", "{"))))
+	require.Empty(t, skillOf(envelope(payload("postToolUse", "Read", map[string]any{}))))
+	require.Empty(t, skillOf(envelope(payload("postToolUse", "Read", map[string]any{"file_path": "SKILL.md"}))))
+	require.Empty(t, skillOf(envelope(payload("postToolUse", "Read", map[string]any{"file_path": filepath.Join(t.TempDir(), "docs", "not-a-skill", "SKILL.md")}))))
+	require.Equal(t, "example", skillOf(envelope(payload("postToolUse", "Read", map[string]any{"file_path": filepath.Join(t.TempDir(), "docs", "skills", "example", "SKILL.md")}))))
+	require.Empty(t, skillOf(envelope(payload("postToolUse", "Read", map[string]any{"file_path": filepath.Join(t.TempDir(), "plugin", "skills", "SKILL.md")}))))
 }
 
 // TestRedactCommandMasksSeparatedHeaderValue pins the tokenized-header shape:
@@ -1197,11 +1343,12 @@ func TestRedactCommandMasksURLQuerySecrets(t *testing.T) {
 }
 
 func TestMCPInventoryRedactionMasksSignedURLCredentials(t *testing.T) {
-	got, ok := redactMCPInventoryURL("https://mcp.example.com/sse?sig=short&X-Amz-Signature=aws-secret&X-Amz-Credential=aws-credential&channel=eng")
+	got, ok := redactMCPInventoryURL("https://mcp.example.com/sse?sig=short&X-Amz-Signature=aws-secret&X-Amz-Credential=aws-credential&oauth_signature=oauth-secret&channel=eng")
 	require.True(t, ok)
 	require.NotContains(t, got, "short")
 	require.NotContains(t, got, "aws-secret")
 	require.NotContains(t, got, "aws-credential")
+	require.NotContains(t, got, "oauth-secret", "prefixed OAuth signature params must redact")
 	require.Contains(t, got, "channel=eng", "non-secret query parameters must survive")
 
 	command := redactCommand("npx -y mcp-remote https://mcp.example.com/sse?X-Goog-Signature=goog-secret&channel=eng")
@@ -1342,4 +1489,127 @@ func TestSendBoundsTotalRetryTime(t *testing.T) {
 
 	require.Equal(t, 0, res.statusCode, "a hung endpoint yields a transport failure, not a verdict")
 	require.Less(t, time.Since(start), 10*time.Second, "the send budget must bound retries end to end")
+}
+
+// TestEnvelopeReportsBinaryVersion keeps relay version skew diagnosable from
+// ingested events.
+func TestEnvelopeReportsBinaryVersion(t *testing.T) {
+	previous := BinaryVersion
+	t.Cleanup(func() { BinaryVersion = previous })
+	BinaryVersion = "9.9.9"
+
+	payload := buildEnvelope(&agenthooks.PromptEvent{
+		Event: agenthooks.Event{
+			Provider:   agenthooks.ProviderCodex,
+			Kind:       agenthooks.KindPromptSubmitted,
+			NativeName: "UserPromptSubmit",
+			Session:    agenthooks.SessionInfo{ID: "s1"},
+		},
+		Prompt: "hello",
+	}, "host")
+
+	require.NotNil(t, payload.Source.AdapterVersion)
+	require.Equal(t, "9.9.9", *payload.Source.AdapterVersion)
+}
+
+func TestMCPInventoryEnvelopeRedactsCredentials(t *testing.T) {
+	payload := buildEnvelope(&agenthooks.MCPInventoryEvent{
+		Event: agenthooks.Event{
+			Provider:   agenthooks.ProviderClaudeCode,
+			Kind:       agenthooks.KindMCPInventory,
+			NativeName: "MCPInventory",
+			Session:    agenthooks.SessionInfo{ID: "inventory-session"},
+		},
+		Servers: []agenthooks.MCPServer{
+			{Name: "remote", URL: "https://user:password@mcp.example.com/sse?api_key=secret&workspace=acme", Command: ""},
+			{Name: "local", URL: "", Command: "env GITHUB_TOKEN=secret local-mcp --auth token"},
+		},
+		Complete: true,
+	}, "host")
+
+	require.Equal(t, components.TypeMcpInventory, payload.Event.Type)
+	require.NotNil(t, payload.Data)
+	require.NotNil(t, payload.Data.McpInventoryCollected)
+	require.True(t, *payload.Data.McpInventoryCollected)
+	require.Len(t, payload.Data.McpInventory, 2)
+	require.Equal(t, "https://mcp.example.com/sse?api_key=%2A%2A%2A&workspace=acme", *payload.Data.McpInventory[0].URL)
+	require.Equal(t, "env GITHUB_TOKEN=*** local-mcp --auth ***", *payload.Data.McpInventory[1].Command)
+}
+
+func TestRunnerRelaysMCPInventoryBeforeFirstMCPTool(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("TMPDIR", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("PATH", t.TempDir())
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".claude.json"), []byte(`{"mcpServers":{"remote":{"url":"https://user:password@mcp.example.com/sse?api_key=secret&workspace=test"}}}`), 0o600))
+
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
+	payload := []byte(`{"session_id":"ordered-inventory-session","hook_event_name":"PreToolUse","tool_name":"mcp__remote__call","tool_input":{},"tool_use_id":"tool-1"}`)
+
+	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderClaudeCode, payload, "--variant=cli")
+
+	require.Equal(t, 0, res.ExitCode)
+	require.GreaterOrEqual(t, fs.count(), 2)
+	inventory := fs.requests[0]
+	require.Equal(t, components.TypeMcpInventory, inventory.Event.Type)
+	require.NotNil(t, inventory.Data)
+	require.Len(t, inventory.Data.McpInventory, 1)
+	require.NotNil(t, inventory.Data.McpInventoryCollected)
+	require.False(t, *inventory.Data.McpInventoryCollected,
+		"the config fallback is ordered but remains incomplete when the CLI probe fails")
+	require.Equal(t, "remote", *inventory.Data.McpInventory[0].ServerName)
+	require.Equal(t, "https://mcp.example.com/sse?api_key=%2A%2A%2A&workspace=test", *inventory.Data.McpInventory[0].URL)
+
+	tool := fs.last()
+	require.Equal(t, components.TypeToolRequested, tool.Event.Type)
+	require.NotNil(t, tool.Data)
+	require.NotNil(t, tool.Data.ToolCall)
+	require.Equal(t, "mcp__remote__call", *tool.Data.ToolCall.Name)
+}
+
+func TestRunnerRelaysIncompleteEmptyMCPInventory(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("TMPDIR", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("PATH", t.TempDir())
+
+	fs := newFakeServer(t, nil)
+	cfg := authedConfig(t, fs.URL)
+	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
+	payload := []byte(`{"session_id":"empty-inventory-session","hook_event_name":"SessionStart","source":"startup"}`)
+
+	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderClaudeCode, payload, "--variant=cli")
+
+	require.Equal(t, 0, res.ExitCode)
+	require.Equal(t, 2, fs.count())
+	inventory := fs.requests[0]
+	require.Equal(t, components.TypeMcpInventory, inventory.Event.Type)
+	require.NotNil(t, inventory.Data)
+	require.NotNil(t, inventory.Data.McpInventory)
+	require.NotNil(t, inventory.Data.McpInventoryCollected)
+	require.False(t, *inventory.Data.McpInventoryCollected,
+		"a failed CLI probe must not turn an empty fallback into proof that no servers exist")
+	require.Empty(t, inventory.Data.McpInventory)
+	require.Equal(t, components.TypeSessionStarted, fs.requests[1].Event.Type)
+}
+
+func TestMCPInventoryEnvelopeReportsIncompleteSnapshot(t *testing.T) {
+	payload := buildEnvelope(&agenthooks.MCPInventoryEvent{
+		Event: agenthooks.Event{
+			Provider:   agenthooks.ProviderCodex,
+			Kind:       agenthooks.KindMCPInventory,
+			NativeName: "MCPInventory",
+			Session:    agenthooks.SessionInfo{ID: "partial-inventory-session"},
+		},
+		Servers:  []agenthooks.MCPServer{{Name: "known", URL: "https://mcp.example.test"}},
+		Complete: false,
+	}, "host")
+
+	require.NotNil(t, payload.Data)
+	require.Len(t, payload.Data.McpInventory, 1)
+	require.NotNil(t, payload.Data.McpInventoryCollected)
+	require.False(t, *payload.Data.McpInventoryCollected)
 }

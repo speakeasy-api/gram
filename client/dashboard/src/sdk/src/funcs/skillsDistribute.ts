@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * distribute skills
  *
  * @remarks
- * Create or update the active distribution of a skill to a plugin. Repeating the request for the same skill and plugin updates the version pin or is a no-op.
+ * Create or update the active distribution of a skill to exactly one plugin or assistant. Repeating the request for the same target updates the version pin or is a no-op.
  */
 export function skillsDistribute(
   client: GramCore,

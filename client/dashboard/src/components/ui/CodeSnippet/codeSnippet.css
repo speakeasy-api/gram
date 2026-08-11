@@ -1,0 +1,98 @@
+@property --rotation {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@property --x {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0;
+}
+
+@keyframes rotate {
+  0% {
+    --rotation: 0deg;
+  }
+
+  32.8228% {
+    --rotation: 0deg;
+  }
+  50% {
+    --rotation: 180deg;
+  }
+  82.8228% {
+    --rotation: 180deg;
+  }
+  100% {
+    --rotation: 360deg;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    --x: 20px;
+  }
+
+  32.8228% {
+    --x: calc(var(--width) - 20px);
+  }
+  50% {
+    --x: calc(var(--width) - 20px);
+  }
+  82.8228% {
+    --x: 20px;
+  }
+  100% {
+    --x: 20px;
+  }
+}
+
+.snippet-inner {
+  z-index: 2;
+}
+
+.snippet {
+  box-sizing: border-box;
+  padding: 2px;
+}
+
+.snippet::before {
+  content: "";
+  display: block;
+  height: 100%;
+  width: 100%;
+  position: absolute;
+  z-index: 1;
+  visibility: hidden;
+}
+
+.shimmer::before {
+  content: "";
+  display: block;
+  padding: 1px;
+  background:
+    conic-gradient(
+      from calc(var(--rotation) - 80deg) at var(--x) 30px,
+      transparent 0,
+      var(--border-neutral-softest) 20%,
+      transparent 25%
+    ),
+    transparent;
+  transition: all 0.2s ease;
+  transform: translateZ(0);
+  visibility: visible;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  animation:
+    rotate -0.64s linear 5s infinite,
+    shimmer -0.64s linear 5s infinite;
+  z-index: 1;
+}
+
+.highlighted-code {
+  transition: background-color cubic-bezier(0.25, 0.1, 0.25, 1) 400ms;
+}

@@ -1,15 +1,14 @@
-import { Page } from "@/components/page-layout";
-import { RequireScope } from "@/components/require-scope";
+import { ResourceListPage } from "@/components/page-templates";
 import { CardContextMenu } from "@/components/card-context-menu";
-import { Card, Cards } from "@/components/ui/card";
-import { Action, MoreActions } from "@/components/ui/more-actions";
+import { Card, Cards } from "@/components/ui/Card";
+import { Action, MoreActions } from "@/components/ui/MoreActions";
 import { UpdatedAt } from "@/components/updated-at";
 import { useRoutes } from "@/routes";
 import { PromptTemplate } from "@gram/client/models/components/prompttemplate.js";
 import { useDeleteTemplateMutation } from "@gram/client/react-query/deleteTemplate.js";
 import { invalidateAllTemplates } from "@gram/client/react-query/templates.js";
 import { usePrompts } from "./usePrompts";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { Outlet } from "react-router";
@@ -20,54 +19,43 @@ export function PromptsRoot(): JSX.Element {
 }
 
 export default function Prompts(): JSX.Element {
-  return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope={["project:read", "project:write"]} level="page">
-          <PromptsInner />
-        </RequireScope>
-      </Page.Body>
-    </Page>
-  );
+  return <PromptsInner />;
 }
 
 function PromptsInner() {
   const { prompts, isLoading } = usePrompts();
   const routes = useRoutes();
 
-  if (!isLoading && prompts && prompts.length === 0) {
-    return (
-      <PromptsEmptyState
-        onCreatePrompt={() => routes.prompts.newPrompt.goTo()}
-      />
-    );
-  }
+  const isEmpty = !isLoading && !!prompts && prompts.length === 0;
+
+  const newPromptButton = (
+    <Button onClick={() => routes.prompts.newPrompt.goTo()}>
+      <Button.LeftIcon>
+        <Plus className="h-4 w-4" />
+      </Button.LeftIcon>
+      <Button.Text>New Prompt</Button.Text>
+    </Button>
+  );
 
   return (
-    <Page.Section>
-      <Page.Section.Title>Prompt Templates</Page.Section.Title>
-      <Page.Section.Description>
-        Provide your users with MCP-native prompt templates
-      </Page.Section.Description>
-      <Page.Section.CTA>
-        <Button onClick={() => routes.prompts.newPrompt.goTo()}>
-          <Button.LeftIcon>
-            <Plus className="h-4 w-4" />
-          </Button.LeftIcon>
-          <Button.Text>New Prompt</Button.Text>
-        </Button>
-      </Page.Section.CTA>
-      <Page.Section.Body>
-        <Cards isLoading={isLoading}>
-          {prompts?.map((template) => {
-            return <PromptTemplateCard key={template.id} template={template} />;
-          })}
-        </Cards>
-      </Page.Section.Body>
-    </Page.Section>
+    <ResourceListPage
+      scope={["project:read", "project:write"]}
+      title="Prompt Templates"
+      description="Provide your users with MCP-native prompt templates"
+      primaryAction={isEmpty ? undefined : newPromptButton}
+      isEmpty={isEmpty}
+      empty={
+        <PromptsEmptyState
+          onCreatePrompt={() => routes.prompts.newPrompt.goTo()}
+        />
+      }
+    >
+      <Cards isLoading={isLoading}>
+        {prompts?.map((template) => {
+          return <PromptTemplateCard key={template.id} template={template} />;
+        })}
+      </Cards>
+    </ResourceListPage>
   );
 }
 

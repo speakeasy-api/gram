@@ -8,22 +8,23 @@ import {
   SourceInfoRow,
   SourceInfoTable,
 } from "@/components/sources/SourceInfoTable";
-import { CopyButton } from "@/components/ui/copy-button";
-import { Heading } from "@/components/ui/heading";
-import { Input } from "@/components/ui/input";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { Heading } from "@/components/ui/Heading";
+import { Input } from "@/components/ui/Input";
 import {
   PageTabsTrigger,
   Tabs,
   TabsContent,
-  TabsList,
-} from "@/components/ui/tabs";
-import { Type } from "@/components/ui/type";
+  PageTabsList,
+} from "@/components/ui/Tabs";
+import { Text } from "@/components/ui/Text";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { dateTimeFormatters } from "@/lib/dates";
 import {
   formatRemoteMcpDisplay,
   getRemoteMcpServerArgs,
   remoteMcpRouteParam,
+  validateMcpServerUrl,
 } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
@@ -40,7 +41,11 @@ import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
 import { useUpdateRemoteMcpServerMutation } from "@gram/client/react-query/updateRemoteMcpServer.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { Alert, Badge, Button, Dialog, Stack } from "@speakeasy-api/moonshine";
+import { Alert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { Stack } from "@/components/ui/Stack";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -68,26 +73,6 @@ type TabValue = (typeof VALID_TABS)[number];
 
 function isValidTab(value: string): value is TabValue {
   return (VALID_TABS as readonly string[]).includes(value);
-}
-
-// Mirrors the validation in CreateRemoteMcp.tsx so users get the same feedback
-// from the Settings tab. Backend re-validates regardless.
-function validateRemoteMcpUrl(value: string): string | null {
-  const trimmed = value.trim();
-  if (!trimmed) return "URL is required";
-  let parsed: URL;
-  try {
-    parsed = new URL(trimmed);
-  } catch {
-    return "Enter a valid absolute URL (e.g. https://example.com/mcp)";
-  }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    return "URL must use http or https";
-  }
-  if (!parsed.hostname) {
-    return "URL must include a host";
-  }
-  return null;
 }
 
 export default function RemoteMCPDetails(): JSX.Element {
@@ -176,7 +161,7 @@ export default function RemoteMCPDetails(): JSX.Element {
         >
           <div className="shrink-0 border-b">
             <div className="mx-auto max-w-[1270px] px-8">
-              <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
+              <PageTabsList className="h-auto gap-6 bg-transparent p-0">
                 <PageTabsTrigger value="overview">Overview</PageTabsTrigger>
                 <PageTabsTrigger value="mcp-servers">
                   MCP Servers
@@ -184,7 +169,7 @@ export default function RemoteMCPDetails(): JSX.Element {
                     ` (${linkedMcpServers.length})`}
                 </PageTabsTrigger>
                 <PageTabsTrigger value="settings">Settings</PageTabsTrigger>
-              </TabsList>
+              </PageTabsList>
             </div>
           </div>
 
@@ -251,8 +236,9 @@ function RemoteMcpHero({ server }: { server: RemoteMcpServer | undefined }) {
   return (
     <DetailHero>
       <Stack gap={2}>
+        <Page.Eyebrow />
         <Stack direction="horizontal" gap={3} align="center">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 dark:bg-violet-500/20">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-violet-500/10 dark:bg-violet-500/20">
             <Network className="h-5 w-5 text-violet-600 dark:text-violet-400" />
           </div>
           <Heading variant="h1" className="break-all normal-case">
@@ -343,37 +329,37 @@ function OverviewTab({
           </Heading>
           <SourceInfoTable>
             <SourceInfoRow label="Name">
-              <Type className="font-medium">
+              <Text className="font-medium">
                 {remoteMcpServer?.name || "—"}
-              </Type>
+              </Text>
             </SourceInfoRow>
             <SourceInfoRow label="URL">
-              <Type className="font-mono text-sm break-all">
+              <Text className="font-mono text-sm break-all">
                 {remoteMcpServer?.url ?? "—"}
-              </Type>
+              </Text>
             </SourceInfoRow>
             <SourceInfoRow label="Transport Type">
-              <Type className="font-mono text-sm">
+              <Text className="font-mono text-sm">
                 {remoteMcpServer?.transportType ?? "—"}
-              </Type>
+              </Text>
             </SourceInfoRow>
             <SourceInfoRow label="Source ID">
               <span className="flex items-center gap-1">
-                <Type className="font-mono text-sm">
+                <Text className="font-mono text-sm">
                   {remoteMcpServer?.id
                     ? `${remoteMcpServer.id.slice(0, 8)}…`
                     : "—"}
-                </Type>
+                </Text>
                 {remoteMcpServer?.id && (
-                  <CopyButton text={remoteMcpServer.id} size="inline" />
+                  <CopyButton text={remoteMcpServer.id} size="xs" />
                 )}
               </span>
             </SourceInfoRow>
             <SourceInfoRow label="Created">
-              <Type className="text-sm">{createdAt}</Type>
+              <Text className="text-sm">{createdAt}</Text>
             </SourceInfoRow>
             <SourceInfoRow label="Updated">
-              <Type className="text-sm">{updatedAt}</Type>
+              <Text className="text-sm">{updatedAt}</Text>
             </SourceInfoRow>
             <SourceInfoRow label="Linked MCP servers">
               {showLinkedCount ? (
@@ -385,7 +371,7 @@ function OverviewTab({
                   {linkedMcpServersCount}
                 </button>
               ) : (
-                <Type className="text-muted-foreground text-sm">—</Type>
+                <Text className="text-muted-foreground text-sm">—</Text>
               )}
             </SourceInfoRow>
           </SourceInfoTable>
@@ -456,9 +442,9 @@ function McpServersEmptyState({
   return (
     <div className="flex flex-col items-center py-12 text-center">
       <Server className="text-muted-foreground/50 mb-3 h-12 w-12" />
-      <Type muted className="mb-4">
+      <Text muted className="mb-4">
         No MCP servers are linked to this source yet.
-      </Type>
+      </Text>
       <RequireScope scope="mcp:write" level="component">
         <Button
           variant="primary"
@@ -485,12 +471,12 @@ function McpServersSkeleton() {
   return (
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
       {[1, 2, 3].map((i) => (
-        <div key={i} className="bg-card animate-pulse rounded-xl border p-6">
+        <div key={i} className="bg-card animate-pulse border p-6">
           <div className="mb-4 flex items-center gap-3">
-            <div className="bg-muted h-10 w-10 rounded-lg" />
+            <div className="bg-muted h-10 w-10" />
             <div className="flex-1">
-              <div className="bg-muted mb-2 h-4 w-24 rounded" />
-              <div className="bg-muted h-3 w-32 rounded" />
+              <div className="bg-muted mb-2 h-4 w-24" />
+              <div className="bg-muted h-3 w-32" />
             </div>
           </div>
         </div>
@@ -576,14 +562,14 @@ function NameSection({
   };
 
   return (
-    <div className="rounded-lg border p-6">
-      <Type variant="subheading" className="mb-1">
+    <div className="border p-6">
+      <Text variant="subheading" className="mb-1">
         Display Name
-      </Type>
-      <Type muted small className="mb-4">
+      </Text>
+      <Text muted small className="mb-4">
         Optional name for display purposes such as source listings and
         breadcrumbs. Defaults to URL when empty.
-      </Type>
+      </Text>
       <Stack gap={2}>
         <Input
           value={draft}
@@ -603,15 +589,11 @@ function NameSection({
               onClick={() => void handleSave()}
             >
               {update.isPending ? (
-                <>
-                  <Button.LeftIcon>
-                    <Loader2 className="size-4 animate-spin" />
-                  </Button.LeftIcon>
-                  <Button.Text>Saving</Button.Text>
-                </>
-              ) : (
-                <Button.Text>Save</Button.Text>
-              )}
+                <Button.LeftIcon>
+                  <Loader2 className="size-4 animate-spin" />
+                </Button.LeftIcon>
+              ) : null}
+              <Button.Text>{update.isPending ? "Saving" : "Save"}</Button.Text>
             </Button>
           </RequireScope>
         </Stack>
@@ -644,16 +626,16 @@ function UrlSection({
   const update = useUpdateRemoteMcpServerMutation();
   const verify = useVerifyRemoteMcpUrl(draft);
 
-  const validationError = touched ? validateRemoteMcpUrl(draft) : null;
+  const validationError = touched ? validateMcpServerUrl(draft) : null;
   const dirty = draft.trim() !== initialUrl;
   const saveDisabled =
-    !dirty || update.isPending || validateRemoteMcpUrl(draft) !== null;
+    !dirty || update.isPending || validateMcpServerUrl(draft) !== null;
   const verifyDisabled =
-    update.isPending || !draft.trim() || validateRemoteMcpUrl(draft) !== null;
+    update.isPending || !draft.trim() || validateMcpServerUrl(draft) !== null;
 
   const handleSave = async () => {
     setTouched(true);
-    if (validateRemoteMcpUrl(draft) !== null) return;
+    if (validateMcpServerUrl(draft) !== null) return;
     try {
       const updated = await update.mutateAsync({
         request: {
@@ -691,14 +673,14 @@ function UrlSection({
   };
 
   return (
-    <div className="rounded-lg border p-6">
-      <Type variant="subheading" className="mb-1">
+    <div className="border p-6">
+      <Text variant="subheading" className="mb-1">
         Remote URL
-      </Type>
-      <Type muted small className="mb-4">
+      </Text>
+      <Text muted small className="mb-4">
         The endpoint this source proxies to. Must be an absolute http or https
         URL.
-      </Type>
+      </Text>
       <Stack gap={2}>
         <Input
           value={draft}
@@ -744,15 +726,11 @@ function UrlSection({
               onClick={() => void handleSave()}
             >
               {update.isPending ? (
-                <>
-                  <Button.LeftIcon>
-                    <Loader2 className="size-4 animate-spin" />
-                  </Button.LeftIcon>
-                  <Button.Text>Saving</Button.Text>
-                </>
-              ) : (
-                <Button.Text>Save</Button.Text>
-              )}
+                <Button.LeftIcon>
+                  <Loader2 className="size-4 animate-spin" />
+                </Button.LeftIcon>
+              ) : null}
+              <Button.Text>{update.isPending ? "Saving" : "Save"}</Button.Text>
             </Button>
           </RequireScope>
         </Stack>
@@ -775,14 +753,14 @@ function DangerZoneSection({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   return (
-    <div className="border-destructive/30 rounded-lg border p-6">
-      <Type variant="subheading" className="text-destructive mb-1">
+    <div className="border-destructive/30 border p-6">
+      <Text variant="subheading" className="text-destructive mb-1">
         Danger Zone
-      </Type>
-      <Type muted small className="mb-4">
+      </Text>
+      <Text muted small className="mb-4">
         Deleting this source will also remove the linked MCP servers and their
         endpoints. This action cannot be undone.
-      </Type>
+      </Text>
       <RequireScope scope="mcp:write" level="component">
         <Button
           variant="destructive-primary"

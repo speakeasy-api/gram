@@ -55,7 +55,7 @@ func Describe() Reference {
 
 	return Reference{
 		Variables: []VarRef{
-			{Name: "kind", Type: "string", Description: "Message type: user_message, assistant_message, tool_request, or tool_response. Usually unnecessary — body fields are auto-scoped.", Matchable: false, Fields: nil},
+			{Name: "kind", Type: "string", Description: "Message type: user_message, assistant_message, tool_request, tool_response, or prompt_attachment. Usually unnecessary — body fields are auto-scoped.", Matchable: false, Fields: nil},
 			field("content", "The message's raw text body, any message type."),
 			field("prompt", "The body of a user_message (empty otherwise)."),
 			field("assistant", "The body of an assistant_message (empty otherwise)."),

@@ -217,15 +217,24 @@ class PresidioHandler:
         # try/except so a synchronous failure skips just that finding.
         entity_types: dict[str, int] = {}
         pending: list[_PendingPublish] = []
+        # Occurrence counter per deterministic base id, mirroring the Go
+        # publisher (scanners.StartPublishFindings): identical detections in one
+        # message publish under stable suffixed ids instead of colliding.
+        occurrences: dict[uuid.UUID, int] = {}
         for d in detections:
             entity_types[d.entity_type] = entity_types.get(d.entity_type, 0) + 1
             rule_id = _canonical_rule_id(d.entity_type)
+            base_id = _deterministic_finding_id(message, rule_id, d)
+            finding_id = base_id
+            n = occurrences.get(base_id, 0)
+            if n > 0:
+                finding_id = _duplicate_finding_id(base_id, n)
+            occurrences[base_id] = n + 1
             finding = finding_pb2.Finding(
-                # A UUIDv7 per finding: globally unique with a time-ordered prefix,
-                # so findings sort by creation in storage.
-                id=str(uuid.uuid7()),
+                id=str(finding_id),
                 request_id=message.request_id,
                 chat_message_id=message.chat_message_id,
+                content_part_id=message.content_part_id,
                 project_id=message.project_id,
                 organization_id=message.organization_id,
                 risk_policy_id=message.risk_policy_id,
@@ -239,6 +248,9 @@ class PresidioHandler:
                 tags=["pii"],
                 source=SOURCE_PRESIDIO,
                 confidence=d.confidence,
+                # Presidio scans the request's verbatim content, so the span
+                # offsets index the anchored message/part text.
+                surface="content",
             )
             try:
                 result = self.publisher.publish(finding)
@@ -255,9 +267,11 @@ class PresidioHandler:
     ) -> int:
         """Await each already-fired publish's commit; return how many landed.
 
-        A commit failure is logged and skipped rather than raised: nacking the
-        message would redeliver it and re-publish the findings that already
-        landed, duplicating them (there is no dedup downstream).
+        A commit failure is logged and skipped rather than raised: this is
+        best-effort shadow processing, so a transient publish failure must not
+        redrive the whole scan. Deterministic finding ids mean a redelivery
+        would at least republish under the same ids (ClickHouse dedupes by id),
+        but acking keeps one flaky commit from re-running the scanner.
         """
         published = 0
         for p in pending:
@@ -297,6 +311,49 @@ def _canonical_rule_id(entity_type: str) -> str:
     rule id regardless of which path produced it.
     """
     return "pii." + entity_type.lower()
+
+
+def _deterministic_finding_id(
+    message: presidio_analysis_pb2.PresidioAnalysis,
+    rule_id: str,
+    detection: Detection,
+) -> uuid.UUID:
+    """Derive the finding id from its identity, not a fresh random uuid.
+
+    Byte-for-byte the Go derivation in ``scanners.deterministicFindingID``
+    (server/internal/scanners/publish.go): ``uuid.uuid5(NAMESPACE_URL, name)``
+    is the same SHA-1 construction as Go's ``uuid.NewSHA1(NameSpaceURL, name)``.
+    A redelivered Pub/Sub message then republishes each detection under the id
+    it used the first time, so ClickHouse's id-level dedup collapses the
+    duplicates instead of counting a new row per delivery attempt.
+    """
+    parts = [message.request_id, message.chat_message_id]
+    if message.content_part_id:
+        parts.append(message.content_part_id)
+    parts.extend(
+        [
+            message.project_id,
+            message.organization_id,
+            message.risk_policy_id,
+            str(message.risk_policy_version),
+            SOURCE_PRESIDIO,
+            rule_id,
+            str(detection.start_pos),
+            str(detection.end_pos),
+            detection.match,
+        ]
+    )
+    return uuid.uuid5(uuid.NAMESPACE_URL, "gram:risk:finding:" + "\x00".join(parts))
+
+
+def _duplicate_finding_id(base: uuid.UUID, n: int) -> uuid.UUID:
+    """Id for the n-th repeat (n >= 1) of a colliding detection in one message.
+
+    Mirrors Go's ``duplicateFindingID``: derived from the base id rather than
+    re-joining the parts so it can never collide with any base id, and stable
+    across redeliveries because the repeat ordinal follows detection order.
+    """
+    return uuid.uuid5(uuid.NAMESPACE_URL, f"gram:risk:finding:dup:{base}:{n}")
 
 
 class FindingPublisher(Protocol):

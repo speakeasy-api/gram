@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -18,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -32,6 +34,8 @@ import (
 // can never collide with a user-toolset slug; keep it in lockstep with
 // platformtools.PlatformToolsetURL.
 const PlatformToolsetRoute = "/platform/mcp/{toolsetSlug}"
+
+const platformToolsetMaxBodyBytes = 1 << 20
 
 // ServePlatformToolset is the runtime-only entrypoint for platform toolsets:
 // only the assistant token is accepted, so user OAuth/API keys/chat sessions
@@ -72,10 +76,15 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 		return err
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, platformToolsetMaxBodyBytes)
+
 	bodyBytes, err := io.ReadAll(r.Body)
+	var maxBytesErr *http.MaxBytesError
 	switch {
 	case errors.Is(err, io.EOF) || len(bodyBytes) == 0:
 		return nil
+	case errors.As(err, &maxBytesErr):
+		return oops.E(oops.CodeRequestTooLarge, err, "platform toolset request body exceeds 1 MiB").LogError(ctx, s.logger)
 	case err != nil:
 		return oops.E(oops.CodeBadRequest, err, "failed to read request body").LogError(ctx, s.logger)
 	}
@@ -123,7 +132,9 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 // project is rejected as if the toolset did not exist, rather than relying on
 // downstream tools to refuse the call.
 func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, authCtx *contextvalues.AuthContext) error {
-	if slug != platformtools.ManagedAssistantPlatformToolsetSlug {
+	switch slug {
+	case platformtools.ManagedAssistantPlatformToolsetSlug, platformtools.PlatformMCPReadToolsetSlug:
+	default:
 		return nil
 	}
 
@@ -142,6 +153,26 @@ func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, aut
 
 	if managed.ID != principal.AssistantID {
 		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+	}
+
+	// The Platform MCP read toolset is rollout-gated per organization. The
+	// attachment decision in the assistants service uses the same flag, but
+	// the assistant token lives inside the runner VM, so the serve path
+	// re-checks rather than trusting attachment. Fail closed on evaluation
+	// errors.
+	if slug == platformtools.PlatformMCPReadToolsetSlug {
+		if s.features == nil {
+			return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+		}
+		enabled, err := s.features.IsFlagEnabled(ctx, feature.FlagAssistantPlatformMCP,
+			authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
+		if err != nil {
+			s.logger.WarnContext(ctx, "evaluate assistant platform mcp flag", attr.SlogError(err))
+			return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+		}
+		if !enabled {
+			return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+		}
 	}
 
 	return nil
@@ -308,6 +339,9 @@ func (s *Service) callPlatformToolsetTool(
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  gramEmail,
+		GramChatID: chatIDHeader,
+		// Platform toolsets serve Gram's own tools, never customer functions.
+		MCPClient: toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
 	}
 
 	var mcpURL string
@@ -401,6 +435,10 @@ func (s *Service) callPlatformToolsetTool(
 	}()
 
 	if err := s.toolProxy.Do(ctx, rw, bytes.NewReader(requestBodyBytes), toolCallEnv, plan, logAttrs); err != nil {
+		var shareableErr *oops.ShareableError
+		if errors.As(err, &shareableErr) {
+			return nil, fmt.Errorf("execute platform tool: %w", err)
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute platform tool call").LogError(ctx, logger, attr.SlogToolName(params.Name))
 	}
 	outputBytes = int64(rw.body.Len())

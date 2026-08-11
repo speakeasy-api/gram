@@ -1,0 +1,605 @@
+import { Meta } from "@storybook/addon-docs/blocks";
+import { useState } from "react";
+
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/Accordion";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  ErrorAlert,
+} from "@/components/ui/Alert";
+import { Avatar, AvatarFallback } from "@/components/ui/Avatar";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { CodeSnippet } from "@/components/ui/CodeSnippet";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/Collapsible";
+import {
+  Command,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/Command";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/ContextMenu";
+import { CopyButton } from "@/components/ui/CopyButton";
+import { Dialog } from "@/components/ui/Dialog";
+import { DotRow } from "@/components/ui/DotRow";
+import { DotTable } from "@/components/ui/DotTable";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/Dropdown";
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/Field";
+import { Grid } from "@/components/ui/Grid";
+import { Heading } from "@/components/ui/Heading";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/HoverCard";
+import { Icon } from "@/components/ui/Icon";
+import { Input } from "@/components/ui/Input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/InputGroup";
+import { Label } from "@/components/ui/Label";
+import { Link } from "@/components/ui/Link";
+import { McpIcon } from "@/components/ui/McpIcon";
+import { MoreActions } from "@/components/ui/MoreActions";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/Popover";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
+import { ResizablePanel } from "@/components/ui/ResizablePanel";
+import { SearchBar } from "@/components/ui/SearchBar";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
+import { Separator } from "@/components/ui/Separator";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/Sheet";
+import { Skeleton, SkeletonParagraph } from "@/components/ui/Skeleton";
+import { Slider } from "@/components/ui/Slider";
+import { Spinner } from "@/components/ui/Spinner";
+import { Stack } from "@/components/ui/Stack";
+import { Switch } from "@/components/ui/Switch";
+import { Table } from "@/components/ui/Table";
+import {
+  PageTabsList,
+  PageTabsTrigger,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/Tabs";
+import { TextArea } from "@/components/ui/Textarea";
+import { ThemeSwitcher } from "@/components/ui/ThemeSwitcher";
+import { ToggleButton } from "@/components/ui/SegmentedControl";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/ToggleGroup";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
+import { ViewToggle } from "@/components/ui/ViewToggle";
+import { XYFade } from "@/components/ui/XyFade";
+import { ConfigProvider } from "@/components/ui/context/ConfigContext";
+import { TooltipProvider } from "@/components/ui/Tooltip";
+
+<Meta title="Design System/All Components" />
+
+# All components
+
+Every component in `components/ui`, on one page, so the design-system
+components internalised from Moonshine can be compared side by side with the
+ones Gram already had. Each entry is tagged with where it came from:
+
+- **DS** — internalised from the Moonshine design system.
+- **Gram** — written for the dashboard.
+
+Flip the theme with the toolbar's theme switcher to check both palettes.
+
+Docs pages do not run the preview decorators, so each row supplies the
+providers its components expect.
+
+export const Row = ({ name, origin, children }) => {
+  const [theme, setTheme] = useState("light");
+
+  return (
+    <ConfigProvider theme={theme} setTheme={setTheme}>
+      <TooltipProvider>
+        <div className="flex flex-col gap-2 border-b py-6 last:border-b-0">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-sm">{name}</span>
+            <span className="text-muted-foreground border px-1 font-mono text-[10px] uppercase">
+              {origin}
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-4">{children}</div>
+        </div>
+      </TooltipProvider>
+    </ConfigProvider>
+  );
+};
+
+## Typography
+
+<Row name="Heading" origin="Gram">
+  <Heading variant="h3">Heading three</Heading>
+  <Heading variant="h5">Heading five</Heading>
+</Row>
+
+<Row name="Text" origin="Gram">
+  <Text variant="body">Body copy</Text>
+  <Text variant="small" muted>{"Small muted"}</Text>
+  <Text mono>mono</Text>
+</Row>
+
+<Row name="Link" origin="DS">
+  <Link href="https://docs.getgram.ai">Documentation</Link>
+  <Link
+    href="https://docs.getgram.ai"
+    variant="secondary"
+    iconSuffixName="external-link"
+  >
+    Secondary
+  </Link>
+</Row>
+
+<Row name="Separator" origin="DS">
+  <div className="w-64">
+    <Separator />
+  </div>
+</Row>
+
+## Actions
+
+<Row name="Button" origin="DS">
+  <Button variant="primary">Primary</Button>
+  <Button variant="secondary">Secondary</Button>
+  <Button variant="tertiary">Tertiary</Button>
+  <Button variant="destructive-primary">Destructive</Button>
+  <Button variant="brand">Brand</Button>
+  <Button icon="plus">With icon</Button>
+  <Button disabled>Disabled</Button>
+</Row>
+
+<Row name="Button sizes" origin="DS">
+  <Button size="xs">xs</Button>
+  <Button size="sm">sm</Button>
+  <Button size="md">md</Button>
+  <Button size="lg">lg</Button>
+</Row>
+
+<Row name="CopyButton" origin="Gram">
+  <CopyButton text="https://app.getgram.ai/mcp/petstore" tooltip="Copy URL" />
+</Row>
+
+<Row name="ToggleButton" origin="Gram">
+  <ToggleButton active onClick={() => {}}>{"Day"}</ToggleButton>
+  <ToggleButton active={false} onClick={() => {}}>{"Week"}</ToggleButton>
+</Row>
+
+<Row name="ToggleGroup" origin="Gram">
+  <ToggleGroup type="single" defaultValue="list">
+    <ToggleGroupItem value="list">List</ToggleGroupItem>
+    <ToggleGroupItem value="grid">Grid</ToggleGroupItem>
+  </ToggleGroup>
+</Row>
+
+<Row name="SegmentedControl" origin="Gram">
+  <SegmentedControl
+    value="tokens"
+    onChange={() => {}}
+    options={[
+      { value: "tokens", label: "Tokens" },
+      { value: "cost", label: "Cost" },
+    ]}
+  />
+</Row>
+
+<Row name="ViewToggle" origin="Gram">
+  <ViewToggle value="grid" onChange={() => {}} />
+</Row>
+
+<Row name="MoreActions" origin="Gram">
+  <MoreActions
+    actions={[
+      { label: "Rename", icon: "pencil", onClick: () => {} },
+      { label: "Delete", icon: "trash", onClick: () => {}, destructive: true },
+    ]}
+  />
+</Row>
+
+<Row name="ThemeSwitcher" origin="DS">
+  <ThemeSwitcher />
+</Row>
+
+## Status and feedback
+
+<Row name="Badge" origin="DS">
+  <Badge variant="neutral">neutral</Badge>
+  <Badge variant="information">information</Badge>
+  <Badge variant="success">success</Badge>
+  <Badge variant="warning">warning</Badge>
+  <Badge variant="destructive">destructive</Badge>
+  <Badge variant="neutral" background={false}>
+    outline
+  </Badge>
+</Row>
+
+<Row name="Alert" origin="DS">
+  <div className="flex w-full flex-col gap-2">
+    <Alert variant="info" dismissible={false}>
+      Informational message
+    </Alert>
+    <Alert variant="success" dismissible={false}>
+      Deployment published
+    </Alert>
+    <Alert variant="warning" dismissible={false}>
+      Approaching your plan limit
+    </Alert>
+    <Alert variant="error" dismissible={false}>
+      <AlertTitle>Could not reach the server</AlertTitle>
+      <AlertDescription>Check the URL and try again.</AlertDescription>
+    </Alert>
+    <ErrorAlert error="Request timed out after 30s" />
+  </div>
+</Row>
+
+<Row name="Skeleton" origin="DS">
+  <Skeleton className="h-4 w-40" />
+  <div className="w-64">
+    <SkeletonParagraph lines={3} />
+  </div>
+</Row>
+
+<Row name="Spinner" origin="Gram">
+  <Spinner />
+</Row>
+
+## Forms
+
+<Row name="Input" origin="DS">
+  <div className="w-64">
+    <Input placeholder="Server slug" />
+  </div>
+  <div className="w-64">
+    <Input placeholder="Search" icon="search" />
+  </div>
+</Row>
+
+<Row name="InputGroup" origin="Gram">
+  <InputGroup className="w-72">
+    <InputGroupAddon>https://</InputGroupAddon>
+    <InputGroupInput placeholder="api.example.com" />
+  </InputGroup>
+</Row>
+
+<Row name="TextArea" origin="Gram">
+  <div className="w-72">
+    <TextArea placeholder="Describe this toolset…" rows={3} />
+  </div>
+</Row>
+
+<Row name="Field" origin="Gram">
+  <FieldGroup className="w-72">
+    <Field>
+      <FieldLabel htmlFor="all-slug">Server slug</FieldLabel>
+      <Input id="all-slug" placeholder="petstore" />
+      <FieldDescription>Lowercase, no spaces.</FieldDescription>
+    </Field>
+  </FieldGroup>
+</Row>
+
+<Row name="Label" origin="Gram">
+  <Label>Environment</Label>
+</Row>
+
+<Row name="Checkbox / RadioGroup / Switch" origin="Gram">
+  <Checkbox defaultChecked />
+  <RadioGroup defaultValue="a" className="flex gap-2">
+    <RadioGroupItem value="a" />
+    <RadioGroupItem value="b" />
+  </RadioGroup>
+  <Switch checked onCheckedChange={() => {}} aria-label="Enabled" />
+</Row>
+
+<Row name="Slider" origin="Gram">
+  <div className="w-64">
+    <Slider value={40} onChange={() => {}} />
+  </div>
+</Row>
+
+<Row name="Select" origin="Gram">
+  <Select defaultValue="prod">
+    <SelectTrigger className="w-56">
+      <SelectValue placeholder="Environment" />
+    </SelectTrigger>
+    <SelectContent>
+      <SelectItem value="prod">Production</SelectItem>
+      <SelectItem value="staging">Staging</SelectItem>
+    </SelectContent>
+  </Select>
+</Row>
+
+<Row name="SearchBar" origin="Gram">
+  <div className="w-72">
+    <SearchBar value="" onChange={() => {}} placeholder="Search tools" />
+  </div>
+</Row>
+
+## Overlays
+
+<Row name="Tooltip" origin="DS">
+  <SimpleTooltip tooltip="Publishes to every attached environment">
+    <Button variant="secondary">Hover me</Button>
+  </SimpleTooltip>
+</Row>
+
+<Row name="Popover" origin="Gram">
+  <Popover>
+    <PopoverTrigger asChild>
+      <Button variant="secondary">Filters</Button>
+    </PopoverTrigger>
+    <PopoverContent className="text-sm">Narrow the list.</PopoverContent>
+  </Popover>
+</Row>
+
+<Row name="HoverCard" origin="Gram">
+  <HoverCard>
+    <HoverCardTrigger className="underline underline-offset-4">
+      petstore.listPets
+    </HoverCardTrigger>
+    <HoverCardContent>Returns every visible pet.</HoverCardContent>
+  </HoverCard>
+</Row>
+
+<Row name="DropdownMenu" origin="DS">
+  <DropdownMenu>
+    <DropdownMenuTrigger asChild>
+      <Button variant="secondary">Open menu</Button>
+    </DropdownMenuTrigger>
+    <DropdownMenuContent align="start">
+      <DropdownMenuItem>Account settings</DropdownMenuItem>
+      <DropdownMenuItem>Sign out</DropdownMenuItem>
+    </DropdownMenuContent>
+  </DropdownMenu>
+</Row>
+
+<Row name="ContextMenu" origin="Gram">
+  <ContextMenu>
+    <ContextMenuTrigger className="flex h-16 w-64 items-center justify-center border border-dashed text-sm">
+      Right-click here
+    </ContextMenuTrigger>
+    <ContextMenuContent>
+      <ContextMenuItem>Open</ContextMenuItem>
+      <ContextMenuItem variant="destructive">Delete</ContextMenuItem>
+    </ContextMenuContent>
+  </ContextMenu>
+</Row>
+
+<Row name="Dialog" origin="DS">
+  <Dialog>
+    <Dialog.Trigger asChild>
+      <Button variant="secondary">Open dialog</Button>
+    </Dialog.Trigger>
+    <Dialog.Content>
+      <Dialog.Header>
+        <Dialog.Title>
+          <Heading variant="h4">Regenerate</Heading>
+        </Dialog.Title>
+        <Dialog.Description>This re-runs generation.</Dialog.Description>
+      </Dialog.Header>
+      <Dialog.Footer>
+        <Button>Regenerate</Button>
+      </Dialog.Footer>
+    </Dialog.Content>
+  </Dialog>
+</Row>
+
+<Row name="Sheet" origin="Gram">
+  <Sheet>
+    <Button variant="secondary" disabled>
+      See the Sheet story
+    </Button>
+    <SheetContent>
+      <SheetHeader>
+        <SheetTitle>Edit server</SheetTitle>
+      </SheetHeader>
+    </SheetContent>
+  </Sheet>
+</Row>
+
+## Data display
+
+<Row name="Table" origin="DS">
+  <div className="w-full">
+    <Table
+      columns={[
+        { key: "name", header: "Server", render: (row) => row.name },
+        { key: "tools", header: "Tools", render: (row) => row.tools },
+      ]}
+      data={[
+        { id: "1", name: "Petstore", tools: 12 },
+        { id: "2", name: "Billing", tools: 5 },
+      ]}
+      rowKey={(row) => row.id}
+    />
+  </div>
+</Row>
+
+<Row name="DotTable / DotRow" origin="Gram">
+  <div className="w-full">
+    <DotTable headers={[{ label: "Server" }, { label: "Tools" }]}>
+      <DotRow icon={<Icon name="server" className="size-5" />}>
+        <td className="px-4 py-3 font-medium">Petstore</td>
+        <td className="text-muted-foreground px-4 py-3 text-sm">12 tools</td>
+      </DotRow>
+    </DotTable>
+  </div>
+</Row>
+
+<Row name="Card" origin="DS">
+  <div className="w-80">
+    <Card>
+      <Card.Header>Petstore</Card.Header>
+      <Card.Content>12 tools · updated 2 days ago</Card.Content>
+    </Card>
+  </div>
+</Row>
+
+<Row name="Card.Dashboard" origin="Gram">
+  <div className="w-80">
+    <Card.Dashboard title="Tool calls">
+      <div className="text-3xl font-semibold tabular-nums">12,480</div>
+    </Card.Dashboard>
+  </div>
+</Row>
+
+<Row name="Accordion / Collapsible" origin="Gram">
+  <Accordion type="single" collapsible className="w-72">
+    <AccordionItem value="a">
+      <AccordionTrigger>What is a toolset?</AccordionTrigger>
+      <AccordionContent>A named group of tools.</AccordionContent>
+    </AccordionItem>
+  </Accordion>
+  <Collapsible className="w-72">
+    <CollapsibleTrigger asChild>
+      <Button variant="tertiary">Advanced</Button>
+    </CollapsibleTrigger>
+    <CollapsibleContent className="text-muted-foreground pt-2 text-sm">
+      Timeouts and retries.
+    </CollapsibleContent>
+  </Collapsible>
+</Row>
+
+<Row name="Tabs" origin="Gram">
+  <Tabs defaultValue="tools" className="w-96">
+    <TabsList>
+      <TabsTrigger value="tools">Tools</TabsTrigger>
+      <TabsTrigger value="settings">Settings</TabsTrigger>
+    </TabsList>
+    <TabsContent value="tools" className="pt-3 text-sm">
+      12 tools.
+    </TabsContent>
+    <TabsContent value="settings" className="pt-3 text-sm">
+      Auth.
+    </TabsContent>
+  </Tabs>
+  <Tabs defaultValue="overview" className="w-96">
+    <PageTabsList>
+      <PageTabsTrigger value="overview">Overview</PageTabsTrigger>
+      <PageTabsTrigger value="logs">Logs</PageTabsTrigger>
+    </PageTabsList>
+  </Tabs>
+</Row>
+
+<Row name="Command" origin="Gram">
+  <Command className="w-72 border">
+    <CommandInput placeholder="Search projects…" />
+    <CommandList>
+      <CommandGroup heading="Projects">
+        <CommandItem>Petstore</CommandItem>
+        <CommandItem>Billing</CommandItem>
+      </CommandGroup>
+    </CommandList>
+  </Command>
+</Row>
+
+<Row name="CodeSnippet" origin="DS">
+  <div className="w-96">
+    <CodeSnippet language="bash" code="speakeasy run" copyable />
+  </div>
+</Row>
+
+<Row name="Icon / McpIcon / Avatar" origin="DS / Gram / Gram">
+  <Icon name="server" />
+  <Icon name="settings" />
+  <McpIcon size={24} />
+  <Avatar>
+    <AvatarFallback>GR</AvatarFallback>
+  </Avatar>
+</Row>
+
+## Layout
+
+<Row name="Stack" origin="DS">
+  <Stack direction="horizontal" gap={3}>
+    <div className="bg-card border px-3 py-2 text-sm">One</div>
+    <div className="bg-card border px-3 py-2 text-sm">Two</div>
+  </Stack>
+</Row>
+
+<Row name="Grid" origin="DS">
+  <div className="w-full">
+    <Grid columns={3} gap={3}>
+      {[1, 2, 3].map((n) => (
+        <Grid.Item key={n}>
+          <div className="bg-card border px-3 py-2 text-sm">
+            Item {n}
+          </div>
+        </Grid.Item>
+      ))}
+    </Grid>
+  </div>
+</Row>
+
+<Row name="ResizablePanel" origin="DS">
+  <div className="h-32 w-full border">
+    <ResizablePanel direction="horizontal">
+      <ResizablePanel.Pane defaultSize={40}>
+        <div className="h-full p-3 text-sm">Left</div>
+      </ResizablePanel.Pane>
+      <ResizablePanel.Pane>
+        <div className="h-full p-3 text-sm">Right</div>
+      </ResizablePanel.Pane>
+    </ResizablePanel>
+  </div>
+</Row>
+
+<Row name="XYFade" origin="Gram">
+  <XYFade className="h-24 w-72 overflow-auto border p-3">
+    <div className="flex flex-col gap-1 text-sm">
+      {Array.from({ length: 12 }).map((_, i) => (
+        <div key={i}>Row {i + 1}</div>
+      ))}
+    </div>
+  </XYFade>
+</Row>
+
+Sidebar and Toolbar own the whole page frame, so they live in their own
+stories rather than in this gallery.

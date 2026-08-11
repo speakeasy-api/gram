@@ -19,19 +19,7 @@ import (
 // every additional 50 beyond that. Returns 0 while usage sits below the
 // lowest threshold.
 func highestCrossedTumThreshold(usageTokens, limitTokens int64) int64 {
-	pct := usageTokens * 100 / limitTokens
-	switch {
-	case pct < 50:
-		return 0
-	case pct < 75:
-		return 50
-	case pct < 90:
-		return 75
-	case pct < 100:
-		return 90
-	default:
-		return 100 + (pct-100)/50*50
-	}
+	return highestCrossedAlertThreshold(usageTokens*100/limitTokens, true)
 }
 
 // maybeSendUsageAlert emails the org's billing alert contact when the active

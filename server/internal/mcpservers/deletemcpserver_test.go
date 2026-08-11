@@ -15,6 +15,9 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -77,6 +80,88 @@ func TestDeleteMcpServer(t *testing.T) {
 		ProjectSlugInput: nil,
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func TestDeleteMcpServer_DetachesFromPlugins(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	backendID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		Name:              "detach test server",
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &backendID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	attached, err := plugins.AttachToDefaultPlugin(ctx, tx, plugins.AttachToDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		ToolsetID:      uuid.NullUUID{},
+		McpServerID:    uuid.NullUUID{UUID: uuid.MustParse(created.ID), Valid: true},
+		DisplayName:    "detach test server",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, attached)
+	require.NoError(t, tx.Commit(ctx))
+
+	beforeRemoveCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginServerRemove)
+	require.NoError(t, err)
+
+	err = ti.service.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	servers, err := pluginsrepo.New(ti.conn).ListPluginServers(ctx, attached.PluginID)
+	require.NoError(t, err)
+	require.Empty(t, servers, "deleting the mcp server must soft-delete its plugin attachments")
+
+	afterRemoveCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionPluginServerRemove)
+	require.NoError(t, err)
+	require.Equal(t, beforeRemoveCount+1, afterRemoveCount)
+
+	// The display name is free again: a replacement server with the same name
+	// attaches under the original, un-suffixed name — the scenario where a
+	// stale attachment from a deleted server blocked enabling its successor.
+	replacementBackendID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	replacement, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		Name:              "detach test server",
+		EnvironmentID:     nil,
+		RemoteMcpServerID: &replacementBackendID,
+		ToolsetID:         nil,
+		Visibility:        types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+
+	tx2 := testenv.BeginTx(t, ctx, ti.conn)
+	reattached, err := plugins.AttachToDefaultPlugin(ctx, tx2, plugins.AttachToDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		ToolsetID:      uuid.NullUUID{},
+		McpServerID:    uuid.NullUUID{UUID: uuid.MustParse(replacement.ID), Valid: true},
+		DisplayName:    "detach test server",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, reattached)
+	require.NoError(t, tx2.Commit(ctx))
+	require.Equal(t, "detach test server", reattached.Server.DisplayName)
 }
 
 func TestDeleteMcpServer_NotFound(t *testing.T) {

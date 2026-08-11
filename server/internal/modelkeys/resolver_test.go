@@ -117,7 +117,7 @@ func TestResolveKey_JudgeSlotsResolveIndependently(t *testing.T) {
 	require.Equal(t, "sk-or-risk-policy-override", resolved.Key)
 	require.True(t, resolved.Customer)
 
-	// The prompt-injection classifier has no override and falls back to the
+	// The prompt-injection judge has no override and falls back to the
 	// project default key, not the risk-policy override.
 	resolved, err = resolver.ResolveKey(ctx, orgID, projectID, billing.ModelUsageSourcePromptInjection, openrouter.KeyTypeInternal)
 	require.NoError(t, err)

@@ -1,14 +1,17 @@
-import { ErrorAlert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
+import { ErrorAlert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import { Textarea } from "@/components/moon/textarea";
-import { Type } from "@/components/ui/type";
+import { Text } from "@/components/ui/Text";
 import { useQueryState } from "nuqs";
+import type { ApproveSkillSuggestionResultOutcome } from "@gram/client/models/components/approveskillsuggestionresult.js";
 import type { RecordSkillResult } from "@gram/client/models/components/recordskillresult.js";
 import { useAddSkillVersionMutation } from "@gram/client/react-query/addSkillVersion.js";
+import { useApproveSkillSuggestionMutation } from "@gram/client/react-query/approveSkillSuggestion.js";
 import { useCreateSkillMutation } from "@gram/client/react-query/createSkill.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useId, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   decodeManifestFile,
   manifestByteLength,
@@ -18,7 +21,7 @@ import {
 import { invalidateSkillQueries } from "./invalidate-skill-queries";
 import { SkillValidationErrors } from "./SkillValidationErrors";
 
-export type SkillManifestDialogMode = "create" | "edit";
+export type SkillManifestDialogMode = "create" | "edit" | "approve-suggestion";
 
 const MODE_COPY: Record<
   SkillManifestDialogMode,
@@ -30,9 +33,15 @@ const MODE_COPY: Record<
     submit: "Add skill",
   },
   edit: {
-    title: "Edit skill",
+    title: "Edit SKILL.md",
     description: "Saving records your changes as a new immutable version.",
     submit: "Save new version",
+  },
+  "approve-suggestion": {
+    title: "Edit and approve suggestion",
+    description:
+      "Review the complete proposed SKILL.md. Approval records a new version unless the skill changed, in which case the suggestion is superseded.",
+    submit: "Approve edited suggestion",
   },
 };
 
@@ -41,12 +50,18 @@ export function SkillManifestDialog({
   open,
   onOpenChange,
   skillId,
+  derivedFromVersionId,
+  suggestionId,
+  onSuggestionApproved,
   initialContent = "",
 }: {
   mode: SkillManifestDialogMode;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   skillId?: string;
+  derivedFromVersionId?: string;
+  suggestionId?: string;
+  onSuggestionApproved?: (outcome: ApproveSkillSuggestionResultOutcome) => void;
   initialContent?: string;
 }): JSX.Element {
   const copy = MODE_COPY[mode];
@@ -58,17 +73,25 @@ export function SkillManifestDialog({
   const [content, setContent] = useState(initialContent);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
+  const [reconcilingApproval, setReconcilingApproval] = useState(false);
+  const [approvalUncertain, setApprovalUncertain] = useState(false);
   const [savedResult, setSavedResult] = useState<RecordSkillResult | null>(
     null,
   );
   const [continuing, setContinuing] = useState(false);
   const [persistedSkillId, setPersistedSkillId] = useState<string | null>(null);
+  const [parentVersionId, setParentVersionId] = useState(derivedFromVersionId);
   const [noOpContent, setNoOpContent] = useState<string | null>(null);
   const [readingFile, setReadingFile] = useState(false);
   const fileReadSeq = useRef(0);
   const createMutation = useCreateSkillMutation();
   const addVersionMutation = useAddSkillVersionMutation();
-  const isPending = createMutation.isPending || addVersionMutation.isPending;
+  const approveSuggestionMutation = useApproveSkillSuggestionMutation();
+  const isPending =
+    createMutation.isPending ||
+    addVersionMutation.isPending ||
+    approveSuggestionMutation.isPending;
+  const isBusy = isPending || reconcilingApproval;
   const savedInvalid = savedResult?.version.specValid === false;
   const noChanges = savedResult?.createdVersion === false;
   const unchangedNoOp = noOpContent === content;
@@ -78,18 +101,22 @@ export function SkillManifestDialog({
     setContent(initialContent);
     setFieldError(null);
     setMutationError(null);
+    setReconcilingApproval(false);
+    setApprovalUncertain(false);
     setSavedResult(null);
     setContinuing(false);
     setPersistedSkillId(null);
+    setParentVersionId(derivedFromVersionId);
     setNoOpContent(null);
     fileReadSeq.current += 1;
     setReadingFile(false);
     createMutation.reset();
     addVersionMutation.reset();
+    approveSuggestionMutation.reset();
   };
 
   const handleOpenChange = (nextOpen: boolean): void => {
-    if (!nextOpen && isPending) return;
+    if (!nextOpen && isBusy) return;
     if (!nextOpen) reset();
     onOpenChange(nextOpen);
   };
@@ -101,6 +128,45 @@ export function SkillManifestDialog({
     if (validationError) return;
 
     try {
+      if (mode === "approve-suggestion") {
+        if (!suggestionId) {
+          setMutationError("A suggestion ID is required to approve this edit.");
+          return;
+        }
+        let approval:
+          | Awaited<ReturnType<typeof approveSuggestionMutation.mutateAsync>>
+          | undefined;
+        setReconcilingApproval(true);
+        try {
+          approval = await approveSuggestionMutation.mutateAsync({
+            request: {
+              approveSkillSuggestionRequestBody: { id: suggestionId, content },
+            },
+          });
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "Unable to approve suggestion.";
+          setMutationError(
+            `${message} Approval status may be unknown. Review the refreshed state before retrying.`,
+          );
+          setApprovalUncertain(true);
+        } finally {
+          await invalidateSkillQueries(queryClient).catch(() => undefined);
+          setReconcilingApproval(false);
+        }
+        if (!approval) return;
+        onSuggestionApproved?.(approval.outcome);
+        handleOpenChange(false);
+        if (approval.outcome === "applied") {
+          toast.success("Suggested edit approved");
+        } else {
+          toast.info("Suggestion was superseded because the skill changed");
+        }
+        return;
+      }
+
       let result: RecordSkillResult;
       const versionSkillId = persistedSkillId ?? skillId;
       if (mode === "create" && !versionSkillId) {
@@ -114,13 +180,18 @@ export function SkillManifestDialog({
         }
         result = await addVersionMutation.mutateAsync({
           request: {
-            addSkillVersionRequestBody: { id: versionSkillId, content },
+            addSkillVersionRequestBody: {
+              id: versionSkillId,
+              content,
+              derivedFromVersionId: parentVersionId,
+            },
           },
         });
       }
 
       if (!result.createdVersion) {
         setPersistedSkillId(result.skill.id);
+        setParentVersionId(result.version.id);
         setNoOpContent(content);
         setSavedResult(result);
         return;
@@ -129,6 +200,7 @@ export function SkillManifestDialog({
       await invalidateSkillQueries(queryClient);
       if (!result.version.specValid) {
         setPersistedSkillId(result.skill.id);
+        setParentVersionId(result.version.id);
         setNoOpContent(null);
         setSavedResult(result);
         return;
@@ -196,10 +268,10 @@ export function SkillManifestDialog({
           />
 
           {continuing && (
-            <Type small muted role="status">
+            <Text small muted role="status">
               Future saves add versions to this saved skill. Change the manifest
               before saving again.
-            </Type>
+            </Text>
           )}
 
           <div className="space-y-2">
@@ -213,7 +285,7 @@ export function SkillManifestDialog({
                   type="file"
                   accept=".md,text/markdown,text/plain"
                   className="sr-only"
-                  disabled={isPending || savedInvalid}
+                  disabled={isBusy || savedInvalid}
                   onChange={(event) => {
                     void handleFile(event.currentTarget.files?.[0]);
                     event.currentTarget.value = "";
@@ -225,52 +297,65 @@ export function SkillManifestDialog({
               id={fieldId}
               value={content}
               rows={18}
-              disabled={isPending || savedInvalid}
+              disabled={isBusy || savedInvalid}
               className="min-h-64 resize-y font-mono text-sm"
               aria-invalid={fieldError !== null}
               aria-describedby={`${helpId}${fieldError ? ` ${errorId}` : ""}`}
               onChange={(event) => {
                 setContent(event.currentTarget.value);
                 setFieldError(null);
-                setMutationError(null);
+                if (!approvalUncertain) setMutationError(null);
                 setSavedResult(null);
               }}
             />
             <div className="flex flex-wrap justify-between gap-2">
-              <Type id={helpId} small muted>
+              <Text id={helpId} small muted>
                 UTF-8, up to 65,536 bytes.
-              </Type>
-              <Type small muted className="font-mono">
+              </Text>
+              <Text small muted className="font-mono">
                 {manifestByteLength(content).toLocaleString()} bytes
-              </Type>
+              </Text>
             </div>
             <div id={errorId} aria-live="polite">
               {fieldError && (
-                <Type small className="text-destructive">
+                <Text small className="text-destructive">
                   {fieldError}
-                </Type>
+                </Text>
               )}
             </div>
           </div>
 
           {mutationError && (
-            <ErrorAlert title="Unable to save skill" error={mutationError} />
+            <ErrorAlert
+              title={
+                mode === "approve-suggestion"
+                  ? "Unable to approve suggestion"
+                  : "Unable to save skill"
+              }
+              error={mutationError}
+            />
           )}
         </div>
 
         <Dialog.Footer>
           <Button
-            variant="outline"
-            disabled={isPending}
+            variant="secondary"
+            disabled={isBusy}
             onClick={() => handleOpenChange(false)}
           >
             Cancel
           </Button>
           <Button
             onClick={() => void submit()}
-            disabled={isPending || readingFile || savedInvalid || unchangedNoOp}
+            disabled={
+              isBusy ||
+              readingFile ||
+              savedInvalid ||
+              unchangedNoOp ||
+              approvalUncertain
+            }
           >
-            {isPending ? "Saving..." : submitLabel}
+            {isBusy ? "Saving..." : submitLabel}
           </Button>
         </Dialog.Footer>
       </Dialog.Content>
@@ -295,22 +380,22 @@ function SavedManifestResult({
   if (noChanges) title = "No changes detected.";
   return (
     <div
-      className="border-border bg-muted/30 space-y-3 rounded-lg border p-4"
+      className="border-border bg-muted/30 space-y-3 border p-4"
       role="status"
     >
-      <Type variant="subheading">{title}</Type>
+      <Text variant="subheading">{title}</Text>
       {!noChanges && (
         <SkillValidationErrors errors={result.version.validationErrors} />
       )}
-      <Type small muted>
+      <Text small muted>
         Continue editing keeps this saved skill selected. Future saves create
         immutable versions of it.
-      </Type>
+      </Text>
       <div className="flex flex-wrap gap-2">
         <Button size="sm" onClick={onView}>
           View skill
         </Button>
-        <Button size="sm" variant="outline" onClick={onContinue}>
+        <Button size="sm" variant="secondary" onClick={onContinue}>
           Continue editing
         </Button>
       </div>

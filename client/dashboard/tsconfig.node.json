@@ -14,5 +14,9 @@
     "moduleDetection": "force",
     "noEmit": true
   },
-  "include": ["vite.config.ts"]
+  "include": [
+    "vite.config.ts",
+    ".storybook/main.ts",
+    ".storybook/vite.config.ts"
+  ]
 }

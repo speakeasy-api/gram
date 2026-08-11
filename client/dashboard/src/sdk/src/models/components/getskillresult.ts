@@ -8,16 +8,46 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { Skill, Skill$inboundSchema } from "./skill.js";
+import { SkillAdoption, SkillAdoption$inboundSchema } from "./skilladoption.js";
+import { SkillDrift, SkillDrift$inboundSchema } from "./skilldrift.js";
+import {
+  SkillPromptInjectionFinding,
+  SkillPromptInjectionFinding$inboundSchema,
+} from "./skillpromptinjectionfinding.js";
+import {
+  SkillSightingTimelinePoint,
+  SkillSightingTimelinePoint$inboundSchema,
+} from "./skillsightingtimelinepoint.js";
 import { SkillVersion, SkillVersion$inboundSchema } from "./skillversion.js";
 
 /**
- * An active skill and its derived latest version.
+ * An active skill and its current version.
  */
 export type GetSkillResult = {
   /**
+   * Activation adoption metrics for a skill.
+   */
+  adoption: SkillAdoption;
+  /**
+   * The number of active, non-deleted assistants using the skill.
+   */
+  assistantCount: number;
+  /**
+   * Active-machine convergence against the skill's plugin distribution target.
+   */
+  drift: SkillDrift;
+  /**
    * An immutable version of a skill manifest.
    */
-  latestVersion: SkillVersion;
+  latestVersion?: SkillVersion | undefined;
+  /**
+   * Open prompt-injection findings for the current skill version.
+   */
+  promptInjectionFindings: Array<SkillPromptInjectionFinding>;
+  /**
+   * Daily activations by attributed version in the adoption window.
+   */
+  sightingTimeline: Array<SkillSightingTimelinePoint>;
   /**
    * An active project skill. All API reads return active skills, and archive returns an empty response.
    */
@@ -30,12 +60,22 @@ export const GetSkillResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    latest_version: SkillVersion$inboundSchema,
+    adoption: SkillAdoption$inboundSchema,
+    assistant_count: z.int(),
+    drift: SkillDrift$inboundSchema,
+    latest_version: z.optional(SkillVersion$inboundSchema),
+    prompt_injection_findings: z.array(
+      SkillPromptInjectionFinding$inboundSchema,
+    ),
+    sighting_timeline: z.array(SkillSightingTimelinePoint$inboundSchema),
     skill: Skill$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
+      "assistant_count": "assistantCount",
       "latest_version": "latestVersion",
+      "prompt_injection_findings": "promptInjectionFindings",
+      "sighting_timeline": "sightingTimeline",
     });
   }),
 );

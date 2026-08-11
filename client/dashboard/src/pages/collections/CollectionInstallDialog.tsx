@@ -1,14 +1,16 @@
 import { ProjectAvatar } from "@/components/project-menu";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog } from "@/components/ui/dialog";
-import { Type } from "@/components/ui/type";
+import { Badge } from "@/components/ui/Badge";
+import { Checkbox } from "@/components/ui/Checkbox";
+import { Dialog } from "@/components/ui/Dialog";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import type { PulseMCPServer as CatalogServer } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import type { ProjectEntry } from "@gram/client/models/components/projectentry.js";
-import { Button, Icon, Input } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { Input } from "@/components/ui/Input";
 import {
   ArrowRight,
   Circle,
@@ -17,7 +19,6 @@ import {
   Search,
   Server,
 } from "lucide-react";
-import type { ChangeEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 
 type InstallResult = {
@@ -159,11 +160,11 @@ export function CollectionInstallDialog({
                 </Dialog.Description>
               </Dialog.Header>
               <div className="space-y-4 py-2">
-                <Type small muted>
+                <Text small muted>
                   Project{" "}
                   {Math.min(currentProjectIndex + 1, selectedProjects.length)}{" "}
                   of {selectedProjects.length}
-                </Type>
+                </Text>
                 <ProjectProgressList
                   projects={selectedProjects}
                   resultByProjectSlug={resultByProjectSlug}
@@ -225,7 +226,7 @@ export function CollectionInstallDialog({
                 </Dialog.Description>
               </Dialog.Header>
               <div className="space-y-4 py-2">
-                <div className="rounded-lg border p-3">
+                <div className="border p-3">
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <Server className="h-4 w-4" />
                     {servers.length}{" "}
@@ -245,12 +246,12 @@ export function CollectionInstallDialog({
                     <div className="space-y-1">
                       <div className="flex items-center justify-between gap-2">
                         <label className="text-sm font-medium">Projects</label>
-                        <Type small muted>
+                        <Text small muted>
                           {selectedProjects.length} selected
-                        </Type>
+                        </Text>
                       </div>
                       {selectedProjects.length > 0 && (
-                        <Type small muted className="line-clamp-2">
+                        <Text small muted className="line-clamp-2">
                           {selectedProjects
                             .slice(0, 3)
                             .map((project) => project.name)
@@ -258,7 +259,7 @@ export function CollectionInstallDialog({
                           {selectedProjects.length > 3
                             ? `, +${selectedProjects.length - 3} more`
                             : ""}
-                        </Type>
+                        </Text>
                       )}
                     </div>
                     {projects.length > 5 && (
@@ -267,14 +268,12 @@ export function CollectionInstallDialog({
                         <Input
                           value={projectSearch}
                           placeholder="Search projects..."
-                          onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                            setProjectSearch(e.target.value)
-                          }
+                          onChange={setProjectSearch}
                           className="pl-9"
                         />
                       </div>
                     )}
-                    <div className="max-h-64 overflow-y-auto rounded-lg border">
+                    <div className="max-h-64 overflow-y-auto border">
                       {filteredProjects.length === 0 ? (
                         <div className="flex flex-col items-center py-6 text-center">
                           <Search className="text-muted-foreground mb-2 h-6 w-6" />
@@ -360,7 +359,7 @@ function ProjectProgressList({
           <div
             key={project.slug}
             className={cn(
-              "bg-card flex items-start gap-3 rounded-lg border p-3 transition-colors",
+              "bg-card flex items-start gap-3 border p-3 transition-colors",
               status === "installing" && "border-primary/30 bg-primary/5",
               status === "failed" && "border-destructive/30 bg-destructive/5",
             )}
@@ -371,16 +370,16 @@ function ProjectProgressList({
             />
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-2">
-                <Type className="truncate text-sm font-medium">
+                <Text className="truncate text-sm font-medium">
                   {project.name}
-                </Type>
+                </Text>
                 <ProjectStatusIndicator status={status} />
               </div>
               {result && (result.status !== "succeeded" || result.error) && (
-                <Type small muted className="mt-1 whitespace-pre-line">
+                <Text small muted className="mt-1 whitespace-pre-line">
                   {result.error ||
                     `${result.succeededCount} succeeded, ${result.failedCount} failed.`}
-                </Type>
+                </Text>
               )}
               {result?.firstCompletedMcpServerParam && (
                 <ProjectConfigureLink
@@ -411,14 +410,14 @@ function ResultStat({
   }[tone];
 
   return (
-    <div className={cn("rounded-lg border p-3 text-center", toneClass)}>
+    <div className={cn("border p-3 text-center", toneClass)}>
       <div className="flex items-center justify-center gap-1.5">
         <StatusCircleIcon tone={tone} />
         <span className="text-lg font-semibold">{value}</span>
       </div>
-      <Type small muted className="block text-center">
+      <Text small muted className="block text-center">
         {label}
-      </Type>
+      </Text>
     </div>
   );
 }
@@ -426,7 +425,7 @@ function ResultStat({
 function InstallResultBadge({ status }: { status: InstallResult["status"] }) {
   if (status === "succeeded") {
     return (
-      <Badge variant="secondary" className="text-emerald-600">
+      <Badge variant="neutral" className="text-emerald-600">
         <StatusCircleIcon tone="success" size="sm" />
         Succeeded
       </Badge>
@@ -434,7 +433,7 @@ function InstallResultBadge({ status }: { status: InstallResult["status"] }) {
   }
 
   return (
-    <Badge variant="outline" className="text-destructive">
+    <Badge variant="neutral" className="text-destructive">
       <StatusCircleIcon tone="danger" size="sm" />
       Failed
     </Badge>
@@ -444,7 +443,7 @@ function InstallResultBadge({ status }: { status: InstallResult["status"] }) {
 function ProjectStatusIndicator({ status }: { status: ProjectInstallStatus }) {
   if (status === "pending") {
     return (
-      <Badge variant="outline" className="text-muted-foreground">
+      <Badge variant="neutral" className="text-muted-foreground">
         <Circle className="mr-1 h-3 w-3" />
         Pending
       </Badge>
@@ -453,7 +452,7 @@ function ProjectStatusIndicator({ status }: { status: ProjectInstallStatus }) {
 
   if (status === "installing") {
     return (
-      <Badge variant="secondary" className="text-primary">
+      <Badge variant="neutral" className="text-primary">
         <Loader2 className="mr-1 h-3 w-3 animate-spin" />
         Installing
       </Badge>

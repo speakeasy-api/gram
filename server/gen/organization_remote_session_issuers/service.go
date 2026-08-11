@@ -47,6 +47,39 @@ type Service interface {
 	// project-specific, or omit it to make it organization-level (project_id NULL,
 	// inherited by every project). Requires org:admin.
 	MoveIssuer(context.Context, *MoveIssuerPayload) (res *types.RemoteSessionIssuer, err error)
+	// Authoritative impact summary for migrating a remote_session_issuer's clients
+	// onto another issuer: the clients that would move, the affected MCP servers,
+	// and every blocker (endpoint mismatches, conflicting MCP-server bindings).
+	// Requires org:read.
+	GetIssuerMigratePreflight(context.Context, *GetIssuerMigratePreflightPayload) (res *OrganizationIssuerMigratePreflight, err error)
+	// Consolidate two remote_session_issuers that point at the same upstream
+	// authorization server: re-point every client from the source issuer onto the
+	// target issuer, then soft-delete the source. Existing remote sessions are
+	// preserved, so no user re-authenticates. Both issuers must belong to the
+	// caller's organization and agree on issuer, token_endpoint, and
+	// authorization_endpoint. The issuer identifier is compared canonically, so
+	// two spellings differing only by a trailing slash or an explicit default port
+	// count as the same upstream; the two endpoints are compared literally. The
+	// target may not be narrower in scope than the source: a project-specific
+	// issuer may migrate onto an issuer in the same project or onto an
+	// organization-level issuer, and an organization-level issuer may migrate onto
+	// another organization-level issuer. Requires org:admin.
+	MigrateIssuer(context.Context, *MigrateIssuerPayload) (res *MigrateOrganizationRemoteSessionIssuerResult, err error)
+	// Hit an upstream issuer's RFC 8414 .well-known/oauth-authorization-server
+	// document and return a draft suitable for
+	// organizationRemoteSessionIssuers.create. Keyed by issuer URL; no record need
+	// exist and nothing is persisted. The organization-scoped counterpart of
+	// remoteSessionIssuers.fetchMetadata, so creating an organization-level issuer
+	// no longer has to borrow an unrelated project's scope. Requires org:admin.
+	FetchIssuerMetadata(context.Context, *FetchIssuerMetadataPayload) (res *types.RemoteSessionIssuerDraft, err error)
+	// Re-fetch an existing remote_session_issuer's RFC 8414 metadata document and
+	// persist the discovered values. Keyed by issuer id; serves both
+	// organizational and project-specific issuers in the caller's organization.
+	// Only RFC 8414-derived columns are written — endpoints, the *_supported
+	// arrays, client_id_metadata_document_supported, and the documentation URLs.
+	// Gram behavior and display fields (oidc, passthrough, name, slug, logo,
+	// client setup documentation) are left alone. Requires org:admin.
+	RefreshIssuerMetadata(context.Context, *RefreshIssuerMetadataPayload) (res *types.RemoteSessionIssuerRefresh, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -69,7 +102,7 @@ const ServiceName = "organizationRemoteSessionIssuers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"createIssuer", "listIssuers", "getIssuer", "getIssuerDeletePreflight", "updateIssuer", "deleteIssuer", "moveIssuer"}
+var MethodNames = [11]string{"createIssuer", "listIssuers", "getIssuer", "getIssuerDeletePreflight", "updateIssuer", "deleteIssuer", "moveIssuer", "getIssuerMigratePreflight", "migrateIssuer", "fetchIssuerMetadata", "refreshIssuerMetadata"}
 
 // CreateIssuerPayload is the payload type of the
 // organizationRemoteSessionIssuers service createIssuer method.
@@ -137,11 +170,31 @@ type DeleteIssuerPayload struct {
 	ApikeyToken  *string
 }
 
+// FetchIssuerMetadataPayload is the payload type of the
+// organizationRemoteSessionIssuers service fetchIssuerMetadata method.
+type FetchIssuerMetadataPayload struct {
+	// Issuer URL to fetch metadata for (e.g. https://login.linear.com).
+	Issuer       string
+	SessionToken *string
+	ApikeyToken  *string
+}
+
 // GetIssuerDeletePreflightPayload is the payload type of the
 // organizationRemoteSessionIssuers service getIssuerDeletePreflight method.
 type GetIssuerDeletePreflightPayload struct {
 	// The remote_session_issuer id.
 	ID           string
+	SessionToken *string
+	ApikeyToken  *string
+}
+
+// GetIssuerMigratePreflightPayload is the payload type of the
+// organizationRemoteSessionIssuers service getIssuerMigratePreflight method.
+type GetIssuerMigratePreflightPayload struct {
+	// The remote_session_issuer to migrate away from.
+	SourceID string
+	// The remote_session_issuer to migrate onto.
+	TargetID     string
 	SessionToken *string
 	ApikeyToken  *string
 }
@@ -174,6 +227,30 @@ type ListOrganizationRemoteSessionIssuersResult struct {
 	NextCursor *string
 }
 
+// MigrateIssuerPayload is the payload type of the
+// organizationRemoteSessionIssuers service migrateIssuer method.
+type MigrateIssuerPayload struct {
+	// The remote_session_issuer to migrate away from; soft-deleted on success.
+	SourceID string
+	// The remote_session_issuer to migrate onto; survives and adopts the source's
+	// clients.
+	TargetID     string
+	SessionToken *string
+	ApikeyToken  *string
+}
+
+// MigrateOrganizationRemoteSessionIssuerResult is the result type of the
+// organizationRemoteSessionIssuers service migrateIssuer method.
+type MigrateOrganizationRemoteSessionIssuerResult struct {
+	// The surviving target remote_session_issuer.
+	Issuer *types.RemoteSessionIssuer
+	// Number of remote_session_clients re-pointed from the source issuer to the
+	// target issuer. Zero when the source had no active clients.
+	ClientsMigrated int
+	// TRUE when the source issuer was soft-deleted.
+	SourceDeleted bool
+}
+
 // MoveIssuerPayload is the payload type of the
 // organizationRemoteSessionIssuers service moveIssuer method.
 type MoveIssuerPayload struct {
@@ -195,6 +272,30 @@ type OrganizationIssuerDeletePreflight struct {
 	McpServerNames []string
 }
 
+// OrganizationIssuerMigratePreflight is the result type of the
+// organizationRemoteSessionIssuers service getIssuerMigratePreflight method.
+type OrganizationIssuerMigratePreflight struct {
+	// Number of non-deleted remote_session_clients that would be re-pointed from
+	// the source issuer to the target issuer.
+	ClientCount int
+	// Display names of MCP servers attached to the source issuer's clients.
+	McpServerNames []string
+	// Names of the authorization-server metadata fields (issuer, token_endpoint,
+	// authorization_endpoint) that differ between source and target. Non-empty
+	// blocks the migration.
+	EndpointMismatches []string
+	// Display names of MCP servers where both the source and the target issuer
+	// already have a client bound. Non-empty blocks the migration; detach one
+	// client per listed server and retry.
+	ConflictingMcpServerNames []string
+	// Non-blocking divergences (oidc, passthrough, scopes_supported). The target
+	// issuer's values become authoritative for the migrated clients.
+	Warnings []string
+	// TRUE when the migration would succeed: no endpoint mismatches and no
+	// conflicting MCP-server bindings.
+	CanMigrate bool
+}
+
 // An organization-administrator view of a remote_session_issuer: the issuer
 // plus its associated client count and (for project-specific issuers) the
 // owning project's name.
@@ -206,6 +307,15 @@ type OrganizationRemoteSessionIssuer struct {
 	// The owning project's name. Empty for organizational (project_id NULL)
 	// issuers.
 	ProjectName *string
+}
+
+// RefreshIssuerMetadataPayload is the payload type of the
+// organizationRemoteSessionIssuers service refreshIssuerMetadata method.
+type RefreshIssuerMetadataPayload struct {
+	// The remote_session_issuer id.
+	ID           string
+	SessionToken *string
+	ApikeyToken  *string
 }
 
 // UpdateIssuerPayload is the payload type of the

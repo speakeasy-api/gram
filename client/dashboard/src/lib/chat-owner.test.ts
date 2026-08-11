@@ -1,6 +1,11 @@
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import { describe, expect, it } from "vitest";
-import { chatOwnerLabel, resolveChatOwner } from "./chat-owner";
+import {
+  chatOwnerDisplay,
+  chatOwnerLabel,
+  resolveChatOwner,
+  unresolvedChatOwnerTooltip,
+} from "./chat-owner";
 
 function member(overrides: Partial<AccessMember>): AccessMember {
   return {
@@ -49,6 +54,14 @@ describe("resolveChatOwner", () => {
   it("returns undefined before members load", () => {
     expect(resolveChatOwner(undefined, { userId: "gram-1" })).toBeUndefined();
   });
+
+  it("matches external emails regardless of casing", () => {
+    const owner = resolveChatOwner(members, {
+      externalUserId: "Ada@Example.com",
+    });
+
+    expect(owner?.name).toBe("Ada");
+  });
 });
 
 describe("chatOwnerLabel", () => {
@@ -87,5 +100,52 @@ describe("chatOwnerLabel", () => {
     expect(
       chatOwnerLabel(members, { externalUserId: "user_opaque" }, currentUser),
     ).toBe("user_opaque");
+  });
+
+  it("labels the current user as You regardless of email casing", () => {
+    expect(
+      chatOwnerLabel(
+        members,
+        { externalUserId: "Grace@Example.com" },
+        {
+          id: "gram-2",
+          email: "grace@example.com",
+        },
+      ),
+    ).toBe("You");
+  });
+});
+
+describe("chatOwnerDisplay", () => {
+  it("marks known identities as resolved", () => {
+    expect(
+      chatOwnerDisplay(members, { userId: "gram-1" }, currentUser),
+    ).toEqual({ label: "Ada", resolved: true });
+  });
+
+  it("marks fallback labels as unresolved", () => {
+    expect(
+      chatOwnerDisplay(members, { externalUserId: "user_opaque" }, currentUser),
+    ).toEqual({ label: "user_opaque", resolved: false });
+  });
+});
+
+describe("unresolvedChatOwnerTooltip", () => {
+  it("explains an unmatched provider-reported user ID", () => {
+    expect(
+      unresolvedChatOwnerTooltip({ externalUserId: "user_opaque" }),
+    ).toContain("the user ID reported by the AI provider is shown instead");
+  });
+
+  it("explains an unmatched resolved user without claiming no identity was reported", () => {
+    expect(unresolvedChatOwnerTooltip({ userId: "gram-gone" })).toContain(
+      "couldn't be matched to a member",
+    );
+  });
+
+  it("explains a session with no reported identity", () => {
+    expect(unresolvedChatOwnerTooltip({})).toContain(
+      "didn't report a user identity",
+    );
   });
 });

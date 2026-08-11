@@ -15,12 +15,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func newProvisioningCore(t *testing.T, conn *pgxpool.Pool) *ServiceCore {
 	t.Helper()
 	logger := testenv.NewLogger(t)
-	return NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(logger), nil)
+	return NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendFlyIO}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger())
 }
 
 func newProvisioningProject(t *testing.T, conn *pgxpool.Pool, slug string) uuid.UUID {
@@ -127,7 +128,7 @@ func TestDisableManagedAssistantTearsDown(t *testing.T) {
 	enabled, err := core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1")
 	require.NoError(t, err)
 
-	require.NoError(t, core.DisableManagedAssistant(ctx, projectID))
+	require.NoError(t, core.DisableManagedAssistant(ctx, projectID, urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"), nil))
 
 	// Mapping is gone — resolver reports no managed assistant.
 	_, err = core.GetManagedAssistant(ctx, projectID)
@@ -139,7 +140,7 @@ func TestDisableManagedAssistantTearsDown(t *testing.T) {
 	require.Empty(t, all)
 
 	// Disabling again is a no-op.
-	require.NoError(t, core.DisableManagedAssistant(ctx, projectID))
+	require.NoError(t, core.DisableManagedAssistant(ctx, projectID, urn.NewPrincipal(urn.PrincipalTypeUser, "test-user"), nil))
 
 	// Re-enabling provisions a fresh managed assistant.
 	reenabled, err := core.EnableManagedAssistant(ctx, "org-test", projectID, "user-1")

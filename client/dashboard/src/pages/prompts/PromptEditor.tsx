@@ -1,7 +1,7 @@
 import { InputField } from "@/components/moon/input-field";
 import { Textarea } from "@/components/moon/textarea";
-import { Button } from "@speakeasy-api/moonshine";
-import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/Button";
+import { Label } from "@/components/ui/Label";
 import { MUSTACHE_VAR_REGEX, PROMPT_NAME_PATTERN } from "@/lib/constants";
 import { assert, cn } from "@/lib/utils";
 import { PromptTemplate } from "@gram/client/models/components/prompttemplate.js";
@@ -184,10 +184,12 @@ export function PromptEditor({
                     className="absolute top-4 right-4"
                     type="button"
                     variant="tertiary"
+                    aria-label="Exit full screen"
                     onClick={() => setFullScreenEditor(false)}
                   >
-                    <span className="sr-only">Exit full screen</span>
-                    <X className="h-4 w-4" />
+                    <Button.Icon>
+                      <X aria-hidden="true" className="h-4 w-4" />
+                    </Button.Icon>
                   </Button>
                 ) : null}
                 {!fullScreenEditor ? (
@@ -195,13 +197,15 @@ export function PromptEditor({
                     className="absolute right-4 bottom-4"
                     type="button"
                     variant="tertiary"
+                    aria-label="Enter full screen"
                     onClick={() => {
                       setFullScreenEditor(true);
                       document.querySelector("textarea")?.focus();
                     }}
                   >
-                    <span className="sr-only">Enter full screen</span>
-                    <Fullscreen className="h-4 w-4" />
+                    <Button.Icon>
+                      <Fullscreen aria-hidden="true" className="h-4 w-4" />
+                    </Button.Icon>
                   </Button>
                 ) : null}
               </div>
@@ -229,10 +233,10 @@ export function PromptEditor({
                   })}
                 </ul>
               ) : (
-                <p className="text-muted-foreground border-muted-foreground/20 rounded-md border border-dashed p-4 text-sm">
+                <p className="text-muted-foreground border-muted-foreground/20 border border-dashed p-4 text-sm">
                   No arguments found in prompt template. You can add these using
                   the syntax{" "}
-                  <code className="rounded bg-red-50 px-1 py-0.5 text-xs text-red-600">
+                  <code className="bg-red-50 px-1 py-0.5 text-xs text-red-600">
                     {"{{argument_name}}"}
                   </code>
                   .
@@ -243,19 +247,21 @@ export function PromptEditor({
         </div>
         <div className="pt-6">
           {error ? (
-            <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3">
+            <div className="mb-4 border border-red-200 bg-red-50 p-3">
               <p className="text-sm text-red-700">{error.message}</p>
             </div>
           ) : null}
           <Button type="submit" disabled={isPending} size="md">
             {isPending ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Button.LeftIcon>
+                <Loader2 className="h-4 w-4 animate-spin" />
+              </Button.LeftIcon>
             ) : null}
-            {isPending ? "Saving..." : "Save Prompt"}
+            <Button.Text>{isPending ? "Saving..." : "Save Prompt"}</Button.Text>
           </Button>
         </div>
       </form>
-      <aside className="bg-secondary sticky top-8 w-80 flex-shrink-0 space-y-6 rounded-lg p-6">
+      <aside className="bg-secondary sticky top-8 w-80 flex-shrink-0 space-y-6 p-6">
         <div>
           <h3 className="mb-2 text-sm font-medium">Prompt Templates</h3>
           <p className="text-muted-foreground text-sm">
@@ -268,7 +274,7 @@ export function PromptEditor({
           <p className="text-muted-foreground mb-2 text-sm">
             Add variables to your prompt using double curly braces:
           </p>
-          <code className="bg-muted block rounded px-2 py-1 text-xs">
+          <code className="bg-muted block px-2 py-1 text-xs">
             {"{{variable_name}}"}
           </code>
         </div>

@@ -22,6 +22,7 @@ Gram API Description: Gram is the tools platform for AI agents
 * [sdk](#sdk)
   * [SDK Installation](#sdk-installation)
   * [SDK Example Usage](#sdk-example-usage)
+  * [Authentication](#authentication)
   * [Available Resources and Operations](#available-resources-and-operations)
   * [Retries](#retries)
   * [Error Handling](#error-handling)
@@ -61,7 +62,12 @@ import (
 func main() {
 	ctx := context.Background()
 
-	s := sdk.New()
+	s := sdk.New(
+		sdk.WithSecurity(components.Security{
+			ApikeyHeaderGramKey:          "<YOUR_API_KEY_HERE>",
+			ProjectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
+		}),
+	)
 
 	res, err := s.Hooks.Ingest(ctx, operations.IngestHookEventRequest{
 		Body: components.IngestRequestBody{
@@ -85,6 +91,98 @@ func main() {
 ```
 <!-- End SDK Example Usage [usage] -->
 
+<!-- Start Authentication [security] -->
+## Authentication
+
+### Per-Client Security Schemes
+
+This SDK supports the following security schemes globally:
+
+| Name                           | Type   | Scheme  |
+| ------------------------------ | ------ | ------- |
+| `ApikeyHeaderGramKey`          | apiKey | API key |
+| `ProjectSlugHeaderGramProject` | apiKey | API key |
+
+You can set the security parameters through the `WithSecurity` option when initializing the SDK client instance. The selected scheme will be used by default to authenticate with the API for all operations that support it. For example:
+```go
+package main
+
+import (
+	"context"
+	"github.com/speakeasy-api/gram/hooks/sdk"
+	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
+	"github.com/speakeasy-api/gram/hooks/sdk/models/operations"
+	"log"
+)
+
+func main() {
+	ctx := context.Background()
+
+	s := sdk.New(
+		sdk.WithSecurity(components.Security{
+			ApikeyHeaderGramKey:          "<YOUR_API_KEY_HERE>",
+			ProjectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
+		}),
+	)
+
+	res, err := s.Hooks.Ingest(ctx, operations.IngestHookEventRequest{
+		Body: components.IngestRequestBody{
+			Event: components.HookIngestEvent{
+				Type: components.TypeSkillActivated,
+			},
+			SchemaVersion: "<value>",
+			Source: components.HookIngestSource{
+				Adapter: "<value>",
+			},
+		},
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	if res.IngestHookResult != nil {
+		// handle response
+	}
+}
+
+```
+
+### Per-Operation Security Schemes
+
+Some operations in this SDK require the security scheme to be specified at the request level. For example:
+```go
+package main
+
+import (
+	"context"
+	"github.com/speakeasy-api/gram/hooks/sdk"
+	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
+	"github.com/speakeasy-api/gram/hooks/sdk/models/operations"
+	"log"
+)
+
+func main() {
+	ctx := context.Background()
+
+	s := sdk.New()
+
+	res, err := s.Hooks.SkillFeedback(ctx, operations.SkillFeedbackRequest{
+		Body: components.SkillFeedbackPayload{
+			Outcome:       components.OutcomeMisleading,
+			SchemaVersion: components.SkillFeedbackPayloadSchemaVersionHookSkillFeedbackV1,
+			Skill:         "<value>",
+		},
+	}, sdk.Pointer(operations.SkillFeedbackSecurity{}))
+	if err != nil {
+		log.Fatal(err)
+	}
+	if res != nil {
+		// handle response
+	}
+}
+
+```
+<!-- End Authentication [security] -->
+
 <!-- Start Available Resources and Operations [operations] -->
 ## Available Resources and Operations
 
@@ -94,6 +192,8 @@ func main() {
 ### [Hooks](docs/sdks/hooks/README.md)
 
 * [Ingest](docs/sdks/hooks/README.md#ingest) - ingest hooks
+* [SkillFeedback](docs/sdks/hooks/README.md#skillfeedback) - skillFeedback hooks
+* [UploadSkillContent](docs/sdks/hooks/README.md#uploadskillcontent) - uploadSkillContent hooks
 
 </details>
 <!-- End Available Resources and Operations [operations] -->
@@ -120,7 +220,12 @@ import (
 func main() {
 	ctx := context.Background()
 
-	s := sdk.New()
+	s := sdk.New(
+		sdk.WithSecurity(components.Security{
+			ApikeyHeaderGramKey:          "<YOUR_API_KEY_HERE>",
+			ProjectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
+		}),
+	)
 
 	res, err := s.Hooks.Ingest(ctx, operations.IngestHookEventRequest{
 		Body: components.IngestRequestBody{
@@ -181,6 +286,10 @@ func main() {
 				},
 				RetryConnectionErrors: false,
 			}),
+		sdk.WithSecurity(components.Security{
+			ApikeyHeaderGramKey:          "<YOUR_API_KEY_HERE>",
+			ProjectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
+		}),
 	)
 
 	res, err := s.Hooks.Ingest(ctx, operations.IngestHookEventRequest{
@@ -238,7 +347,12 @@ import (
 func main() {
 	ctx := context.Background()
 
-	s := sdk.New()
+	s := sdk.New(
+		sdk.WithSecurity(components.Security{
+			ApikeyHeaderGramKey:          "<YOUR_API_KEY_HERE>",
+			ProjectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
+		}),
+	)
 
 	res, err := s.Hooks.Ingest(ctx, operations.IngestHookEventRequest{
 		Body: components.IngestRequestBody{
@@ -298,6 +412,10 @@ func main() {
 
 	s := sdk.New(
 		sdk.WithServerURL("https://app.getgram.ai"),
+		sdk.WithSecurity(components.Security{
+			ApikeyHeaderGramKey:          "<YOUR_API_KEY_HERE>",
+			ProjectSlugHeaderGramProject: "<YOUR_API_KEY_HERE>",
+		}),
 	)
 
 	res, err := s.Hooks.Ingest(ctx, operations.IngestHookEventRequest{

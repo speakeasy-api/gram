@@ -1,10 +1,10 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/components/ui/sidebar", () => ({
+vi.mock("@/components/ui/Sidebar", () => ({
   SidebarTrigger: () => <button data-testid="sidebar-trigger" />,
 }));
-vi.mock("@/components/ui/separator", () => ({
+vi.mock("@/components/ui/Separator", () => ({
   Separator: () => <hr data-testid="separator" />,
 }));
 vi.mock("./onboarding-banner.tsx", () => ({

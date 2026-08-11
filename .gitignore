@@ -8,6 +8,7 @@ mise.local.toml
 mise.*.local.toml
 flags.local.csv
 *.tsbuildinfo
+.eslintcache
 node_modules
 bin
 junit-report.xml
@@ -83,6 +84,8 @@ flagged-chats.jsonl
 .superpowers/
 # Stray riskjudgebench build/output artifacts (compiled binary + bench result dumps)
 /server/riskjudgebench
+# Stray skillsuggestbench binary from `go build ./cmd/skillsuggestbench` without -o
+/server/skillsuggestbench
 /results.json
 /finalists.json
 
@@ -94,3 +97,25 @@ __pycache__/
 
 .playwright-mcp
 .playwright-cli
+
+# Riptide artifacts (cloud-synced)
+.humanlayer/tasks/
+
+# Local kubernetes manifests (developer scratch)
+.local-k8s/
+
+# Personal impeccable ignores (.impeccable/config.json is shared and committed)
+.impeccable/config.local.json
+
+# Storybook build output
+storybook-static/
+
+# Stray browser-automation screenshots at repo root (agents must use .playwright-cli/)
+/*.png
+
+# Removed orphaned Speakeasy build output (#4947); the SDK generates into
+# client/dashboard/src/sdk — nothing may reappear here.
+/client/sdk/
+
+# Compiled one-off backfill binary; build with `go build ./cmd/workos-backfill`.
+/server/workos-backfill

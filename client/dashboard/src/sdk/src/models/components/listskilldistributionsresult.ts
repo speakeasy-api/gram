@@ -8,18 +8,18 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
-  SkillDistribution,
-  SkillDistribution$inboundSchema,
-} from "./skilldistribution.js";
+  PluginSkillDistribution,
+  PluginSkillDistribution$inboundSchema,
+} from "./pluginskilldistribution.js";
 
 /**
  * A page of active plugin skill distributions for the current project.
  */
 export type ListSkillDistributionsResult = {
   /**
-   * The active skill distributions in this page.
+   * The active plugin skill distributions in this page.
    */
-  distributions: Array<SkillDistribution>;
+  distributions: Array<PluginSkillDistribution>;
   /**
    * Cursor for the next page; absent when exhausted.
    */
@@ -32,7 +32,7 @@ export const ListSkillDistributionsResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    distributions: z.array(SkillDistribution$inboundSchema),
+    distributions: z.array(PluginSkillDistribution$inboundSchema),
     next_cursor: z.optional(z.string()),
   }),
   z.transform((v) => {

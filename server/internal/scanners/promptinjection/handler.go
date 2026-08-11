@@ -42,15 +42,25 @@ func NewHandler(logger *slog.Logger, meterProvider metric.MeterProvider, realSca
 }
 
 func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptInjectionAnalysis, _ gcp.MessageMetadata) error {
-	gateReason := h.gate.Decide(ctx, m.GetProjectId(), m.GetChatMessageId())
+	anchorID := m.GetChatMessageId()
+	if anchorID == "" {
+		anchorID = m.GetContentPartId()
+	}
+	gateReason := h.gate.Decide(ctx, m.GetProjectId(), anchorID)
 	engine := gateReason.Engine()
-	trace.SpanFromContext(ctx).SetAttributes(
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
 		attr.RiskScanRequestID(m.GetRequestId()),
-		attr.MessageID(m.GetChatMessageId()),
+		attr.MessageID(anchorID),
 		attr.AuthOrganizationID(m.GetOrganizationId()),
 		attr.RiskScanEngine(engine),
 		attr.RiskScanGateReason(gateReason),
 	)
+	// message.id carries whichever anchor resolved, so a part-anchored scan also
+	// gets the dedicated key: without it those spans are unsearchable by part.
+	if partID := m.GetContentPartId(); partID != "" {
+		span.SetAttributes(attr.ChatContentPartID(partID))
+	}
 
 	scanner := h.stubScanner
 	if engine == scanners.AsyncScanEngineReal {
@@ -63,9 +73,19 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptInjectionAnalysis,
 		return fmt.Errorf("scan prompt injection: %w", err)
 	}
 
+	// The scan proceeds on empty content as long as the judge message has
+	// content (tool name/calls), but the finding it produces has an empty
+	// match, no fingerprint, and nothing revealable — pure noise as a
+	// persisted row. Skip publishing; the classification (judge telemetry)
+	// and the handled metrics below are unaffected.
+	if m.GetContent() == "" {
+		findings = nil
+	}
+
 	_, _, err = scanners.PublishFindings(ctx, h.logger, h.findingsPub, scanners.FindingMetadata{
 		RequestID:         m.GetRequestId(),
 		ChatMessageID:     m.GetChatMessageId(),
+		ContentPartID:     m.GetContentPartId(),
 		ProjectID:         m.GetProjectId(),
 		OrganizationID:    m.GetOrganizationId(),
 		RiskPolicyID:      m.GetRiskPolicyId(),

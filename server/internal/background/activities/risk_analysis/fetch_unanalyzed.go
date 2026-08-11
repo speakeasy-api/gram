@@ -50,8 +50,9 @@ type FetchUnanalyzedArgs struct {
 }
 
 type FetchUnanalyzedResult struct {
-	MessageIDs []uuid.UUID
-	Policies   []PolicyForAnalysis
+	MessageIDs     []uuid.UUID
+	ContentPartIDs []uuid.UUID
+	Policies       []PolicyForAnalysis
 }
 
 func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *FetchUnanalyzedResult, err error) {
@@ -74,12 +75,13 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 
 	if len(policies) == 0 {
 		return &FetchUnanalyzedResult{
-			MessageIDs: nil,
-			Policies:   nil,
+			MessageIDs:     nil,
+			ContentPartIDs: nil,
+			Policies:       nil,
 		}, nil
 	}
 
-	ids, err := queries.FetchUnanalyzedMessageIDs(ctx, repo.FetchUnanalyzedMessageIDsParams{
+	messageIDs, err := queries.FetchUnanalyzedMessageIDs(ctx, repo.FetchUnanalyzedMessageIDsParams{
 		ProjectID:    uuid.NullUUID{UUID: args.ProjectID, Valid: true},
 		IDLowerBound: args.IDLowerBound,
 		BatchLimit:   args.BatchLimit,
@@ -87,15 +89,26 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 	if err != nil {
 		return nil, fmt.Errorf("fetch unanalyzed message IDs: %w", err)
 	}
+	contentPartIDs, err := queries.FetchUnanalyzedContentPartIDs(ctx, repo.FetchUnanalyzedContentPartIDsParams{
+		ProjectID:    uuid.NullUUID{UUID: args.ProjectID, Valid: true},
+		IDLowerBound: args.IDLowerBound,
+		BatchLimit:   args.BatchLimit,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("fetch unanalyzed content part IDs: %w", err)
+	}
 
 	span.SetAttributes(
-		attribute.Int("risk.unanalyzed_count", len(ids)),
+		attribute.Int("risk.unanalyzed_count", len(messageIDs)+len(contentPartIDs)),
+		attribute.Int("risk.unanalyzed_message_count", len(messageIDs)),
+		attribute.Int("risk.unanalyzed_content_part_count", len(contentPartIDs)),
 		attribute.Int("risk.active_policies", len(policies)),
 	)
 
 	result := &FetchUnanalyzedResult{
-		MessageIDs: ids,
-		Policies:   make([]PolicyForAnalysis, len(policies)),
+		MessageIDs:     messageIDs,
+		ContentPartIDs: contentPartIDs,
+		Policies:       make([]PolicyForAnalysis, len(policies)),
 	}
 	for i, p := range policies {
 		result.Policies[i] = PolicyForAnalysis{

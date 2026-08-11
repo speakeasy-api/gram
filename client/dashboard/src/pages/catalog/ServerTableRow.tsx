@@ -1,8 +1,9 @@
 import { ToolCollectionBadge } from "@/components/tool-collection-badge";
-import { DotRow } from "@/components/ui/dot-row";
-import { Type } from "@/components/ui/type";
+import { DotRow } from "@/components/ui/DotRow";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
-import { Badge, Button } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { ArrowRight, Check } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "react-router";
@@ -59,25 +60,25 @@ export function ServerTableRow({
       {/* Selection */}
       <td className="w-10 px-3 py-3">
         {isSelected ? (
-          <div className="flex size-5 items-center justify-center rounded-full bg-[#1DA1F2]">
-            <Check className="size-3 text-white" strokeWidth={5} />
+          <div className="bg-foreground flex size-4 items-center justify-center">
+            <Check className="text-background size-3" strokeWidth={3} />
           </div>
         ) : (
-          <div className="border-muted-foreground/30 size-5 rounded-full border-2" />
+          <div className="border-border size-4 border" />
         )}
       </td>
 
       {/* Name */}
       <td className="px-3 py-3">
         <div className="flex items-center gap-2">
-          <Type
+          <Text
             variant="subheading"
             as="div"
             className="group-hover:text-primary truncate text-sm transition-colors"
             title={displayName}
           >
             {displayName}
-          </Type>
+          </Text>
           {isAdded && (
             <Badge variant="success">
               <Badge.Text>Added</Badge.Text>
@@ -94,16 +95,16 @@ export function ServerTableRow({
 
       {/* Version */}
       <td className="px-3 py-3">
-        <Type small muted>
+        <Text small muted>
           v{server.version}
-        </Type>
+        </Text>
       </td>
 
       {/* Description */}
       <td className="max-w-xs px-3 py-3">
-        <Type small muted className="block truncate">
+        <Text small muted className="block truncate">
           {server.description}
-        </Type>
+        </Text>
       </td>
 
       {/* Tools */}

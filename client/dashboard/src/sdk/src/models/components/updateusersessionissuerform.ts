@@ -21,6 +21,20 @@ export type UpdateUserSessionIssuerFormAuthnChallengeMode = ClosedEnum<
 >;
 
 /**
+ * Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Gram's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged. Once set, the issuer can never return to the unset state — it can only be moved between explicit modes.
+ */
+export const UpdateUserSessionIssuerFormClientIdMetadataAdmissionMode = {
+  Disabled: "disabled",
+  Presets: "presets",
+  Open: "open",
+} as const;
+/**
+ * Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Gram's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged. Once set, the issuer can never return to the unset state — it can only be moved between explicit modes.
+ */
+export type UpdateUserSessionIssuerFormClientIdMetadataAdmissionMode =
+  ClosedEnum<typeof UpdateUserSessionIssuerFormClientIdMetadataAdmissionMode>;
+
+/**
  * Form for updating a user_session_issuer. All non-id fields are optional patches.
  */
 export type UpdateUserSessionIssuerForm = {
@@ -31,11 +45,17 @@ export type UpdateUserSessionIssuerForm = {
     | UpdateUserSessionIssuerFormAuthnChallengeMode
     | undefined;
   /**
+   * Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits. 'presets' admits Gram's curated catalog plus this issuer's custom URLs; 'open' admits any spec-valid document; 'disabled' admits none and stops advertising CIMD support. Omit to leave unchanged. Once set, the issuer can never return to the unset state — it can only be moved between explicit modes.
+   */
+  clientIdMetadataAdmissionMode?:
+    | UpdateUserSessionIssuerFormClientIdMetadataAdmissionMode
+    | undefined;
+  /**
    * The user_session_issuer id.
    */
   id: string;
   /**
-   * Issued user session lifetime, in hours.
+   * Maximum issued user session lifetime, in hours.
    */
   sessionDurationHours?: number | undefined;
   /**
@@ -51,8 +71,15 @@ export const UpdateUserSessionIssuerFormAuthnChallengeMode$outboundSchema:
   );
 
 /** @internal */
+export const UpdateUserSessionIssuerFormClientIdMetadataAdmissionMode$outboundSchema:
+  z.ZodMiniEnum<
+    typeof UpdateUserSessionIssuerFormClientIdMetadataAdmissionMode
+  > = z.enum(UpdateUserSessionIssuerFormClientIdMetadataAdmissionMode);
+
+/** @internal */
 export type UpdateUserSessionIssuerForm$Outbound = {
   authn_challenge_mode?: string | undefined;
+  client_id_metadata_admission_mode?: string | undefined;
   id: string;
   session_duration_hours?: number | undefined;
   slug?: string | undefined;
@@ -67,6 +94,9 @@ export const UpdateUserSessionIssuerForm$outboundSchema: z.ZodMiniType<
     authnChallengeMode: z.optional(
       UpdateUserSessionIssuerFormAuthnChallengeMode$outboundSchema,
     ),
+    clientIdMetadataAdmissionMode: z.optional(
+      UpdateUserSessionIssuerFormClientIdMetadataAdmissionMode$outboundSchema,
+    ),
     id: z.string(),
     sessionDurationHours: z.optional(z.int()),
     slug: z.optional(z.string()),
@@ -74,6 +104,7 @@ export const UpdateUserSessionIssuerForm$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       authnChallengeMode: "authn_challenge_mode",
+      clientIdMetadataAdmissionMode: "client_id_metadata_admission_mode",
       sessionDurationHours: "session_duration_hours",
     });
   }),

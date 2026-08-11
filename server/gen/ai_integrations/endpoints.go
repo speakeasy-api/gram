@@ -16,9 +16,12 @@ import (
 
 // Endpoints wraps the "aiIntegrations" service endpoints.
 type Endpoints struct {
-	GetConfig    goa.Endpoint
-	UpsertConfig goa.Endpoint
-	DeleteConfig goa.Endpoint
+	GetConfig          goa.Endpoint
+	UpsertConfig       goa.Endpoint
+	DeleteConfig       goa.Endpoint
+	ListSchedules      goa.Endpoint
+	SetScheduleEnabled goa.Endpoint
+	RetrySchedule      goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "aiIntegrations" service with
@@ -27,9 +30,12 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		GetConfig:    NewGetConfigEndpoint(s, a.APIKeyAuth),
-		UpsertConfig: NewUpsertConfigEndpoint(s, a.APIKeyAuth),
-		DeleteConfig: NewDeleteConfigEndpoint(s, a.APIKeyAuth),
+		GetConfig:          NewGetConfigEndpoint(s, a.APIKeyAuth),
+		UpsertConfig:       NewUpsertConfigEndpoint(s, a.APIKeyAuth),
+		DeleteConfig:       NewDeleteConfigEndpoint(s, a.APIKeyAuth),
+		ListSchedules:      NewListSchedulesEndpoint(s, a.APIKeyAuth),
+		SetScheduleEnabled: NewSetScheduleEnabledEndpoint(s, a.APIKeyAuth),
+		RetrySchedule:      NewRetryScheduleEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -39,6 +45,9 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetConfig = m(e.GetConfig)
 	e.UpsertConfig = m(e.UpsertConfig)
 	e.DeleteConfig = m(e.DeleteConfig)
+	e.ListSchedules = m(e.ListSchedules)
+	e.SetScheduleEnabled = m(e.SetScheduleEnabled)
+	e.RetrySchedule = m(e.RetrySchedule)
 }
 
 // NewGetConfigEndpoint returns an endpoint function that calls the method
@@ -143,5 +152,110 @@ func NewDeleteConfigEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 			return nil, err
 		}
 		return nil, s.DeleteConfig(ctx, p)
+	}
+}
+
+// NewListSchedulesEndpoint returns an endpoint function that calls the method
+// "listSchedules" of service "aiIntegrations".
+func NewListSchedulesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListSchedulesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"consumer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListSchedules(ctx, p)
+	}
+}
+
+// NewSetScheduleEnabledEndpoint returns an endpoint function that calls the
+// method "setScheduleEnabled" of service "aiIntegrations".
+func NewSetScheduleEnabledEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetScheduleEnabledPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SetScheduleEnabled(ctx, p)
+	}
+}
+
+// NewRetryScheduleEndpoint returns an endpoint function that calls the method
+// "retrySchedule" of service "aiIntegrations".
+func NewRetryScheduleEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RetrySchedulePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.RetrySchedule(ctx, p)
 	}
 }

@@ -12,9 +12,12 @@ import { skillsList } from "../funcs/skillsList.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import {
+  Classifications,
   ListSkillsRequest,
   ListSkillsResponse,
   ListSkillsSecurity,
+  Sort,
+  SourceKinds,
 } from "../models/operations/listskills.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
@@ -81,6 +84,11 @@ export function buildSkillsQuery(
     queryKey: queryKeySkills({
       cursor: request?.cursor,
       limit: request?.limit,
+      search: request?.search,
+      sourceKinds: request?.sourceKinds,
+      classifications: request?.classifications,
+      tags: request?.tags,
+      sort: request?.sort,
       gramSession: request?.gramSession,
       gramKey: request?.gramKey,
       gramProject: request?.gramProject,
@@ -122,6 +130,11 @@ export function buildSkillsInfiniteQuery(
     queryKey: queryKeySkillsInfinite({
       cursor: request?.cursor,
       limit: request?.limit,
+      search: request?.search,
+      sourceKinds: request?.sourceKinds,
+      classifications: request?.classifications,
+      tags: request?.tags,
+      sort: request?.sort,
       gramSession: request?.gramSession,
       gramKey: request?.gramKey,
       gramProject: request?.gramProject,
@@ -160,6 +173,11 @@ export function queryKeySkills(
   parameters: {
     cursor?: string | undefined;
     limit?: number | undefined;
+    search?: string | undefined;
+    sourceKinds?: Array<SourceKinds> | undefined;
+    classifications?: Array<Classifications> | undefined;
+    tags?: Array<string> | undefined;
+    sort?: Sort | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
     gramProject?: string | undefined;
@@ -172,6 +190,11 @@ export function queryKeySkillsInfinite(
   parameters: {
     cursor?: string | undefined;
     limit?: number | undefined;
+    search?: string | undefined;
+    sourceKinds?: Array<SourceKinds> | undefined;
+    classifications?: Array<Classifications> | undefined;
+    tags?: Array<string> | undefined;
+    sort?: Sort | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
     gramProject?: string | undefined;

@@ -2,6 +2,7 @@ import { type FC, memo, type ReactNode } from "react";
 import ReactMarkdown, {
   defaultUrlTransform,
   type Components,
+  type Options,
 } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -26,7 +27,16 @@ export interface MarkdownProps {
    * system (e.g. a Moonshine `Link`). Falls back to a plain `<a>` when omitted.
    */
   linkComponent?: MarkdownLinkComponent;
+  /**
+   * remark plugins to run in addition to GFM, for callers rendering markdown
+   * that uses syntax GFM does not cover. Keep the array in a module-level
+   * constant: `Markdown` is memoized, so a fresh array on every render defeats
+   * that.
+   */
+  extraRemarkPlugins?: Options["remarkPlugins"];
 }
+
+const GFM_ONLY: Options["remarkPlugins"] = [remarkGfm];
 
 /**
  * Standalone markdown renderer that mirrors the look of the live
@@ -43,17 +53,21 @@ const MarkdownImpl: FC<MarkdownProps> = ({
   className,
   resolveLink,
   linkComponent,
+  extraRemarkPlugins,
 }) => {
   // Preserve hrefs the resolver claims (e.g. a `gram:…` entity scheme) that
   // react-markdown would otherwise strip as an unknown protocol; sanitize the
   // rest with the default transform.
   const urlTransform = (url: string) =>
     resolveLink && resolveLink(url) !== null ? url : defaultUrlTransform(url);
+  const remarkPlugins = extraRemarkPlugins
+    ? [remarkGfm, ...extraRemarkPlugins]
+    : GFM_ONLY;
   return (
     <MarkdownLinkProvider value={{ resolveLink, LinkComponent: linkComponent }}>
       <div className={cn("aui-md", className)}>
         <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
+          remarkPlugins={remarkPlugins}
           urlTransform={urlTransform}
           components={markdownComponents}
         >

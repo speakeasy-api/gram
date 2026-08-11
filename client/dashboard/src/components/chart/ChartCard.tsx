@@ -1,4 +1,6 @@
-import { cn, Icon } from "@speakeasy-api/moonshine";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Icon } from "@/components/ui/Icon";
+import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 import { ChartButton } from "./ChartButton";
 
@@ -7,6 +9,18 @@ export type ChartCardProps = {
   chartId: string;
   hasData?: boolean;
   expandable?: boolean;
+  /**
+   * When true the card renders a skeleton in place of its body. Lets a panel
+   * show its own loading state so dashboards can render each card as its data
+   * arrives instead of blocking on the slowest query.
+   */
+  loading?: boolean;
+  /**
+   * When true the card renders an error state in place of its body. Symmetric
+   * with `loading` so a panel whose own query failed reads as failed rather
+   * than as empty ("no data"). Ignored while `loading` is true.
+   */
+  error?: boolean;
   expandedChart: string | null;
   onExpand: (id: string | null) => void;
   isZoomed?: boolean;
@@ -19,6 +33,8 @@ export function ChartCard({
   chartId,
   hasData = true,
   expandable = true,
+  loading = false,
+  error = false,
   expandedChart,
   onExpand,
   isZoomed,
@@ -26,16 +42,20 @@ export function ChartCard({
   children,
 }: ChartCardProps): ReactNode {
   const isExpanded = expandedChart === chartId;
-  const showExpandButton = expandable && (hasData || isExpanded);
+  // Always keep the button on an expanded card so its Minimize (collapse) escape
+  // survives the card later entering loading/error; on a collapsed card, only
+  // offer Expand once it has data and is neither loading nor erroring.
+  const showExpandButton =
+    expandable && (isExpanded || (!loading && !error && hasData));
   return (
     <div
       className={cn(
-        "border-border bg-card rounded-lg border p-4 transition-all duration-200 ease-in-out",
+        "border-border bg-card border p-4 transition-all duration-200 ease-in-out",
         expandedChart && !isExpanded && "hidden",
       )}
     >
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text font-semibold">{title}</h3>
+        <h3 className="text-eyebrow">{title}</h3>
         <div className="flex items-center gap-2">
           {isZoomed && onResetZoom && (
             <ChartButton onClick={onResetZoom} ariaLabel="Reset zoom">
@@ -57,7 +77,19 @@ export function ChartCard({
           )}
         </div>
       </div>
-      {children}
+      {loading ? (
+        <Skeleton className="h-[240px] w-full" />
+      ) : error ? (
+        <div
+          role="alert"
+          className="text-muted-foreground flex h-[240px] w-full flex-col items-center justify-center gap-2 text-sm"
+        >
+          <Icon name="triangle-alert" className="size-5" />
+          <span>Couldn&apos;t load this data</span>
+        </div>
+      ) : (
+        children
+      )}
     </div>
   );
 }

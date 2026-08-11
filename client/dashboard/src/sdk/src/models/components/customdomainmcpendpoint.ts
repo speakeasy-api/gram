@@ -17,6 +17,10 @@ export type CustomDomainMcpEndpoint = {
    */
   id: string;
   /**
+   * Whether this endpoint is mapped to the custom-domain root
+   */
+  isDomainRoot: boolean;
+  /**
    * The ID of the parent MCP server
    */
   mcpServerId: string;
@@ -53,6 +57,7 @@ export const CustomDomainMcpEndpoint$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     id: z.string(),
+    is_domain_root: z.boolean(),
     mcp_server_id: z.string(),
     mcp_server_name: z.optional(z.string()),
     mcp_server_slug: z.optional(z.string()),
@@ -63,6 +68,7 @@ export const CustomDomainMcpEndpoint$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "is_domain_root": "isDomainRoot",
       "mcp_server_id": "mcpServerId",
       "mcp_server_name": "mcpServerName",
       "mcp_server_slug": "mcpServerSlug",

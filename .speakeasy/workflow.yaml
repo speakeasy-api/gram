@@ -1,5 +1,5 @@
 workflowVersion: 1.0.0
-speakeasyVersion: pinned
+speakeasyVersion: 1.791.1
 sources:
     Gram-Internal:
         inputs:
@@ -23,7 +23,7 @@ sources:
             - location: overlays/goa.yaml
         transformations:
             - filterOperations:
-                operations: ingestHookEvent
+                operations: ingestHookEvent,uploadSkillContent,skillFeedback
             - removeUnused: true
         output: .speakeasy/openapi-hooks.yaml
 targets:

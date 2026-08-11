@@ -29,6 +29,15 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { parseTOML } from "confbox";
 import { getPort } from "get-port-please";
 
+/**
+ * Ports of services that are shared across ALL worktrees (see
+ * compose.shared.yml). These must NOT be remapped: every worktree reaches the
+ * single shared stack on the same default host port. Skipping a port here also
+ * skips any env var that depends on it (e.g. PRESIDIO_ANALYZER_URL), so those
+ * keep their mise.toml defaults too.
+ */
+const SHARED_PORT_ENV_VARS = new Set(["PRESIDIO_PORT"]);
+
 async function main() {
   const config = parseTOML(await readFileSync("mise.toml", "utf-8")) as {
     env: Record<string, string>;
@@ -48,8 +57,8 @@ async function main() {
     }
   }
 
-  const portEnvVars = Object.keys(config.env).filter((key) =>
-    key.endsWith("_PORT"),
+  const portEnvVars = Object.keys(config.env).filter(
+    (key) => key.endsWith("_PORT") && !SHARED_PORT_ENV_VARS.has(key),
   );
 
   const emitted = new Map<string, string>();

@@ -17,6 +17,10 @@ type Skill struct {
 	Summary        pgtype.Text
 	SourceKind     string
 	Classification string
+	Tags           []string
+	FirstSeenAt    pgtype.Timestamptz
+	LastSeenAt     pgtype.Timestamptz
+	SeenCount      int64
 	ArchivedAt     pgtype.Timestamptz
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
@@ -36,6 +40,121 @@ type SkillDistribution struct {
 	UpdatedAt       pgtype.Timestamptz
 }
 
+type SkillEditSuggestion struct {
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+	SkillID            uuid.UUID
+	BaseVersionID      uuid.UUID
+	Rationale          string
+	Status             string
+	ScoredSessionCount int64
+	ApprovedByUserID   pgtype.Text
+	ApprovedAt         pgtype.Timestamptz
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+}
+
+type SkillEditSuggestionChange struct {
+	ID           uuid.UUID
+	ProjectID    uuid.UUID
+	SuggestionID uuid.UUID
+	ProposedDiff string
+	Rationale    string
+	Position     int32
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
+type SkillEfficacyEvaluation struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	Surface         string
+	SessionID       string
+	ChatID          uuid.UUID
+	SkillID         uuid.UUID
+	SkillVersionID  uuid.UUID
+	CanonicalSha256 string
+	ObservedAt      pgtype.Timestamptz
+	State           string
+	ReservedOn      pgtype.Date
+	ClaimToken      uuid.NullUUID
+	Attempts        int32
+	LastError       pgtype.Text
+	ScoredAt        pgtype.Timestamptz
+	FailedAt        pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
+type SkillEfficacySetting struct {
+	OrganizationID   string
+	Enabled          bool
+	PerSkillDailyCap int32
+	OrgDailyCap      int32
+	NewVersionBurst  int32
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
+type SkillFeedback struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	SkillID        uuid.NullUUID
+	SkillVersionID uuid.NullUUID
+	SkillName      string
+	Source         string
+	Outcome        string
+	Note           pgtype.Text
+	SessionID      pgtype.Text
+	UserID         pgtype.Text
+	UserEmail      pgtype.Text
+	ReviewedAt     pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+}
+
+type SkillObservation struct {
+	ID                 uuid.UUID
+	ProjectID          uuid.UUID
+	IdempotencyKey     pgtype.Text
+	Provider           string
+	UserID             pgtype.Text
+	UserEmail          pgtype.Text
+	Hostname           pgtype.Text
+	SessionID          pgtype.Text
+	SkillName          string
+	Source             pgtype.Text
+	SourceLevel        pgtype.Text
+	SourcePath         pgtype.Text
+	RawSha256          pgtype.Text
+	SeenAt             pgtype.Timestamptz
+	SkillID            uuid.NullUUID
+	SkillVersionID     uuid.NullUUID
+	ReconciledAt       pgtype.Timestamptz
+	MetricsSyncedAt    pgtype.Timestamptz
+	EfficacyEnqueuedAt pgtype.Timestamptz
+	ReconcileErrorCode pgtype.Text
+	CreatedAt          pgtype.Timestamptz
+}
+
+type SkillRawHash struct {
+	ProjectID       uuid.UUID
+	RawSha256       string
+	CanonicalSha256 string
+	CreatedAt       pgtype.Timestamptz
+}
+
+type SkillShareLink struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	SkillID         uuid.UUID
+	Token           string
+	CreatedByUserID string
+	RevokedAt       pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
 type SkillVersion struct {
 	ID               uuid.UUID
 	SkillID          uuid.UUID
@@ -47,5 +166,14 @@ type SkillVersion struct {
 	SpecValid        bool
 	ValidationErrors []byte
 	CreatedAt        pgtype.Timestamptz
+	PromotedAt       pgtype.Timestamptz
 	CreatedByUserID  string
+}
+
+type SkillVersionOrigin struct {
+	SkillVersionID uuid.UUID
+	SkillID        uuid.UUID
+	ProjectID      uuid.UUID
+	Origin         string
+	CreatedAt      pgtype.Timestamptz
 }

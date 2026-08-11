@@ -1,3 +1,5 @@
+import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
+
 export type PolicyAction = "flag" | "block" | "warn";
 
 export type PolicyMessageType =
@@ -91,7 +93,7 @@ export const RULE_CATEGORY_META: Record<
   shadow_mcp: {
     label: "Shadow MCP",
     description:
-      "Tool calls in Cursor, Claude Code, and Codex that don't come from a Speakeasy-issued MCP server. Requires Speakeasy hooks to be installed on the agent.",
+      "Tool calls that don't come from a Speakeasy-issued MCP server. Requires Speakeasy hooks to be installed on the agent.",
     icon: "shield-off",
   },
   destructive_tool: {
@@ -1606,8 +1608,7 @@ export const DETECTION_RULES: Record<RuleCategory, DetectionRule[]> = {
     {
       id: "identity.personal_account",
       title: "Personal AI account",
-      description:
-        "When on, flags any session signed in with a personal AI account (e.g. an individual Claude plan) instead of your organization's team account. Needs no configuration.",
+      description: `When on, flags any session signed in with a personal AI account (e.g. an individual Claude plan) instead of your organization's team account. Needs no configuration. ${PERSONAL_ACCOUNT_GOVERNANCE_NOTE}`,
       source: "account_identity",
     },
     {

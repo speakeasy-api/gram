@@ -55,6 +55,8 @@ type CreateMcpEndpointResponseBody struct {
 	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
 	// The slug
 	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Whether this endpoint is mapped to its custom-domain root
+	IsDomainRoot bool `form:"is_domain_root" json:"is_domain_root" xml:"is_domain_root"`
 	// When the MCP endpoint was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the MCP endpoint was last updated
@@ -75,6 +77,8 @@ type GetMcpEndpointResponseBody struct {
 	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
 	// The slug
 	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Whether this endpoint is mapped to its custom-domain root
+	IsDomainRoot bool `form:"is_domain_root" json:"is_domain_root" xml:"is_domain_root"`
 	// When the MCP endpoint was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the MCP endpoint was last updated
@@ -101,6 +105,8 @@ type UpdateMcpEndpointResponseBody struct {
 	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
 	// The slug
 	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Whether this endpoint is mapped to its custom-domain root
+	IsDomainRoot bool `form:"is_domain_root" json:"is_domain_root" xml:"is_domain_root"`
 	// When the MCP endpoint was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the MCP endpoint was last updated
@@ -1257,6 +1263,8 @@ type McpEndpointResponseBody struct {
 	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
 	// The slug
 	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Whether this endpoint is mapped to its custom-domain root
+	IsDomainRoot bool `form:"is_domain_root" json:"is_domain_root" xml:"is_domain_root"`
 	// When the MCP endpoint was created
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the MCP endpoint was last updated
@@ -1272,6 +1280,7 @@ func NewCreateMcpEndpointResponseBody(res *types.McpEndpoint) *CreateMcpEndpoint
 		CustomDomainID: res.CustomDomainID,
 		McpServerID:    res.McpServerID,
 		Slug:           string(res.Slug),
+		IsDomainRoot:   res.IsDomainRoot,
 		CreatedAt:      res.CreatedAt,
 		UpdatedAt:      res.UpdatedAt,
 	}
@@ -1287,6 +1296,7 @@ func NewGetMcpEndpointResponseBody(res *types.McpEndpoint) *GetMcpEndpointRespon
 		CustomDomainID: res.CustomDomainID,
 		McpServerID:    res.McpServerID,
 		Slug:           string(res.Slug),
+		IsDomainRoot:   res.IsDomainRoot,
 		CreatedAt:      res.CreatedAt,
 		UpdatedAt:      res.UpdatedAt,
 	}
@@ -1321,6 +1331,7 @@ func NewUpdateMcpEndpointResponseBody(res *types.McpEndpoint) *UpdateMcpEndpoint
 		CustomDomainID: res.CustomDomainID,
 		McpServerID:    res.McpServerID,
 		Slug:           string(res.Slug),
+		IsDomainRoot:   res.IsDomainRoot,
 		CreatedAt:      res.CreatedAt,
 		UpdatedAt:      res.UpdatedAt,
 	}

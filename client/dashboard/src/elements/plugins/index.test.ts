@@ -8,6 +8,11 @@ describe("recommended", () => {
     expect(recommended).toHaveLength(2);
     expect(recommended).toContain(chart);
     expect(recommended).toContain(generativeUI);
+    expect(chart.prompt).toContain("AVAILABLE CHART TYPES");
+    expect(chart.prompt).toContain("BarChart");
+    expect(generativeUI.prompt).toContain("```ui code blocks");
+    expect(generativeUI.prompt).toContain("frameless container");
+    expect(generativeUI.prompt).toContain("0.25 = 25%");
   });
 
   it("is usable as a plain array", () => {

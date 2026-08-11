@@ -226,6 +226,62 @@ func (q *Queries) ListEnvironmentConfigs(ctx context.Context, mcpMetadataID uuid
 	return items, nil
 }
 
+const setDefaultLogoIfUnset = `-- name: SetDefaultLogoIfUnset :one
+INSERT INTO mcp_metadata (
+    mcp_server_id,
+    project_id,
+    logo_id
+) VALUES ($1, $2, $3)
+ON CONFLICT (mcp_server_id) WHERE mcp_server_id IS NOT NULL
+DO UPDATE SET logo_id = EXCLUDED.logo_id,
+              updated_at = clock_timestamp()
+WHERE mcp_metadata.logo_id IS NULL
+RETURNING id,
+          toolset_id,
+          mcp_server_id,
+          project_id,
+          external_documentation_url,
+          external_documentation_text,
+          logo_id,
+          instructions,
+          header_display_names,
+          default_environment_id,
+          installation_override_url,
+          created_at,
+          updated_at
+`
+
+type SetDefaultLogoIfUnsetParams struct {
+	McpServerID uuid.NullUUID
+	ProjectID   uuid.UUID
+	LogoID      uuid.NullUUID
+}
+
+// Used for system-assigned defaults (e.g. an unproxied server's favicon)
+// rather than a user-initiated edit: only ever touches logo_id, and only
+// when unset, so it can never race a concurrent user edit into clobbering
+// their branding/install-page settings the way a full-record upsert would.
+func (q *Queries) SetDefaultLogoIfUnset(ctx context.Context, arg SetDefaultLogoIfUnsetParams) (McpMetadatum, error) {
+	row := q.db.QueryRow(ctx, setDefaultLogoIfUnset, arg.McpServerID, arg.ProjectID, arg.LogoID)
+	var i McpMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.ToolsetID,
+		&i.McpServerID,
+		&i.ProjectID,
+		&i.ExternalDocumentationUrl,
+		&i.ExternalDocumentationText,
+		&i.LogoID,
+		&i.Instructions,
+		&i.HeaderDisplayNames,
+		&i.DefaultEnvironmentID,
+		&i.InstallationOverrideUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const upsertEnvironmentConfig = `-- name: UpsertEnvironmentConfig :one
 INSERT INTO mcp_environment_configs (
     project_id,

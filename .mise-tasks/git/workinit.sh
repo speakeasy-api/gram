@@ -55,3 +55,13 @@ for line in $remap; do
 done
 
 echo ✅ Updated all port mappings for new worktree
+
+# Ports are randomized, so `wt list`'s URL column can't derive them from the
+# branch name. Store the dashboard port as a per-branch var for it to read.
+# Best-effort: this is display metadata, and the script runs under `set -e` as a
+# blocking pre-start hook, so a failure here must not stop the worktree from
+# being set up. stderr is left alone so the reason is still visible.
+site_port=$(printf '%s\n' $remap | sed -n 's/^GRAM_SITE_PORT=//p')
+if [ -n "$site_port" ] && command -v wt &> /dev/null; then
+  wt config state vars set "siteport=${site_port}" > /dev/null || true
+fi

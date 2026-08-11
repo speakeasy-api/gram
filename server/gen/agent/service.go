@@ -20,17 +20,26 @@ import (
 // 'agent' scope also satisfies these endpoints (it implies 'agent_user'), so
 // existing installs keep working during the transition.
 type Service interface {
-	// Resolve the marketplaces and plugins assigned to the enrolled user. The
-	// device agent reconciles these into whichever AI developer tools it manages
-	// (Claude Code today), so each tool's own plugin manager fetches and installs
-	// the bundles. The response is tool-agnostic: it names what to install, and
-	// each tool's syncer decides how to render it into that tool's native
-	// configuration.
+	// Resolve the marketplaces, plugins, and optional organization configuration
+	// assigned to the enrolled user. The device agent reconciles these into the AI
+	// developer tools it manages. Organization configuration is delivered on this
+	// existing poll so agents do not need a second control-plane request.
 	GetPlugins(context.Context, *GetPluginsPayload) (res *GetPluginsResult, err error)
 	// List users in the current organization who are actively running the
 	// Speakeasy device agent, attributed by the email each agent reports on sync.
 	// Dashboard-only; requires an org admin session.
 	ListSyncedUsers(context.Context, *ListSyncedUsersPayload) (res *ListSyncedUsersResult, err error)
+	// Get the organization-wide device-agent configuration for the dashboard.
+	// Requires a session with the org:read scope. An unconfigured organization
+	// returns an empty document with is_configured=false; enrolled agents do not
+	// receive a remote layer until an administrator saves one.
+	GetConfiguration(context.Context, *GetConfigurationPayload) (res *DeviceAgentConfiguration, err error)
+	// Create or replace the organization-wide, non-secret device-agent
+	// configuration. Requires a session with the org:admin scope. Known settings
+	// are replaced wholesale — omitting one removes it — while stored keys this
+	// server does not recognize are preserved for forward compatibility; identity
+	// and credential keys are rejected.
+	UpdateConfiguration(context.Context, *UpdateConfigurationPayload) (res *DeviceAgentConfiguration, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -53,7 +62,7 @@ const ServiceName = "agent"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [2]string{"getPlugins", "listSyncedUsers"}
+var MethodNames = [4]string{"getPlugins", "listSyncedUsers", "getConfiguration", "updateConfiguration"}
 
 type AgentMarketplace struct {
 	// Stable identifier for the marketplace, used as its key when the agent
@@ -75,6 +84,30 @@ type AgentPlugin struct {
 	MarketplaceName string
 }
 
+// DeviceAgentConfiguration is the result type of the agent service
+// getConfiguration method.
+type DeviceAgentConfiguration struct {
+	// Schema version for this remote configuration envelope.
+	SchemaVersion int
+	// Forward-compatible non-secret settings document. Platform values use false,
+	// user, or managed enforcement layers.
+	Config map[string]any
+	// Whether an administrator has saved a remote configuration. False means
+	// agents should not add a remote resolver layer.
+	IsConfigured bool
+	// Opaque revision identifier for this configuration.
+	Etag string
+	// When this remote configuration was last saved. Absent when is_configured is
+	// false.
+	UpdatedAt *string
+}
+
+// GetConfigurationPayload is the payload type of the agent service
+// getConfiguration method.
+type GetConfigurationPayload struct {
+	SessionToken *string
+}
+
 // GetPluginsPayload is the payload type of the agent service getPlugins method.
 type GetPluginsPayload struct {
 	ApikeyToken *string
@@ -82,12 +115,19 @@ type GetPluginsPayload struct {
 	// an org-scoped agent install key (the MDM zero-touch path); ignored for a
 	// per-user key, whose owner is the enrolled user.
 	Email string
+	// Hardware serial number of the machine the agent runs on, when it can be
+	// read. Lets device coverage attest this specific machine rather than its
+	// assigned user.
+	SerialNumber *string
+	// Hostname of the machine the agent runs on, when it can be read.
+	Hostname *string
 }
 
 // GetPluginsResult is the result type of the agent service getPlugins method.
 type GetPluginsResult struct {
-	// Opaque revision identifier covering the marketplace + plugin set. The agent
-	// stores this to detect changes between polls.
+	// Opaque revision identifier covering the marketplace, plugin, and
+	// remote-configuration set. The agent stores this to detect changes between
+	// polls.
 	Etag string
 	// Plugin marketplaces the agent should register with the tools it manages.
 	// Sorted by name.
@@ -95,6 +135,10 @@ type GetPluginsResult struct {
 	// Plugins the agent should enable. Each entry references one of the
 	// marketplaces above by name.
 	Plugins []*AgentPlugin
+	// Organization-wide remote configuration. Absent until an administrator saves
+	// a configuration, allowing an agent with no cached remote layer to keep using
+	// its local configuration.
+	Configuration *DeviceAgentConfiguration
 }
 
 // ListSyncedUsersPayload is the payload type of the agent service
@@ -118,6 +162,18 @@ type SyncedAgentUser struct {
 	FirstSeenAt string
 	// Most recent time this email was seen syncing the device agent.
 	LastSeenAt string
+}
+
+// UpdateConfigurationPayload is the payload type of the agent service
+// updateConfiguration method.
+type UpdateConfigurationPayload struct {
+	SessionToken *string
+	// Shareable device-agent settings. Supported keys include platforms,
+	// update_channel, auto_update, pinned_target, blocked_versions, and
+	// sync_interval_seconds. update_channel and blocked_versions can only be set
+	// by Speakeasy platform administrators; per-device identity and secret keys
+	// are forbidden.
+	Config map[string]any
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

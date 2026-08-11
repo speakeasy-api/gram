@@ -1,21 +1,22 @@
-import { Label } from "@/components/ui/label";
+import { Label } from "@/components/ui/Label";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
+} from "@/components/ui/Popover";
 import {
   Sheet,
   SheetContent,
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { Switch } from "@/components/ui/switch";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Button } from "@speakeasy-api/moonshine";
+} from "@/components/ui/Sheet";
+import { Switch } from "@/components/ui/Switch";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Button } from "@/components/ui/Button";
 import { AlertCircle, ChevronDown, Plus, X } from "lucide-react";
-import { useCallback, useState } from "react";
+import { type ClipboardEvent, useCallback, useRef, useState } from "react";
+import { parseDotEnvPaste } from "./dotEnvUtils";
 import { EnvVarState } from "./environmentVariableUtils";
 
 interface Environment {
@@ -30,6 +31,14 @@ interface VariableEntry {
   state: EnvVarState;
   isSecret: boolean;
 }
+
+type DraftVariableEntry = Omit<VariableEntry, "state">;
+
+const EMPTY_ENTRY: DraftVariableEntry = {
+  key: "",
+  value: "",
+  isSecret: true,
+};
 
 interface AddVariableSheetProps {
   open: boolean;
@@ -50,16 +59,23 @@ export function AddVariableSheet({
 }: AddVariableSheetProps): JSX.Element {
   // Secret is on by default so an unattended value is never stored in the clear
   // by accident. This matches the server's default for new entries.
-  const emptyEntry = { key: "", value: "", isSecret: true };
-  const [entries, setEntries] = useState([{ ...emptyEntry }]);
+  const [entries, setEntries] = useState<DraftVariableEntry[]>([
+    { ...EMPTY_ENTRY },
+  ]);
   const [error, setError] = useState<string | null>(null);
+  const [isReadingFile, setIsReadingFile] = useState(false);
+  const fileReadSeq = useRef(0);
 
   const resetForm = useCallback(() => {
-    setEntries([{ key: "", value: "", isSecret: true }]);
+    fileReadSeq.current += 1;
+    setEntries([{ ...EMPTY_ENTRY }]);
     setError(null);
+    setIsReadingFile(false);
   }, []);
 
   const handleSave = () => {
+    if (isReadingFile) return;
+
     const keyedEntries = entries.filter((e) => e.key.trim());
     if (keyedEntries.length === 0) return;
 
@@ -106,7 +122,76 @@ export function AddVariableSheet({
   };
 
   const addEntry = () => {
-    setEntries((prev) => [...prev, { ...emptyEntry }]);
+    setEntries((prev) => [...prev, { ...EMPTY_ENTRY }]);
+  };
+
+  const importDotEnvContents = (contents: string, index: number): boolean => {
+    const parsed = parseDotEnvPaste(contents);
+    if (!parsed) return false;
+
+    if (parsed.entries.length > 0) {
+      const importedEntries = parsed.entries.map(({ key, value }) => ({
+        key: key.toUpperCase(),
+        value,
+        isSecret: true,
+      }));
+      setEntries((prev) => [
+        ...prev.slice(0, index),
+        ...importedEntries,
+        ...prev.slice(index + 1),
+      ]);
+    }
+
+    if (parsed.invalidLineNumbers.length > 0) {
+      const lineLabel =
+        parsed.invalidLineNumbers.length === 1 ? "line" : "lines";
+      setError(
+        `Ignored invalid .env ${lineLabel}: ${parsed.invalidLineNumbers.join(", ")}.`,
+      );
+    } else {
+      setError(null);
+    }
+
+    return true;
+  };
+
+  const handleDotEnvPaste = (
+    index: number,
+    event: ClipboardEvent<HTMLInputElement>,
+  ) => {
+    const imported = importDotEnvContents(
+      event.clipboardData.getData("text"),
+      index,
+    );
+    if (imported) {
+      fileReadSeq.current += 1;
+      setIsReadingFile(false);
+      event.preventDefault();
+    }
+  };
+
+  const handleDotEnvFile = async (file: File | undefined): Promise<void> => {
+    if (!file) return;
+
+    const readSeq = ++fileReadSeq.current;
+    setIsReadingFile(true);
+
+    try {
+      const contents = await file.text();
+      if (readSeq !== fileReadSeq.current) return;
+
+      const imported = importDotEnvContents(contents, 0);
+      if (!imported) {
+        setError("No valid environment variable assignments found.");
+      }
+    } catch {
+      if (readSeq !== fileReadSeq.current) return;
+      setError("The selected .env file could not be read.");
+    } finally {
+      if (readSeq === fileReadSeq.current) {
+        setIsReadingFile(false);
+      }
+    }
   };
 
   const removeEntry = (index: number) => {
@@ -145,7 +230,7 @@ export function AddVariableSheet({
               </Label>
               <Popover>
                 <PopoverTrigger asChild>
-                  <button className="border-input bg-background hover:bg-accent flex h-10 w-full items-center justify-between rounded-md border px-3 text-sm transition-colors">
+                  <button className="border-input bg-background hover:bg-accent flex h-10 w-full items-center justify-between border px-3 text-sm transition-colors">
                     <span className="text-muted-foreground">
                       Select a variable to add...
                     </span>
@@ -159,7 +244,7 @@ export function AddVariableSheet({
                   {availableEnvVarsFromAttached.map((varName) => (
                     <div
                       key={varName}
-                      className="hover:bg-accent flex cursor-pointer items-center gap-2 rounded-sm px-3 py-2 text-sm"
+                      className="hover:bg-accent flex cursor-pointer items-center gap-2 px-3 py-2 text-sm"
                       onClick={() => onLoadFromEnvironment(varName)}
                     >
                       <div className="font-mono">{varName}</div>
@@ -202,8 +287,9 @@ export function AddVariableSheet({
                   type="text"
                   value={entry.key}
                   onChange={(e) => updateEntry(index, "key", e.target.value)}
+                  onPaste={(e) => handleDotEnvPaste(index, e)}
                   placeholder="CLIENT_KEY..."
-                  className="border-input bg-background placeholder:text-muted-foreground focus:ring-ring h-10 w-full rounded-md border px-3 font-mono text-sm focus:ring-2 focus:outline-none"
+                  className="border-input bg-background placeholder:text-muted-foreground focus:ring-ring h-10 w-full border px-3 font-mono text-sm focus:ring-2 focus:outline-none"
                 />
               </div>
               <div className="flex-1">
@@ -217,7 +303,7 @@ export function AddVariableSheet({
                   value={entry.value}
                   onChange={(e) => updateEntry(index, "value", e.target.value)}
                   placeholder=""
-                  className="border-input bg-background placeholder:text-muted-foreground focus:ring-ring h-10 w-full rounded-md border px-3 font-mono text-sm focus:ring-2 focus:outline-none"
+                  className="border-input bg-background placeholder:text-muted-foreground focus:ring-ring h-10 w-full border px-3 font-mono text-sm focus:ring-2 focus:outline-none"
                 />
               </div>
               <div className="shrink-0">
@@ -278,7 +364,7 @@ export function AddVariableSheet({
         </div>
 
         <SheetFooter className="flex-row items-center justify-between border-t px-6 py-4">
-          <button className="text-muted-foreground hover:text-foreground flex items-center gap-2 text-sm transition-colors">
+          <label className="text-muted-foreground hover:text-foreground flex cursor-pointer items-center gap-2 text-sm transition-colors">
             <svg
               className="h-4 w-4"
               fill="none"
@@ -289,11 +375,24 @@ export function AddVariableSheet({
               <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
             </svg>
             Import .env
-          </button>
+            <input
+              type="file"
+              accept=".env,text/plain"
+              className="sr-only"
+              aria-label="Import .env file"
+              onChange={(event) => {
+                void handleDotEnvFile(event.currentTarget.files?.[0]);
+                event.currentTarget.value = "";
+              }}
+            />
+          </label>
           <span className="text-muted-foreground text-xs">
             or paste .env contents in Key input
           </span>
-          <Button onClick={handleSave} disabled={!hasValidEntry}>
+          <Button
+            onClick={handleSave}
+            disabled={!hasValidEntry || isReadingFile}
+          >
             Save
           </Button>
         </SheetFooter>

@@ -1,22 +1,7 @@
 import { type SourceTelemetrySummary } from "@/components/sources/sourceTelemetrySummary";
-import { Heading } from "@/components/ui/heading";
-import { Type } from "@/components/ui/type";
+import { Heading } from "@/components/ui/Heading";
+import { Text } from "@/components/ui/Text";
 import type { ToolMetric } from "@gram/client/models/components/toolmetric.js";
-
-// Brand-inspired muted palette (from moonshine gradient colors). Defined here
-// so both Source overview tabs (OpenAPI + Remote MCP) share one palette.
-const barColors = [
-  "bg-[hsl(214,69%,50%)]",
-  "bg-[hsl(4,67%,52%)]",
-  "bg-[hsl(108,35%,45%)]",
-  "bg-[hsl(216,70%,60%)]",
-  "bg-[hsl(23,80%,55%)]",
-  "bg-[hsl(334,50%,45%)]",
-  "bg-[hsl(68,45%,50%)]",
-  "bg-[hsl(154,50%,40%)]",
-  "bg-[hsl(220,60%,45%)]",
-  "bg-[hsl(280,40%,50%)]",
-];
 
 export interface SourceActivityPanelProps {
   tools: ToolMetric[];
@@ -36,32 +21,32 @@ export function SourceActivityPanel({
     <div className="flex flex-col">
       <div className="mb-3 flex items-center justify-between">
         <Heading variant="h4">Source Activity</Heading>
-        <Type muted small>
+        <Text muted small>
           {windowLabel}
-        </Type>
+        </Text>
       </div>
 
       {isLoading ? (
-        <div className="bg-muted/20 h-48 animate-pulse rounded-lg border p-6" />
+        <div className="bg-muted/20 h-48 animate-pulse border p-6" />
       ) : tools.length > 0 ? (
         <div className="space-y-4">
           {summary && <TelemetrySummaryRow summary={summary} />}
-          <div className="rounded-lg border p-4">
-            <Type muted small className="mb-3 block">
+          <div className="border p-4">
+            <Text muted small className="mb-3 block">
               Tool usage
-            </Type>
+            </Text>
             <ToolBarList tools={tools} />
           </div>
         </div>
       ) : (
-        <div className="flex flex-col items-center justify-center rounded-lg border p-12 text-center">
-          <Type muted className="mb-1 block">
+        <div className="flex flex-col items-center justify-center border p-12 text-center">
+          <Text muted className="mb-1 block">
             No invocation data yet
-          </Type>
-          <Type muted small>
+          </Text>
+          <Text muted small>
             Telemetry will appear here once tools from this source are called
             via an MCP server.
-          </Type>
+          </Text>
         </div>
       )}
     </div>
@@ -71,28 +56,28 @@ export function SourceActivityPanel({
 function TelemetrySummaryRow({ summary }: { summary: SourceTelemetrySummary }) {
   return (
     <div className="flex items-center gap-4 text-sm">
-      <Type muted small>
+      <Text muted small>
         {summary.totalCalls.toLocaleString()} calls
-      </Type>
+      </Text>
       {summary.totalFailures > 0 && (
-        <Type small className="text-destructive">
+        <Text small className="text-destructive">
           {summary.totalFailures} failed
-        </Type>
+        </Text>
       )}
-      <Type muted small>
+      <Text muted small>
         {summary.avgLatency < 1000
           ? `${summary.avgLatency.toFixed(0)}ms avg`
           : `${(summary.avgLatency / 1000).toFixed(1)}s avg`}
-      </Type>
+      </Text>
       {summary.errorRate > 0 && (
-        <Type
+        <Text
           small
           className={
             summary.errorRate > 5 ? "text-destructive" : "text-warning"
           }
         >
           {summary.errorRate.toFixed(1)}% error rate
-        </Type>
+        </Text>
       )}
     </div>
   );
@@ -116,7 +101,7 @@ function ToolBarList({ tools }: { tools: ToolMetric[] }) {
 
   return (
     <div className="space-y-2">
-      {barListData.map((item, index) => {
+      {barListData.map((item) => {
         const widthPercent = maxValue > 0 ? (item.value / maxValue) * 100 : 0;
 
         return (
@@ -124,19 +109,20 @@ function ToolBarList({ tools }: { tools: ToolMetric[] }) {
             <span className="min-w-[3rem] shrink-0 text-right text-sm font-medium">
               {item.value.toLocaleString()}
             </span>
-            <div className="relative h-7 flex-1">
+            {/* Single-metric ranked list: one ink fill on a neutral track. */}
+            <div className="bg-muted relative h-7 flex-1">
               <span className="text-foreground absolute inset-y-0 left-2 z-0 flex items-center truncate pr-2 text-sm font-medium">
                 {item.name}
               </span>
               <div
-                className={`absolute inset-y-0 left-0 rounded ${barColors[index % barColors.length]}`}
+                className="bg-foreground absolute inset-y-0 left-0"
                 style={{ width: `${Math.max(widthPercent, 5)}%` }}
               />
               <div
                 className="absolute inset-y-0 left-0 z-10 overflow-hidden"
                 style={{ width: `${Math.max(widthPercent, 5)}%` }}
               >
-                <span className="absolute inset-y-0 left-2 flex items-center truncate pr-2 text-sm font-medium whitespace-nowrap text-white">
+                <span className="text-background absolute inset-y-0 left-2 flex items-center truncate pr-2 text-sm font-medium whitespace-nowrap">
                   {item.name}
                 </span>
               </div>

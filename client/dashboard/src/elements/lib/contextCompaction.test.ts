@@ -34,6 +34,10 @@ describe("estimateTokens", () => {
 });
 
 describe("getModelContextLimit", () => {
+  it("returns known mapping for Claude Opus 5", () => {
+    expect(getModelContextLimit("anthropic/claude-opus-5")).toBe(1_000_000);
+  });
+
   it("returns known mapping for Sonnet 4.6", () => {
     expect(getModelContextLimit("anthropic/claude-sonnet-4.6")).toBe(1_000_000);
   });

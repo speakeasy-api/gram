@@ -1,7 +1,8 @@
-import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Type } from "@/components/ui/type";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
+import { Text } from "@/components/ui/Text";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 
 import { WizardContext } from "./machine";
 
@@ -18,16 +19,16 @@ export function ProxyCredentialsForm(): JSX.Element {
     <>
       <div className="max-h-[60vh] space-y-4 overflow-auto">
         <div>
-          <Type muted small className="mb-4">
+          <Text muted small className="mb-4">
             Enter the client credentials from your OAuth provider. These will be
             stored securely in a new environment created for this proxy.
-          </Type>
+          </Text>
 
-          {error && <Type className="mb-4 text-sm text-red-500!">{error}</Type>}
+          {error && <Text className="mb-4 text-sm text-red-500!">{error}</Text>}
 
           <Stack gap={4}>
             <div>
-              <Type className="mb-2 font-medium">Client ID</Type>
+              <Text className="mb-2 font-medium">Client ID</Text>
               <Input
                 placeholder="your-client-id"
                 value={proxy.clientId}
@@ -38,7 +39,7 @@ export function ProxyCredentialsForm(): JSX.Element {
             </div>
 
             <div>
-              <Type className="mb-2 font-medium">Client Secret</Type>
+              <Text className="mb-2 font-medium">Client Secret</Text>
               <Input
                 placeholder="your-client-secret"
                 value={proxy.clientSecret}

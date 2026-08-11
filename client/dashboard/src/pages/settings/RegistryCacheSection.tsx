@@ -1,8 +1,9 @@
-import { Heading } from "@/components/ui/heading";
-import { Type } from "@/components/ui/type";
+import { Heading } from "@/components/ui/Heading";
+import { Text } from "@/components/ui/Text";
 import { useListMCPRegistries } from "@gram/client/react-query/listMCPRegistries";
 import { useMcpRegistriesClearCacheMutation } from "@gram/client/react-query/mcpRegistriesClearCache";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
+import { Stack } from "@/components/ui/Stack";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -29,24 +30,24 @@ export function RegistryCacheSection(): JSX.Element {
       <Heading variant="h5" className="mb-2">
         MCP Registry Cache
       </Heading>
-      <Type muted small className="mb-4">
+      <Text muted small className="mb-4">
         Clear cached registry data to force a fresh fetch from the registry
         source.
-      </Type>
+      </Text>
 
       {isLoading && (
         <div className="text-muted-foreground flex items-center gap-2">
           <Loader2 className="h-4 w-4 animate-spin" />
-          <Type muted small>
+          <Text muted small>
             Loading registries…
-          </Type>
+          </Text>
         </div>
       )}
 
       {!isLoading && registries.length === 0 && (
-        <Type muted small>
+        <Text muted small>
           No registries configured.
-        </Type>
+        </Text>
       )}
 
       {registries.length > 0 && (
@@ -58,13 +59,13 @@ export function RegistryCacheSection(): JSX.Element {
                 key={registry.id}
                 direction="horizontal"
                 align="center"
-                className="justify-between rounded-md border p-3"
+                className="justify-between border p-3"
               >
                 <div>
-                  <Type className="font-medium">{registry.name}</Type>
-                  <Type muted small className="font-mono">
+                  <Text className="font-medium">{registry.name}</Text>
+                  <Text muted small className="font-mono">
                     {registry.url}
-                  </Type>
+                  </Text>
                 </div>
                 <Button
                   variant="secondary"
@@ -78,9 +79,11 @@ export function RegistryCacheSection(): JSX.Element {
                   }}
                 >
                   {isClearing && (
-                    <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                    <Button.LeftIcon>
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    </Button.LeftIcon>
                   )}
-                  Clear Cache
+                  <Button.Text>Clear Cache</Button.Text>
                 </Button>
               </Stack>
             );

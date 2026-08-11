@@ -128,6 +128,38 @@ describe("buildEmployees attributed/unattributed split", () => {
     expect(alias.tokenCount).toBe(0);
   });
 
+  it("merges a member's split identities so an email-less id summary can't shadow their email tokens", () => {
+    // The member's opaque user_id (Gram tool calls, no email) and their email
+    // (Claude/Cursor usage) are two summaries for the same person. Matching the
+    // id first must not attribute the token-less id summary and orphan the
+    // token-bearing email summary into the unattributed list (DNO-618).
+    const member = makeMember({
+      id: "01924a0eb409b0ecf44e06d0ec03cbc4",
+      email: "ada@example.com",
+      name: "Ada Lovelace",
+    });
+    const employees = buildEmployees([member], noRoles, [
+      makeSummary({
+        userId: "ada@example.com",
+        userEmail: "ada@example.com",
+        totalInputTokens: 700,
+        totalOutputTokens: 20,
+      }),
+      makeSummary({
+        userId: "01924a0eb409b0ecf44e06d0ec03cbc4",
+        userEmail: "",
+        totalInputTokens: 0,
+        totalOutputTokens: 0,
+      }),
+    ]);
+
+    expect(employees).toHaveLength(1);
+    const ada = employees[0]!;
+    expect(ada.status).toBe("enrolled");
+    expect(ada.tokenCount).toBe(720);
+    expect(isUnattributedEmployee(ada)).toBe(false);
+  });
+
   it("creates unattributed rows with a usage: id for unmatched summaries", () => {
     const employees = buildEmployees([], noRoles, [
       makeSummary({ userId: "ghost@example.com" }),

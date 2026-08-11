@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -181,7 +182,7 @@ func TestDeploymentsService_Redeploy_WithPackages(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Create external package
-	otherCtx := testenv.InitAuthContext(t, t.Context(), ti.conn, ti.sessionManager)
+	otherCtx := authztest.InitAuthContext(t, t.Context(), ti.conn, ti.sessionManager)
 	bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
 	packageAsset, err := ti.assets.UploadOpenAPIv3(otherCtx, &agen.UploadOpenAPIv3Form{
 		ApikeyToken:      nil,
@@ -453,7 +454,7 @@ func TestDeploymentsService_Redeploy_ComplexDeployment(t *testing.T) {
 	ctx, ti := newTestDeploymentService(t, assetStorage)
 
 	// Create external package
-	otherCtx := testenv.InitAuthContext(t, t.Context(), ti.conn, ti.sessionManager)
+	otherCtx := authztest.InitAuthContext(t, t.Context(), ti.conn, ti.sessionManager)
 	bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
 	packageAsset, err := ti.assets.UploadOpenAPIv3(otherCtx, &agen.UploadOpenAPIv3Form{
 		ApikeyToken:      nil,

@@ -1,5 +1,8 @@
-# Fixed project name so all git worktrees share the same infra containers
-# instead of each worktree creating its own set and causing port conflicts.
+# Per-worktree infra. `git:workinit` sets a unique COMPOSE_PROJECT_NAME (and
+# `zero:remap-ports` remaps the host ports) so each worktree gets its own stack
+# — postgres, clickhouse, temporal, observability, etc. — without colliding.
+# The one exception is the stateless Presidio analyzer, which is shared across
+# all worktrees; see compose.shared.yml.
 name: ${COMPOSE_PROJECT_NAME:-gram}
 
 services:
@@ -33,14 +36,25 @@ services:
     command: redis-server --port 35299 --requirepass xi9XILbY
 
   gram-temporal:
-    image: temporalio/server:1.27.2
+    # The CLI image, not temporalio/server: as of 1.31 the server image no
+    # longer bundles the `temporal` binary that `server start-dev` needs.
+    # CLI 1.8.1 embeds Server 1.31.2 and UI 2.50.1.
+    image: temporalio/temporal:1.8.1
     restart: unless-stopped
     ports:
       - "${TEMPORAL_PORT}:7233"
       - "${TEMPORAL_WEB_PORT}:8233"
+    environment:
+      # The dev server is a single Go process, so its footprint is governed by
+      # the Go runtime rather than by cgroup limits. GOMEMLIMIT is a soft heap
+      # ceiling the GC actively works to stay under, which is what caps memory
+      # in sandboxes where `deploy.resources.limits` cannot be applied.
+      GOMEMLIMIT: 256MiB
+      # Per-P allocator caches and GC workers scale with core count; the dev
+      # server never needs the whole host.
+      GOMAXPROCS: 4
     entrypoint: ["temporal"]
-    command:
-      [
+    command: [
         "server",
         "start-dev",
         "--ip",
@@ -51,6 +65,27 @@ services:
         "default",
         "--db-filename",
         "/home/temporal/dev.db",
+        # Temporal's history cache is count-bounded by default (128k mutable
+        # state entries host-wide), which puts no ceiling on bytes. Switch it to
+        # a size-based limit so the live heap stays bounded and GOMEMLIMIT does
+        # not turn into GC thrash. 1.31 dropped the shard-level cache, so
+        # hostLevelCacheMaxSizeBytes is the only size knob left.
+        "--dynamic-config-value",
+        "history.cacheSizeBasedLimit=true",
+        "--dynamic-config-value",
+        "history.hostLevelCacheMaxSizeBytes=67108864",
+        "--dynamic-config-value",
+        "history.eventsCacheMaxSizeBytes=2097152",
+        "--dynamic-config-value",
+        'history.cacheTTL="5m"',
+        "--dynamic-config-value",
+        'history.eventsCacheTTL="5m"',
+        # A single local worker does not need the default 4 task queue
+        # partitions, each of which carries its own manager and buffers.
+        "--dynamic-config-value",
+        "matching.numTaskqueueReadPartitions=1",
+        "--dynamic-config-value",
+        "matching.numTaskqueueWritePartitions=1",
       ]
     volumes:
       - temporal_data:/home/temporal
@@ -87,6 +122,27 @@ services:
     depends_on:
       - otel-collector
 
+  litellm:
+    profiles: [litellm]
+    image: ghcr.io/berriai/litellm:v1.94.0@sha256:65d84a2282137b4dc73bbe184650a7c807177c533e4223b3bfbc87963fe3fabe
+    restart: unless-stopped
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    environment:
+      OPENROUTER_API_KEY: ${OPENROUTER_DEV_KEY}
+    volumes:
+      - ./local/litellm/config.yaml:/app/config.yaml:ro
+    ports:
+      - "${LITELLM_PORT}:4000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'python3 -c "import urllib.request; urllib.request.urlopen(''http://localhost:4000/health/liveliness'')"',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
   clickhouse:
     build:
       context: ./local/clickhouse
@@ -120,23 +176,6 @@ services:
         "start",
         "--host-port=0.0.0.0:8085",
       ]
-
-  gram-presidio:
-    image: mcr.microsoft.com/presidio-analyzer:2.2.362
-    restart: unless-stopped
-    ports:
-      - "${PRESIDIO_PORT}:3000"
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:3000/health')",
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   mcp-registry-db:
     profiles: [local-registry]

@@ -4,8 +4,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
+	"net/url"
 	"path"
 	"slices"
 	"sort"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
+	domainskills "github.com/speakeasy-api/gram/server/internal/skills"
 )
 
 // ServerEnvConfig represents a user-facing environment variable required by a server.
@@ -33,6 +36,12 @@ type PluginServerInfo struct {
 	// IsOAuth indicates the toolset uses OAuth (proxy or external). OAuth servers are emitted
 	// as stdio mcp-remote entries instead of HTTP-with-headers entries.
 	IsOAuth bool
+	// IsUnproxied indicates the server is an unproxied MCP server: MCPURL
+	// points directly at the vendor, never through Gram's gateway. No
+	// Authorization header may be attached — the Gram API key would leak to
+	// the vendor's own server, which was never meant to receive it, and
+	// Gram has no way to inject vendor-specific credentials on its behalf.
+	IsUnproxied bool
 	// EnvConfigs are user-facing environment variables for public servers.
 	EnvConfigs []ServerEnvConfig
 }
@@ -54,7 +63,8 @@ type PluginInfo struct {
 	Description string
 	Servers     []PluginServerInfo
 	// Skills are emitted into each platform plugin's skills/ directory.
-	Skills []PluginSkillInfo
+	Skills               []PluginSkillInfo
+	AgentPluginsV1Issues []string
 }
 
 // GenerateConfig holds org-level configuration for package generation.
@@ -70,13 +80,13 @@ type GenerateConfig struct {
 	// APIKey is the plaintext consumer-scoped Gram API key to inject into
 	// MCP server configs. If empty, configs will use placeholder variables.
 	APIKey string
-	// HooksAPIKey controls whether the observability plugin is emitted. Runtime
-	// hook senders authenticate with explicit env credentials or a local cached
-	// hooks key, then fall back to this org-wide key embedded in speakeasy.json.
+	// HooksAPIKey controls whether the observability plugin and distributed-skill
+	// feedback MCP servers are emitted. Both authenticate with this hooks-scoped
+	// key.
 	HooksAPIKey string
 	// ProjectSlug is the publishing project's slug. The Cursor hooks endpoint
-	// requires it via the Gram-Project header (Claude's does not), and it scopes
-	// the default marketplace name for non-default projects.
+	// and skill feedback MCP server require it via the Gram-Project header, and
+	// it scopes the default marketplace name for non-default projects.
 	ProjectSlug string
 	// IsDefaultProject reports whether this is the org's default project (its
 	// oldest, by id ASC). The default project keeps the bare org-derived
@@ -89,6 +99,9 @@ type GenerateConfig struct {
 	// manifests as new and refresh installed copies. Empty pins deterministic
 	// defaults for tests, fingerprints, and the CI render diff.
 	Version string
+	// PlatformMCPEnabled adds the first-party organization-level Platform MCP
+	// package to the literal-default project's Claude marketplace only.
+	PlatformMCPEnabled bool
 	// MarketplaceName is the identifier users type into Claude Code or Codex
 	// (e.g. `<plugin>@<marketplace>`) and the `name` field in the generated
 	// marketplace.json. Empty falls back to DefaultMarketplaceName.
@@ -127,19 +140,20 @@ type GenerateConfig struct {
 // fields are fixed sentinels so only generator changes register, never data.
 func PublishedHooksFiles() (map[string][]byte, error) {
 	cfg := GenerateConfig{
-		OrgName:          "Hooks Check",
-		OrgEmail:         "hooks-check@example.com",
-		OrgID:            "org-hooks-check",
-		ServerURL:        "https://app.getgram.ai",
-		APIKey:           fingerprintAPIKeySentinel,
-		HooksAPIKey:      fingerprintHooksKeySentinel,
-		ProjectSlug:      "hooks-check",
-		IsDefaultProject: true,
-		Version:          "",
-		MarketplaceName:  "",
-		HooksOrgName:     "",
-		BrowserLogin:     false,
-		InstallFailOpen:  false,
+		OrgName:            "Hooks Check",
+		OrgEmail:           "hooks-check@example.com",
+		OrgID:              "org-hooks-check",
+		ServerURL:          "https://app.getgram.ai",
+		APIKey:             fingerprintAPIKeySentinel,
+		HooksAPIKey:        fingerprintHooksKeySentinel,
+		ProjectSlug:        "hooks-check",
+		IsDefaultProject:   true,
+		Version:            "",
+		MarketplaceName:    "",
+		HooksOrgName:       "",
+		BrowserLogin:       false,
+		InstallFailOpen:    false,
+		PlatformMCPEnabled: false,
 	}
 	out := make(map[string][]byte)
 	for _, mode := range []struct {
@@ -190,8 +204,9 @@ func DogfoodPluginFiles() (map[string][]byte, error) {
 		HooksOrgName:     "",
 		// The dogfood harness is how the browser flow itself gets exercised
 		// locally, so it stays on here regardless of the publish default.
-		BrowserLogin:    true,
-		InstallFailOpen: false,
+		BrowserLogin:       true,
+		InstallFailOpen:    false,
+		PlatformMCPEnabled: false,
 	}
 	files := make(map[string][]byte)
 	if err := generateClaudeObservabilityPluginInDir(files, "plugin-claude", cfg); err != nil {
@@ -199,6 +214,9 @@ func DogfoodPluginFiles() (map[string][]byte, error) {
 	}
 	if err := generateCursorObservabilityPluginInDir(files, "plugin-cursor", "plugin-cursor", cfg); err != nil {
 		return nil, fmt.Errorf("generate dogfood cursor plugin: %w", err)
+	}
+	if err := generateOpenCodeObservabilityPluginInDir(files, "plugin-opencode", cfg); err != nil {
+		return nil, fmt.Errorf("generate dogfood opencode plugin: %w", err)
 	}
 	for p := range files {
 		if strings.Contains(p, ".claude-plugin/") || strings.Contains(p, ".cursor-plugin/") {
@@ -345,7 +363,12 @@ func storedHooksConfigHash(stored []byte) string {
 // MCP plugins on the next run, even when a project's generated MCP output is
 // byte-identical — for generator changes that alter MCP behaviour in ways the
 // placeholder fingerprint pass can't observe.
-const mcpGeneratorVersion = "9"
+const mcpGeneratorVersion = "11"
+
+// platformMCPGeneratorVersion is independent from mcpGeneratorVersion so adding
+// or changing the first-party Platform MCP never triggers a fleet-wide customer
+// plugin republish.
+const platformMCPGeneratorVersion = "1"
 
 // hooksGeneratorVersion is the sole rollout signal for the observability (hooks)
 // plugin. It is stamped into the hooks plugin.json version (see
@@ -354,13 +377,15 @@ const mcpGeneratorVersion = "9"
 // MCP-only publish leaves the existing hooks subtree untouched. Bump it for ANY
 // change to hooks generation, including behaviour a fingerprint couldn't observe.
 //
-// The Plugin Generate Check CI workflow requires the relevant one of these two
-// constants to change whenever generate.go does.
-const hooksGeneratorVersion = "16"
+// Releases bump it automatically: server/cmd/pin-hooks-release rewrites this
+// line when it pins a new binary, because new checksums always change the
+// rendered bootstrap script. Any other change to hooks generation needs a
+// manual bump, which the Plugin Generate Check CI workflow enforces.
+const hooksGeneratorVersion = "28"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
-// the observability plugin entirely (see GenerateConfig.HooksAPIKey), which
+// hooks and skill feedback MCP output (see GenerateConfig.HooksAPIKey), which
 // would make the fingerprint blind to it. Constant values keep the generated
 // bytes stable across publishes while the real keys rotate.
 const (
@@ -374,6 +399,14 @@ const (
 // be assembled per plugin and this reserved entry can be reworked away.
 const mcpSharedFingerprintKey = "__shared__"
 
+// mcpPlatformFingerprintKey is deliberately not a valid customer plugin slug.
+const mcpPlatformFingerprintKey = "__platform_mcp__"
+
+const (
+	platformMCPPluginName = "gram-platform-mcp"
+	platformMCPPluginRoot = "platform-mcp"
+)
+
 // MCPFingerprints returns per-plugin content fingerprints of the MCP (feature)
 // plugins that would be generated for the given plugins — a map of plugin slug ->
 // stable hash, plus a reserved mcpSharedFingerprintKey entry covering the shared
@@ -384,24 +417,30 @@ const mcpSharedFingerprintKey = "__shared__"
 // Fingerprints are stored per plugin (rather than as one aggregate) so a future
 // per-plugin publish flow can decide independently which plugins have unpublished
 // changes without a schema migration; today the rollout treats the MCP component
-// as changed when any entry differs. Per-publish fields (manifest version, the
-// injected MCP API key) are normalized out so the same MCP configuration and
+// as changed when any entry differs. Per-publish fields (manifest version and
+// injected API keys) are normalized out so the same MCP configuration and
 // mcpGeneratorVersion always produce the same fingerprints.
 func MCPFingerprints(plugins []PluginInfo, cfg GenerateConfig) (map[string]string, error) {
 	cfg.Version = ""
 	cfg.APIKey = fingerprintAPIKeySentinel
-	// HooksAPIKey affects only the shared files here (whether the observability
-	// entry is listed in marketplace.json). Published repos always carry a hooks
-	// key, so pin a stable non-empty sentinel to keep that entry in the hash.
+	// Published repos carry a hooks key. Normalize it so skill feedback MCP
+	// entries are fingerprinted without rotating the hash on every publish.
 	cfg.HooksAPIKey = fingerprintHooksKeySentinel
 
-	out := make(map[string]string, len(plugins)+1)
+	out := make(map[string]string, len(plugins)+2)
 	for _, p := range plugins {
 		files, err := generateMCPFiles([]PluginInfo{p}, cfg)
 		if err != nil {
 			return nil, fmt.Errorf("generate mcp files for plugin %s fingerprint: %w", p.Slug, err)
 		}
 		out[p.Slug] = hashFiles(mcpGeneratorVersion, files)
+	}
+	if cfg.PlatformMCPEnabled {
+		files, err := generatePlatformMCPFiles(cfg)
+		if err != nil {
+			return nil, fmt.Errorf("generate Platform MCP files for fingerprint: %w", err)
+		}
+		out[mcpPlatformFingerprintKey] = hashFiles(platformMCPGeneratorVersion, files)
 	}
 
 	shared, err := generateSharedFiles(plugins, cfg)
@@ -484,6 +523,7 @@ var ClaudeObservabilityHookEvents = []string{
 // separately.
 var CursorObservabilityHookEvents = []string{
 	"beforeSubmitPrompt",
+	"sessionEnd",
 	"stop",
 	"afterAgentResponse",
 	"afterAgentThought",
@@ -498,6 +538,13 @@ var CursorObservabilityHookEvents = []string{
 // grouped in a published repo. Declared via marketplace.json's metadata.pluginRoot
 // so plugin sources can be referenced by bare name relative to this root.
 const cursorPluginRoot = "cursor-plugins"
+
+// opencodePluginRoot groups the OpenCode feature-plugin packages in a
+// published repo. OpenCode has no marketplace manifest that could point at
+// per-plugin sources, so the root exists purely to keep each package's
+// extract-into-config-dir file set (plugin/<slug>.ts + <slug>/) in one
+// syncable directory per plugin.
+const opencodePluginRoot = "opencode-plugins"
 
 // GeneratePluginPackages produces the complete file map for a plugin
 // distribution repository containing Claude Code, Cursor, and Codex plugins.
@@ -515,6 +562,11 @@ func GeneratePluginPackages(plugins []PluginInfo, cfg GenerateConfig) (map[strin
 	mcp, err := generateMCPFiles(plugins, cfg)
 	if err != nil {
 		return nil, err
+	}
+	if cfg.PlatformMCPEnabled {
+		if err := generatePlatformMCPFilesInto(mcp, cfg); err != nil {
+			return nil, fmt.Errorf("generate Platform MCP package: %w", err)
+		}
 	}
 	shared, err := generateSharedFiles(plugins, cfg)
 	if err != nil {
@@ -547,6 +599,9 @@ func generateHooksFiles(cfg GenerateConfig) (map[string][]byte, error) {
 	if err := generateCodexObservabilityPlugin(files, cfg); err != nil {
 		return nil, fmt.Errorf("generate codex observability plugin: %w", err)
 	}
+	if err := generateOpenCodeObservabilityPlugin(files, cfg); err != nil {
+		return nil, fmt.Errorf("generate opencode observability plugin: %w", err)
+	}
 	return files, nil
 }
 
@@ -570,9 +625,26 @@ func writeHooksRuntimeFiles(files map[string][]byte, subdir string, cfg Generate
 // verbatim from the existing repo when only the hooks component changed.
 func mcpFilePaths(plugins []PluginInfo, cfg GenerateConfig) ([]string, error) {
 	cfg.APIKey = fingerprintAPIKeySentinel
+	cfg.HooksAPIKey = fingerprintHooksKeySentinel
 	files, err := generateMCPFiles(plugins, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("enumerate mcp file paths: %w", err)
+	}
+	if cfg.PlatformMCPEnabled {
+		if err := generatePlatformMCPFilesInto(files, cfg); err != nil {
+			return nil, fmt.Errorf("enumerate Platform MCP file paths: %w", err)
+		}
+	}
+	return slices.Sorted(maps.Keys(files)), nil
+}
+
+// sharedFilePaths returns the deterministic marketplace manifests and README
+// paths that are regenerated on every publish. An indeterminate Platform MCP
+// admission must verify them before skipping so a partial repo is repaired.
+func sharedFilePaths(plugins []PluginInfo, cfg GenerateConfig) ([]string, error) {
+	files, err := generateSharedFiles(plugins, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("enumerate shared file paths: %w", err)
 	}
 	return slices.Sorted(maps.Keys(files)), nil
 }
@@ -590,6 +662,19 @@ func generateMCPFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][]by
 		}
 		if err := generateCodexPlugin(files, p, cfg); err != nil {
 			return nil, fmt.Errorf("generate codex plugin %s: %w", p.Slug, err)
+		}
+		if err := generateOpenCodePlugin(files, p, cfg); err != nil {
+			return nil, fmt.Errorf("generate opencode plugin %s: %w", p.Slug, err)
+		}
+		agentFiles, err := compileAgentPlugin(p, cfg, agentPluginCredentialsPackage)
+		if err != nil {
+			if errors.Is(err, ErrAgentPluginsV1Incompatible) {
+				continue
+			}
+			return nil, fmt.Errorf("generate Agent Plugins package %s: %w", p.Slug, err)
+		}
+		for filePath, content := range agentFiles {
+			files[path.Join(agentPluginRoot, p.Slug, filePath)] = content
 		}
 	}
 	return files, nil
@@ -634,6 +719,15 @@ func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][
 				Installation:   "INSTALLED_BY_DEFAULT",
 				Authentication: "ON_USE",
 			},
+		})
+	}
+
+	if cfg.PlatformMCPEnabled {
+		claudePlugins = append(claudePlugins, marketplaceEntry{
+			Name:        platformMCPPluginName,
+			DisplayName: "Gram Platform MCP",
+			Source:      "./" + platformMCPPluginRoot,
+			Description: "Read-only organization administration through the Gram Platform MCP.",
 		})
 	}
 
@@ -725,13 +819,18 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 
 	b.WriteString("# " + cfg.OrgName + " Plugins\n\n")
 	b.WriteString("This repository contains plugin packages managed by [Speakeasy](https://getgram.ai). ")
-	b.WriteString("Each plugin bundles MCP servers for distribution via Claude Code, Cursor, and Codex marketplaces.\n\n")
+	b.WriteString("Each plugin bundles MCP servers for distribution via supported coding agent marketplaces.\n\n")
 	b.WriteString("## How this repo works\n\n")
 	b.WriteString("- **Read-only access.** Collaborators are granted pull permission only. You can clone and inspect the repository, but you cannot push to it.\n")
 	b.WriteString("- **Auto-managed by Speakeasy.** Each publish from the Speakeasy dashboard overwrites this repository's contents. Any manual edits, new branches, or local commits will be discarded on the next publish — make changes in Speakeasy instead.\n\n")
 
 	if cfg.HooksAPIKey != "" {
 		fmt.Fprintf(&b, "> **Required:** install the `%s` plugin alongside any feature plugins to enable Speakeasy observability. Without it, your team will install MCP servers but tool events will not be reported to your Speakeasy dashboard.\n\n", ClaudeObservabilitySlug(cfg))
+	}
+
+	if cfg.PlatformMCPEnabled {
+		b.WriteString("## Gram Platform MCP\n\n")
+		b.WriteString("The `gram-platform-mcp` plugin provides read-only organization administration through Gram OAuth. Install it in Claude Cowork to authorize a Platform MCP connection.\n\n")
 	}
 
 	if len(plugins) > 0 {
@@ -774,6 +873,16 @@ func generateReadme(plugins []PluginInfo, cfg GenerateConfig) []byte {
 	b.WriteString("Then list available plugins with `codex /plugins` and install the ones you want.\n")
 	b.WriteString("Plugins that need authentication will prompt for any required environment variables on install.\n")
 
+	b.WriteString("\n### OpenCode\n\n")
+	b.WriteString("OpenCode has no plugin marketplace. Each plugin is a self-contained package: ")
+	fmt.Fprintf(&b, "copy the contents of a plugin's directory under `%s/` ", opencodePluginRoot)
+	if cfg.HooksAPIKey != "" {
+		fmt.Fprintf(&b, "(or `%s/` for observability) ", OpenCodeObservabilitySlug(cfg))
+	}
+	b.WriteString("into `~/.config/opencode/` (all projects) or a repository's `.opencode/` (that project only). ")
+	b.WriteString("OpenCode picks the package up on next start; remove the copied files to uninstall.\n")
+	b.WriteString("Plugins that need authentication read the environment variables named in their `mcp.json`.\n")
+
 	return []byte(b.String())
 }
 
@@ -796,6 +905,12 @@ func GenerateSinglePluginPackage(plugin PluginInfo, cfg GenerateConfig, platform
 		if err := generateCodexPluginFlat(files, plugin, cfg); err != nil {
 			return nil, fmt.Errorf("generate codex plugin: %w", err)
 		}
+	case "agent-plugin":
+		return compileAgentPlugin(plugin, cfg, agentPluginCredentialsKeyless)
+	// ponytail: no "opencode" case — the downloadPluginPackage enum is
+	// claude|cursor|codex, so a flat per-plugin opencode package is unreachable.
+	// OpenCode ships via downloadObservabilityPlugin only; add here if per-plugin
+	// opencode download is ever exposed in the design enum + UI.
 	default:
 		return nil, fmt.Errorf("unsupported platform: %s", platform)
 	}
@@ -829,12 +944,20 @@ func generateCodexPlugin(files map[string][]byte, p PluginInfo, cfg GenerateConf
 	return generateCodexPluginInDir(files, name, name, p, cfg)
 }
 
+func generateOpenCodePlugin(files map[string][]byte, p PluginInfo, cfg GenerateConfig) error {
+	return generateOpenCodePluginInDir(files, path.Join(opencodePluginRoot, p.Slug), p, cfg)
+}
+
 // codexAuthPolicy picks ON_INSTALL when the user will be prompted for a
 // secret (public server env vars or a Gram API key the published config
 // can't bake in) and ON_USE when nothing needs to be collected. A baked-in
 // APIKey plus all-public-no-env servers means the plugin is install-silent.
 func codexAuthPolicy(p PluginInfo, cfg GenerateConfig) string {
 	for _, s := range p.Servers {
+		if s.IsUnproxied {
+			// No credential of any kind is ever collected for these.
+			continue
+		}
 		if s.IsPublic {
 			if len(s.EnvConfigs) > 0 {
 				return "ON_INSTALL"
@@ -895,35 +1018,58 @@ func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p Pl
 		taken[key] = true
 	}
 
-	mcpServers := make(map[string]codexMCPServer, len(p.Servers))
+	mcpServers := make(map[string]codexMCPServer, len(p.Servers)+1)
 	for i, s := range p.Servers {
 		if keys[i] == "" {
 			continue
 		}
 
 		entry := codexMCPServer{
+			Command:           "",
+			Args:              nil,
 			URL:               s.MCPURL,
 			BearerTokenEnvVar: "",
 			HTTPHeaders:       nil,
 			EnvHTTPHeaders:    nil,
 		}
 
-		if s.IsOAuth {
+		switch {
+		case s.IsUnproxied:
+			// Never attach the Gram API key: MCPURL points straight at the
+			// vendor's own server, which was never meant to receive it.
+		case s.IsOAuth:
 			// OAuth servers handle identity at the HTTP layer — no auth credential needed.
-		} else if s.IsPublic {
+		case s.IsPublic:
 			if len(s.EnvConfigs) > 0 {
 				entry.EnvHTTPHeaders = make(map[string]string, len(s.EnvConfigs))
 				for _, ec := range s.EnvConfigs {
 					entry.EnvHTTPHeaders[ec.DisplayName] = ec.VariableName
 				}
 			}
-		} else if cfg.APIKey != "" {
+		case cfg.APIKey != "":
 			entry.HTTPHeaders = map[string]string{"Authorization": "Bearer " + cfg.APIKey}
-		} else {
+		default:
 			entry.BearerTokenEnvVar = "GRAM_API_KEY"
 		}
 
 		mcpServers[keys[i]] = entry
+	}
+	if bundleSkillFeedbackMCP(p) {
+		// Codex trims invalid edge characters when forming keys, so a
+		// non-exact display name can still occupy the reserved key.
+		if _, exists := mcpServers[skillFeedbackMCPServerName]; !exists {
+			mcpServers[skillFeedbackMCPServerName] = codexMCPServer{
+				Command:           "bash",
+				Args:              codexSkillFeedbackMCPArgs(name, cfg),
+				URL:               "",
+				BearerTokenEnvVar: "",
+				HTTPHeaders:       nil,
+				EnvHTTPHeaders:    nil,
+			}
+			if err := writeHooksRuntimeFiles(files, subdir, cfg); err != nil {
+				return err
+			}
+		}
 	}
 	mcpJSON, err := marshalJSON(codexMCPConfig{MCPServers: mcpServers})
 	if err != nil {
@@ -984,6 +1130,9 @@ func CursorObservabilitySlug(cfg GenerateConfig) string {
 func CodexObservabilitySlug(cfg GenerateConfig) string {
 	return conv.ToSlug(conv.Default(cfg.HooksOrgName, cfg.OrgName)) + "-observability-codex"
 }
+func OpenCodeObservabilitySlug(cfg GenerateConfig) string {
+	return conv.ToSlug(conv.Default(cfg.HooksOrgName, cfg.OrgName)) + "-observability-opencode"
+}
 
 // hooksSubtreePrefixes returns the repo directory prefixes the hooks
 // (observability) subtree occupies for a given org name — every hooks
@@ -997,6 +1146,7 @@ func hooksSubtreePrefixes(orgName string) []string {
 		naming.ObservabilitySlug(orgName) + "/",
 		cursorPluginRoot + "/" + conv.ToSlug(orgName) + "-observability-cursor/",
 		conv.ToSlug(orgName) + "-observability-codex/",
+		conv.ToSlug(orgName) + "-observability-opencode/",
 	}
 }
 
@@ -1214,10 +1364,15 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 	hookEvents := make(map[string][]codexMatcherGroup, len(CodexObservabilityHookEvents))
 	for _, event := range CodexObservabilityHookEvents {
 		timeoutSeconds, async := codexHookParams(event)
+		hookTimeout := 0
+		if event == "SessionEnd" {
+			hookTimeout = timeoutSeconds
+		}
 		hooks := []codexHookCommand{{
 			Type:           "command",
 			Command:        codexHookCommandString(timeoutSeconds, async),
 			CommandWindows: codexHookCommandStringWindows(timeoutSeconds, async),
+			Timeout:        hookTimeout,
 		}}
 		hookEvents[event] = []codexMatcherGroup{{
 			Matcher: "",
@@ -1238,6 +1393,197 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 	return nil
 }
 
+// generateOpenCodeObservabilityPluginFlat emits the per-org observability
+// plugin for OpenCode at the ZIP root, for extraction into an OpenCode config
+// directory (~/.config/opencode/ or a repo's .opencode/). OpenCode has no
+// hooks.json dialect or plugin manifest: hooks are TypeScript plugin modules
+// discovered under plugin/, so the package is a self-contained shim that
+// bridges OpenCode's plugin API to the hooks binary over NDJSON stdio
+// (agenthooks serve).
+func generateOpenCodeObservabilityPluginFlat(files map[string][]byte, cfg GenerateConfig) error {
+	return generateOpenCodeObservabilityPluginInDir(files, "", cfg)
+}
+
+func generateOpenCodeObservabilityPlugin(files map[string][]byte, cfg GenerateConfig) error {
+	return generateOpenCodeObservabilityPluginInDir(files, OpenCodeObservabilitySlug(cfg), cfg)
+}
+
+func generateOpenCodeObservabilityPluginInDir(files map[string][]byte, subdir string, cfg GenerateConfig) error {
+	files[path.Join(subdir, "plugin/agenthooks.ts")] = []byte(opencodeObservabilityShim)
+	if err := writeHooksRuntimeFiles(files, subdir, cfg); err != nil {
+		return err
+	}
+	// The shim picks the PowerShell bootstrapper on Windows (OpenCode has no
+	// commandWindows equivalent — the spawn decision lives in the shim).
+	files[path.Join(subdir, "hooks/bootstrap.ps1")] = renderHooksPowerShellBootstrap(cfg)
+	return nil
+}
+
+// opencodeObservabilityShim is the OpenCode plugin module. It carries no
+// org-specific values — deployment identity rides in the sibling
+// speakeasy.json — and resolves every path relative to its own location so
+// the same file works from a global config dir or a repo .opencode/.
+//
+// The argv deliberately leads with the "agenthooks serve" sentinel and passes
+// --config after it: pinned hooks binaries only recognize the serve mode with
+// the sentinel first, while --config is position-independent.
+//
+// The NDJSON frame protocol (seq-tagged request/reply over stdio) is the
+// agenthooks serve-mode contract; the shim owns the per-hook timeout policy
+// OpenCode lacks. The body mirrors agenthooks' canonical opencode shim
+// (install/render_opencode.go): it lifts MCP config, the final assistant
+// message, and end-of-turn token/cost off the transcript, none of which ride
+// a native OpenCode hook.
+const opencodeObservabilityShim = `// Generated by Speakeasy. Proxies OpenCode plugin hooks to the Speakeasy
+// hooks binary over NDJSON stdio (agenthooks serve --provider=opencode).
+import { spawn, type ChildProcess } from "node:child_process"
+import { createInterface } from "node:readline"
+import { fileURLToPath } from "node:url"
+import { dirname, join } from "node:path"
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..")
+const SERVE_ARGS = ["agenthooks", "serve", "--provider=opencode", "--config=" + join(ROOT, "speakeasy.json")]
+const COMMAND: string[] =
+  process.platform === "win32"
+    ? ["powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", join(ROOT, "hooks", "bootstrap.ps1"), ...SERVE_ARGS]
+    : ["bash", join(ROOT, "hooks", "bootstrap.sh"), ...SERVE_ARGS]
+const HOOK_TIMEOUT_MS = 30_000
+
+export const SpeakeasyObservability = async (ctx: any) => {
+  const child: ChildProcess = spawn(COMMAND[0], COMMAND.slice(1), {
+    stdio: ["pipe", "pipe", "inherit"],
+  })
+  let seq = 0
+  const pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>()
+  const failedCalls = new Set<string>()
+
+  createInterface({ input: child.stdout! }).on("line", (line) => {
+    if (!line.trim()) return
+    let reply: any
+    try {
+      reply = JSON.parse(line)
+    } catch {
+      return
+    }
+    const p = pending.get(reply.seq)
+    if (!p) return
+    pending.delete(reply.seq)
+    p.resolve(reply)
+  })
+  child.on("exit", () => {
+    for (const [, p] of pending) p.resolve({})
+    pending.clear()
+  })
+
+  const call = (hook: string, input: unknown, output: unknown): Promise<any> => {
+    if (child.exitCode !== null || !child.stdin?.writable) return Promise.resolve({})
+    const id = ++seq
+    child.stdin.write(JSON.stringify({ seq: id, hook, input, output }) + "\n")
+    return new Promise((resolve) => {
+      pending.set(id, { resolve, reject: resolve as any })
+      // The shim adds the timeout policy OpenCode lacks.
+      const timer = setTimeout(() => {
+        if (pending.delete(id)) resolve({})
+      }, HOOK_TIMEOUT_MS)
+      // Don't keep the event loop alive for a hook reply.
+      if (typeof timer.unref === "function") timer.unref()
+    })
+  }
+
+  const apply = (target: any, reply: any) => {
+    if (reply?.error) throw new Error(reply.error)
+    if (reply?.output && target && typeof target === "object") {
+      // Arrays replaced wholesale, preserving OpenCode's mutation semantics.
+      Object.assign(target, reply.output)
+    }
+  }
+
+  let initialized: Promise<void> | undefined
+  const initialize = () => initialized ??= (async () => {
+    let mcp: Record<string, unknown> | undefined
+    try {
+      const config: any = (await ctx.client.config.get())?.data
+      if (config) {
+        mcp = {}
+        for (const [name, server] of Object.entries(config.mcp ?? {}) as [string, any][]) {
+          mcp[name] = {
+            type: server?.type,
+            command: server?.command,
+            url: server?.url,
+            enabled: server?.enabled,
+          }
+        }
+      }
+    } catch {}
+    await call("initialize", {
+      serverUrl: ctx?.serverUrl ?? ctx?.client?.baseUrl ?? "",
+      directory: ctx?.directory ?? "",
+      worktree: ctx?.worktree ?? "",
+      ...(mcp === undefined ? {} : { mcp }),
+    }, null)
+  })()
+
+  const forward = (hook: string) => async (input: unknown, output: unknown) => {
+    await initialize()
+    apply(output, await call(hook, input, output))
+  }
+
+  return {
+    "chat.message": forward("chat.message"),
+    "chat.params": forward("chat.params"),
+    "tool.execute.before": forward("tool.execute.before"),
+    "tool.execute.after": forward("tool.execute.after"),
+    event: async ({ event }: any) => {
+      let input = event?.properties ?? {}
+      if (event?.type === "message.part.updated") {
+        const part = input?.part
+        // Only failed tool parts are reported: tool.execute.after does not
+        // fire when a tool errors, and streaming deltas would flood the pipe.
+        if (part?.type !== "tool" || part?.state?.status !== "error") return
+        if (failedCalls.has(part.callID)) return
+        failedCalls.add(part.callID)
+      }
+      const ready = initialize()
+      // No native hook or bus event carries the completed assistant text, so
+      // splice the transcript's final assistant message into the stop event
+      // the way Claude/Codex report last_assistant_message.
+      if (event?.type === "session.idle" && input?.sessionID) {
+        try {
+          const res: any = await ctx.client.session.messages({ path: { id: input.sessionID } })
+          const msgs: any[] = res?.data ?? []
+          for (let i = msgs.length - 1; i >= 0; i--) {
+            const m = msgs[i]
+            if (m?.info?.role !== "assistant") continue
+            const text = (m.parts ?? [])
+              .filter((p: any) => p?.type === "text" && p.text && !p.synthetic)
+              .map((p: any) => p.text)
+              .join("\n")
+            if (text) input = { ...input, finalMessage: text }
+            // No native hook carries end-of-turn totals either; lift the same
+            // message's info.tokens / info.cost into the stop event.
+            const info: any = m?.info ?? {}
+            if (info.tokens || info.cost != null) {
+              input = { ...input, usage: { tokens: info.tokens, cost: info.cost } }
+            }
+            break
+          }
+        } catch {}
+      }
+      await ready
+      apply(null, await call(event?.type ?? "event", input, null))
+    },
+    dispose: () => {
+      try {
+        child.stdin!.end()
+        child.kill()
+      } catch {}
+    },
+  }
+}
+
+export default SpeakeasyObservability
+`
+
 // GenerateObservabilityPluginPackage produces the file map for a single
 // observability plugin for direct ZIP installation (no <org>-observability/
 // subdir). Minting a fresh hooks key is the caller's responsibility — this
@@ -1256,6 +1602,10 @@ func GenerateObservabilityPluginPackage(cfg GenerateConfig, platform string) (ma
 	case "codex":
 		if err := generateCodexObservabilityPluginFlat(files, cfg); err != nil {
 			return nil, fmt.Errorf("generate codex observability plugin: %w", err)
+		}
+	case "opencode":
+		if err := generateOpenCodeObservabilityPluginFlat(files, cfg); err != nil {
+			return nil, fmt.Errorf("generate opencode observability plugin: %w", err)
 		}
 	default:
 		return nil, fmt.Errorf("unsupported platform: %s", platform)
@@ -1280,6 +1630,8 @@ func codexEventSnakeCase(event string) string {
 	switch event {
 	case "SessionStart":
 		return "session_start"
+	case "SessionEnd":
+		return "session_end"
 	case "PreToolUse":
 		return "pre_tool_use"
 	case "PermissionRequest":
@@ -1298,7 +1650,7 @@ func codexEventSnakeCase(event string) string {
 // computeCodexHookHash returns the sha256:hex trusted_hash that Codex expects
 // for a single hook entry. Codex's canonical JSON varies by event:
 //
-//   - SessionStart, PreToolUse, PermissionRequest, PostToolUse:
+//   - SessionStart, SessionEnd, PreToolUse, PermissionRequest, PostToolUse:
 //     sha256(canonical_json({event_name, hooks:[{async, command, timeout, type}], matcher:""}))
 //   - UserPromptSubmit, Stop:
 //     sha256(canonical_json({event_name, hooks:[{async, command, timeout, type}]}))
@@ -1308,10 +1660,14 @@ func codexEventSnakeCase(event string) string {
 // variables only after trust verification.
 func computeCodexHookHash(event, command string) (string, error) {
 	eventSnake := codexEventSnakeCase(event)
+	timeoutSeconds := 600
+	if event == "SessionEnd" {
+		timeoutSeconds = 3
+	}
 	hook := map[string]any{
 		"async":   false,
 		"command": command,
-		"timeout": 600,
+		"timeout": timeoutSeconds,
 		"type":    "command",
 	}
 	// json.Marshal on map[string]any sorts keys alphabetically, matching
@@ -1341,10 +1697,13 @@ func computeCodexHookHash(event, command string) (string, error) {
 // so the hooks.json generator and the precomputed approvals must derive them
 // from this single source.
 func codexHookParams(event string) (timeoutSeconds int, async bool) {
-	async = event == "PostToolUse" || event == "Stop"
+	async = event == "PostToolUse" || event == "SessionEnd" || event == "Stop"
 	timeoutSeconds = 60
-	if event == "SessionStart" {
+	switch event {
+	case "SessionStart":
 		timeoutSeconds = 330
+	case "SessionEnd":
+		timeoutSeconds = 3
 	}
 	return timeoutSeconds, async
 }
@@ -1425,10 +1784,15 @@ func renderCodexInstallScript(marketplaceURL, marketplace, plugin string, approv
   fi
   local codex_home="${CODEX_HOME:-$HOME/.codex}"
   local candidate
+  # ChatGPT.app is the unified desktop app (Chat + Work + Codex modes) OpenAI
+  # merged the standalone Codex app into on 2026-07-09; it embeds the same
+  # codex CLI and still reads ~/.codex/config.toml. It is probed before the
+  # legacy Codex.app bundle, which is frozen post-merge.
   for candidate in \
     "${codex_home}/packages/standalone/current/bin/codex" \
     "${HOME}/.local/bin/codex" \
     /usr/local/bin/codex \
+    "/Applications/ChatGPT.app/Contents/Resources/codex" \
     "/Applications/Codex.app/Contents/Resources/codex"; do
     if [ -f "${candidate}" ] && [ -x "${candidate}" ]; then
       printf '%s\n' "${candidate}"
@@ -1592,6 +1956,50 @@ echo "✓ Speakeasy observability plugin installed. Restart Codex to activate."
 	return []byte(b.String())
 }
 
+func generatePlatformMCPFiles(cfg GenerateConfig) (map[string][]byte, error) {
+	files := make(map[string][]byte)
+	if err := generatePlatformMCPFilesInto(files, cfg); err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+func generatePlatformMCPFilesInto(files map[string][]byte, cfg GenerateConfig) error {
+	platformURL, err := url.Parse(strings.TrimRight(cfg.ServerURL, "/") + "/platform-mcp")
+	if err != nil || platformURL.Host == "" || platformURL.User != nil || platformURL.RawQuery != "" || platformURL.Fragment != "" || (platformURL.Scheme != "http" && platformURL.Scheme != "https") {
+		return fmt.Errorf("invalid Platform MCP server URL %q", cfg.ServerURL)
+	}
+
+	meta, err := marshalJSON(claudePluginMeta{
+		Name:        platformMCPPluginName,
+		DisplayName: "Gram Platform MCP",
+		Description: "Read-only organization administration through the Gram Platform MCP.",
+		Version:     "0." + platformMCPGeneratorVersion + "." + conv.Default(cfg.Version, "0"),
+		Author:      pluginAuthor{Name: "Gram", URL: "https://getgram.ai"},
+		Homepage:    "https://getgram.ai",
+		UserConfig:  nil,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal Platform MCP plugin.json: %w", err)
+	}
+	files[path.Join(platformMCPPluginRoot, ".claude-plugin/plugin.json")] = meta
+
+	mcpConfig, err := marshalJSON(claudeMCPConfig{MCPServers: map[string]claudeMCPServer{
+		platformMCPPluginName: {
+			Type:    "http",
+			Command: "",
+			Args:    nil,
+			URL:     platformURL.String(),
+			Headers: nil,
+		},
+	}})
+	if err != nil {
+		return fmt.Errorf("marshal Platform MCP .mcp.json: %w", err)
+	}
+	files[path.Join(platformMCPPluginRoot, ".mcp.json")] = mcpConfig
+	return nil
+}
+
 func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginInfo, cfg GenerateConfig) error {
 	// Collect userConfig entries across all servers that need user-provided values.
 	userConfig := make(map[string]userConfigEntry)
@@ -1599,7 +2007,7 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 	// Determine if any private server needs a Gram API key prompt.
 	needsGramKeyPrompt := false
 	for _, s := range p.Servers {
-		if !s.IsPublic && !s.IsOAuth && cfg.APIKey == "" {
+		if !s.IsUnproxied && !s.IsPublic && !s.IsOAuth && cfg.APIKey == "" {
 			needsGramKeyPrompt = true
 		}
 		// Public non-OAuth servers may need user-provided env vars.
@@ -1637,11 +2045,14 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 	}
 	files[path.Join(subdir, ".claude-plugin/plugin.json")] = pluginJSON
 
-	mcpServers := make(map[string]claudeMCPServer)
+	mcpServers := make(map[string]claudeMCPServer, len(p.Servers)+1)
 	for _, s := range p.Servers {
 		var headers map[string]string
 
-		if s.IsOAuth {
+		if s.IsUnproxied {
+			// Never attach the Gram API key: MCPURL points straight at the
+			// vendor's own server, which was never meant to receive it.
+		} else if s.IsOAuth {
 			// OAuth servers handle identity at the HTTP layer — no Authorization header needed.
 		} else if s.IsPublic {
 			headers = make(map[string]string)
@@ -1656,8 +2067,22 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 
 		mcpServers[s.DisplayName] = claudeMCPServer{
 			Type:    "http",
+			Command: "",
+			Args:    nil,
 			URL:     s.MCPURL,
 			Headers: headers,
+		}
+	}
+	if bundleSkillFeedbackMCP(p) {
+		mcpServers[skillFeedbackMCPServerName] = claudeMCPServer{
+			Type:    "stdio",
+			Command: "bash",
+			Args:    skillFeedbackMCPArgs(`${CLAUDE_PLUGIN_ROOT}`),
+			URL:     "",
+			Headers: nil,
+		}
+		if err := writeHooksRuntimeFiles(files, subdir, cfg); err != nil {
+			return err
 		}
 	}
 	mcpJSON, err := marshalJSON(claudeMCPConfig{MCPServers: mcpServers})
@@ -1679,32 +2104,68 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 // than trust the invariant across the DB boundary.
 func emitPluginSkills(files map[string][]byte, subdir string, p PluginInfo) {
 	for _, sk := range p.Skills {
-		if !validSkillDirName(sk.Name) {
+		if !domainskills.ValidSpecName(sk.Name) {
 			continue
 		}
 		files[path.Join(subdir, "skills", sk.Name, "SKILL.md")] = []byte(sk.Content)
 	}
 }
 
-// validSkillDirName reports whether a skill name is safe to use as a package
-// directory: 1-64 chars of lowercase alphanumerics and single interior
-// hyphens, mirroring the skill spec's name rules.
-func validSkillDirName(name string) bool {
-	if len(name) == 0 || len(name) > 64 || name[0] == '-' || name[len(name)-1] == '-' {
+const skillFeedbackMCPServerName = "speakeasy-skill-feedback"
+
+// bundleSkillFeedbackMCP uses the same name predicate as emitPluginSkills, so
+// feedback is bundled exactly when this feature package carries a skill. A
+// customer server that already claims the reserved name wins.
+func bundleSkillFeedbackMCP(p PluginInfo) bool {
+	hasSkill := false
+	for _, skill := range p.Skills {
+		if domainskills.ValidSpecName(skill.Name) {
+			hasSkill = true
+			break
+		}
+	}
+	if !hasSkill {
 		return false
 	}
-	previousHyphen := false
-	for _, r := range name {
-		switch {
-		case r >= 'a' && r <= 'z' || r >= '0' && r <= '9':
-			previousHyphen = false
-		case r == '-' && !previousHyphen:
-			previousHyphen = true
-		default:
+	for _, server := range p.Servers {
+		if server.DisplayName == skillFeedbackMCPServerName {
 			return false
 		}
 	}
 	return true
+}
+
+// skillFeedbackMCPArgs builds the argv for the bundled stdio feedback server:
+// the plugin-root bootstrap script downloads the pinned hooks binary and
+// forwards to its skill-feedback subcommand. root is the harness's plugin-root
+// placeholder (${CLAUDE_PLUGIN_ROOT} or ${CURSOR_PLUGIN_ROOT}), which those
+// harnesses substitute in plugin MCP configs when they spawn the server, so
+// the entry works wherever the plugin is installed.
+func skillFeedbackMCPArgs(root string) []string {
+	// The subcommand must precede the flags: the binary dispatches on its
+	// first argument.
+	return []string{
+		root + "/hooks/bootstrap.sh",
+		"skill-feedback",
+		"--config=" + root + "/speakeasy.json",
+	}
+}
+
+// codexSkillFeedbackMCPArgs is the Codex variant: codex-cli does not
+// substitute ${PLUGIN_ROOT} in plugin MCP server configs (verified against
+// 0.145.0), so the entry addresses the deterministic plugin cache path —
+// <codex home>/plugins/cache/<marketplace>/<plugin>/<version> — and lets bash
+// expand the home from the process environment at spawn.
+func codexSkillFeedbackMCPArgs(pluginName string, cfg GenerateConfig) []string {
+	root := "${CODEX_HOME:-$HOME/.codex}/plugins/cache/" + path.Join(resolveMarketplaceName(cfg), pluginName, pluginManifestVersion(cfg))
+	return []string{
+		"-c",
+		fmt.Sprintf(`exec "%s/hooks/bootstrap.sh" skill-feedback "--config=%s/speakeasy.json"`, root, root),
+	}
+}
+
+func needsSkillFeedbackHooksKey(plugins []PluginInfo) bool {
+	return slices.ContainsFunc(plugins, bundleSkillFeedbackMCP)
 }
 
 func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p PluginInfo, cfg GenerateConfig) error {
@@ -1726,11 +2187,14 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 	}
 	files[path.Join(subdir, ".cursor-plugin/plugin.json")] = pluginJSON
 
-	mcpServers := make(map[string]cursorMCPServer)
+	mcpServers := make(map[string]cursorMCPServer, len(p.Servers)+1)
 	for _, s := range p.Servers {
 		var headers map[string]string
 
-		if s.IsOAuth {
+		if s.IsUnproxied {
+			// Never attach the Gram API key: MCPURL points straight at the
+			// vendor's own server, which was never meant to receive it.
+		} else if s.IsOAuth {
 			// OAuth servers handle identity at the HTTP layer — no Authorization header needed.
 		} else if s.IsPublic {
 			headers = make(map[string]string)
@@ -1744,8 +2208,21 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 		}
 
 		mcpServers[s.DisplayName] = cursorMCPServer{
+			Command: "",
+			Args:    nil,
 			URL:     s.MCPURL,
 			Headers: headers,
+		}
+	}
+	if bundleSkillFeedbackMCP(p) {
+		mcpServers[skillFeedbackMCPServerName] = cursorMCPServer{
+			Command: "bash",
+			Args:    skillFeedbackMCPArgs(`${CURSOR_PLUGIN_ROOT}`),
+			URL:     "",
+			Headers: nil,
+		}
+		if err := writeHooksRuntimeFiles(files, subdir, cfg); err != nil {
+			return err
 		}
 	}
 	mcpJSON, err := marshalJSON(cursorMCPConfig{MCPServers: mcpServers})
@@ -1758,6 +2235,112 @@ func generateCursorPluginInDir(files map[string][]byte, subdir, name string, p P
 
 	return nil
 }
+
+// generateOpenCodePluginInDir emits the OpenCode package for a feature
+// plugin. OpenCode has no plugin manifest or marketplace: it auto-loads every
+// module under <config-dir>/plugin/ and merges whatever the module's config
+// hook writes into the resolved config. The package is therefore a loader
+// module plus a slug-named data directory, both extracted into an OpenCode
+// config dir (~/.config/opencode/ or a repo's .opencode/):
+//
+//	plugin/<slug>.ts          — registers the servers and skills at startup
+//	<slug>/mcp.json           — the servers, in OpenCode's own mcp config shape
+//	<slug>/skills/<n>/SKILL.md — skills, referenced via the skills.paths config
+//
+// Slug-prefixing both files keeps any number of plugins (and the
+// observability package) coexisting in the one shared config dir, which is
+// what directory isolation gives the other platforms for free.
+func generateOpenCodePluginInDir(files map[string][]byte, subdir string, p PluginInfo, cfg GenerateConfig) error {
+	mcpServers := make(map[string]opencodeMCPServer)
+	for _, s := range p.Servers {
+		var headers map[string]string
+
+		if s.IsUnproxied {
+			// Never attach the Gram API key: MCPURL points straight at the
+			// vendor's own server, which was never meant to receive it.
+		} else if s.IsOAuth {
+			// OpenCode auto-detects OAuth on remote servers and runs the
+			// authorization flow itself — no headers needed.
+		} else if s.IsPublic {
+			headers = make(map[string]string)
+			for _, ec := range s.EnvConfigs {
+				headers[ec.DisplayName] = "${env:" + ec.VariableName + "}"
+			}
+		} else if cfg.APIKey != "" {
+			headers = map[string]string{"Authorization": "Bearer " + cfg.APIKey}
+		} else {
+			headers = map[string]string{"Authorization": "Bearer ${env:GRAM_API_KEY}"}
+		}
+
+		mcpServers[s.DisplayName] = opencodeMCPServer{
+			Type:    "remote",
+			URL:     s.MCPURL,
+			Enabled: true,
+			Headers: headers,
+		}
+	}
+	mcpJSON, err := marshalJSON(opencodeMCPConfig{MCP: mcpServers})
+	if err != nil {
+		return fmt.Errorf("marshal opencode mcp.json: %w", err)
+	}
+	files[path.Join(subdir, p.Slug, "mcp.json")] = mcpJSON
+
+	loader := strings.ReplaceAll(opencodeFeatureLoader, "__SLUG__", p.Slug)
+	files[path.Join(subdir, "plugin", p.Slug+".ts")] = []byte(loader)
+
+	emitPluginSkills(files, path.Join(subdir, p.Slug), p)
+
+	return nil
+}
+
+// opencodeFeatureLoader is the OpenCode module emitted as plugin/<slug>.ts.
+// It carries no server data — the servers ride in the sibling <slug>/mcp.json
+// so the loader stays a stable template — and resolves paths relative to its
+// own location so the same file works from a global config dir or a repo
+// .opencode/.
+//
+// The config hook is the only supported way for a plugin to register MCP
+// servers and extra skill folders: OpenCode merges mutations to the resolved
+// config before MCP clients start and before skill discovery runs. User
+// config entries win on name collisions. ${env:VAR} header values are
+// resolved from the loader's environment; headers left empty by an unset
+// variable are dropped so unauthenticated requests fail at the server rather
+// than send malformed credentials.
+const opencodeFeatureLoader = `// Generated by Speakeasy. Registers this package's MCP servers and skills
+// with OpenCode via the plugin config hook.
+import { readFileSync, existsSync } from "node:fs"
+import { fileURLToPath } from "node:url"
+import { dirname, join } from "node:path"
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "__SLUG__")
+
+export const SpeakeasyPlugin = async (_ctx: any) => ({
+  config: async (cfg: any) => {
+    let mcp: Record<string, any> = {}
+    try {
+      mcp = JSON.parse(readFileSync(join(ROOT, "mcp.json"), "utf8")).mcp ?? {}
+    } catch {
+      // A missing or unreadable manifest disables the servers but must not
+      // break OpenCode startup.
+    }
+    for (const server of Object.values(mcp) as any[]) {
+      if (!server.headers) continue
+      for (const [name, value] of Object.entries(server.headers) as [string, string][]) {
+        const resolved = value.replace(/\$\{env:([A-Za-z0-9_]+)\}/g, (_m: string, v: string) => process.env[v] ?? "")
+        if (resolved.trim() === "" || resolved.trim() === "Bearer") delete server.headers[name]
+        else server.headers[name] = resolved
+      }
+    }
+    cfg.mcp = { ...mcp, ...cfg.mcp }
+    const skills = join(ROOT, "skills")
+    if (existsSync(skills)) {
+      cfg.skills = { ...cfg.skills, paths: [...(cfg.skills?.paths ?? []), skills] }
+    }
+  },
+})
+
+export default SpeakeasyPlugin
+`
 
 // --- JSON types ---
 
@@ -1813,7 +2396,9 @@ type claudeMCPConfig struct {
 
 type claudeMCPServer struct {
 	Type    string            `json:"type"`
-	URL     string            `json:"url"`
+	Command string            `json:"command,omitempty"`
+	Args    []string          `json:"args,omitempty"`
+	URL     string            `json:"url,omitempty"`
 	Headers map[string]string `json:"headers,omitempty"`
 }
 
@@ -1839,7 +2424,23 @@ type cursorMCPConfig struct {
 }
 
 type cursorMCPServer struct {
+	Command string            `json:"command,omitempty"`
+	Args    []string          `json:"args,omitempty"`
+	URL     string            `json:"url,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
+}
+
+// opencodeMCPConfig is the <slug>/mcp.json sidecar the OpenCode loader module
+// reads. The mcp map uses OpenCode's own remote-server config shape verbatim
+// so the loader can merge entries into the resolved config unchanged.
+type opencodeMCPConfig struct {
+	MCP map[string]opencodeMCPServer `json:"mcp"`
+}
+
+type opencodeMCPServer struct {
+	Type    string            `json:"type"`
 	URL     string            `json:"url"`
+	Enabled bool              `json:"enabled"`
 	Headers map[string]string `json:"headers,omitempty"`
 }
 
@@ -1902,12 +2503,14 @@ type codexHookCommand struct {
 	Type           string `json:"type"`
 	Command        string `json:"command"`
 	CommandWindows string `json:"commandWindows,omitempty"`
+	Timeout        int    `json:"timeout,omitempty"`
 }
 
 // CodexObservabilityHookEvents are Codex's hook event names. Codex uses
 // PascalCase names and has a PermissionRequest event that Claude/Cursor lack.
 var CodexObservabilityHookEvents = []string{
 	"SessionStart",
+	"SessionEnd",
 	"PreToolUse",
 	"PermissionRequest",
 	"PostToolUse",
@@ -1942,7 +2545,9 @@ type codexMCPConfig struct {
 }
 
 type codexMCPServer struct {
-	URL               string            `json:"url"`
+	Command           string            `json:"command,omitempty"`
+	Args              []string          `json:"args,omitempty"`
+	URL               string            `json:"url,omitempty"`
 	BearerTokenEnvVar string            `json:"bearer_token_env_var,omitempty"`
 	HTTPHeaders       map[string]string `json:"http_headers,omitempty"`
 	EnvHTTPHeaders    map[string]string `json:"env_http_headers,omitempty"`

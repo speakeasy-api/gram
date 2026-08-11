@@ -1,14 +1,15 @@
 import { DetailHero } from "@/components/detail-hero";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
+import { Heading } from "@/components/ui/Heading";
 import {
   PageTabsTrigger,
   Tabs,
   TabsContent,
-  TabsList,
-} from "@/components/ui/tabs";
-import { Type } from "@/components/ui/type";
+  PageTabsList,
+} from "@/components/ui/Tabs";
+import { Text } from "@/components/ui/Text";
+import { remoteSessionScopeTier } from "@/lib/sources";
 import { useOrgRoutes } from "@/routes";
 import { useOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
 import { Link, Navigate, useLocation, useParams } from "react-router";
@@ -37,6 +38,11 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
 
   const label = issuer ? issuerDisplayName(issuer) : "Remote Identity Provider";
 
+  // Platform issuers are read-only to tenants. The Settings tab holds the only
+  // issuer mutation controls (edit + delete), both refused by the backend, so it
+  // is hidden for a platform issuer; client management on the Clients tab stays.
+  const isPlatform = !!issuer && remoteSessionScopeTier(issuer) === "platform";
+
   // The issuer doesn't exist (or failed to load); return to the listing.
   if (isError || (!isLoading && !issuer)) {
     return <Navigate to={orgRoutes.remoteIdentityProviders.href()} replace />;
@@ -47,6 +53,12 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
     return <Navigate to={tabHref("overview")} replace />;
   }
 
+  // A direct Settings URL on a platform issuer has no editable surface; send it
+  // back to Overview.
+  if (isPlatform && activeTab === "settings") {
+    return <Navigate to={tabHref("overview")} replace />;
+  }
+
   return (
     <Page>
       <Page.Header>
@@ -54,11 +66,17 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
       </Page.Header>
       <Page.Body fullWidth noPadding className="gap-0">
         <DetailHero>
+          <Page.Eyebrow />
           <div className="flex items-center gap-3">
-            <Type small muted>
+            <Text small muted>
               Remote Identity Provider
-            </Type>
-            {issuer && <ScopeBadge projectScoped={Boolean(issuer.projectId)} />}
+            </Text>
+            {issuer && (
+              <ScopeBadge
+                projectId={issuer.projectId}
+                organizationId={issuer.organizationId}
+              />
+            )}
           </div>
           <Heading variant="h1" className="break-all normal-case">
             {label}
@@ -69,17 +87,19 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
           <Tabs value={activeTab} className="flex w-full flex-1 flex-col">
             <div className="shrink-0 border-b">
               <div className="mx-auto max-w-[1270px] px-8">
-                <TabsList className="h-auto gap-6 rounded-none bg-transparent p-0">
+                <PageTabsList className="h-auto gap-6 bg-transparent p-0">
                   <PageTabsTrigger value="overview" asChild>
                     <Link to={tabHref("overview")}>Overview</Link>
                   </PageTabsTrigger>
                   <PageTabsTrigger value="clients" asChild>
                     <Link to={tabHref("clients")}>Clients</Link>
                   </PageTabsTrigger>
-                  <PageTabsTrigger value="settings" asChild>
-                    <Link to={tabHref("settings")}>Settings</Link>
-                  </PageTabsTrigger>
-                </TabsList>
+                  {!isPlatform && (
+                    <PageTabsTrigger value="settings" asChild>
+                      <Link to={tabHref("settings")}>Settings</Link>
+                    </PageTabsTrigger>
+                  )}
+                </PageTabsList>
               </div>
             </div>
 
@@ -89,12 +109,14 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
               </TabsContent>
               <TabsContent value="clients" className="mt-0">
                 {issuer && <ClientsTab issuer={issuer} />}
-                {isLoading && <Type muted>Loading…</Type>}
+                {isLoading && <Text muted>Loading…</Text>}
               </TabsContent>
-              <TabsContent value="settings" className="mt-0">
-                {issuer && <SettingsTab key={issuer.id} issuer={issuer} />}
-                {isLoading && <Type muted>Loading…</Type>}
-              </TabsContent>
+              {!isPlatform && (
+                <TabsContent value="settings" className="mt-0">
+                  {issuer && <SettingsTab key={issuer.id} issuer={issuer} />}
+                  {isLoading && <Text muted>Loading…</Text>}
+                </TabsContent>
+              )}
             </div>
           </Tabs>
         </RequireScope>

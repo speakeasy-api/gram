@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	defaultAssistantModel = "anthropic/claude-sonnet-5"
+	defaultAssistantModel = "anthropic/claude-opus-5"
 	defaultTurnTimeout    = 300 * time.Second
 	maxTurnTimeout        = 900 * time.Second
 	turnPollInterval      = 2 * time.Second
@@ -46,7 +46,7 @@ type idInput struct {
 type createAssistantInput struct {
 	projectInput
 	Name           string         `json:"name" jsonschema:"The assistant name."`
-	Model          string         `json:"model,omitempty" jsonschema:"OpenRouter model identifier. Defaults to anthropic/claude-sonnet-5."`
+	Model          string         `json:"model,omitempty" jsonschema:"OpenRouter model identifier. Defaults to anthropic/claude-opus-5."`
 	Instructions   string         `json:"instructions" jsonschema:"System instructions for the assistant."`
 	Toolsets       []toolsetRef   `json:"toolsets,omitempty" jsonschema:"Toolsets available to the assistant. Defaults to none."`
 	MCPServers     []mcpServerRef `json:"mcp_servers,omitempty" jsonschema:"MCP servers attached directly to the assistant."`

@@ -1,21 +1,23 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { Text } from "@/components/ui/Text";
 import { useSdkClient } from "@/contexts/Sdk";
 import {
   useRegisterEnvironmentTelemetry,
   useRegisterToolsetTelemetry,
+  useTelemetry,
 } from "@/contexts/Telemetry";
 import { useLatestDeployment, useToolset } from "@/hooks/toolTypes";
 import { DEFAULT_MODEL } from "@/lib/models";
+import { TUNNELED_MCP_FEATURE_FLAG } from "@/lib/tunneledMcp";
 import { Tool } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import { useHideInsightsDock } from "@/components/insights-context";
@@ -27,9 +29,8 @@ import {
 } from "@gram/client/react-query/listToolsets.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateTemplate } from "@gram/client/react-query/template.js";
-import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";
-import { ResizablePanel } from "@speakeasy-api/moonshine";
+import { ResizablePanel } from "@/components/ui/ResizablePanel";
 import { useQueryClient } from "@tanstack/react-query";
 import { MessageCircle, Plus, ScrollTextIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -43,13 +44,17 @@ import { PlaygroundAuth } from "./PlaygroundAuth";
 import { PlaygroundConfigPanel } from "./PlaygroundConfigPanel";
 import { PlaygroundElements } from "./PlaygroundElements";
 import { PlaygroundLogsPanel } from "./PlaygroundLogsPanel";
-import { PlaygroundRemoteChat } from "./PlaygroundRemoteChat";
+import { PlaygroundProxiedChat } from "./PlaygroundProxiedChat";
 import { ShareChatButton } from "./ShareChatButton";
-import { useRemoteMcpConnection } from "./useRemoteMcpConnection";
+import { invalidatePlaygroundToolQueries } from "./playgroundToolQueries";
+import { useProxiedMcpConnection } from "./useProxiedMcpConnection";
 
 // A single selectable server in the playground. Toolset-backed and
-// remote-MCP-backed servers share one flat picker; the `kind` discriminant only
-// drives how we connect (and which controls appear), never how it's labeled.
+// proxied-MCP-backed servers (remote or tunneled) share one flat picker; the
+// `kind` discriminant only drives how we connect (and which controls appear),
+// never how it's labeled. `remote` and `tunneled` carry identical fields and
+// route to the same proxied connection path — the distinct variant keeps the
+// discriminant honest and leaves room for tunneled-only affordances later.
 type PlaygroundServerRef =
   | { kind: "toolset"; key: string; name: string; toolsetSlug: string }
   | {
@@ -57,11 +62,18 @@ type PlaygroundServerRef =
       key: string;
       name: string;
       mcpServerId: string;
-      isIssuerGated: boolean;
+      userSessionIssuerId: string | undefined;
+    }
+  | {
+      kind: "tunneled";
+      key: string;
+      name: string;
+      mcpServerId: string;
+      userSessionIssuerId: string | undefined;
     };
 
 const toolsetServerKey = (slug: string) => `toolset:${slug}`;
-const remoteServerKey = (mcpServerId: string) => `remote:${mcpServerId}`;
+const mcpServerKey = (mcpServerId: string) => `mcp:${mcpServerId}`;
 
 // Merges toolset-backed servers (from listToolsets) with remote-MCP-backed
 // servers (the remoteMcpServerId subset of mcpServers) into one sorted list.
@@ -74,6 +86,10 @@ function usePlaygroundServers(): {
     useListToolsets();
   const { data: mcpServersData, isLoading: isLoadingMcpServers } =
     useMcpServers();
+
+  const telemetry = useTelemetry();
+  const tunneledEnabled =
+    telemetry.isFeatureEnabled(TUNNELED_MCP_FEATURE_FLAG) === true;
 
   const servers = useMemo<PlaygroundServerRef[]>(() => {
     const toolsetServers: PlaygroundServerRef[] = (
@@ -91,33 +107,53 @@ function usePlaygroundServers(): {
       .filter((server) => !!server.remoteMcpServerId)
       .map((server) => ({
         kind: "remote",
-        key: remoteServerKey(server.id),
+        key: mcpServerKey(server.id),
         name: server.name ?? server.slug ?? "Remote MCP server",
         mcpServerId: server.id,
-        isIssuerGated: !!server.userSessionIssuerId,
+        userSessionIssuerId: server.userSessionIssuerId,
       }));
 
-    return [...toolsetServers, ...remoteServers].sort((a, b) =>
-      a.name.localeCompare(b.name),
+    // Tunneled servers serve at the same /mcp/<slug> path and are the same
+    // McpServer view as remote; they only reach the picker when the flag is on.
+    // Public tunneled servers serve anonymously: the backend 404s every issuer
+    // surface even though the issuer column is populated, so drop the issuer id
+    // here to keep the playground off the mint/connect path.
+    const tunneledServers: PlaygroundServerRef[] = tunneledEnabled
+      ? (mcpServersData?.mcpServers ?? [])
+          .filter((server) => !!server.tunneledMcpServerId)
+          .map((server) => ({
+            kind: "tunneled",
+            key: mcpServerKey(server.id),
+            name: server.name ?? server.slug ?? "Tunneled MCP server",
+            mcpServerId: server.id,
+            userSessionIssuerId:
+              server.visibility === "public"
+                ? undefined
+                : server.userSessionIssuerId,
+          }))
+      : [];
+
+    return [...toolsetServers, ...remoteServers, ...tunneledServers].sort(
+      (a, b) => a.name.localeCompare(b.name),
     );
-  }, [toolsetsData, mcpServersData]);
+  }, [toolsetsData, mcpServersData, tunneledEnabled]);
 
   return { servers, isLoading: isLoadingToolsets || isLoadingMcpServers };
 }
 
 function PlaygroundEmptyState({ onCreate }: { onCreate: () => void }) {
   return (
-    <div className="bg-muted/20 flex flex-col items-center justify-center rounded-xl border border-dashed px-8 py-16">
+    <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16">
       <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
         <MessageCircle className="text-muted-foreground h-6 w-6" />
       </div>
-      <Type variant="subheading" className="mb-1">
+      <Text variant="subheading" className="mb-1">
         No MCP servers yet
-      </Type>
-      <Type small muted className="mb-4 max-w-md text-center">
+      </Text>
+      <Text small muted className="mb-4 max-w-md text-center">
         The playground lets you chat with tools from an MCP server. Create one
         to start testing.
-      </Type>
+      </Text>
       <RequireScope scope="mcp:write" level="component">
         {({ disabled }) => (
           <Button onClick={onCreate} disabled={disabled}>
@@ -147,7 +183,7 @@ export default function Playground(): JSX.Element {
 /** Resolve the initially-selected server key from URL params. */
 function initialServerKey(searchParams: URLSearchParams): string | null {
   const mcpServer = searchParams.get("mcpServer");
-  if (mcpServer) return remoteServerKey(mcpServer);
+  if (mcpServer) return mcpServerKey(mcpServer);
   const toolset = searchParams.get("toolset");
   if (toolset) return toolsetServerKey(toolset);
   return null;
@@ -239,7 +275,7 @@ function PlaygroundInner() {
   }
 
   const logsButton = (
-    <Button size="sm" variant="ghost" onClick={() => setShowLogs(!showLogs)}>
+    <Button size="sm" variant="tertiary" onClick={() => setShowLogs(!showLogs)}>
       <ScrollTextIcon className="mr-2 size-4" />
       {showLogs ? "Hide" : "Show"} Logs
     </Button>
@@ -277,10 +313,11 @@ function PlaygroundInner() {
                 onPlaygroundEnvironmentSlug={setPlaygroundEnvironmentSlug}
               />
             )}
-            {selectedServer?.kind === "remote" && (
-              <RemoteServerPanel
+            {(selectedServer?.kind === "remote" ||
+              selectedServer?.kind === "tunneled") && (
+              <ProxiedServerPanel
                 mcpServerId={selectedServer.mcpServerId}
-                isIssuerGated={selectedServer.isIssuerGated}
+                userSessionIssuerId={selectedServer.userSessionIssuerId}
                 serverSelector={serverSelector}
                 temperature={temperature}
                 setTemperature={setTemperature}
@@ -295,7 +332,7 @@ function PlaygroundInner() {
             <div className="flex h-full flex-col">
               {!selectedServer && (
                 <div className="flex h-full items-center justify-center">
-                  <Type muted>Select an MCP server to start chatting</Type>
+                  <Text muted>Select an MCP server to start chatting</Text>
                 </div>
               )}
               {selectedServer?.kind === "toolset" && (
@@ -307,10 +344,11 @@ function PlaygroundInner() {
                   additionalActions={additionalActions}
                 />
               )}
-              {selectedServer?.kind === "remote" && (
-                <PlaygroundRemoteChat
+              {(selectedServer?.kind === "remote" ||
+                selectedServer?.kind === "tunneled") && (
+                <PlaygroundProxiedChat
                   mcpServerId={selectedServer.mcpServerId}
-                  isIssuerGated={selectedServer.isIssuerGated}
+                  userSessionIssuerId={selectedServer.userSessionIssuerId}
                   environmentSlug={selectedEnvironment}
                   model={model}
                   additionalActions={additionalActions}
@@ -474,7 +512,7 @@ function ToolsetPanel({
           ...updates,
         },
       });
-      void invalidateTemplate(queryClient, [{ name: tool.name }]);
+      await invalidateTemplate(queryClient, [{ name: tool.name }]);
     } else {
       const form = {
         ...tool.variation,
@@ -488,11 +526,7 @@ function ToolsetPanel({
       });
     }
 
-    // Invalidate to refresh tool data in the sidebar
-    void invalidateAllToolset(queryClient);
-    void queryClient.invalidateQueries({
-      queryKey: queryKeyInstance({ toolsetSlug }),
-    });
+    await invalidatePlaygroundToolQueries(queryClient, toolsetSlug);
   };
 
   return (
@@ -564,6 +598,7 @@ function ToolsetPanel({
           currentTools={toolset.tools}
           onAddTools={(toolUrns) => handleAddTools(toolUrns)}
           onRemoveTools={(toolUrns) => handleRemoveTools(toolUrns)}
+          onToolUpdate={handleToolUpdate}
           initialGroup={manageToolsGroup}
         />
       )}
@@ -599,13 +634,13 @@ function ToolsetPanel({
 }
 
 /**
- * Left panel for a remote-MCP-backed server: the shared selector, a read-only
+ * Left panel for a proxied-MCP-backed server: the shared selector, a read-only
  * live tool list, and model settings. Tool curation, auth, and env config are
  * absent — those affordances don't apply to a proxied upstream.
  */
-function RemoteServerPanel({
+function ProxiedServerPanel({
   mcpServerId,
-  isIssuerGated,
+  userSessionIssuerId,
   serverSelector,
   temperature,
   setTemperature,
@@ -615,9 +650,9 @@ function RemoteServerPanel({
   setMaxTokens,
 }: PanelConfigProps & {
   mcpServerId: string;
-  isIssuerGated: boolean;
+  userSessionIssuerId: string | undefined;
 }) {
-  const { tools } = useRemoteMcpConnection(mcpServerId, isIssuerGated);
+  const { tools } = useProxiedMcpConnection(mcpServerId, userSessionIssuerId);
 
   const remoteTools = useMemo(
     () =>

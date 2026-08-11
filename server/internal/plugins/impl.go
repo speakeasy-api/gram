@@ -44,11 +44,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
-	mcpmetarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -161,6 +161,16 @@ type Service struct {
 	// eligible and carry their existing hooks — so a missing provider can never
 	// force-advance an org.
 	features feature.Provider
+	// platformAdmission decides package presence separately from runtime access.
+	// Indeterminate outcomes preserve published package bytes rather than
+	// interpreting an unavailable dependency as a revocation.
+	platformAdmission PlatformMCPAdmission
+}
+
+// PlatformMCPAdmission is the package-level policy used by plugin publishing.
+// It remains deliberately independent from the runtime authorization gate.
+type PlatformMCPAdmission interface {
+	Evaluate(ctx context.Context, organizationID, organizationSlug string) (platformmcp.Admission, error)
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -178,6 +188,7 @@ func NewService(
 	env string,
 	serverURL string,
 	features feature.Provider,
+	platformAdmission PlatformMCPAdmission,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("plugins"))
 
@@ -197,7 +208,8 @@ func NewService(
 		// rename via UpdateMarketplaceSettings, browser-login toggle via
 		// productfeatures) on the phased hooks rollout, mirroring the automated
 		// publisher. Fail-closed when nil: non-canary orgs defer those changes.
-		features: features,
+		features:          features,
+		platformAdmission: platformAdmission,
 	}
 }
 
@@ -209,22 +221,24 @@ func NewPublisher(
 	env string,
 	serverURL string,
 	features feature.Provider,
+	platformAdmission PlatformMCPAdmission,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("plugins"))
 
 	return &Service{
-		tracer:    nil,
-		logger:    logger,
-		db:        db,
-		repo:      repo.New(db),
-		auth:      nil,
-		authz:     nil,
-		audit:     auditLogger,
-		cache:     nil,
-		github:    github,
-		serverURL: serverURL,
-		keyPrefix: auth.APIKeyPrefix(env),
-		features:  features,
+		tracer:            nil,
+		logger:            logger,
+		db:                db,
+		repo:              repo.New(db),
+		auth:              nil,
+		authz:             nil,
+		audit:             auditLogger,
+		cache:             nil,
+		github:            github,
+		serverURL:         serverURL,
+		keyPrefix:         auth.APIKeyPrefix(env),
+		features:          features,
+		platformAdmission: platformAdmission,
 	}
 }
 
@@ -285,6 +299,10 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 	for _, srv := range allServers {
 		serversByPlugin[srv.PluginID] = append(serversByPlugin[srv.PluginID], srv)
 	}
+	compatibility, err := s.resolveAgentPluginCompatibility(ctx, *ac.ProjectID, pluginIDs...)
+	if err != nil {
+		return nil, err
+	}
 
 	plugins := make([]*gen.Plugin, 0, len(rows))
 	for _, r := range rows {
@@ -295,18 +313,19 @@ func (s *Service) ListPlugins(ctx context.Context, payload *gen.ListPluginsPaylo
 		}
 
 		plugins = append(plugins, &gen.Plugin{
-			ID:              r.ID.String(),
-			Name:            r.Name,
-			Slug:            r.Slug,
-			Description:     conv.FromPGText[string](r.Description),
-			IsDefault:       conv.FromPGBool[bool](r.IsDefault),
-			ServerCount:     &r.ServerCount,
-			SkillCount:      &r.SkillCount,
-			AssignmentCount: &r.AssignmentCount,
-			Servers:         genServers,
-			Assignments:     nil,
-			CreatedAt:       formatTime(r.CreatedAt),
-			UpdatedAt:       formatTime(r.UpdatedAt),
+			ID:                       r.ID.String(),
+			Name:                     r.Name,
+			Slug:                     r.Slug,
+			Description:              conv.FromPGText[string](r.Description),
+			IsDefault:                conv.FromPGBool[bool](r.IsDefault),
+			ServerCount:              &r.ServerCount,
+			SkillCount:               &r.SkillCount,
+			AssignmentCount:          &r.AssignmentCount,
+			AgentPluginsV1Compatible: compatibility[r.Slug],
+			Servers:                  genServers,
+			Assignments:              nil,
+			CreatedAt:                formatTime(r.CreatedAt),
+			UpdatedAt:                formatTime(r.UpdatedAt),
 		})
 	}
 
@@ -394,7 +413,11 @@ func (s *Service) GetPlugin(ctx context.Context, payload *gen.GetPluginPayload) 
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugin assignments").LogError(ctx, s.logger)
 	}
 
-	return pluginToGen(plugin, servers, assignments), nil
+	compatibility, err := s.resolveAgentPluginCompatibility(ctx, *ac.ProjectID, pluginID)
+	if err != nil {
+		return nil, err
+	}
+	return pluginToGen(plugin, servers, assignments, compatibility[plugin.Slug]), nil
 }
 
 func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPayload) (*gen.Plugin, error) {
@@ -482,7 +505,9 @@ func (s *Service) CreatePlugin(ctx context.Context, payload *gen.CreatePluginPay
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
 
-	return pluginToGen(plugin, nil, nil), nil
+	return pluginToGen(plugin, nil, nil, classifyAgentPlugin(PluginInfo{
+		Name: plugin.Name, Slug: plugin.Slug, Description: conv.FromPGTextOrEmpty[string](plugin.Description), Servers: nil, Skills: nil, AgentPluginsV1Issues: nil,
+	}).Compatible), nil
 }
 
 func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPayload) (*gen.Plugin, error) {
@@ -581,7 +606,11 @@ func (s *Service) UpdatePlugin(ctx context.Context, payload *gen.UpdatePluginPay
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugin assignments").LogError(ctx, s.logger)
 	}
 
-	return pluginToGen(plugin, servers, assignments), nil
+	compatibility, err := s.resolveAgentPluginCompatibility(ctx, *ac.ProjectID, pluginID)
+	if err != nil {
+		return nil, err
+	}
+	return pluginToGen(plugin, servers, assignments, compatibility[plugin.Slug]), nil
 }
 
 func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPayload) error {
@@ -649,6 +678,7 @@ func (s *Service) DeletePlugin(ctx context.Context, payload *gen.DeletePluginPay
 			ProjectID:         revoked.ProjectID.String(),
 			SkillID:           revoked.SkillID.String(),
 			PluginID:          conv.FromNullableUUID(revoked.PluginID),
+			AssistantID:       conv.FromNullableUUID(revoked.AssistantID),
 			PinnedVersionID:   conv.FromNullableUUID(revoked.PinnedVersionID),
 			ResolvedVersionID: revoked.ResolvedVersionID.String(),
 			Channel:           revoked.Channel,
@@ -743,7 +773,9 @@ func (s *Service) AddPluginServer(ctx context.Context, payload *gen.AddPluginSer
 			}
 			return nil, oops.E(oops.CodeUnexpected, mcpErr, "verify mcp server").LogError(ctx, s.logger)
 		}
-		if server.Visibility == visibility.Disabled || !server.HasEndpoint {
+		// Unproxied-backed servers are never proxied, so they never gain an
+		// mcp_endpoints row; exempt them from the has_endpoint requirement.
+		if server.Visibility == visibility.Disabled || (!server.HasEndpoint && !server.IsUnproxied) {
 			return nil, oops.E(oops.CodeBadRequest, nil, "mcp server is disabled or has no published endpoint")
 		}
 		if displayName == "" {
@@ -1155,7 +1187,7 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 	}
 
 	// Resolve all plugin infos and find the matching one.
-	allInfos, err := s.resolvePluginInfos(ctx, *ac.ProjectID)
+	allInfos, err := s.resolvePluginInfos(ctx, *ac.ProjectID, pluginID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1168,14 +1200,7 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 		}
 	}
 	if pluginInfo == nil {
-		// Plugin exists but has no servers — generate an empty plugin.
-		pluginInfo = &PluginInfo{
-			Name:        dbPlugin.Name,
-			Slug:        dbPlugin.Slug,
-			Description: conv.FromPGTextOrEmpty[string](dbPlugin.Description),
-			Servers:     nil,
-			Skills:      nil,
-		}
+		return nil, nil, oops.E(oops.CodeUnexpected, nil, "resolve plugin package").LogError(ctx, s.logger)
 	}
 
 	projectSlug := ""
@@ -1186,6 +1211,9 @@ func (s *Service) DownloadPluginPackage(ctx context.Context, payload *gen.Downlo
 
 	files, err := GenerateSinglePluginPackage(*pluginInfo, cfg, payload.Platform)
 	if err != nil {
+		if payload.Platform == "agent-plugin" && errors.Is(err, ErrAgentPluginsV1Incompatible) {
+			return nil, nil, oops.E(oops.CodeFailedPrecondition, err, "plugin is not compatible with Agent Plugins 1.0")
+		}
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "generate plugin package").LogError(ctx, s.logger)
 	}
 
@@ -1248,6 +1276,8 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 		filename = "observability-cursor"
 	case "codex":
 		filename = "observability-codex"
+	case "opencode":
+		filename = "observability-opencode"
 	}
 	return &gen.DownloadObservabilityPluginResult{
 		ContentType:        "application/zip",
@@ -1322,7 +1352,7 @@ func writePluginZip(w io.Writer, files map[string][]byte) error {
 			ReaderVersion:      0,
 			Flags:              0,
 			Method:             zip.Deflate,
-			Modified:           time.Now(),
+			Modified:           time.Date(1980, time.January, 1, 0, 0, 0, 0, time.UTC),
 			ModifiedTime:       0,
 			ModifiedDate:       0,
 			CRC32:              0,
@@ -1418,19 +1448,20 @@ func (s *Service) GetPublishStatus(ctx context.Context, payload *gen.GetPublishS
 			// directories when a rename happened while the rollout gate carried
 			// the hooks subtree.
 			slugCfg := GenerateConfig{
-				OrgName:          s.resolveOrganizationName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug),
-				OrgEmail:         "",
-				OrgID:            "",
-				ServerURL:        "",
-				APIKey:           "",
-				HooksAPIKey:      "",
-				ProjectSlug:      "",
-				IsDefaultProject: false,
-				Version:          "",
-				MarketplaceName:  "",
-				HooksOrgName:     naming.PublishedHooksOrgName(conn.PublishedHooksConfig),
-				BrowserLogin:     false,
-				InstallFailOpen:  false,
+				OrgName:            s.resolveOrganizationName(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug),
+				OrgEmail:           "",
+				OrgID:              "",
+				ServerURL:          "",
+				APIKey:             "",
+				HooksAPIKey:        "",
+				ProjectSlug:        "",
+				IsDefaultProject:   false,
+				Version:            "",
+				MarketplaceName:    "",
+				HooksOrgName:       naming.PublishedHooksOrgName(conn.PublishedHooksConfig),
+				BrowserLogin:       false,
+				InstallFailOpen:    false,
+				PlatformMCPEnabled: false,
 			}
 			result.ClaudeObservabilityPlugin = conv.PtrEmpty(ClaudeObservabilitySlug(slugCfg))
 			result.CodexObservabilityPlugin = conv.PtrEmpty(CodexObservabilitySlug(slugCfg))
@@ -1637,17 +1668,36 @@ func (s *Service) publishUpToDate(ctx context.Context, ac *contextvalues.AuthCon
 	}
 
 	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, projectSlug, *ac.ProjectID)
+	publishedMCPFingerprints := decodeMCPFingerprints(conn.PublishedMcpFingerprints)
+	admission := platformmcp.AdmissionDisabled
+	if projectSlug == "default" {
+		admission = platformmcp.AdmissionIndeterminate
+		if s.platformAdmission != nil {
+			admission, err = s.platformAdmission.Evaluate(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug)
+			if err != nil {
+				s.logger.WarnContext(ctx, "publish freshness: evaluate platform mcp admission", attr.SlogError(err))
+				admission = platformmcp.AdmissionIndeterminate
+			}
+		}
+	}
+	platformWasPublished := publishedMCPFingerprints[mcpPlatformFingerprintKey] != ""
+	cfg.PlatformMCPEnabled = admission == platformmcp.AdmissionEnabled ||
+		(admission == platformmcp.AdmissionIndeterminate && platformWasPublished)
+
 	mcpFingerprints, err := MCPFingerprints(pluginInfos, cfg)
 	if err != nil {
 		s.logger.WarnContext(ctx, "publish freshness: compute mcp fingerprints", attr.SlogError(err))
 		return nil
+	}
+	if admission == platformmcp.AdmissionIndeterminate && platformWasPublished {
+		mcpFingerprints[mcpPlatformFingerprintKey] = publishedMCPFingerprints[mcpPlatformFingerprintKey]
 	}
 
 	// Up to date only when both components match what was last published: the MCP
 	// per-plugin fingerprints, the hooks generator version, and the hook-affecting
 	// config (so a marketplace rename or browser-login toggle that hasn't
 	// propagated to the hooks subtree yet reads as stale rather than current).
-	upToDate := maps.Equal(mcpFingerprints, decodeMCPFingerprints(conn.PublishedMcpFingerprints)) &&
+	upToDate := maps.Equal(mcpFingerprints, publishedMCPFingerprints) &&
 		conv.FromPGTextOrEmpty[string](conn.PublishedHooksVersion) == hooksGeneratorVersion &&
 		storedHooksConfigHash(conn.PublishedHooksConfig) == hooksConfigHash(hooksConfigSnapshot(cfg))
 	return &upToDate
@@ -1895,19 +1945,6 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 
 	cfg := s.generateConfig(ctx, input.OrganizationID, input.OrganizationSlug, input.ProjectSlug, input.ProjectID)
 
-	// The per-plugin MCP fingerprints and the hooks generator version are the two
-	// independent rollout signals. Compute both up front so we can short-circuit
-	// unchanged publishes before touching GitHub and persist them after a
-	// successful push.
-	mcpFingerprints, err := MCPFingerprints(pluginInfos, cfg)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "compute mcp fingerprints").LogError(ctx, s.logger)
-	}
-	mcpFingerprintsJSON, err := json.Marshal(mcpFingerprints)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "marshal mcp fingerprints").LogError(ctx, s.logger)
-	}
-
 	// GitHub repo owner/name are case-insensitive. Normalize at the boundary
 	// so the rows we persist round-trip cleanly through the case-insensitive
 	// unique index on (installation_id, LOWER(repo_owner), LOWER(repo_name)).
@@ -1920,14 +1957,61 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		return nil, oops.E(oops.CodeUnexpected, connErr, "get github connection").LogError(ctx, s.logger)
 	}
 	firstPublish := errors.Is(connErr, pgx.ErrNoRows)
+	publishedMCPFingerprints := decodeMCPFingerprints(existing.PublishedMcpFingerprints)
 
-	// Decide which components to (re)generate. The hooks subtree changes only on
-	// a hooksGeneratorVersion bump, so an MCP publish never touches it. A human
-	// publish (SkipIfUnchanged == false) always refreshes MCP so installed copies
-	// pick up a new manifest version, but still leaves hooks alone unless its
-	// version bumped.
-	mcpChanged := firstPublish || !input.SkipIfUnchanged ||
-		!maps.Equal(mcpFingerprints, decodeMCPFingerprints(existing.PublishedMcpFingerprints))
+	// Platform publishing is bound to the literal default project slug, not the
+	// oldest-project convention used by marketplace naming.
+	admission := platformmcp.AdmissionDisabled
+	if input.ProjectSlug == "default" {
+		admission = platformmcp.AdmissionIndeterminate
+		if s.platformAdmission != nil {
+			var admissionErr error
+			admission, admissionErr = s.platformAdmission.Evaluate(ctx, input.OrganizationID, input.OrganizationSlug)
+			if admissionErr != nil {
+				if errors.Is(admissionErr, context.Canceled) || errors.Is(admissionErr, context.DeadlineExceeded) {
+					return nil, fmt.Errorf("evaluate platform mcp package admission: %w", admissionErr)
+				}
+				s.logger.WarnContext(ctx, "platform mcp package admission is indeterminate; preserving prior state",
+					attr.SlogOrganizationID(input.OrganizationID),
+					attr.SlogError(admissionErr))
+				admission = platformmcp.AdmissionIndeterminate
+			}
+		}
+	}
+	platformWasPublished := publishedMCPFingerprints[mcpPlatformFingerprintKey] != ""
+	preservePlatformMCP := admission == platformmcp.AdmissionIndeterminate && platformWasPublished
+	cfg.PlatformMCPEnabled = admission == platformmcp.AdmissionEnabled || preservePlatformMCP
+
+	// The per-plugin MCP fingerprints and the hooks generator version are the two
+	// independent rollout signals. Compute both up front so we can short-circuit
+	// unchanged publishes before touching GitHub and persist them after a
+	// successful push.
+	mcpFingerprints, err := MCPFingerprints(pluginInfos, cfg)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "compute mcp fingerprints").LogError(ctx, s.logger)
+	}
+	// An unavailable admission dependency must not mutate the Platform package's
+	// rollout state. Retain its prior fingerprint while the shared marketplace
+	// files continue to be regenerated with the package entry present.
+	currentPlatformMCPFingerprint := mcpFingerprints[mcpPlatformFingerprintKey]
+	if preservePlatformMCP {
+		mcpFingerprints[mcpPlatformFingerprintKey] = publishedMCPFingerprints[mcpPlatformFingerprintKey]
+	}
+
+	// Decide which components to (re)generate. A human publish refreshes customer
+	// MCP packages so installed copies pick up a new manifest version. A
+	// Platform-only transition deliberately carries those customer packages
+	// unchanged. Hooks change independently based on their version and
+	// output-affecting config.
+	// A confirmed Platform transition changes only its reserved fingerprint and
+	// shared marketplace files. Carry customer MCP files so adding/removing this
+	// first-party package never rotates customer credentials or manifests.
+	platformOnlyChange := !firstPublish &&
+		!maps.Equal(mcpFingerprints, publishedMCPFingerprints) &&
+		platformMCPOnlyFingerprintChange(mcpFingerprints, publishedMCPFingerprints)
+	mcpChanged := firstPublish ||
+		(!input.SkipIfUnchanged && !platformOnlyChange) ||
+		(!platformOnlyChange && !maps.Equal(mcpFingerprints, publishedMCPFingerprints))
 
 	// Snapshot the hook-output-affecting config (resolved marketplace name,
 	// browser login, server URL, etc.). A rename or browser-login toggle
@@ -1976,7 +2060,10 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		conv.FromPGTextOrEmpty[string](existing.PublishedHooksVersion) != targetHooksVersion ||
 		publishedHooksConfigHash != targetHooksConfigHash
 
-	if input.SkipIfUnchanged && !mcpChanged && !hooksChanged {
+	// Indeterminate Platform admission must inspect an already-published subtree
+	// before skipping. A stored fingerprint alone cannot establish that its files
+	// still exist, and the preservation path below reconstructs incomplete repos.
+	if input.SkipIfUnchanged && !preservePlatformMCP && !mcpChanged && !platformOnlyChange && !hooksChanged {
 		return &publishOutcome{RepoURL: repoURL, Skipped: true, HooksConfigDeferred: hooksConfigDeferred}, nil
 	}
 
@@ -1985,7 +2072,8 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// Fetch the repo only in that case; a first publish or a both-components
 	// change regenerates everything and needs no fetch.
 	var existingFiles map[string][]byte
-	if !firstPublish && (!mcpChanged || !hooksChanged) {
+	existingRepoMissing := false
+	if !firstPublish && (!mcpChanged || !hooksChanged || preservePlatformMCP) {
 		existingFiles, err = s.github.Client.GetRepoFiles(ctx, s.github.InstallationID, repoOwner, repoName, "main")
 		if err != nil {
 			if !errors.Is(err, ghclient.ErrRepoNotFound) {
@@ -1993,6 +2081,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 			}
 			// The connection row exists but the repo is gone or empty; regenerate
 			// both components rather than carrying stale files.
+			existingRepoMissing = true
 			existingFiles = nil
 		}
 	}
@@ -2016,13 +2105,39 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		return true
 	}
 
+	if input.SkipIfUnchanged && preservePlatformMCP && !mcpChanged && !platformOnlyChange && !hooksChanged {
+		carryCfg := cfg
+		carryCfg.PlatformMCPEnabled = false
+		mcpPaths, err := mcpFilePaths(pluginInfos, carryCfg)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "enumerate mcp files").LogError(ctx, s.logger)
+		}
+		sharedPaths, err := sharedFilePaths(pluginInfos, cfg)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "enumerate shared files").LogError(ctx, s.logger)
+		}
+		verifiedFiles := make(map[string][]byte)
+		_, hooksIntact := carryHooksSubtree(verifiedFiles, existingFiles, targetHooksConfigJSON, cfg.OrgName)
+		if carry(verifiedFiles, mcpPaths) && carry(verifiedFiles, sharedPaths) && carryPlatformMCPSubtree(verifiedFiles, existingFiles) && hooksIntact {
+			return &publishOutcome{RepoURL: repoURL, Skipped: true, HooksConfigDeferred: hooksConfigDeferred}, nil
+		}
+	}
+
 	files := make(map[string][]byte)
 	var candidates []pluginAPIKeyCandidate
+	var hooksCandidate *pluginAPIKeyCandidate
 
 	// MCP component: carry when unchanged, otherwise regenerate with a fresh key.
 	carriedMCP := false
 	if !mcpChanged {
-		paths, err := mcpFilePaths(pluginInfos, cfg)
+		carryCfg := cfg
+		// A transition or an indeterminate result needs a separate Platform
+		// decision below. Otherwise include Platform paths in normal MCP carry
+		// enumeration so hooks-only publishes preserve its bytes verbatim.
+		if platformOnlyChange || admission != platformmcp.AdmissionEnabled {
+			carryCfg.PlatformMCPEnabled = false
+		}
+		paths, err := mcpFilePaths(pluginInfos, carryCfg)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "enumerate mcp files").LogError(ctx, s.logger)
 		}
@@ -2034,12 +2149,41 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 			return nil, oops.E(oops.CodeUnexpected, err, "build plugin mcp api key").LogError(ctx, s.logger)
 		}
 		cfg.APIKey = mcpCandidate.fullKey
+		if needsSkillFeedbackHooksKey(pluginInfos) {
+			candidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeHooks, "hooks")
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "build plugin hooks api key").LogError(ctx, s.logger)
+			}
+			hooksCandidate = &candidate
+			cfg.HooksAPIKey = candidate.fullKey
+			candidates = append(candidates, candidate)
+		}
 		mcpFiles, err := generateMCPFiles(pluginInfos, cfg)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "generate mcp files").LogError(ctx, s.logger)
 		}
 		maps.Copy(files, mcpFiles)
+		if admission == platformmcp.AdmissionEnabled {
+			if err := generatePlatformMCPFilesInto(files, cfg); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "generate platform mcp files").LogError(ctx, s.logger)
+			}
+		}
 		candidates = append(candidates, mcpCandidate)
+	}
+	if preservePlatformMCP && !carryPlatformMCPSubtree(files, existingFiles) {
+		if !existingRepoMissing {
+			s.logger.WarnContext(ctx, "published platform mcp subtree cannot be preserved; reconstructing package",
+				attr.SlogOrganizationID(input.OrganizationID))
+		}
+		if err := generatePlatformMCPFilesInto(files, cfg); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "reconstruct platform mcp files after missing repo").LogError(ctx, s.logger)
+		}
+		mcpFingerprints[mcpPlatformFingerprintKey] = currentPlatformMCPFingerprint
+	}
+	if admission == platformmcp.AdmissionEnabled && platformOnlyChange && carriedMCP {
+		if err := generatePlatformMCPFilesInto(files, cfg); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "generate platform mcp files").LogError(ctx, s.logger)
+		}
 	}
 
 	// Hooks component: carry when the target version+config match what's
@@ -2054,9 +2198,13 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		carriedHooksOrgName, carriedHooks = carryHooksSubtree(files, existingFiles, targetHooksConfigJSON, cfg.OrgName)
 	}
 	if !carriedHooks {
-		hooksCandidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeHooks, "hooks")
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "build plugin hooks api key").LogError(ctx, s.logger)
+		if hooksCandidate == nil {
+			candidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeHooks, "hooks")
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "build plugin hooks api key").LogError(ctx, s.logger)
+			}
+			hooksCandidate = &candidate
+			candidates = append(candidates, candidate)
 		}
 		cfg.HooksAPIKey = hooksCandidate.fullKey
 		hooksFiles, err := generateHooksFiles(cfg)
@@ -2064,7 +2212,6 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 			return nil, oops.E(oops.CodeUnexpected, err, "generate hooks files").LogError(ctx, s.logger)
 		}
 		maps.Copy(files, hooksFiles)
-		candidates = append(candidates, hooksCandidate)
 		// What lands in the repo is the CURRENT generator's output; persist that
 		// truthfully even when the rollout gate had pinned an older published
 		// version — recording the stale version would make every subsequent
@@ -2142,6 +2289,11 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		pluginSlugs = append(pluginSlugs, p.Slug)
 	}
 
+	mcpFingerprintsJSON, err := json.Marshal(mcpFingerprints)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "marshal mcp fingerprints").LogError(ctx, s.logger)
+	}
+
 	// Persist the API keys, audit logs, and github connection atomically only
 	// after the GitHub publish has succeeded. This prevents leaking valid
 	// credentials when GitHub fails. If this transaction itself fails, the
@@ -2163,6 +2315,45 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	}
 
 	return &publishOutcome{RepoURL: repoURL, Skipped: false, HooksConfigDeferred: hooksConfigDeferred}, nil
+}
+
+// platformMCPOnlyFingerprintChange reports whether two maps differ only in the
+// Platform package and shared marketplace entries. Those paths have no tenant
+// credentials and can change without regenerating customer MCP packages.
+func platformMCPOnlyFingerprintChange(current, published map[string]string) bool {
+	if current[mcpPlatformFingerprintKey] == published[mcpPlatformFingerprintKey] {
+		return false
+	}
+	current = maps.Clone(current)
+	published = maps.Clone(published)
+	delete(current, mcpPlatformFingerprintKey)
+	delete(published, mcpPlatformFingerprintKey)
+	delete(current, mcpSharedFingerprintKey)
+	delete(published, mcpSharedFingerprintKey)
+	return maps.Equal(current, published)
+}
+
+// carryPlatformMCPSubtree preserves every currently-published Platform package
+// path, including a future generator layout. An indeterminate admission result
+// must never regenerate or drop tenant-facing Platform bytes.
+func carryPlatformMCPSubtree(dst, existing map[string][]byte) bool {
+	if len(existing) == 0 {
+		return false
+	}
+	staged := make(map[string][]byte)
+	for p, content := range existing {
+		if strings.HasPrefix(p, platformMCPPluginRoot+"/") {
+			staged[p] = content
+		}
+	}
+	if _, ok := staged[platformMCPPluginRoot+"/.claude-plugin/plugin.json"]; !ok {
+		return false
+	}
+	if _, ok := staged[platformMCPPluginRoot+"/.mcp.json"]; !ok {
+		return false
+	}
+	maps.Copy(dst, staged)
+	return true
 }
 
 // carryHooksSubtree copies the published hooks (observability) subtree
@@ -2573,8 +2764,12 @@ func (s *Service) persistPluginAPIKeys(
 
 // --- Internal helpers ---
 
-func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) ([]PluginInfo, error) {
-	rows, err := s.repo.ListPluginsWithServersForProject(ctx, projectID)
+func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID, pluginIDs ...uuid.UUID) ([]PluginInfo, error) {
+	plugins, err := s.repo.ListActivePluginsForProject(ctx, repo.ListActivePluginsForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list active plugins").LogError(ctx, s.logger)
+	}
+	rows, err := s.repo.ListPluginsWithServersForProject(ctx, repo.ListPluginsWithServersForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugins with servers").LogError(ctx, s.logger)
 	}
@@ -2582,14 +2777,22 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 	// Remote MCP-backed (mcp_server) plugin servers are resolved by a separate
 	// query and merged in below. Both backends are supported simultaneously
 	// until the AGE-1902 cutover.
-	mcpRows, err := s.repo.ListPluginsWithMcpServersForProject(ctx, projectID)
+	mcpRows, err := s.repo.ListPluginsWithMcpServersForProject(ctx, repo.ListPluginsWithMcpServersForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugins with mcp servers").LogError(ctx, s.logger)
 	}
 
-	skillRows, err := s.repo.ListPluginSkillsForProject(ctx, projectID)
+	skillRows, err := s.repo.ListPluginSkillsForProject(ctx, repo.ListPluginSkillsForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list plugin skills").LogError(ctx, s.logger)
+	}
+	envRows, err := s.repo.ListPluginEnvironmentConfigsForProject(ctx, repo.ListPluginEnvironmentConfigsForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list plugin environment configs").LogError(ctx, s.logger)
+	}
+	compatibilityIssues, err := s.repo.ListAgentPluginCompatibilityIssuesForProject(ctx, repo.ListAgentPluginCompatibilityIssuesForProjectParams{ProjectID: projectID, PluginIds: pluginIDs})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list Agent Plugins compatibility issues").LogError(ctx, s.logger)
 	}
 
 	// serverBuild carries the row's sort_order so the merged toolset- and
@@ -2603,25 +2806,38 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 		info    PluginInfo
 		servers []serverBuild
 	}
-	pluginMap := make(map[uuid.UUID]*pluginBuild)
-	mcpMeta := mcpmetarepo.New(s.db)
+	pluginMap := make(map[uuid.UUID]*pluginBuild, len(plugins))
 
 	ensurePlugin := func(id uuid.UUID, name, slug string, description pgtype.Text) *pluginBuild {
 		pb, ok := pluginMap[id]
 		if !ok {
 			pb = &pluginBuild{
 				info: PluginInfo{
-					Name:        name,
-					Slug:        slug,
-					Description: conv.FromPGTextOrEmpty[string](description),
-					Servers:     nil,
-					Skills:      nil,
+					Name:                 name,
+					Slug:                 slug,
+					Description:          conv.FromPGTextOrEmpty[string](description),
+					Servers:              nil,
+					Skills:               nil,
+					AgentPluginsV1Issues: nil,
 				},
 				servers: nil,
 			}
 			pluginMap[id] = pb
 		}
 		return pb
+	}
+	for _, plugin := range plugins {
+		ensurePlugin(plugin.ID, plugin.Name, plugin.Slug, plugin.Description)
+	}
+
+	envConfigs := make(map[uuid.UUID][]ServerEnvConfig)
+	invalidEnvConfig := make(map[uuid.UUID]bool)
+	for _, env := range envRows {
+		if !env.HeaderDisplayName.Valid {
+			invalidEnvConfig[env.ToolsetID] = true
+			continue
+		}
+		envConfigs[env.ToolsetID] = append(envConfigs[env.ToolsetID], ServerEnvConfig{VariableName: env.VariableName, DisplayName: env.HeaderDisplayName.String})
 	}
 
 	for _, r := range rows {
@@ -2638,46 +2854,14 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 				MCPURL:      fmt.Sprintf("%s/mcp/%s", mcpBase, *mcpSlug),
 				IsPublic:    r.ToolsetIsPublic,
 				IsOAuth:     r.ToolsetIsOauth,
+				IsUnproxied: false,
 				EnvConfigs:  nil,
 			}
 
-			// For public servers, load user-facing environment configs. A public
-			// toolset without an mcp_metadata row simply has no user-provided
-			// env vars — UpsertMetadata is explicit, not auto-created on publish.
 			if r.ToolsetIsPublic {
-				metadata, metaErr := mcpMeta.GetMetadataForToolset(ctx, r.ToolsetID)
-				switch {
-				case errors.Is(metaErr, pgx.ErrNoRows):
-					// No metadata configured → no env configs to surface.
-				case metaErr != nil:
-					return nil, oops.E(oops.CodeUnexpected, metaErr, "load mcp metadata for toolset").LogError(ctx, s.logger)
-				default:
-					envConfigs, envErr := mcpMeta.ListEnvironmentConfigs(ctx, metadata.ID)
-					if envErr != nil {
-						return nil, oops.E(oops.CodeUnexpected, envErr, "load environment configs for toolset").LogError(ctx, s.logger)
-					}
-					for _, ec := range envConfigs {
-						if ec.ProvidedBy != "user" {
-							continue
-						}
-						// DisplayName ends up as both the HTTP header name and
-						// the userConfig description in generated configs. The
-						// env variable name is not a valid header substitute,
-						// so skip configs with no HeaderDisplayName rather than
-						// emit a broken header.
-						headerName := conv.FromPGText[string](ec.HeaderDisplayName)
-						if headerName == nil {
-							s.logger.WarnContext(ctx, "skipping user env config with no header name",
-								attr.SlogToolsetID(r.ToolsetID.UUID.String()),
-								attr.SlogEnvVarName(ec.VariableName),
-							)
-							continue
-						}
-						serverInfo.EnvConfigs = append(serverInfo.EnvConfigs, ServerEnvConfig{
-							VariableName: ec.VariableName,
-							DisplayName:  *headerName,
-						})
-					}
+				serverInfo.EnvConfigs = append(serverInfo.EnvConfigs, envConfigs[r.ToolsetID.UUID]...)
+				if invalidEnvConfig[r.ToolsetID.UUID] {
+					pb.info.AgentPluginsV1Issues = append(pb.info.AgentPluginsV1Issues, "environment header is unresolved")
 				}
 			}
 
@@ -2688,24 +2872,42 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 	for _, m := range mcpRows {
 		pb := ensurePlugin(m.PluginID, m.PluginName, m.PluginSlug, m.PluginDescription)
 
-		// Custom-domain endpoints are served from the domain host; platform
-		// endpoints from the Gram server URL. The query already resolved the
-		// single preferred endpoint per server.
-		mcpBase := s.serverURL
-		if cd := conv.FromPGText[string](m.EndpointCustomDomain); cd != nil {
-			mcpBase = fmt.Sprintf("https://%s", *cd)
+		// Classify from the authoritative backend signal (unproxied_url, set
+		// only when s.unproxied_mcp_server_id resolved a live row), not from
+		// endpoint presence/absence: nothing stops an mcp_endpoints row from
+		// existing for an unproxied-backed server (verifyEndpointReferenceOwnership
+		// only checks project ownership, not backend type), and mcp_servers'
+		// own backend-exclusivity check doesn't cover mcp_endpoints either.
+		// An unproxied-backed server's URL always wins so it's never routed
+		// through a Gram endpoint it can't actually be served from.
+		mcpURL := ""
+		isOAuth := m.McpServerIsOauth
+		isUnproxied := false
+		switch {
+		case m.UnproxiedUrl.Valid:
+			mcpURL = m.UnproxiedUrl.String
+			isUnproxied = true
+		case m.EndpointSlug != "":
+			// Custom-domain endpoints are served from the domain host; platform
+			// endpoints from the Gram server URL. The query already resolved the
+			// single preferred endpoint per server.
+			mcpBase := s.serverURL
+			if cd := conv.FromPGText[string](m.EndpointCustomDomain); cd != nil {
+				mcpBase = fmt.Sprintf("https://%s", *cd)
+			}
+			mcpURL = fmt.Sprintf("%s/mcp/%s", mcpBase, m.EndpointSlug)
 		}
-		// Remote MCP-backed servers authenticate via their user session issuer
-		// (OAuth), so the generated config carries no static Authorization
-		// header (IsOAuth). Environments are not yet wired to mcp_servers, so
-		// there are no public env configs to surface.
+
+		// Environments are not yet wired to mcp_servers, so there are no
+		// public env configs to surface.
 		pb.servers = append(pb.servers, serverBuild{
 			info: PluginServerInfo{
 				DisplayName: m.ServerDisplayName,
 				Policy:      m.ServerPolicy,
-				MCPURL:      fmt.Sprintf("%s/mcp/%s", mcpBase, m.EndpointSlug),
-				IsPublic:    false,
-				IsOAuth:     true,
+				MCPURL:      mcpURL,
+				IsPublic:    m.McpServerIsPublic,
+				IsOAuth:     isOAuth,
+				IsUnproxied: isUnproxied,
 				EnvConfigs:  nil,
 			},
 			sortOrder: m.ServerSortOrder,
@@ -2721,6 +2923,11 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 			Name:    sk.SkillName,
 			Content: sk.SkillContent,
 		})
+	}
+	for _, issue := range compatibilityIssues {
+		if pb := pluginMap[issue.PluginID]; pb != nil {
+			pb.info.AgentPluginsV1Issues = append(pb.info.AgentPluginsV1Issues, issue.Reason)
+		}
 	}
 
 	pluginInfos := make([]PluginInfo, 0, len(pluginMap))
@@ -2747,6 +2954,18 @@ func (s *Service) resolvePluginInfos(ctx context.Context, projectID uuid.UUID) (
 	return pluginInfos, nil
 }
 
+func (s *Service) resolveAgentPluginCompatibility(ctx context.Context, projectID uuid.UUID, pluginIDs ...uuid.UUID) (map[string]bool, error) {
+	plugins, err := s.resolvePluginInfos(ctx, projectID, pluginIDs...)
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]bool, len(plugins))
+	for _, plugin := range plugins {
+		result[plugin.Slug] = classifyAgentPlugin(plugin).Compatible
+	}
+	return result, nil
+}
+
 func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlug string, projectID uuid.UUID) GenerateConfig {
 	cfg := GenerateConfig{
 		OrgName:     orgSlug,
@@ -2760,12 +2979,13 @@ func (s *Service) generateConfig(ctx context.Context, orgID, orgSlug, projectSlu
 		// settings flip right after a publish) still mint distinct manifest
 		// versions; the 13-digit patch also sorts numerically above the
 		// 10-digit second epochs already in installed caches.
-		Version:          fmt.Sprintf("%d", time.Now().UnixMilli()),
-		MarketplaceName:  "",
-		HooksOrgName:     "",
-		IsDefaultProject: s.isDefaultProject(ctx, projectID),
-		BrowserLogin:     false,
-		InstallFailOpen:  false,
+		Version:            fmt.Sprintf("%d", time.Now().UnixMilli()),
+		MarketplaceName:    "",
+		HooksOrgName:       "",
+		IsDefaultProject:   s.isDefaultProject(ctx, projectID),
+		BrowserLogin:       false,
+		InstallFailOpen:    false,
+		PlatformMCPEnabled: false,
 	}
 	orgName, err := s.repo.GetOrganizationName(ctx, orgID)
 	switch {
@@ -2851,20 +3071,21 @@ func (s *Service) authContext(ctx context.Context) (*contextvalues.AuthContext, 
 
 // --- Conversion helpers ---
 
-func pluginToGen(p repo.Plugin, servers []repo.PluginServer, assignments []repo.PluginAssignment) *gen.Plugin {
+func pluginToGen(p repo.Plugin, servers []repo.PluginServer, assignments []repo.PluginAssignment, agentPluginsV1Compatible bool) *gen.Plugin {
 	result := &gen.Plugin{
-		ID:              p.ID.String(),
-		Name:            p.Name,
-		Slug:            p.Slug,
-		Description:     conv.FromPGText[string](p.Description),
-		IsDefault:       conv.FromPGBool[bool](p.IsDefault),
-		ServerCount:     nil,
-		SkillCount:      nil,
-		AssignmentCount: nil,
-		Servers:         nil,
-		Assignments:     nil,
-		CreatedAt:       formatTime(p.CreatedAt),
-		UpdatedAt:       formatTime(p.UpdatedAt),
+		ID:                       p.ID.String(),
+		Name:                     p.Name,
+		Slug:                     p.Slug,
+		Description:              conv.FromPGText[string](p.Description),
+		IsDefault:                conv.FromPGBool[bool](p.IsDefault),
+		ServerCount:              nil,
+		SkillCount:               nil,
+		AssignmentCount:          nil,
+		AgentPluginsV1Compatible: agentPluginsV1Compatible,
+		Servers:                  nil,
+		Assignments:              nil,
+		CreatedAt:                formatTime(p.CreatedAt),
+		UpdatedAt:                formatTime(p.UpdatedAt),
 	}
 
 	if servers != nil {

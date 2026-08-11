@@ -37,6 +37,14 @@ type Client struct {
 	// deleteGlobalIssuer endpoint.
 	DeleteGlobalIssuerDoer goahttp.Doer
 
+	// FetchGlobalIssuerMetadata Doer is the HTTP client used to make requests to
+	// the fetchGlobalIssuerMetadata endpoint.
+	FetchGlobalIssuerMetadataDoer goahttp.Doer
+
+	// RefreshGlobalIssuerMetadata Doer is the HTTP client used to make requests to
+	// the refreshGlobalIssuerMetadata endpoint.
+	RefreshGlobalIssuerMetadataDoer goahttp.Doer
+
 	// CreateGlobalClient Doer is the HTTP client used to make requests to the
 	// createGlobalClient endpoint.
 	CreateGlobalClientDoer goahttp.Doer
@@ -56,6 +64,18 @@ type Client struct {
 	// DeleteGlobalClient Doer is the HTTP client used to make requests to the
 	// deleteGlobalClient endpoint.
 	DeleteGlobalClientDoer goahttp.Doer
+
+	// ListGlobalIssuerConvergenceCandidates Doer is the HTTP client used to make
+	// requests to the listGlobalIssuerConvergenceCandidates endpoint.
+	ListGlobalIssuerConvergenceCandidatesDoer goahttp.Doer
+
+	// GetGlobalIssuerMigratePreflight Doer is the HTTP client used to make
+	// requests to the getGlobalIssuerMigratePreflight endpoint.
+	GetGlobalIssuerMigratePreflightDoer goahttp.Doer
+
+	// MigrateToGlobalIssuer Doer is the HTTP client used to make requests to the
+	// migrateToGlobalIssuer endpoint.
+	MigrateToGlobalIssuerDoer goahttp.Doer
 
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
@@ -78,21 +98,26 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateGlobalIssuerDoer: doer,
-		ListGlobalIssuersDoer:  doer,
-		GetGlobalIssuerDoer:    doer,
-		UpdateGlobalIssuerDoer: doer,
-		DeleteGlobalIssuerDoer: doer,
-		CreateGlobalClientDoer: doer,
-		ListGlobalClientsDoer:  doer,
-		GetGlobalClientDoer:    doer,
-		UpdateGlobalClientDoer: doer,
-		DeleteGlobalClientDoer: doer,
-		RestoreResponseBody:    restoreBody,
-		scheme:                 scheme,
-		host:                   host,
-		decoder:                dec,
-		encoder:                enc,
+		CreateGlobalIssuerDoer:                    doer,
+		ListGlobalIssuersDoer:                     doer,
+		GetGlobalIssuerDoer:                       doer,
+		UpdateGlobalIssuerDoer:                    doer,
+		DeleteGlobalIssuerDoer:                    doer,
+		FetchGlobalIssuerMetadataDoer:             doer,
+		RefreshGlobalIssuerMetadataDoer:           doer,
+		CreateGlobalClientDoer:                    doer,
+		ListGlobalClientsDoer:                     doer,
+		GetGlobalClientDoer:                       doer,
+		UpdateGlobalClientDoer:                    doer,
+		DeleteGlobalClientDoer:                    doer,
+		ListGlobalIssuerConvergenceCandidatesDoer: doer,
+		GetGlobalIssuerMigratePreflightDoer:       doer,
+		MigrateToGlobalIssuerDoer:                 doer,
+		RestoreResponseBody:                       restoreBody,
+		scheme:                                    scheme,
+		host:                                      host,
+		decoder:                                   dec,
+		encoder:                                   enc,
 	}
 }
 
@@ -216,6 +241,54 @@ func (c *Client) DeleteGlobalIssuer() goa.Endpoint {
 	}
 }
 
+// FetchGlobalIssuerMetadata returns an endpoint that makes HTTP requests to
+// the adminRemoteSessions service fetchGlobalIssuerMetadata server.
+func (c *Client) FetchGlobalIssuerMetadata() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeFetchGlobalIssuerMetadataRequest(c.encoder)
+		decodeResponse = DecodeFetchGlobalIssuerMetadataResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildFetchGlobalIssuerMetadataRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.FetchGlobalIssuerMetadataDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("adminRemoteSessions", "fetchGlobalIssuerMetadata", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RefreshGlobalIssuerMetadata returns an endpoint that makes HTTP requests to
+// the adminRemoteSessions service refreshGlobalIssuerMetadata server.
+func (c *Client) RefreshGlobalIssuerMetadata() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRefreshGlobalIssuerMetadataRequest(c.encoder)
+		decodeResponse = DecodeRefreshGlobalIssuerMetadataResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRefreshGlobalIssuerMetadataRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RefreshGlobalIssuerMetadataDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("adminRemoteSessions", "refreshGlobalIssuerMetadata", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // CreateGlobalClient returns an endpoint that makes HTTP requests to the
 // adminRemoteSessions service createGlobalClient server.
 func (c *Client) CreateGlobalClient() goa.Endpoint {
@@ -331,6 +404,79 @@ func (c *Client) DeleteGlobalClient() goa.Endpoint {
 		resp, err := c.DeleteGlobalClientDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("adminRemoteSessions", "deleteGlobalClient", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListGlobalIssuerConvergenceCandidates returns an endpoint that makes HTTP
+// requests to the adminRemoteSessions service
+// listGlobalIssuerConvergenceCandidates server.
+func (c *Client) ListGlobalIssuerConvergenceCandidates() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListGlobalIssuerConvergenceCandidatesRequest(c.encoder)
+		decodeResponse = DecodeListGlobalIssuerConvergenceCandidatesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListGlobalIssuerConvergenceCandidatesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListGlobalIssuerConvergenceCandidatesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("adminRemoteSessions", "listGlobalIssuerConvergenceCandidates", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetGlobalIssuerMigratePreflight returns an endpoint that makes HTTP requests
+// to the adminRemoteSessions service getGlobalIssuerMigratePreflight server.
+func (c *Client) GetGlobalIssuerMigratePreflight() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetGlobalIssuerMigratePreflightRequest(c.encoder)
+		decodeResponse = DecodeGetGlobalIssuerMigratePreflightResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetGlobalIssuerMigratePreflightRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetGlobalIssuerMigratePreflightDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("adminRemoteSessions", "getGlobalIssuerMigratePreflight", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// MigrateToGlobalIssuer returns an endpoint that makes HTTP requests to the
+// adminRemoteSessions service migrateToGlobalIssuer server.
+func (c *Client) MigrateToGlobalIssuer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeMigrateToGlobalIssuerRequest(c.encoder)
+		decodeResponse = DecodeMigrateToGlobalIssuerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildMigrateToGlobalIssuerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.MigrateToGlobalIssuerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("adminRemoteSessions", "migrateToGlobalIssuer", err)
 		}
 		return decodeResponse(resp)
 	}

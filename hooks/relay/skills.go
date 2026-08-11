@@ -1,51 +1,49 @@
 package relay
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/speakeasy-api/agenthooks"
+
+	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
 )
 
-// Codex has no structured skill signal: implicit activations surface as a
-// reader tool opening a skills/<name>/SKILL.md path, and explicit $skill-name
-// prompt mentions are expanded internally without any tool call. Both are
-// inferred best-effort here and attached as data.skill while the event keeps
-// its true type on the wire — reclassifying would skip the server's
-// tool/prompt policy scan, so the server layers the skill.activated
-// classification on top instead.
+const maxSkillContentBytes = 65_536
 
-var (
-	codexSkillPathRE  = regexp.MustCompile(`skills/(?:\.system/)?([A-Za-z0-9][A-Za-z0-9._-]*)/SKILL\.md`)
-	codexSkillTokenRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
-)
+var skillTokenRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
-// codexToolSkillName infers an implicit activation from a reader tool opening
-// a SKILL.md path. Callers gate on the pre-tool kind: completions must not
-// re-report the activation and permission previews may still be denied.
-func codexToolSkillName(tool *agenthooks.ToolCall) string {
-	switch tool.Name {
-	case "Bash", "shell", "Read":
-	default:
-		return ""
-	}
-	matches := codexSkillPathRE.FindAllStringSubmatch(string(tool.Input), -1)
-	if len(matches) == 0 {
-		return ""
-	}
-	// The bash senders' greedy sed match resolved the last occurrence; keep
-	// that so both channels report the same skill for one command.
-	return matches[len(matches)-1][1]
+type resolvedSkill struct {
+	name         string
+	rawSHA256    string
+	content      string
+	captureReady bool
 }
 
-// codexPromptSkillName infers an explicit activation from a $skill-name
-// mention in the submitted prompt. A candidate counts only when it resolves to
-// a skill directory on disk, so dollar amounts and env-var mentions are
-// ignored; candidates are tried in sorted order and the first that resolves
-// wins, matching the bash senders.
+func resolveActivatedSkill(typed any, payload *components.IngestRequestBody) *resolvedSkill {
+	if payload == nil || payload.Data == nil || payload.Data.Skill == nil {
+		return nil
+	}
+
+	result := &resolvedSkill{name: payload.Data.Skill.Name}
+	activation := agenthooks.SkillActivationOf(typed)
+	if activation == nil || !activation.ContentAvailable || len(activation.Content) > maxSkillContentBytes || !utf8.ValidString(activation.Content) {
+		return result
+	}
+	digest := sha256.Sum256([]byte(activation.Content))
+	result.rawSHA256 = hex.EncodeToString(digest[:])
+	result.content = activation.Content
+	result.captureReady = true
+	return result
+}
+
+// Codex has no structured signal for explicit $skill-name prompt activations.
 func codexPromptSkillName(prompt, cwd string) string {
 	if !strings.Contains(prompt, "$") {
 		return ""
@@ -62,18 +60,16 @@ func codexPromptSkillName(prompt, cwd string) string {
 	})
 	seen := map[string]bool{}
 	names := []string{}
-	for _, f := range fields {
-		name, ok := strings.CutPrefix(f, "$")
-		if !ok || !codexSkillTokenRE.MatchString(name) {
+	for _, field := range fields {
+		name, ok := strings.CutPrefix(field, "$")
+		if !ok || !skillTokenRE.MatchString(name) {
 			continue
 		}
-		// Sentence-final punctuation survives tokenization ("use $foo.").
 		name = strings.TrimRight(name, ".")
-		if seen[name] {
-			continue
+		if !seen[name] {
+			seen[name] = true
+			names = append(names, name)
 		}
-		seen[name] = true
-		names = append(names, name)
 	}
 	sort.Strings(names)
 	for _, name := range names {
@@ -84,48 +80,75 @@ func codexPromptSkillName(prompt, cwd string) string {
 	return ""
 }
 
-// codexSkillExists validates a candidate skill name against the directories
-// Codex discovers skills from: the user root, the admin and Codex-home roots
-// (whose bundled skills live under a .system subdirectory but are mentioned by
-// bare name), and .agents/skills walking up from the session cwd.
 func codexSkillExists(name, cwd string) bool {
 	if name == "" || strings.ContainsAny(name, `/\`) || strings.HasPrefix(name, ".") {
 		return false
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = ""
+	home, _ := os.UserHomeDir()
+	roots := []string{
+		"/etc/codex/skills", filepath.Join("/etc/codex/skills", ".system"),
+		"/opt/codex/skills", filepath.Join("/opt/codex/skills", ".system"),
 	}
-	if home != "" && skillManifestExists(filepath.Join(home, ".agents", "skills", name)) {
-		return true
+	if home != "" {
+		personal := filepath.Join(home, ".agents", "skills")
+		roots = append(roots, personal, filepath.Join(personal, ".system"))
 	}
 	codexHome := strings.TrimSpace(os.Getenv("CODEX_HOME"))
 	if codexHome == "" && home != "" {
 		codexHome = filepath.Join(home, ".codex")
 	}
-	roots := []string{"/etc/codex/skills", "/opt/codex/skills"}
 	if codexHome != "" {
-		roots = append(roots, filepath.Join(codexHome, "skills"))
+		roots = append(roots, filepath.Join(codexHome, "skills"), filepath.Join(codexHome, "skills", ".system"))
 	}
 	for _, root := range roots {
-		if skillManifestExists(filepath.Join(root, name)) || skillManifestExists(filepath.Join(root, ".system", name)) {
+		if readableRegularFile(filepath.Join(root, name, "SKILL.md")) {
 			return true
 		}
 	}
-	for dir := cwd; dir != "" && dir != "/" && dir != "."; {
-		if skillManifestExists(filepath.Join(dir, ".agents", "skills", name)) {
-			return true
+	if filepath.IsAbs(cwd) {
+		for dir := cwd; ; dir = filepath.Dir(dir) {
+			if readableRegularFile(filepath.Join(dir, ".agents", "skills", name, "SKILL.md")) {
+				return true
+			}
+			if pathExists(filepath.Join(dir, ".git")) || filepath.Dir(dir) == dir {
+				break
+			}
 		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
 	}
 	return false
 }
 
-func skillManifestExists(dir string) bool {
-	info, err := os.Stat(filepath.Join(dir, "SKILL.md"))
-	return err == nil && !info.IsDir()
+func readableRegularFile(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		return false
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	openedInfo, statErr := file.Stat()
+	closeErr := file.Close()
+	return statErr == nil && openedInfo.Mode().IsRegular() && closeErr == nil
+}
+
+func pathExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+func pathWithin(path, root string) bool {
+	if path == "" || root == "" {
+		return false
+	}
+	pathAbs, err := filepath.Abs(path)
+	if err != nil {
+		return false
+	}
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(rootAbs, pathAbs)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }

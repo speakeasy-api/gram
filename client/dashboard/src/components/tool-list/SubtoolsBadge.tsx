@@ -1,12 +1,12 @@
 import { Tool } from "@/lib/toolTypes";
+import { Badge } from "@/components/ui/Badge";
+import { Stack } from "@/components/ui/Stack";
 import {
-  Badge,
-  Stack,
   Tooltip,
   TooltipContent,
   TooltipPortal,
   TooltipTrigger,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Tooltip";
 
 export function SubtoolsBadge({
   tool,

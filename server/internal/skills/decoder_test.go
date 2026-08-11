@@ -8,7 +8,19 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	srv "github.com/speakeasy-api/gram/server/gen/http/skills/server"
 )
+
+func TestSkillsRequestDecoderAllowsMissingApproveAllBody(t *testing.T) {
+	t.Parallel()
+
+	request := httptest.NewRequest(http.MethodPost, srv.ApproveAllSuggestionsSkillsPath(), http.NoBody)
+	payload, err := srv.DecodeApproveAllSuggestionsRequest(nil, skillsRequestDecoder)(request)
+
+	require.NoError(t, err)
+	require.Empty(t, payload.SuggestionIds)
+}
 
 func TestSkillsRequestDecoderBoundsOversizedBody(t *testing.T) {
 	t.Parallel()

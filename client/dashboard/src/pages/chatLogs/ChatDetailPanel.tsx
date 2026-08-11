@@ -6,6 +6,7 @@ import {
   ChevronUp,
   Info,
   Loader2,
+  Pin,
   Search,
   Sparkles,
   SlidersHorizontal,
@@ -20,47 +21,54 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import {
-  Badge,
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Icon,
-} from "@speakeasy-api/moonshine";
+} from "@/components/ui/Dropdown";
+import { Icon } from "@/components/ui/Icon";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useSearchLogsMutation } from "@gram/client/react-query/searchLogs.js";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
+import { useChatSetPinnedMutation } from "@gram/client/react-query/chatSetPinned.js";
+import { invalidateAllListChats } from "@gram/client/react-query/listChats.js";
+import { useSummarizeChatMutation } from "@gram/client/react-query/summarizeChat.js";
 import { QueryErrorResetBoundary, useQueryClient } from "@tanstack/react-query";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
+import { toast } from "sonner";
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetTitle,
-} from "@/components/ui/sheet";
+} from "@/components/ui/Sheet";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
-import { Dialog } from "@/components/ui/dialog";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { Switch } from "@/components/ui/switch";
+} from "@/components/ui/Popover";
+import { Dialog } from "@/components/ui/Dialog";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Switch } from "@/components/ui/Switch";
 import { AccountTypeBadge } from "@/components/account-type-badge";
 import { personalAccountEmail } from "@/components/observe/account-display-utils";
 import { HookSourceIcon } from "@/pages/hooks/HookSourceIcon";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useIsPlatformAdmin, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { ChatOwnerLabel } from "@/components/chat-owner-label";
 import { chatOwnerLabel } from "@/lib/chat-owner";
 import { handleError, toError } from "@/lib/errors";
+import { formatPlatform } from "@/lib/formatPlatform";
 import {
   ExclusionEditor,
   type ExclusionSheetState,
@@ -68,7 +76,7 @@ import {
 import { useChatTranscript } from "./useChatTranscript";
 import { useWindowedTranscript } from "./useWindowedTranscript";
 import { CreateExclusionContext } from "./exclusionContext";
-import { findingToExclusionState } from "./chatHelpers";
+import { riskResultAnchorId } from "./chatHelpers";
 import {
   ChatTranscript,
   type RowContext,
@@ -77,6 +85,7 @@ import {
 import {
   buildDisplayItems,
   buildTranscript,
+  displayItemContainsMessage,
   displayItemRows,
   type MessageCategory,
   rowCategory,
@@ -94,6 +103,8 @@ import {
   formatUsageCost,
 } from "./claudeUsage";
 import { filterPanelTelemetryLogs, filterToolLogs } from "./chatLogFilters";
+import { WorkUnitsHeaderMetrics } from "./WorkUnitsMetrics";
+import { formatWorkUnits, workUnitsEfficiency } from "./workUnits";
 import { ToolCallsView } from "./chatLogViews";
 import { exportTraceDataAsJson } from "./chatExport";
 
@@ -108,6 +119,8 @@ interface ChatDetailPanelProps {
   chatId: string;
   onClose: () => void;
   onDelete: (chatId: string) => void;
+  /** One-based raw transcript message index to load, center, and highlight. */
+  focusedMessageTurn?: number;
   /** Risk-focused view: collapse the transcript to the flagged messages plus a
    * few of context either side, expandable via "show more". Implies dimming. */
   riskFocus?: boolean;
@@ -192,6 +205,7 @@ export function ChatDetailSheet({
   chatId,
   onClose,
   onDelete,
+  focusedMessageTurn,
   riskFocus,
   dimNonRisk,
 }: ChatDetailSheetProps): JSX.Element {
@@ -217,6 +231,7 @@ export function ChatDetailSheet({
                   chatId={chatId}
                   onClose={onClose}
                   onDelete={onDelete}
+                  focusedMessageTurn={focusedMessageTurn}
                   riskFocus={riskFocus}
                   dimNonRisk={dimNonRisk}
                 />
@@ -259,14 +274,20 @@ function SessionSummary({
     totalTokens?: number;
     lastMessageTimestamp?: Date;
     updatedAt: Date;
+    workUnits?: number;
+    workUnitsReport?: string;
   };
-  userLabel: string;
+  userLabel: ReactNode;
   messageCount: number;
   toolCount: number;
   compact?: boolean;
 }) {
   const tokens = totalTokensFor(chat);
   const hasCost = chat.totalCost !== undefined && chat.totalCost > 0;
+  const {
+    costPerUnit: workUnitsCostPerUnit,
+    tokensPerUnit: workUnitsTokensPerUnit,
+  } = workUnitsEfficiency(chat);
   const accountEmail = personalAccountEmail(chat);
   const endTime = chat.lastMessageTimestamp ?? chat.updatedAt;
   const duration = Math.round(
@@ -278,7 +299,7 @@ function SessionSummary({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm transition-colors"
+          className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1.5 px-2 py-1 text-sm transition-colors"
         >
           {compact ? (
             <span className="inline-flex items-center gap-1.5">
@@ -328,7 +349,7 @@ function SessionSummary({
               <MetaRow label="Source">
                 <span className="inline-flex items-center gap-1.5">
                   <HookSourceIcon source={chat.source} className="size-3.5" />
-                  {chat.source}
+                  {formatPlatform(chat.source)}
                 </span>
               </MetaRow>
             )}
@@ -350,6 +371,21 @@ function SessionSummary({
             )}
             {tokens > 0 && (
               <MetaRow label="Total tokens">{tokens.toLocaleString()}</MetaRow>
+            )}
+            {chat.workUnits !== undefined && (
+              <MetaRow label="Work delivered">
+                {formatWorkUnits(chat.workUnits)}
+              </MetaRow>
+            )}
+            {workUnitsCostPerUnit !== null && (
+              <MetaRow label="Cost efficiency">
+                {formatUsageCost(workUnitsCostPerUnit)}
+              </MetaRow>
+            )}
+            {workUnitsTokensPerUnit !== null && (
+              <MetaRow label="Token efficiency">
+                {formatTokenCount(workUnitsTokensPerUnit)}
+              </MetaRow>
             )}
           </div>
         </div>
@@ -396,7 +432,7 @@ function ChatDetailMetadataBadges({
           <Badge.Text>
             <span className="inline-flex items-center gap-1.5">
               <HookSourceIcon source={chat.source} className="size-3" />
-              {chat.source}
+              {formatPlatform(chat.source)}
             </span>
           </Badge.Text>
         </Badge>
@@ -458,7 +494,7 @@ function MessageFilterBar({
 
   return (
     <div className="flex items-center justify-end gap-3">
-      <div className="bg-muted/40 inline-flex items-center gap-1 rounded-lg border p-1">
+      <div className="border-border bg-card divide-border inline-flex items-center divide-x border">
         {MESSAGE_TYPES.map(({ key, label, icon: Glyph }) => {
           const on = typeFilter.has(key);
           return (
@@ -468,10 +504,10 @@ function MessageFilterBar({
               aria-pressed={on}
               onClick={() => toggleType(key)}
               className={cn(
-                "inline-flex items-center gap-2 rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:border-foreground/40",
+                "inline-flex items-center gap-2 px-3 py-1.5 font-mono text-xs tracking-[0.08em] uppercase transition-colors",
                 on
-                  ? "bg-background text-foreground shadow-sm hover:bg-muted/60"
-                  : "text-muted-foreground hover:bg-background hover:text-foreground",
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
               <Glyph className="size-3.5" />
@@ -488,7 +524,7 @@ function MessageFilterBar({
               checked={riskyOnly}
               onCheckedChange={onRiskyOnlyChange}
               aria-label="Show only risky messages"
-              className={riskyOnly ? "bg-red-800" : undefined}
+              className={riskyOnly ? "bg-destructive" : undefined}
             />
             <span className="text-muted-foreground text-xs font-medium">
               Risky only
@@ -527,9 +563,9 @@ function ThreadSearchBar({
   // (meaningless) prev/next nav while keeping clear available.
   const overLimit = trimmedLen > MAX_SEARCH_QUERY_LEN;
   const navBtn =
-    "text-muted-foreground hover:text-foreground hover:bg-background flex size-6 shrink-0 items-center justify-center rounded transition-colors disabled:opacity-40";
+    "text-muted-foreground hover:text-foreground hover:bg-background flex size-6 shrink-0 items-center justify-center transition-colors disabled:opacity-40";
   return (
-    <div className="bg-background focus-within:border-foreground/40 flex h-9 items-center gap-2 rounded-lg border px-2.5 transition-colors">
+    <div className="bg-background focus-within:border-foreground/40 flex h-9 items-center gap-2 border px-2.5 transition-colors">
       {overLimit ? (
         <SimpleTooltip
           tooltip={`Queries are limited to ${MAX_SEARCH_QUERY_LEN} characters`}
@@ -630,6 +666,9 @@ function ChatDetailHeader({
   onRiskyOnlyChange,
   showRiskyOnly,
   searchBar,
+  pinned,
+  onTogglePinned,
+  pinPending,
   onExport,
   onDelete,
   onSetView,
@@ -637,7 +676,7 @@ function ChatDetailHeader({
 }: {
   chatId: string;
   chat: Parameters<typeof SessionSummary>[0]["chat"] & { title?: string };
-  userLabel: string;
+  userLabel: ReactNode;
   messageCount: number;
   toolCount: number;
   canManageChat: boolean;
@@ -650,6 +689,9 @@ function ChatDetailHeader({
   showRiskyOnly: boolean;
   /** Optional find-in-conversation bar (normal view only). */
   searchBar?: ReactNode;
+  pinned: boolean;
+  onTogglePinned: () => void;
+  pinPending: boolean;
   onExport: () => void;
   onDelete: () => void;
   onSetView: (view: ViewMode) => void;
@@ -682,6 +724,7 @@ function ChatDetailHeader({
               ) : (
                 <HeaderMetadataBadge>{getTraceId(chatId)}</HeaderMetadataBadge>
               )}
+              <WorkUnitsHeaderMetrics chat={chat} />
             </div>
           </SheetDescription>
         </div>
@@ -697,7 +740,7 @@ function ChatDetailHeader({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm transition-colors"
+                className="text-muted-foreground hover:text-foreground hover:bg-muted inline-flex items-center gap-1.5 px-2 py-1 text-sm transition-colors"
               >
                 <SlidersHorizontal className="size-4" />
                 Actions
@@ -710,6 +753,17 @@ function ChatDetailHeader({
                 onSelect={() => onSetView("tools")}
               >
                 Tool calls{toolCount > 0 ? ` (${toolCount})` : ""}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="cursor-pointer gap-2"
+                disabled={pinPending}
+                onSelect={onTogglePinned}
+              >
+                <Pin
+                  className={cn("size-3.5", pinned && "fill-current")}
+                  aria-hidden
+                />
+                {pinned ? "Unpin session" : "Pin session"}
               </DropdownMenuItem>
               {canManageChat && (
                 <>
@@ -732,7 +786,7 @@ function ChatDetailHeader({
           </DropdownMenu>
           <button
             onClick={onClose}
-            className="hover:bg-muted rounded-md p-1 transition-colors"
+            className="hover:bg-muted p-1 transition-colors"
             aria-label="Close panel"
           >
             <Icon name="x" className="size-5" />
@@ -773,10 +827,132 @@ function SubViewBar({ title, onBack }: { title: string; onBack: () => void }) {
   );
 }
 
+function SessionSummarySection({
+  chatId,
+  summary,
+  summaryGeneratedAt,
+  onSummaryChange,
+}: {
+  chatId: string;
+  summary?: string;
+  summaryGeneratedAt?: Date;
+  onSummaryChange: (
+    summary: string,
+    generatedAt: Date,
+    forChatId: string,
+  ) => void;
+}) {
+  const queryClient = useQueryClient();
+  const summarize = useSummarizeChatMutation();
+  const [expanded, setExpanded] = useState(true);
+  const hasSummary = Boolean(summary?.trim());
+  // Track the active session so a late summarize response cannot apply to a
+  // different chat after the panel navigates away.
+  const activeChatIdRef = useRef(chatId);
+  activeChatIdRef.current = chatId;
+
+  const runSummarize = (regenerate: boolean) => {
+    const requestedChatId = chatId;
+    summarize.mutate(
+      {
+        request: {
+          summarizeRequestBody: { id: requestedChatId, regenerate },
+        },
+      },
+      {
+        onSuccess: (result) => {
+          if (activeChatIdRef.current !== requestedChatId) {
+            return;
+          }
+          onSummaryChange(
+            result.summary,
+            result.summaryGeneratedAt,
+            requestedChatId,
+          );
+          void queryClient.invalidateQueries({
+            queryKey: ["chat", requestedChatId, "transcript"],
+          });
+          void invalidateAllListChats(queryClient);
+        },
+        onError: (error) => {
+          if (activeChatIdRef.current !== requestedChatId) {
+            return;
+          }
+          toast.error(error.message || "Failed to summarize session");
+        },
+      },
+    );
+  };
+
+  return (
+    <div className="border-b px-4 py-3">
+      <div className="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => setExpanded((prev) => !prev)}
+          className="text-foreground inline-flex items-center gap-1.5 text-sm font-medium"
+        >
+          <Sparkles className="size-3.5" aria-hidden />
+          Summary
+          {expanded ? (
+            <ChevronUp className="text-muted-foreground size-3.5" />
+          ) : (
+            <ChevronDown className="text-muted-foreground size-3.5" />
+          )}
+        </button>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={summarize.isPending}
+          onClick={() => runSummarize(hasSummary)}
+        >
+          <Button.LeftIcon>
+            {summarize.isPending ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="size-3.5" />
+            )}
+          </Button.LeftIcon>
+          <Button.Text>
+            {summarize.isPending
+              ? "Summarizing…"
+              : hasSummary
+                ? "Regenerate"
+                : "Summarize"}
+          </Button.Text>
+        </Button>
+      </div>
+      {expanded && (
+        <div className="mt-2">
+          {hasSummary ? (
+            <>
+              <p className="text-foreground/90 text-sm leading-relaxed whitespace-pre-wrap">
+                {summary}
+              </p>
+              {summaryGeneratedAt && (
+                <p className="text-muted-foreground mt-2 text-xs">
+                  Generated{" "}
+                  {formatDistanceToNow(summaryGeneratedAt, { addSuffix: true })}
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              No summary yet. Generate one to get a concise overview of this
+              session.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ChatDetailPanel({
   chatId,
   onClose,
   onDelete,
+  focusedMessageTurn,
   riskFocus = false,
   dimNonRisk: dimNonRiskProp = false,
 }: ChatDetailPanelProps) {
@@ -816,10 +992,20 @@ function ChatDetailPanel({
     null,
   );
   const [scrollNonce, setScrollNonce] = useState(0);
+  const [localSummary, setLocalSummary] = useState<string | undefined>();
+  const [localSummaryGeneratedAt, setLocalSummaryGeneratedAt] = useState<
+    Date | undefined
+  >();
+  const queryClient = useQueryClient();
+  const setPinnedMutation = useChatSetPinnedMutation();
   useEffect(() => {
     const handle = setTimeout(() => setSearchQuery(searchInput.trim()), 250);
     return () => clearTimeout(handle);
   }, [searchInput]);
+  useEffect(() => {
+    setLocalSummary(undefined);
+    setLocalSummaryGeneratedAt(undefined);
+  }, [chatId]);
 
   // Risk-review contexts — explicit risk focus, or opened from the has-risk
   // filter — load the server-windowed risk transcript so findings load no matter
@@ -860,6 +1046,43 @@ function ChatDetailPanel({
   // resolved (otherwise the panel would show "Not found" despite having data).
   const chat = transcript.chat ?? active.chat;
   const chatMessages = active.messages;
+  const validFocusedMessageTurn =
+    focusedMessageTurn !== undefined &&
+    Number.isInteger(focusedMessageTurn) &&
+    focusedMessageTurn > 0
+      ? focusedMessageTurn
+      : undefined;
+  const transcriptMessageCount = transcript.messages.length;
+  const transcriptLoading = transcript.isLoading;
+  const transcriptFetchingNewer = transcript.isFetchingNewer;
+  const transcriptHasMoreAfter = transcript.hasMoreAfter;
+  const loadNextTranscriptPage = transcript.fetchNewer;
+
+  // Provenance can cite a turn beyond the cheap first transcript page. Load
+  // forward pages only until that raw one-based message index is available.
+  useEffect(() => {
+    if (
+      validFocusedMessageTurn === undefined ||
+      transcriptLoading ||
+      transcriptFetchingNewer ||
+      transcriptMessageCount >= validFocusedMessageTurn ||
+      !transcriptHasMoreAfter
+    ) {
+      return;
+    }
+    loadNextTranscriptPage();
+  }, [
+    validFocusedMessageTurn,
+    transcriptLoading,
+    transcriptFetchingNewer,
+    transcriptMessageCount,
+    transcriptHasMoreAfter,
+    loadNextTranscriptPage,
+  ]);
+  const focusedMessageId =
+    validFocusedMessageTurn === undefined
+      ? null
+      : (transcript.messages[validFocusedMessageTurn - 1]?.id ?? null);
   const { data: membersData } = useMembers();
   const userLabel = chat
     ? chatOwnerLabel(
@@ -869,6 +1092,18 @@ function ChatDetailPanel({
         personalAccountEmail(chat),
       )
     : "anonymous";
+  // Same label as a node: unresolved owners get an explanatory tooltip in the
+  // header's session details, while transcript rows keep the plain string.
+  const userLabelNode = chat ? (
+    <ChatOwnerLabel
+      members={membersData?.members}
+      chat={chat}
+      currentUser={user}
+      accountEmail={personalAccountEmail(chat)}
+    />
+  ) : (
+    "anonymous"
+  );
   // Only the primary (or risk) initial load blanks the whole panel; a search
   // re-fetch updates the transcript in place — its loading shows in the search
   // bar and as a "Searching…" empty state instead.
@@ -916,7 +1151,6 @@ function ChatDetailPanel({
   );
   const toolLogs = useMemo(() => filterToolLogs(logs), [logs]);
 
-  const queryClient = useQueryClient();
   const { data: riskData } = useRiskListResults({ chatId });
   const riskResults = useMemo(() => {
     const all = riskData?.results ?? [];
@@ -926,9 +1160,12 @@ function ChatDetailPanel({
   const riskResultsByMessage = useMemo(() => {
     const map = new Map<string, RiskResult[]>();
     for (const r of riskResults) {
-      const existing = map.get(r.chatMessageId);
+      const anchorId = riskResultAnchorId(r);
+      if (!anchorId) continue;
+
+      const existing = map.get(anchorId);
       if (existing) existing.push(r);
-      else map.set(r.chatMessageId, [r]);
+      else map.set(anchorId, [r]);
     }
     return map;
   }, [riskResults]);
@@ -956,8 +1193,8 @@ function ChatDetailPanel({
   }, [chat?.agentUsage]);
 
   const transcriptRows = useMemo(
-    () => buildTranscript(chatMessages),
-    [chatMessages],
+    () => buildTranscript(chatMessages, chat?.contentParts ?? []),
+    [chatMessages, chat?.contentParts],
   );
   // Apply the header filters at the row level so generation dividers and risk
   // gaps recompute against exactly what's shown (no orphaned dividers).
@@ -992,17 +1229,25 @@ function ChatDetailPanel({
       }),
     [visibleRows, hasMoreBefore, hasMoreAfter, windowGaps],
   );
+  const focusedItemIndex = useMemo(() => {
+    if (!focusedMessageId) return null;
+    const index = displayItems.findIndex((item) =>
+      displayItemContainsMessage(item, focusedMessageId),
+    );
+    return index >= 0 ? index : null;
+  }, [displayItems, focusedMessageId]);
 
   // Risk-review contexts (risk focus or the has-risk spotlight) open scrolled to
   // the first finding, however far down it is. Plain cost/default views open at
   // the top (first message) — even when the session happens to have findings.
   const initialScrollIndex = useMemo(() => {
+    if (focusedItemIndex !== null) return focusedItemIndex;
     if (!dimNonRisk) return null;
     const idx = displayItems.findIndex((it) =>
       displayItemRows(it).some((r) => rowIsFlagged(r, riskResultsByMessage)),
     );
     return idx >= 0 ? idx : null;
-  }, [dimNonRisk, displayItems, riskResultsByMessage]);
+  }, [focusedItemIndex, dimNonRisk, displayItems, riskResultsByMessage]);
 
   // Unified per-occurrence search navigation: flat-map the loaded display rows
   // into every query occurrence (message text / tool name / args / output) in
@@ -1093,8 +1338,9 @@ function ChatDetailPanel({
       // mid-thread, so suppress the top-of-list auto-load + jump-to-start button
       // that the plain from-start transcript uses — otherwise the window's top
       // edge eagerly expands older messages on mount.
-      scrollToFinding: riskWindowed || searchActive,
-      scrollToItemIndex: activeOccurrence?.itemIndex ?? null,
+      scrollToFinding:
+        riskWindowed || searchActive || validFocusedMessageTurn !== undefined,
+      scrollToItemIndex: activeOccurrence?.itemIndex ?? focusedItemIndex,
       scrollNonce,
       activeOccurrence: activeOccurrence
         ? {
@@ -1104,17 +1350,21 @@ function ChatDetailPanel({
             indexInField: activeOccurrence.indexInField,
           }
         : null,
+      focusedMessageId,
     };
   }, [
     hasMoreBefore,
     hasMoreAfter,
     riskWindowed,
     searchActive,
+    validFocusedMessageTurn,
     windowed,
     transcript,
     initialScrollIndex,
     scrollNonce,
     activeOccurrence,
+    focusedItemIndex,
+    focusedMessageId,
   ]);
 
   // "Load all messages": shown whenever part of the conversation isn't loaded
@@ -1156,10 +1406,10 @@ function ChatDetailPanel({
     ],
   );
 
-  // "Create exclusion" swaps the transcript for the exclusion editor in-place
-  // (with a back button) rather than stacking a second sheet on top.
+  // "Setup exclusion rule" swaps the transcript for the exclusion editor
+  // in-place (with a back button) rather than stacking a second sheet on top.
   const openExclusion = useCallback((result: RiskResult) => {
-    setExclusionState(findingToExclusionState(result));
+    setExclusionState({ mode: "create", results: [result] });
     setPendingExclusionKey(findingKey(result));
     setView("exclusion");
   }, []);
@@ -1234,13 +1484,16 @@ function ChatDetailPanel({
   }
 
   const error = logsError as Error | null;
+  const pinned = Boolean(chat.pinned);
+  const summary = localSummary ?? chat.summary;
+  const summaryGeneratedAt = localSummaryGeneratedAt ?? chat.summaryGeneratedAt;
 
   return (
     <div className="bg-background flex h-full flex-col">
       <ChatDetailHeader
         chatId={chatId}
         chat={chat}
-        userLabel={userLabel}
+        userLabel={userLabelNode}
         messageCount={chat.numMessages}
         toolCount={toolLogs.length}
         canManageChat={canManageChat}
@@ -1264,6 +1517,28 @@ function ChatDetailPanel({
             />
           )
         }
+        pinned={pinned}
+        pinPending={setPinnedMutation.isPending}
+        onTogglePinned={() => {
+          setPinnedMutation.mutate(
+            {
+              request: {
+                setPinnedRequestBody: { id: chatId, pinned: !pinned },
+              },
+            },
+            {
+              onSettled: () => {
+                void invalidateAllListChats(queryClient);
+                void queryClient.invalidateQueries({
+                  queryKey: ["chat", chatId, "transcript"],
+                });
+              },
+              onError: (err) => {
+                toast.error(err.message || "Failed to update pin");
+              },
+            },
+          );
+        }}
         onExport={() => {
           // Fetches the complete transcript server-side — the export must not
           // depend on which messages the panel happens to have loaded.
@@ -1279,6 +1554,20 @@ function ChatDetailPanel({
         onDelete={() => setShowDeleteConfirm(true)}
         onSetView={setView}
         onClose={onClose}
+      />
+
+      <SessionSummarySection
+        key={chatId}
+        chatId={chatId}
+        summary={summary}
+        summaryGeneratedAt={summaryGeneratedAt}
+        onSummaryChange={(nextSummary, generatedAt, forChatId) => {
+          if (forChatId !== chatId) {
+            return;
+          }
+          setLocalSummary(nextSummary);
+          setLocalSummaryGeneratedAt(generatedAt);
+        }}
       />
 
       {chatLoadHasErrors && (
@@ -1350,8 +1639,8 @@ function ChatDetailPanel({
             <SubViewBar
               title={
                 exclusionState.mode === "edit"
-                  ? "Edit exclusion"
-                  : "Create exclusion"
+                  ? "Edit exclusion rule"
+                  : "Set up exclusion rule"
               }
               onBack={closeExclusion}
             />

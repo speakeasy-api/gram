@@ -12,9 +12,12 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -50,6 +53,16 @@ func WithOTELMetadata(params LogParams, observedTimestamp time.Time, resourceAtt
 	return params
 }
 
+// LogObserver is notified after a batch of telemetry log rows is written to
+// telemetry_logs. Observers receive the caller's batch before per-org
+// feature-flag filtering, so a row is not a guarantee that it was persisted.
+// Implementations must be cheap; heavy work should be throttled or dispatched
+// asynchronously. Staged rows (LogBulkStaging) are not observed — they only
+// reach telemetry_logs later, via promotion.
+type LogObserver interface {
+	OnTelemetryLogsWritten(ctx context.Context, params []LogParams)
+}
+
 type Logger struct {
 	shutdownCtx       func() context.Context
 	logger            *slog.Logger
@@ -57,28 +70,51 @@ type Logger struct {
 	logsEnabled       FeatureChecker
 	toolIOLogsEnabled FeatureChecker
 	users             *UserInfoResolver
+	logPublisher      *LogPublisher
+	observers         []LogObserver
 }
 
 func NewLogger(
 	shutdownCtx context.Context,
 	logger *slog.Logger,
+	// Both providers are unused and kept only for signature stability:
+	// ClickHouse client calls are not individually instrumented (DNO-602
+	// simplified o11y.TraceClickhouseConn to span-context forwarding only).
+	_ trace.TracerProvider,
+	_ metric.MeterProvider,
 	chConn clickhouse.Conn,
 	logsEnabled FeatureChecker,
 	toolIOLogsEnabled FeatureChecker,
 	users *UserInfoResolver,
+	logPublisher *LogPublisher,
 ) *Logger {
+	inv.Require(
+		"telemetry logger",
+		"log publisher set", logPublisher != nil,
+	)
+
+	logger = logger.With(attr.SlogComponent("telemetry_logger"))
 	return &Logger{
 		shutdownCtx:       func() context.Context { return shutdownCtx },
-		logger:            logger.With(attr.SlogComponent("telemetry_logger")),
+		logger:            logger,
 		chConn:            chConn,
 		logsEnabled:       logsEnabled,
 		toolIOLogsEnabled: toolIOLogsEnabled,
 		users:             users,
+		logPublisher:      logPublisher,
+		observers:         nil,
 	}
 }
 
+// AddObserver registers a LogObserver. Not safe to call concurrently with
+// logging — register observers during wiring, before traffic flows.
+func (l *Logger) AddObserver(obs LogObserver) {
+	l.observers = append(l.observers, obs)
+}
+
 // NewStub returns a Logger with feature checks hard-wired to disabled. Log
-// is a no-op and the ClickHouse connection is never dialed.
+// is a no-op and the ClickHouse connection is never dialed; the shadow log
+// publisher is an inert noop with all flags off.
 func NewStub(logger *slog.Logger) *Logger {
 	disabled := func(context.Context, string) (bool, error) { return false, nil }
 	return &Logger{
@@ -88,6 +124,8 @@ func NewStub(logger *slog.Logger) *Logger {
 		logsEnabled:       disabled,
 		toolIOLogsEnabled: disabled,
 		users:             nil,
+		logPublisher:      NewNoopLogPublisher(logger),
+		observers:         nil,
 	}
 }
 
@@ -142,14 +180,51 @@ func (l *Logger) Log(ctx context.Context, params LogParams) {
 }
 
 func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
-	logParams := l.buildBulkParams(ctx, params)
+	_, err := l.logBulk(ctx, l.shutdownCtx(), params, false)
+	return err
+}
+
+// LogBulkBounded respects the caller's context for every part of the write.
+func (l *Logger) LogBulkBounded(ctx context.Context, params []LogParams) error {
+	_, err := l.logBulk(ctx, ctx, params, false)
+	return err
+}
+
+// logBulk writes params to telemetry_logs and returns how many rows it
+// inserted, which is not len(params): rows belonging to an organization with
+// telemetry logs disabled, and rows that fail to build, are dropped here.
+//
+// When synchronous is set the rows are committed before the call returns
+// instead of being queued in ClickHouse's async insert buffer, which callers
+// whose next read must see these rows require.
+func (l *Logger) logBulk(ctx context.Context, writeCtx context.Context, params []LogParams, synchronous bool) (int, error) {
+	logParams := l.buildBulkParams(ctx, writeCtx, params)
 	if len(logParams) == 0 {
-		return nil
+		if err := writeCtx.Err(); err != nil {
+			return 0, fmt.Errorf("prepare telemetry logs: %w", err)
+		}
+		return 0, nil
 	}
-	if err := repo.New(l.chConn).InsertTelemetryLogs(l.shutdownCtx(), logParams); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "insert telemetry logs")
+	writeCtx = trace.ContextWithSpan(writeCtx, trace.SpanFromContext(ctx))
+	queries := repo.New(l.chConn)
+	insert := queries.InsertTelemetryLogs
+	if synchronous {
+		insert = queries.InsertTelemetryLogsSync
 	}
-	return nil
+	err := insert(writeCtx, logParams)
+	if err != nil {
+		return 0, fmt.Errorf("insert telemetry logs: %w", err)
+	}
+
+	// Shadow dual-write: mirror the rows onto Pub/Sub only after ClickHouse
+	// accepted them, so the shadow stream never contains rows the ledger
+	// rejected. Best-effort and non-blocking.
+	l.logPublisher.PublishLogs(ctx, logParams)
+
+	for _, obs := range l.observers {
+		obs.OnTelemetryLogsWritten(ctx, params)
+	}
+	return len(logParams), nil
 }
 
 // LogBulkStaging writes rows to telemetry_logs_staging instead of
@@ -158,22 +233,29 @@ func (l *Logger) LogBulk(ctx context.Context, params []LogParams) error {
 // scrubbing, and hydration as LogBulk, so a promoted row is byte-identical to
 // what a direct insert would have produced apart from the patched attribution.
 func (l *Logger) LogBulkStaging(ctx context.Context, params []LogParams) error {
-	logParams := l.buildBulkParams(ctx, params)
+	logParams := l.buildBulkParams(ctx, l.shutdownCtx(), params)
 	if len(logParams) == 0 {
 		return nil
 	}
-	if err := repo.New(l.chConn).InsertTelemetryLogsStaging(l.shutdownCtx(), logParams); err != nil {
+	err := repo.New(l.chConn).InsertTelemetryLogsStaging(l.detachedWriteContext(ctx), logParams)
+	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "insert staged telemetry logs")
 	}
 	return nil
 }
 
-func (l *Logger) buildBulkParams(ctx context.Context, params []LogParams) []repo.InsertTelemetryLogParams {
+// detachedWriteContext returns the shutdown-scoped context synchronous
+// ClickHouse writes run on (they must survive request cancellation), carrying
+// the caller's span so the connection layer (o11y.TraceClickhouseConn) can
+// forward the request's trace context to ClickHouse's server-side span log.
+func (l *Logger) detachedWriteContext(ctx context.Context) context.Context {
+	return trace.ContextWithSpan(l.shutdownCtx(), trace.SpanFromContext(ctx))
+}
+
+func (l *Logger) buildBulkParams(ctx context.Context, operationCtx context.Context, params []LogParams) []repo.InsertTelemetryLogParams {
 	if len(params) == 0 {
 		return nil
 	}
-
-	shutdownCtx := l.shutdownCtx()
 
 	logParams := make([]repo.InsertTelemetryLogParams, 0, len(params))
 	logsEnabledByOrg := make(map[string]bool)
@@ -183,7 +265,7 @@ func (l *Logger) buildBulkParams(ctx context.Context, params []LogParams) []repo
 		enabled, ok := logsEnabledByOrg[param.ToolInfo.OrganizationID]
 		if !ok {
 			var err error
-			enabled, err = l.logsEnabled(shutdownCtx, param.ToolInfo.OrganizationID)
+			enabled, err = l.logsEnabled(operationCtx, param.ToolInfo.OrganizationID)
 			if err != nil || !enabled {
 				logsEnabledByOrg[param.ToolInfo.OrganizationID] = false
 				continue
@@ -196,7 +278,7 @@ func (l *Logger) buildBulkParams(ctx context.Context, params []LogParams) []repo
 
 		toolIOEnabled, ok := toolIOLogsEnabledByOrg[param.ToolInfo.OrganizationID]
 		if !ok {
-			toolIOEnabled = l.checkToolIOLogsEnabled(shutdownCtx, param.ToolInfo.OrganizationID)
+			toolIOEnabled = l.checkToolIOLogsEnabled(operationCtx, param.ToolInfo.OrganizationID)
 			toolIOLogsEnabledByOrg[param.ToolInfo.OrganizationID] = toolIOEnabled
 		}
 
@@ -214,7 +296,7 @@ func (l *Logger) buildBulkParams(ctx context.Context, params []LogParams) []repo
 			}
 		}
 
-		param = l.hydrateUserInfo(shutdownCtx, param)
+		param = l.hydrateUserInfo(operationCtx, param)
 
 		logParam, err := buildTelemetryLogParams(param)
 		if err != nil {
@@ -268,6 +350,16 @@ func buildTelemetryLogParams(params LogParams) (*repo.InsertTelemetryLogParams, 
 	allAttrs[attr.TimeUnixNanoKey] = params.Timestamp.UnixNano()
 	allAttrs[attr.ServiceNameKey] = serviceName
 
+	// Stamp the canonical event identity (urn:telemetry:...) on every
+	// row so consumers can classify by one column (the event_urn
+	// materialized column) instead of re-deriving meaning from gram_urn
+	// prefixes, hook names, and attribute presence. Callers that already set
+	// gram.event.urn win; everything else is derived from the signals the
+	// writer stamped.
+	if getString(allAttrs, attr.EventURNKey) == "" {
+		allAttrs[attr.EventURNKey] = deriveEventURN(params.ToolInfo.URN, allAttrs)
+	}
+
 	spanAttrs, resourceAttrs, err := parseAttributesWithExplicitResources(allAttrs, params.resourceAttributes)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "parse log attributes")
@@ -302,14 +394,17 @@ func parseAttributesWithExplicitResources(attrs map[attr.Key]any, explicitResour
 	spanAttrs := make(map[attr.Key]any)
 	resourceAttrs := make(map[attr.Key]any)
 	maps.Copy(resourceAttrs, explicitResourceAttrs)
+	explicitProvider, providerIsString := attrs[attr.GenAIProviderNameKey].(string)
+	inferModelProvider := !providerIsString || strings.TrimSpace(explicitProvider) == ""
+	if inferModelProvider {
+		if model, ok := attrs[attr.GenAIRequestModelKey].(string); ok {
+			spanAttrs[attr.GenAIProviderNameKey] = inferProvider(model)
+		}
+	}
 
 	for k, v := range attrs {
-		// if there's an attribute related to a Gen AI request we want
-		// to infer the model provider for insights
-		if k == attr.GenAIRequestModelKey {
-			if model, ok := v.(string); ok {
-				spanAttrs[attr.GenAIProviderNameKey] = inferProvider(model)
-			}
+		if k == attr.GenAIProviderNameKey && inferModelProvider {
+			continue
 		}
 
 		if _, ok := ResourceAttributeKeys[k]; ok {

@@ -25,6 +25,10 @@ export type McpEndpoint = {
    */
   id: string;
   /**
+   * Whether this endpoint is mapped to its custom-domain root
+   */
+  isDomainRoot: boolean;
+  /**
    * The ID of the MCP server this endpoint addresses
    */
   mcpServerId: string;
@@ -52,6 +56,7 @@ export const McpEndpoint$inboundSchema: z.ZodMiniType<McpEndpoint, unknown> = z
       ),
       custom_domain_id: z.optional(z.string()),
       id: z.string(),
+      is_domain_root: z.boolean(),
       mcp_server_id: z.string(),
       project_id: z.string(),
       slug: z.string(),
@@ -64,6 +69,7 @@ export const McpEndpoint$inboundSchema: z.ZodMiniType<McpEndpoint, unknown> = z
       return remap$(v, {
         "created_at": "createdAt",
         "custom_domain_id": "customDomainId",
+        "is_domain_root": "isDomainRoot",
         "mcp_server_id": "mcpServerId",
         "project_id": "projectId",
         "updated_at": "updatedAt",

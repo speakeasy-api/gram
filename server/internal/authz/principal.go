@@ -257,7 +257,6 @@ func upsertPrincipalGrants(ctx context.Context, q *repo.Queries, orgID string, p
 			OrganizationID: orgID,
 			PrincipalUrn:   principal,
 			Scope:          string(row.Scope),
-			Effect:         row.Effect.pgText(),
 			Selectors:      row.SelectorRaw,
 		}); err != nil {
 			return fmt.Errorf("upsert grant %q for %s: %w", row.Scope, principal.Label(), err)
@@ -273,7 +272,6 @@ func (rp rolePrincipals) insertGrantsIfAbsent(ctx context.Context, q *repo.Queri
 			OrganizationID: orgID,
 			PrincipalUrn:   rp.WritePrincipal,
 			Scope:          string(row.Scope),
-			Effect:         row.Effect.pgText(),
 			Selectors:      row.SelectorRaw,
 		}); err != nil {
 			return fmt.Errorf("insert grant %q for role %q: %w", row.Scope, rp.Slug, err)
@@ -294,7 +292,6 @@ func deletePrincipalGrants(ctx context.Context, q *repo.Queries, orgID string, p
 				OrganizationID: orgID,
 				PrincipalUrn:   principal,
 				Scope:          string(row.Scope),
-				Effect:         string(row.Effect),
 				Selectors:      row.SelectorRaw,
 			}); err != nil {
 				return fmt.Errorf("delete grant %q for %s: %w", row.Scope, principal.Label(), err)

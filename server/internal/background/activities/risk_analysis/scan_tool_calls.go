@@ -2,6 +2,7 @@ package risk_analysis
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -9,17 +10,19 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/clidestructive"
 	"github.com/speakeasy-api/gram/server/internal/scanners/destructivetool"
 	"github.com/speakeasy-api/gram/server/internal/scanners/shadowmcpscan"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
-// MCPMatchLookup resolves stored tool-call IDs to MCP match strings. It is the
-// risk_analysis-facing name for shadowmcpscan.MatchLookup, kept here because it
-// is part of the NewAnalyzeBatch constructor signature.
-type MCPMatchLookup interface {
-	LookupMCPMatchesByToolCallID(ctx context.Context, projectID uuid.UUID, toolCallIDs []string) (map[string]string, error)
+// MCPProvenanceLookup replays the MCP server identity recorded for a set of
+// tool calls. It is the risk_analysis-facing name for
+// shadowmcpscan.ProvenanceLookup, kept here because it is part of the
+// NewAnalyzeBatch constructor signature.
+type MCPProvenanceLookup interface {
+	LookupMCPProvenanceByToolCallID(ctx context.Context, projectID uuid.UUID, toolCallIDs []string, since time.Time) (map[string]telemetryrepo.MCPProvenance, error)
 }
 
-func (a *AnalyzeBatch) scanShadowMCP(ctx context.Context, orgID string, projectID uuid.UUID, messages []batchMessage) [][]scanners.Finding {
-	calls := make([][]shadowmcpscan.ToolCall, len(messages))
+func (a *AnalyzeBatch) scanShadowMCP(ctx context.Context, orgID string, projectID uuid.UUID, policyID uuid.UUID, messages []batchMessage) [][]scanners.Finding {
+	scanMessages := make([]shadowmcpscan.Message, len(messages))
 	for i, msg := range messages {
 		msgCalls := make([]shadowmcpscan.ToolCall, 0, len(msg.ToolCalls))
 		for _, call := range msg.ToolCalls {
@@ -27,11 +30,16 @@ func (a *AnalyzeBatch) scanShadowMCP(ctx context.Context, orgID string, projectI
 				ID:        call.ID,
 				Name:      call.Function.Name,
 				Arguments: call.Function.Arguments,
+				CreatedAt: msg.CreatedAt,
+				Sender:    msg.Source,
 			})
 		}
-		calls[i] = msgCalls
+		scanMessages[i] = shadowmcpscan.Message{
+			UserID:    msg.UserID,
+			ToolCalls: msgCalls,
+		}
 	}
-	return a.shadowMCPScanner.Scan(ctx, orgID, projectID, calls)
+	return a.shadowMCPScanner.Scan(ctx, orgID, projectID, policyID, scanMessages)
 }
 
 func (a *AnalyzeBatch) scanDestructiveToolAnnotations(ctx context.Context, orgID string, messages []batchMessage) [][]scanners.Finding {

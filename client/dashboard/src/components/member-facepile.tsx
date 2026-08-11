@@ -1,16 +1,16 @@
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { getGradientColors } from "@/components/gradient-colors";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { getIdentityTint } from "@/components/gradient-colors";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
+} from "@/components/ui/Popover";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
 import { motion } from "motion/react";
 import * as React from "react";
 
@@ -39,19 +39,14 @@ function MemberAvatar({
   member: FacepileMember;
   className?: string;
 }): React.JSX.Element {
-  // Deterministic per-member gradient so each fallback face is unique.
-  const gradient = getGradientColors(member.id || member.name);
+  // Deterministic per-member flat tint so each fallback face is unique.
+  const tint = getIdentityTint(member.id || member.name);
   return (
     <Avatar className={className}>
       {member.photoUrl && (
         <AvatarImage src={member.photoUrl} alt={member.name} />
       )}
-      <AvatarFallback
-        className="text-[10px] font-semibold text-white"
-        style={{
-          backgroundImage: `linear-gradient(${gradient.angle}deg, ${gradient.from}, ${gradient.to})`,
-        }}
-      >
+      <AvatarFallback className="text-[10px] font-semibold" style={tint}>
         {initials(member.name)}
       </AvatarFallback>
     </Avatar>
@@ -89,7 +84,7 @@ export function MemberFacepile({
           aria-label={label}
           // Stop the row's onRowClick from firing when opening the popover.
           onClick={(e) => e.stopPropagation()}
-          className="hover:bg-accent/40 -ml-1 flex w-fit cursor-pointer items-center rounded-full p-1 transition-colors"
+          className="hover:bg-accent/40 -ml-1 flex w-fit cursor-pointer items-center p-1 transition-colors"
         >
           {/* Grid overlap: each face sits in a track narrower than itself
               (auto-cols < avatar width), so faces overlap by a fixed amount and
@@ -180,21 +175,21 @@ export function MemberFacepile({
         className="w-64 overflow-hidden p-0"
       >
         <div className="border-border border-b px-3 py-2">
-          <Type small className="font-medium">
+          <Text small className="font-medium">
             {label}
-          </Type>
+          </Text>
         </div>
         <div className="max-h-64 overflow-y-auto py-1">
           {sorted.map((m) => (
             <div key={m.id} className="flex items-center gap-2.5 px-3 py-1.5">
               <MemberAvatar member={m} className="size-6" />
               <div className="min-w-0">
-                <Type small className="truncate font-medium">
+                <Text small className="truncate font-medium">
                   {m.name}
-                </Type>
-                <Type muted small className="truncate text-xs">
+                </Text>
+                <Text muted small className="truncate text-xs">
                   {m.email}
-                </Type>
+                </Text>
               </div>
             </div>
           ))}

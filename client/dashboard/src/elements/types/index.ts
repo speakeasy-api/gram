@@ -721,11 +721,11 @@ export interface ComponentOverrides {
   ReasoningGroup?: ReasoningGroupComponent;
 
   /**
-   * The component to use for the tool group (a group of tool calls returned by the LLM in a single message).
+   * The component to use for the tool group (a run of tool calls, including
+   * the terse annotation text parts preceding each batch). `indices` are the
+   * positions of the run's parts within the assistant message.
    */
-  ToolGroup?: ComponentType<
-    PropsWithChildren<{ startIndex: number; endIndex: number }>
-  >;
+  ToolGroup?: ComponentType<PropsWithChildren<{ indices: number[] }>>;
 }
 
 export type ToolsFilter =
@@ -1052,6 +1052,12 @@ export interface ComposerConfig {
    * @default true
    */
   toolMentions?: boolean | ToolMentionsConfig;
+
+  /**
+   * Optional controlled skill picker rendered as an "Add context" affordance.
+   * Selected skill IDs are supplied to the caller's transport for the next turn.
+   */
+  skillContext?: SkillContextConfig;
 }
 
 /**
@@ -1085,6 +1091,22 @@ export interface ToolMentionsConfig {
   /** @default 10 */
   maxSuggestions?: number;
   placeholder?: string;
+}
+
+export interface ComposerSkill {
+  id: string;
+  name: string;
+  displayName: string;
+  summary?: string;
+}
+
+export interface SkillContextConfig {
+  skills: ComposerSkill[];
+  selectedSkillIds: string[];
+  onSelectedSkillIdsChange: (skillIds: string[]) => void;
+  loading?: boolean;
+  error?: boolean;
+  maxSelected?: number;
 }
 
 export interface SidecarConfig extends ExpandableConfig {

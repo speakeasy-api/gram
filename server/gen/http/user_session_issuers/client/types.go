@@ -20,7 +20,7 @@ type CreateUserSessionIssuerRequestBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// How multi-remote authn challenges are presented: chain | interactive.
 	AuthnChallengeMode string `form:"authn_challenge_mode" json:"authn_challenge_mode" xml:"authn_challenge_mode"`
-	// Issued user session lifetime, in hours.
+	// Maximum issued user session lifetime, in hours.
 	SessionDurationHours int `form:"session_duration_hours" json:"session_duration_hours" xml:"session_duration_hours"`
 }
 
@@ -33,18 +33,15 @@ type UpdateUserSessionIssuerRequestBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// chain | interactive.
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
-	// Issued user session lifetime, in hours.
+	// Maximum issued user session lifetime, in hours.
 	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
-}
-
-// MigrateLegacyGramRegistrationsRequestBody is the type of the
-// "userSessionIssuers" service "migrateLegacyGramRegistrations" endpoint HTTP
-// request body.
-type MigrateLegacyGramRegistrationsRequestBody struct {
-	// The gram-type oauth_proxy_provider whose Redis registrations are migrated.
-	OauthProxyProviderID string `form:"oauth_proxy_provider_id" json:"oauth_proxy_provider_id" xml:"oauth_proxy_provider_id"`
-	// The target user_session_issuer the migrated user_session_clients attach to.
-	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
+	// Which CIMD (OAuth Client ID Metadata Document) clients this issuer admits.
+	// 'presets' admits Gram's curated catalog plus this issuer's custom URLs;
+	// 'open' admits any spec-valid document; 'disabled' admits none and stops
+	// advertising CIMD support. Omit to leave unchanged. Once set, the issuer can
+	// never return to the unset state — it can only be moved between explicit
+	// modes.
+	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
 }
 
 // CreateUserSessionIssuerResponseBody is the type of the "userSessionIssuers"
@@ -58,10 +55,18 @@ type CreateUserSessionIssuerResponseBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// chain | interactive.
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
-	// Issued user session lifetime, in hours.
-	SessionDurationHours *int    `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
-	CreatedAt            *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt            *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Maximum issued user session lifetime, in hours.
+	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
+	// The EFFECTIVE CIMD admission policy in force for this issuer: disabled |
+	// presets | reporting | open. Always populated, so clients never have to
+	// reason about an unset state. Note 'reporting' can be READ but not written:
+	// it is the current default for an issuer whose mode has never been
+	// configured, and it admits every spec-valid client while recording what
+	// 'presets' would have refused. It exists so the platform can measure before
+	// switching the default to 'presets'. Set an explicit mode to opt out of it.
+	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
+	CreatedAt                     *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt                     *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // UpdateUserSessionIssuerResponseBody is the type of the "userSessionIssuers"
@@ -75,10 +80,18 @@ type UpdateUserSessionIssuerResponseBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// chain | interactive.
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
-	// Issued user session lifetime, in hours.
-	SessionDurationHours *int    `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
-	CreatedAt            *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt            *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Maximum issued user session lifetime, in hours.
+	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
+	// The EFFECTIVE CIMD admission policy in force for this issuer: disabled |
+	// presets | reporting | open. Always populated, so clients never have to
+	// reason about an unset state. Note 'reporting' can be READ but not written:
+	// it is the current default for an issuer whose mode has never been
+	// configured, and it admits every spec-valid client while recording what
+	// 'presets' would have refused. It exists so the platform can measure before
+	// switching the default to 'presets'. Set an explicit mode to opt out of it.
+	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
+	CreatedAt                     *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt                     *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // ListUserSessionIssuersResponseBody is the type of the "userSessionIssuers"
@@ -100,19 +113,18 @@ type GetUserSessionIssuerResponseBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// chain | interactive.
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
-	// Issued user session lifetime, in hours.
-	SessionDurationHours *int    `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
-	CreatedAt            *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt            *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
-}
-
-// MigrateLegacyGramRegistrationsResponseBody is the type of the
-// "userSessionIssuers" service "migrateLegacyGramRegistrations" endpoint HTTP
-// response body.
-type MigrateLegacyGramRegistrationsResponseBody struct {
-	// Number of user_session_clients newly inserted; already-migrated
-	// registrations count as zero.
-	MigratedCount *int `form:"migrated_count,omitempty" json:"migrated_count,omitempty" xml:"migrated_count,omitempty"`
+	// Maximum issued user session lifetime, in hours.
+	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
+	// The EFFECTIVE CIMD admission policy in force for this issuer: disabled |
+	// presets | reporting | open. Always populated, so clients never have to
+	// reason about an unset state. Note 'reporting' can be READ but not written:
+	// it is the current default for an issuer whose mode has never been
+	// configured, and it admits every spec-valid client while recording what
+	// 'presets' would have refused. It exists so the platform can measure before
+	// switching the default to 'presets'. Set an explicit mode to opt out of it.
+	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
+	CreatedAt                     *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt                     *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // CreateUserSessionIssuerUnauthorizedResponseBody is the type of the
@@ -1065,196 +1077,6 @@ type DeleteUserSessionIssuerGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// MigrateLegacyGramRegistrationsUnauthorizedResponseBody is the type of the
-// "userSessionIssuers" service "migrateLegacyGramRegistrations" endpoint HTTP
-// response body for the "unauthorized" error.
-type MigrateLegacyGramRegistrationsUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// MigrateLegacyGramRegistrationsForbiddenResponseBody is the type of the
-// "userSessionIssuers" service "migrateLegacyGramRegistrations" endpoint HTTP
-// response body for the "forbidden" error.
-type MigrateLegacyGramRegistrationsForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// MigrateLegacyGramRegistrationsBadRequestResponseBody is the type of the
-// "userSessionIssuers" service "migrateLegacyGramRegistrations" endpoint HTTP
-// response body for the "bad_request" error.
-type MigrateLegacyGramRegistrationsBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// MigrateLegacyGramRegistrationsNotFoundResponseBody is the type of the
-// "userSessionIssuers" service "migrateLegacyGramRegistrations" endpoint HTTP
-// response body for the "not_found" error.
-type MigrateLegacyGramRegistrationsNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// MigrateLegacyGramRegistrationsConflictResponseBody is the type of the
-// "userSessionIssuers" service "migrateLegacyGramRegistrations" endpoint HTTP
-// response body for the "conflict" error.
-type MigrateLegacyGramRegistrationsConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// MigrateLegacyGramRegistrationsUnsupportedMediaResponseBody is the type of
-// the "userSessionIssuers" service "migrateLegacyGramRegistrations" endpoint
-// HTTP response body for the "unsupported_media" error.
-type MigrateLegacyGramRegistrationsUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// MigrateLegacyGramRegistrationsInvalidResponseBody is the type of the
-// "userSessionIssuers" service "migrateLegacyGramRegistrations" endpoint HTTP
-// response body for the "invalid" error.
-type MigrateLegacyGramRegistrationsInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// MigrateLegacyGramRegistrationsInvariantViolationResponseBody is the type of
-// the "userSessionIssuers" service "migrateLegacyGramRegistrations" endpoint
-// HTTP response body for the "invariant_violation" error.
-type MigrateLegacyGramRegistrationsInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// MigrateLegacyGramRegistrationsUnexpectedResponseBody is the type of the
-// "userSessionIssuers" service "migrateLegacyGramRegistrations" endpoint HTTP
-// response body for the "unexpected" error.
-type MigrateLegacyGramRegistrationsUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
-// MigrateLegacyGramRegistrationsGatewayErrorResponseBody is the type of the
-// "userSessionIssuers" service "migrateLegacyGramRegistrations" endpoint HTTP
-// response body for the "gateway_error" error.
-type MigrateLegacyGramRegistrationsGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
-	// Is the error temporary?
-	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
-	// Is the error a timeout?
-	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
-	// Is the error a server-side fault?
-	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
-}
-
 // UserSessionIssuerResponseBody is used to define fields on response body
 // types.
 type UserSessionIssuerResponseBody struct {
@@ -1266,10 +1088,18 @@ type UserSessionIssuerResponseBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// chain | interactive.
 	AuthnChallengeMode *string `form:"authn_challenge_mode,omitempty" json:"authn_challenge_mode,omitempty" xml:"authn_challenge_mode,omitempty"`
-	// Issued user session lifetime, in hours.
-	SessionDurationHours *int    `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
-	CreatedAt            *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt            *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Maximum issued user session lifetime, in hours.
+	SessionDurationHours *int `form:"session_duration_hours,omitempty" json:"session_duration_hours,omitempty" xml:"session_duration_hours,omitempty"`
+	// The EFFECTIVE CIMD admission policy in force for this issuer: disabled |
+	// presets | reporting | open. Always populated, so clients never have to
+	// reason about an unset state. Note 'reporting' can be READ but not written:
+	// it is the current default for an issuer whose mode has never been
+	// configured, and it admits every spec-valid client while recording what
+	// 'presets' would have refused. It exists so the platform can measure before
+	// switching the default to 'presets'. Set an explicit mode to opt out of it.
+	ClientIDMetadataAdmissionMode *string `form:"client_id_metadata_admission_mode,omitempty" json:"client_id_metadata_admission_mode,omitempty" xml:"client_id_metadata_admission_mode,omitempty"`
+	CreatedAt                     *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt                     *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // NewCreateUserSessionIssuerRequestBody builds the HTTP request body from the
@@ -1289,21 +1119,11 @@ func NewCreateUserSessionIssuerRequestBody(p *usersessionissuers.CreateUserSessi
 // "userSessionIssuers" service.
 func NewUpdateUserSessionIssuerRequestBody(p *usersessionissuers.UpdateUserSessionIssuerPayload) *UpdateUserSessionIssuerRequestBody {
 	body := &UpdateUserSessionIssuerRequestBody{
-		ID:                   p.ID,
-		Slug:                 p.Slug,
-		AuthnChallengeMode:   p.AuthnChallengeMode,
-		SessionDurationHours: p.SessionDurationHours,
-	}
-	return body
-}
-
-// NewMigrateLegacyGramRegistrationsRequestBody builds the HTTP request body
-// from the payload of the "migrateLegacyGramRegistrations" endpoint of the
-// "userSessionIssuers" service.
-func NewMigrateLegacyGramRegistrationsRequestBody(p *usersessionissuers.MigrateLegacyGramRegistrationsPayload) *MigrateLegacyGramRegistrationsRequestBody {
-	body := &MigrateLegacyGramRegistrationsRequestBody{
-		OauthProxyProviderID: p.OauthProxyProviderID,
-		UserSessionIssuerID:  p.UserSessionIssuerID,
+		ID:                            p.ID,
+		Slug:                          p.Slug,
+		AuthnChallengeMode:            p.AuthnChallengeMode,
+		SessionDurationHours:          p.SessionDurationHours,
+		ClientIDMetadataAdmissionMode: p.ClientIDMetadataAdmissionMode,
 	}
 	return body
 }
@@ -1312,13 +1132,14 @@ func NewMigrateLegacyGramRegistrationsRequestBody(p *usersessionissuers.MigrateL
 // service "createUserSessionIssuer" endpoint result from a HTTP "OK" response.
 func NewCreateUserSessionIssuerUserSessionIssuerOK(body *CreateUserSessionIssuerResponseBody) *types.UserSessionIssuer {
 	v := &types.UserSessionIssuer{
-		ID:                   *body.ID,
-		ProjectID:            *body.ProjectID,
-		Slug:                 *body.Slug,
-		AuthnChallengeMode:   *body.AuthnChallengeMode,
-		SessionDurationHours: *body.SessionDurationHours,
-		CreatedAt:            *body.CreatedAt,
-		UpdatedAt:            *body.UpdatedAt,
+		ID:                            *body.ID,
+		ProjectID:                     *body.ProjectID,
+		Slug:                          *body.Slug,
+		AuthnChallengeMode:            *body.AuthnChallengeMode,
+		SessionDurationHours:          *body.SessionDurationHours,
+		ClientIDMetadataAdmissionMode: *body.ClientIDMetadataAdmissionMode,
+		CreatedAt:                     *body.CreatedAt,
+		UpdatedAt:                     *body.UpdatedAt,
 	}
 
 	return v
@@ -1478,13 +1299,14 @@ func NewCreateUserSessionIssuerGatewayError(body *CreateUserSessionIssuerGateway
 // service "updateUserSessionIssuer" endpoint result from a HTTP "OK" response.
 func NewUpdateUserSessionIssuerUserSessionIssuerOK(body *UpdateUserSessionIssuerResponseBody) *types.UserSessionIssuer {
 	v := &types.UserSessionIssuer{
-		ID:                   *body.ID,
-		ProjectID:            *body.ProjectID,
-		Slug:                 *body.Slug,
-		AuthnChallengeMode:   *body.AuthnChallengeMode,
-		SessionDurationHours: *body.SessionDurationHours,
-		CreatedAt:            *body.CreatedAt,
-		UpdatedAt:            *body.UpdatedAt,
+		ID:                            *body.ID,
+		ProjectID:                     *body.ProjectID,
+		Slug:                          *body.Slug,
+		AuthnChallengeMode:            *body.AuthnChallengeMode,
+		SessionDurationHours:          *body.SessionDurationHours,
+		ClientIDMetadataAdmissionMode: *body.ClientIDMetadataAdmissionMode,
+		CreatedAt:                     *body.CreatedAt,
+		UpdatedAt:                     *body.UpdatedAt,
 	}
 
 	return v
@@ -1812,13 +1634,14 @@ func NewListUserSessionIssuersGatewayError(body *ListUserSessionIssuersGatewayEr
 // service "getUserSessionIssuer" endpoint result from a HTTP "OK" response.
 func NewGetUserSessionIssuerUserSessionIssuerOK(body *GetUserSessionIssuerResponseBody) *types.UserSessionIssuer {
 	v := &types.UserSessionIssuer{
-		ID:                   *body.ID,
-		ProjectID:            *body.ProjectID,
-		Slug:                 *body.Slug,
-		AuthnChallengeMode:   *body.AuthnChallengeMode,
-		SessionDurationHours: *body.SessionDurationHours,
-		CreatedAt:            *body.CreatedAt,
-		UpdatedAt:            *body.UpdatedAt,
+		ID:                            *body.ID,
+		ProjectID:                     *body.ProjectID,
+		Slug:                          *body.Slug,
+		AuthnChallengeMode:            *body.AuthnChallengeMode,
+		SessionDurationHours:          *body.SessionDurationHours,
+		ClientIDMetadataAdmissionMode: *body.ClientIDMetadataAdmissionMode,
+		CreatedAt:                     *body.CreatedAt,
+		UpdatedAt:                     *body.UpdatedAt,
 	}
 
 	return v
@@ -2124,169 +1947,6 @@ func NewDeleteUserSessionIssuerGatewayError(body *DeleteUserSessionIssuerGateway
 	return v
 }
 
-// NewMigrateLegacyGramRegistrationsResultOK builds a "userSessionIssuers"
-// service "migrateLegacyGramRegistrations" endpoint result from a HTTP "OK"
-// response.
-func NewMigrateLegacyGramRegistrationsResultOK(body *MigrateLegacyGramRegistrationsResponseBody) *usersessionissuers.MigrateLegacyGramRegistrationsResult {
-	v := &usersessionissuers.MigrateLegacyGramRegistrationsResult{
-		MigratedCount: *body.MigratedCount,
-	}
-
-	return v
-}
-
-// NewMigrateLegacyGramRegistrationsUnauthorized builds a userSessionIssuers
-// service migrateLegacyGramRegistrations endpoint unauthorized error.
-func NewMigrateLegacyGramRegistrationsUnauthorized(body *MigrateLegacyGramRegistrationsUnauthorizedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewMigrateLegacyGramRegistrationsForbidden builds a userSessionIssuers
-// service migrateLegacyGramRegistrations endpoint forbidden error.
-func NewMigrateLegacyGramRegistrationsForbidden(body *MigrateLegacyGramRegistrationsForbiddenResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewMigrateLegacyGramRegistrationsBadRequest builds a userSessionIssuers
-// service migrateLegacyGramRegistrations endpoint bad_request error.
-func NewMigrateLegacyGramRegistrationsBadRequest(body *MigrateLegacyGramRegistrationsBadRequestResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewMigrateLegacyGramRegistrationsNotFound builds a userSessionIssuers
-// service migrateLegacyGramRegistrations endpoint not_found error.
-func NewMigrateLegacyGramRegistrationsNotFound(body *MigrateLegacyGramRegistrationsNotFoundResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewMigrateLegacyGramRegistrationsConflict builds a userSessionIssuers
-// service migrateLegacyGramRegistrations endpoint conflict error.
-func NewMigrateLegacyGramRegistrationsConflict(body *MigrateLegacyGramRegistrationsConflictResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewMigrateLegacyGramRegistrationsUnsupportedMedia builds a
-// userSessionIssuers service migrateLegacyGramRegistrations endpoint
-// unsupported_media error.
-func NewMigrateLegacyGramRegistrationsUnsupportedMedia(body *MigrateLegacyGramRegistrationsUnsupportedMediaResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewMigrateLegacyGramRegistrationsInvalid builds a userSessionIssuers service
-// migrateLegacyGramRegistrations endpoint invalid error.
-func NewMigrateLegacyGramRegistrationsInvalid(body *MigrateLegacyGramRegistrationsInvalidResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewMigrateLegacyGramRegistrationsInvariantViolation builds a
-// userSessionIssuers service migrateLegacyGramRegistrations endpoint
-// invariant_violation error.
-func NewMigrateLegacyGramRegistrationsInvariantViolation(body *MigrateLegacyGramRegistrationsInvariantViolationResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewMigrateLegacyGramRegistrationsUnexpected builds a userSessionIssuers
-// service migrateLegacyGramRegistrations endpoint unexpected error.
-func NewMigrateLegacyGramRegistrationsUnexpected(body *MigrateLegacyGramRegistrationsUnexpectedResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewMigrateLegacyGramRegistrationsGatewayError builds a userSessionIssuers
-// service migrateLegacyGramRegistrations endpoint gateway_error error.
-func NewMigrateLegacyGramRegistrationsGatewayError(body *MigrateLegacyGramRegistrationsGatewayErrorResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
 // ValidateCreateUserSessionIssuerResponseBody runs the validations defined on
 // CreateUserSessionIssuerResponseBody
 func ValidateCreateUserSessionIssuerResponseBody(body *CreateUserSessionIssuerResponseBody) (err error) {
@@ -2305,6 +1965,9 @@ func ValidateCreateUserSessionIssuerResponseBody(body *CreateUserSessionIssuerRe
 	if body.SessionDurationHours == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("session_duration_hours", "body"))
 	}
+	if body.ClientIDMetadataAdmissionMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_metadata_admission_mode", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -2316,6 +1979,11 @@ func ValidateCreateUserSessionIssuerResponseBody(body *CreateUserSessionIssuerRe
 	}
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.ClientIDMetadataAdmissionMode != nil {
+		if !(*body.ClientIDMetadataAdmissionMode == "disabled" || *body.ClientIDMetadataAdmissionMode == "presets" || *body.ClientIDMetadataAdmissionMode == "reporting" || *body.ClientIDMetadataAdmissionMode == "open") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_id_metadata_admission_mode", *body.ClientIDMetadataAdmissionMode, []any{"disabled", "presets", "reporting", "open"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -2344,6 +2012,9 @@ func ValidateUpdateUserSessionIssuerResponseBody(body *UpdateUserSessionIssuerRe
 	if body.SessionDurationHours == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("session_duration_hours", "body"))
 	}
+	if body.ClientIDMetadataAdmissionMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_metadata_admission_mode", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -2355,6 +2026,11 @@ func ValidateUpdateUserSessionIssuerResponseBody(body *UpdateUserSessionIssuerRe
 	}
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.ClientIDMetadataAdmissionMode != nil {
+		if !(*body.ClientIDMetadataAdmissionMode == "disabled" || *body.ClientIDMetadataAdmissionMode == "presets" || *body.ClientIDMetadataAdmissionMode == "reporting" || *body.ClientIDMetadataAdmissionMode == "open") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_id_metadata_admission_mode", *body.ClientIDMetadataAdmissionMode, []any{"disabled", "presets", "reporting", "open"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -2399,6 +2075,9 @@ func ValidateGetUserSessionIssuerResponseBody(body *GetUserSessionIssuerResponse
 	if body.SessionDurationHours == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("session_duration_hours", "body"))
 	}
+	if body.ClientIDMetadataAdmissionMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_metadata_admission_mode", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -2411,20 +2090,16 @@ func ValidateGetUserSessionIssuerResponseBody(body *GetUserSessionIssuerResponse
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
 	}
+	if body.ClientIDMetadataAdmissionMode != nil {
+		if !(*body.ClientIDMetadataAdmissionMode == "disabled" || *body.ClientIDMetadataAdmissionMode == "presets" || *body.ClientIDMetadataAdmissionMode == "reporting" || *body.ClientIDMetadataAdmissionMode == "open") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_id_metadata_admission_mode", *body.ClientIDMetadataAdmissionMode, []any{"disabled", "presets", "reporting", "open"}))
+		}
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
-	}
-	return
-}
-
-// ValidateMigrateLegacyGramRegistrationsResponseBody runs the validations
-// defined on MigrateLegacyGramRegistrationsResponseBody
-func ValidateMigrateLegacyGramRegistrationsResponseBody(body *MigrateLegacyGramRegistrationsResponseBody) (err error) {
-	if body.MigratedCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("migrated_count", "body"))
 	}
 	return
 }
@@ -3636,252 +3311,6 @@ func ValidateDeleteUserSessionIssuerGatewayErrorResponseBody(body *DeleteUserSes
 	return
 }
 
-// ValidateMigrateLegacyGramRegistrationsUnauthorizedResponseBody runs the
-// validations defined on
-// migrateLegacyGramRegistrations_unauthorized_response_body
-func ValidateMigrateLegacyGramRegistrationsUnauthorizedResponseBody(body *MigrateLegacyGramRegistrationsUnauthorizedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateMigrateLegacyGramRegistrationsForbiddenResponseBody runs the
-// validations defined on migrateLegacyGramRegistrations_forbidden_response_body
-func ValidateMigrateLegacyGramRegistrationsForbiddenResponseBody(body *MigrateLegacyGramRegistrationsForbiddenResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateMigrateLegacyGramRegistrationsBadRequestResponseBody runs the
-// validations defined on
-// migrateLegacyGramRegistrations_bad_request_response_body
-func ValidateMigrateLegacyGramRegistrationsBadRequestResponseBody(body *MigrateLegacyGramRegistrationsBadRequestResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateMigrateLegacyGramRegistrationsNotFoundResponseBody runs the
-// validations defined on migrateLegacyGramRegistrations_not_found_response_body
-func ValidateMigrateLegacyGramRegistrationsNotFoundResponseBody(body *MigrateLegacyGramRegistrationsNotFoundResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateMigrateLegacyGramRegistrationsConflictResponseBody runs the
-// validations defined on migrateLegacyGramRegistrations_conflict_response_body
-func ValidateMigrateLegacyGramRegistrationsConflictResponseBody(body *MigrateLegacyGramRegistrationsConflictResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateMigrateLegacyGramRegistrationsUnsupportedMediaResponseBody runs the
-// validations defined on
-// migrateLegacyGramRegistrations_unsupported_media_response_body
-func ValidateMigrateLegacyGramRegistrationsUnsupportedMediaResponseBody(body *MigrateLegacyGramRegistrationsUnsupportedMediaResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateMigrateLegacyGramRegistrationsInvalidResponseBody runs the
-// validations defined on migrateLegacyGramRegistrations_invalid_response_body
-func ValidateMigrateLegacyGramRegistrationsInvalidResponseBody(body *MigrateLegacyGramRegistrationsInvalidResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateMigrateLegacyGramRegistrationsInvariantViolationResponseBody runs
-// the validations defined on
-// migrateLegacyGramRegistrations_invariant_violation_response_body
-func ValidateMigrateLegacyGramRegistrationsInvariantViolationResponseBody(body *MigrateLegacyGramRegistrationsInvariantViolationResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateMigrateLegacyGramRegistrationsUnexpectedResponseBody runs the
-// validations defined on
-// migrateLegacyGramRegistrations_unexpected_response_body
-func ValidateMigrateLegacyGramRegistrationsUnexpectedResponseBody(body *MigrateLegacyGramRegistrationsUnexpectedResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
-// ValidateMigrateLegacyGramRegistrationsGatewayErrorResponseBody runs the
-// validations defined on
-// migrateLegacyGramRegistrations_gateway_error_response_body
-func ValidateMigrateLegacyGramRegistrationsGatewayErrorResponseBody(body *MigrateLegacyGramRegistrationsGatewayErrorResponseBody) (err error) {
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.Message == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
-	}
-	if body.Temporary == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
-	}
-	if body.Timeout == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
-	}
-	if body.Fault == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
-	}
-	return
-}
-
 // ValidateUserSessionIssuerResponseBody runs the validations defined on
 // UserSessionIssuerResponseBody
 func ValidateUserSessionIssuerResponseBody(body *UserSessionIssuerResponseBody) (err error) {
@@ -3900,6 +3329,9 @@ func ValidateUserSessionIssuerResponseBody(body *UserSessionIssuerResponseBody) 
 	if body.SessionDurationHours == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("session_duration_hours", "body"))
 	}
+	if body.ClientIDMetadataAdmissionMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_id_metadata_admission_mode", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -3911,6 +3343,11 @@ func ValidateUserSessionIssuerResponseBody(body *UserSessionIssuerResponseBody) 
 	}
 	if body.ProjectID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+	}
+	if body.ClientIDMetadataAdmissionMode != nil {
+		if !(*body.ClientIDMetadataAdmissionMode == "disabled" || *body.ClientIDMetadataAdmissionMode == "presets" || *body.ClientIDMetadataAdmissionMode == "reporting" || *body.ClientIDMetadataAdmissionMode == "open") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_id_metadata_admission_mode", *body.ClientIDMetadataAdmissionMode, []any{"disabled", "presets", "reporting", "open"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

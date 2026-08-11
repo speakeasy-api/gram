@@ -443,7 +443,7 @@ function ChatInner({
     messages: chatMessages,
     status,
     sendMessage,
-    addToolResult,
+    addToolOutput,
     setMessages: setUseChatMessages,
   } = useChat({
     // Include model in the chat ID to force a fresh session when switching models
@@ -476,7 +476,7 @@ function ChatInner({
       try {
         const result = await tool.execute!(toolArgs);
 
-        void addToolResult({
+        void addToolOutput({
           tool: toolName,
           toolCallId,
           output: result,
@@ -591,7 +591,7 @@ function ChatInner({
           <PromptInputBody>
             <PromptInputTextarea placeholder="Send a message..." />
           </PromptInputBody>
-          <PromptInputFooter className="bg-secondary border-neutral-softest rounded-br-lg rounded-bl-lg border-t">
+          <PromptInputFooter className="bg-secondary border-neutral-softest border-t">
             <PromptInputTools>{additionalActions}</PromptInputTools>
             <PromptInputSubmit
               disabled={status === "streaming"}

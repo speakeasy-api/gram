@@ -5,7 +5,10 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use agentkit_adapter_completions::CompletionsAdapter;
-use agentkit_core::{Item, ItemKind, Part, TextPart, ToolCallPart, ToolOutput, ToolResultPart};
+use agentkit_core::{
+    DataRef, Item, ItemKind, MediaPart, Modality, Part, TextPart, ToolCallPart, ToolOutput,
+    ToolResultPart,
+};
 use agentkit_loop::{
     Agent, LoopDriver, LoopInterrupt, LoopStep, ModelSession, PromptCacheRequest,
     PromptCacheRetention, SessionConfig,
@@ -36,7 +39,7 @@ use crate::gram_client::GramBootstrapClient;
 use crate::http_layer::{McpRotatingClient, TokenRegistry, build_bootstrap_client, build_http};
 use crate::telemetry::SpanIdentity;
 use crate::tools;
-use crate::wire::{McpServer, RunnerMessage, ThreadBootstrap};
+use crate::wire::{McpServer, RunnerContent, RunnerContentPart, RunnerMessage, ThreadBootstrap};
 use crate::workdir::ASSISTANT_WORKDIR;
 
 const TOOL_RESULT_SPILL_DIR: &str = "tool-results";
@@ -74,7 +77,7 @@ pub struct RuntimeHost {
     pub threads: DashMap<String, Arc<OnceCell<Arc<ConfiguredThread>>>>,
     pub gram_client: GramBootstrapClient,
     pub thread_idle_ttl: Duration,
-    pub http_client: reqwest::Client,
+    pub mcp_http_client: reqwest::Client,
     pub spill_root: PathBuf,
     /// Fallback bearer used only when `/threads/turn` arrives with no
     /// `auth_token` so the bootstrap fetch still has a credential.
@@ -88,7 +91,7 @@ pub struct ConfiguredThread {
     pub thread_id: String,
     pub chat_id: String,
     pub idle_since: Arc<Mutex<Option<Instant>>>,
-    pub inbox_tx: UnboundedSender<String>,
+    pub inbox_tx: UnboundedSender<RunnerContent>,
     pub task_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
     pub tokens: TokenRegistry,
     pub mcp_cmd_tx: mpsc::Sender<McpCmd>,
@@ -118,7 +121,7 @@ impl ConfiguredThread {
         }
     }
 
-    pub fn enqueue(&self, input: String) -> Result<(), RunnerError> {
+    pub fn enqueue(&self, input: RunnerContent) -> Result<(), RunnerError> {
         self.inbox_tx
             .send(input)
             .map_err(|_| RunnerError::SubmitInput("loop inbox closed".into()))?;
@@ -140,8 +143,16 @@ pub async fn build_host(
     );
     let http_client = reqwest::Client::builder()
         .user_agent(concat!("gram-assistant-runner/", env!("CARGO_PKG_VERSION")))
+        .default_headers(default_headers.clone())
+        .connect_timeout(HTTP_CONNECT_TIMEOUT)
+        .build()?;
+    // MCP servers are externally configured endpoints. Never follow redirects so
+    // per-server headers and bearer tokens only ever go to the configured origin.
+    let mcp_http_client = reqwest::Client::builder()
+        .user_agent(concat!("gram-assistant-runner/", env!("CARGO_PKG_VERSION")))
         .default_headers(default_headers)
         .connect_timeout(HTTP_CONNECT_TIMEOUT)
+        .redirect(reqwest::redirect::Policy::none())
         .build()?;
 
     let spill_root = PathBuf::from(ASSISTANT_WORKDIR).join(TOOL_RESULT_SPILL_DIR);
@@ -155,7 +166,7 @@ pub async fn build_host(
         threads: DashMap::new(),
         gram_client,
         thread_idle_ttl,
-        http_client,
+        mcp_http_client,
         spill_root,
         initial_token,
     });
@@ -295,7 +306,7 @@ async fn spawn_thread(
     bootstrap: ThreadBootstrap,
     tokens: TokenRegistry,
 ) -> Result<Arc<ConfiguredThread>, RunnerError> {
-    let (inbox_tx, inbox_rx) = mpsc::unbounded_channel::<String>();
+    let (inbox_tx, inbox_rx) = mpsc::unbounded_channel::<RunnerContent>();
 
     let (mcp_cmd_tx, mcp_catalog, mcp_auth_notices) = build_thread_mcp(
         host,
@@ -389,9 +400,14 @@ async fn spawn_thread(
     let fs_resources = FileSystemToolResources::new()
         .with_policy(FileSystemToolPolicy::new().require_read_before_write(true));
 
-    let native_tools = ToolRegistry::new().with(tools::bun_run::bun_run).with(
-        tools::mcp_force_reconnect::McpForceReconnectTool::new(Arc::clone(host)),
-    );
+    let native_tools = ToolRegistry::new()
+        .with(tools::bun_run::bun_run)
+        .with(tools::mcp_force_reconnect::McpForceReconnectTool::new(
+            Arc::clone(host),
+        ))
+        .with(tools::inspect_asset::InspectAssetTool::new(
+            inbox_tx.clone(),
+        ));
 
     let compose_source = agentkit_tool_compose::ComposeTool::wrap(mcp_catalog)
         .with_source(native_tools.merge(agentkit_tool_fs::registry()));
@@ -496,7 +512,7 @@ async fn build_thread_mcp(
     thread_id: &str,
     servers: &[McpServer],
     tokens: &TokenRegistry,
-    inbox_tx: UnboundedSender<String>,
+    inbox_tx: UnboundedSender<RunnerContent>,
 ) -> Result<(mpsc::Sender<McpCmd>, CatalogReader, Vec<String>), RunnerError> {
     let mut manager = McpServerManager::new();
     let catalog = manager.source();
@@ -505,7 +521,7 @@ async fn build_thread_mcp(
     let configured: BTreeSet<String> = servers.iter().map(|s| s.id.clone()).collect();
 
     for server in servers {
-        let config = build_mcp_server_config(server, &host.http_client, tokens)?;
+        let config = build_mcp_server_config(server, &host.mcp_http_client, tokens)?;
         manager.register_server_with_options(
             config,
             McpServerOptions::new().with_timeout(MCP_HANDSHAKE_TIMEOUT),
@@ -573,7 +589,7 @@ struct McpActorContext {
     host: Arc<RuntimeHost>,
     thread_id: String,
     tokens: TokenRegistry,
-    inbox_tx: UnboundedSender<String>,
+    inbox_tx: UnboundedSender<RunnerContent>,
     // Servers currently connected or auth-pending. Drives reconcile's
     // add/remove diff and is mutated as connections come and go.
     known: BTreeSet<String>,
@@ -625,7 +641,7 @@ async fn reconcile_servers(
         if ctx.known.contains(&server.id) {
             continue;
         }
-        let config = match build_mcp_server_config(server, &ctx.host.http_client, &ctx.tokens) {
+        let config = match build_mcp_server_config(server, &ctx.host.mcp_http_client, &ctx.tokens) {
             Ok(cfg) => cfg,
             Err(err) => {
                 tracing::warn!(
@@ -661,7 +677,7 @@ async fn reconcile_servers(
                 {
                     Some(notice) => {
                         ctx.known.insert(server.id.clone());
-                        if ctx.inbox_tx.send(notice).is_err() {
+                        if ctx.inbox_tx.send(RunnerContent::Text(notice)).is_err() {
                             tracing::warn!(
                                 server_id = %server.id,
                                 "drop reconcile auth notice: thread inbox closed"
@@ -807,7 +823,7 @@ async fn run_mcp_actor(
 
 async fn run_loop<S>(
     mut driver: LoopDriver<S>,
-    mut inbox: UnboundedReceiver<String>,
+    mut inbox: UnboundedReceiver<RunnerContent>,
     idle_since: Arc<Mutex<Option<Instant>>>,
     turn_end_compactor: Option<PersistingCompactor>,
     thread_id: String,
@@ -834,7 +850,7 @@ where
                     drained_into_items(drained)
                 } else {
                     match inbox.recv().await {
-                        Some(msg) => vec![Item::text(ItemKind::User, &msg)],
+                        Some(msg) => vec![user_content_item(&msg)],
                         None => return Ok("inbox closed"),
                     }
                 };
@@ -878,14 +894,11 @@ async fn compact_at_turn_end<S: ModelSession>(
     }
 }
 
-fn drained_into_items(drained: Vec<String>) -> Vec<Item> {
-    drained
-        .into_iter()
-        .map(|s| Item::text(ItemKind::User, &s))
-        .collect()
+fn drained_into_items(drained: Vec<RunnerContent>) -> Vec<Item> {
+    drained.iter().map(user_content_item).collect()
 }
 
-fn drain(inbox: &mut UnboundedReceiver<String>) -> Vec<String> {
+fn drain(inbox: &mut UnboundedReceiver<RunnerContent>) -> Vec<RunnerContent> {
     let mut out = Vec::new();
     while let Ok(msg) = inbox.try_recv() {
         out.push(msg);
@@ -905,17 +918,81 @@ fn mark_idle(idle_since: &Arc<Mutex<Option<Instant>>>) {
     }
 }
 
+/// Builds a user item from a content union. Text maps to `TextPart`s and
+/// image parts map to agentkit `MediaPart`s, which the completions adapter
+/// sends upstream as `image_url` content. The wire `detail` hint has no
+/// agentkit slot and is dropped at this boundary.
+fn user_content_item(content: &RunnerContent) -> Item {
+    let parts = match content {
+        RunnerContent::Text(text) => vec![Part::Text(TextPart::new(text.clone()))],
+        RunnerContent::Parts(parts) => parts
+            .iter()
+            .map(|part| match part {
+                RunnerContentPart::Text { text } => Part::Text(TextPart::new(text.clone())),
+                RunnerContentPart::ImageUrl { image_url } => Part::Media(MediaPart::new(
+                    Modality::Image,
+                    image_mime_type(&image_url.url),
+                    DataRef::Uri(image_url.url.clone()),
+                )),
+            })
+            .collect(),
+    };
+    Item::new(ItemKind::User, parts)
+}
+
+/// Best-effort mime type for an image `MediaPart`. The completions adapter
+/// passes URI data refs through untouched, so this is informational only.
+fn image_mime_type(url: &str) -> String {
+    url.strip_prefix("data:")
+        .and_then(|rest| rest.split([';', ',']).next())
+        .filter(|mime| !mime.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| "image/*".to_string())
+}
+
+/// Plain-text projection for roles whose outbound messages cannot carry
+/// media (the completions adapter rejects `Media` parts outside user
+/// items): text parts join with newlines and image parts leave a visible
+/// placeholder instead of being silently dropped.
+fn text_with_image_placeholders(content: &RunnerContent) -> String {
+    match content {
+        RunnerContent::Text(text) => text.clone(),
+        RunnerContent::Parts(parts) => {
+            let mut buf = String::new();
+            for part in parts {
+                let piece = match part {
+                    RunnerContentPart::Text { text } => text.clone(),
+                    RunnerContentPart::ImageUrl { image_url }
+                        if image_url.url.starts_with("data:") =>
+                    {
+                        "[image: inline data]".to_string()
+                    }
+                    RunnerContentPart::ImageUrl { image_url } => {
+                        format!("[image: {}]", image_url.url)
+                    }
+                };
+                if !buf.is_empty() {
+                    buf.push('\n');
+                }
+                buf.push_str(&piece);
+            }
+            buf
+        }
+    }
+}
+
 fn normalize_history(history: &[RunnerMessage]) -> Result<Vec<Item>, RunnerError> {
     let mut items = Vec::with_capacity(history.len());
     for message in history {
         match message.role.as_str() {
             "user" => {
-                items.push(Item::text(ItemKind::User, &message.content));
+                items.push(user_content_item(&message.content));
             }
             "assistant" => {
                 let mut parts: Vec<Part> = Vec::new();
-                if !message.content.is_empty() {
-                    parts.push(Part::Text(TextPart::new(message.content.clone())));
+                let text = text_with_image_placeholders(&message.content);
+                if !text.is_empty() {
+                    parts.push(Part::Text(TextPart::new(text)));
                 }
                 for call in &message.tool_calls {
                     let input: Value = if call.arguments.is_empty() {
@@ -946,12 +1023,15 @@ fn normalize_history(history: &[RunnerMessage]) -> Result<Vec<Item>, RunnerError
                     ItemKind::Tool,
                     vec![Part::ToolResult(ToolResultPart::success(
                         call_id,
-                        ToolOutput::text(message.content.clone()),
+                        ToolOutput::text(text_with_image_placeholders(&message.content)),
                     ))],
                 ));
             }
             "system" => {
-                items.push(Item::text(ItemKind::System, &message.content));
+                items.push(Item::text(
+                    ItemKind::System,
+                    text_with_image_placeholders(&message.content),
+                ));
             }
             other => {
                 return Err(RunnerError::UnsupportedHistoryRole(other.to_string()));
@@ -962,7 +1042,7 @@ fn normalize_history(history: &[RunnerMessage]) -> Result<Vec<Item>, RunnerError
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
     use crate::http_layer::{TokenRegistry, build_bootstrap_client};
@@ -982,14 +1062,17 @@ mod tests {
             threads: DashMap::new(),
             gram_client,
             thread_idle_ttl: Duration::from_secs(60 * 30),
-            http_client,
+            mcp_http_client: reqwest::Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .expect("MCP HTTP client should build"),
             spill_root: PathBuf::from("/tmp/runtime-test-spill"),
             initial_token: String::new(),
         })
     }
 
     fn insert_thread(host: &RuntimeHost, thread_id: &str, idle_since: Option<Instant>) {
-        let (inbox_tx, _inbox_rx) = mpsc::unbounded_channel::<String>();
+        let (inbox_tx, _inbox_rx) = mpsc::unbounded_channel::<RunnerContent>();
         let (mcp_cmd_tx, _mcp_cmd_rx) = mpsc::channel::<McpCmd>(1);
         let handle = tokio::spawn(async {});
         let configured = Arc::new(ConfiguredThread {
@@ -1072,5 +1155,89 @@ mod tests {
             host.seen.get("other:evt-1").is_some(),
             "unrelated idempotency keys must survive eviction"
         );
+    }
+
+    fn image_part(url: &str) -> RunnerContentPart {
+        RunnerContentPart::ImageUrl {
+            image_url: crate::wire::RunnerImageUrl {
+                url: url.to_string(),
+                detail: None,
+            },
+        }
+    }
+
+    #[test]
+    fn normalize_history_text_content_matches_legacy_shape() {
+        let history = vec![RunnerMessage {
+            role: "user".to_string(),
+            content: RunnerContent::Text("hello".to_string()),
+            tool_calls: Vec::new(),
+            tool_call_id: None,
+        }];
+        let items = normalize_history(&history).unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].kind, ItemKind::User);
+        assert_eq!(
+            items[0].parts,
+            vec![Part::Text(TextPart::new("hello"))],
+            "text-only content must normalize exactly as the plain-string wire did"
+        );
+    }
+
+    #[test]
+    fn normalize_history_user_image_parts_become_media() {
+        let history = vec![RunnerMessage {
+            role: "user".to_string(),
+            content: RunnerContent::Parts(vec![
+                RunnerContentPart::Text {
+                    text: "look at this".to_string(),
+                },
+                image_part("https://example.com/cat.png"),
+            ]),
+            tool_calls: Vec::new(),
+            tool_call_id: None,
+        }];
+        let items = normalize_history(&history).unwrap();
+        assert_eq!(items[0].parts.len(), 2);
+        assert_eq!(items[0].parts[0], Part::Text(TextPart::new("look at this")));
+        let Part::Media(media) = &items[0].parts[1] else {
+            panic!("expected media part, got {:?}", items[0].parts[1]);
+        };
+        assert_eq!(media.modality, Modality::Image);
+        assert_eq!(
+            media.data,
+            DataRef::Uri("https://example.com/cat.png".to_string())
+        );
+    }
+
+    #[test]
+    fn normalize_history_assistant_image_parts_become_placeholder_text() {
+        // The completions adapter rejects Media parts on assistant items, so
+        // image parts surface as visible text placeholders instead.
+        let history = vec![RunnerMessage {
+            role: "assistant".to_string(),
+            content: RunnerContent::Parts(vec![
+                RunnerContentPart::Text {
+                    text: "here you go".to_string(),
+                },
+                image_part("https://example.com/out.png"),
+            ]),
+            tool_calls: Vec::new(),
+            tool_call_id: None,
+        }];
+        let items = normalize_history(&history).unwrap();
+        assert_eq!(
+            items[0].parts,
+            vec![Part::Text(TextPart::new(
+                "here you go\n[image: https://example.com/out.png]"
+            ))]
+        );
+    }
+
+    #[test]
+    fn image_mime_type_reads_data_uri_header() {
+        assert_eq!(image_mime_type("data:image/png;base64,AAAA"), "image/png");
+        assert_eq!(image_mime_type("data:image/jpeg,raw"), "image/jpeg");
+        assert_eq!(image_mime_type("https://example.com/a.png"), "image/*");
     }
 }

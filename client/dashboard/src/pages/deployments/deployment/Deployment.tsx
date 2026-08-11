@@ -4,8 +4,8 @@ import {
   RouteNotFoundState,
   SecondaryRouteAction,
 } from "@/components/route-not-found-state";
-import { Heading } from "@/components/ui/heading";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Heading } from "@/components/ui/Heading";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { dateTimeFormatters } from "@/lib/dates";
 import { isNotFoundError, isUuidRouteParam } from "@/lib/route-errors";
 import { cn } from "@/lib/utils";
@@ -14,16 +14,11 @@ import {
   useDeployment,
   useDeploymentSuspense,
 } from "@gram/client/react-query/deployment.js";
-import { Button, Separator, Skeleton } from "@speakeasy-api/moonshine";
-import {
-  CheckIcon,
-  DotIcon,
-  FileCodeIcon,
-  RefreshCcwIcon,
-  WrenchIcon,
-  XIcon,
-} from "lucide-react";
-import { memo, Suspense } from "react";
+import { Button } from "@/components/ui/Button";
+import { MetricCard } from "@/components/ui/MetricCard";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { RefreshCcwIcon } from "lucide-react";
+import { Suspense } from "react";
 import { useParams } from "react-router";
 import { useActiveDeployment } from "../useActiveDeployment";
 import { useRedeployDeployment } from "../useRedeployDeployment";
@@ -90,7 +85,13 @@ function DeploymentPageContent({ deploymentId }: { deploymentId: string }) {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <Suspense fallback={<div>Loading logs...</div>}>
+        <Suspense
+          fallback={
+            <Skeleton>
+              <div className="h-4 w-1/3" />
+            </Skeleton>
+          }
+        >
           <DeploymentLogs deploymentId={deploymentId} />
         </Suspense>
       </Page.Body>
@@ -173,12 +174,24 @@ function DeploymentLogs(props: { deploymentId: string }) {
           <TabsTrigger value="tools">Tools</TabsTrigger>
         </TabsList>
         <TabsContent value="logs">
-          <Suspense fallback={<div>Loading logs...</div>}>
+          <Suspense
+            fallback={
+              <Skeleton>
+                <div className="h-4 w-1/3" />
+              </Skeleton>
+            }
+          >
             <LogsTabContent />
           </Suspense>
         </TabsContent>
         <TabsContent value="assets">
-          <Suspense fallback={<div>Loading assets...</div>}>
+          <Suspense
+            fallback={
+              <Skeleton>
+                <div className="h-4 w-1/3" />
+              </Skeleton>
+            }
+          >
             <AssetsTabContent />
           </Suspense>
         </TabsContent>
@@ -251,7 +264,10 @@ const HeadingSection = () => {
 
   return (
     <div className="flex items-center justify-between">
-      <Heading variant="h1">Deployment Overview</Heading>
+      <div className="flex flex-col gap-2">
+        <Page.Eyebrow />
+        <Heading variant="h1">Deployment Overview</Heading>
+      </div>
       <RequireScope scope="project:write" level="section">
         <RedeployButton />
       </RequireScope>
@@ -286,34 +302,79 @@ const StatsSection = ({
   }
   assetCount += deployment.externalMcps?.length ?? 0;
 
+  const toolCount =
+    deployment.openapiv3ToolCount +
+    deployment.functionsToolCount +
+    deployment.externalMcpToolCount;
+
+  const statusTone =
+    deployment.status === "completed"
+      ? "success"
+      : deployment.status === "failed"
+        ? "destructive"
+        : "neutral";
+  const statusWord =
+    deployment.status === "completed"
+      ? "Succeeded"
+      : deployment.status === "failed"
+        ? "Failed"
+        : deployment.status;
+
   return (
-    <div className="flex h-4 items-center gap-3 text-sm">
-      <span>{deployment.id}</span>
-      <Separator orientation="vertical" />
-      <div className="flex items-center gap-0.5">
-        <HumanizedDeploymentStatus status={deployment.status} />
-        <DotIcon className="text-border" />
-        {humanizedDate}
+    <div className="space-y-2">
+      <div className="text-muted-foreground font-mono text-xs">
+        {deployment.id}
       </div>
-      <Separator orientation="vertical" />
-      <button
-        className="flex items-center gap-1"
-        onClick={() => onClickAssets?.()}
-      >
-        <FileCodeIcon size={16} />
-        {assetCount} Assets
-      </button>
-      <Separator orientation="vertical" />
-      <button
-        className="flex items-center gap-1"
-        onClick={() => onClickTools?.()}
-      >
-        <WrenchIcon size={16} />
-        {deployment.openapiv3ToolCount +
-          deployment.functionsToolCount +
-          deployment.externalMcpToolCount}{" "}
-        Tools
-      </button>
+      <MetricCard.Group>
+        <MetricCard
+          label="Assets"
+          value={assetCount}
+          tone="information"
+          size="sm"
+          role="button"
+          tabIndex={0}
+          className="cursor-pointer"
+          onClick={() => onClickAssets?.()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onClickAssets?.();
+            }
+          }}
+        />
+        <MetricCard
+          label="Tools"
+          value={toolCount}
+          tone="information"
+          size="sm"
+          role="button"
+          tabIndex={0}
+          className="cursor-pointer"
+          onClick={() => onClickTools?.()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onClickTools?.();
+            }
+          }}
+        />
+        <MetricCard
+          label="Status"
+          tone={statusTone}
+          size="sm"
+          value={
+            <span className="font-mono text-lg tracking-wide uppercase">
+              {statusWord}
+            </span>
+          }
+        />
+        <MetricCard
+          label="Created"
+          tone="neutral"
+          size="sm"
+          value={<span className="text-2xl">{humanizedDate}</span>}
+        />
+      </MetricCard.Group>
     </div>
   );
 };
@@ -327,25 +388,3 @@ function humanizeDeploymentDate(date: Date) {
 
   return dateTimeFormatters.humanize(date);
 }
-
-const HumanizedDeploymentStatus = memo((props: { status: string }) => {
-  if (props.status === "completed") {
-    return (
-      <div className="flex items-center">
-        <CheckIcon className="text-default-success size-4" />
-        <span className="ml-2">Succeeded</span>
-      </div>
-    );
-  }
-
-  if (props.status === "failed") {
-    return (
-      <div className="flex items-center">
-        <XIcon className="text-destructive size-4" />
-        <span className="ml-2">Failed</span>
-      </div>
-    );
-  }
-
-  return <span className="capitalize">{props.status}</span>;
-});

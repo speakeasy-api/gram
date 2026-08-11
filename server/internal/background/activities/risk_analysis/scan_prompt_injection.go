@@ -53,6 +53,7 @@ func (a *AnalyzeBatch) publishPromptInjectionScanRequests(ctx context.Context, a
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	publishResults := make([]gcp.PublishResult, 0, len(messages))
 	for _, msg := range messages {
+		chatMessageID, contentPartID := msg.anchorIDStrings()
 		jm := batchJudgeMessage(msg)
 		toolCalls := make([]*riskv1.PromptInjectionAnalysis_ToolCall, 0, len(jm.ToolCalls))
 		for _, call := range jm.ToolCalls {
@@ -64,7 +65,8 @@ func (a *AnalyzeBatch) publishPromptInjectionScanRequests(ctx context.Context, a
 
 		publishResults = append(publishResults, a.promptInjectionPub.Publish(ctx, riskv1.PromptInjectionAnalysis_builder{
 			RequestId:         new(requestID.String()),
-			ChatMessageId:     new(msg.ID.String()),
+			ChatMessageId:     chatMessageID,
+			ContentPartId:     contentPartID,
 			ProjectId:         new(args.ProjectID.String()),
 			OrganizationId:    &args.OrganizationID,
 			RiskPolicyId:      new(args.RiskPolicyID.String()),

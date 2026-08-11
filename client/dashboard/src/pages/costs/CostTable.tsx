@@ -1,10 +1,11 @@
-import { SkeletonTable } from "@/components/ui/skeleton";
+import { formatCost } from "@/lib/money";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Tooltip";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { type QueryRow } from "@gram/client/models/components/queryrow.js";
@@ -24,14 +25,8 @@ import {
   ESTIMATED_COST_TOOLTIP,
   isMeteredBilling,
 } from "@/components/estimated-cost-utils";
-import { isAttributionDim } from "./taxonomy";
-
-function formatCost(value: number): string {
-  return `$${value.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
+import { TREND } from "@/components/chart/palette";
+import { displayName, formatWorkUnits, isAttributionDim } from "./taxonomy";
 
 // Average cost per chat session for a row; 0 when there are no sessions.
 function costPerSession(row: QueryRow): number {
@@ -39,11 +34,29 @@ function costPerSession(row: QueryRow): number {
   return chats > 0 ? (row.measures.totalCost ?? 0) / chats : 0;
 }
 
+// Work units delivered by a row's scored sessions; 0 where nothing is scored.
+function rowWorkUnits(row: QueryRow): number {
+  return row.measures.totalWorkUnits ?? 0;
+}
+
+// Cost/tokens of the row's SCORED sessions per work unit — null (rendered "—")
+// where the row has no scored work. Scored-only numerators keep partial
+// analysis coverage from overstating the ratios (see Measures in taxonomy.ts).
+function rowCostPerUnit(row: QueryRow): number | null {
+  const units = rowWorkUnits(row);
+  return units > 0 ? (row.measures.scoredCost ?? 0) / units : null;
+}
+function rowTokensPerUnit(row: QueryRow): number | null {
+  const units = rowWorkUnits(row);
+  return units > 0 ? (row.measures.scoredTokens ?? 0) / units : null;
+}
+
 // Bucket the cost into three bands by its position in the column's range:
-// lowest third → emerald, middle → neutral (default text), highest → rose.
+// lowest third → muted green, middle → neutral (default text), highest →
+// muted red — the shared TREND tokens.
 function costColor(t: number): string | undefined {
-  if (t >= 2 / 3) return "#e11d48"; // rose-600 — high cost
-  if (t <= 1 / 3) return "#059669"; // emerald-600 — low cost
+  if (t >= 2 / 3) return TREND.up; // high cost
+  if (t <= 1 / 3) return TREND.down; // low cost
   return undefined; // neutral
 }
 
@@ -83,28 +96,35 @@ function LegendTooltip({
   );
 }
 
-// A plain info icon + tooltip for explaining a column header.
+// A plain info icon + tooltip for explaining a column header or a special row.
+// The trigger is a span (not the Radix default button) so it can also render
+// inside the row drill buttons without nesting interactive elements.
 function InfoTooltip({ text }: { text: string }): JSX.Element {
   return (
     <Tooltip>
-      <TooltipTrigger
-        aria-label={text}
-        className="text-muted-foreground inline-flex cursor-help"
-      >
-        <Info className="size-3.5" />
+      <TooltipTrigger asChild>
+        {/* stopPropagation keeps a click on the icon from activating the
+            surrounding row drill button. */}
+        <span
+          tabIndex={0}
+          aria-label={text}
+          onClick={(event) => event.stopPropagation()}
+          className="text-muted-foreground inline-flex shrink-0 cursor-help"
+        >
+          <Info className="size-3.5" />
+        </span>
       </TooltipTrigger>
       <TooltipContent className="max-w-56">{text}</TooltipContent>
     </Tooltip>
   );
 }
 
-const GREEN = "#10b981";
-const RED = "#f43f5e";
-const GREY = "#94a3b8";
-
-function displayValue(groupValue: string): string {
-  return groupValue === "" ? "(unset)" : groupValue;
-}
+// Why the Team-wide API Usage row exists, surfaced as an info tooltip on the
+// user breakdown's empty-identity bucket.
+const TEAM_WIDE_USAGE_TOOLTIP =
+  "Sessions authenticated with a shared company credential (an API key or " +
+  "gateway) carry no user identity, so their usage can't be attributed to an " +
+  "individual and is grouped here.";
 
 // "" is the "(unset)" bucket — a real slice (everyone missing this attribute),
 // so it stays drillable. Only "Other" — the synthetic top-N overflow rollup of
@@ -151,7 +171,11 @@ type SortKey =
   | "tools"
   | "cache"
   | "tokens"
-  | "trend";
+  | "trend"
+  | "units"
+  | "unitsShare"
+  | "costPerUnit"
+  | "tokensPerUnit";
 type SortDir = "asc" | "desc";
 type Sort = { key: SortKey; dir: SortDir };
 
@@ -159,10 +183,11 @@ function sortValue(
   row: QueryRow,
   key: SortKey,
   seriesByGroup: Map<string, number[]>,
+  groupBy: Dimension,
 ): number | string {
   switch (key) {
     case "name":
-      return displayValue(row.groupValue).toLowerCase();
+      return displayName(groupBy, row.groupValue).toLowerCase();
     case "cost":
     // Share is cost ÷ a constant total, so it sorts identically to cost.
     case "share":
@@ -177,6 +202,16 @@ function sortValue(
       return row.measures.cacheCreationInputTokens ?? 0;
     case "tokens":
       return row.measures.totalTokens ?? 0;
+    case "units":
+    // Units share is units ÷ a constant total, so it sorts identically.
+    case "unitsShare":
+      return rowWorkUnits(row);
+    // Unscored rows (null ratio) sort as -1: below every real ratio on the
+    // default descending order, so "no data yet" never outranks a real number.
+    case "costPerUnit":
+      return rowCostPerUnit(row) ?? -1;
+    case "tokensPerUnit":
+      return rowTokensPerUnit(row) ?? -1;
     case "trend": {
       // Group by colour first (up → flat → down), then by net change within a
       // group, so a sort never mixes a grey "flat" line among the red risers.
@@ -221,6 +256,10 @@ export type CostTableProps = {
   // The view's resolved billing mode; "metered" shows real cost rather than the
   // API-rate estimate on the cost headers.
   billingMode?: string;
+  // Efficiency lens: swap the cost columns for the work-units measures (work
+  // units, cost/tokens per unit) and default the sort to work units. Callers
+  // remount the table (key) when toggling, so the default sort re-applies.
+  efficiency?: boolean;
   // Zero-row copy override — e.g. an active search should read "no matches",
   // not "no data".
   emptyMessage?: string;
@@ -235,9 +274,13 @@ export function CostTable({
   seriesByGroup,
   isLoading,
   billingMode,
+  efficiency,
   emptyMessage,
 }: CostTableProps): JSX.Element {
-  const [sort, setSort] = useState<Sort>({ key: "cost", dir: "desc" });
+  const [sort, setSort] = useState<Sort>({
+    key: efficiency ? "units" : "cost",
+    dir: "desc",
+  });
   const [page, setPage] = useState(0);
   // A confidently metered view shows real cost, so the estimate caveat is hidden.
   const showCostEstimate = !isMeteredBilling(billingMode);
@@ -259,8 +302,8 @@ export function CostTable({
     const main = rows.filter((r) => r.groupValue !== "Other");
     const other = rows.filter((r) => r.groupValue === "Other");
     main.sort((a, b) => {
-      const av = sortValue(a, sort.key, seriesByGroup);
-      const bv = sortValue(b, sort.key, seriesByGroup);
+      const av = sortValue(a, sort.key, seriesByGroup, groupBy);
+      const bv = sortValue(b, sort.key, seriesByGroup, groupBy);
       const cmp =
         typeof av === "string"
           ? av.localeCompare(bv as string)
@@ -268,7 +311,7 @@ export function CostTable({
       return sort.dir === "asc" ? cmp : -cmp;
     });
     return [...main, ...other];
-  }, [rows, sort, seriesByGroup]);
+  }, [rows, sort, seriesByGroup, groupBy]);
 
   if (isLoading) return <SkeletonTable />;
 
@@ -297,27 +340,82 @@ export function CostTable({
     (sum, r) => sum + (r.measures.totalCost ?? 0),
     0,
   );
+  // Efficiency-lens equivalents: the share column divides by total work units,
+  // and the heat scale grades cost per unit (high = rose = expensive output)
+  // across the rows that have any scored work.
+  const totalUnits = sorted.reduce((sum, r) => sum + rowWorkUnits(r), 0);
+  const realUnitCosts = sorted
+    .filter((r) => r.groupValue !== "Other")
+    .map(rowCostPerUnit)
+    .filter((v): v is number => v !== null);
+  const minUnitCost = realUnitCosts.length ? Math.min(...realUnitCosts) : 0;
+  const maxUnitCost = realUnitCosts.length ? Math.max(...realUnitCosts) : 0;
 
-  return (
-    <div
-      className="border-border divide-border grid gap-x-3 gap-y-0 divide-y overflow-x-auto rounded-lg border"
-      style={{ gridTemplateColumns: COLUMNS }}
-    >
-      <div
-        className={cn(
-          "text-muted-foreground grid items-center py-3.5 text-sm font-medium",
-          SUBGRID_ROW_CLASS,
-        )}
-      >
-        <Gutter />
-        <span className="flex">
-          <HeaderButton
-            label={groupLabel}
-            sortKey="name"
-            sort={sort}
-            onSort={onSort}
-          />
-        </span>
+  // The six measure header cells before the Trend column, by lens.
+  function measureHeaders(): JSX.Element {
+    if (efficiency) {
+      return (
+        <>
+          <span className="flex items-center gap-1">
+            <HeaderButton
+              label="Work delivered"
+              sortKey="units"
+              sort={sort}
+              onSort={onSort}
+            />
+            <InfoTooltip text="Work delivered by this slice's scored sessions, as judged by work analysis. Sessions without a score contribute nothing." />
+          </span>
+          <span className="flex items-center gap-1">
+            <HeaderButton
+              label="% Share"
+              sortKey="unitsShare"
+              sort={sort}
+              onSort={onSort}
+            />
+            <InfoTooltip
+              text={`Share of total work delivered across all ${groupLabel.toLowerCase()}s in this view.`}
+            />
+          </span>
+          <span className="flex items-center gap-1">
+            <HeaderButton
+              label="Cost efficiency"
+              sortKey="costPerUnit"
+              sort={sort}
+              onSort={onSort}
+            />
+            <InfoTooltip text="Cost relative to work delivered by scored sessions. Unscored spend is excluded, so partial analysis coverage can't overstate the ratio." />
+          </span>
+          <span className="flex">
+            <HeaderButton
+              label="Sessions"
+              sortKey="chats"
+              sort={sort}
+              onSort={onSort}
+            />
+          </span>
+          <span className="flex items-center gap-1">
+            <HeaderButton
+              label="Token efficiency"
+              sortKey="tokensPerUnit"
+              sort={sort}
+              onSort={onSort}
+            />
+            <InfoTooltip text="Tokens relative to work delivered by scored sessions." />
+          </span>
+          <span className="flex items-center gap-1">
+            <HeaderButton
+              label={costMeasureLabel(billingMode)}
+              sortKey="cost"
+              sort={sort}
+              onSort={onSort}
+            />
+            {showCostEstimate && <InfoTooltip text={ESTIMATED_COST_TOOLTIP} />}
+          </span>
+        </>
+      );
+    }
+    return (
+      <>
         <span className="flex items-center gap-1">
           <HeaderButton
             label={costMeasureLabel(billingMode)}
@@ -383,6 +481,111 @@ export function CostTable({
             onSort={onSort}
           />
         </span>
+      </>
+    );
+  }
+
+  // The six measure cells for one row, matching measureHeaders' column order.
+  function measureCells(row: QueryRow): JSX.Element {
+    const isOther = row.groupValue === "Other";
+    if (efficiency) {
+      const units = rowWorkUnits(row);
+      const unitCost = rowCostPerUnit(row);
+      const unitTokens = rowTokensPerUnit(row);
+      const unitT =
+        unitCost !== null && maxUnitCost > minUnitCost
+          ? (unitCost - minUnitCost) / (maxUnitCost - minUnitCost)
+          : 0.5;
+      const unitColor =
+        isOther || unitCost === null ? undefined : costColor(unitT);
+      return (
+        <>
+          <span className="text-left font-medium tabular-nums whitespace-nowrap">
+            {formatWorkUnits(units)}
+          </span>
+          <span className="text-muted-foreground text-left tabular-nums whitespace-nowrap">
+            {totalUnits > 0 && units > 0
+              ? `${((units / totalUnits) * 100).toFixed(1)}%`
+              : "—"}
+          </span>
+          <span
+            className="text-left font-medium tabular-nums whitespace-nowrap"
+            style={unitColor ? { color: unitColor } : undefined}
+          >
+            {unitCost !== null ? formatCost(unitCost) : "—"}
+          </span>
+          <span className="text-left tabular-nums whitespace-nowrap">
+            {(row.measures.totalChats ?? 0).toLocaleString()}
+          </span>
+          <span className="text-left tabular-nums whitespace-nowrap">
+            {unitTokens !== null
+              ? Math.round(unitTokens).toLocaleString()
+              : "—"}
+          </span>
+          <span className="text-muted-foreground text-left tabular-nums whitespace-nowrap">
+            {formatCost(row.measures.totalCost ?? 0)}
+          </span>
+        </>
+      );
+    }
+    const cost = row.measures.totalCost ?? 0;
+    const costT =
+      maxCost > minCost ? (cost - minCost) / (maxCost - minCost) : 0.5;
+    return (
+      <>
+        <span
+          className="text-left font-medium tabular-nums whitespace-nowrap"
+          style={isOther ? undefined : { color: costColor(costT) }}
+        >
+          {formatCost(cost)}
+        </span>
+        <span
+          className="text-left tabular-nums whitespace-nowrap"
+          style={isOther ? undefined : { color: costColor(costT) }}
+        >
+          {totalCost > 0 ? `${((cost / totalCost) * 100).toFixed(1)}%` : "—"}
+        </span>
+        <span className="text-muted-foreground text-left tabular-nums whitespace-nowrap">
+          {(row.measures.totalChats ?? 0) > 0
+            ? formatCost(costPerSession(row))
+            : "—"}
+        </span>
+        <span className="text-left tabular-nums whitespace-nowrap">
+          {(row.measures.totalChats ?? 0).toLocaleString()}
+        </span>
+        <span className="text-left tabular-nums whitespace-nowrap">
+          {cacheMetric
+            ? (row.measures.cacheCreationInputTokens ?? 0).toLocaleString()
+            : (row.measures.totalToolCalls ?? 0).toLocaleString()}
+        </span>
+        <span className="text-left tabular-nums whitespace-nowrap">
+          {(row.measures.totalTokens ?? 0).toLocaleString()}
+        </span>
+      </>
+    );
+  }
+
+  return (
+    <div
+      className="border-border divide-border grid gap-x-3 gap-y-0 divide-y overflow-x-auto border"
+      style={{ gridTemplateColumns: COLUMNS }}
+    >
+      <div
+        className={cn(
+          "text-eyebrow grid items-center py-3.5",
+          SUBGRID_ROW_CLASS,
+        )}
+      >
+        <Gutter />
+        <span className="flex">
+          <HeaderButton
+            label={groupLabel}
+            sortKey="name"
+            sort={sort}
+            onSort={onSort}
+          />
+        </span>
+        {measureHeaders()}
         <span className="flex items-center gap-1">
           <HeaderButton
             label="Trend This Period"
@@ -393,9 +596,9 @@ export function CostTable({
           <LegendTooltip
             intro="over the selected range"
             items={[
-              { key: "Green", label: "trending down", color: GREEN },
-              { key: "Red", label: "trending up", color: RED },
-              { key: "Grey", label: "no clear trend", color: GREY },
+              { key: "Green", label: "trending down", color: TREND.down },
+              { key: "Red", label: "trending up", color: TREND.up },
+              { key: "Grey", label: "no clear trend", color: TREND.flat },
             ]}
           />
         </span>
@@ -407,17 +610,13 @@ export function CostTable({
           className="px-5 py-10 text-center"
           style={{ gridColumn: "1 / -1" }}
         >
-          <Type className="text-muted-foreground">
+          <Text className="text-muted-foreground">
             {emptyMessage ?? "No cost data for this slice."}
-          </Type>
+          </Text>
         </div>
       ) : (
         pageRows.map((row, i) => {
           const drillable = canDrill && isDrillableValue(row.groupValue);
-          const cost = row.measures.totalCost ?? 0;
-          const isOther = row.groupValue === "Other";
-          const costT =
-            maxCost > minCost ? (cost - minCost) / (maxCost - minCost) : 0.5;
           return (
             <button
               key={row.groupValue}
@@ -448,44 +647,16 @@ export function CostTable({
                   />
                 )}
                 <span className="truncate font-medium">
-                  {displayValue(row.groupValue)}
+                  {displayName(groupBy, row.groupValue)}
                 </span>
+                {groupBy === Dimension.Email && row.groupValue === "" && (
+                  <InfoTooltip text={TEAM_WIDE_USAGE_TOOLTIP} />
+                )}
                 {drillable && (
                   <ChevronRight className="text-muted-foreground size-4 shrink-0" />
                 )}
               </div>
-              <span
-                className="text-left font-medium tabular-nums whitespace-nowrap"
-                style={isOther ? undefined : { color: costColor(costT) }}
-              >
-                {formatCost(cost)}
-              </span>
-              <span
-                className="text-left tabular-nums whitespace-nowrap"
-                style={isOther ? undefined : { color: costColor(costT) }}
-              >
-                {totalCost > 0
-                  ? `${((cost / totalCost) * 100).toFixed(1)}%`
-                  : "—"}
-              </span>
-              <span className="text-muted-foreground text-left tabular-nums whitespace-nowrap">
-                {(row.measures.totalChats ?? 0) > 0
-                  ? formatCost(costPerSession(row))
-                  : "—"}
-              </span>
-              <span className="text-left tabular-nums whitespace-nowrap">
-                {(row.measures.totalChats ?? 0).toLocaleString()}
-              </span>
-              <span className="text-left tabular-nums whitespace-nowrap">
-                {cacheMetric
-                  ? (
-                      row.measures.cacheCreationInputTokens ?? 0
-                    ).toLocaleString()
-                  : (row.measures.totalToolCalls ?? 0).toLocaleString()}
-              </span>
-              <span className="text-left tabular-nums whitespace-nowrap">
-                {(row.measures.totalTokens ?? 0).toLocaleString()}
-              </span>
+              {measureCells(row)}
               <span className="flex">
                 <Sparkline values={seriesByGroup.get(row.groupValue) ?? []} />
               </span>
@@ -511,7 +682,7 @@ export function CostTable({
               aria-label="Previous page"
               onClick={() => setPage((p) => p - 1)}
               disabled={safePage === 0}
-              className="hover:bg-muted inline-flex size-8 items-center justify-center rounded-md transition-colors disabled:pointer-events-none disabled:opacity-40"
+              className="hover:bg-muted inline-flex size-8 items-center justify-center transition-colors disabled:pointer-events-none disabled:opacity-40"
             >
               <ChevronLeft className="size-4" />
             </button>
@@ -520,7 +691,7 @@ export function CostTable({
               aria-label="Next page"
               onClick={() => setPage((p) => p + 1)}
               disabled={safePage >= totalPages - 1}
-              className="hover:bg-muted inline-flex size-8 items-center justify-center rounded-md transition-colors disabled:pointer-events-none disabled:opacity-40"
+              className="hover:bg-muted inline-flex size-8 items-center justify-center transition-colors disabled:pointer-events-none disabled:opacity-40"
             >
               <ChevronRight className="size-4" />
             </button>

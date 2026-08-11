@@ -16,29 +16,57 @@ import (
 
 // Client is the "skills" service client.
 type Client struct {
-	CreateEndpoint            goa.Endpoint
-	AddVersionEndpoint        goa.Endpoint
-	ListEndpoint              goa.Endpoint
-	GetEndpoint               goa.Endpoint
-	ListVersionsEndpoint      goa.Endpoint
-	ArchiveEndpoint           goa.Endpoint
-	DistributeEndpoint        goa.Endpoint
-	UndistributeEndpoint      goa.Endpoint
-	ListDistributionsEndpoint goa.Endpoint
+	CreateEndpoint                 goa.Endpoint
+	AddVersionEndpoint             goa.Endpoint
+	RestoreVersionEndpoint         goa.Endpoint
+	UpdateEndpoint                 goa.Endpoint
+	ListEndpoint                   goa.Endpoint
+	ListTagsEndpoint               goa.Endpoint
+	ListSuggestionsEndpoint        goa.Endpoint
+	ListFeedbackEndpoint           goa.Endpoint
+	TriggerSuggestionEndpoint      goa.Endpoint
+	ApproveSuggestionEndpoint      goa.Endpoint
+	DismissSuggestionEndpoint      goa.Endpoint
+	ListSuggestionFeedbackEndpoint goa.Endpoint
+	ApproveAllSuggestionsEndpoint  goa.Endpoint
+	GetEndpoint                    goa.Endpoint
+	ListUnknownActivationsEndpoint goa.Endpoint
+	ListVersionsEndpoint           goa.Endpoint
+	ArchiveEndpoint                goa.Endpoint
+	DistributeEndpoint             goa.Endpoint
+	UndistributeEndpoint           goa.Endpoint
+	ShareEndpoint                  goa.Endpoint
+	UnshareEndpoint                goa.Endpoint
+	GetSharedEndpoint              goa.Endpoint
+	ListDistributionsEndpoint      goa.Endpoint
 }
 
 // NewClient initializes a "skills" service client given the endpoints.
-func NewClient(create, addVersion, list, get, listVersions, archive, distribute, undistribute, listDistributions goa.Endpoint) *Client {
+func NewClient(create, addVersion, restoreVersion, update, list, listTags, listSuggestions, listFeedback, triggerSuggestion, approveSuggestion, dismissSuggestion, listSuggestionFeedback, approveAllSuggestions, get, listUnknownActivations, listVersions, archive, distribute, undistribute, share, unshare, getShared, listDistributions goa.Endpoint) *Client {
 	return &Client{
-		CreateEndpoint:            create,
-		AddVersionEndpoint:        addVersion,
-		ListEndpoint:              list,
-		GetEndpoint:               get,
-		ListVersionsEndpoint:      listVersions,
-		ArchiveEndpoint:           archive,
-		DistributeEndpoint:        distribute,
-		UndistributeEndpoint:      undistribute,
-		ListDistributionsEndpoint: listDistributions,
+		CreateEndpoint:                 create,
+		AddVersionEndpoint:             addVersion,
+		RestoreVersionEndpoint:         restoreVersion,
+		UpdateEndpoint:                 update,
+		ListEndpoint:                   list,
+		ListTagsEndpoint:               listTags,
+		ListSuggestionsEndpoint:        listSuggestions,
+		ListFeedbackEndpoint:           listFeedback,
+		TriggerSuggestionEndpoint:      triggerSuggestion,
+		ApproveSuggestionEndpoint:      approveSuggestion,
+		DismissSuggestionEndpoint:      dismissSuggestion,
+		ListSuggestionFeedbackEndpoint: listSuggestionFeedback,
+		ApproveAllSuggestionsEndpoint:  approveAllSuggestions,
+		GetEndpoint:                    get,
+		ListUnknownActivationsEndpoint: listUnknownActivations,
+		ListVersionsEndpoint:           listVersions,
+		ArchiveEndpoint:                archive,
+		DistributeEndpoint:             distribute,
+		UndistributeEndpoint:           undistribute,
+		ShareEndpoint:                  share,
+		UnshareEndpoint:                unshare,
+		GetSharedEndpoint:              getShared,
+		ListDistributionsEndpoint:      listDistributions,
 	}
 }
 
@@ -86,6 +114,50 @@ func (c *Client) AddVersion(ctx context.Context, p *AddVersionPayload) (res *Rec
 	return ires.(*RecordSkillResult), nil
 }
 
+// RestoreVersion calls the "restoreVersion" endpoint of the "skills" service.
+// RestoreVersion may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) RestoreVersion(ctx context.Context, p *RestoreVersionPayload) (res *RecordSkillResult, err error) {
+	var ires any
+	ires, err = c.RestoreVersionEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*RecordSkillResult), nil
+}
+
+// Update calls the "update" endpoint of the "skills" service.
+// Update may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) Update(ctx context.Context, p *UpdatePayload) (res *types.Skill, err error) {
+	var ires any
+	ires, err = c.UpdateEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.Skill), nil
+}
+
 // List calls the "list" endpoint of the "skills" service.
 // List may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
@@ -108,6 +180,183 @@ func (c *Client) List(ctx context.Context, p *ListPayload) (res *ListSkillsResul
 	return ires.(*ListSkillsResult), nil
 }
 
+// ListTags calls the "listTags" endpoint of the "skills" service.
+// ListTags may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListTags(ctx context.Context, p *ListTagsPayload) (res *ListSkillTagsResult, err error) {
+	var ires any
+	ires, err = c.ListTagsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListSkillTagsResult), nil
+}
+
+// ListSuggestions calls the "listSuggestions" endpoint of the "skills" service.
+// ListSuggestions may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListSuggestions(ctx context.Context, p *ListSuggestionsPayload) (res *ListSkillSuggestionsResult, err error) {
+	var ires any
+	ires, err = c.ListSuggestionsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListSkillSuggestionsResult), nil
+}
+
+// ListFeedback calls the "listFeedback" endpoint of the "skills" service.
+// ListFeedback may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListFeedback(ctx context.Context, p *ListFeedbackPayload) (res *ListSkillFeedbackResult, err error) {
+	var ires any
+	ires, err = c.ListFeedbackEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListSkillFeedbackResult), nil
+}
+
+// TriggerSuggestion calls the "triggerSuggestion" endpoint of the "skills"
+// service.
+// TriggerSuggestion may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) TriggerSuggestion(ctx context.Context, p *TriggerSuggestionPayload) (err error) {
+	_, err = c.TriggerSuggestionEndpoint(ctx, p)
+	return
+}
+
+// ApproveSuggestion calls the "approveSuggestion" endpoint of the "skills"
+// service.
+// ApproveSuggestion may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ApproveSuggestion(ctx context.Context, p *ApproveSuggestionPayload) (res *ApproveSkillSuggestionResult, err error) {
+	var ires any
+	ires, err = c.ApproveSuggestionEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ApproveSkillSuggestionResult), nil
+}
+
+// DismissSuggestion calls the "dismissSuggestion" endpoint of the "skills"
+// service.
+// DismissSuggestion may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DismissSuggestion(ctx context.Context, p *DismissSuggestionPayload) (res *types.SkillEditSuggestion, err error) {
+	var ires any
+	ires, err = c.DismissSuggestionEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.SkillEditSuggestion), nil
+}
+
+// ListSuggestionFeedback calls the "listSuggestionFeedback" endpoint of the
+// "skills" service.
+// ListSuggestionFeedback may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListSuggestionFeedback(ctx context.Context, p *ListSuggestionFeedbackPayload) (res *ListSkillSuggestionFeedbackResult, err error) {
+	var ires any
+	ires, err = c.ListSuggestionFeedbackEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListSkillSuggestionFeedbackResult), nil
+}
+
+// ApproveAllSuggestions calls the "approveAllSuggestions" endpoint of the
+// "skills" service.
+// ApproveAllSuggestions may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ApproveAllSuggestions(ctx context.Context, p *ApproveAllSuggestionsPayload) (res *ApproveAllSkillSuggestionsResult, err error) {
+	var ires any
+	ires, err = c.ApproveAllSuggestionsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ApproveAllSkillSuggestionsResult), nil
+}
+
 // Get calls the "get" endpoint of the "skills" service.
 // Get may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
@@ -128,6 +377,29 @@ func (c *Client) Get(ctx context.Context, p *GetPayload) (res *GetSkillResult, e
 		return
 	}
 	return ires.(*GetSkillResult), nil
+}
+
+// ListUnknownActivations calls the "listUnknownActivations" endpoint of the
+// "skills" service.
+// ListUnknownActivations may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListUnknownActivations(ctx context.Context, p *ListUnknownActivationsPayload) (res *ListUnknownSkillActivationsResult, err error) {
+	var ires any
+	ires, err = c.ListUnknownActivationsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListUnknownSkillActivationsResult), nil
 }
 
 // ListVersions calls the "listVersions" endpoint of the "skills" service.
@@ -208,6 +480,68 @@ func (c *Client) Distribute(ctx context.Context, p *DistributePayload) (res *typ
 func (c *Client) Undistribute(ctx context.Context, p *UndistributePayload) (err error) {
 	_, err = c.UndistributeEndpoint(ctx, p)
 	return
+}
+
+// Share calls the "share" endpoint of the "skills" service.
+// Share may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) Share(ctx context.Context, p *SharePayload) (res *types.SkillShareLink, err error) {
+	var ires any
+	ires, err = c.ShareEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.SkillShareLink), nil
+}
+
+// Unshare calls the "unshare" endpoint of the "skills" service.
+// Unshare may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) Unshare(ctx context.Context, p *UnsharePayload) (err error) {
+	_, err = c.UnshareEndpoint(ctx, p)
+	return
+}
+
+// GetShared calls the "getShared" endpoint of the "skills" service.
+// GetShared may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetShared(ctx context.Context, p *GetSharedPayload) (res *SharedSkill, err error) {
+	var ires any
+	ires, err = c.GetSharedEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*SharedSkill), nil
 }
 
 // ListDistributions calls the "listDistributions" endpoint of the "skills"

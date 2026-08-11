@@ -1,9 +1,9 @@
-import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
-import { Type } from "@/components/ui/type";
+import { Dialog } from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
+import { Switch } from "@/components/ui/Switch";
+import { Text } from "@/components/ui/Text";
 import { Environment } from "@gram/client/models/components/environment.js";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
 import { useState } from "react";
 import { useCloneEnvironment } from "./useEnvironmentActions";
 
@@ -48,9 +48,9 @@ export function CloneEnvironmentDialog({
 
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
-            <Type variant="small" className="font-medium">
+            <Text variant="small" className="font-medium">
               New environment name
-            </Type>
+            </Text>
             <Input
               autoFocus
               value={name}
@@ -61,15 +61,15 @@ export function CloneEnvironmentDialog({
             />
           </div>
 
-          <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
+          <div className="flex items-start justify-between gap-4 border p-3">
             <div className="flex flex-col gap-1">
-              <Type variant="small" className="font-medium">
+              <Text variant="small" className="font-medium">
                 Copy stored secret values
-              </Type>
-              <Type small muted>
+              </Text>
+              <Text small muted>
                 Off: copies only variable names with empty placeholders. On:
                 duplicates the encrypted secret values from the source.
-              </Type>
+              </Text>
             </div>
             <Switch
               checked={copyValues}

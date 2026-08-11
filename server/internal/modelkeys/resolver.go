@@ -135,6 +135,18 @@ func internalSlotWithBYOK(slot billing.ModelUsageSource) bool {
 	return slices.Contains(internalBYOKSlots, slot)
 }
 
+// InternalOnlySlots returns the slot names whose customer keys only ever pay
+// for platform-initiated inference, never chat completions. Consumers that
+// need to know whether an organization's chat traffic is customer-funded
+// (e.g. credit-exhaustion alerting) must ignore keys in these slots.
+func InternalOnlySlots() []string {
+	slots := make([]string, len(internalBYOKSlots))
+	for i, slot := range internalBYOKSlots {
+		slots[i] = string(slot)
+	}
+	return slots
+}
+
 func isUndefinedTable(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UndefinedTable

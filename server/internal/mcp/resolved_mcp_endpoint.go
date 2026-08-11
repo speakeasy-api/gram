@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -37,6 +38,23 @@ type ResolvedMcpEndpoint struct {
 	// Mint. /mcp uses urn.NewToolset(toolset.ID).String(); /x/mcp uses
 	// urn.NewUserSessionIssuer(issuerID).String().
 	AudienceURN string
+
+	// CIMDAdmissionModeRaw is the issuer's stored
+	// client_id_metadata_admission_mode, carried verbatim so that
+	// admission.ResolveMode stays the single place deciding what it means:
+	// NULL resolves to "presets", and a value outside the enum fails closed
+	// to "disabled".
+	//
+	// Raw rather than a resolved admission.Mode so that resolution stays in
+	// one place. Carrying a resolved Mode would mean resolving at every
+	// stamping site, which is exactly what admission.ResolveMode exists to
+	// prevent.
+	//
+	// The cost is that an unstamped endpoint reads as NULL and therefore as
+	// "presets" — the default, not a denial. Callers must ensure this is
+	// populated before enforcement; RequireUserSessionIssuer is the one
+	// place that does so.
+	CIMDAdmissionModeRaw pgtype.Text
 
 	// CustomDomainID, when valid, scopes the endpoint to a custom domain.
 	CustomDomainID uuid.NullUUID
@@ -226,6 +244,16 @@ func (e *ResolvedMcpEndpoint) ValidateRef(ref EndpointRef) error {
 	if e.CustomDomainID != ref.CustomDomainID {
 		return errToolsetEndpointMismatch
 	}
+	// The route surface is part of the endpoint's identity: the same slug can
+	// resolve on both /mcp and /x/mcp, and the RFC 9207 `iss` on every
+	// authorization response is built from the resolved endpoint's RouteBase.
+	// Resuming a challenge on the other surface would emit an issuer that
+	// differs from the one the client recorded at mint time, which an
+	// iss-validating client rejects as a mix-up. Empty ref.RouteBase is
+	// treated as "mcp" for states minted before EndpointRef.RouteBase existed.
+	if e.RouteBase != conv.Default(ref.RouteBase, "mcp") {
+		return errToolsetEndpointMismatch
+	}
 	return nil
 }
 
@@ -243,17 +271,19 @@ func NewResolvedMcpEndpointFromMcpServer(
 	organizationID string,
 ) *ResolvedMcpEndpoint {
 	return &ResolvedMcpEndpoint{
-		AudienceURN:         urn.NewUserSessionIssuer(mcpServer.UserSessionIssuerID.UUID).String(),
-		CustomDomainID:      mcpEndpoint.CustomDomainID,
-		IsPublic:            mcpServer.Visibility == mcpservers.VisibilityPublic,
-		McpServerID:         uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
-		OrganizationID:      organizationID,
-		ProjectID:           mcpEndpoint.ProjectID,
-		RouteBase:           "x/mcp",
-		Slug:                mcpEndpoint.Slug,
-		ToolsetID:           mcpServer.ToolsetID,
-		UpstreamResource:    "",
-		UserSessionIssuerID: mcpServer.UserSessionIssuerID.UUID,
+		AudienceURN: urn.NewUserSessionIssuer(mcpServer.UserSessionIssuerID.UUID).String(),
+		// Stamped by RequireUserSessionIssuer, which every path runs next.
+		CIMDAdmissionModeRaw: pgtype.Text{String: "", Valid: false},
+		CustomDomainID:       mcpEndpoint.CustomDomainID,
+		IsPublic:             mcpServer.Visibility == mcpservers.VisibilityPublic,
+		McpServerID:          uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
+		OrganizationID:       organizationID,
+		ProjectID:            mcpEndpoint.ProjectID,
+		RouteBase:            "x/mcp",
+		Slug:                 mcpEndpoint.Slug,
+		ToolsetID:            mcpServer.ToolsetID,
+		UpstreamResource:     "",
+		UserSessionIssuerID:  mcpServer.UserSessionIssuerID.UUID,
 	}
 }
 
@@ -266,17 +296,19 @@ func NewResolvedMcpEndpointFromMcpServer(
 // consent form action all need to match the caller's surface.
 func newResolvedMcpEndpointFromToolset(toolset *toolsets_repo.Toolset, routeBase string) *ResolvedMcpEndpoint {
 	return &ResolvedMcpEndpoint{
-		AudienceURN:         urn.NewToolset(toolset.ID).String(),
-		CustomDomainID:      toolset.CustomDomainID,
-		IsPublic:            toolset.McpIsPublic,
-		McpServerID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		OrganizationID:      toolset.OrganizationID,
-		ProjectID:           toolset.ProjectID,
-		RouteBase:           routeBase,
-		Slug:                conv.PtrValOr(conv.FromPGText[string](toolset.McpSlug), ""),
-		ToolsetID:           uuid.NullUUID{UUID: toolset.ID, Valid: true},
-		UpstreamResource:    "",
-		UserSessionIssuerID: toolset.UserSessionIssuerID.UUID,
+		AudienceURN: urn.NewToolset(toolset.ID).String(),
+		// Stamped by RequireUserSessionIssuer, which every path runs next.
+		CIMDAdmissionModeRaw: pgtype.Text{String: "", Valid: false},
+		CustomDomainID:       toolset.CustomDomainID,
+		IsPublic:             toolset.McpIsPublic,
+		McpServerID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:       toolset.OrganizationID,
+		ProjectID:            toolset.ProjectID,
+		RouteBase:            routeBase,
+		Slug:                 conv.PtrValOr(conv.FromPGText[string](toolset.McpSlug), ""),
+		ToolsetID:            uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		UpstreamResource:     "",
+		UserSessionIssuerID:  toolset.UserSessionIssuerID.UUID,
 	}
 }
 
@@ -322,7 +354,10 @@ func (s *Service) buildResolvedMcpEndpointByRef(ctx context.Context, ref Endpoin
 		case err != nil:
 			return nil, oops.E(oops.CodeUnexpected, err, "load mcp server").LogError(ctx, s.logger)
 		}
-		if !mcpServer.UserSessionIssuerID.Valid {
+		// A tunnel flipped to public visibility mid-OAuth-flow has no OAuth
+		// surface: reject the cached-ref resumption (e.g. /mcp/idp_callback)
+		// so a visibility change closes in-flight flows.
+		if !mcpServer.UserSessionIssuerID.Valid || isTunneledPublic(&mcpServer) {
 			return nil, oops.E(oops.CodeNotFound, nil, "not found")
 		}
 		// Guard against an mcp_endpoint that has been re-pointed mid-flow

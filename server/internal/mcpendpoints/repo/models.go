@@ -15,6 +15,7 @@ type McpEndpoint struct {
 	CustomDomainID uuid.NullUUID
 	McpServerID    uuid.UUID
 	Slug           string
+	IsDomainRoot   pgtype.Bool
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz

@@ -1,11 +1,12 @@
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import { ToolVariationBadge } from "@/components/tool-variation-badge";
-import { MoreActions } from "@/components/ui/more-actions";
-import { SearchBar } from "@/components/ui/search-bar";
-import { Type } from "@/components/ui/type";
+import { MoreActions } from "@/components/ui/MoreActions";
+import { SearchBar } from "@/components/ui/SearchBar";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
 import { ToolUpdateFields } from "@/hooks/useToolUpdate";
 import type { Tool } from "@/lib/toolTypes";
-import { Badge } from "@speakeasy-api/moonshine";
+import { Badge } from "@/components/ui/Badge";
 import { useState } from "react";
 import { useSourceToolActions } from "./useSourceToolActions";
 
@@ -23,27 +24,14 @@ type ToolActionsProps = {
 
 const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
 
-const HTTP_METHOD_VARIANT: Record<
-  string,
-  "success" | "information" | "warning" | "neutral" | "destructive"
-> = {
-  GET: "success",
-  POST: "information",
-  PUT: "warning",
+// Method chips stay neutral mono-outlined; red is reserved for DELETE.
+const HTTP_METHOD_VARIANT: Record<string, "neutral" | "destructive"> = {
+  GET: "neutral",
+  POST: "neutral",
+  PUT: "neutral",
   PATCH: "neutral",
   DELETE: "destructive",
 };
-
-function runtimeBadgeVariant(
-  runtime: string,
-): "success" | "information" | "warning" | "neutral" | "destructive" {
-  const rt = runtime.toLowerCase();
-  if (rt.startsWith("nodejs") || rt.startsWith("node")) return "information";
-  if (rt.startsWith("python")) return "success";
-  if (rt.startsWith("go") || rt.startsWith("golang")) return "warning";
-  if (rt.startsWith("rust")) return "destructive";
-  return "neutral";
-}
 
 function FilterPill({
   label,
@@ -125,7 +113,7 @@ function FunctionToolRow({
       <TableRowContextMenu actions={onToolUpdate ? actions : []}>
         <div className="hover:bg-muted/30 grid grid-cols-[120px_1fr_1.5fr] items-center gap-4 border-b px-4 py-3 transition-colors last:border-b-0">
           <div>
-            <Badge variant={runtimeBadgeVariant(tool.runtime)}>
+            <Badge variant="neutral">
               <Badge.Text>{tool.runtime}</Badge.Text>
             </Badge>
           </div>
@@ -155,8 +143,7 @@ function ToolsTableHeader({
   searchQuery: string;
   onSearchChange: (v: string) => void;
 }) {
-  const columnClass =
-    "text-xs font-medium text-muted-foreground uppercase tracking-wider";
+  const columnClass = "text-eyebrow";
   return (
     <div className="bg-muted/50 shrink-0 border-b">
       {isOpenAPI ? (
@@ -235,7 +222,7 @@ function FilteredToolsList({
   if (filtered.length === 0) {
     return (
       <div className="flex h-full items-center justify-center">
-        <Type muted>No matching tools found</Type>
+        <Text muted>No matching tools found</Text>
       </div>
     );
   }
@@ -271,22 +258,34 @@ export function SourceToolsTab({
   relatedTools,
   isOpenAPI,
   uniqueRuntimes,
+  isLoading,
   onToolUpdate,
   isToolUpdating,
 }: {
   relatedTools: Tool[];
   isOpenAPI: boolean;
   uniqueRuntimes: string[];
+  /** True while the tools query is still pending, so an empty list doesn't
+   * flash the "no tools" empty state during load. */
+  isLoading?: boolean;
 } & ToolActionsProps): JSX.Element {
   const [methodFilter, setMethodFilter] = useState<string | null>(null);
   const [runtimeFilter, setRuntimeFilter] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
+  if (isLoading && relatedTools.length === 0) {
+    return (
+      <div className="mx-auto w-full max-w-[1270px] px-8 py-6">
+        <SkeletonTable />
+      </div>
+    );
+  }
+
   if (relatedTools.length === 0) {
     return (
       <div className="mx-auto w-full max-w-[1270px] px-8 py-6">
         <div className="py-12 text-center">
-          <Type muted>No tools derived from this source yet.</Type>
+          <Text muted>No tools derived from this source yet.</Text>
         </div>
       </div>
     );
@@ -300,8 +299,8 @@ export function SourceToolsTab({
           <div className="flex shrink-0 flex-wrap gap-2">
             <button onClick={() => setMethodFilter(null)}>
               <Badge
-                variant={methodFilter === null ? "information" : "neutral"}
-                className="py-2"
+                variant="neutral"
+                className={`py-2 ${methodFilter === null ? "" : "opacity-50 hover:opacity-100"}`}
               >
                 <Badge.Text>
                   All ({relatedTools.filter((t) => t.type === "http").length})
@@ -334,8 +333,8 @@ export function SourceToolsTab({
           <div className="flex shrink-0 flex-wrap gap-2">
             <button onClick={() => setRuntimeFilter(null)}>
               <Badge
-                variant={runtimeFilter === null ? "information" : "neutral"}
-                className="py-2"
+                variant="neutral"
+                className={`py-2 ${runtimeFilter === null ? "" : "opacity-50 hover:opacity-100"}`}
               >
                 <Badge.Text>
                   All (
@@ -353,7 +352,7 @@ export function SourceToolsTab({
                   label={runtime}
                   count={count}
                   active={runtimeFilter === runtime}
-                  variant={runtimeBadgeVariant(runtime)}
+                  variant="neutral"
                   onClick={() =>
                     setRuntimeFilter(runtimeFilter === runtime ? null : runtime)
                   }
@@ -364,7 +363,7 @@ export function SourceToolsTab({
         )}
 
         {/* Tools table */}
-        <div className="mb-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border">
+        <div className="mb-4 flex min-h-0 flex-1 flex-col overflow-hidden border">
           <ToolsTableHeader
             isOpenAPI={isOpenAPI}
             searchQuery={searchQuery}

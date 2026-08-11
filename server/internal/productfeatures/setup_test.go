@@ -80,10 +80,9 @@ func newTestProductFeaturesService(t *testing.T) (context.Context, *testInstance
 	// "returns true for enabled feature" reading a `false` written by
 	// "returns false after feature is disabled"). Override the org ID with
 	// a fresh UUID per test so cache keys are unique. organization_features
-	// has no FK on organization_id, and ShouldEnforce skips RBAC for the
-	// non-enterprise account type used in tests. The synthetic org does need
-	// an organization_metadata row: audited toggles append to the outbox,
-	// whose organization_id carries a foreign key.
+	// has no FK on organization_id. The synthetic org does need an
+	// organization_metadata row: audited toggles append to the outbox, whose
+	// organization_id carries a foreign key.
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok, "auth context not found")
 	authCtx.ActiveOrganizationID = uuid.NewString()
@@ -101,11 +100,13 @@ func newTestProductFeaturesService(t *testing.T) (context.Context, *testInstance
 		DisabledAt:         conv.PtrToPGTimestamptz(nil),
 	})
 	require.NoError(t, err)
+	require.NoError(t, authz.SeedSystemRoleGrants(ctx, conn, authCtx.ActiveOrganizationID))
+	ctx = authztest.WithAdminGrants(ctx)
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	svc := productfeatures.NewService(logger, tracerProvider, conn, sessionManager, redisClient, authzEngine, audit.NewLogger())
 
 	return ctx, &testInstance{

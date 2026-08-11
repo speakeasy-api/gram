@@ -38,6 +38,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -80,6 +81,10 @@ type ParentChallenge struct {
 	// Resource is the RFC 8707 resource indicator sent on the authorize
 	// redirect and code exchange. Empty omits the parameter.
 	Resource string
+	// AutoRefresh is the subject's consent-screen auto-refresh choice for the
+	// session this leg will mint. Nil means "no explicit choice" — the
+	// callback falls back to the client capability's default.
+	AutoRefresh *bool
 }
 
 // RemoteLoginState is the per-remote-leg Redis state, keyed by the opaque
@@ -109,15 +114,18 @@ type RemoteLoginState struct {
 	// /<RouteBase>/{slug}/connect. Set by dashboard-driven flows that
 	// own their own popup-close surface (validated against an allow-list
 	// before it lands here).
-	FinalRedirectURI string    `json:"final_redirect_uri,omitempty"`
-	CreatedAt        time.Time `json:"created_at"`
+	FinalRedirectURI string `json:"final_redirect_uri,omitempty"`
+	// AutoRefresh is the subject's consent-screen auto-refresh choice. Nil
+	// (including in-flight states minted before this field) defers to the
+	// client capability's default at persist time.
+	AutoRefresh *bool     `json:"auto_refresh,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 var _ cache.CacheableObject[RemoteLoginState] = (*RemoteLoginState)(nil)
 
-func (s RemoteLoginState) CacheKey() string              { return "remoteLogin:" + s.ID }
-func (s RemoteLoginState) AdditionalCacheKeys() []string { return []string{} }
-func (s RemoteLoginState) TTL() time.Duration            { return 10 * time.Minute }
+func (s RemoteLoginState) CacheKey() string   { return "remoteLogin:" + s.ID }
+func (s RemoteLoginState) TTL() time.Duration { return 10 * time.Minute }
 
 // ChallengeManager drives the per-remote OAuth authn-challenge leg.
 type ChallengeManager struct {
@@ -126,6 +134,8 @@ type ChallengeManager struct {
 	enc       *encryption.Client
 	policy    *guardian.Policy
 	cache     cache.TypedCacheObject[RemoteLoginState]
+	locks     cache.Cache
+	refresher *RefreshService
 	serverURL *url.URL
 	// authorizeInterceptors adapt the outgoing upstream authorize request to
 	// per-provider, non-standard requirements (e.g. Google's offline access).
@@ -152,6 +162,8 @@ func NewChallengeManager(
 			cacheImpl,
 			cache.SuffixNone,
 		),
+		locks:     cacheImpl,
+		refresher: NewRefreshService(logger, db, enc, policy, cacheImpl),
 		serverURL: serverURL,
 		authorizeInterceptors: []interceptors.AuthorizeInterceptor{
 			interceptors.NewGoogle(logger),
@@ -165,6 +177,7 @@ func NewChallengeManager(
 // without re-querying.
 type Client struct {
 	ID                    uuid.UUID
+	RemoteSessionIssuerID uuid.UUID
 	ExternalClientID      string
 	ClientSecretEncrypted *string
 	IssuerSlug            string
@@ -208,6 +221,7 @@ func (m *ChallengeManager) ListClients(
 	for _, r := range rows {
 		out = append(out, Client{
 			ID:                    r.ClientID,
+			RemoteSessionIssuerID: r.RemoteSessionIssuerID,
 			ExternalClientID:      r.ExternalClientID,
 			ClientSecretEncrypted: conv.FromPGText[string](r.ClientSecretEncrypted),
 			IssuerSlug:            r.IssuerSlug,
@@ -240,38 +254,143 @@ const (
 	RemoteSessionExpired RemoteSessionStatus = "expired"
 )
 
-// RemoteSessionStatuses returns, per remote_session_client_id, the usability
-// status of `subject`'s remote_session under the given `userSessionIssuerID`.
-// Clients with no non-deleted session are omitted (disconnected). Single
-// round-trip; the caller (consent renderer) then does O(1) lookups per card.
-// Returns an empty map for zero subjects so anonymous-pre-stamp renders are
-// no-ops.
+// RemoteSessionState is the consent renderer's per-client view of a stored
+// remote_session: its usability plus the subject's stored auto-refresh
+// preference.
+type RemoteSessionState struct {
+	Status      RemoteSessionStatus
+	AutoRefresh bool
+	// AccessExpiresAt is the upstream-reported deadline for the current access
+	// token. RefreshExpiresAt is the earliest known deadline for renewal,
+	// combining the refresh-token idle timeout and absolute authorization
+	// lifetime. Either is nil when the provider omitted that lifetime.
+	AccessExpiresAt  *time.Time
+	RefreshExpiresAt *time.Time
+	CanRefresh       bool
+}
+
+// RemoteSessionStatuses returns, per remote_session_client_id, the state of
+// `subject`'s remote_session under the given `userSessionIssuerID`. Clients
+// with no non-deleted session are omitted (disconnected). Single round-trip;
+// the caller (consent renderer) then does O(1) lookups per card. Returns an
+// empty map for zero subjects so anonymous-pre-stamp renders are no-ops.
 func (m *ChallengeManager) RemoteSessionStatuses(
 	ctx context.Context,
 	subject urn.SessionSubject,
+	projectID uuid.UUID,
 	userSessionIssuerID uuid.UUID,
-) (map[uuid.UUID]RemoteSessionStatus, error) {
+) (map[uuid.UUID]RemoteSessionState, error) {
 	if subject.IsZero() {
-		return map[uuid.UUID]RemoteSessionStatus{}, nil
+		return map[uuid.UUID]RemoteSessionState{}, nil
 	}
 	rows, err := remotesessions_repo.New(m.db).ListRemoteSessionStatusesForSubject(ctx, remotesessions_repo.ListRemoteSessionStatusesForSubjectParams{
 		SubjectUrn:          subject,
 		UserSessionIssuerID: userSessionIssuerID,
+		ProjectID:           projectID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list remote session statuses: %w", err)
 	}
-	statuses := make(map[uuid.UUID]RemoteSessionStatus, len(rows))
+	statuses := make(map[uuid.UUID]RemoteSessionState, len(rows))
 	for _, row := range rows {
-		statuses[row.RemoteSessionClientID] = RemoteSessionStatus(row.Status)
+		var accessExpiresAt *time.Time
+		if row.AccessExpiresAt.Valid {
+			expires := row.AccessExpiresAt.Time
+			accessExpiresAt = &expires
+		}
+		var refreshExpiresAt *time.Time
+		if row.RefreshExpiresAt.Valid {
+			expires := row.RefreshExpiresAt.Time
+			refreshExpiresAt = &expires
+		}
+		if row.AuthorizationExpiresAt.Valid &&
+			(refreshExpiresAt == nil || row.AuthorizationExpiresAt.Time.Before(*refreshExpiresAt)) {
+			expires := row.AuthorizationExpiresAt.Time
+			refreshExpiresAt = &expires
+		}
+		statuses[row.RemoteSessionClientID] = RemoteSessionState{
+			Status:           RemoteSessionStatus(row.Status),
+			AutoRefresh:      row.AutoRefresh,
+			AccessExpiresAt:  accessExpiresAt,
+			RefreshExpiresAt: refreshExpiresAt,
+			CanRefresh:       row.CanRefresh,
+		}
 	}
 	return statuses, nil
+}
+
+var ErrRemoteSessionNotRefreshable = errors.New("remote session has no usable refresh token")
+
+// RefreshRemoteSession performs an explicit consent-screen refresh through the
+// same best-effort single-flight path as lazy and scheduled refreshes.
+func (m *ChallengeManager) RefreshRemoteSession(
+	ctx context.Context,
+	subject urn.SessionSubject,
+	userSessionIssuerID uuid.UUID,
+	clientID uuid.UUID,
+	fallbackResource string,
+) (RefreshResult, error) {
+	var zero RefreshResult
+
+	session, err := remotesessions_repo.New(m.db).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            subject,
+		RemoteSessionClientID: clientID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return zero, ErrRemoteSessionNotRefreshable
+	}
+	if err != nil {
+		return zero, fmt.Errorf("get consent remote session: %w", err)
+	}
+	if session.UserSessionIssuerID != userSessionIssuerID ||
+		!session.RefreshTokenEncrypted.Valid ||
+		session.RefreshTokenEncrypted.String == "" {
+		return zero, ErrRemoteSessionNotRefreshable
+	}
+
+	return m.refresher.RefreshNow(ctx, session, fallbackResource)
+}
+
+// DisconnectRemoteSession soft-deletes the subject's remote_session for one
+// client — the consent screen's per-card "Disconnect". Local only: the
+// upstream grant is not revoked (issuers' revocation endpoints are not even
+// persisted), matching every other revoke path in this package. Returns the
+// number of rows affected; zero means there was nothing to disconnect.
+func (m *ChallengeManager) DisconnectRemoteSession(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, userSessionIssuerID uuid.UUID, clientID uuid.UUID) (int64, error) {
+	n, err := remotesessions_repo.New(m.db).SoftDeleteRemoteSessionBySubjectAndClient(ctx, remotesessions_repo.SoftDeleteRemoteSessionBySubjectAndClientParams{
+		SubjectUrn:            subject,
+		RemoteSessionClientID: clientID,
+		UserSessionIssuerID:   userSessionIssuerID,
+		ProjectID:             projectID,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("disconnect remote session: %w", err)
+	}
+	return n, nil
+}
+
+// SetRemoteSessionAutoRefresh records the subject's consent-screen
+// auto-refresh choice for one client. Returns rows affected; zero means no
+// active session exists for the binding (e.g. disconnected in another tab).
+func (m *ChallengeManager) SetRemoteSessionAutoRefresh(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, userSessionIssuerID uuid.UUID, clientID uuid.UUID, enabled bool) (int64, error) {
+	n, err := remotesessions_repo.New(m.db).SetRemoteSessionAutoRefresh(ctx, remotesessions_repo.SetRemoteSessionAutoRefreshParams{
+		AutoRefresh:           enabled,
+		SubjectUrn:            subject,
+		RemoteSessionClientID: clientID,
+		UserSessionIssuerID:   userSessionIssuerID,
+		ProjectID:             projectID,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("set remote session auto refresh: %w", err)
+	}
+	return n, nil
 }
 
 // BuildAuthorizationUrl mints a RemoteLoginState (with PKCE S256) for the
 // (parent, client) pair, stores it in Redis, and returns the upstream
 // authorize URL with bound `state` + `code_challenge` query params. The
-// caller is the consent renderer; this is called once per visible card.
+// caller is the consent-screen connect action; this is called once per
+// connect click.
 func (m *ChallengeManager) BuildAuthorizationUrl(
 	ctx context.Context,
 	parent ParentChallenge,
@@ -297,20 +416,13 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 	stateParam := stateID
 	if client.LegacyCallbackUrl {
 		// Upstream was registered against the legacy oauth_proxy_servers
-		// callback. Keep that exact redirect_uri so the upstream's
-		// strict-match check still passes, and wrap the state in a JSON
-		// envelope tagged remote_sessions=true so /oauth/callback can tell
-		// this response apart from a true proxy callback and forward to
-		// /mcp/remote_login_callback.
+		// callback, so keep that exact redirect_uri — the upstream's
+		// strict-match check still requires it. /oauth/callback forwards the
+		// response into the canonical remote-login callback. The state is the
+		// bare stateID, same as the non-legacy path: with the proxy gone,
+		// /oauth/callback serves only these forwards, so there is nothing to
+		// tell them apart from and no envelope is needed.
 		redirectURI = m.legacyCallbackURL()
-		envelope, eerr := json.Marshal(map[string]string{
-			"remote_sessions": "true",
-			"state_id":        stateID,
-		})
-		if eerr != nil {
-			return "", fmt.Errorf("marshal legacy state envelope: %w", eerr)
-		}
-		stateParam = string(envelope)
 	}
 
 	// Parse the upstream authorize URL before the cache write so a malformed
@@ -337,6 +449,7 @@ func (m *ChallengeManager) BuildAuthorizationUrl(
 		McpSlug:               parent.McpSlug,
 		RouteBase:             parent.RouteBase,
 		FinalRedirectURI:      parent.FinalRedirectURI,
+		AutoRefresh:           parent.AutoRefresh,
 		CreatedAt:             time.Now(),
 	}
 	if err := m.cache.Store(ctx, state); err != nil {
@@ -478,24 +591,30 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 
 	// expires_in is OPTIONAL per RFC 6749 §5.1. When the upstream omits it we
 	// store NULL — "no known expiry" — rather than fabricating a deadline the
-	// provider never asserted. validateAndRefresh then decides what NULL means
-	// from the refresh token: non-expiring when none was issued (e.g. Slack
-	// non-rotating xoxp), or an hourly app-layer refresh cadence when one was.
+	// provider never asserted. validateAndRefresh serves that token as-is; a
+	// refresh token does not imply that the access token expires.
+	now := time.Now()
 	var accessExpires *time.Time
 	if tok.ExpiresIn > 0 {
-		v := time.Now().Add(time.Duration(tok.ExpiresIn) * time.Second)
+		v := now.Add(time.Duration(tok.ExpiresIn) * time.Second)
 		accessExpires = &v
 	}
-	var refreshExpires *time.Time
-	if tok.RefreshExpiresIn > 0 {
-		v := time.Now().Add(time.Duration(tok.RefreshExpiresIn) * time.Second)
-		refreshExpires = &v
-	}
+	refreshTimeout, refreshTimeoutReported := tok.RefreshTokenTimeoutSeconds()
+	refreshExpires := expirationDeadline(now, refreshTimeout, refreshTimeoutReported)
+	authorizationLifetime, authorizationLifetimeReported := tok.AuthorizationLifetimeSeconds()
+	authorizationExpires := expirationDeadline(now, authorizationLifetime, authorizationLifetimeReported)
 
 	scopes := tok.Scopes()
 	if scopes == nil {
 		scopes = []string{}
 	}
+	// Only the visible consent control opts a new session into scheduled
+	// keepalive. On reconnect, UpsertRemoteSession preserves the stored choice.
+	autoRefresh := false
+	if state.AutoRefresh != nil {
+		autoRefresh = *state.AutoRefresh
+	}
+
 	if _, err := queries.UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
 		SubjectUrn:            *state.Subject,
 		UserSessionIssuerID:   state.UserSessionIssuerID,
@@ -503,8 +622,13 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 		AccessTokenEncrypted:  accessEnc,
 		AccessExpiresAt:       conv.PtrToPGTimestamptz(accessExpires),
 		RefreshTokenEncrypted: conv.PtrToPGText(refreshEnc),
-		RefreshExpiresAt:      conv.PtrToPGTimestamptz(refreshExpires),
-		Scopes:                scopes,
+		AuthorizationExpiresAt: conv.PtrToPGTimestamptz(
+			authorizationExpires,
+		),
+		RefreshExpiresAt: conv.PtrToPGTimestamptz(refreshExpires),
+		Scopes:           scopes,
+		Resource:         conv.ToPGTextEmpty(state.Resource),
+		AutoRefresh:      autoRefresh,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "store remote session").LogError(ctx, logger)
 	}
@@ -541,12 +665,27 @@ func (m *ChallengeManager) callbackURL(routeBase string) string {
 	return strings.TrimRight(m.serverURL.String(), "/") + "/" + routeBase + "/remote_login_callback"
 }
 
-// legacyCallbackURL is the oauth_proxy_servers-era redirect_uri. Used only
-// for clients flagged LegacyCallbackUrl whose upstream registration still
-// points at this path; /oauth/callback then forwards them into
-// /mcp/remote_login_callback by reading the JSON state envelope.
+// legacyCallbackURL is the oauth_proxy_servers-era redirect_uri. Used only for
+// clients flagged LegacyCallbackUrl whose upstream registration still points at
+// this path; HandleLegacyProxyCallback forwards them into
+// /mcp/remote_login_callback.
 func (m *ChallengeManager) legacyCallbackURL() string {
 	return strings.TrimRight(m.serverURL.String(), "/") + "/oauth/callback"
+}
+
+// HandleLegacyProxyCallback is the shim behind `GET /oauth/callback`, the
+// oauth_proxy_servers-era redirect_uri that clients flagged LegacyCallbackUrl
+// still send upstream. The proxy that once shared this path is gone, so every
+// response here is a remote-session callback: forward the query string (state,
+// code, error) unchanged to the canonical /mcp/remote_login_callback, where the
+// remote-session flow finishes the exchange.
+func (m *ChallengeManager) HandleLegacyProxyCallback(w http.ResponseWriter, r *http.Request) error {
+	target := strings.TrimRight(m.serverURL.String(), "/") + "/" + canonicalCallbackRouteBase + "/remote_login_callback"
+	if raw := r.URL.RawQuery; raw != "" {
+		target += "?" + raw
+	}
+	http.Redirect(w, r, target, http.StatusFound)
+	return nil
 }
 
 func (m *ChallengeManager) exchangeCode(

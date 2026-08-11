@@ -4,21 +4,18 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { SkeletonTable } from "@/components/ui/skeleton";
-import { Type } from "@/components/ui/type";
+} from "@/components/ui/Select";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import type { AuthzChallenge } from "@gram/client/models/components/authzchallenge.js";
 import type { ChallengeBucket } from "@gram/client/models/components/challengebucket.js";
 import { Outcome } from "@gram/client/models/operations/listchallengebuckets.js";
 import { useChallengeBuckets } from "@gram/client/react-query/challengeBuckets.js";
 import { useChallenges } from "@gram/client/react-query/challenges.js";
-import {
-  Badge as MoonshineBadge,
-  type Column,
-  Table,
-} from "@speakeasy-api/moonshine";
-import { Button } from "@/components/ui/button";
+import { Badge as MoonshineBadge } from "@/components/ui/Badge";
+import { type Column, Table } from "@/components/ui/Table";
+import { Button } from "@/components/ui/Button";
 import { Check, Loader2 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -119,7 +116,7 @@ function FilterPill({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
+        "inline-flex cursor-pointer items-center gap-1.5 border px-2.5 py-1 text-xs font-medium transition-colors",
         active
           ? "border-primary bg-primary/5 text-primary"
           : "border-border text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -146,24 +143,24 @@ export function ChallengesEmptyState({
   outcomeFilter: OutcomeFilter;
 }): JSX.Element {
   return (
-    <div className="border-border/50 bg-muted/20 rounded-lg border px-6 py-16 text-center">
+    <div className="border-border/50 bg-muted/20 border px-6 py-16 text-center">
       <div className="bg-primary/10 mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full">
         <Check className="text-primary h-6 w-6" />
       </div>
-      <Type variant="body" className="font-medium">
+      <Text variant="body" className="font-medium">
         {outcomeFilter === "deny"
           ? "No denied access attempts"
           : outcomeFilter === "resolved"
             ? "No resolved challenges yet"
             : "No challenges found"}
-      </Type>
-      <Type variant="body" className="text-muted-foreground mt-1 text-sm">
+      </Text>
+      <Text variant="body" className="text-muted-foreground mt-1 text-sm">
         {outcomeFilter === "deny"
           ? "All authorization checks are passing. Your team's permissions look good."
           : outcomeFilter === "resolved"
             ? "Denied challenges that are resolved by granting access will appear here."
             : "Authorization challenges will appear here as your team uses the platform."}
-      </Type>
+      </Text>
     </div>
   );
 }
@@ -508,13 +505,13 @@ export function ChallengesTab(): JSX.Element {
           </Table>
           {(accumulated.length > 0 || isLoadingMore) && (
             <div className="bg-muted/20 flex items-center justify-between border-t px-4 py-3">
-              <Type muted small>
+              <Text muted small>
                 Showing {accumulated.length.toLocaleString()} of{" "}
                 {totalBuckets.toLocaleString()}
-              </Type>
+              </Text>
               {hasMore ? (
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
                   onClick={() => setPageCount((p) => p + 1)}
                   disabled={isLoadingMore}
@@ -529,45 +526,45 @@ export function ChallengesTab(): JSX.Element {
                   )}
                 </Button>
               ) : (
-                <Type muted small>
+                <Text muted small>
                   All results loaded
-                </Type>
+                </Text>
               )}
             </div>
           )}
         </>
       )}
 
-      <div className="border-border/50 bg-muted/30 mt-8 rounded-md border px-4 py-3">
-        <Type variant="subheading" className="mb-3">
+      <div className="border-border/50 bg-muted/30 mt-8 border px-4 py-3">
+        <Text variant="subheading" className="mb-3">
           About Challenges
-        </Type>
+        </Text>
         <div className="space-y-2 text-sm">
           <div className="flex items-start gap-3">
             <MoonshineBadge variant="destructive" className="mt-0.5 shrink-0">
               <MoonshineBadge.Text>Denied</MoonshineBadge.Text>
             </MoonshineBadge>
-            <Type variant="body" className="text-muted-foreground text-sm">
+            <Text variant="body" className="text-muted-foreground text-sm">
               The principal lacked the required scope or grants to perform the
               action. Check role assignments and grant selectors.
-            </Type>
+            </Text>
           </div>
           <div className="flex items-start gap-3">
             <MoonshineBadge variant="success" className="mt-0.5 shrink-0">
               <MoonshineBadge.Text>Allowed</MoonshineBadge.Text>
             </MoonshineBadge>
-            <Type variant="body" className="text-muted-foreground text-sm">
+            <Text variant="body" className="text-muted-foreground text-sm">
               The principal had matching grants satisfying the requested scope.
-            </Type>
+            </Text>
           </div>
           <div className="flex items-start gap-3">
             <MoonshineBadge variant="neutral" className="mt-0.5 shrink-0">
               <MoonshineBadge.Text>Resolved</MoonshineBadge.Text>
             </MoonshineBadge>
-            <Type variant="body" className="text-muted-foreground text-sm">
+            <Text variant="body" className="text-muted-foreground text-sm">
               A denied challenge that has since been addressed by granting the
               required access.
-            </Type>
+            </Text>
           </div>
         </div>
       </div>

@@ -127,13 +127,35 @@ var _ cache.CacheableObject[AuthnChallengeState] = (*AuthnChallengeState)(nil)
 // CacheKey implements cache.CacheableObject.
 func (a AuthnChallengeState) CacheKey() string { return "authnChallenge:" + a.ID }
 
-// AdditionalCacheKeys implements cache.CacheableObject. Single-key entry; no
-// fan-out. (Per the Cleanup ticket in project.md, AdditionalCacheKeys is
-// itself slated for removal from the interface.)
-func (a AuthnChallengeState) AdditionalCacheKeys() []string { return []string{} }
-
 // TTL implements cache.CacheableObject.
 func (a AuthnChallengeState) TTL() time.Duration { return 10 * time.Minute }
+
+// mintOriginOr returns the public origin this challenge was minted under: the
+// mint-time snapshot when present, the supplied fallback otherwise.
+//
+// Every URL a resuming handler builds — the consent redirect and the RFC 9207
+// `iss` on the authorization response — hangs off this origin rather than off
+// the resuming request, because a challenge can be resumed on an origin other
+// than the one it was minted under. HandleIDPCallback is mounted at the global
+// server URL and carries no customdomains.Context at all, and the upstream
+// remote-session login returns the user to the platform origin, so even the
+// consent POST — which does carry a custom-domain context — can be serving a
+// challenge minted under a different one. A client that recorded
+// https://<custom-domain>/mcp/<slug> as the issuer rejects a response carrying
+// the platform origin and is forbidden from displaying the error it discarded,
+// so a wrong origin here surfaces as nothing at all.
+//
+// The fallback is per-caller because the right one differs: a handler holding
+// the request's custom-domain context falls back to that origin, while
+// HandleIDPCallback can only fall back to the server default. It covers states
+// carrying no snapshot at all, the one case where the true mint origin is
+// unrecoverable.
+func (a AuthnChallengeState) mintOriginOr(fallback string) string {
+	if a.Endpoint.BaseURL == "" {
+		return fallback
+	}
+	return a.Endpoint.BaseURL
+}
 
 // UserSessionGrant is the short-lived OAuth authorization grant minted by
 // HandleConsent's POST and consumed by HandleToken's authorization_code
@@ -153,7 +175,12 @@ type UserSessionGrant struct {
 	CodeChallenge       string             `json:"code_challenge"`
 	CodeChallengeMethod string             `json:"code_challenge_method"`
 	Subject             urn.SessionSubject `json:"subject"`
-	CreatedAt           time.Time          `json:"created_at"`
+	// DesiredSessionDurationHours is the subject's consent-screen session
+	// length choice. Token minting clamps it to the issuer maximum. Zero means
+	// "no explicit choice" and the mint uses that maximum. Keep the JSON key
+	// stable so grants survive rolling deploys.
+	DesiredSessionDurationHours int       `json:"session_duration_hours,omitempty"`
+	CreatedAt                   time.Time `json:"created_at"`
 }
 
 var _ cache.CacheableObject[UserSessionGrant] = (*UserSessionGrant)(nil)
@@ -163,13 +190,9 @@ func (g UserSessionGrant) CacheKey() string {
 	return "userSessionGrant:" + g.UserSessionIssuerID.String() + ":" + g.Code
 }
 
-// AdditionalCacheKeys implements cache.CacheableObject. Single-key entry; no
-// fan-out.
-func (g UserSessionGrant) AdditionalCacheKeys() []string { return []string{} }
-
 // TTL implements cache.CacheableObject. 10 minutes is the standard OAuth code
 // lifetime — enough for a slow round trip from the MCP client to /token, short
-// enough to limit blast radius if the code leaks.
+// enough to limit exposure if the code leaks.
 func (g UserSessionGrant) TTL() time.Duration { return 10 * time.Minute }
 
 // errIssuerGateOrgLookup marks the post-validation operational path in
@@ -190,26 +213,31 @@ var errIssuerGateOrgLookup = errors.New("describe organization for issuer-gated 
 // whose org lookup failed wraps errIssuerGateOrgLookup, letting the caller
 // label it as an operational failure rather than a bad credential.
 //
-// Anonymous subjects deliberately leave the context untouched (non-nil
-// subject, no AuthContext set). The request belongs to no known principal, so
+// Anonymous subjects deliberately leave the AuthContext unset (non-nil
+// subject, no AuthContext). The request belongs to no known principal, so
 // stamping the endpoint's org as ActiveOrganizationID would misrepresent
 // the caller as a member of that org. Downstream code on the public
 // path reads org/project off the resolved endpoint directly, the same
-// way it does for unauthenticated public-endpoint traffic.
+// way it does for unauthenticated public-endpoint traffic. The OAuth client
+// id is still stamped for them — an anonymous session is anonymous in its
+// principal, not in the client that registered for it.
 //
-// SessionID and AccountType are populated for non-anonymous subjects so
-// authz.Engine.ShouldEnforce / PrepareContext treat the request as a
-// real authenticated session — without them the mcp:connect RBAC check
-// silently bypasses on enterprise endpoints (ShouldEnforce returns false
-// when AccountType != "enterprise"; PrepareContext skips when SessionID
-// is nil).
+// SessionID is populated for non-anonymous subjects so
+// authz.Engine.ShouldEnforce / PrepareContext treat the request as a real
+// authenticated session. AccountType is retained as session metadata but does
+// not control RBAC enforcement.
 func (s *Service) validateUserSessionToken(ctx context.Context, token string, endpoint *ResolvedMcpEndpoint) (context.Context, *urn.SessionSubject, error) {
 	if token == "" {
 		return ctx, nil, nil
 	}
-	subject, jti, err := s.userSessionSigner.ValidateBearer(ctx, token, endpoint.AudienceURN, s.chatSessionsManager)
+	session, err := s.userSessionSigner.ValidateBearer(ctx, token, endpoint.AudienceURN, s.chatSessionsManager)
 	if err != nil {
 		return ctx, nil, fmt.Errorf("validate user-session bearer: %w", err)
+	}
+
+	subject := session.Subject
+	if session.ClientID != "" {
+		ctx = contextvalues.SetOAuthClientID(ctx, session.ClientID)
 	}
 
 	if subject.Kind == urn.SessionSubjectKindAnonymous {
@@ -229,7 +257,7 @@ func (s *Service) validateUserSessionToken(ctx context.Context, token string, en
 		APIKeyID:              "",
 		APIKeyName:            "",
 		OrgWidePluginHooksKey: false,
-		SessionID:             &jti,
+		SessionID:             &session.JTI,
 		OrganizationSlug:      orgMetadata.Slug,
 		Email:                 nil,
 		AccountType:           orgMetadata.GramAccountType,
@@ -394,24 +422,38 @@ func (s *Service) ApplyIssuerGate(
 var errToolsetEndpointMismatch = errors.New("authn challenge endpoint does not match toolset")
 
 // RequireUserSessionIssuer verifies the endpoint's user_session_issuer_id
-// FK still resolves to a live row. Returns CodeNotFound when the issuer
-// was deleted out from under the endpoint, CodeUnexpected on lookup
+// FK still resolves to a live row, and stamps the issuer configuration the
+// OAuth handlers need onto the endpoint. Returns CodeNotFound when the
+// issuer was deleted out from under the endpoint, CodeUnexpected on lookup
 // failure. Callers are responsible for first checking that the endpoint
 // is issuer-gated.
 //
+// This is where issuer config reaches an OAuth-facing
+// ResolvedMcpEndpoint, and it already had to load the row for the FK check,
+// so carrying config out of it costs no additional query.
+//
+// It is NOT run by every construction path: the runtime issuer-gate in
+// impl.go builds an endpoint without it. Nothing on that path reads the
+// config today, but any future consumer must either route through here or
+// tolerate an unstamped endpoint, which reads as an unset mode.
+//
 // Exported so /x/mcp's [Service.buildResolvedMcpEndpoint] can include
-// the live-FK check in the same chokepoint as the
+// the live-FK check in the same place as the
 // NewResolvedMcpEndpointFromMcpServer construction.
 func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *ResolvedMcpEndpoint) error {
-	if _, err := usersessions_repo.New(s.db).GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
+	issuer, err := usersessions_repo.New(s.db).GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
 		ID:        endpoint.UserSessionIssuerID,
 		ProjectID: endpoint.ProjectID,
-	}); err != nil {
+	})
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeNotFound, err, "user_session_issuer not found")
 		}
 		return oops.E(oops.CodeUnexpected, err, "load user_session_issuer").LogError(ctx, s.logger)
 	}
+	// Carried verbatim, NULL included; admission.ResolveMode is the one
+	// place that decides what an absent or unrecognized value means.
+	endpoint.CIMDAdmissionModeRaw = issuer.ClientIDMetadataAdmissionMode
 	return nil
 }
 

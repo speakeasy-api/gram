@@ -47,6 +47,9 @@ type Message struct {
 
 // Span is one matched substring, attributed to the field (and optionally the
 // tool call and JSON path) it matched in. Detection evaluation returns a slice.
+// ToolCallID carries the tool NAME (the per-name grouping key findings derive
+// their SpanGroupKey from), not a recorded call id — Postgres never stored
+// call ids, so consumers must never publish this value as a tool_call_id.
 type Span struct {
 	Target     string
 	ToolCallID string

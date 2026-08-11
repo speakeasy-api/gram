@@ -1,9 +1,10 @@
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
-import type { BadgeProps } from "@speakeasy-api/moonshine";
+import { type BadgeProps } from "@/components/ui/Badge";
 
 export type ShadowMCPPolicyState =
   | "blocking"
+  | "warning"
   | "flagging"
   | "none"
   | "unavailable";
@@ -14,6 +15,36 @@ export type ShadowMCPInventoryStatus =
   | "observed"
   | "pending"
   | "unavailable";
+
+export type ShadowMCPPolicyDisposition = "block_all" | "allow_all";
+
+/**
+ * The effective disposition of the project's enabled blocking shadow MCP
+ * policies, or null when none exist. With legacy multi-policy data,
+ * deny-by-default wins: allow_all only applies when every blocking policy
+ * declares it.
+ */
+export function shadowMCPBlockingPolicyDisposition(
+  policies: Pick<RiskPolicy, "shadowMcpDisposition">[],
+): ShadowMCPPolicyDisposition | null {
+  if (policies.length === 0) return null;
+  return policies.every((policy) => policy.shadowMcpDisposition === "allow_all")
+    ? "allow_all"
+    : "block_all";
+}
+
+export function eligibleShadowMCPAllowRulePolicies(
+  policies: RiskPolicy[] | undefined,
+): RiskPolicy[] {
+  return (
+    policies?.filter(
+      (policy) =>
+        policy.enabled &&
+        policy.action === "block" &&
+        policy.sources.includes("shadow_mcp"),
+    ) ?? []
+  );
+}
 
 export function shadowMCPPolicyState(
   policies: RiskPolicy[] | undefined,
@@ -26,6 +57,10 @@ export function shadowMCPPolicyState(
 
   if (shadowPolicies.some((policy) => policy.action === "block")) {
     return "blocking";
+  }
+
+  if (shadowPolicies.some((policy) => policy.action === "warn")) {
+    return "warning";
   }
 
   if (shadowPolicies.some((policy) => policy.action === "flag")) {
@@ -84,12 +119,21 @@ export function shadowMCPInventoryStatusBadgeVariant(
 export function shadowMCPInventoryStatusDescription(
   server: ShadowMCPInventoryServer,
   policyState: ShadowMCPPolicyState,
+  disposition: ShadowMCPPolicyDisposition | null = null,
 ): string {
   if (server.requestCount > 0) {
     return `${server.requestCount} access ${server.requestCount === 1 ? "request" : "requests"} pending`;
   }
-  if (server.access === "allowed") return "Allowed by URL rule";
-  if (server.access === "blocked") return "Blocked by policy";
+  if (server.access === "allowed") {
+    return disposition === "allow_all"
+      ? "Allowed by default"
+      : "Allowed by URL rule";
+  }
+  if (server.access === "blocked") {
+    return disposition === "allow_all"
+      ? "Blocked by rule"
+      : "Blocked by policy";
+  }
   if (policyState === "unavailable") return "Policy status unavailable";
   if (policyState === "blocking") return "Blocked by policy";
   return "Not blocking";

@@ -142,7 +142,7 @@ func TestCreateLog_HydratesDirectorySnapshot(t *testing.T) {
 		Attributes: attrs,
 	})
 
-	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
+	log := flushAndGetLog(t, ctx, ti, toolInfo.ProjectID, toolInfo.URN, timestamp)
 
 	// user.attributes carries the allowlisted WorkOS predefined attributes.
 	require.Contains(t, log.Attributes, "Engineering")
@@ -181,7 +181,7 @@ func TestCreateLog_NoDirectorySnapshotWhenNoDirectoryData(t *testing.T) {
 		Attributes: attrs,
 	})
 
-	log := waitForLog(t, ctx, ti.chClient, toolInfo.ProjectID, toolInfo.URN, timestamp)
+	log := flushAndGetLog(t, ctx, ti, toolInfo.ProjectID, toolInfo.URN, timestamp)
 
 	// Empty snapshot parts are omitted rather than stamped as empty payloads.
 	require.NotContains(t, log.Attributes, "groups")

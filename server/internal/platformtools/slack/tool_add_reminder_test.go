@@ -27,6 +27,7 @@ func TestAddReminderTool_RequiresUserToken(t *testing.T) {
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
+		GramChatID: "",
 	}, bytes.NewBufferString(`{"text":"ping","time":"in 5 minutes"}`), io.Discard)
 	require.Error(t, err)
 	require.ErrorContains(t, err, slackUserTokenEnvVar)
@@ -62,6 +63,7 @@ func TestAddReminderTool_CallsRemindersAddWithRecurrence(t *testing.T) {
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
+		GramChatID: "",
 	}, bytes.NewBufferString(`{
 		"text":"ship the PR",
 		"time":"every Thursday at 9am",
@@ -93,6 +95,7 @@ func TestAddReminderTool_RequiresTextAndTime(t *testing.T) {
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
+		GramChatID: "",
 	}, bytes.NewBufferString(`{"time":"in 5 minutes"}`), io.Discard)
 	require.Error(t, err)
 	require.ErrorContains(t, err, "text")

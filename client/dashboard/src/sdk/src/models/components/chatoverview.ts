@@ -18,6 +18,14 @@ export type ChatOverview = {
    */
   accountType?: string | undefined;
   /**
+   * The ID of the assistant that produced this chat, if any
+   */
+  assistantId?: string | undefined;
+  /**
+   * The name of the assistant that produced this chat, if any
+   */
+  assistantName?: string | undefined;
+  /**
    * When the chat was created.
    */
   createdAt: Date;
@@ -38,6 +46,10 @@ export type ChatOverview = {
    */
   numMessages: number;
   /**
+   * True when the chat is pinned
+   */
+  pinned?: boolean | undefined;
+  /**
    * Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
    */
   riskFindingsCount?: number | undefined;
@@ -45,6 +57,14 @@ export type ChatOverview = {
    * The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)
    */
   source?: string | undefined;
+  /**
+   * Persisted LLM summary of the session transcript, if one has been generated
+   */
+  summary?: string | undefined;
+  /**
+   * When the session summary was last generated.
+   */
+  summaryGeneratedAt?: Date | undefined;
   /**
    * The title of the chat
    */
@@ -73,6 +93,10 @@ export type ChatOverview = {
    * The ID of the user who created the chat
    */
   userId?: string | undefined;
+  /**
+   * Work units of value delivered in this chat as judged by the work-units analysis. Absent unless the organization has work-units analysis enabled and this chat has been scored.
+   */
+  workUnits?: number | undefined;
 };
 
 /** @internal */
@@ -81,6 +105,8 @@ export const ChatOverview$inboundSchema: z.ZodMiniType<ChatOverview, unknown> =
     z.object({
       account_email: z.optional(z.string()),
       account_type: z.optional(z.string()),
+      assistant_id: z.optional(z.string()),
+      assistant_name: z.optional(z.string()),
       created_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
@@ -92,8 +118,13 @@ export const ChatOverview$inboundSchema: z.ZodMiniType<ChatOverview, unknown> =
         z.transform(v => new Date(v)),
       ),
       num_messages: z.int(),
+      pinned: z.optional(z.boolean()),
       risk_findings_count: z.optional(z.int()),
       source: z.optional(z.string()),
+      summary: z.optional(z.string()),
+      summary_generated_at: z.optional(
+        z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+      ),
       title: z.string(),
       total_cost: z.optional(z.number()),
       total_input_tokens: z.optional(z.int()),
@@ -104,22 +135,27 @@ export const ChatOverview$inboundSchema: z.ZodMiniType<ChatOverview, unknown> =
         z.transform(v => new Date(v)),
       ),
       user_id: z.optional(z.string()),
+      work_units: z.optional(z.number()),
     }),
     z.transform((v) => {
       return remap$(v, {
         "account_email": "accountEmail",
         "account_type": "accountType",
+        "assistant_id": "assistantId",
+        "assistant_name": "assistantName",
         "created_at": "createdAt",
         "external_user_id": "externalUserId",
         "last_message_timestamp": "lastMessageTimestamp",
         "num_messages": "numMessages",
         "risk_findings_count": "riskFindingsCount",
+        "summary_generated_at": "summaryGeneratedAt",
         "total_cost": "totalCost",
         "total_input_tokens": "totalInputTokens",
         "total_output_tokens": "totalOutputTokens",
         "total_tokens": "totalTokens",
         "updated_at": "updatedAt",
         "user_id": "userId",
+        "work_units": "workUnits",
       });
     }),
   );

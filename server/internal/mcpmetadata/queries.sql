@@ -104,6 +104,34 @@ RETURNING id,
           created_at,
           updated_at;
 
+-- name: SetDefaultLogoIfUnset :one
+-- Used for system-assigned defaults (e.g. an unproxied server's favicon)
+-- rather than a user-initiated edit: only ever touches logo_id, and only
+-- when unset, so it can never race a concurrent user edit into clobbering
+-- their branding/install-page settings the way a full-record upsert would.
+INSERT INTO mcp_metadata (
+    mcp_server_id,
+    project_id,
+    logo_id
+) VALUES (@mcp_server_id, @project_id, @logo_id)
+ON CONFLICT (mcp_server_id) WHERE mcp_server_id IS NOT NULL
+DO UPDATE SET logo_id = EXCLUDED.logo_id,
+              updated_at = clock_timestamp()
+WHERE mcp_metadata.logo_id IS NULL
+RETURNING id,
+          toolset_id,
+          mcp_server_id,
+          project_id,
+          external_documentation_url,
+          external_documentation_text,
+          logo_id,
+          instructions,
+          header_display_names,
+          default_environment_id,
+          installation_override_url,
+          created_at,
+          updated_at;
+
 -- name: GetHeaderDisplayNames :one
 SELECT header_display_names
 FROM mcp_metadata

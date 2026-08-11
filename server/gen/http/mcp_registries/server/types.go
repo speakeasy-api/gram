@@ -61,6 +61,14 @@ type GetServerDetailsResponseBody struct {
 	Remotes []*ExternalMCPRemoteResponseBody `form:"remotes,omitempty" json:"remotes,omitempty" xml:"remotes,omitempty"`
 }
 
+// GetSetupDocsResponseBody is the type of the "mcpRegistries" service
+// "getSetupDocs" endpoint HTTP response body.
+type GetSetupDocsResponseBody struct {
+	// Matching setup guides, most specific match first. Empty when no guide has
+	// been published for the server.
+	Guides []*MCPSetupGuideResponseBody `form:"guides" json:"guides" xml:"guides"`
+}
+
 // ClearCacheUnauthorizedResponseBody is the type of the "mcpRegistries"
 // service "clearCache" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -808,6 +816,192 @@ type GetServerDetailsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetSetupDocsUnauthorizedResponseBody is the type of the "mcpRegistries"
+// service "getSetupDocs" endpoint HTTP response body for the "unauthorized"
+// error.
+type GetSetupDocsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSetupDocsForbiddenResponseBody is the type of the "mcpRegistries" service
+// "getSetupDocs" endpoint HTTP response body for the "forbidden" error.
+type GetSetupDocsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSetupDocsBadRequestResponseBody is the type of the "mcpRegistries"
+// service "getSetupDocs" endpoint HTTP response body for the "bad_request"
+// error.
+type GetSetupDocsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSetupDocsNotFoundResponseBody is the type of the "mcpRegistries" service
+// "getSetupDocs" endpoint HTTP response body for the "not_found" error.
+type GetSetupDocsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSetupDocsConflictResponseBody is the type of the "mcpRegistries" service
+// "getSetupDocs" endpoint HTTP response body for the "conflict" error.
+type GetSetupDocsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSetupDocsUnsupportedMediaResponseBody is the type of the "mcpRegistries"
+// service "getSetupDocs" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetSetupDocsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSetupDocsInvalidResponseBody is the type of the "mcpRegistries" service
+// "getSetupDocs" endpoint HTTP response body for the "invalid" error.
+type GetSetupDocsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSetupDocsInvariantViolationResponseBody is the type of the
+// "mcpRegistries" service "getSetupDocs" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetSetupDocsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSetupDocsUnexpectedResponseBody is the type of the "mcpRegistries"
+// service "getSetupDocs" endpoint HTTP response body for the "unexpected"
+// error.
+type GetSetupDocsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSetupDocsGatewayErrorResponseBody is the type of the "mcpRegistries"
+// service "getSetupDocs" endpoint HTTP response body for the "gateway_error"
+// error.
+type GetSetupDocsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // MCPRegistryResponseBody is used to define fields on response body types.
 type MCPRegistryResponseBody struct {
 	// Registry ID
@@ -912,6 +1106,49 @@ type ExternalMCPToolResponseBody struct {
 	Annotations any `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
 }
 
+// MCPSetupGuideResponseBody is used to define fields on response body types.
+type MCPSetupGuideResponseBody struct {
+	// Stable identifier of the guide
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Display title of the guide
+	Title string `form:"title" json:"title" xml:"title"`
+	// One-line summary of what the guide covers
+	Summary string `form:"summary" json:"summary" xml:"summary"`
+	// How the server is meant to be added in Gram, when the guide states one
+	// (e.g., 'catalog', 'custom-remote')
+	AddServerFlow *string `form:"add_server_flow,omitempty" json:"add_server_flow,omitempty" xml:"add_server_flow,omitempty"`
+	// Registry identifiers the guide is also published under
+	Aliases []string `form:"aliases" json:"aliases" xml:"aliases"`
+	// Endpoints documented by the guide
+	Remotes []*MCPSetupGuideRemoteResponseBody `form:"remotes" json:"remotes" xml:"remotes"`
+	// ID of the documented endpoint the lookup matched. Absent when the lookup
+	// identified the guide and not a specific endpoint, which is always the case
+	// for an 'alias' match.
+	MatchedRemoteID *string `form:"matched_remote_id,omitempty" json:"matched_remote_id,omitempty" xml:"matched_remote_id,omitempty"`
+	// How the lookup matched this guide. The most specific kind, when both lookup
+	// keys matched it.
+	MatchKind string `form:"match_kind" json:"match_kind" xml:"match_kind"`
+	// Markdown instructions for the setup work that happens in the upstream
+	// provider
+	ExternalMarkdown string `form:"external_markdown" json:"external_markdown" xml:"external_markdown"`
+	// Markdown instructions for the setup work that happens in Gram
+	SpeakeasyMarkdown string `form:"speakeasy_markdown" json:"speakeasy_markdown" xml:"speakeasy_markdown"`
+}
+
+// MCPSetupGuideRemoteResponseBody is used to define fields on response body
+// types.
+type MCPSetupGuideRemoteResponseBody struct {
+	// Stable identifier of the endpoint within the guide
+	ID string `form:"id" json:"id" xml:"id"`
+	// URL of the endpoint
+	URL string `form:"url" json:"url" xml:"url"`
+	// Transport type as published by the guide (e.g., 'streamable-http', 'sse')
+	TransportType string `form:"transport_type" json:"transport_type" xml:"transport_type"`
+	// Whether the endpoint URL is customer-specific and has to be filled in per
+	// tenant
+	Tenanted bool `form:"tenanted" json:"tenanted" xml:"tenanted"`
+}
+
 // NewListRegistriesResponseBody builds the HTTP response body from the result
 // of the "listRegistries" endpoint of the "mcpRegistries" service.
 func NewListRegistriesResponseBody(res *mcpregistries.ListRegistriesResult) *ListRegistriesResponseBody {
@@ -986,6 +1223,25 @@ func NewGetServerDetailsResponseBody(res *types.ExternalMCPServer) *GetServerDet
 			}
 			body.Remotes[i] = marshalTypesExternalMCPRemoteToExternalMCPRemoteResponseBody(val)
 		}
+	}
+	return body
+}
+
+// NewGetSetupDocsResponseBody builds the HTTP response body from the result of
+// the "getSetupDocs" endpoint of the "mcpRegistries" service.
+func NewGetSetupDocsResponseBody(res *mcpregistries.GetSetupDocsResult) *GetSetupDocsResponseBody {
+	body := &GetSetupDocsResponseBody{}
+	if res.Guides != nil {
+		body.Guides = make([]*MCPSetupGuideResponseBody, len(res.Guides))
+		for i, val := range res.Guides {
+			if val == nil {
+				body.Guides[i] = nil
+				continue
+			}
+			body.Guides[i] = marshalTypesMCPSetupGuideToMCPSetupGuideResponseBody(val)
+		}
+	} else {
+		body.Guides = []*MCPSetupGuideResponseBody{}
 	}
 	return body
 }
@@ -1556,6 +1812,148 @@ func NewGetServerDetailsGatewayErrorResponseBody(res *goa.ServiceError) *GetServ
 	return body
 }
 
+// NewGetSetupDocsUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "getSetupDocs" endpoint of the "mcpRegistries" service.
+func NewGetSetupDocsUnauthorizedResponseBody(res *goa.ServiceError) *GetSetupDocsUnauthorizedResponseBody {
+	body := &GetSetupDocsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSetupDocsForbiddenResponseBody builds the HTTP response body from the
+// result of the "getSetupDocs" endpoint of the "mcpRegistries" service.
+func NewGetSetupDocsForbiddenResponseBody(res *goa.ServiceError) *GetSetupDocsForbiddenResponseBody {
+	body := &GetSetupDocsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSetupDocsBadRequestResponseBody builds the HTTP response body from the
+// result of the "getSetupDocs" endpoint of the "mcpRegistries" service.
+func NewGetSetupDocsBadRequestResponseBody(res *goa.ServiceError) *GetSetupDocsBadRequestResponseBody {
+	body := &GetSetupDocsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSetupDocsNotFoundResponseBody builds the HTTP response body from the
+// result of the "getSetupDocs" endpoint of the "mcpRegistries" service.
+func NewGetSetupDocsNotFoundResponseBody(res *goa.ServiceError) *GetSetupDocsNotFoundResponseBody {
+	body := &GetSetupDocsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSetupDocsConflictResponseBody builds the HTTP response body from the
+// result of the "getSetupDocs" endpoint of the "mcpRegistries" service.
+func NewGetSetupDocsConflictResponseBody(res *goa.ServiceError) *GetSetupDocsConflictResponseBody {
+	body := &GetSetupDocsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSetupDocsUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "getSetupDocs" endpoint of the "mcpRegistries"
+// service.
+func NewGetSetupDocsUnsupportedMediaResponseBody(res *goa.ServiceError) *GetSetupDocsUnsupportedMediaResponseBody {
+	body := &GetSetupDocsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSetupDocsInvalidResponseBody builds the HTTP response body from the
+// result of the "getSetupDocs" endpoint of the "mcpRegistries" service.
+func NewGetSetupDocsInvalidResponseBody(res *goa.ServiceError) *GetSetupDocsInvalidResponseBody {
+	body := &GetSetupDocsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSetupDocsInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "getSetupDocs" endpoint of the "mcpRegistries"
+// service.
+func NewGetSetupDocsInvariantViolationResponseBody(res *goa.ServiceError) *GetSetupDocsInvariantViolationResponseBody {
+	body := &GetSetupDocsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSetupDocsUnexpectedResponseBody builds the HTTP response body from the
+// result of the "getSetupDocs" endpoint of the "mcpRegistries" service.
+func NewGetSetupDocsUnexpectedResponseBody(res *goa.ServiceError) *GetSetupDocsUnexpectedResponseBody {
+	body := &GetSetupDocsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSetupDocsGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "getSetupDocs" endpoint of the "mcpRegistries" service.
+func NewGetSetupDocsGatewayErrorResponseBody(res *goa.ServiceError) *GetSetupDocsGatewayErrorResponseBody {
+	body := &GetSetupDocsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewClearCachePayload builds a mcpRegistries service clearCache endpoint
 // payload.
 func NewClearCachePayload(registryID string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpregistries.ClearCachePayload {
@@ -1599,6 +1997,19 @@ func NewGetServerDetailsPayload(registryID string, serverSpecifier string, sessi
 	v := &mcpregistries.GetServerDetailsPayload{}
 	v.RegistryID = registryID
 	v.ServerSpecifier = serverSpecifier
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetSetupDocsPayload builds a mcpRegistries service getSetupDocs endpoint
+// payload.
+func NewGetSetupDocsPayload(serverURL *string, registrySpecifier *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpregistries.GetSetupDocsPayload {
+	v := &mcpregistries.GetSetupDocsPayload{}
+	v.ServerURL = serverURL
+	v.RegistrySpecifier = registrySpecifier
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

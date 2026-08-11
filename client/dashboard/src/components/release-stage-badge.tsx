@@ -1,5 +1,5 @@
-import { Badge } from "@speakeasy-api/moonshine";
-import { SimpleTooltip } from "./ui/tooltip";
+import { cn } from "@/lib/utils";
+import { SimpleTooltip } from "./ui/Tooltip";
 
 export type ReleaseStage = "preview" | "beta";
 
@@ -10,14 +10,12 @@ type ReleaseStageBadgeProps = {
   className?: string;
 };
 
-// Map each release stage onto Moonshine's built-in Badge semantic variants.
-// `warning` (amber) for preview = "use with caution, may change."
-// `information` (Speakeasy brand blue) for beta = "open for use, still evolving."
-// Moonshine's Badge handles the shape, padding, typography, and theme/brand
-// retuning — we just pick the semantic variant.
-const stageVariant: Record<ReleaseStage, "warning" | "information"> = {
-  preview: "warning",
-  beta: "information",
+// Editorial tag chip: square, mono uppercase, hairline border on bg-card.
+// Beta keeps the brand-blue text (the historical stage color); preview uses
+// warning-orange. Color lives in text + border only — no tinted washes.
+const stageTextClass: Record<ReleaseStage, string> = {
+  preview: "text-default-warning border-warning-softest",
+  beta: "text-default-information border-information-softest",
 };
 
 const stageLabel: Record<ReleaseStage, string> = {
@@ -37,15 +35,16 @@ export function ReleaseStageBadge({
   className,
 }: ReleaseStageBadgeProps): JSX.Element {
   const pill = (
-    <Badge
-      size="sm"
-      variant={stageVariant[stage]}
-      background
-      className={className}
+    <span
+      className={cn(
+        "border-border bg-card inline-flex items-center border px-1.5 py-px font-mono text-[10px] tracking-[0.08em] uppercase",
+        stageTextClass[stage],
+        className,
+      )}
       data-release-stage={stage}
     >
-      <Badge.Text>{stageLabel[stage]}</Badge.Text>
-    </Badge>
+      {stageLabel[stage]}
+    </span>
   );
 
   if (noTooltip) return pill;

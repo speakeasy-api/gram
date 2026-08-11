@@ -1,9 +1,9 @@
-import { Icon } from "@speakeasy-api/moonshine";
+import { Icon } from "@/components/ui/Icon";
 
 import { cn } from "@/lib/utils";
 
 import { PERSONAL_TOOLTIP, TEAM_TOOLTIP } from "./account-type-badge";
-import { SimpleTooltip } from "./ui/tooltip";
+import { SimpleTooltip } from "./ui/Tooltip";
 
 // Encodes the personal/team distinction in the person glyph itself: a single
 // person for personal accounts, a group for team accounts. This reuses the

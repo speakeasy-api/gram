@@ -1,49 +1,25 @@
-import { Page } from "@/components/page-layout";
+import { SettingsPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/heading";
-import { Switch } from "@/components/ui/switch";
-import { Type } from "@/components/ui/type";
+import { Heading } from "@/components/ui/Heading";
+import { Switch } from "@/components/ui/Switch";
+import { Text } from "@/components/ui/Text";
 import { useCreatePortalSessionMutation } from "@gram/client/react-query/createPortalSession.js";
 import { useDisableWebhooksMutation } from "@gram/client/react-query/disableWebhooks.js";
 import { useEnableWebhooksMutation } from "@gram/client/react-query/enableWebhooks.js";
 import { useOrganization } from "@gram/client/react-query/organization.js";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
-import {
-  Button as MoonshineButton,
-  Stack,
-  useMoonshineConfig,
-} from "@speakeasy-api/moonshine";
+import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
+import { Stack } from "@/components/ui/Stack";
 import { Webhook } from "lucide-react";
 import { AppPortal } from "svix-react";
-import React, { JSX } from "react";
+import React from "react";
 
 import "svix-react/style.css";
-import { useTelemetry } from "@/contexts/Telemetry";
-import { useSessionData } from "@/contexts/Auth";
 
 export default function OrgWebhooks(): React.JSX.Element {
-  const { data: features, isLoading } = useProductFeatures();
-
-  let content: JSX.Element | null = null;
-  if (isLoading) {
-    content = null;
-  } else if (features?.webhooks) {
-    content = (
-      <RequireScope scope={["org:read"]} level="page">
-        <OrgWebhooksInner />
-      </RequireScope>
-    );
-  } else {
-    content = <WebhooksDisabled />;
-  }
-
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs stage="preview" />
-      </Page.Header>
-      <Page.Body>{content}</Page.Body>
-    </Page>
+    <RequireScope scope={["org:read"]} level="page">
+      <OrgWebhooksInner />
+    </RequireScope>
   );
 }
 
@@ -62,31 +38,29 @@ function OrgWebhooksInner() {
     disableWebhooks.status !== "pending";
 
   return (
-    <>
-      <Heading variant="h3" className="mb-4">
-        Webhooks
-      </Heading>
-      <Type muted small className="mb-6">
-        Configure webhook delivery for various platform events.
-      </Type>
-      <div className="border-border bg-card rounded-lg border p-4">
+    <SettingsPage
+      title="Webhooks"
+      stage="beta"
+      description="Configure webhook delivery for various platform events."
+    >
+      <div className="border-border bg-card border p-4">
         <Stack gap={4}>
           <Stack direction="horizontal" justify="space-between" align="center">
             <Stack gap={1}>
               <Stack direction="horizontal" align="center" gap={2}>
                 <Webhook className="text-muted-foreground h-4 w-4" />
-                <Type variant="body" className="font-medium">
+                <Text variant="body" className="font-medium">
                   Enable Webhooks
-                </Type>
+                </Text>
               </Stack>
-              <Type
+              <Text
                 variant="body"
                 className="text-muted-foreground ml-6 text-sm"
               >
                 Enable or disable webhook delivery of organization events.
                 Disabling this option does not destroy existing webhook
                 configuration below.
-              </Type>
+              </Text>
             </Stack>
             <RequireScope scope="org:admin" level="component">
               <Switch
@@ -106,44 +80,7 @@ function OrgWebhooksInner() {
         </Stack>
       </div>
       {orgResult.data?.webhooksOnboarded && <WebhookConfigPortal />}
-    </>
-  );
-}
-
-function WebhooksDisabled() {
-  const telemetry = useTelemetry();
-  const { session } = useSessionData();
-
-  return (
-    <div className="border-border bg-card rounded-lg border p-4">
-      <Stack gap={4} align="center" justify="center">
-        <Webhook className="text-muted-foreground h-10 w-10" />
-        <div>
-          <Heading variant="h4" className="text-center font-medium">
-            Webhooks are currently in preview
-          </Heading>
-        </div>
-
-        <MoonshineButton variant="brand" asChild>
-          <a
-            href="https://www.speakeasy.com/book-demo"
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => {
-              telemetry.capture("webhooks_interest", {
-                action: "webhook_design_partner_clicked",
-                email: session?.user.email ?? "",
-                organization_id: session?.organization?.id ?? "",
-                organization_name: session?.organization?.name ?? "",
-                organization_slug: session?.organization?.slug ?? "",
-              });
-            }}
-          >
-            Talk to our team
-          </a>
-        </MoonshineButton>
-      </Stack>
-    </div>
+    </SettingsPage>
   );
 }
 
@@ -177,7 +114,9 @@ function WebhookConfigPortal() {
 
   return (
     <>
-      <Heading variant="h4">Webhook Configuration</Heading>
+      <Heading variant="h4" className="mb-4 text-display-xs font-thin">
+        Webhook Configuration
+      </Heading>
       <AppPortal
         url={portalURL}
         darkMode={theme}

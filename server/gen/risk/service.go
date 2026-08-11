@@ -46,6 +46,16 @@ type Service interface {
 	UnmaskRiskResult(context.Context, *UnmaskRiskResultPayload) (res *RiskUnmaskResultResult, err error)
 	// List risk results grouped by chat session for the current project.
 	ListRiskResultsByChat(context.Context, *ListRiskResultsByChatPayload) (res *ListRiskResultsByChatResult, err error)
+	// Mark one or more risk results as manually-reviewed false positives. Distinct
+	// from exclusions: this suppresses the specific results picked, not future
+	// findings matching a rule.
+	MarkRiskResultsFalsePositive(context.Context, *MarkRiskResultsFalsePositivePayload) (err error)
+	// Undo a false-positive dismissal for one or more risk results.
+	UnmarkRiskResultsFalsePositive(context.Context, *UnmarkRiskResultsFalsePositivePayload) (err error)
+	// List risk results manually marked as false positive for the current project
+	// (the Dismissed tab). Kept separate from listRiskResults, which never returns
+	// dismissed results.
+	ListDismissedRiskResults(context.Context, *ListDismissedRiskResultsPayload) (res *ListRiskResultsResult, err error)
 	// Get risk overview metrics and trend data for the current project.
 	GetRiskOverview(context.Context, *GetRiskOverviewPayload) (res *RiskOverviewResult, err error)
 	// Return the canonical risk category definitions: metadata
@@ -64,6 +74,10 @@ type Service interface {
 	// Get per-rule_id finding counts for a category within a time window. Powers
 	// the per-category drill-down chart on /risk-overview.
 	GetRiskRuleBreakdown(context.Context, *GetRiskRuleBreakdownPayload) (res *RiskRuleBreakdownResult, err error)
+	// Get clustered risk signals — findings grouped by rule and ranked by severity
+	// score — plus window-level KPI stats and the exposure breakdown by category.
+	// Powers the Watchdog page. Served from the ClickHouse findings store.
+	GetRiskSignals(context.Context, *GetRiskSignalsPayload) (res *RiskSignalsResult, err error)
 	// Get the analysis status of a risk policy including progress and workflow
 	// state.
 	GetRiskPolicyStatus(context.Context, *GetRiskPolicyStatusPayload) (res *types.RiskPolicyStatus, err error)
@@ -124,9 +138,10 @@ type Service interface {
 	// form.
 	SuggestCustomDetectionRule(context.Context, *SuggestCustomDetectionRulePayload) (res *SuggestCustomDetectionRuleResult, err error)
 	// Suggest a risk exclusion (match_type, match_value, filters) from a
-	// natural-language prompt describing findings an operator wants to stop
-	// flagging. Calls the configured LLM with a JSON-schema constrained response
-	// so the dashboard can prefill the create exclusion form.
+	// natural-language prompt, a batch of example findings, or both. Calls the
+	// configured LLM with a JSON-schema constrained response so the dashboard can
+	// prefill the create exclusion form. At least one of prompt or finding_ids is
+	// required.
 	SuggestExclusion(context.Context, *SuggestExclusionPayload) (res *SuggestExclusionResult, err error)
 	// Run a single detection rule against pasted sample text and return any
 	// matches. Reuses the same scanner code (gitleaks, Presidio, prompt-injection,
@@ -175,7 +190,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [43]string{"createRiskPolicy", "listRiskPolicies", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "suggestExclusion", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
+var MethodNames = [47]string{"createRiskPolicy", "listRiskPolicies", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "markRiskResultsFalsePositive", "unmarkRiskResultsFalsePositive", "listDismissedRiskResults", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskSignals", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "suggestExclusion", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
 
 // AcknowledgeRiskPolicyChallengePayload is the payload type of the risk
 // service acknowledgeRiskPolicyChallenge method.
@@ -317,6 +332,10 @@ type CreateRiskPolicyPayload struct {
 	// approved. Sessions whose AI-account email domain is not listed are flagged.
 	// Empty/omitted leaves the domain rule inert.
 	ApprovedEmailDomains []string
+	// Per-category detection scopes. Each specified category replaces its
+	// centrally recommended scope; a scope with both predicates empty scans every
+	// message surface. Empty/omitted = all recommendations apply unchanged.
+	DetectionScopes []*types.RiskDetectionScope
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string
@@ -341,6 +360,18 @@ type CreateRiskPolicyPayload struct {
 	// Principal URNs this policy applies to. For audience_type=everyone, the
 	// server stores user:all.
 	AudiencePrincipalUrns []string
+	// Complete desired canonical URL allow set for this policy. Omit or send empty
+	// to create no URL-specific allow decisions.
+	ShadowMcpAllowedUrls []string `json:"shadow_mcp_allowed_urls"`
+	// Default disposition for shadow MCP blocking policies: block_all (default)
+	// blocks every non-Gram-hosted server unless allowed, allow_all permits every
+	// server unless blocked. Only valid with the shadow_mcp source and block
+	// action. Immutable after create — switching requires delete + recreate.
+	ShadowMcpDisposition *string
+	// For allow_all policies: complete desired canonical URL block set. Omit or
+	// send empty to block nothing. Only valid when shadow_mcp_disposition is
+	// allow_all.
+	ShadowMcpBlockedUrls []string `json:"shadow_mcp_blocked_urls"`
 	// Whether the policy name should be auto-generated.
 	AutoName *bool
 	// Optional message shown to end users when this policy blocks an action or
@@ -437,8 +468,8 @@ type EvaluatePromptGuardrailPayload struct {
 	// judge model.
 	ModelConfig *types.RiskPolicyModelConfig
 	// Message types to judge (user_message, assistant_message, tool_request,
-	// tool_response), matching a policy's message_types. When empty or omitted,
-	// judges all supported types.
+	// tool_response, prompt_attachment), matching a policy's message_types. When
+	// empty or omitted, judges all supported types.
 	MessageTypes []string
 	// CEL scope predicate: the replay judges a message only when this boolean
 	// expression is true (in addition to message_types). Omit/empty means all
@@ -546,6 +577,19 @@ type GetRiskRuleBreakdownPayload struct {
 	To *string
 }
 
+// GetRiskSignalsPayload is the payload type of the risk service getRiskSignals
+// method.
+type GetRiskSignalsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Inclusive start of the signals window. Defaults to the start of the 7-day
+	// calendar window ending at to.
+	From *string
+	// Exclusive end of the signals window. Defaults to now.
+	To *string
+}
+
 // GetRiskUserBreakdownPayload is the payload type of the risk service
 // getRiskUserBreakdown method.
 type GetRiskUserBreakdownPayload struct {
@@ -591,6 +635,18 @@ type ListCustomDetectionRulesPayload struct {
 type ListCustomDetectionRulesResult struct {
 	// The list of custom detection rules.
 	Rules []*types.RiskCustomDetectionRule
+}
+
+// ListDismissedRiskResultsPayload is the payload type of the risk service
+// listDismissedRiskResults method.
+type ListDismissedRiskResultsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Cursor to fetch the next page of results.
+	Cursor *string
+	// Maximum number of results to return per page.
+	Limit *int
 }
 
 // ListRiskCategoriesPayload is the payload type of the risk service
@@ -789,6 +845,18 @@ type ListRiskResultsResult struct {
 	NextCursor *string
 }
 
+// MarkRiskResultsFalsePositivePayload is the payload type of the risk service
+// markRiskResultsFalsePositive method.
+type MarkRiskResultsFalsePositivePayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// IDs of the risk results to mark as false positive.
+	ResultIds []string
+	// Optional free-text reason for the dismissal.
+	Reason *string
+}
+
 // PromptGuardrailEvalResult is the result type of the risk service
 // evaluatePromptGuardrail method.
 type PromptGuardrailEvalResult struct {
@@ -814,7 +882,7 @@ type PromptGuardrailMessageVerdict struct {
 	// Message sequence within the chat generation, ascending.
 	Seq int64
 	// The judged message type (user_message, assistant_message, tool_request,
-	// tool_response).
+	// tool_response, prompt_attachment).
 	MessageType string
 	// Tool name for a single-call tool_request message; empty otherwise.
 	ToolName *string
@@ -871,6 +939,9 @@ type RiskCategoriesResult struct {
 	// Categories in classification-priority order. The last entry is the 'custom'
 	// fallback for findings that match none of the others.
 	Categories []*RiskCategoryDefinition
+	// Version of the recommended-scope registry; bumps when any recommendation
+	// changes.
+	RecommendedScopesVersion int64
 }
 
 // One canonical risk category and how findings are classified into it.
@@ -892,6 +963,26 @@ type RiskCategoryDefinition struct {
 	// When non-empty, findings whose rule_id starts with this prefix belong to
 	// this category. The catch-all for a family (e.g. 'pii.').
 	RuleIDPrefix string
+	// Centrally recommended CEL scope predicate for this category; empty = no
+	// include restriction.
+	RecommendedScopeInclude string
+	// Centrally recommended CEL exemption predicate; empty = no exemption.
+	RecommendedScopeExempt string
+	// User-facing explanation of the recommended scope and the consequences of
+	// disabling it. Empty when the category has no recommendation.
+	RecommendedScopeRationale string
+	// False when the category is session-scoped and message scoping does not apply
+	// (e.g. account_identity).
+	RecommendedScopeApplicable bool
+}
+
+type RiskExposureSlice struct {
+	// Canonical risk category key.
+	Category string
+	// Deduplicated finding count for this category in the window.
+	Findings int64
+	// Fraction of the window's findings in this category (0-1).
+	Share float64
 }
 
 type RiskOverviewCategory struct {
@@ -1006,6 +1097,93 @@ type RiskRuleBreakdownResult struct {
 	Total int64
 }
 
+// One clustered risk signal: all live findings for a single rule in the
+// window, with a heuristic severity score and trend/spread stats.
+type RiskSignal struct {
+	// Stable client identity for the signal. Currently 'rule:<rule_id>'.
+	Key string
+	// Rule identifier the signal clusters on (e.g. 'secret.aws_access_token',
+	// 'pii.email_address').
+	RuleID string
+	// Canonical risk category of the rule (secrets, pii, ...).
+	Category string
+	// Representative finding description for this rule. Empty when findings carry
+	// no description.
+	Description string
+	// Detector sources that produced findings in this signal (gitleaks, presidio,
+	// prompt_injection, ...).
+	DetectionSources []string
+	// Source apps (chat surfaces) the findings were observed in. Empty until app
+	// attribution is recorded on findings.
+	Apps []string
+	// Severity rating derived from the risk score.
+	Severity string
+	// Heuristic severity score on the 0.1-10 scale used across risk surfaces.
+	RiskScore float64
+	// Deduplicated finding count in the window.
+	Findings int64
+	// Finding count in the equal-length window immediately before from.
+	PreviousFindings int64
+	// Distinct users with at least one finding in the window.
+	Users int64
+	// Distinct teams with at least one finding in the window. Zero until team
+	// attribution is recorded on findings.
+	Teams int64
+	// Event time of the earliest finding in the window.
+	FirstSeen string
+	// Event time of the latest finding in the window.
+	LastSeen string
+	// Top users by finding count within the signal.
+	TopUsers []*RiskSignalTopUser
+	// Deduplicated finding counts per equal-width time bucket across the window,
+	// oldest bucket first. Powers the per-signal trend sparkline.
+	Sparkline []int64
+}
+
+type RiskSignalTopUser struct {
+	// User email, or Unknown user when unavailable.
+	Email string
+	// External user identifier as recorded on chats, when known. Empty when the
+	// finding cannot be attributed to an external user.
+	ExternalUserID string
+	// WorkOS directory department of the user when known; empty otherwise.
+	Team string
+	// Finding count for this user within the signal and window.
+	Findings int64
+}
+
+// RiskSignalsResult is the result type of the risk service getRiskSignals
+// method.
+type RiskSignalsResult struct {
+	// Inclusive start of the signals window.
+	From string
+	// Exclusive end of the signals window.
+	To string
+	// Heuristic organization risk score on the 0.1-10 scale, blended from the top
+	// signal scores and finding volume. Zero when the window has no findings.
+	OrgRiskScore float64
+	// Organization risk score computed the same way over the equal-length window
+	// immediately before from.
+	PreviousOrgRiskScore float64
+	// Deduplicated findings in the 24 hours ending at to.
+	Findings24h int64
+	// Deduplicated findings in the 24 hours before that.
+	PreviousFindings24h int64
+	// Signals with at least one live finding in the window.
+	OpenSignals int64
+	// Signals rated critical in the window.
+	CriticalSignals int64
+	// Distinct users with at least one finding in the window.
+	UsersExposed int64
+	// Distinct users with at least one finding in the equal-length window
+	// immediately before from.
+	PreviousUsersExposed int64
+	// Finding counts by category, largest first.
+	Exposure []*RiskExposureSlice
+	// Signals ranked by risk score, highest first.
+	Signals []*RiskSignal
+}
+
 // RiskUnmaskResultResult is the result type of the risk service
 // unmaskRiskResult method.
 type RiskUnmaskResultResult struct {
@@ -1094,10 +1272,18 @@ type SuggestExclusionPayload struct {
 	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
-	// Natural-language description of the findings to stop flagging.
-	Prompt string
+	// Natural-language description of the findings to stop flagging. Optional when
+	// finding_ids is provided.
+	Prompt *string
 	// Built-in and custom rule ids the suggestion may reference in rule_id filters.
 	KnownRuleIds []string
+	// IDs of example findings (e.g. a multiselect batch) to derive a suggestion
+	// from. Looked up server-side rather than trusted from the client, but only
+	// rule_id/source cross into the suggestion — a finding's matched value (a
+	// detected secret/PII value the caller hasn't reviewed) is never read for
+	// this, so batch-derived suggestions are rule_id/source scoped rather than
+	// exact-value. Optional when prompt is provided.
+	FindingIds []string
 }
 
 // SuggestExclusionResult is the result type of the risk service
@@ -1173,6 +1359,16 @@ type TriggerRiskAnalysisPayload struct {
 	// (the recent-N drain budget). Pass 0 to request a full backfill of every
 	// unanalyzed message.
 	Limit int32
+}
+
+// UnmarkRiskResultsFalsePositivePayload is the payload type of the risk
+// service unmarkRiskResultsFalsePositive method.
+type UnmarkRiskResultsFalsePositivePayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// IDs of the risk results to restore.
+	ResultIds []string
 }
 
 // UnmaskRiskResultPayload is the payload type of the risk service
@@ -1253,6 +1449,10 @@ type UpdateRiskPolicyPayload struct {
 	// For the account_identity source: corporate email domains considered
 	// approved. Omit to preserve the current list; send an empty array to clear it.
 	ApprovedEmailDomains []string
+	// Per-category detection scopes. Each specified category replaces its
+	// centrally recommended scope; a scope with both predicates empty scans every
+	// message surface. Omit to preserve the current value; send empty to clear.
+	DetectionScopes []*types.RiskDetectionScope
 	// Canonical rule_ids the user has unchecked within otherwise-enabled
 	// categories. Matching findings are dropped at scan time.
 	DisabledRules []string
@@ -1278,6 +1478,16 @@ type UpdateRiskPolicyPayload struct {
 	// Principal URNs this policy applies to. Omit to preserve the current target
 	// principals.
 	AudiencePrincipalUrns []string
+	// Complete desired canonical URL allow set for this policy. Omit to preserve;
+	// send empty to clear.
+	ShadowMcpAllowedUrls []string `json:"shadow_mcp_allowed_urls"`
+	// The policy's shadow MCP disposition. Immutable: omit, or send the current
+	// value unchanged; any other value is rejected. Switching posture requires
+	// delete + recreate.
+	ShadowMcpDisposition *string
+	// For allow_all policies: complete desired canonical URL block set. Omit to
+	// preserve; send empty to clear.
+	ShadowMcpBlockedUrls []string `json:"shadow_mcp_blocked_urls"`
 	// Whether the policy name should be auto-generated.
 	AutoName *bool
 	// Optional message shown to end users when this policy blocks an action or

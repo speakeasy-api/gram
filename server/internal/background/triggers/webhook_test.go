@@ -1,6 +1,7 @@
 package triggers
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha1"
 	"crypto/sha256"
@@ -133,6 +134,9 @@ func TestWebhookHandleDefersEventIDFallback(t *testing.T) {
 	vendor := WebhookVendor{
 		Slug:      "test-vendor",
 		EventType: reflect.TypeFor[struct{}](),
+		Authenticate: func(_ context.Context, _ []byte, _ http.Header, _ map[string]string) error {
+			return nil
+		},
 		Ingest: func(_ []byte, _ http.Header) (*WebhookIngest, error) {
 			// No vendor delivery id and no correlation id.
 			return &WebhookIngest{Event: map[string]any{"ok": true}}, nil

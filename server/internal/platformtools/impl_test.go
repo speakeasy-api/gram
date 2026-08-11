@@ -65,6 +65,7 @@ func TestExecuteSearchLogs_IgnoresInjectedAuthFields(t *testing.T) {
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		OAuthToken: "",
 		GramEmail:  "",
+		GramChatID: "",
 	}, bytes.NewBufferString(`{
 		"apikeyToken":"api-key",
 		"sessionToken":"session",

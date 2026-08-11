@@ -7,9 +7,17 @@ import (
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/plugins/naming"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
+
+// ptr takes the address of a literal. conv.PtrEmpty collapses the zero value
+// to nil, which is exactly what the blank-serial cases below need to send.
+//
+//go:fix inline
+func ptr[T any](v T) *T { return new(v) }
 
 // wantMarketplace / wantObservability derive the expected names from the same
 // helpers the publish path uses, so the test pins the actual cross-surface
@@ -346,4 +354,180 @@ func TestGetPlugins_PerUserKeyBindsToOwner(t *testing.T) {
 	res, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: "someone-else@example.com"})
 	require.NoError(t, err, "per-user key ignores the vouched email and uses its owner")
 	require.Len(t, res.Marketplaces, 1)
+}
+
+// TestGetPlugins_RecordsDeviceSync covers the per-device heartbeat that lets
+// coverage attest a specific machine rather than its assigned user.
+func TestGetPlugins_RecordsDeviceSync(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+
+	_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
+		Email:        mockidp.MockUserEmail,
+		SerialNumber: new("C02XK1ABCDEF"),
+		Hostname:     new("dev-macbook-pro"),
+	})
+	require.NoError(t, err)
+
+	rows, err := testrepo.New(ti.conn).ListDeviceAgentDeviceSyncsFixture(ctx, ti.orgID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "c02xk1abcdef", rows[0].SerialNumber,
+		"stored lowercased so the value agrees with its own LOWER() dedup key and the coverage joins")
+	require.Equal(t, conv.NormalizeEmail(mockidp.MockUserEmail), rows[0].Email)
+	require.Equal(t, "dev-macbook-pro", rows[0].Hostname.String)
+}
+
+// TestGetPlugins_DeviceSyncSkippedWithoutSerial pins the graceful-degradation
+// contract: agents predating the capability, and machines with no readable
+// serial, must still sync and simply fall back to user-level coverage.
+func TestGetPlugins_DeviceSyncSkippedWithoutSerial(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+
+	for _, serial := range []*string{nil, new(""), new("   ")} {
+		_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
+			Email:        mockidp.MockUserEmail,
+			SerialNumber: serial,
+			Hostname:     nil,
+		})
+		require.NoError(t, err, "a missing serial must never fail the sync")
+	}
+
+	rows, err := testrepo.New(ti.conn).ListDeviceAgentDeviceSyncsFixture(ctx, ti.orgID)
+	require.NoError(t, err)
+	require.Empty(t, rows, "no serial means no device row")
+
+	// The user-level heartbeat still lands, which is what coverage falls back to.
+	userRows, err := agentrepo.New(ti.conn).ListDeviceAgentSyncs(ctx, ti.orgID)
+	require.NoError(t, err)
+	require.Len(t, userRows, 1)
+}
+
+// TestGetPlugins_DeviceSyncReassignmentBeatsThrottle is the regression test for
+// the throttle trap: last_seen_at is almost always fresh at a ~60s poll, so a
+// guard that only checked it would leave a reassigned machine attributed to its
+// previous owner for the whole session.
+func TestGetPlugins_DeviceSyncReassignmentBeatsThrottle(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+
+	const serial = "C02XK1ABCDEF"
+	_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
+		Email:        mockidp.MockUserEmail,
+		SerialNumber: ptr(serial),
+		Hostname:     new("old-name"),
+	})
+	require.NoError(t, err)
+
+	rows, err := testrepo.New(ti.conn).ListDeviceAgentDeviceSyncsFixture(ctx, ti.orgID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	firstSeen := rows[0].LastSeenAt.Time
+
+	// Same machine, same user, immediately: the heartbeat throttle holds.
+	_, err = ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
+		Email:        mockidp.MockUserEmail,
+		SerialNumber: ptr(serial),
+		Hostname:     new("old-name"),
+	})
+	require.NoError(t, err)
+	rows, err = testrepo.New(ti.conn).ListDeviceAgentDeviceSyncsFixture(ctx, ti.orgID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "same serial must not create a second row")
+	require.Equal(t, firstSeen, rows[0].LastSeenAt.Time,
+		"an unchanged poll inside the 1-minute guard must not advance last_seen_at")
+
+	// A rename inside the same window must land despite the throttle.
+	_, err = ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
+		Email:        mockidp.MockUserEmail,
+		SerialNumber: ptr(serial),
+		Hostname:     new("new-name"),
+	})
+	require.NoError(t, err)
+	rows, err = testrepo.New(ti.conn).ListDeviceAgentDeviceSyncsFixture(ctx, ti.orgID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "new-name", rows[0].Hostname.String,
+		"a changed hostname must not wait out the heartbeat throttle")
+
+	// Dropping the hostname must not blank a known one.
+	_, err = ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
+		Email:        mockidp.MockUserEmail,
+		SerialNumber: ptr(serial),
+		Hostname:     nil,
+	})
+	require.NoError(t, err)
+	rows, err = testrepo.New(ti.conn).ListDeviceAgentDeviceSyncsFixture(ctx, ti.orgID)
+	require.NoError(t, err)
+	require.Equal(t, "new-name", rows[0].Hostname.String,
+		"an agent that stops reporting a hostname must not erase the stored one")
+}
+
+// TestGetPlugins_DeviceSyncNormalizesSerialCase pins the write-side
+// normalization. The dedup key and every coverage reader compare
+// LOWER(serial_number), so a machine reporting two casings must resolve to ONE
+// row — otherwise both would match its device and fan out its coverage.
+func TestGetPlugins_DeviceSyncNormalizesSerialCase(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+
+	for _, reported := range []string{"C02XK1ABCDEF", "c02xk1abcdef", "  C02xk1AbCdEf  "} {
+		_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
+			Email:        mockidp.MockUserEmail,
+			SerialNumber: new(reported),
+			Hostname:     nil,
+		})
+		require.NoError(t, err)
+	}
+
+	rows, err := testrepo.New(ti.conn).ListDeviceAgentDeviceSyncsFixture(ctx, ti.orgID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "casing variants of one machine's serial must collapse to a single row")
+	require.Equal(t, "c02xk1abcdef", rows[0].SerialNumber, "stored canonically, matching the LOWER() dedup key")
+}
+
+// TestGetPlugins_DeviceSyncRejectsPlaceholderSerials guards the compliance
+// claim: white-box hardware reports SMBIOS defaults verbatim, so many DIFFERENT
+// machines can share one "serial". Storing a heartbeat under it would let one
+// agent install attest all of them as device-verified.
+func TestGetPlugins_DeviceSyncRejectsPlaceholderSerials(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+
+	for _, placeholder := range []string{
+		"To Be Filled By O.E.M.",
+		"Default string",
+		"System Serial Number",
+		"0",
+		"none",
+		"N/A",
+	} {
+		_, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{
+			Email:        mockidp.MockUserEmail,
+			SerialNumber: new(placeholder),
+			Hostname:     nil,
+		})
+		require.NoError(t, err, "a placeholder serial must never fail the sync")
+	}
+
+	rows, err := testrepo.New(ti.conn).ListDeviceAgentDeviceSyncsFixture(ctx, ti.orgID)
+	require.NoError(t, err)
+	require.Empty(t, rows, "placeholder serials are not device identities; coverage falls back to the email match")
+
+	// The user-level heartbeat still lands, so these devices stay covered at
+	// the weaker attestation rather than dropping out entirely.
+	userRows, err := agentrepo.New(ti.conn).ListDeviceAgentSyncs(ctx, ti.orgID)
+	require.NoError(t, err)
+	require.Len(t, userRows, 1)
 }

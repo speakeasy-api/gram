@@ -36,7 +36,7 @@ export const MODEL_KEY_SLOTS: ModelKeySlot[] = [
   },
   {
     slot: "prompt-injection",
-    name: "Prompt injection classifier",
+    name: "Prompt injection judge",
     description: "Prompt injection scanning of observed agent traffic.",
   },
 ];

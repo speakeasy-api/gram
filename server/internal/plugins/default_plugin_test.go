@@ -1,6 +1,7 @@
 package plugins_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -130,7 +131,7 @@ func TestEnsureDefaultPlugin_PromotesExistingDefaultSlugPlugin(t *testing.T) {
 	require.Equal(t, pgtype.Bool{Bool: true, Valid: true}, result.Plugin.IsDefault)
 }
 
-func TestAttachToDefaultPlugin_DisplayNameCollision_ReturnsError(t *testing.T) {
+func TestAttachToDefaultPlugin_DisplayNameCollision_Uniquifies(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestPluginsService(t)
@@ -145,6 +146,7 @@ func TestAttachToDefaultPlugin_DisplayNameCollision_ReturnsError(t *testing.T) {
 	result, err := plugins.AttachToDefaultPlugin(ctx, tx1, plugins.AttachToDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
+		ToolsetID:      uuid.NullUUID{},
 		McpServerID:    uuid.NullUUID{UUID: first.id, Valid: true},
 		DisplayName:    "Attach Test Server",
 	})
@@ -152,22 +154,90 @@ func TestAttachToDefaultPlugin_DisplayNameCollision_ReturnsError(t *testing.T) {
 	require.NotNil(t, result)
 	require.NoError(t, tx1.Commit(ctx))
 
-	// A different mcp_server that happens to derive the same display name
-	// must not be silently dropped — the display_name unique violation is a
-	// different failure mode than "already attached" and must surface.
+	// A different mcp_server deriving the same display name must neither be
+	// silently dropped nor block the attach (the caller's triggering action —
+	// e.g. enabling the server — would fail with it): the name is uniquified
+	// with the backend-id suffix instead.
 	second := createTestMcpServer(t, ctx, ti.conn, "Attach Test Server 2", mcpservers.VisibilityPublic)
 	tx2 := testenv.BeginTx(t, ctx, ti.conn)
-	_, err = plugins.AttachToDefaultPlugin(ctx, tx2, plugins.AttachToDefaultPluginParams{
+	attached, err := plugins.AttachToDefaultPlugin(ctx, tx2, plugins.AttachToDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
+		ToolsetID:      uuid.NullUUID{},
 		McpServerID:    uuid.NullUUID{UUID: second.id, Valid: true},
 		DisplayName:    "Attach Test Server",
 	})
-	require.Error(t, err)
+	require.NoError(t, err)
+	require.NotNil(t, attached)
+	require.NoError(t, tx2.Commit(ctx))
+
+	idStr := second.id.String()
+	require.Equal(t, fmt.Sprintf("Attach Test Server (%s)", idStr[len(idStr)-4:]), attached.Server.DisplayName)
 
 	servers, err := queries.ListPluginServers(ctx, result.PluginID)
 	require.NoError(t, err)
-	require.Len(t, servers, 1, "the colliding server must not have been attached")
+	require.Len(t, servers, 2, "both same-named servers must be attached")
+}
+
+func TestAttachToDefaultPlugin_SuffixedNameAlsoTaken_ProbesLadder(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	queries := pluginsrepo.New(ti.conn)
+
+	first := createTestMcpServer(t, ctx, ti.conn, "Ladder Test Server", mcpservers.VisibilityPublic)
+	tx1 := testenv.BeginTx(t, ctx, ti.conn)
+	result, err := plugins.AttachToDefaultPlugin(ctx, tx1, plugins.AttachToDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		ToolsetID:      uuid.NullUUID{},
+		McpServerID:    uuid.NullUUID{UUID: first.id, Valid: true},
+		DisplayName:    "Ladder Test Server",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NoError(t, tx1.Commit(ctx))
+
+	// Occupy the backend-id-suffixed candidate too, the way a user renaming a
+	// plugin server (UpdatePluginServer) can. A single derived candidate is
+	// therefore not enough: the attach must keep probing rather than trip the
+	// unique index and fail the caller's triggering action.
+	second := createTestMcpServer(t, ctx, ti.conn, "Ladder Test Server 2", mcpservers.VisibilityPublic)
+	idStr := second.id.String()
+	suffix := idStr[len(idStr)-4:]
+
+	squatter := createTestToolset(t, ctx, ti.conn, "ladder-squatter")
+	_, err = queries.AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
+		PluginID:    result.PluginID,
+		ToolsetID:   uuid.NullUUID{UUID: squatter.ID, Valid: true},
+		McpServerID: uuid.NullUUID{},
+		DisplayName: fmt.Sprintf("Ladder Test Server (%s)", suffix),
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	tx2 := testenv.BeginTx(t, ctx, ti.conn)
+	attached, err := plugins.AttachToDefaultPlugin(ctx, tx2, plugins.AttachToDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		ToolsetID:      uuid.NullUUID{},
+		McpServerID:    uuid.NullUUID{UUID: second.id, Valid: true},
+		DisplayName:    "Ladder Test Server",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, attached)
+	require.NoError(t, tx2.Commit(ctx))
+
+	require.Equal(t, fmt.Sprintf("Ladder Test Server (%s 2)", suffix), attached.Server.DisplayName)
+
+	servers, err := queries.ListPluginServers(ctx, result.PluginID)
+	require.NoError(t, err)
+	require.Len(t, servers, 3, "the attach must succeed alongside both occupied names")
 }
 
 func TestListPluginPublishCandidates_IncludesNeverPublishedDefaultPlugin(t *testing.T) {

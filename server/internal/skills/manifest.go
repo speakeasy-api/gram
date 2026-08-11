@@ -20,6 +20,8 @@ import (
 
 	"golang.org/x/text/unicode/norm"
 	"gopkg.in/yaml.v3"
+
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 const (
@@ -30,6 +32,11 @@ const (
 
 var errCanonicalDocumentTooLarge = errors.New("canonical skill manifest exceeds 65536 bytes")
 var errYAMLSourceTooDeep = errors.New("YAML source exceeds maximum nesting depth of 64")
+
+// ErrSkillSuggestionNoOp marks a valid proposal that is canonically identical
+// to its base. Suggestion generation treats this as a terminal decline rather
+// than asking the model to reformat the same content.
+var ErrSkillSuggestionNoOp = errors.New("skill suggestion is unchanged from base")
 
 type validationError struct {
 	Code    string `json:"code"`
@@ -49,6 +56,54 @@ type parsedSkillManifest struct {
 	RawSHA256        string
 	CanonicalSHA256  string
 	canonicalContent string
+}
+
+// ValidatedSkillSuggestion is a proposed SKILL.md that differs canonically
+// from its base version.
+type ValidatedSkillSuggestion struct {
+	Content         string
+	CanonicalSHA256 string
+}
+
+// ValidateSkillSuggestion applies the SKILL.md parser and spec validation used
+// by skill versions, verifies the target skill, and rejects canonical no-ops.
+func ValidateSkillSuggestion(content, expectedName, baseCanonicalSHA256 string) (ValidatedSkillSuggestion, error) {
+	proposed, err := parseSkillManifest(content)
+	if err != nil {
+		return ValidatedSkillSuggestion{}, fmt.Errorf("validate proposed skill manifest: %w", err)
+	}
+	if !proposed.SpecValid {
+		return ValidatedSkillSuggestion{}, fmt.Errorf("validate proposed skill manifest: manifest is not spec-valid: %s", formatSkillValidationErrors(proposed.ValidationErrors))
+	}
+	if proposed.Name != expectedName {
+		return ValidatedSkillSuggestion{}, fmt.Errorf("validate proposed skill manifest: name %q does not match skill %q", proposed.Name, expectedName)
+	}
+
+	if proposed.CanonicalSHA256 == baseCanonicalSHA256 {
+		return ValidatedSkillSuggestion{}, fmt.Errorf("validate proposed skill manifest: content is unchanged from base: %w", ErrSkillSuggestionNoOp)
+	}
+
+	return ValidatedSkillSuggestion{
+		Content:         proposed.RawContent,
+		CanonicalSHA256: proposed.CanonicalSHA256,
+	}, nil
+}
+
+func formatSkillValidationErrors(validationErrors []validationError) string {
+	const maxDetails = 3
+
+	details := make([]string, 0, min(len(validationErrors), maxDetails))
+	for _, validationErr := range validationErrors[:min(len(validationErrors), maxDetails)] {
+		details = append(details, fmt.Sprintf("field=%q code=%q message=%q",
+			conv.TruncateString(validationErr.Field, 80),
+			conv.TruncateString(validationErr.Code, 40),
+			conv.TruncateString(validationErr.Message, 200),
+		))
+	}
+	if omitted := len(validationErrors) - len(details); omitted > 0 {
+		details = append(details, fmt.Sprintf("%d more", omitted))
+	}
+	return strings.Join(details, "; ")
 }
 
 func parseSkillManifest(content string) (parsedSkillManifest, error) {
@@ -614,7 +669,7 @@ func normalizeSkillName(displayName string) (string, error) {
 
 func validateSkillSpec(fields map[string]*yaml.Node, displayName string) []validationError {
 	validationErrors := make([]validationError, 0)
-	if !validSpecName(displayName) {
+	if !ValidSpecName(displayName) {
 		validationErrors = append(validationErrors, validationError{
 			Code:    "invalid_format",
 			Field:   "name",
@@ -684,7 +739,8 @@ func validateSkillSpec(fields map[string]*yaml.Node, displayName string) []valid
 	return validationErrors
 }
 
-func validSpecName(name string) bool {
+// ValidSpecName reports whether name is already in canonical skill-spec form.
+func ValidSpecName(name string) bool {
 	if len(name) == 0 || len(name) > 64 || name[0] == '-' || name[len(name)-1] == '-' {
 		return false
 	}

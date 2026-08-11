@@ -107,23 +107,3 @@ func (s *PKCEService) VerifyCodeChallenge(ctx context.Context, codeVerifier, cod
 
 	return nil
 }
-
-// ValidatePKCEFlow validates the complete PKCE flow
-func (s *PKCEService) ValidatePKCEFlow(ctx context.Context, grant *Grant, codeVerifier string) error {
-	// Check if PKCE was used in the authorization request
-	if grant.CodeChallenge == "" {
-		return fmt.Errorf("PKCE code challenge not found in grant")
-	}
-
-	if grant.CodeChallengeMethod == "" {
-		return fmt.Errorf("PKCE code challenge method not found in grant")
-	}
-
-	// Verify the code verifier against the challenge
-	err := s.VerifyCodeChallenge(ctx, codeVerifier, grant.CodeChallenge, grant.CodeChallengeMethod)
-	if err != nil {
-		return fmt.Errorf("PKCE verification failed: %w", err)
-	}
-
-	return nil
-}

@@ -188,7 +188,7 @@ SELECT
     p.slug as project_slug,
     
     -- Organization metadata fields
-    om.id, om.name, om.slug, om.gram_account_type, om.sso_connection_id, om.workos_id, om.workos_updated_at, om.workos_last_event_id, om.svix_app_id, om.webhooks_enabled, om.whitelisted, om.free_trial_started_at, om.free_trial_ends_at, om.scim_enabled, om.sso_enabled, om.created_at, om.updated_at, om.disabled_at
+    om.id, om.name, om.slug, om.gram_account_type, om.workos_id, om.workos_updated_at, om.workos_last_event_id, om.svix_app_id, om.webhooks_enabled, om.whitelisted, om.free_trial_started_at, om.free_trial_ends_at, om.scim_enabled, om.sso_enabled, om.created_at, om.updated_at, om.disabled_at
     
 FROM projects p
 INNER JOIN organization_metadata om ON p.organization_id = om.id
@@ -204,7 +204,6 @@ type GetProjectWithOrganizationMetadataRow struct {
 	Name               string
 	Slug               string
 	GramAccountType    string
-	SsoConnectionID    pgtype.Text
 	WorkosID           pgtype.Text
 	WorkosUpdatedAt    pgtype.Timestamptz
 	WorkosLastEventID  pgtype.Text
@@ -231,7 +230,6 @@ func (q *Queries) GetProjectWithOrganizationMetadata(ctx context.Context, id uui
 		&i.Name,
 		&i.Slug,
 		&i.GramAccountType,
-		&i.SsoConnectionID,
 		&i.WorkosID,
 		&i.WorkosUpdatedAt,
 		&i.WorkosLastEventID,
@@ -325,6 +323,51 @@ ORDER BY id ASC
 
 func (q *Queries) ListProjectsByOrganization(ctx context.Context, organizationID string) ([]Project, error) {
 	rows, err := q.db.Query(ctx, listProjectsByOrganization, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Project
+	for rows.Next() {
+		var i Project
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.OrganizationID,
+			&i.LogoAssetID,
+			&i.FunctionsRunnerVersion,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectsByOrganizationLimited = `-- name: ListProjectsByOrganizationLimited :many
+SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
+FROM projects
+WHERE organization_id = $1
+  AND deleted IS FALSE
+ORDER BY id ASC
+LIMIT $2
+`
+
+type ListProjectsByOrganizationLimitedParams struct {
+	OrganizationID string
+	LimitValue     int32
+}
+
+func (q *Queries) ListProjectsByOrganizationLimited(ctx context.Context, arg ListProjectsByOrganizationLimitedParams) ([]Project, error) {
+	rows, err := q.db.Query(ctx, listProjectsByOrganizationLimited, arg.OrganizationID, arg.LimitValue)
 	if err != nil {
 		return nil, err
 	}

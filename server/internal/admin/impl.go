@@ -417,6 +417,7 @@ func (s *Service) UpdateOrganization(ctx context.Context, payload *gen.UpdateOrg
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "fetch organization after update").LogError(ctx, s.logger)
 	}
+
 	return adminOrganizationFromGetRow(row), nil
 }
 

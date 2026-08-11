@@ -42,10 +42,35 @@ var allowedHeaders = map[string]struct{}{
 	"x-ratelimit-reset":       {},
 }
 
+// CallToolPayload is the request body Gram POSTs to /tool-call. Mirrored by
+// the server's own encode type in `server/internal/functions/auth.go` — the
+// two live in separate `internal` subtrees and cannot import one another, so
+// they must be changed together.
 type CallToolPayload struct {
 	ToolName    string            `json:"name"`
 	Input       json.RawMessage   `json:"input"`
 	Environment map[string]string `json:"environment,omitempty,omitzero"`
+	Meta        *ToolCallMeta     `json:"_meta,omitempty"`
+}
+
+// ToolCallMeta describes the caller of one tool call, keyed the way MCP keys
+// request `_meta`. Decoding into a declared shape (rather than forwarding the
+// bytes) is what bounds what reaches the entrypoint: the request is re-encoded
+// from this struct, so unknown keys never make it into the subprocess
+// arguments.
+type ToolCallMeta struct {
+	// ClientInfo is what the MCP client reports about itself. Untrusted and
+	// self-reported.
+	ClientInfo *MCPClientInfo `json:"io.modelcontextprotocol/clientInfo,omitempty"`
+	// OAuthClientID is the OAuth client the caller authenticated as.
+	OAuthClientID string `json:"gram.ai/oauth-client-id,omitempty"`
+}
+
+// MCPClientInfo is an MCP `Implementation` value: the name and version a
+// client reports for itself.
+type MCPClientInfo struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
 }
 
 type callRequest struct {

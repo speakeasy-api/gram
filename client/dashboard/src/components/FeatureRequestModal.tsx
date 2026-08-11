@@ -1,9 +1,17 @@
-import { Dialog } from "@/components/ui/dialog";
+import { Dialog } from "@/components/ui/Dialog";
+import { InputField } from "@/components/moon/input-field";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button } from "@/components/ui/Button";
 import { LucideIcon } from "lucide-react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useOrgRoutes } from "@/routes";
+
+interface FeatureRequestInput {
+  label: string;
+  placeholder: string;
+  telemetryField: string;
+}
 
 interface FeatureRequestModalProps {
   isOpen: boolean;
@@ -14,6 +22,7 @@ interface FeatureRequestModalProps {
   icon?: LucideIcon;
   telemetryData?: Record<string, unknown>;
   accountUpgrade?: boolean;
+  requestInput?: FeatureRequestInput;
 }
 
 export function FeatureRequestModal({
@@ -25,20 +34,38 @@ export function FeatureRequestModal({
   icon: Icon,
   telemetryData,
   accountUpgrade,
+  requestInput,
 }: FeatureRequestModalProps): JSX.Element {
   const telemetry = useTelemetry();
   const routes = useOrgRoutes();
+  const [requestInputValue, setRequestInputValue] = useState("");
+
+  useEffect(() => {
+    if (!isOpen) {
+      setRequestInputValue("");
+    }
+  }, [isOpen]);
+
+  const handleClose = () => {
+    setRequestInputValue("");
+    onClose();
+  };
 
   const handleRequestFeature = async () => {
     if (accountUpgrade) return; // For account upgrades, this is handled by the anchor tag's onClick
 
     try {
+      const requestTelemetry = { ...telemetryData };
+      if (requestInput) {
+        requestTelemetry[requestInput.telemetryField] =
+          requestInputValue.trim();
+      }
       telemetry.capture("feature_requested", {
         action: actionType,
-        ...telemetryData,
+        ...requestTelemetry,
       });
       toast.success("Feature requested");
-      onClose();
+      handleClose();
     } catch {
       toast.error("Failed to request feature");
     }
@@ -52,7 +79,12 @@ export function FeatureRequestModal({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) handleClose();
+      }}
+    >
       <Dialog.Content className="sm:max-w-md">
         <Dialog.Header className="text-center">
           {Icon && (
@@ -65,6 +97,16 @@ export function FeatureRequestModal({
             {description}
           </Dialog.Description>
         </Dialog.Header>
+        {requestInput && (
+          <InputField
+            label={requestInput.label}
+            value={requestInputValue}
+            onChange={(event) => setRequestInputValue(event.target.value)}
+            placeholder={requestInput.placeholder}
+            required
+            autoFocus
+          />
+        )}
         <Dialog.Footer className="gap-3 sm:justify-center">
           {accountUpgrade ? (
             <Button
@@ -77,7 +119,11 @@ export function FeatureRequestModal({
               UPGRADE
             </Button>
           ) : (
-            <Button variant="brand" onClick={() => void handleRequestFeature()}>
+            <Button
+              variant="brand"
+              disabled={!!requestInput && !requestInputValue.trim()}
+              onClick={() => void handleRequestFeature()}
+            >
               REQUEST FEATURE
             </Button>
           )}

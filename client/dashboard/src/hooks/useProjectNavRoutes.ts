@@ -1,9 +1,10 @@
 import { useMemo } from "react";
 import { useProject } from "@/contexts/Auth";
-import { useTelemetry } from "@/contexts/Telemetry";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { AppRoute, useRoutes } from "@/routes";
+import { useOrgMemoryDeveloperToggle } from "./useOrgMemoryDeveloperToggle";
 
 /** A project nav page plus the scopes that grant access to it. */
 export interface ProjectNavRoute {
@@ -35,17 +36,15 @@ export interface ProjectNavRoute {
 export function useProjectNavRoutes(): ProjectNavRoute[] {
   const routes = useRoutes();
   const { id: projectId } = useProject();
-  const telemetry = useTelemetry();
-  const { data: productFeatures } = useProductFeatures(undefined, undefined, {
-    staleTime: 30_000,
-    throwOnError: false,
-  });
+  const assistantsFlag = useFeatureFlag(FEATURE_FLAGS.assistants);
+  const deploymentsPageFlag = useFeatureFlag(FEATURE_FLAGS.deploymentsPage);
+  const [isOrgMemoryEnabled] = useOrgMemoryDeveloperToggle();
 
-  const isAssistantsEnabled = telemetry.isFeatureEnabled("assistants") ?? false;
-  // Default true: opt-out via PostHog org-group targeting on `gram-deployments-page`.
-  const isDeploymentsPageEnabled =
-    telemetry.isFeatureEnabled("gram-deployments-page") ?? true;
-  const isSkillsEnabled = productFeatures?.skillsEnabled === true;
+  // Assistants is opt-in: unavailable flags remain hidden.
+  const isAssistantsEnabled = assistantsFlag.status === "enabled";
+  // Deployments is opt-out: it remains visible unless PostHog explicitly
+  // resolves the flag to disabled.
+  const isDeploymentsPageEnabled = deploymentsPageFlag.status !== "disabled";
 
   return useMemo<ProjectNavRoute[]>(() => {
     const read: Scope[] = ["project:read"];
@@ -74,8 +73,8 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
         : []),
       {
         route: routes.skills,
-        scope: isSkillsEnabled ? ["skill:read"] : read,
-        ...(isSkillsEnabled ? { resourceId: projectId } : {}),
+        scope: ["skill:read"],
+        resourceId: projectId,
       },
       { route: routes.plugins, scope: readWrite },
       { route: routes.environments, scope: readWrite },
@@ -83,6 +82,9 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       { route: routes.costs, scope: observe },
       { route: routes.insights, scope: observe },
       { route: routes.agentSessions, scope: observe },
+      ...(isOrgMemoryEnabled
+        ? [{ route: routes.orgMemory, scope: observe }]
+        : []),
       { route: routes.logs, scope: observe },
       { route: routes.riskOverview, scope: read },
       { route: routes.policyCenter, scope: readWrite },
@@ -96,6 +98,6 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     projectId,
     isAssistantsEnabled,
     isDeploymentsPageEnabled,
-    isSkillsEnabled,
+    isOrgMemoryEnabled,
   ]);
 }

@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import * as React from "react";
 import { CalendarIcon, ChevronDown, Zap } from "lucide-react";
-import { generateObject, LanguageModel } from "ai";
+import { generateText, LanguageModel, Output } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
 
@@ -171,6 +171,102 @@ type ParseResult =
   | { type: "custom"; range: TimeRange; label?: string }
   | null;
 
+const MONTH_INDEX_BY_NAME: Readonly<Record<string, number>> = {
+  jan: 0,
+  january: 0,
+  feb: 1,
+  february: 1,
+  mar: 2,
+  march: 2,
+  apr: 3,
+  april: 3,
+  may: 4,
+  jun: 5,
+  june: 5,
+  jul: 6,
+  july: 6,
+  aug: 7,
+  august: 7,
+  sep: 8,
+  sept: 8,
+  september: 8,
+  oct: 9,
+  october: 9,
+  nov: 10,
+  november: 10,
+  dec: 11,
+  december: 11,
+};
+const SINCE_DATE_PATTERN =
+  /^since\s+([a-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?$/i;
+
+/**
+ * Resolve common calendar-relative ranges locally.
+ *
+ * These inputs are deterministic and should not depend on the availability of
+ * the AI parsing endpoint. More flexible natural-language input still falls
+ * through to parseWithAI.
+ */
+export function parseRelativeTimeRange(
+  input: string,
+  now = new Date(),
+): ParseResult {
+  const normalizedInput = input.trim().replace(/\s+/g, " ").toLowerCase();
+
+  if (normalizedInput === "this month") {
+    const from = new Date(now.getFullYear(), now.getMonth(), 1);
+    return {
+      type: "custom",
+      range: { from, to: new Date(now) },
+      label: from.toLocaleDateString("en-US", { month: "short" }),
+    };
+  }
+
+  if (normalizedInput === "this year") {
+    return {
+      type: "custom",
+      range: {
+        from: new Date(now.getFullYear(), 0, 1),
+        to: new Date(now),
+      },
+      label: String(now.getFullYear()),
+    };
+  }
+
+  const sinceMatch = SINCE_DATE_PATTERN.exec(normalizedInput);
+  if (!sinceMatch) return null;
+
+  const month = MONTH_INDEX_BY_NAME[sinceMatch[1]!];
+  const day = Number(sinceMatch[2]);
+  const explicitYear = sinceMatch[3] ? Number(sinceMatch[3]) : null;
+  if (month === undefined || day < 1 || day > 31) return null;
+
+  let year = explicitYear ?? now.getFullYear();
+  let from = new Date(year, month, day);
+
+  // Without a year, "since Dec 1" in July means the most recent Dec 1.
+  if (explicitYear === null && from.getTime() > now.getTime()) {
+    year -= 1;
+    from = new Date(year, month, day);
+  }
+
+  // Reject invalid dates (e.g. February 30) and explicit future ranges.
+  if (
+    from.getFullYear() !== year ||
+    from.getMonth() !== month ||
+    from.getDate() !== day ||
+    from.getTime() > now.getTime()
+  ) {
+    return null;
+  }
+
+  return {
+    type: "custom",
+    range: { from, to: new Date(now) },
+    label: `${month + 1}/${day}-${now.getMonth() + 1}/${now.getDate()}`,
+  };
+}
+
 // Exported for unit testing. Decides how a successful parse is applied given
 // the picker's available presets: `availablePresets` only limits the
 // quick-pick options, so typed input that the AI normalizes to a preset
@@ -240,6 +336,9 @@ export async function parseWithAI(
   projectSlug?: string,
   authHeaders?: Record<string, string>,
 ): Promise<ParseResult> {
+  const relativeRange = parseRelativeTimeRange(input);
+  if (relativeRange) return relativeRange;
+
   try {
     const now = new Date();
 
@@ -267,9 +366,9 @@ export async function parseWithAI(
 
     const model = openRouter.chat(TIME_RANGE_MODEL) as LanguageModel;
 
-    const result = await generateObject({
+    const result = await generateText({
       model,
-      schema: timeRangeSchema,
+      output: Output.object({ schema: timeRangeSchema }),
       prompt: `You are a time range parser for an analytics dashboard. Parse natural language into a PAST time range.
 Current time: ${now.toISOString()}
 
@@ -299,7 +398,7 @@ Examples:
 User input: ${input}`,
     });
 
-    const parsed = result.object;
+    const parsed = result.output;
     // Parse dates as local to avoid timezone shifts
     const from = parseAsLocalDate(parsed.from);
     const to = parseAsLocalDate(parsed.to);

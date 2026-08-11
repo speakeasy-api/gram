@@ -27,13 +27,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	unproxiedmcprepo "github.com/speakeasy-api/gram/server/internal/unproxiedmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -84,7 +87,7 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	authCtx.AccountType = "enterprise"
@@ -100,7 +103,7 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 
 	auditLogger := audit.NewLogger()
 
-	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, "local", "https://app.getgram.ai", nil)
+	svc := plugins.NewService(logger, tracerProvider, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, "local", "https://app.getgram.ai", nil, nil)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -111,14 +114,14 @@ func newTestPluginsService(t *testing.T) (context.Context, *testInstance) {
 
 func newTestPluginsServiceWithGitHub(t *testing.T, ghClient plugins.GitHubPublisher) (context.Context, *testInstance) {
 	t.Helper()
-	return newTestPluginsServiceWithGitHubAndFeatures(t, ghClient, nil)
+	return newTestPluginsServiceWithGitHubAndFeatures(t, ghClient, nil, nil)
 }
 
 // newTestPluginsServiceWithGitHubAndFeatures builds a dashboard-style Service
 // (with auth) that also carries a feature provider, so the phased-rollout gating
 // on human-initiated hook-output changes (marketplace rename, observability-mode
 // toggle) can be exercised end to end.
-func newTestPluginsServiceWithGitHubAndFeatures(t *testing.T, ghClient plugins.GitHubPublisher, features feature.Provider) (context.Context, *testInstance) {
+func newTestPluginsServiceWithGitHubAndFeatures(t *testing.T, ghClient plugins.GitHubPublisher, features feature.Provider, platformAdmission plugins.PlatformMCPAdmission) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -136,7 +139,7 @@ func newTestPluginsServiceWithGitHubAndFeatures(t *testing.T, ghClient plugins.G
 
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
+	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	authCtx.AccountType = "enterprise"
@@ -164,12 +167,13 @@ func newTestPluginsServiceWithGitHubAndFeatures(t *testing.T, ghClient plugins.G
 		conn,
 		sessionManager,
 		cache.NewRedisCacheAdapter(redisClient),
-		authz.NewEngine(logger, conn, chConn, authztest.RBACAlwaysEnabled, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
+		authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
 		auditLogger,
 		ghConfig,
 		"local",
 		"https://app.getgram.ai",
 		features,
+		platformAdmission,
 	)
 
 	return ctx, &testInstance{
@@ -183,7 +187,7 @@ func newTestPluginsServiceWithGitHubAndFeatures(t *testing.T, ghClient plugins.G
 // worker does) that shares ti's database and GitHub mock but carries a feature
 // provider, so phased-rollout gating can be exercised end to end. Build fixtures
 // via ti.service (which has auth); publish via the returned publisher.
-func newTestPluginPublisher(t *testing.T, ti *testInstance, ghClient plugins.GitHubPublisher, features feature.Provider) *plugins.Service {
+func newTestPluginPublisher(t *testing.T, ti *testInstance, ghClient plugins.GitHubPublisher, features feature.Provider, platformAdmission plugins.PlatformMCPAdmission) *plugins.Service {
 	t.Helper()
 
 	ghConfig := &plugins.GitHubConfig{
@@ -200,6 +204,7 @@ func newTestPluginPublisher(t *testing.T, ti *testInstance, ghClient plugins.Git
 		"local",
 		"https://app.getgram.ai",
 		features,
+		platformAdmission,
 	)
 }
 
@@ -230,6 +235,16 @@ func rewindPublishedHooksVersion(t *testing.T, ctx context.Context, conn *pgxpoo
 // publishOrgID returns the organization id the publisher resolves for a project
 // — the org-metadata id used as the FlagHooksRollout distinct id, which is not
 // necessarily the same string as authCtx.ActiveOrganizationID.
+func setProjectSlug(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, slug string) {
+	t.Helper()
+
+	err := testrepo.New(conn).SetProjectSlugFixture(ctx, testrepo.SetProjectSlugFixtureParams{
+		Slug: slug,
+		ID:   projectID,
+	})
+	require.NoError(t, err)
+}
+
 func publishOrgID(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID) string {
 	t.Helper()
 
@@ -302,11 +317,12 @@ func createTestToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, na
 // server stands in for a Remote MCP-backed one without the remote_mcp_server /
 // user_session_issuer fixture weight.
 type mcpServerFixture struct {
-	id           uuid.UUID
-	idStr        string
-	name         string
-	slug         string
-	endpointSlug string
+	id                 uuid.UUID
+	idStr              string
+	name               string
+	slug               string
+	endpointSlug       string
+	backingToolsetSlug string
 }
 
 // createTestMcpServer creates an mcp_server in the active project with a single
@@ -326,6 +342,10 @@ func createTestMcpServerWithEndpoint(t *testing.T, ctx context.Context, conn *pg
 	// Back the mcp_server with a toolset to satisfy the backend-exclusivity
 	// check; the plugin path does not distinguish remote- vs toolset-backed.
 	backing := createTestToolset(t, ctx, conn, name+"-backing")
+	if visibility == mcpservers.VisibilityPublic {
+		err := toolsetsrepo.New(conn).SetToolsetMCPPublicByID(ctx, toolsetsrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: backing.ID, ProjectID: backing.ProjectID})
+		require.NoError(t, err)
+	}
 
 	slug := fmt.Sprintf("mcp-%s-%s", name, uuid.New().String()[:8])
 	serverID := uuid.New()
@@ -340,7 +360,7 @@ func createTestMcpServerWithEndpoint(t *testing.T, ctx context.Context, conn *pg
 	})
 	require.NoError(t, err)
 
-	fixture := mcpServerFixture{id: serverID, idStr: serverID.String(), name: name, slug: slug}
+	fixture := mcpServerFixture{id: serverID, idStr: serverID.String(), name: name, slug: slug, backingToolsetSlug: backing.Slug}
 
 	if withEndpoint {
 		endpointSlug := slug + "-endpoint"
@@ -355,6 +375,43 @@ func createTestMcpServerWithEndpoint(t *testing.T, ctx context.Context, conn *pg
 	}
 
 	return fixture
+}
+
+// createTestUnproxiedMcpServer creates an unproxied-backed mcp_server
+// with no mcp_endpoints row, mirroring how the real create flow leaves it
+// (there is no Gram-hosted endpoint to serve for a server Gram never
+// proxies). visibility controls publishability.
+func createTestUnproxiedMcpServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, name, visibility string) mcpServerFixture {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	backingID := uuid.New()
+	_, err := unproxiedmcprepo.New(conn).CreateServer(ctx, unproxiedmcprepo.CreateServerParams{
+		ID:          backingID,
+		ProjectID:   *authCtx.ProjectID,
+		Name:        pgtype.Text{String: name, Valid: true},
+		Slug:        pgtype.Text{String: fmt.Sprintf("unproxied-%s-%s", name, uuid.New().String()[:8]), Valid: true},
+		Url:         "https://vendor.example.com/mcp",
+		Description: pgtype.Text{},
+	})
+	require.NoError(t, err)
+
+	slug := fmt.Sprintf("mcp-%s-%s", name, uuid.New().String()[:8])
+	serverID := uuid.New()
+	_, err = mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                   serverID,
+		ProjectID:            *authCtx.ProjectID,
+		Name:                 pgtype.Text{String: name, Valid: true},
+		Slug:                 pgtype.Text{String: slug, Valid: true},
+		UnproxiedMcpServerID: uuid.NullUUID{UUID: backingID, Valid: true},
+		Visibility:           visibility,
+	})
+	require.NoError(t, err)
+
+	return mcpServerFixture{id: serverID, idStr: serverID.String(), name: name, slug: slug}
 }
 
 func withauthzGrants(t *testing.T, ctx context.Context, conn *pgxpool.Pool, grants ...authz.Grant) context.Context {

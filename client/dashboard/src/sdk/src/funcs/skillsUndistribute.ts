@@ -38,7 +38,7 @@ import { Result } from "../types/fp.js";
  * undistribute skills
  *
  * @remarks
- * Revoke a skill's active distribution to a plugin. Repeated requests are a no-op.
+ * Revoke a skill's active distribution to exactly one plugin or assistant. Repeated requests are a no-op.
  */
 export function skillsUndistribute(
   client: GramCore,

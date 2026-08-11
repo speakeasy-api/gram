@@ -17,8 +17,11 @@ type RiskResult struct {
 	// ID of the durable tool call block recorded for this finding's message, when
 	// one exists. Links to the block page at /blocks/:id.
 	BlockID *string
-	// The chat message that was scanned.
-	ChatMessageID string
+	// The chat message that was scanned, when the finding is anchored to a message.
+	ChatMessageID *string
+	// The chat content part that was scanned, when the finding is anchored to a
+	// content part.
+	ChatContentPartID *string
 	// The chat session containing the message.
 	ChatID *string
 	// Title of the chat session.
@@ -55,8 +58,7 @@ type RiskResult struct {
 	MatchRedacted *string
 	// When this result was created.
 	CreatedAt string
-	// True when the scanned message arrived as a replay from a device's offline
-	// spool after control-plane downtime — the finding was produced retroactively
-	// rather than from live traffic.
-	Replayed bool
+	// When this result was manually marked as a false positive. Null when not
+	// dismissed.
+	FalsePositiveAt *string
 }

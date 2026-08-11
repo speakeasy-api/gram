@@ -68,7 +68,7 @@ func seedRiskResult(t *testing.T, ti *testInstance, projectID uuid.UUID, orgID s
 		OrganizationID:    orgID,
 		RiskPolicyID:      policyID,
 		RiskPolicyVersion: policyVersion,
-		ChatMessageID:     msgID,
+		ChatMessageID:     uuid.NullUUID{UUID: msgID, Valid: true},
 		Source:            "gitleaks",
 		Found:             found,
 		RuleID:            pgtype.Text{String: "aws-access-key-id", Valid: found},
@@ -80,6 +80,48 @@ func seedRiskResult(t *testing.T, ti *testInstance, projectID uuid.UUID, orgID s
 		Tags:              nil,
 	}})
 	require.NoError(t, err)
+}
+
+func seedContentPartFinding(t *testing.T, ti *testInstance, projectID uuid.UUID, orgID string, policyID uuid.UUID, chatID uuid.UUID, parentMsgID uuid.UUID) uuid.UUID {
+	t.Helper()
+	ctx := t.Context()
+
+	repo := riskrepo.New(ti.conn)
+	partID, err := repo.CreateChatContentPartForTest(ctx, riskrepo.CreateChatContentPartForTestParams{
+		ChatID:              chatID,
+		ProjectID:           uuid.NullUUID{UUID: projectID, Valid: true},
+		Kind:                "prompt_attachment",
+		ContentAssetUrl:     "gs://test-bucket/content-part.txt",
+		ParentChatMessageID: uuid.NullUUID{UUID: parentMsgID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	resultID, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	match := "SECRET_ATTACHMENT_TOKEN"
+	_, err = repo.InsertRiskResults(ctx, []riskrepo.InsertRiskResultsParams{{
+		ID:                resultID,
+		ProjectID:         projectID,
+		OrganizationID:    orgID,
+		RiskPolicyID:      policyID,
+		RiskPolicyVersion: 1,
+		ChatMessageID:     uuid.NullUUID{},
+		ChatContentPartID: uuid.NullUUID{UUID: partID, Valid: true},
+		Source:            "gitleaks",
+		Found:             true,
+		RuleID:            pgtype.Text{String: "generic-api-key", Valid: true},
+		Description:       pgtype.Text{String: "Generic API key", Valid: true},
+		Match:             pgtype.Text{String: match, Valid: true},
+		StartPos:          pgtype.Int4{Int32: 0, Valid: true},
+		EndPos:            pgtype.Int4{Int32: int32(len(match)), Valid: true},
+		Confidence:        pgtype.Float8{Float64: 1.0, Valid: true},
+		Tags:              nil,
+		Spans:             []byte(`[{"match":"SECRET_ATTACHMENT_TOKEN","field":"content","path":"","start_pos":0,"end_pos":23}]`),
+	}})
+	require.NoError(t, err)
+
+	return partID
 }
 
 func TestListRiskResults_ByPolicy(t *testing.T) {
@@ -206,6 +248,69 @@ func TestListRiskResults_ByChatID(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Results, 1)
 	require.Equal(t, chatIDStr, *result.Results[0].ChatID)
+}
+
+func TestListRiskResults_ByChatID_IncludesContentPartFindings(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	chatID, msgID := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+		authz.NewGrant(authz.ScopeChatRead, chatID.String()),
+	)
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Content Part Chat Filter Test")})
+	require.NoError(t, err)
+	policyID, _ := uuid.Parse(policy.ID)
+	partID := seedContentPartFinding(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, chatID, msgID)
+
+	chatIDStr := chatID.String()
+	result, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{
+		ChatID: &chatIDStr,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Results, 1)
+
+	got := result.Results[0]
+	require.Nil(t, got.ChatMessageID)
+	require.NotNil(t, got.ChatContentPartID)
+	require.Equal(t, partID.String(), *got.ChatContentPartID)
+	require.Equal(t, chatIDStr, *got.ChatID)
+	require.NotNil(t, got.Match, "chat:read should preserve raw attachment match for transcript masking")
+	require.Equal(t, "SECRET_ATTACHMENT_TOKEN", *got.Match)
+	require.Len(t, got.Spans, 1, "attachment chips need spans for precise highlighting")
+	require.Equal(t, "SECRET_ATTACHMENT_TOKEN", got.Spans[0].Match)
+}
+
+func TestListRiskResults_ProjectIncludesContentPartFindings(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Content Part Project List Test")})
+	require.NoError(t, err)
+	policyID, _ := uuid.Parse(policy.ID)
+	chatID, msgID := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+	partID := seedContentPartFinding(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, chatID, msgID)
+
+	result, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{})
+	require.NoError(t, err)
+	require.Len(t, result.Results, 1)
+
+	got := result.Results[0]
+	require.Nil(t, got.ChatMessageID)
+	require.NotNil(t, got.ChatContentPartID)
+	require.Equal(t, partID.String(), *got.ChatContentPartID)
+	require.Nil(t, got.Match, "project-level list remains redacted without chat:read")
+	require.Nil(t, got.Spans)
+	require.NotNil(t, got.MatchRedacted)
+	require.NotContains(t, *got.MatchRedacted, "SECRET_ATTACHMENT_TOKEN")
 }
 
 func TestListRiskResults_ExcludesNotFound(t *testing.T) {
@@ -470,7 +575,7 @@ func TestDeleteRiskPolicy_Unauthorized(t *testing.T) {
 // seedRiskResultWith inserts a finding with caller-supplied source, rule_id,
 // and match so redaction-mode tests can vary inputs independently of the
 // gitleaks-flavoured default in seedRiskResult.
-func seedRiskResultWith(t *testing.T, ti *testInstance, projectID uuid.UUID, orgID string, policyID uuid.UUID, msgID uuid.UUID, source, ruleID, match string) {
+func seedRiskResultWith(t *testing.T, ti *testInstance, projectID uuid.UUID, orgID string, policyID uuid.UUID, msgID uuid.UUID, source, ruleID, match string) uuid.UUID {
 	t.Helper()
 	ctx := t.Context()
 
@@ -484,7 +589,7 @@ func seedRiskResultWith(t *testing.T, ti *testInstance, projectID uuid.UUID, org
 		OrganizationID:    orgID,
 		RiskPolicyID:      policyID,
 		RiskPolicyVersion: 1,
-		ChatMessageID:     msgID,
+		ChatMessageID:     uuid.NullUUID{UUID: msgID, Valid: true},
 		Source:            source,
 		Found:             true,
 		RuleID:            pgtype.Text{String: ruleID, Valid: ruleID != ""},
@@ -496,6 +601,7 @@ func seedRiskResultWith(t *testing.T, ti *testInstance, projectID uuid.UUID, org
 		Tags:              nil,
 	}})
 	require.NoError(t, err)
+	return resultID
 }
 
 func TestListRiskResultsForAgent_RedactsGitleaksMatch(t *testing.T) {

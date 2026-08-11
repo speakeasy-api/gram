@@ -826,12 +826,24 @@ type UserSessionResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 	// Slug of the user_session_issuer that gated this session.
 	IssuerSlug *string `form:"issuer_slug,omitempty" json:"issuer_slug,omitempty" xml:"issuer_slug,omitempty"`
+	// The user_session_client this session was issued through. Null for sessions
+	// with no bound client. Unlike client_name, this identifies the registration
+	// unambiguously, so it is what a per-client drill-down should match on.
+	UserSessionClientID *string `form:"user_session_client_id,omitempty" json:"user_session_client_id,omitempty" xml:"user_session_client_id,omitempty"`
 	// Name of the MCP client that established the session, if known.
+	// Client-controlled and unverified; do not present it as an identity.
 	ClientName *string `form:"client_name,omitempty" json:"client_name,omitempty" xml:"client_name,omitempty"`
+	// Set when the client that established this session was resolved from a Client
+	// ID Metadata Document (CIMD) hosted at this URL, rather than registered via
+	// RFC 7591 DCR. Null for DCR clients and for sessions with no bound client.
+	ClientIDMetadataURI *string `form:"client_id_metadata_uri,omitempty" json:"client_id_metadata_uri,omitempty" xml:"client_id_metadata_uri,omitempty"`
 	// Subject kind: 'user', 'apikey', or 'anonymous'.
 	SubjectType *string `form:"subject_type,omitempty" json:"subject_type,omitempty" xml:"subject_type,omitempty"`
 	// Resolved human-readable name of the subject, if known.
 	SubjectDisplayName *string `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
+	// Avatar URL for the subject when it resolves to a Gram user with one. Null
+	// for API key and anonymous subjects, and for users who have no photo.
+	SubjectPhotoURL *string `form:"subject_photo_url,omitempty" json:"subject_photo_url,omitempty" xml:"subject_photo_url,omitempty"`
 	// When the session was revoked, if it has been.
 	RevokedAt *string `form:"revoked_at,omitempty" json:"revoked_at,omitempty" xml:"revoked_at,omitempty"`
 }
@@ -2592,6 +2604,9 @@ func ValidateUserSessionResponseBody(body *UserSessionResponseBody) (err error) 
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	if body.UserSessionClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_client_id", *body.UserSessionClientID, goa.FormatUUID))
 	}
 	if body.RevokedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.revoked_at", *body.RevokedAt, goa.FormatDateTime))

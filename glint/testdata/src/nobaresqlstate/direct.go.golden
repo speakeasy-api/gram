@@ -1,0 +1,18 @@
+package nobaresqlstate
+
+import (
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
+)
+
+func pointerReceiver(pgErr *pgconn.PgError) bool {
+	return pgErr.Code == pgerrcode.UniqueViolation // want `compare pgconn\.PgError\.Code against a github\.com/jackc/pgerrcode constant instead of a bare SQLSTATE string literal`
+}
+
+func valueReceiver(pgErr pgconn.PgError) bool {
+	return pgErr.Code != pgerrcode.CardinalityViolation // want `compare pgconn\.PgError\.Code against a github\.com/jackc/pgerrcode constant instead of a bare SQLSTATE string literal`
+}
+
+func literalOnLeft(pgErr *pgconn.PgError) bool {
+	return pgerrcode.ForeignKeyViolation == pgErr.Code // want `compare pgconn\.PgError\.Code against a github\.com/jackc/pgerrcode constant instead of a bare SQLSTATE string literal`
+}

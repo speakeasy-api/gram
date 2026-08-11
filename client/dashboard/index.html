@@ -10,6 +10,10 @@
          default: light). Keep these in sync. -->
     <script src="/src/theme-init.ts" vite-ignore></script>
 
+    <!-- Nothing on this host wants search indexing: the app is behind login
+         and /shared/* pages are tokenized capability URLs. -->
+    <meta name="robots" content="noindex, nofollow" />
+
     <meta property="og:title" content="Speakeasy AI Control Plane" />
     <meta
       property="og:description"

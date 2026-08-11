@@ -73,6 +73,55 @@ WHERE om.disabled_at IS NULL
   AND om.gram_account_type = ANY(@account_types::text[])
 ORDER BY om.slug;
 
+-- name: GetOpenRouterCreditsAlertRecipients :many
+-- Resolve the billing alert recipient for each supplied organization that
+-- should receive an OpenRouter credit threshold warning. An org qualifies only
+-- if it is not disabled and has a billing alert email configured (the address
+-- set on the billing page). chat_byok reports whether the org has an enabled,
+-- non-deleted customer-supplied model provider key outside the internal-only
+-- slots (@internal_only_slots, the platform-initiated judge slots that never
+-- carry chat completions); such a key means the platform chat key is not what
+-- pays for the org's completions, so the caller suppresses chat-key warnings —
+-- deliberately org-wide, matching the ticket-level "no alerts for BYOK orgs"
+-- decision. The flag is returned rather than filtered on because it only
+-- applies to some key types: usage on the internal key is platform-billed
+-- regardless of any customer keys.
+SELECT
+    om.id AS organization_id,
+    om.name AS organization_name,
+    bm.alert_email,
+    EXISTS (
+        SELECT 1
+        FROM model_provider_keys mpk
+        WHERE mpk.organization_id = om.id
+          AND mpk.enabled = TRUE
+          AND mpk.deleted = FALSE
+          AND mpk.slot <> ALL(@internal_only_slots::text[])
+    )::boolean AS chat_byok
+FROM organization_metadata om
+JOIN billing_metadata bm ON bm.organization_id = om.id
+WHERE om.id = ANY(@organization_ids::text[])
+  AND om.disabled_at IS NULL
+  AND bm.alert_email IS NOT NULL;
+
+-- name: ListWeeklyUsageSummaryTargets :many
+-- Organizations that receive the weekly tokens-under-management usage
+-- summary email: not disabled, with a billing alert email configured (the
+-- address set on the billing page). The anchor day determines the billing
+-- cycle window the summary reports on; the slug builds the billing page
+-- link.
+SELECT
+    om.id AS organization_id,
+    om.name AS organization_name,
+    om.slug AS organization_slug,
+    bm.alert_email,
+    bm.billing_cycle_anchor_day
+FROM organization_metadata om
+JOIN billing_metadata bm ON bm.organization_id = om.id
+WHERE om.disabled_at IS NULL
+  AND bm.alert_email IS NOT NULL
+ORDER BY om.slug;
+
 -- name: GetUserEmailsByOrgIDs :many
 -- Get user emails for organization IDs by looking up the latest deployment for each org
 SELECT DISTINCT
@@ -94,7 +143,7 @@ WHERE d.organization_id = ANY($1::text[])
 SELECT id, seq, content, created_at
 FROM chat_messages
 WHERE chat_id = @chat_id
-  AND (project_id IS NULL OR project_id = @project_id)
+  AND project_id = @project_id
   AND role = 'user'
   AND content != ''
   AND (message_id IS NULL OR message_id = '')
@@ -107,7 +156,7 @@ UPDATE chat_messages
 SET message_id = @prompt_id
 WHERE id = @message_id
   AND chat_id = @chat_id
-  AND (project_id IS NULL OR project_id = @project_id)
+  AND project_id = @project_id
   AND role = 'user'
   AND (message_id IS NULL OR message_id = '');
 
@@ -187,3 +236,131 @@ ON CONFLICT (outbox_id) DO UPDATE SET
     last_error = EXCLUDED.last_error,
     dead_lettered = TRUE,
     updated_at = clock_timestamp();
+
+-- name: ClaimPublishOutboxBatch :many
+-- Leases a batch of publishable rows to this drainer. The lease plus SKIP
+-- LOCKED is what makes concurrent drains safe: two workers claim disjoint sets
+-- rather than racing to publish the same row. attempts is incremented here
+-- rather than on failure so it counts deliveries attempted, which is what the
+-- dead-letter threshold acts on. The statement commits on its own — the caller
+-- must not hold a transaction open across the Pub/Sub round trip, or a stalled
+-- publish would pin an XID and block vacuum database-wide.
+--
+-- locked_until doubles as the claim's fencing token, which is why the
+-- settlement statements match on it. A row can only be re-claimed once its
+-- lease has elapsed, so each claim sets a value strictly greater than the last,
+-- and a drain that overran its lease finds no row to settle instead of
+-- overwriting the claim that replaced it.
+--
+-- lease_token identifies this claim, and the settlement statements match on it
+-- so a drain that overran its lease finds no row to settle instead of
+-- overwriting the claim that replaced it. The caller mints it: gen_random_uuid()
+-- is volatile and would evaluate per row, giving every row in one batch a
+-- different token and leaving settlement no single value to match.
+UPDATE publish_outbox SET
+    locked_until = clock_timestamp() + @lease::interval,
+    lease_token = @lease_token::uuid,
+    attempts = attempts + 1,
+    updated_at = clock_timestamp()
+WHERE id IN (
+  SELECT o.id
+  FROM publish_outbox o
+  WHERE (o.retry_after IS NULL OR o.retry_after <= clock_timestamp())
+    AND (o.locked_until IS NULL OR o.locked_until <= clock_timestamp())
+  ORDER BY o.id ASC
+  LIMIT @batch_size
+  FOR UPDATE SKIP LOCKED
+)
+RETURNING id, public_id, organization_id, topic, message, attributes, attempts, created_at;
+
+-- name: DeletePublishedOutboxRows :execrows
+-- Removes rows whose publish was acknowledged by Pub/Sub. Deleting rather than
+-- marking is what keeps the table near-empty and its updates cheap.
+--
+-- Matched on the lease as well as the id, so a drain that outlived its own
+-- lease cannot settle a row another worker has since claimed. See
+-- ClaimPublishOutboxBatch for why locked_until identifies the claim.
+DELETE FROM publish_outbox
+WHERE id = ANY(@ids::bigint[])
+  AND lease_token = @lease_token::uuid;
+
+-- name: MarkPublishOutboxFailed :exec
+-- Records a transient publish failure and releases the lease so the row is
+-- eligible again once retry_after elapses.
+--
+-- Both the delay and the error arrive per row, expanded in lockstep with the
+-- ids. A claim is ordered by id, so one batch mixes rows on their first attempt
+-- with rows deep into their back-off; a single timestamp for the batch would
+-- hand every row the shortest delay among them, and back-off would never
+-- escalate for as long as new rows kept arriving. The error names the topic the
+-- row could not reach, so one shared string labels most of the batch with a
+-- topic they have nothing to do with — and last_error is what anyone looking
+-- into a stuck row reads.
+UPDATE publish_outbox SET
+    last_error = settlement.last_error,
+    retry_after = settlement.retry_after,
+    locked_until = NULL,
+    lease_token = NULL,
+    updated_at = clock_timestamp()
+FROM (
+  SELECT unnest(@ids::bigint[]) AS id,
+         unnest(@errors::text[]) AS last_error,
+         unnest(@retry_afters::timestamptz[]) AS retry_after
+) AS settlement
+WHERE publish_outbox.id = settlement.id
+  AND publish_outbox.lease_token = @lease_token::uuid;
+
+-- name: DeadLetterPublishOutboxRows :execrows
+-- Moves rows that can never publish out of the queue in one statement, so a
+-- crash cannot leave a row both dead-lettered and still pending.
+--
+-- Each row carries the error that stopped it, expanded in lockstep with the
+-- ids. One batch can hold an unregistered topic next to an oversized payload,
+-- and this table is the permanent forensic record: an operator triaging a dead
+-- letter has nothing else to read, so a row stamped with its neighbour's
+-- failure sends them after a problem that row does not have.
+WITH failures AS (
+  SELECT unnest(@ids::bigint[]) AS id,
+         unnest(@errors::text[]) AS last_error
+), moved AS (
+  DELETE FROM publish_outbox
+  WHERE id = ANY(@ids::bigint[])
+    AND lease_token = @lease_token::uuid
+  RETURNING id, public_id, organization_id, topic, message, attributes, attempts,
+            created_at AS row_enqueued_at
+)
+INSERT INTO publish_outbox_dead_letters (
+  public_id, organization_id, topic, message, attributes, attempts, last_error, enqueued_at
+)
+SELECT moved.public_id, moved.organization_id, moved.topic, moved.message,
+       moved.attributes, moved.attempts, failures.last_error, moved.row_enqueued_at
+FROM moved
+JOIN failures ON failures.id = moved.id;
+
+-- name: GCPublishOutboxDeadLetters :execrows
+-- Bounds the dead letter table. Batched via LIMIT to keep lock time short.
+DELETE FROM publish_outbox_dead_letters
+WHERE id IN (
+  SELECT d.id
+  FROM publish_outbox_dead_letters d
+  WHERE d.created_at < @cutoff
+  ORDER BY d.id ASC
+  LIMIT @batch_size
+);
+
+-- name: CountPendingPublishOutboxRows :one
+-- Backs the queue depth gauge. Cheap only because the table is near-empty in
+-- steady state; a growing count is itself the signal worth alerting on.
+SELECT COUNT(*) FROM publish_outbox;
+
+-- name: ReleasePublishOutboxRows :exec
+-- Drops the lease on rows claimed but not acted upon, so the next drain sees
+-- them immediately instead of waiting out the lease. attempts is decremented
+-- back because the claim incremented it for a delivery that never happened.
+UPDATE publish_outbox SET
+    locked_until = NULL,
+    lease_token = NULL,
+    attempts = GREATEST(attempts - 1, 0),
+    updated_at = clock_timestamp()
+WHERE id = ANY(@ids::bigint[])
+  AND lease_token = @lease_token::uuid;
