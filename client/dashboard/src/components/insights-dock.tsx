@@ -788,21 +788,31 @@ export function InsightsProvider({
     [skillsQuery.data?.pages],
   );
 
-  // Derive "Continue chat" from the server: if the assistant's most recent
-  // conversation was active within CONTINUE_WINDOW_MS, the resting pill offers
-  // to reopen it. Reading the backend (rather than client state) means it
-  // survives reloads for free. limit:1 — we only need the newest.
+  // Derive "Continue chat" from the server: if the viewer's most recent
+  // dashboard conversation with the assistant was active within
+  // CONTINUE_WINDOW_MS, the resting pill offers to reopen it. Reading the
+  // backend (rather than client state) means it survives reloads for free.
+  // sourceKind narrows to dashboard-initiated sessions — an admin's chat:read
+  // visibility would otherwise surface other members' and other sources'
+  // (Slack, cron, …) sessions here. Ownership is checked client-side below:
+  // the listing has no owner filter for admins, so fetch a few and pick the
+  // newest chat the viewer started.
+  const { user } = useSession();
   const { data: recentChatsData } = useListChats(
     {
       assistantId: managedAssistantId || undefined,
+      sourceKind: "dashboard",
       sortBy: SortBy.LastMessageTimestamp,
       sortOrder: SortOrder.Desc,
-      limit: 1,
+      limit: 5,
     },
     undefined,
     { enabled: Boolean(managedAssistantId), throwOnError: false },
   );
-  const recentChat = recentChatsData?.chats?.[0];
+  const recentChat = recentChatsData?.chats?.find(
+    (chat) =>
+      chat.userId === user.id || emailsMatch(chat.externalUserId, user.email),
+  );
   const continueMode =
     recentChat !== undefined &&
     Date.now() - recentChat.lastMessageTimestamp.getTime() < CONTINUE_WINDOW_MS;
@@ -846,7 +856,6 @@ export function InsightsProvider({
   // their chat:read grant, so hide the composer for those rather than let a
   // send 404. Chats started from the dashboard stash the caller's email in
   // externalUserId instead of userId (see resolveCreator above).
-  const { user } = useSession();
   const isOwnChat = useCallback(
     ({
       userId,
