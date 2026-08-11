@@ -60,8 +60,6 @@ type RecordDecisionRequestBody struct {
 // ListRequestsResponseBody is the type of the "mcpApproval" service
 // "listRequests" endpoint HTTP response body.
 type ListRequestsResponseBody struct {
-	// The cursor to fetch results from
-	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 	// The list of approval requests
 	Requests []*ApprovalRequestSummaryResponseBody `form:"requests" json:"requests" xml:"requests"`
 }
@@ -1419,9 +1417,7 @@ type ResearchReportResponseBody struct {
 // NewListRequestsResponseBody builds the HTTP response body from the result of
 // the "listRequests" endpoint of the "mcpApproval" service.
 func NewListRequestsResponseBody(res *mcpapproval.ListApprovalRequestsResult) *ListRequestsResponseBody {
-	body := &ListRequestsResponseBody{
-		NextCursor: res.NextCursor,
-	}
+	body := &ListRequestsResponseBody{}
 	if res.Requests != nil {
 		body.Requests = make([]*ApprovalRequestSummaryResponseBody, len(res.Requests))
 		for i, val := range res.Requests {
@@ -2414,10 +2410,9 @@ func NewRecordDecisionGatewayErrorResponseBody(res *goa.ServiceError) *RecordDec
 
 // NewListRequestsPayload builds a mcpApproval service listRequests endpoint
 // payload.
-func NewListRequestsPayload(status *string, cursor *string, limit *int32, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpapproval.ListRequestsPayload {
+func NewListRequestsPayload(status *string, limit *int32, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpapproval.ListRequestsPayload {
 	v := &mcpapproval.ListRequestsPayload{}
 	v.Status = status
-	v.Cursor = cursor
 	v.Limit = limit
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -2563,6 +2558,11 @@ func ValidateRecordDecisionRequestBody(body *RecordDecisionRequestBody) (err err
 	}
 	if body.Rationale == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("rationale", "body"))
+	}
+	if body.Decision != nil {
+		if !(*body.Decision == "approved" || *body.Decision == "denied") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.decision", *body.Decision, []any{"approved", "denied"}))
+		}
 	}
 	return
 }

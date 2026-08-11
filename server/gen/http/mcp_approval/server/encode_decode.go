@@ -39,7 +39,6 @@ func DecodeListRequestsRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		var payload *mcpapproval.ListRequestsPayload
 		var (
 			status           *string
-			cursor           *string
 			limit            *int32
 			sessionToken     *string
 			apikeyToken      *string
@@ -50,10 +49,6 @@ func DecodeListRequestsRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		statusRaw := qp.Get("status")
 		if statusRaw != "" {
 			status = &statusRaw
-		}
-		cursorRaw := qp.Get("cursor")
-		if cursorRaw != "" {
-			cursor = &cursorRaw
 		}
 		{
 			limitRaw := qp.Get("limit")
@@ -81,7 +76,7 @@ func DecodeListRequestsRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListRequestsPayload(status, cursor, limit, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewListRequestsPayload(status, limit, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

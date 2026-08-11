@@ -4,12 +4,27 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { ClosedEnum } from "../../types/enums.js";
+
+/**
+ * Either approved or denied.
+ */
+export const RecordDecisionRequestBodyDecision = {
+  Approved: "approved",
+  Denied: "denied",
+} as const;
+/**
+ * Either approved or denied.
+ */
+export type RecordDecisionRequestBodyDecision = ClosedEnum<
+  typeof RecordDecisionRequestBodyDecision
+>;
 
 export type RecordDecisionRequestBody = {
   /**
    * Either approved or denied.
    */
-  decision: string;
+  decision: RecordDecisionRequestBodyDecision;
   /**
    * Principals the approval covers. Empty for a denial.
    */
@@ -29,6 +44,11 @@ export type RecordDecisionRequestBody = {
 };
 
 /** @internal */
+export const RecordDecisionRequestBodyDecision$outboundSchema: z.ZodMiniEnum<
+  typeof RecordDecisionRequestBodyDecision
+> = z.enum(RecordDecisionRequestBodyDecision);
+
+/** @internal */
 export type RecordDecisionRequestBody$Outbound = {
   decision: string;
   granted_principal_urns?: Array<string> | undefined;
@@ -43,7 +63,7 @@ export const RecordDecisionRequestBody$outboundSchema: z.ZodMiniType<
   RecordDecisionRequestBody
 > = z.pipe(
   z.object({
-    decision: z.string(),
+    decision: RecordDecisionRequestBodyDecision$outboundSchema,
     grantedPrincipalUrns: z.optional(z.array(z.string())),
     id: z.string(),
     rationale: z.string(),

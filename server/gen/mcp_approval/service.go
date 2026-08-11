@@ -188,8 +188,6 @@ type GetRequestPayload struct {
 // ListApprovalRequestsResult is the result type of the mcpApproval service
 // listRequests method.
 type ListApprovalRequestsResult struct {
-	// The cursor to fetch results from
-	NextCursor *string
 	// The list of approval requests
 	Requests []*ApprovalRequestSummary
 }
@@ -202,8 +200,6 @@ type ListRequestsPayload struct {
 	ProjectSlugInput *string
 	// Only return requests in this status.
 	Status *string
-	// The cursor to fetch results from
-	Cursor *string
 	// The number of requests to return per page
 	Limit *int32
 }

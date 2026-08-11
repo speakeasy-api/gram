@@ -19534,13 +19534,6 @@ paths:
             description: Only return requests in this status.
             type: string
         - allowEmptyValue: true
-          description: The cursor to fetch results from
-          in: query
-          name: cursor
-          schema:
-            description: The cursor to fetch results from
-            type: string
-        - allowEmptyValue: true
           description: The number of requests to return per page
           in: query
           name: limit
@@ -61539,14 +61532,12 @@ components:
     ListApprovalRequestsResult:
       type: object
       properties:
-        next_cursor:
-          type: string
-          description: The cursor to fetch results from
         requests:
           type: array
           items:
             $ref: '#/components/schemas/ApprovalRequestSummary'
           description: The list of approval requests
+      description: A page of the approval queue.
       required:
         - requests
     ListAssetsResult:
@@ -66083,6 +66074,9 @@ components:
         decision:
           type: string
           description: Either approved or denied.
+          enum:
+            - approved
+            - denied
         granted_principal_urns:
           type: array
           items:

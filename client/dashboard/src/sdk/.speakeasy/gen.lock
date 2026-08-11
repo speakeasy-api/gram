@@ -7033,7 +7033,7 @@ examples:
   recordMcpApprovalDecision:
     speakeasy-default-record-mcp-approval-decision:
       requestBody:
-        application/json: {"decision": "<value>", "id": "<id>", "rationale": "<value>"}
+        application/json: {"decision": "approved", "id": "<id>", "rationale": "<value>"}
       responses:
         "200":
           application/json: {"decided_at": "2024-02-04T10:29:28.784Z", "decided_by": "<value>", "decision": "<value>", "id": "<id>"}

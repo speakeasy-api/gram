@@ -118,7 +118,6 @@ export function setListMcpApprovalRequestsData(
   queryKeyBase: [
     parameters: {
       status?: string | undefined;
-      cursor?: string | undefined;
       limit?: number | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
@@ -137,7 +136,6 @@ export function invalidateListMcpApprovalRequests(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       status?: string | undefined;
-      cursor?: string | undefined;
       limit?: number | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;

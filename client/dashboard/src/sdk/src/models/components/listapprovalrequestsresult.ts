@@ -3,7 +3,6 @@
  */
 
 import * as z from "zod/v4-mini";
-import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
@@ -12,11 +11,10 @@ import {
   ApprovalRequestSummary$inboundSchema,
 } from "./approvalrequestsummary.js";
 
+/**
+ * A page of the approval queue.
+ */
 export type ListApprovalRequestsResult = {
-  /**
-   * The cursor to fetch results from
-   */
-  nextCursor?: string | undefined;
   /**
    * The list of approval requests
    */
@@ -27,17 +25,9 @@ export type ListApprovalRequestsResult = {
 export const ListApprovalRequestsResult$inboundSchema: z.ZodMiniType<
   ListApprovalRequestsResult,
   unknown
-> = z.pipe(
-  z.object({
-    next_cursor: z.optional(z.string()),
-    requests: z.array(ApprovalRequestSummary$inboundSchema),
-  }),
-  z.transform((v) => {
-    return remap$(v, {
-      "next_cursor": "nextCursor",
-    });
-  }),
-);
+> = z.object({
+  requests: z.array(ApprovalRequestSummary$inboundSchema),
+});
 
 export function listApprovalRequestsResultFromJSON(
   jsonString: string,

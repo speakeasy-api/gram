@@ -81,6 +81,8 @@ var adminScopes = []Scope{
 	ScopeEnvironmentWrite,
 	ScopeSkillRead,
 	ScopeSkillWrite,
+	ScopeMCPApprovalRead,
+	ScopeMCPApprovalDecide,
 	// chat:read and chat:write are intentionally NOT defaults for any system
 	// role: reading other members' session transcripts is sensitive, and
 	// mutating them (pin, rename, feedback, delete) is destructive, so both
@@ -88,12 +90,6 @@ var adminScopes = []Scope{
 	// mutates their own sessions via owner-matching in the chat handlers
 	// regardless. chat:write satisfies chat:read via scopeExpansions, so a
 	// session reviewer who should not be able to delete gets chat:read alone.
-	ScopeMCPApprovalRead,
-	ScopeMCPApprovalDecide,
-	// chat:read is intentionally NOT a default for any system role: reading
-	// other members' session transcripts is sensitive, so it must be granted
-	// explicitly (via a custom role grant). Everyone reads their own sessions
-	// via owner-matching in the chat handlers regardless.
 }
 
 // scopeVisibilityByScope is the source of truth for whether a scope is exposed

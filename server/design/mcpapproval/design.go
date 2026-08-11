@@ -9,18 +9,20 @@ import (
 var _ = Service("mcpApproval", func() {
 	Description("Dashboard API for reviewing and deciding MCP server approval requests.")
 	Security(security.Session, security.ProjectSlug)
-	Security(security.ByKey, security.ProjectSlug)
 	shared.DeclareErrorResponses()
 
 	Method("listRequests", func() {
 		Description("List MCP approval requests for a project.")
+		Security(security.Session, security.ProjectSlug)
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("consumer")
+		})
 
 		Payload(func() {
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
 			Attribute("status", String, "Only return requests in this status.")
-			Attribute("cursor", String, "The cursor to fetch results from")
 			Attribute("limit", Int32, "The number of requests to return per page")
 		})
 
@@ -29,7 +31,6 @@ var _ = Service("mcpApproval", func() {
 		HTTP(func() {
 			GET("/rpc/mcpApproval.listRequests")
 			Param("status")
-			Param("cursor")
 			Param("limit")
 			security.SessionHeader()
 			security.ByKeyHeader()
@@ -44,6 +45,10 @@ var _ = Service("mcpApproval", func() {
 
 	Method("getRequest", func() {
 		Description("Fetch one MCP approval request with its evidence and decision history.")
+		Security(security.Session, security.ProjectSlug)
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("consumer")
+		})
 
 		Payload(func() {
 			security.SessionPayload()
@@ -160,13 +165,19 @@ var _ = Service("mcpApproval", func() {
 
 	Method("recordDecision", func() {
 		Description("Approve or deny an MCP approval request, recording the rationale and who it applies to.")
+		Security(security.Session, security.ProjectSlug)
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
 
 		Payload(func() {
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
 			Attribute("id", String, "The approval request ID.")
-			Attribute("decision", String, "Either approved or denied.")
+			Attribute("decision", String, "Either approved or denied.", func() {
+				Enum("approved", "denied")
+			})
 			Attribute("rationale", String, "Why the decision was made. This is the artifact cited when explaining the decision to the requester, so it cannot be blank.")
 			Attribute("granted_principal_urns", ArrayOf(String), "Principals the approval covers. Empty for a denial.")
 			Attribute("research_report_id", String, "A research report this decision cites. Must belong to the request being decided.")
@@ -266,7 +277,8 @@ var ApprovalRequestDetail = Type("ApprovalRequestDetail", func() {
 })
 
 var ListApprovalRequestsResult = Type("ListApprovalRequestsResult", func() {
-	Attribute("next_cursor", String, "The cursor to fetch results from")
+	Description("A page of the approval queue.")
+
 	Attribute("requests", ArrayOf(ApprovalRequestSummary), "The list of approval requests")
 	Required("requests")
 })
