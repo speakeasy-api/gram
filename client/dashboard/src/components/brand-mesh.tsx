@@ -56,13 +56,11 @@ function meshTreatment(seed: string | undefined) {
   }
 
   const hash = hashSeed(seed);
-  const color =
-    SEEDED_BRAND_COLORS[hash % SEEDED_BRAND_COLORS.length] ??
-    SEEDED_BRAND_COLORS[0];
+  const color = SEEDED_BRAND_COLORS[hash % SEEDED_BRAND_COLORS.length]!;
   const variation =
     MESH_VARIATIONS[
       Math.floor(hash / SEEDED_BRAND_COLORS.length) % MESH_VARIATIONS.length
-    ] ?? MESH_VARIATIONS[0];
+    ]!;
 
   return {
     variation,
