@@ -87,10 +87,10 @@ export const SdkProvider = ({
       datadogRum.clearUser();
       telemetry.reset();
       document.cookie = "gram_admin_override=; path=/; max-age=0;";
-      // Still clear explicitly: Clear-Site-Data is a no-op in browsers that
-      // don't implement it (Safari) and on non-trustworthy origins. Where it
-      // did apply this finds storage already empty, and the restore then puts
-      // the preserved entries back either way.
+      // Still clear explicitly: Clear-Site-Data is a no-op on origins the
+      // browser does not treat as trustworthy, and on engines that don't
+      // implement it. Where it did apply, this finds storage already empty and
+      // the restore puts the preserved entries back either way.
       clearStorageForLogout();
       restorePreservedStorage(preservedAcrossLogout);
       preservedAcrossLogout = [];
