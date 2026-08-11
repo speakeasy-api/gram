@@ -48,8 +48,8 @@ export async function gramAdminFetch<T>(
     // server/internal/admin/oauth.go keeps an absolute URL only when its origin
     // is listed in GRAM_ADMIN_ALLOWED_ORIGINS, which is empty by default, so an
     // absolute return_to silently loses the page the operator was on. The hash
-    // is left out because the app routes with BrowserRouter, so the route is
-    // entirely in the path and query.
+    // is left out because the router keeps the whole route in the path and
+    // query.
     const returnTo = encodeURIComponent(
       window.location.pathname + window.location.search,
     );
