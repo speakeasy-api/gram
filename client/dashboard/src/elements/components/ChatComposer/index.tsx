@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useEffect } from "react";
 import { useAui } from "@assistant-ui/react";
+import { AttachmentDropZone } from "../assistant-ui/attachment-dropzone";
 import { Composer } from "../assistant-ui/thread";
 import { ErrorBoundary } from "../assistant-ui/error-boundary";
 import { ShadowRoot } from "@/elements/components/ShadowRoot";
@@ -49,10 +50,10 @@ export const ChatComposer = ({
       hostClassName={COMPOSER_HOST_CLASS}
       hostStyle={{ width: "100%" }}
     >
-      <div className={className}>
+      <AttachmentDropZone className={className}>
         <ClearDraftOnUnmount />
         <Composer showThreadAffordances={false} autoFocus={false} />
-      </div>
+      </AttachmentDropZone>
     </ShadowRoot>
   </ErrorBoundary>
 );

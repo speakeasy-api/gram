@@ -2,6 +2,7 @@ import { assistantsSendMessage } from "@gram/client/funcs/assistantsSendMessage"
 import { chatLoad } from "@gram/client/funcs/chatLoad";
 import type { GramCore } from "@gram/client/core";
 import { sleep, type ElementsTransportContext } from "@/elements";
+import { chatAttachmentAssetId } from "@/elements/lib/attachmentUpload";
 import { streamTurn } from "@/lib/turnStream";
 import {
   type ChatTransport,
@@ -9,6 +10,9 @@ import {
   type UIMessage,
   type UIMessageStreamWriter,
 } from "ai";
+
+/** Matches the `attachments` MaxLength on assistants.sendMessage. */
+const MAX_TURN_ATTACHMENTS = 5;
 
 const DEFAULT_POLL_INTERVAL_MS = 1500;
 const DEFAULT_POLL_TIMEOUT_MS = 600_000;
@@ -113,8 +117,40 @@ export function createServerAssistantTransport(
           .map((p) => p.text)
           .join("")
           .trim() ?? "";
-      if (!text) {
+      // File parts carry the URL our attachment adapter minted at upload time;
+      // the asset id in that URL is what the assistant runtime reads the file
+      // back from.
+      const fileParts = latest?.parts.filter((p) => p.type === "file") ?? [];
+      const attachments = fileParts
+        .map((p) => ({
+          assetId: chatAttachmentAssetId(p.url),
+          name: p.filename,
+        }))
+        .filter(
+          (a): a is { assetId: string; name: string | undefined } =>
+            a.assetId !== null,
+        );
+      // A file whose URL carries no asset id was never stored in Gram, so the
+      // turn cannot reference it. Name it rather than letting the send fail as
+      // a bare "nothing to send".
+      if (attachments.length < fileParts.length) {
+        const unresolved = fileParts
+          .filter((p) => chatAttachmentAssetId(p.url) === null)
+          .map((p) => p.filename ?? "a file")
+          .join(", ");
+        throw new Error(
+          `Could not attach ${unresolved}: upload did not complete.`,
+        );
+      }
+      if (!text && attachments.length === 0) {
         throw new Error("No user message to send.");
+      }
+      // The endpoint caps a turn at five files. Saying so here beats letting
+      // the send fail with a validation error after the user has typed.
+      if (attachments.length > MAX_TURN_ATTACHMENTS) {
+        throw new Error(
+          `You can attach up to ${MAX_TURN_ATTACHMENTS} files to a message. Remove ${attachments.length - MAX_TURN_ATTACHMENTS} to send.`,
+        );
       }
       const skillIds = deps.getSkillIds?.() ?? [];
 
@@ -220,6 +256,7 @@ export function createServerAssistantTransport(
                 chatId: chatId ?? undefined,
                 idempotencyKey: latest?.id,
                 skillIds: skillIds.length > 0 ? skillIds : undefined,
+                attachments: attachments.length > 0 ? attachments : undefined,
               },
             },
             undefined,

@@ -1165,8 +1165,7 @@ export function InsightsProvider({
         suggestions,
       },
       // Mirror the docked pill's wording so the chat composer reads as the
-      // same control the user just typed into. Attachments are hidden — the
-      // dock has no attach affordance and the feature is not implemented.
+      // same control the user just typed into.
       composer: {
         placeholder: "Ask anything",
         // Typing `/` offers the same canned prompts the landing widget used to
@@ -1176,7 +1175,6 @@ export function InsightsProvider({
           label: command.label,
           prompt: command.prompt,
         })),
-        attachments: false,
         skillContext: {
           skills: composerSkills,
           selectedSkillIds,
