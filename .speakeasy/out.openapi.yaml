@@ -9463,6 +9463,13 @@ paths:
             description: Filter by external user ID
             type: string
         - allowEmptyValue: true
+          description: Filter by Gram user ID
+          in: query
+          name: user_id
+          schema:
+            description: Filter by Gram user ID
+            type: string
+        - allowEmptyValue: true
           description: Filter by agent source. Comma-separated list of exact source values (e.g. 'claude-code,Codex,playground') matched against each session's inferred source; empty for no filter. Use chat.listSources to discover the available values.
           in: query
           name: source

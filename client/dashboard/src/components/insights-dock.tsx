@@ -789,30 +789,26 @@ export function InsightsProvider({
   );
 
   // Derive "Continue chat" from the server: if the viewer's most recent
-  // dashboard conversation with the assistant was active within
+  // dashboard-initiated session with the assistant was active within
   // CONTINUE_WINDOW_MS, the resting pill offers to reopen it. Reading the
   // backend (rather than client state) means it survives reloads for free.
-  // sourceKind narrows to dashboard-initiated sessions — an admin's chat:read
-  // visibility would otherwise surface other members' and other sources'
-  // (Slack, cron, …) sessions here. Ownership is checked client-side below:
-  // the listing has no owner filter for admins, so fetch a few and pick the
-  // newest chat the viewer started.
+  // sourceKind and userId keep out other members' sessions and other sources
+  // (Slack, cron, …), which an admin's chat:read visibility would otherwise
+  // surface here. limit:1 — we only need the newest.
   const { user } = useSession();
   const { data: recentChatsData } = useListChats(
     {
       assistantId: managedAssistantId || undefined,
       sourceKind: "dashboard",
+      userId: user.id,
       sortBy: SortBy.LastMessageTimestamp,
       sortOrder: SortOrder.Desc,
-      limit: 5,
+      limit: 1,
     },
     undefined,
     { enabled: Boolean(managedAssistantId), throwOnError: false },
   );
-  const recentChat = recentChatsData?.chats?.find(
-    (chat) =>
-      chat.userId === user.id || emailsMatch(chat.externalUserId, user.email),
-  );
+  const recentChat = recentChatsData?.chats?.[0];
   const continueMode =
     recentChat !== undefined &&
     Date.now() - recentChat.lastMessageTimestamp.getTime() < CONTINUE_WINDOW_MS;
