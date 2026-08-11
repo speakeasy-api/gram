@@ -434,6 +434,10 @@ export function ShadowMCPInventoryTable({
         onDecided={() => {
           setCursor(undefined);
           setPages([]);
+          // A decision handed off from the stdio review sheet resolves that
+          // review; leaving the sheet open underneath would return the admin
+          // to a stale pending view of a request that was just decided.
+          setReviewSheetServer(null);
         }}
       />
       <Page.Toolbar className="shrink-0">
