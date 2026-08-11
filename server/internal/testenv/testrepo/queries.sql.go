@@ -103,6 +103,35 @@ func (q *Queries) CountPublishOutboxRows(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countSkillScanRecords = `-- name: CountSkillScanRecords :one
+SELECT count(*)
+FROM risk_results rr
+JOIN skill_versions sv ON sv.id = rr.skill_version_id
+JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = $1
+  AND s.name = $2
+  AND (
+    NOT $3::boolean
+    OR (rr.source = 'prompt_injection' AND rr.found IS TRUE)
+  )
+`
+
+type CountSkillScanRecordsParams struct {
+	ProjectID uuid.UUID
+	SkillName string
+	FoundOnly bool
+}
+
+// Test-only fixture: counts recorded scans of a version of the named skill.
+// found_only narrows the count to prompt-injection findings; otherwise every
+// recorded scan counts, clean coverage rows included.
+func (q *Queries) CountSkillScanRecords(ctx context.Context, arg CountSkillScanRecordsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countSkillScanRecords, arg.ProjectID, arg.SkillName, arg.FoundOnly)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createOrganizationMetadataFixture = `-- name: CreateOrganizationMetadataFixture :exec
 INSERT INTO organization_metadata (
     id,
@@ -979,8 +1008,63 @@ func (q *Queries) ListDeviceAgentDeviceSyncsFixture(ctx context.Context, organiz
 	return items, nil
 }
 
+const listPublishOutboxRows = `-- name: ListPublishOutboxRows :many
+SELECT id, public_id, organization_id, topic, message, attributes,
+       attempts, last_error, retry_after, locked_until, lease_token, created_at
+FROM publish_outbox
+ORDER BY id
+`
+
+type ListPublishOutboxRowsRow struct {
+	ID             int64
+	PublicID       uuid.UUID
+	OrganizationID string
+	Topic          string
+	Message        []byte
+	Attributes     []byte
+	Attempts       int32
+	LastError      pgtype.Text
+	RetryAfter     pgtype.Timestamptz
+	LockedUntil    pgtype.Timestamptz
+	LeaseToken     uuid.NullUUID
+	CreatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) ListPublishOutboxRows(ctx context.Context) ([]ListPublishOutboxRowsRow, error) {
+	rows, err := q.db.Query(ctx, listPublishOutboxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPublishOutboxRowsRow
+	for rows.Next() {
+		var i ListPublishOutboxRowsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PublicID,
+			&i.OrganizationID,
+			&i.Topic,
+			&i.Message,
+			&i.Attributes,
+			&i.Attempts,
+			&i.LastError,
+			&i.RetryAfter,
+			&i.LockedUntil,
+			&i.LeaseToken,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRiskResultsAll = `-- name: ListRiskResultsAll :many
-SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, chat_content_part_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, spans, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
+SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, chat_content_part_id, skill_version_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, spans, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
 FROM risk_results
 WHERE project_id = $1
   AND risk_policy_id = $2
@@ -1012,6 +1096,7 @@ func (q *Queries) ListRiskResultsAll(ctx context.Context, arg ListRiskResultsAll
 			&i.RiskPolicyVersion,
 			&i.ChatMessageID,
 			&i.ChatContentPartID,
+			&i.SkillVersionID,
 			&i.Source,
 			&i.Found,
 			&i.RuleID,

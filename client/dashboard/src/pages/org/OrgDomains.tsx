@@ -1,10 +1,8 @@
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
-import { PageEyebrow } from "@/components/page-eyebrow";
-import { Page } from "@/components/page-layout";
+import { SettingsPage } from "@/components/page-templates";
 import { Badge } from "@/components/ui/Badge";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Dialog } from "@/components/ui/Dialog";
-import { Heading } from "@/components/ui/Heading";
 import { Input } from "@/components/ui/Input";
 import {
   Sheet,
@@ -65,16 +63,9 @@ import {
 
 export default function OrgDomains(): JSX.Element {
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope={["org:read", "org:admin"]} level="page">
-          <OrgDomainsInner />
-        </RequireScope>
-      </Page.Body>
-    </Page>
+    <RequireScope scope={["org:read", "org:admin"]} level="page">
+      <OrgDomainsInner />
+    </RequireScope>
   );
 }
 
@@ -751,17 +742,10 @@ function OrgDomainsInner() {
   }, [domain?.isUpdating, domainRefetch]);
 
   return (
-    <>
-      <div className="mb-6">
-        <PageEyebrow className="mb-2" />
-        <Heading variant="h4" className="mb-2 text-display-sm font-thin">
-          Custom Domain
-        </Heading>
-        <Text muted small className="mt-1">
-          Connect a custom domain to serve your MCP servers from your own
-          branded URL instead of the default platform domain.
-        </Text>
-      </div>
+    <SettingsPage
+      title="Custom Domain"
+      description="Connect a custom domain to serve your MCP servers from your own branded URL instead of the default platform domain."
+    >
       {domain?.domain ? (
         <div className="border-border bg-card border p-4">
           <Stack direction="horizontal" justify="space-between" align="start">
@@ -1274,6 +1258,6 @@ function OrgDomainsInner() {
         icon={Globe}
         accountUpgrade
       />
-    </>
+    </SettingsPage>
   );
 }

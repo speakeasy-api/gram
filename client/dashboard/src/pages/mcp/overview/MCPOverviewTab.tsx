@@ -1,4 +1,4 @@
-import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
+import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { RankedBarList } from "@/components/chart/RankedBarList";
 import { ToolCallsTimeSeriesChart } from "@/components/chart/ToolCallsTimeSeriesChart";
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
@@ -153,14 +153,14 @@ export function MCPOverviewTab({
       )}
       {!isLogsDisabled && !showQueryError && (
         <>
-          <MetricCardGroup>
+          <StatTileGroup>
             {isLoading && !summary ? (
               Array.from({ length: 4 }).map((_, i) => (
                 <Skeleton key={i} className="h-[116px] flex-1" />
               ))
             ) : (
               <>
-                <MetricCard
+                <StatTile
                   title="Tool calls"
                   value={summary?.totalToolCalls ?? 0}
                   tone="information"
@@ -168,7 +168,7 @@ export function MCPOverviewTab({
                   format="compact"
                   comparisonLabel="vs previous period"
                 />
-                <MetricCard
+                <StatTile
                   title="Failed calls"
                   value={summary?.failedToolCalls ?? 0}
                   tone={
@@ -181,7 +181,7 @@ export function MCPOverviewTab({
                   invertDelta
                   comparisonLabel="vs previous period"
                 />
-                <MetricCard
+                <StatTile
                   title="Error rate"
                   value={summary ? errorRate(summary) : 0}
                   previousValue={comparison ? errorRate(comparison) : undefined}
@@ -190,7 +190,7 @@ export function MCPOverviewTab({
                   thresholds={{ red: 10, amber: 5, inverted: true }}
                   comparisonLabel="vs previous period"
                 />
-                <MetricCard
+                <StatTile
                   title="Avg latency"
                   value={summary?.avgLatencyMs ?? 0}
                   tone="information"
@@ -201,7 +201,7 @@ export function MCPOverviewTab({
                 />
               </>
             )}
-          </MetricCardGroup>
+          </StatTileGroup>
 
           <ToolCallsTimeSeriesChart
             title="Tool calls over time"

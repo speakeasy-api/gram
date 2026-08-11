@@ -209,6 +209,7 @@ trackedFiles:
   src/funcs/externalReceiveWorkOSWebhook.ts: {}
   src/funcs/featuresGet.ts: {}
   src/funcs/featuresSet.ts: {}
+  src/funcs/featuresSetRemoteSessionAutoRefreshPolicy.ts: {}
   src/funcs/hooksHooksNumberClaude.ts: {}
   src/funcs/hooksHooksNumberCodex.ts: {}
   src/funcs/hooksHooksNumberCursor.ts: {}
@@ -415,6 +416,7 @@ trackedFiles:
   src/funcs/riskResultsUnmarkFalsePositive.ts: {}
   src/funcs/riskResultsUnmask.ts: {}
   src/funcs/riskRulesTest.ts: {}
+  src/funcs/riskSignalsGet.ts: {}
   src/funcs/skillEfficacyGetSettings.ts: {}
   src/funcs/skillEfficacyQueryInsights.ts: {}
   src/funcs/skillEfficacyUpsertSettings.ts: {}
@@ -1082,6 +1084,7 @@ trackedFiles:
   src/models/components/riskcustomdetectionrule.ts: {}
   src/models/components/riskdetectionscope.ts: {}
   src/models/components/riskexclusion.ts: {}
+  src/models/components/riskexposureslice.ts: {}
   src/models/components/riskidrequestbody.ts: {}
   src/models/components/riskoverviewcategory.ts: {}
   src/models/components/riskoverviewresult.ts: {}
@@ -1098,6 +1101,9 @@ trackedFiles:
   src/models/components/riskrulebreakdownentry.ts: {}
   src/models/components/riskrulebreakdownresult.ts: {}
   src/models/components/risksegment.ts: {}
+  src/models/components/risksignal.ts: {}
+  src/models/components/risksignalsresult.ts: {}
+  src/models/components/risksignaltopuser.ts: {}
   src/models/components/riskspan.ts: {}
   src/models/components/riskspanredacted.ts: {}
   src/models/components/riskunmaskresultresult.ts: {}
@@ -1143,6 +1149,7 @@ trackedFiles:
   src/models/components/setpluginassignmentsresponsebody.ts: {}
   src/models/components/setproductfeaturerequestbody.ts: {}
   src/models/components/setprojectlogoresult.ts: {}
+  src/models/components/setremotesessionautorefreshpolicyrequestbody.ts: {}
   src/models/components/setrootmcpendpointrequestbody.ts: {}
   src/models/components/setscheduleenabledrequestbody.ts: {}
   src/models/components/setsourceenvironmentlinkrequestbody.ts: {}
@@ -1181,6 +1188,7 @@ trackedFiles:
   src/models/components/skillfeedbacktimelinepoint.ts: {}
   src/models/components/skillinsightmetrics.ts: {}
   src/models/components/skillinsightpoint.ts: {}
+  src/models/components/skillpromptinjectionfinding.ts: {}
   src/models/components/skillsharelink.ts: {}
   src/models/components/skillsightingtimelinepoint.ts: {}
   src/models/components/skillsuggestionapprovalitem.ts: {}
@@ -1559,6 +1567,7 @@ trackedFiles:
   src/models/operations/getriskpolicychallenge.ts: {}
   src/models/operations/getriskpolicystatus.ts: {}
   src/models/operations/getriskrulebreakdown.ts: {}
+  src/models/operations/getrisksignals.ts: {}
   src/models/operations/getriskuserbreakdown.ts: {}
   src/models/operations/getrole.ts: {}
   src/models/operations/getshadowmcpinventoryserver.ts: {}
@@ -1794,6 +1803,7 @@ trackedFiles:
   src/models/operations/setpluginassignments.ts: {}
   src/models/operations/setproductfeature.ts: {}
   src/models/operations/setprojectlogo.ts: {}
+  src/models/operations/setremotesessionautorefreshpolicy.ts: {}
   src/models/operations/setrootmcpendpoint.ts: {}
   src/models/operations/setsourceenvironmentlink.ts: {}
   src/models/operations/settoolsetenvironmentlink.ts: {}
@@ -2431,6 +2441,8 @@ trackedFiles:
   src/react-query/riskRuleBreakdown.core.ts: {}
   src/react-query/riskRuleBreakdown.ts: {}
   src/react-query/riskSaveEvalReview.ts: {}
+  src/react-query/riskSignals.core.ts: {}
+  src/react-query/riskSignals.ts: {}
   src/react-query/riskSubmitBlockFeedback.ts: {}
   src/react-query/riskSuggestCustomRule.ts: {}
   src/react-query/riskSuggestExclusion.ts: {}
@@ -2477,6 +2489,7 @@ trackedFiles:
   src/react-query/setModelProviderKeyEnabled.ts: {}
   src/react-query/setPluginAssignments.ts: {}
   src/react-query/setProjectLogo.ts: {}
+  src/react-query/setRemoteSessionAutoRefreshPolicy.ts: {}
   src/react-query/setRootMcpEndpoint.ts: {}
   src/react-query/setSourceEnvironmentLink.ts: {}
   src/react-query/setToolsetEnvironmentLink.ts: {}
@@ -2703,6 +2716,7 @@ trackedFiles:
   src/sdk/risk.ts: {}
   src/sdk/rules.ts: {}
   src/sdk/sdk.ts: {}
+  src/sdk/signals.ts: {}
   src/sdk/skillefficacy.ts: {}
   src/sdk/skills.ts: {}
   src/sdk/spendrules.ts: {}
@@ -4919,7 +4933,7 @@ examples:
     speakeasy-default-get-product-features:
       responses:
         "200":
-          application/json: {"ai_platform_push_integrations_enabled": false, "authz_challenge_logging_enabled": false, "custom_model_keys_enabled": false, "customer_managed_encryption_keys_enabled": false, "device_agent": false, "hooks_browser_login_enabled": false, "hooks_fail_open_enabled": false, "logs_enabled": false, "platform_mcp_enabled": false, "remote_session_auto_refresh_enabled": false, "scim_enabled": false, "session_capture_enabled": true, "skill_capture_metadata_only": false, "skills_enabled": false, "sso_enabled": false, "tool_io_logs_enabled": true}
+          application/json: {"ai_platform_push_integrations_enabled": false, "authz_challenge_logging_enabled": false, "custom_model_keys_enabled": false, "customer_managed_encryption_keys_enabled": false, "device_agent": false, "hooks_browser_login_enabled": false, "hooks_fail_open_enabled": false, "logs_enabled": false, "platform_mcp_enabled": false, "remote_session_auto_refresh_enabled": false, "remote_session_auto_refresh_enforced_enabled": false, "scim_enabled": false, "session_capture_enabled": true, "skill_capture_metadata_only": false, "skills_enabled": false, "sso_enabled": false, "tool_io_logs_enabled": true}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -5095,6 +5109,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getRiskSignals:
+    speakeasy-default-get-risk-signals:
+      responses:
+        "200":
+          application/json: {"critical_signals": 768641, "exposure": [], "findings_24h": 401120, "from": "2024-12-08T21:17:49.589Z", "open_signals": 603364, "org_risk_score": 4167.11, "previous_findings_24h": 642528, "previous_org_risk_score": 1446.58, "previous_users_exposed": 771170, "signals": [{"apps": ["<value 1>", "<value 2>"], "category": "<value>", "description": "oxidise while hyphenation foolishly near valuable", "detection_sources": [], "findings": 788291, "first_seen": "2025-05-14T23:50:54.748Z", "key": "<key>", "last_seen": "2025-05-19T07:08:20.774Z", "previous_findings": 292567, "risk_score": 2348.04, "rule_id": "<id>", "severity": "high", "sparkline": [147956, 401120, 312853], "teams": 944513, "top_users": [{"email": "Alanis.Lesch56@yahoo.com", "external_user_id": "<id>", "findings": 501016, "team": "<value>"}], "users": 391632}], "to": "2024-09-17T02:46:50.555Z", "users_exposed": 527472}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   getRiskUserBreakdown:
     speakeasy-default-get-risk-user-breakdown:
       parameters:
@@ -5152,7 +5175,7 @@ examples:
           id: "3600ba92-a629-4238-b118-2374ee531ccc"
       responses:
         "200":
-          application/json: {"adoption": {"activations_in_window": 193282, "distinct_hostnames": 385005, "window_end": "2024-02-17T23:16:40.002Z", "window_start": "2024-01-07T02:41:01.226Z"}, "assistant_count": 728301, "drift": {"active_machines": 675725, "drifted_machines": 591176, "indeterminate_machines": 139736, "on_target_machines": 674561, "target_state": "single", "target_version_ids": [], "window_end": "2025-09-18T07:28:40.508Z", "window_start": "2024-06-13T03:54:30.891Z"}, "sighting_timeline": [], "skill": {"classification": "<value>", "created_at": "2026-06-16T05:42:51.497Z", "display_name": "Adan_Parisian83", "has_valid_version": true, "id": "2f844f68-8ade-4021-927e-ce44754f24fc", "name": "<value>", "project_id": "cb362ec4-4029-48dd-8e7d-90248980a327", "seen_count": 500904, "source_kind": "<value>", "tags": [], "updated_at": "2024-08-06T14:28:41.275Z", "version_count": 278392}}
+          application/json: {"adoption": {"activations_in_window": 193282, "distinct_hostnames": 385005, "window_end": "2024-02-17T23:16:40.002Z", "window_start": "2024-01-07T02:41:01.226Z"}, "assistant_count": 728301, "drift": {"active_machines": 675725, "drifted_machines": 591176, "indeterminate_machines": 139736, "on_target_machines": 674561, "target_state": "single", "target_version_ids": [], "window_end": "2025-09-18T07:28:40.508Z", "window_start": "2024-06-13T03:54:30.891Z"}, "prompt_injection_findings": [], "sighting_timeline": [], "skill": {"classification": "<value>", "created_at": "2026-06-16T05:42:51.497Z", "display_name": "Adan_Parisian83", "has_valid_version": true, "id": "2f844f68-8ade-4021-927e-ce44754f24fc", "name": "<value>", "project_id": "cb362ec4-4029-48dd-8e7d-90248980a327", "seen_count": 500904, "source_kind": "<value>", "tags": [], "updated_at": "2024-08-06T14:28:41.275Z", "version_count": 278392}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -7730,6 +7753,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  setRemoteSessionAutoRefreshPolicy:
+    speakeasy-default-set-remote-session-auto-refresh-policy:
+      requestBody:
+        application/json: {"policy": "enforced"}
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   setRootMcpEndpoint:
     speakeasy-default-set-root-mcp-endpoint:
       requestBody:

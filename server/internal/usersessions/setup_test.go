@@ -87,15 +87,12 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker) 
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)

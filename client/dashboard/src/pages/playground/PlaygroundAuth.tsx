@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/Button";
 import { Label } from "@/components/ui/Label";
-import { PrivateInput } from "@/components/ui/PrivateInput";
+import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { Toolset } from "@/lib/toolTypes";
@@ -271,7 +271,10 @@ export function PlaygroundAuth({
             >
               {displayName}
             </Label>
-            <PrivateInput
+            <Input
+              type="password"
+              reveal
+              autoComplete="off"
               id={`auth-${envVar.id}`}
               value={displayValue}
               onChange={(newValue) => {

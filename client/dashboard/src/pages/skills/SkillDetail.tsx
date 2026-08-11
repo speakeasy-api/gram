@@ -1,5 +1,11 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { StatusBanner } from "@/components/status-banner";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/Collapsible";
 import {
   RouteNotFoundState,
   SecondaryRouteAction,
@@ -17,13 +23,15 @@ import { isNotFoundError } from "@/lib/route-errors";
 import {
   DangerSettingsSection,
   SettingsSection,
-} from "@/pages/mcp/x/tabs/settings/SettingsSection";
+} from "@/components/detail/settings-section";
 import { useRoutes } from "@/routes";
 import type { SkillVersion } from "@gram/client/models/components/skillversion.js";
+import type { SkillPromptInjectionFinding } from "@gram/client/models/components/skillpromptinjectionfinding.js";
 import { useSkill } from "@gram/client/react-query/skill.js";
 import { useSkillVersionsInfinite } from "@gram/client/react-query/skillVersions.js";
 import { Badge } from "@/components/ui/Badge";
 import { type Column, Table } from "@/components/ui/Table";
+import { ChevronRight, CircleAlert } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import {
@@ -218,6 +226,10 @@ function SkillDetailSections({
 
   return (
     <>
+      <PromptInjectionBanner
+        findings={skillQueryData.promptInjectionFindings}
+      />
+
       <SkillPluginBanner skill={skill} />
 
       <SettingsSection>
@@ -599,6 +611,58 @@ function VersionHistory({
         onClose={() => setRestoreTarget(null)}
       />
     </>
+  );
+}
+
+function PromptInjectionBanner({
+  findings,
+}: {
+  findings: SkillPromptInjectionFinding[];
+}): JSX.Element | null {
+  const [expanded, setExpanded] = useState(false);
+  if (findings.length === 0) return null;
+  const summary =
+    findings.length === 1
+      ? "A prompt injection finding was detected in the current skill version."
+      : `${findings.length} prompt injection findings were detected in the current skill version.`;
+  return (
+    <StatusBanner tone="destructive">
+      <Collapsible open={expanded} onOpenChange={setExpanded}>
+        <div className="flex flex-col gap-3 p-6">
+          <div className="flex items-center gap-2">
+            <CircleAlert className="text-destructive h-4 w-4 shrink-0" />
+            <Text className="text-destructive text-base font-semibold">
+              Prompt injection flagged
+            </Text>
+          </div>
+          <Text variant="small" className="text-muted-foreground/90">
+            {summary}
+          </Text>
+          <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex w-fit items-center gap-1 text-sm transition-colors [&[data-state=open]>svg]:rotate-90">
+            <ChevronRight className="h-4 w-4 transition-transform" />
+            {expanded ? "Hide findings" : "Show findings"}
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <ul className="divide-border divide-y">
+              {findings.map((finding) => (
+                <li
+                  key={`${finding.ruleId}:${finding.description}:${finding.confidence}`}
+                  className="space-y-1 py-3 first:pt-0 last:pb-0"
+                >
+                  <div className="flex flex-wrap items-baseline gap-x-3">
+                    <span className="font-mono text-sm">{finding.ruleId}</span>
+                    <Text small muted>
+                      {Math.round(finding.confidence * 100)}% confidence
+                    </Text>
+                  </div>
+                  <Text small>{finding.description}</Text>
+                </li>
+              ))}
+            </ul>
+          </CollapsibleContent>
+        </div>
+      </Collapsible>
+    </StatusBanner>
   );
 }
 

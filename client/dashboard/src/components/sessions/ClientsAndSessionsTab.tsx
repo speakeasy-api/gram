@@ -11,7 +11,7 @@ import {
   useUserSessionsInfinite,
 } from "@gram/client/react-query/userSessions.js";
 
-import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
+import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
@@ -153,24 +153,22 @@ export function ClientsAndSessionsTab({
 
   return (
     <Stack gap={6}>
-      <MetricCardGroup>
-        <MetricCard
+      <StatTileGroup>
+        <StatTile
           title="Active sessions"
           value={sessions.length}
           tone="information"
           icon="activity"
-          accentColor="blue"
           subtext="Currently authenticated MCP sessions"
         />
-        <MetricCard
+        <StatTile
           title="Clients"
           value={clients.length}
           tone="information"
           icon="app-window"
-          accentColor="purple"
           subtext="Registered against this server"
         />
-      </MetricCardGroup>
+      </StatTileGroup>
 
       {/* Counts, search, and sort all run over what was loaded, so a set the
           cap cut short has to say so rather than read as the whole picture. */}

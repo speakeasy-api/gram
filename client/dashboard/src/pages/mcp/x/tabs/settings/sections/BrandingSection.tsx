@@ -21,7 +21,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
-import { FooterSaveButton, SettingsSection } from "../SettingsSection";
+import {
+  FooterSaveButton,
+  SettingsSection,
+} from "@/components/detail/settings-section";
 
 // The display name shares the mcp_servers.name column, whose CHECK caps length
 // at 40 (see schema.sql / MCP_SERVER_NAME_MAX_LENGTH on the legacy page).

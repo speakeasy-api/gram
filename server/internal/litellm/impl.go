@@ -2,6 +2,7 @@ package litellm
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -33,6 +34,7 @@ import (
 const (
 	genericBlockedReason = "Request blocked by policy."
 	callCacheTimeout     = time.Second
+	agentTurnPrefix      = "agent-turn:v1:"
 )
 
 type HookIngester interface {
@@ -163,6 +165,10 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 	version := strings.TrimSpace(conv.PtrValOr(payload.LitellmVersion, ""))
 	email := conv.NormalizeEmail(conv.PtrValOr(payload.RequestData.UserAPIKeyUserEmail, ""))
 	idempotencyKey := "litellm:" + callID + ":request"
+	turnID := callID
+	if provider, agentTurnID := agentTurnFromHeaders(payload.RequestHeaders); agentTurnID != "" {
+		turnID = agentTurnPrefix + provider + ":" + agentTurnID
+	}
 
 	hookPayload := &hooksgen.IngestPayload{
 		ApikeyToken:      nil,
@@ -179,7 +185,7 @@ func (s *Service) ingestRequest(ctx context.Context, payload *gen.IngestPayload,
 		},
 		Session: &hooksgen.HookIngestSession{
 			ID:     &sessionID,
-			TurnID: &callID,
+			TurnID: &turnID,
 			Cwd:    nil,
 			Model:  conv.PtrEmpty(model),
 		},
@@ -410,20 +416,66 @@ func joinedTexts(texts []string) string {
 
 func sessionHeader(headers map[string]string) string {
 	for _, header := range []string{
+		"x-gram-agent-session-id",
 		"x-gram-session-id",
 		"x-claude-code-session-id",
 		"session-id",
 		"thread-id",
 		"x-session-id",
+		"x-opencode-session",
 	} {
-		for key, value := range headers {
-			if !strings.EqualFold(strings.TrimSpace(key), header) {
-				continue
-			}
-			value = strings.TrimSpace(value)
-			if value != "" && !strings.EqualFold(value, "[present]") {
-				return value
-			}
+		if value := requestHeader(headers, header); value != "" {
+			return value
+		}
+	}
+	if metadata, ok := codexTurnMetadataFromHeaders(headers); ok {
+		return strings.TrimSpace(metadata.SessionID)
+	}
+	return ""
+}
+
+type codexTurnMetadata struct {
+	SessionID string `json:"session_id"`
+	TurnID    string `json:"turn_id"`
+}
+
+func codexTurnMetadataFromHeaders(headers map[string]string) (codexTurnMetadata, bool) {
+	encoded := requestHeader(headers, "x-codex-turn-metadata")
+	if encoded == "" {
+		return codexTurnMetadata{SessionID: "", TurnID: ""}, false
+	}
+	var metadata codexTurnMetadata
+	if json.Unmarshal([]byte(encoded), &metadata) != nil {
+		return codexTurnMetadata{SessionID: "", TurnID: ""}, false
+	}
+	return metadata, true
+}
+
+func agentTurnFromHeaders(headers map[string]string) (string, string) {
+	provider := strings.ToLower(requestHeader(headers, "x-gram-agent-provider"))
+	turnID := requestHeader(headers, "x-gram-agent-turn-id")
+	if (provider == "codex" || provider == "opencode") && turnID != "" {
+		return provider, turnID
+	}
+
+	if metadata, ok := codexTurnMetadataFromHeaders(headers); ok && strings.TrimSpace(metadata.TurnID) != "" {
+		return "codex", strings.TrimSpace(metadata.TurnID)
+	}
+
+	if turnID := requestHeader(headers, "x-opencode-request"); turnID != "" {
+		return "opencode", turnID
+	}
+	return "", ""
+}
+
+func requestHeader(headers map[string]string, name string) string {
+	for key, value := range headers {
+		if !strings.EqualFold(strings.TrimSpace(key), name) {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		if value != "" && !strings.EqualFold(value, "[present]") {
+			return value
 		}
 	}
 	return ""

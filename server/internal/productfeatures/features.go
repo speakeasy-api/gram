@@ -32,6 +32,14 @@ const (
 	// covers model provider API keys.
 	FeatureCustomerManagedEncryptionKeys Feature = "customer_managed_encryption_keys"
 	FeatureRemoteSessionAutoRefresh      Feature = "remote_session_auto_refresh"
+	// FeatureRemoteSessionAutoRefreshEnforced makes automatic remote-session
+	// refresh the organization default: it is forced on for every user, the
+	// consent-screen control is shown locked (users cannot opt out), and the
+	// keepalive refreshes every eligible session in the organization regardless
+	// of its persisted per-session preference. Distinct from
+	// FeatureRemoteSessionAutoRefresh, which only governs whether the opt-in
+	// control is visible and leaves the choice to each user.
+	FeatureRemoteSessionAutoRefreshEnforced Feature = "remote_session_auto_refresh_enforced"
 )
 
 type FeatureCache struct {

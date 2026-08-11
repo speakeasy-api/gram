@@ -54,12 +54,26 @@ export function clearLegacyUserStorage(): void {
   }
 }
 
-export function clearStorageForLogout(): void {
-  if (typeof window === "undefined") return;
+/** localStorage entries that outlive a logout, as key/value pairs. */
+export type PreservedStorage = ReadonlyArray<readonly [string, string]>;
+
+/**
+ * Reads the localStorage entries that survive logout.
+ *
+ * Exported for the logout request itself: that response carries
+ * `Clear-Site-Data: "cookies", "storage"`, and every engine finishes emptying
+ * localStorage before the response reaches the page, so there is nothing left
+ * to preserve by the time a response handler runs. Capturing before the request
+ * goes out and handing the result to `clearStorageForLogout` is what keeps the
+ * theme and favorites across a logout.
+ */
+export function capturePreservedStorage(): PreservedStorage {
+  if (typeof window === "undefined") return [];
+
+  const preserved: Array<readonly [string, string]> = [];
 
   try {
     const local = window.localStorage;
-    const preserved = new Map<string, string>();
 
     for (let i = 0; i < local.length; i++) {
       const key = local.key(i);
@@ -67,18 +81,49 @@ export function clearStorageForLogout(): void {
 
       const value = local.getItem(key);
       if (value !== null) {
-        preserved.set(key, value);
+        preserved.push([key, value]);
       }
     }
+  } catch {
+    // Storage blocked — nothing persisted, nothing to preserve.
+  }
 
-    local.clear();
+  return preserved;
+}
 
+export function restorePreservedStorage(preserved: PreservedStorage): void {
+  if (typeof window === "undefined" || preserved.length === 0) return;
+
+  try {
+    const local = window.localStorage;
     for (const [key, value] of preserved) {
       local.setItem(key, value);
     }
   } catch {
+    // Storage blocked — nothing to restore into.
+  }
+}
+
+/**
+ * Empties storage, keeping the entries that outlive a logout.
+ *
+ * Pass `preserved` when the store may already have been emptied — after a
+ * `Clear-Site-Data` response, a snapshot taken before the request is the only
+ * remaining copy of those entries. Callers clearing an intact store omit it and
+ * the entries are read from storage directly.
+ */
+export function clearStorageForLogout(
+  preserved: PreservedStorage = capturePreservedStorage(),
+): void {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.clear();
+  } catch {
     // Storage blocked — nothing persisted, nothing to clear.
   }
+
+  restorePreservedStorage(preserved);
 
   try {
     window.sessionStorage.clear();
