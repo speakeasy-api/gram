@@ -100,7 +100,15 @@ func requestableBlockEffects(components.IngestRequestBody) map[string]any {
 
 func denyWithEffects(t *testing.T, effects func(components.IngestRequestBody) map[string]any) *fakeServer {
 	t.Helper()
-	fs := newFakeServer(t, func(components.IngestRequestBody) (int, decision) {
+	fs := newFakeServer(t, func(p components.IngestRequestBody) (int, decision) {
+		// agenthooks ≥0.6 backfills a synthetic prompt.submitted before the
+		// first real event of a session. Only the tool call carries the policy
+		// deny — as on the real server, where shadow-MCP enforcement gates
+		// tool.pre — so the deny reaches onToolPre instead of short-circuiting
+		// at the backfilled prompt.
+		if p.Event.Type != components.TypeToolRequested {
+			return http.StatusOK, decision{Decision: "allow", Reason: "", Message: ""}
+		}
 		return http.StatusOK, decision{Decision: "deny", Reason: "policy_denied", Message: "blocked by policy X"}
 	})
 	fs.effects = effects
