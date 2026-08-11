@@ -1,6 +1,11 @@
 import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
 import { isProjectOverviewQueryKey } from "@/components/project/projectOverviewQuery";
-import { clearStorageForLogout } from "@/lib/logout-storage";
+import {
+  capturePreservedStorage,
+  clearStorageForLogout,
+  restorePreservedStorage,
+  type PreservedStorage,
+} from "@/lib/logout-storage";
 import { getApiBaseURL } from "@/lib/utils";
 import { datadogRum } from "@datadog/browser-rum";
 import { Gram } from "@gram/client";
@@ -19,6 +24,8 @@ import {
   useSlugs,
 } from "./Sdk";
 
+const LOGOUT_PATH = "/rpc/auth.logout";
+
 export const SdkProvider = ({
   children,
 }: {
@@ -33,6 +40,12 @@ export const SdkProvider = ({
 
   // Memoize the httpClient and gram instances
   const gram = useMemo(() => {
+    // Values held across the logout round-trip. The logout response tells the
+    // browser to wipe storage for the origin, which happens before the response
+    // hook below runs, so anything meant to outlive the session has to be read
+    // off localStorage before the request is sent.
+    let preservedAcrossLogout: PreservedStorage = [];
+
     const httpClient = new HTTPClient({
       fetcher: (request) => {
         const newRequest = new Request(request, {
@@ -54,13 +67,19 @@ export const SdkProvider = ({
       },
     });
 
+    httpClient.addHook("beforeRequest", (request) => {
+      if (new URL(request.url).pathname === LOGOUT_PATH) {
+        preservedAcrossLogout = capturePreservedStorage();
+      }
+    });
+
     httpClient.addHook("response", (res, request) => {
       if (!res.ok) {
         return;
       }
 
       const u = new URL(request.url);
-      if (u.pathname !== "/rpc/auth.logout") {
+      if (u.pathname !== LOGOUT_PATH) {
         return;
       }
 
@@ -68,7 +87,13 @@ export const SdkProvider = ({
       datadogRum.clearUser();
       telemetry.reset();
       document.cookie = "gram_admin_override=; path=/; max-age=0;";
+      // Still clear explicitly: Clear-Site-Data is a no-op in browsers that
+      // don't implement it (Safari) and on non-trustworthy origins. Where it
+      // did apply this finds storage already empty, and the restore then puts
+      // the preserved entries back either way.
       clearStorageForLogout();
+      restorePreservedStorage(preservedAcrossLogout);
+      preservedAcrossLogout = [];
     });
 
     const gram = new Gram({

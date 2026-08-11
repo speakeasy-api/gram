@@ -54,12 +54,27 @@ export function clearLegacyUserStorage(): void {
   }
 }
 
-export function clearStorageForLogout(): void {
-  if (typeof window === "undefined") return;
+/** localStorage entries that outlive a logout, as key/value pairs. */
+export type PreservedStorage = ReadonlyArray<readonly [string, string]>;
+
+/**
+ * Reads the localStorage entries that survive logout.
+ *
+ * Callers that clear storage themselves get this for free through
+ * `clearStorageForLogout`. It is exported for the logout request itself: that
+ * response carries `Clear-Site-Data: "cookies", "storage"`, so the browser
+ * empties localStorage while the response is in flight and there is nothing
+ * left to preserve by the time any response handler runs. Capturing before the
+ * request goes out and calling `restorePreservedStorage` afterwards is what
+ * keeps the theme and favorites across a logout.
+ */
+export function capturePreservedStorage(): PreservedStorage {
+  if (typeof window === "undefined") return [];
+
+  const preserved: Array<readonly [string, string]> = [];
 
   try {
     const local = window.localStorage;
-    const preserved = new Map<string, string>();
 
     for (let i = 0; i < local.length; i++) {
       const key = local.key(i);
@@ -67,18 +82,41 @@ export function clearStorageForLogout(): void {
 
       const value = local.getItem(key);
       if (value !== null) {
-        preserved.set(key, value);
+        preserved.push([key, value]);
       }
     }
+  } catch {
+    // Storage blocked — nothing persisted, nothing to preserve.
+  }
 
-    local.clear();
+  return preserved;
+}
 
+export function restorePreservedStorage(preserved: PreservedStorage): void {
+  if (typeof window === "undefined" || preserved.length === 0) return;
+
+  try {
+    const local = window.localStorage;
     for (const [key, value] of preserved) {
       local.setItem(key, value);
     }
   } catch {
+    // Storage blocked — nothing to restore into.
+  }
+}
+
+export function clearStorageForLogout(): void {
+  if (typeof window === "undefined") return;
+
+  const preserved = capturePreservedStorage();
+
+  try {
+    window.localStorage.clear();
+  } catch {
     // Storage blocked — nothing persisted, nothing to clear.
   }
+
+  restorePreservedStorage(preserved);
 
   try {
     window.sessionStorage.clear();

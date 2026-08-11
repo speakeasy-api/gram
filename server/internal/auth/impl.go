@@ -187,6 +187,10 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	// context so validateAuthNonce() can verify it.
 	server.Callback = callbackNonceBindingMiddleware(server.Callback)
 
+	// Wrap Logout handler: have the browser drop the origin's cookies and
+	// client-side storage once the session has been invalidated server-side.
+	server.Logout = middleware.ClearSiteDataOnLogout(server.Logout)
+
 	srv.Mount(mux, server)
 }
 
