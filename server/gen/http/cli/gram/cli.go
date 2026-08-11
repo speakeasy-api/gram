@@ -132,7 +132,7 @@ func UsageCommands() []string {
 		"admin-chat-analysis (get-settings|upsert-work-units-settings|upsert-business-memory-settings|trigger-analysis)",
 		"admin-external-credentials (create-gcp-iam-platform-credential|list-platform-external-credentials|update-gcp-iam-platform-credential|get-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
-		"features (get-product-features|set-product-feature)",
+		"features (get-product-features|set-product-feature|set-remote-session-auto-refresh-policy)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|list-servers|get-server|update-server|discover-protected-resource-metadata|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
 		"organization-remote-session-clients (list-clients|get-client|get-client-delete-preflight|list-client-mcp-servers|create-client|create-cimd-client|update-client|delete-client|remove-client-from-mcp-server)",
@@ -1610,6 +1610,10 @@ func ParseEndpoint(
 		featuresSetProductFeatureFlags            = flag.NewFlagSet("set-product-feature", flag.ExitOnError)
 		featuresSetProductFeatureBodyFlag         = featuresSetProductFeatureFlags.String("body", "REQUIRED", "")
 		featuresSetProductFeatureSessionTokenFlag = featuresSetProductFeatureFlags.String("session-token", "", "")
+
+		featuresSetRemoteSessionAutoRefreshPolicyFlags            = flag.NewFlagSet("set-remote-session-auto-refresh-policy", flag.ExitOnError)
+		featuresSetRemoteSessionAutoRefreshPolicyBodyFlag         = featuresSetRemoteSessionAutoRefreshPolicyFlags.String("body", "REQUIRED", "")
+		featuresSetRemoteSessionAutoRefreshPolicySessionTokenFlag = featuresSetRemoteSessionAutoRefreshPolicyFlags.String("session-token", "", "")
 
 		projectsFlags = flag.NewFlagSet("projects", flag.ContinueOnError)
 
@@ -3567,6 +3571,7 @@ func ParseEndpoint(
 	featuresFlags.Usage = featuresUsage
 	featuresGetProductFeaturesFlags.Usage = featuresGetProductFeaturesUsage
 	featuresSetProductFeatureFlags.Usage = featuresSetProductFeatureUsage
+	featuresSetRemoteSessionAutoRefreshPolicyFlags.Usage = featuresSetRemoteSessionAutoRefreshPolicyUsage
 
 	projectsFlags.Usage = projectsUsage
 	projectsGetProjectFlags.Usage = projectsGetProjectUsage
@@ -5016,6 +5021,9 @@ func ParseEndpoint(
 
 			case "set-product-feature":
 				epf = featuresSetProductFeatureFlags
+
+			case "set-remote-session-auto-refresh-policy":
+				epf = featuresSetRemoteSessionAutoRefreshPolicyFlags
 
 			}
 
@@ -6919,6 +6927,9 @@ func ParseEndpoint(
 			case "set-product-feature":
 				endpoint = c.SetProductFeature()
 				data, err = featuresc.BuildSetProductFeaturePayload(*featuresSetProductFeatureBodyFlag, *featuresSetProductFeatureSessionTokenFlag)
+			case "set-remote-session-auto-refresh-policy":
+				endpoint = c.SetRemoteSessionAutoRefreshPolicy()
+				data, err = featuresc.BuildSetRemoteSessionAutoRefreshPolicyPayload(*featuresSetRemoteSessionAutoRefreshPolicyBodyFlag, *featuresSetRemoteSessionAutoRefreshPolicySessionTokenFlag)
 			}
 		case "projects":
 			c := projectsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -14321,6 +14332,7 @@ func featuresUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    get-product-features: Get the current state of all product feature flags.`)
 	fmt.Fprintln(os.Stderr, `    set-product-feature: Enable or disable an organization feature flag.`)
+	fmt.Fprintln(os.Stderr, `    set-remote-session-auto-refresh-policy: Set the organization policy for automatic remote-session refresh.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s features COMMAND --help\n", os.Args[0])
@@ -14361,6 +14373,26 @@ func featuresSetProductFeatureUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features set-product-feature --body '{\n      \"enabled\": false,\n      \"feature_name\": \"aaa\"\n   }' --session-token \"abc123\"")
+}
+
+func featuresSetRemoteSessionAutoRefreshPolicyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] features set-remote-session-auto-refresh-policy", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Set the organization policy for automatic remote-session refresh.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features set-remote-session-auto-refresh-policy --body '{\n      \"policy\": \"user_controlled\"\n   }' --session-token \"abc123\"")
 }
 
 // projectsUsage displays the usage of the projects command and its subcommands.

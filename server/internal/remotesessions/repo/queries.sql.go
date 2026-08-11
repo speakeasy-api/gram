@@ -52,7 +52,23 @@ WITH due AS (
       s.last_refresh_attempt_at IS NULL
       OR s.last_refresh_attempt_at <= $3::timestamptz
     )
-    AND s.auto_refresh IS TRUE
+    AND (
+      EXISTS (
+        SELECT 1 FROM organization_features AS orgf
+        WHERE orgf.organization_id = p.organization_id
+          AND orgf.feature_name = 'remote_session_auto_refresh_enforced'
+          AND orgf.deleted IS FALSE
+      )
+      OR (
+        s.auto_refresh IS TRUE
+        AND EXISTS (
+          SELECT 1 FROM organization_features AS orgf
+          WHERE orgf.organization_id = p.organization_id
+            AND orgf.feature_name = 'remote_session_auto_refresh'
+            AND orgf.deleted IS FALSE
+        )
+      )
+    )
     AND EXISTS (
       SELECT 1 FROM remote_session_client_user_session_issuers AS link
       WHERE link.remote_session_client_id = c.id
@@ -98,8 +114,20 @@ type ClaimDueRemoteSessionRefreshCandidatesRow struct {
 // Best-effort refresh-grant keepalive. Each hourly workflow chain drains
 // cross-project batches. Claiming stamps an independent attempt clock before
 // any network call, so failed sessions rotate out for 24 hours instead of
-// pinning the oldest batch. The organization product feature is UI-only; the
-// persisted per-session preference is the runtime opt-in.
+// pinning the oldest batch.
+//
+// Eligibility is the organization's automatic-refresh policy applied to the
+// session's own preference, so the policy the dashboard shows is the policy the
+// keepalive runs:
+//
+//   - remote_session_auto_refresh_enforced -> every eligible session, whatever
+//     its stored preference.
+//   - remote_session_auto_refresh -> subjects choose, so auto_refresh decides.
+//   - neither -> refresh is off for the organization, and a preference left
+//     over from an earlier policy does not resurrect it.
+//
+// Preferences are read, never rewritten, so restoring the opt-in policy
+// restores each subject's original choice.
 func (q *Queries) ClaimDueRemoteSessionRefreshCandidates(ctx context.Context, arg ClaimDueRemoteSessionRefreshCandidatesParams) ([]ClaimDueRemoteSessionRefreshCandidatesRow, error) {
 	rows, err := q.db.Query(ctx, claimDueRemoteSessionRefreshCandidates,
 		arg.NowTs,
@@ -1076,7 +1104,27 @@ WHERE s.id = $1
   AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > $3::timestamptz)
   AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > $3::timestamptz)
   AND s.updated_at <= $4::timestamptz
-  AND s.auto_refresh IS TRUE
+  -- The organization's automatic-refresh policy applied to this session's own
+  -- preference. This predicate is spelled out again in
+  -- ClaimDueRemoteSessionRefreshCandidates; the two must agree, and
+  -- TestRefreshSweep_ClaimAndRecheckAgreeOnPolicy fails if they drift.
+  AND (
+    EXISTS (
+      SELECT 1 FROM organization_features AS orgf
+      WHERE orgf.organization_id = p.organization_id
+        AND orgf.feature_name = 'remote_session_auto_refresh_enforced'
+        AND orgf.deleted IS FALSE
+    )
+    OR (
+      s.auto_refresh IS TRUE
+      AND EXISTS (
+        SELECT 1 FROM organization_features AS orgf
+        WHERE orgf.organization_id = p.organization_id
+          AND orgf.feature_name = 'remote_session_auto_refresh'
+          AND orgf.deleted IS FALSE
+      )
+    )
+  )
   AND EXISTS (
     SELECT 1 FROM remote_session_client_user_session_issuers AS link
     WHERE link.remote_session_client_id = c.id

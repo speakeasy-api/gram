@@ -28564,6 +28564,90 @@ paths:
       tags:
         - features
       x-speakeasy-name-override: set
+  /rpc/productFeatures.setRemoteSessionAutoRefreshPolicy:
+    post:
+      description: Set the organization policy for automatic remote-session refresh.
+      operationId: setRemoteSessionAutoRefreshPolicy
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetRemoteSessionAutoRefreshPolicyRequestBody'
+        required: true
+      responses:
+        "200":
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: setRemoteSessionAutoRefreshPolicy features
+      tags:
+        - features
+      x-speakeasy-name-override: setRemoteSessionAutoRefreshPolicy
+      x-speakeasy-react-hook:
+        name: SetRemoteSessionAutoRefreshPolicy
   /rpc/projects.create:
     post:
       description: Create a new project.
@@ -59279,6 +59363,9 @@ components:
         remote_session_auto_refresh_enabled:
           type: boolean
           description: Whether consent screens expose automatic remote-session refresh for the organization
+        remote_session_auto_refresh_enforced_enabled:
+          type: boolean
+          description: 'Whether automatic remote-session refresh is enforced as the organization default: forced on for every user, shown locked on consent screens, and applied by the keepalive regardless of per-session preference'
         scim_enabled:
           type: boolean
           description: Whether SCIM/directory sync setup is enabled for the organization
@@ -59313,6 +59400,7 @@ components:
         - platform_mcp_enabled
         - customer_managed_encryption_keys_enabled
         - remote_session_auto_refresh_enabled
+        - remote_session_auto_refresh_enforced_enabled
         - device_agent
     GetProjectForm:
       type: object
@@ -68507,6 +68595,7 @@ components:
             - platform_mcp
             - customer_managed_encryption_keys
             - remote_session_auto_refresh
+            - remote_session_auto_refresh_enforced
           maxLength: 60
       required:
         - feature_name
@@ -68526,6 +68615,18 @@ components:
           $ref: '#/components/schemas/Project'
       required:
         - project
+    SetRemoteSessionAutoRefreshPolicyRequestBody:
+      type: object
+      properties:
+        policy:
+          type: string
+          description: Organization policy for automatic remote-session refresh
+          enum:
+            - disabled
+            - user_controlled
+            - enforced
+      required:
+        - policy
     SetRootMcpEndpointRequestBody:
       type: object
       properties:

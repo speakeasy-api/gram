@@ -209,6 +209,7 @@ trackedFiles:
   src/funcs/externalReceiveWorkOSWebhook.ts: {}
   src/funcs/featuresGet.ts: {}
   src/funcs/featuresSet.ts: {}
+  src/funcs/featuresSetRemoteSessionAutoRefreshPolicy.ts: {}
   src/funcs/hooksHooksNumberClaude.ts: {}
   src/funcs/hooksHooksNumberCodex.ts: {}
   src/funcs/hooksHooksNumberCursor.ts: {}
@@ -1131,6 +1132,7 @@ trackedFiles:
   src/models/components/setpluginassignmentsresponsebody.ts: {}
   src/models/components/setproductfeaturerequestbody.ts: {}
   src/models/components/setprojectlogoresult.ts: {}
+  src/models/components/setremotesessionautorefreshpolicyrequestbody.ts: {}
   src/models/components/setrootmcpendpointrequestbody.ts: {}
   src/models/components/setscheduleenabledrequestbody.ts: {}
   src/models/components/setsourceenvironmentlinkrequestbody.ts: {}
@@ -1776,6 +1778,7 @@ trackedFiles:
   src/models/operations/setpluginassignments.ts: {}
   src/models/operations/setproductfeature.ts: {}
   src/models/operations/setprojectlogo.ts: {}
+  src/models/operations/setremotesessionautorefreshpolicy.ts: {}
   src/models/operations/setrootmcpendpoint.ts: {}
   src/models/operations/setsourceenvironmentlink.ts: {}
   src/models/operations/settoolsetenvironmentlink.ts: {}
@@ -2452,6 +2455,7 @@ trackedFiles:
   src/react-query/setModelProviderKeyEnabled.ts: {}
   src/react-query/setPluginAssignments.ts: {}
   src/react-query/setProjectLogo.ts: {}
+  src/react-query/setRemoteSessionAutoRefreshPolicy.ts: {}
   src/react-query/setRootMcpEndpoint.ts: {}
   src/react-query/setSourceEnvironmentLink.ts: {}
   src/react-query/setToolsetEnvironmentLink.ts: {}
@@ -4860,7 +4864,7 @@ examples:
     speakeasy-default-get-product-features:
       responses:
         "200":
-          application/json: {"ai_platform_push_integrations_enabled": false, "authz_challenge_logging_enabled": false, "custom_model_keys_enabled": false, "customer_managed_encryption_keys_enabled": false, "device_agent": false, "hooks_browser_login_enabled": false, "hooks_fail_open_enabled": false, "logs_enabled": false, "platform_mcp_enabled": false, "remote_session_auto_refresh_enabled": false, "scim_enabled": false, "session_capture_enabled": true, "skill_capture_metadata_only": false, "skills_enabled": false, "sso_enabled": false, "tool_io_logs_enabled": true}
+          application/json: {"ai_platform_push_integrations_enabled": false, "authz_challenge_logging_enabled": false, "custom_model_keys_enabled": false, "customer_managed_encryption_keys_enabled": false, "device_agent": false, "hooks_browser_login_enabled": false, "hooks_fail_open_enabled": false, "logs_enabled": false, "platform_mcp_enabled": false, "remote_session_auto_refresh_enabled": false, "remote_session_auto_refresh_enforced_enabled": false, "scim_enabled": false, "session_capture_enabled": true, "skill_capture_metadata_only": false, "skills_enabled": false, "sso_enabled": false, "tool_io_logs_enabled": true}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -7635,6 +7639,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  setRemoteSessionAutoRefreshPolicy:
+    speakeasy-default-set-remote-session-auto-refresh-policy:
+      requestBody:
+        application/json: {"policy": "enforced"}
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   setRootMcpEndpoint:
     speakeasy-default-set-root-mcp-endpoint:
       requestBody:
