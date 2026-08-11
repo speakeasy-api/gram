@@ -270,11 +270,13 @@ export function OrganizationsList(): JSX.Element {
           </Table>
         </div>
 
+        {/* Placeholder rows belong to the previous filter, and so does the
+            cursor beside them. Both controls wait for the real page. */}
         <div className="mt-3 flex items-center justify-end gap-2">
           <Button
             variant="ghost"
             size="xs"
-            disabled={cursorStack.length === 0}
+            disabled={isPlaceholderData || cursorStack.length === 0}
             onClick={goPrev}
           >
             Previous
@@ -282,7 +284,7 @@ export function OrganizationsList(): JSX.Element {
           <Button
             variant="ghost"
             size="xs"
-            disabled={!data?.next_cursor}
+            disabled={isPlaceholderData || !data?.next_cursor}
             onClick={goNext}
           >
             Next
