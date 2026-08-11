@@ -1067,11 +1067,6 @@ interface ToolCategory {
   tools: MentionableTool[];
 }
 
-// A discoverable counterpart to the type-`@` autocomplete: a composer button
-// that opens a searchable, category-grouped picker of the available tools and
-// inserts an @mention for the chosen one. Inserts through the composer runtime
-// so it stays in sync with the autocomplete's own textarea handling. Hidden when
-// tool mentions are disabled or there are no tools.
 /** Rail entry for the skills half of the context picker. */
 const CONTEXT_SKILLS_SECTION = "__skills__";
 /** Rail entry that lists every tool, ungrouped. */
@@ -1137,8 +1132,21 @@ const ComposerContextPicker: FC = () => {
     return null;
   }
 
+  // A picked rail entry can stop existing under the user — tools refresh and
+  // lose a category, or a half loads empty. Fall back rather than leave the
+  // pane pointed at something that is no longer there.
+  const sectionExists =
+    section === CONTEXT_SKILLS_SECTION
+      ? hasSkills
+      : section === CONTEXT_ALL_TOOLS_SECTION
+        ? hasTools
+        : hasTools && categories.some((category) => category.name === section);
   const activeSection =
-    section ?? (hasSkills ? CONTEXT_SKILLS_SECTION : CONTEXT_ALL_TOOLS_SECTION);
+    section !== null && sectionExists
+      ? section
+      : hasSkills
+        ? CONTEXT_SKILLS_SECTION
+        : CONTEXT_ALL_TOOLS_SECTION;
   const normalizedQuery = deferredQuery.trim().toLowerCase();
   const searching = normalizedQuery !== "";
 
@@ -1321,7 +1329,12 @@ const ComposerContextPicker: FC = () => {
           <div className="min-w-0 flex-1 overflow-y-auto">
             {searching && !showSkills && !showTools && (
               <div className="px-2 py-6 text-center text-xs text-muted-foreground">
-                Nothing found
+                {/* A search that outruns the fetch has nothing to match yet;
+                    saying "nothing found" there reports absence when the
+                    answer is simply not back. */}
+                {skillContext?.loading || mcpToolsLoading
+                  ? "Loading…"
+                  : "Nothing found"}
               </div>
             )}
             {showSkills &&
