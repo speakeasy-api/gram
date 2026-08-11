@@ -435,7 +435,9 @@ func (s *Service) callPlatformToolsetTool(
 	}()
 
 	if err := s.toolProxy.Do(ctx, rw, bytes.NewReader(requestBodyBytes), toolCallEnv, plan, logAttrs); err != nil {
-		return nil, platformToolCallError(ctx, logger, err, attr.SlogToolName(params.Name))
+		failure := platformToolCallError(ctx, logger, err, attr.SlogToolName(params.Name))
+		recordToolCallErrorStatus(ctx, rw, failure)
+		return nil, failure
 	}
 	outputBytes = int64(rw.body.Len())
 

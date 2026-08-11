@@ -402,9 +402,12 @@ func handleToolsCall(
 	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), toolCallEnv, plan, logAttrs)
 	if err != nil {
 		if rejected, ok := toolCallRejection(ctx, logger, err, attr.SlogToolName(params.Name)); ok {
+			recordToolCallErrorStatus(ctx, rw, rejected)
 			return nil, rejected
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute tool call").LogError(ctx, logger, attr.SlogToolName(params.Name))
+		failure := oops.E(oops.CodeUnexpected, err, "failed to execute tool call").LogError(ctx, logger, attr.SlogToolName(params.Name))
+		recordToolCallErrorStatus(ctx, rw, failure)
+		return nil, failure
 	}
 
 	outputBytes = int64(rw.body.Len())
@@ -481,6 +484,17 @@ func toolCallRejection(ctx context.Context, logger *slog.Logger, err error, args
 	}
 
 	return oops.E(oops.CodeBadRequest, err, "tool call was rejected as invalid or not permitted").LogWarn(ctx, logger, args...), true
+}
+
+// recordToolCallErrorStatus keeps deferred billing and telemetry metadata in
+// sync with the status represented by an error returned from the MCP boundary.
+// The response writer starts at 200 because successful tool implementations may
+// write only a body, so failures that occur before WriteHeader must update it.
+func recordToolCallErrorStatus(ctx context.Context, rw *toolCallResponseWriter, err error) {
+	var shareableErr *oops.ShareableError
+	if errors.As(err, &shareableErr) {
+		rw.statusCode = shareableErr.HTTPStatus(ctx)
+	}
 }
 
 func resolveUserConfiguration(

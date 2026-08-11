@@ -119,3 +119,24 @@ func TestPlatformToolCallError_ShareableClientFaultIsRejected(t *testing.T) {
 	entry := decodeLogEntry(t, buf)
 	require.Equal(t, "WARN", entry["level"], "caller faults must use the same warning path when already shareable")
 }
+
+func TestRecordToolCallErrorStatus_UsesShareableHTTPStatus(t *testing.T) {
+	t.Parallel()
+
+	rw := &toolCallResponseWriter{statusCode: http.StatusOK}
+	err := fmt.Errorf("execute platform tool: %w", oops.E(oops.CodeBadRequest, nil, "invalid tool call"))
+
+	recordToolCallErrorStatus(t.Context(), rw, err)
+
+	require.Equal(t, http.StatusBadRequest, rw.statusCode)
+}
+
+func TestRecordToolCallErrorStatus_IgnoresUnclassifiedErrors(t *testing.T) {
+	t.Parallel()
+
+	rw := &toolCallResponseWriter{statusCode: http.StatusOK}
+
+	recordToolCallErrorStatus(t.Context(), rw, errors.New("connection reset by peer"))
+
+	require.Equal(t, http.StatusOK, rw.statusCode)
+}
