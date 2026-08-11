@@ -762,9 +762,10 @@ function RepositoryFacts({
 /**
  * OSV's answer gets its own group: checked-and-clean, advisories-found, and
  * could-not-check are three different answers, and collapsing any two of them
- * is exactly what this panel exists to prevent. Only package references are
- * queried — a remote endpoint has no package to look up, and no section
- * renders at all.
+ * is exactly what this panel exists to prevent. Advisory databases index
+ * published packages, so a non-package reference renders the group with an
+ * explanation rather than an answer — the question still exists for a remote
+ * endpoint; a database just cannot answer it.
  */
 function AdvisoriesSection({
   advisories,
@@ -772,8 +773,18 @@ function AdvisoriesSection({
 }: {
   advisories: EvidenceAdvisories | undefined;
   identityKind: EvidenceIdentity["kind"];
-}): JSX.Element | null {
-  if (identityKind !== "package") return null;
+}): JSX.Element {
+  if (identityKind !== "package") {
+    return (
+      <EvidenceGroup question="Does anything published say it's vulnerable?">
+        <UnknownBlock>
+          Advisory databases index published packages, and this server is not
+          one — there is nothing to look up. The vendor's security history is a
+          research question, not a database check.
+        </UnknownBlock>
+      </EvidenceGroup>
+    );
+  }
 
   if (!advisories) {
     return (
