@@ -9,12 +9,13 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_approval"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
 func listPayload() *gen.ListRequestsPayload {
 	return &gen.ListRequestsPayload{
 		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		Status: nil, Cursor: nil, Limit: nil,
+		Status: nil, Limit: nil,
 	}
 }
 
@@ -42,6 +43,34 @@ func TestListRequests_Success(t *testing.T) {
 	// Demand is what makes the queue orderable, so the count has to reflect
 	// every requester rather than collapsing to one row per request.
 	require.Equal(t, 2, got.RequesterCount)
+}
+
+// A server_url summary always carries the same slug the Shadow MCP inventory
+// derives from the canonical URL, so a request links to the server page it
+// describes; a stdio target has no inventory page, so its slug is absent.
+func TestListRequests_ServerSlugFollowsTargetKind(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	const canonicalURL = "https://sluggable.example.com/mcp"
+	urlRequest := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: canonicalURL, status: "", evidence: "", version: 0})
+	stdioRequest := seedUnresolvedRequest(t, ctx, ti, ti.projectID, "npx some-server")
+
+	result, err := ti.service.ListRequests(ctx, listPayload())
+	require.NoError(t, err)
+	require.Len(t, result.Requests, 2)
+
+	byID := make(map[string]*gen.ApprovalRequestSummary, len(result.Requests))
+	for _, request := range result.Requests {
+		byID[request.ID] = request
+	}
+
+	withSlug := byID[urlRequest.String()]
+	require.NotNil(t, withSlug.ServerSlug)
+	require.Equal(t, shadowmcp.ServerSlug(canonicalURL), *withSlug.ServerSlug)
+
+	require.Nil(t, byID[stdioRequest.String()].ServerSlug)
 }
 
 // An unidentified server must reach the surface as absent rather than as an

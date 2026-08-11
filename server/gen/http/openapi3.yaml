@@ -19492,8 +19492,6 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
             summary: createRequest mcpApproval
             tags:
                 - mcpApproval
@@ -19596,8 +19594,6 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
             summary: ensureServerReview mcpApproval
             tags:
                 - mcpApproval
@@ -19721,13 +19717,6 @@ paths:
                   name: status
                   schema:
                     description: Only return requests in this status.
-                    type: string
-                - allowEmptyValue: true
-                  description: The cursor to fetch results from
-                  in: query
-                  name: cursor
-                  schema:
-                    description: The cursor to fetch results from
                     type: string
                 - allowEmptyValue: true
                   description: The number of requests to return per page
@@ -19926,8 +19915,6 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
             summary: promote mcpApproval
             tags:
                 - mcpApproval
@@ -20136,8 +20123,6 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
             summary: refreshEvidence mcpApproval
             tags:
                 - mcpApproval
@@ -53961,7 +53946,7 @@ components:
                     description: The namespace of the requested reference, such as server_url or stdio_command.
                 target_raw:
                     type: string
-                    description: The reference exactly as the requester named it.
+                    description: The stored display form of the requested reference, with credential-shaped material (URL query strings and userinfo, secret-named flag and environment values in commands) redacted at intake.
                 updated_at:
                     type: string
                     description: When the request last changed.
@@ -56796,10 +56781,12 @@ components:
             properties:
                 note:
                     type: string
-                    description: Why the requester wants it. The one input no automated evidence supplies, so it cannot be blank.
+                    description: The requester's justification for wanting access to this server. Must not be blank.
+                    maxLength: 4000
                 target:
                     type: string
                     description: 'The server reference: a URL, or the stdio command that launches it.'
+                    maxLength: 2048
                 target_kind:
                     type: string
                     description: The namespace of the reference.
@@ -58291,6 +58278,7 @@ components:
                 target:
                     type: string
                     description: The server URL the dossier describes.
+                    maxLength: 2048
             required:
                 - target
         Environment:
@@ -61492,14 +61480,12 @@ components:
         ListApprovalRequestsResult:
             type: object
             properties:
-                next_cursor:
-                    type: string
-                    description: The cursor to fetch results from
                 requests:
                     type: array
                     items:
                         $ref: '#/components/schemas/ApprovalRequestSummary'
                     description: The list of approval requests
+            description: A page of the approval queue.
             required:
                 - requests
         ListAssetsResult:
@@ -66056,6 +66042,9 @@ components:
                 decision:
                     type: string
                     description: Either approved or denied.
+                    enum:
+                        - approved
+                        - denied
                 granted_principal_urns:
                     type: array
                     items:

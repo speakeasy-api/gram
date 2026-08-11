@@ -184,7 +184,10 @@ WHERE id = @id
 -- name: UpsertApprovalRequest :one
 -- Re-requesting a server reuses the same row rather than starting a second
 -- review, so decisions accumulate as history against one target per project.
--- target_key is what deduplicates; target_raw stays as the requester wrote it.
+-- target_key is what deduplicates; target_raw is the redacted display form of
+-- the reference (URLs stripped of query and userinfo, commands stripped of
+-- credential-shaped values), never the verbatim input — it reaches the queue,
+-- the audit feed, and the webhook stream.
 --
 -- A real ask (incoming status 'requested') reopens a denied review and
 -- upgrades an unreviewed evidence dossier: the history stays, and the request

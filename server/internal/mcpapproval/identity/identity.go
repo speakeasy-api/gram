@@ -196,10 +196,167 @@ func RedactServerURL(raw string) (string, bool) {
 	return redactedURL(u), true
 }
 
+// redactedValue stands in for a secret removed from a stdio command reference.
+const redactedValue = "<redacted>"
+
+// secretMarkers are the substrings that mark a flag or environment-variable
+// name as credential-bearing. Matching on the name rather than guessing at the
+// value keeps redaction deterministic: the same command always redacts the
+// same way, which the dedupe key depends on.
+var secretMarkers = []string{"token", "secret", "key", "pass", "auth", "cred", "header", "bearer"}
+
+// RedactCommand renders a stdio launch command with credential-shaped
+// material removed, keeping the structure that identifies the server. Real
+// commands routinely carry secrets — `npx -y mcp-remote https://h/sse
+// --header "Authorization: Bearer <tok>"`, `--api-key=…`, `TOKEN=… npx …` —
+// and the stored reference reaches the review queue, the audit feed, and the
+// webhook stream.
+//
+// Three shapes are redacted: the value of a secret-named flag (the flag name
+// itself is kept, so the command stays readable), the value of a secret-named
+// NAME=value environment prefix, and the query/userinfo/fragment of any
+// URL-shaped token — the same treatment RedactServerURL gives an endpoint
+// reference. Whitespace is collapsed, so the output doubles as a dedupe key:
+// two invocations of the same server with rotated tokens redact identically.
+func RedactCommand(raw string) string {
+	fields := strings.Fields(raw)
+	out := make([]string, 0, len(fields))
+
+	for i := 0; i < len(fields); i++ {
+		field := fields[i]
+
+		if strings.HasPrefix(field, "-") {
+			name, value, joined := strings.Cut(field, "=")
+			switch {
+			case isSecretFlag(name):
+				if joined {
+					out = append(out, name+"="+redactedValue)
+					continue
+				}
+				out = append(out, field)
+				if next := consumeFlagValue(fields, i); next != i {
+					out = append(out, redactedValue)
+					i = next
+				}
+			case joined:
+				if u, ok := absoluteHTTPURL(value); ok {
+					out = append(out, name+"="+redactedURL(u))
+					continue
+				}
+				out = append(out, field)
+			default:
+				out = append(out, field)
+			}
+			continue
+		}
+
+		if name, ok := secretEnvAssignment(field); ok {
+			out = append(out, name+"="+redactedValue)
+			continue
+		}
+
+		if u, ok := absoluteHTTPURL(field); ok {
+			out = append(out, redactedURL(u))
+			continue
+		}
+
+		out = append(out, field)
+	}
+
+	return strings.Join(out, " ")
+}
+
+// isSecretFlag reports whether a flag names a credential-bearing value. The
+// marker match covers the long spellings (`--api-key`, `--auth-token`,
+// `--header`); `-h`/`-H` is listed explicitly for the curl-style header
+// shorthand. None of the launcher selector flags (`-p`, `--package`,
+// `--from`, `--spec`) match, so redaction never renames what identity
+// resolution reads as the package.
+func isSecretFlag(name string) bool {
+	lowered := strings.ToLower(strings.TrimLeft(name, "-"))
+	if lowered == "h" {
+		return true
+	}
+
+	for _, marker := range secretMarkers {
+		if strings.Contains(lowered, marker) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// consumeFlagValue returns the index of the last token belonging to the value
+// after a secret flag, or i when no value follows. Whitespace splitting has
+// already destroyed shell quoting, so a value that opens with a quote spans
+// tokens until one closes it — `--header "Authorization: Bearer tok"` is
+// three tokens, all of them the value.
+func consumeFlagValue(fields []string, i int) int {
+	if i+1 >= len(fields) {
+		return i
+	}
+
+	// A flag immediately followed by another flag carries no value to redact.
+	if strings.HasPrefix(fields[i+1], "-") {
+		return i
+	}
+
+	i++
+	first := fields[i]
+	quote := first[0]
+	if quote != '"' && quote != '\'' {
+		return i
+	}
+	if len(first) > 1 && first[len(first)-1] == quote {
+		return i
+	}
+
+	for i+1 < len(fields) {
+		i++
+		if field := fields[i]; field[len(field)-1] == quote {
+			break
+		}
+	}
+
+	return i
+}
+
+// secretEnvAssignment reports whether a token is a NAME=value environment
+// prefix whose name marks it as credential-bearing, returning the name to
+// keep. A token whose left side is not a valid environment-variable name — a
+// pypi `pkg==1.2.3` spec, say — is never treated as one.
+func secretEnvAssignment(field string) (string, bool) {
+	name, _, found := strings.Cut(field, "=")
+	if !found || name == "" {
+		return "", false
+	}
+
+	for _, r := range name {
+		isWord := r == '_' || (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
+		if !isWord {
+			return "", false
+		}
+	}
+
+	if !isSecretFlag(name) {
+		return "", false
+	}
+
+	return name, true
+}
+
 // redactedURL renders a URL with everything that is per-install or secret
 // removed: credentials in the userinfo, the query string, and the fragment.
 // What remains is the part two references to the same server share, and it is
 // safe to store and show.
+//
+// The path is kept deliberately, even though a credential embedded in a path
+// segment (`https://host/sse/<token>`) survives. The path is what
+// distinguishes one server from another on shared hosting, so dropping it
+// would collapse unrelated servers into one review key; a heuristic for
+// "secret-looking" segments would redact real routes as often as it caught
+// tokens. Dedupe fidelity wins here, and the residual exposure is accepted.
 func redactedURL(u *url.URL) string {
 	canonical := &url.URL{
 		Scheme:      u.Scheme,

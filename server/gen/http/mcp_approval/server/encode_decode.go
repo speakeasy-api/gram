@@ -39,7 +39,6 @@ func DecodeListRequestsRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		var payload *mcpapproval.ListRequestsPayload
 		var (
 			status           *string
-			cursor           *string
 			limit            *int32
 			sessionToken     *string
 			apikeyToken      *string
@@ -50,10 +49,6 @@ func DecodeListRequestsRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		statusRaw := qp.Get("status")
 		if statusRaw != "" {
 			status = &statusRaw
-		}
-		cursorRaw := qp.Get("cursor")
-		if cursorRaw != "" {
-			cursor = &cursorRaw
 		}
 		{
 			limitRaw := qp.Get("limit")
@@ -81,7 +76,7 @@ func DecodeListRequestsRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListRequestsPayload(status, cursor, limit, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewListRequestsPayload(status, limit, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -559,13 +554,6 @@ func DecodeEnsureServerReviewRequest(mux goahttp.Muxer, decoder func(*http.Reque
 				payload.ProjectSlugInput = &cred
 			}
 		}
-		if payload.ApikeyToken != nil {
-			if strings.Contains(*payload.ApikeyToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
-				payload.ApikeyToken = &cred
-			}
-		}
 
 		return payload, nil
 	}
@@ -794,13 +782,6 @@ func DecodeCreateRequestRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
 				payload.ProjectSlugInput = &cred
-			}
-		}
-		if payload.ApikeyToken != nil {
-			if strings.Contains(*payload.ApikeyToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
-				payload.ApikeyToken = &cred
 			}
 		}
 
@@ -1033,13 +1014,6 @@ func DecodePromoteRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp
 				payload.ProjectSlugInput = &cred
 			}
 		}
-		if payload.ApikeyToken != nil {
-			if strings.Contains(*payload.ApikeyToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
-				payload.ApikeyToken = &cred
-			}
-		}
 
 		return payload, nil
 	}
@@ -1257,13 +1231,6 @@ func DecodeRefreshEvidenceRequest(mux goahttp.Muxer, decoder func(*http.Request)
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
 				payload.ProjectSlugInput = &cred
-			}
-		}
-		if payload.ApikeyToken != nil {
-			if strings.Contains(*payload.ApikeyToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
-				payload.ApikeyToken = &cred
 			}
 		}
 

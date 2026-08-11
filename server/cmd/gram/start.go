@@ -1301,12 +1301,15 @@ func newStartCommand() *cli.Command {
 			triggers.Attach(mux, triggers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, triggerApp, auditLogger))
 			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, authzEngine, platformFeatureChecker, assistantPlatformExtras))
 			resources.Attach(mux, resources.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
+			// One probe serves both the authority and tool-declarations slots:
+			// they are two views of the same remote prober.
+			remoteProber := remoteprobe.New(logger, guardianPolicy)
 			mcpApprovalService := mcpapproval.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger,
 				mcpapprovalevidence.NewAssembler(
 					packagemeta.NewClient(guardianPolicy.PooledClient()),
 					telemetryrepo.New(chDB),
-					remoteprobe.New(logger, guardianPolicy),
-					remoteprobe.New(logger, guardianPolicy),
+					remoteProber,
+					remoteProber,
 					mcpapprovalcatalog.New(logger, db, mcpRegistryClient),
 				))
 			mcpapproval.Attach(mux, mcpApprovalService)

@@ -280,7 +280,7 @@ func TestRecordDecision_WritesAnAuditEntry(t *testing.T) {
 	denyBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMCPApprovalRequestDeny)
 	require.NoError(t, err)
 
-	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "requested", evidence: "", version: 0})
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "https://audited.example.com/mcp", status: "requested", evidence: "", version: 0})
 
 	_, err = ti.service.RecordDecision(ctx, decisionPayload(requestID.String(), "approved"))
 	require.NoError(t, err)
@@ -288,6 +288,21 @@ func TestRecordDecision_WritesAnAuditEntry(t *testing.T) {
 	approveAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMCPApprovalRequestApprove)
 	require.NoError(t, err)
 	require.Equal(t, approveBefore+1, approveAfter)
+
+	// The entry is attributed to the request's organisation — the one the
+	// decision handler resolved under the caller's project — and names the
+	// request as its subject, with the raw target as the display name so the
+	// feed entry is readable without a second lookup.
+	request, err := ti.repo.GetApprovalRequest(ctx, repo.GetApprovalRequestParams{ID: requestID, ProjectID: ti.projectID})
+	require.NoError(t, err)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionMCPApprovalRequestApprove)
+	require.NoError(t, err)
+	require.Equal(t, request.OrganizationID, record.OrganizationID)
+	require.True(t, record.ProjectID.Valid)
+	require.Equal(t, ti.projectID, record.ProjectID.UUID)
+	require.Equal(t, requestID.String(), record.SubjectID)
+	require.Equal(t, "https://audited.example.com/mcp", record.SubjectDisplay)
 
 	_, err = ti.service.RecordDecision(ctx, decisionPayload(requestID.String(), "denied"))
 	require.NoError(t, err)

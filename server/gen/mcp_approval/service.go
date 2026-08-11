@@ -117,7 +117,9 @@ type ApprovalRequestSummary struct {
 	// The namespace of the requested reference, such as server_url or
 	// stdio_command.
 	TargetKind string
-	// The reference exactly as the requester named it.
+	// The stored display form of the requested reference, with credential-shaped
+	// material (URL query strings and userinfo, secret-named flag and environment
+	// values in commands) redacted at intake.
 	TargetRaw string
 	// The Shadow MCP inventory page slug for a server_url target — the same
 	// identifier the inventory derives from the canonical URL, so a request links
@@ -161,8 +163,8 @@ type CreateRequestPayload struct {
 	TargetKind string
 	// The server reference: a URL, or the stdio command that launches it.
 	Target string
-	// Why the requester wants it. The one input no automated evidence supplies, so
-	// it cannot be blank.
+	// The requester's justification for wanting access to this server. Must not be
+	// blank.
 	Note string
 }
 
@@ -189,8 +191,6 @@ type GetRequestPayload struct {
 // ListApprovalRequestsResult is the result type of the mcpApproval service
 // listRequests method.
 type ListApprovalRequestsResult struct {
-	// The cursor to fetch results from
-	NextCursor *string
 	// The list of approval requests
 	Requests []*ApprovalRequestSummary
 }
@@ -203,8 +203,6 @@ type ListRequestsPayload struct {
 	ProjectSlugInput *string
 	// Only return requests in this status.
 	Status *string
-	// The cursor to fetch results from
-	Cursor *string
 	// The number of requests to return per page
 	Limit *int32
 }
