@@ -126,8 +126,13 @@ func TestBoundField(t *testing.T) {
 
 	// A cut landing inside a multi-byte rune retreats to the rune's start:
 	// the bounded value stays valid UTF-8 and within the cap, never carrying
-	// a mangled half-rune into the stored document.
-	multibyte := strings.Repeat("é", maxDeclarationFieldBytes)
+	// a mangled half-rune into the stored document. The odd-length ASCII
+	// prefix shifts the two-byte runes off even offsets so the cut lands on
+	// a continuation byte — without it the cut falls on a rune start and the
+	// retreat path never runs.
+	multibyte := "a" + strings.Repeat("é", maxDeclarationFieldBytes)
+	cut := maxDeclarationFieldBytes - len(truncationMarker)
+	require.False(t, utf8.RuneStart(multibyte[cut]))
 	boundedMultibyte := boundField(multibyte)
 	require.LessOrEqual(t, len(boundedMultibyte), maxDeclarationFieldBytes)
 	require.True(t, strings.HasSuffix(boundedMultibyte, truncationMarker))
