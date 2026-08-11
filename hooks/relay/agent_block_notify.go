@@ -116,21 +116,42 @@ func (r *Relay) notifyAgentBlock(ctx context.Context, effect *blockEffect, typed
 	}
 }
 
-// decodeBlockEffect reads the response's "block" effect into its typed form.
-// Returns nil for anything that isn't the object shape this version
-// understands; field-level validation stays with the consumer.
+// decodeBlockEffect reads the response's "block" effect into its typed form,
+// asserting fields straight off the decoded map like the org_settings /
+// skill_capture readers in client.go. Returns nil for anything that isn't the
+// object shape this version understands — a non-object, or a non-numeric "v"
+// (the version gates the consumer's guard, so a garbled one must not decode
+// to a trusted zero). Other mistyped fields degrade to their zero values,
+// which the consumer's requestable/token guards already reject.
 func decodeBlockEffect(raw any) *blockEffect {
 	object, ok := raw.(map[string]any)
 	if !ok {
 		return nil
 	}
-	encoded, err := json.Marshal(object)
-	if err != nil {
-		return nil
+	version := 0
+	if v, present := object["v"]; present {
+		f, ok := v.(float64) // JSON numbers decode as float64
+		if !ok {
+			return nil
+		}
+		version = int(f)
 	}
-	var effect blockEffect
-	if err := json.Unmarshal(encoded, &effect); err != nil {
-		return nil
+	str := func(key string) string {
+		s, _ := object[key].(string)
+		return s
 	}
-	return &effect
+	requestable, _ := object["requestable"].(bool)
+	return &blockEffect{
+		V:                version,
+		Category:         str("category"),
+		Requestable:      requestable,
+		RequestToken:     str("request_token"),
+		RequestURL:       str("request_url"),
+		RequestExpiresAt: str("request_expires_at"),
+		ServerName:       str("server_name"),
+		ServerURL:        str("server_url"),
+		PolicyName:       str("policy_name"),
+		ToolName:         str("tool_name"),
+		BlockURL:         str("block_url"),
+	}
 }
