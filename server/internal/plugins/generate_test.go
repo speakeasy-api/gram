@@ -1677,6 +1677,8 @@ func TestGenerateOpenCodeObservabilityPluginPackage(t *testing.T) {
 	require.Contains(t, string(shim), "--provider=opencode")
 	require.Contains(t, string(shim), "speakeasy.json")
 	require.Contains(t, string(shim), "bootstrap.sh")
+	require.Contains(t, string(shim), `"x-gram-agent-provider": "opencode"`)
+	require.Contains(t, string(shim), `"x-gram-agent-turn-id": messageID`)
 
 	_, ok = files["speakeasy.json"]
 	require.True(t, ok, "opencode package must ship speakeasy.json alongside the shim")
