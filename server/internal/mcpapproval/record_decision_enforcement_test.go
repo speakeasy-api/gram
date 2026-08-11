@@ -306,6 +306,31 @@ func TestRecordDecision_DenyRevokesLegacyVariantGrants(t *testing.T) {
 	require.Empty(t, grantPrincipals(t, ctx, ti, authz.ScopeRiskPolicyBypass, policyID, serverURL))
 }
 
+// A legacy grant may spell the same endpoint through an equivalent
+// default-port variant (`:0443` is port 443): the deny must revoke that
+// spelling too, or the legacy variant would keep enforcing the denied
+// endpoint for traffic that repeats it.
+func TestRecordDecision_DenyRevokesZeroPaddedPortVariantGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	policyID := seedShadowMCPPolicy(t, ctx, ti, "block_all")
+	serverURL := "https://mcp.example.com/legacy-port-variant"
+	variantURL := "https://mcp.example.com:0443/legacy-port-variant"
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: serverURL, status: "requested", evidence: "", version: 0})
+
+	legacyPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, "legacy-approved-user")
+	seedLegacyVariantBypassGrant(t, ctx, ti, policyID, variantURL, legacyPrincipal)
+	require.Equal(t, []string{legacyPrincipal.String()}, grantPrincipals(t, ctx, ti, authz.ScopeRiskPolicyBypass, policyID, variantURL))
+
+	_, err := ti.service.RecordDecision(ctx, decisionPayload(requestID.String(), "denied"))
+	require.NoError(t, err)
+
+	require.Empty(t, grantPrincipals(t, ctx, ti, authz.ScopeRiskPolicyBypass, policyID, variantURL))
+	require.Empty(t, grantPrincipals(t, ctx, ti, authz.ScopeRiskPolicyBypass, policyID, serverURL))
+}
+
 // An approval replaces the whole audience, legacy variants included: the
 // decision's principals are the audience afterwards, with no legacy grant
 // silently widening it.

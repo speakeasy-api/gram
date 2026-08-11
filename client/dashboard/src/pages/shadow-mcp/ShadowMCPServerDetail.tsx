@@ -270,11 +270,18 @@ function EnsureServerReview({
   // navigating from one unreviewed server to another gathers for the new one
   // instead of being swallowed by the first mount's guard.
   const startedRunRef = useRef<string | null>(null);
+  // The run key repeats when the user leaves a server and comes back before
+  // its first gather settles, so key equality alone cannot tell a stale
+  // rejection from the current run's. Each started run gets its own token and
+  // only the newest may mark failure.
+  const activeRunRef = useRef<symbol | null>(null);
 
   useEffect(() => {
     const runKey = `${project.slug}:${canonicalServerUrl}:${attempt}`;
     if (startedRunRef.current === runKey) return;
     startedRunRef.current = runKey;
+    const runToken = Symbol(runKey);
+    activeRunRef.current = runToken;
     setFailed(false);
     void (async () => {
       try {
@@ -285,10 +292,10 @@ function EnsureServerReview({
           },
         });
       } catch {
-        // A failure only marks the run it belongs to: navigating to another
-        // server starts a new run, and a stale rejection must not overwrite
-        // that server's state.
-        if (startedRunRef.current === runKey) {
+        // A failure only marks the run it belongs to: navigating away starts
+        // a new run — even one that repeats this run's key — and a stale
+        // rejection must not overwrite that run's state.
+        if (activeRunRef.current === runToken) {
           setFailed(true);
         }
         return;
