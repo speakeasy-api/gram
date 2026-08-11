@@ -41,8 +41,15 @@ func AdminCORS(allowedOrigins []string) func(http.Handler) http.Handler {
 }
 
 // AdminOriginCheck rejects any unsafe HTTP method whose Origin (or Referer if
-// Origin is absent) is not in the allowlist. CSRF defence for cookie-based
-// admin auth when SameSite=None is required for cross-origin web UIs.
+// Origin is absent) is neither in the allowlist nor the host the request
+// arrived on. CSRF defence for cookie-based admin auth when SameSite=None is
+// required for cross-origin web UIs.
+//
+// The allowlist covers the split deployment, where the admin web UI is served
+// from a different origin than the admin API. The same-host rule covers the
+// single-origin deployment, where the UI and the API share one ingress: a
+// browser sends Origin on every unsafe method, including a same-origin one,
+// so an empty allowlist would otherwise reject every write.
 func AdminOriginCheck(allowedOrigins []string) func(http.Handler) http.Handler {
 	set := make(map[string]struct{}, len(allowedOrigins))
 	for _, o := range allowedOrigins {
@@ -67,14 +74,51 @@ func AdminOriginCheck(allowedOrigins []string) func(http.Handler) http.Handler {
 				}
 			}
 
-			if _, ok := set[origin]; !ok {
-				http.Error(w, "forbidden: origin not allowed", http.StatusForbidden)
+			if _, ok := set[origin]; ok {
+				next.ServeHTTP(w, r)
 				return
 			}
 
-			next.ServeHTTP(w, r)
+			if sameHost(r, origin) {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			http.Error(w, "forbidden: origin not allowed", http.StatusForbidden)
 		})
 	}
+}
+
+// sameHost reports whether origin names the host the request arrived on.
+//
+// Only the host is compared. Behind a TLS-terminating ingress the server sees
+// a plain HTTP request, so the scheme it observes says nothing about the
+// scheme the browser used.
+//
+// X-Forwarded-Host wins when present, because an ingress that rewrites Host to
+// an internal service name leaves the public host only in that header. A
+// browser cannot forge either header across sites: it sets Host itself, and a
+// cross-site request that carries X-Forwarded-Host needs a preflight, which
+// AdminCORS answers for allowlisted origins only.
+func sameHost(r *http.Request, origin string) bool {
+	if origin == "" {
+		return false
+	}
+
+	u, err := url.Parse(origin)
+	if err != nil || u.Host == "" {
+		return false
+	}
+
+	host := r.Header.Get("X-Forwarded-Host")
+	if host == "" {
+		host = r.Host
+	}
+	// A comma separated chain means several proxies appended to the header.
+	// The first entry is the host the browser asked for.
+	host, _, _ = strings.Cut(host, ",")
+
+	return strings.EqualFold(strings.TrimSpace(host), u.Host)
 }
 
 // AdminCookieAttributes rewrites Set-Cookie response headers for the admin
