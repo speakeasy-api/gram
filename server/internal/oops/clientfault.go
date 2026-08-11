@@ -28,7 +28,11 @@ func IsClientFault(err error) bool {
 		return false
 	}
 
-	if faulter, ok := err.(ClientFaulter); ok && faulter.ClientFault() {
+	// Preserve standard errors.As behavior, including custom As(any) hooks. Do
+	// not return false when the first match is not a client fault: a later node
+	// or sibling branch can still contain one.
+	var faulter ClientFaulter
+	if errors.As(err, &faulter) && faulter.ClientFault() {
 		return true
 	}
 
@@ -36,9 +40,8 @@ func IsClientFault(err error) bool {
 		return IsClientFault(wrapped)
 	}
 
-	// The standard errors package has no helper for errors that unwrap to
-	// multiple children (for example errors.Join), so inspect that shape after
-	// using errors.Unwrap for the ordinary single-error chain.
+	// errors.Unwrap only follows a single child. Inspect the []error shape
+	// directly for multi-child error trees such as errors.Join.
 	if wrapped, ok := any(err).(interface{ Unwrap() []error }); ok {
 		for _, child := range wrapped.Unwrap() {
 			if IsClientFault(child) {

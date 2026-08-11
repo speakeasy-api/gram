@@ -27,6 +27,22 @@ func (e *wrappingStubFaultError) Unwrap() error { return e.cause }
 
 func (e *wrappingStubFaultError) ClientFault() bool { return e.client }
 
+type asStubFaultError struct {
+	faulter ClientFaulter
+}
+
+func (e *asStubFaultError) Error() string { return "as stub fault" }
+
+func (e *asStubFaultError) As(target any) bool {
+	faulter, ok := target.(*ClientFaulter)
+	if !ok {
+		return false
+	}
+
+	*faulter = e.faulter
+	return true
+}
+
 func TestIsClientFault_MatchesSelfAttributingError(t *testing.T) {
 	t.Parallel()
 
@@ -59,6 +75,13 @@ func TestIsClientFault_TraversesJoinedErrors(t *testing.T) {
 		fmt.Errorf("call upstream: %w", &stubFaultError{client: true}),
 	)
 	require.True(t, IsClientFault(joined))
+}
+
+func TestIsClientFault_HonorsCustomAs(t *testing.T) {
+	t.Parallel()
+
+	err := &asStubFaultError{faulter: &stubFaultError{client: true}}
+	require.True(t, IsClientFault(err))
 }
 
 func TestIsClientFault_TreatsUnclassifiedErrorsAsServerFaults(t *testing.T) {
