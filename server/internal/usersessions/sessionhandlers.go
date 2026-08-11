@@ -186,14 +186,22 @@ func (s *Service) RevokeUserSession(ctx context.Context, payload *gen.RevokeUser
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	s.revoker.RevokeAllDetached(ctx, revokedUpstream)
-
 	// Push the jti into the revocation cache after the DB commit so a cached
 	// jti always corresponds to a soft-deleted row. Cache-write failure is
 	// surfaced as Unexpected — the row is gone but the access token would keep
 	// validating until expiry, which is the case the cache exists to prevent.
-	if err := s.chatSessions.RevokeToken(ctx, revoked.Jti); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "push jti into revocation cache").LogError(ctx, logger)
+	pushErr := s.chatSessions.RevokeToken(ctx, revoked.Jti)
+
+	// Strictly after the jti push, and attempted even when it failed. The
+	// upstream call is a synchronous round trip to a third party, so running it
+	// first would hold Gram's own access token valid for the length of someone
+	// else's timeout — trading a prompt local revocation for a best-effort
+	// remote one. The two are independent controls, so a cache outage must not
+	// also cost the upstream revocation.
+	s.revoker.RevokeAllDetached(ctx, revokedUpstream)
+
+	if pushErr != nil {
+		return oops.E(oops.CodeUnexpected, pushErr, "push jti into revocation cache").LogError(ctx, logger)
 	}
 
 	return nil

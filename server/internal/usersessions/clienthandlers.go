@@ -268,8 +268,6 @@ func (s *Service) RevokeUserSessionClient(ctx context.Context, payload *gen.Revo
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	s.revoker.RevokeAllDetached(ctx, revokedUpstream)
-
 	// Push every cascaded jti into the revocation cache after the DB commit so
 	// a cached jti always corresponds to a soft-deleted row. Without this the
 	// client's already-issued access tokens keep validating until they expire
@@ -306,6 +304,14 @@ func (s *Service) RevokeUserSessionClient(ctx context.Context, payload *gen.Revo
 		}
 		pushed++
 	}
+
+	// Strictly after the jti pushes, and attempted even when some failed. This
+	// fan-out is synchronous, so running it first would hold every one of the
+	// client's already-issued access tokens valid for the length of the batch
+	// budget — a slow issuer would delay Gram's own security control. The two
+	// are independent, so a cache outage must not also cost the upstream
+	// revocations.
+	s.revoker.RevokeAllDetached(ctx, revokedUpstream)
 
 	// Surfaced rather than logged and swallowed: the client and its sessions
 	// are already gone from the database, so reporting success here would tell
