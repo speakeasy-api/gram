@@ -38,10 +38,11 @@ export async function gramAdminFetch<T>(
   const res = await fetch(url, { ...init, headers });
 
   if (res.status === 401) {
-    // Top-level redirect into the OIDC flow. Use prompt=none so Google returns
-    // silently when the user already has a Google session. The gram admin
-    // backend falls back to interactive login if Google returns
-    // error=login_required (see Callback in server/internal/admin/impl.go).
+    // Top-level redirect into the OIDC flow. Use prompt=none so the identity
+    // provider returns silently when the operator already has a session with
+    // it. The gram admin backend falls back to interactive login if the
+    // provider returns error=login_required (see Callback in
+    // server/internal/admin/impl.go).
     //
     // return_to must stay a relative path. sanitizeReturnTo in
     // server/internal/admin/oauth.go keeps an absolute URL only when its origin
@@ -75,8 +76,8 @@ export async function gramAdminFetch<T>(
 }
 
 // Identity of the admin operator that owns the current session. The backend
-// reads it from the OIDC session record, so it names the Google account that
-// signed in to this app, not any Gram customer account.
+// reads it from the OIDC session record, so it names the identity-provider
+// account that signed in to this app, not any Gram customer account.
 export type AdminSessionInfo = {
   email: string;
   name?: string;
@@ -91,9 +92,10 @@ export function getSession(): Promise<AdminSessionInfo> {
 // The endpoint answers 204, so this cannot use gramAdminFetch, which always
 // parses a JSON body. The endpoint also deletes only the server-side record and
 // leaves the `gram_admin` cookie in the browser. The next request would
-// therefore 401, and the 401 handler retries with prompt=none, which Google
-// honours silently and signs the operator straight back in. Asking for
-// select_account instead forces the account chooser, so logging out is visible.
+// therefore 401, and the 401 handler retries with prompt=none, which the
+// identity provider honours silently and signs the operator straight back in.
+// Asking for select_account instead forces the account chooser, so logging out
+// is visible.
 export async function logout(): Promise<void> {
   const res = await fetch("/admin/auth.logout", { method: "POST" });
   if (!res.ok) {
