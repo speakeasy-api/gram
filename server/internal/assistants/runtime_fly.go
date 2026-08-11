@@ -98,6 +98,14 @@ func (r runnerStateResponse) minThreadIdle() *uint64 {
 	return &minIdle
 }
 
+// turnInFlight reports whether any thread has a turn in flight: the runner
+// clears a thread's idle clock synchronously on /turn enqueue, so a min idle
+// of zero means a turn is running right now.
+func (r runnerStateResponse) turnInFlight() bool {
+	idle := r.minThreadIdle()
+	return idle != nil && *idle == 0
+}
+
 type flyRuntimeAPIClient interface {
 	AllocateIPAddress(ctx context.Context, appName string, addrType string, region string, orgID string, network string) (*fly.IPAddress, error)
 	AllocateSharedIPAddress(ctx context.Context, appName string) (net.IP, error)
@@ -594,14 +602,11 @@ func (f *FlyRuntimeBackend) maybeRecycleImage(
 	target := flyRuntimeTarget{URL: appURL, IP: appIP, MachineID: machine.ID}
 	if machine.State == fly.MachineStateStarted {
 		state, stateErr := f.runtimeState(ctx, target)
-		// A turn in flight reads as min(idle_seconds) == 0 across the
-		// runner's threads (the runner clears a thread's idle clock
-		// synchronously on /turn enqueue). Skip recycling so we don't reboot
-		// mid-turn; a later admission with idle threads picks the upgrade
-		// up. Probe errors fall through to recycle — the runner is
-		// unreachable on the stale image anyway and waitForRuntimeHealth
-		// would just fail next.
-		if idle := state.minThreadIdle(); stateErr == nil && idle != nil && *idle == 0 {
+		// Skip recycling so we don't reboot mid-turn; a later admission with
+		// idle threads picks the upgrade up. Probe errors fall through to
+		// recycle — the runner is unreachable on the stale image anyway and
+		// waitForRuntimeHealth would just fail next.
+		if stateErr == nil && state.turnInFlight() {
 			f.logger.InfoContext(ctx,
 				"assistant fly runtime image recycle skipped: turn in flight",
 				attr.SlogFlyAppName(appName),

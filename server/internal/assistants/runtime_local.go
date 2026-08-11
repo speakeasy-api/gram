@@ -297,8 +297,7 @@ func (l *LocalRuntimeBackend) runnerBusy(ctx context.Context, info localContaine
 	if err != nil {
 		return true
 	}
-	idle := state.minThreadIdle()
-	return idle != nil && *idle == 0
+	return state.turnInFlight()
 }
 
 // startContainer converges the named container onto a running, healthy state

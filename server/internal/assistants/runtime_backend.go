@@ -55,11 +55,9 @@ type RuntimeBackend interface {
 	Ensure(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendEnsureResult, error)
 	// RecycleImage rolls the runtime onto the configured runtime image when
 	// it is running a stale one, without launching anything new: missing
-	// apps/machines/claims are skipped, not created. Fly updates the machine
-	// in place; GKE deletes the claim and re-claims a warm-pool pod. Gated on
-	// the runner's idle clock so an in-flight turn is never interrupted — a
-	// busy runtime is skipped and the next admission's Ensure picks the
-	// upgrade up lazily.
+	// apps/machines/claims are skipped, not created. Gated on the runner's
+	// idle clock so an in-flight turn is never interrupted — a busy runtime
+	// is skipped and the next admission's Ensure picks the upgrade up lazily.
 	RecycleImage(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendRecycleResult, error)
 	// RunTurn delivers a turn to the runner backing `runtime`. The call
 	// lands on /threads/{thread_id}/turn so the runner can dispatch to the
