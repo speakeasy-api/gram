@@ -41,8 +41,8 @@ func BuildSetProductFeaturePayload(featuresSetProductFeatureBody string, feature
 		if err != nil {
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"enabled\": false,\n      \"feature_name\": \"aaa\"\n   }'")
 		}
-		if !(body.FeatureName == "logs" || body.FeatureName == "tool_io_logs" || body.FeatureName == "session_capture" || body.FeatureName == "authz_challenge_logging" || body.FeatureName == "sso" || body.FeatureName == "scim" || body.FeatureName == "hooks_browser_login" || body.FeatureName == "hooks_fail_open" || body.FeatureName == "custom_model_keys" || body.FeatureName == "skills" || body.FeatureName == "skill_capture_metadata_only" || body.FeatureName == "ai_platform_push_integrations" || body.FeatureName == "platform_mcp" || body.FeatureName == "customer_managed_encryption_keys" || body.FeatureName == "remote_session_auto_refresh") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "sso", "scim", "hooks_browser_login", "hooks_fail_open", "custom_model_keys", "skills", "skill_capture_metadata_only", "ai_platform_push_integrations", "platform_mcp", "customer_managed_encryption_keys", "remote_session_auto_refresh"}))
+		if !(body.FeatureName == "logs" || body.FeatureName == "tool_io_logs" || body.FeatureName == "session_capture" || body.FeatureName == "authz_challenge_logging" || body.FeatureName == "sso" || body.FeatureName == "scim" || body.FeatureName == "hooks_browser_login" || body.FeatureName == "hooks_fail_open" || body.FeatureName == "custom_model_keys" || body.FeatureName == "skills" || body.FeatureName == "skill_capture_metadata_only" || body.FeatureName == "ai_platform_push_integrations" || body.FeatureName == "platform_mcp" || body.FeatureName == "customer_managed_encryption_keys" || body.FeatureName == "remote_session_auto_refresh" || body.FeatureName == "remote_session_auto_refresh_enforced") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.feature_name", body.FeatureName, []any{"logs", "tool_io_logs", "session_capture", "authz_challenge_logging", "sso", "scim", "hooks_browser_login", "hooks_fail_open", "custom_model_keys", "skills", "skill_capture_metadata_only", "ai_platform_push_integrations", "platform_mcp", "customer_managed_encryption_keys", "remote_session_auto_refresh", "remote_session_auto_refresh_enforced"}))
 		}
 		if utf8.RuneCountInString(body.FeatureName) > 60 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.feature_name", body.FeatureName, utf8.RuneCountInString(body.FeatureName), 60, false))
@@ -60,6 +60,37 @@ func BuildSetProductFeaturePayload(featuresSetProductFeatureBody string, feature
 	v := &features.SetProductFeaturePayload{
 		FeatureName: body.FeatureName,
 		Enabled:     body.Enabled,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildSetRemoteSessionAutoRefreshPolicyPayload builds the payload for the
+// features setRemoteSessionAutoRefreshPolicy endpoint from CLI flags.
+func BuildSetRemoteSessionAutoRefreshPolicyPayload(featuresSetRemoteSessionAutoRefreshPolicyBody string, featuresSetRemoteSessionAutoRefreshPolicySessionToken string) (*features.SetRemoteSessionAutoRefreshPolicyPayload, error) {
+	var err error
+	var body SetRemoteSessionAutoRefreshPolicyRequestBody
+	{
+		err = json.Unmarshal([]byte(featuresSetRemoteSessionAutoRefreshPolicyBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"policy\": \"user_controlled\"\n   }'")
+		}
+		if !(body.Policy == "disabled" || body.Policy == "user_controlled" || body.Policy == "enforced") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.policy", body.Policy, []any{"disabled", "user_controlled", "enforced"}))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if featuresSetRemoteSessionAutoRefreshPolicySessionToken != "" {
+			sessionToken = &featuresSetRemoteSessionAutoRefreshPolicySessionToken
+		}
+	}
+	v := &features.SetRemoteSessionAutoRefreshPolicyPayload{
+		Policy: body.Policy,
 	}
 	v.SessionToken = sessionToken
 

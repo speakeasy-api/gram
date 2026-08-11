@@ -1,6 +1,6 @@
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
-import { Page } from "@/components/page-layout";
+import { ResourceListPage } from "@/components/page-templates";
 import { Dialog } from "@/components/ui/Dialog";
 import {
   Select,
@@ -218,16 +218,9 @@ function MemberRowContextMenu({
 
 export default function Team(): JSX.Element {
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope="org:admin" level="page">
-          <TeamInner />
-        </RequireScope>
-      </Page.Body>
-    </Page>
+    <RequireScope scope="org:admin" level="page">
+      <TeamInner />
+    </RequireScope>
   );
 }
 
@@ -852,205 +845,201 @@ function TeamInner() {
     },
   ];
 
+  const inviteButton = (
+    <RequireScope scope="org:admin" level="component">
+      {organization.scimEnabled ? (
+        <SimpleTooltip tooltip="Managed by your identity provider">
+          <span className="inline-flex">
+            <Button onClick={() => setIsInviteDialogOpen(true)} disabled>
+              <Button.LeftIcon>
+                <UserPlus className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>Invite Member</Button.Text>
+            </Button>
+          </span>
+        </SimpleTooltip>
+      ) : (
+        <Button onClick={() => setIsInviteDialogOpen(true)}>
+          <Button.LeftIcon>
+            <UserPlus className="h-4 w-4" />
+          </Button.LeftIcon>
+          <Button.Text>Invite Member</Button.Text>
+        </Button>
+      )}
+    </RequireScope>
+  );
+
   return (
     <>
-      <Stack direction="vertical" gap={8}>
-        {/* Members Section */}
-        <div>
-          <Stack
-            direction="horizontal"
-            justify="space-between"
-            align="center"
-            className="mb-4"
-          >
-            <Stack direction="vertical" gap={1}>
-              <Page.Section.Title>Team Members</Page.Section.Title>
-              <Text variant="body" className="text-muted-foreground">
-                Manage who has access to {organization.name}
-              </Text>
-            </Stack>
-            <RequireScope scope="org:admin" level="component">
-              {organization.scimEnabled ? (
-                <SimpleTooltip tooltip="Managed by your identity provider">
-                  <span className="inline-flex">
-                    <Button
-                      onClick={() => setIsInviteDialogOpen(true)}
-                      disabled
-                    >
-                      <Button.LeftIcon>
-                        <UserPlus className="h-4 w-4" />
-                      </Button.LeftIcon>
-                      <Button.Text>Invite Member</Button.Text>
-                    </Button>
-                  </span>
-                </SimpleTooltip>
-              ) : (
-                <Button onClick={() => setIsInviteDialogOpen(true)}>
-                  <Button.LeftIcon>
-                    <UserPlus className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>Invite Member</Button.Text>
-                </Button>
-              )}
-            </RequireScope>
-          </Stack>
-
-          {organization.scimEnabled && (
-            <Alert variant="info" dismissible={false} className="mb-8 text-sm">
-              Directory Sync (SCIM) is enabled. Members are provisioned and
-              roles assigned from your identity provider, not here.{" "}
-              <Link
-                to={orgRoutes.identity.href()}
-                className="underline underline-offset-2"
-              >
-                Manage identity settings
-              </Link>
-            </Alert>
-          )}
-
-          <div className="relative">
-            <Icon
-              name="search"
-              className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
-            />
-            <Input
-              type="text"
-              placeholder="Search members..."
-              value={search}
-              onChange={(value) => {
-                setSearch(value);
-                setPage(0);
-              }}
-              className="mb-4 w-full py-2 pl-9 text-sm"
-            />
-          </div>
-
-          <Table
-            columns={memberColumns}
-            data={visibleMembers}
-            rowKey={(row) => row.userId}
-            renderRow={(row, rowElement) => (
-              <MemberRowContextMenu
-                key={row.userId}
-                member={row}
-                deps={memberMenuDeps}
-              >
-                {rowElement}
-              </MemberRowContextMenu>
-            )}
-            className="min-h-fit"
-            noResultsMessage={
-              <Stack
-                gap={2}
-                className="bg-background h-full p-8"
-                align="center"
-                justify="center"
-              >
-                <Users className="text-muted-foreground h-12 w-12" />
-                <Text variant="body" className="text-muted-foreground">
-                  {search
-                    ? "No members matching your search"
-                    : "No team members yet"}
-                </Text>
-              </Stack>
-            }
-          />
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between border-t px-4 py-3">
-              <Text variant="body" className="text-muted-foreground text-sm">
-                {safePage * MEMBERS_PAGE_SIZE + 1}–
-                {Math.min((safePage + 1) * MEMBERS_PAGE_SIZE, members.length)}{" "}
-                of {members.length}
-              </Text>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="tertiary"
-                  size="sm"
-                  onClick={() => setPage((p) => p - 1)}
-                  disabled={safePage === 0}
-                >
-                  <Button.LeftIcon>
-                    <ChevronLeft className="size-4" />
-                  </Button.LeftIcon>
-                  <Button.Text className="sr-only">Previous page</Button.Text>
-                </Button>
-                <Button
-                  variant="tertiary"
-                  size="sm"
-                  onClick={() => setPage((p) => p + 1)}
-                  disabled={safePage >= totalPages - 1}
-                >
-                  <Button.LeftIcon>
-                    <ChevronRight className="size-4" />
-                  </Button.LeftIcon>
-                  <Button.Text className="sr-only">Next page</Button.Text>
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Pending Invites Section */}
-        {invites.length > 0 && (
+      <ResourceListPage
+        title="Team Members"
+        description={`Manage who has access to ${organization.name}`}
+        primaryAction={inviteButton}
+      >
+        <Stack direction="vertical" gap={8}>
+          {/* Members Section */}
           <div>
-            <Stack direction="vertical" gap={1} className="mb-4">
-              <h3 className="text-eyebrow">Pending Invites</h3>
-              <Text variant="body" className="text-muted-foreground">
-                Invitations that haven't been accepted yet
-              </Text>
-            </Stack>
+            {organization.scimEnabled && (
+              <Alert
+                variant="info"
+                dismissible={false}
+                className="mb-8 text-sm"
+              >
+                Directory Sync (SCIM) is enabled. Members are provisioned and
+                roles assigned from your identity provider, not here.{" "}
+                <Link
+                  to={orgRoutes.identity.href()}
+                  className="underline underline-offset-2"
+                >
+                  Manage identity settings
+                </Link>
+              </Alert>
+            )}
+
+            <div className="relative">
+              <Icon
+                name="search"
+                className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+              />
+              <Input
+                type="text"
+                placeholder="Search members..."
+                value={search}
+                onChange={(value) => {
+                  setSearch(value);
+                  setPage(0);
+                }}
+                className="mb-4 w-full py-2 pl-9 text-sm"
+              />
+            </div>
 
             <Table
-              columns={inviteColumns}
-              data={invites}
-              rowKey={(row) => row.id}
+              columns={memberColumns}
+              data={visibleMembers}
+              rowKey={(row) => row.userId}
+              renderRow={(row, rowElement) => (
+                <MemberRowContextMenu
+                  key={row.userId}
+                  member={row}
+                  deps={memberMenuDeps}
+                >
+                  {rowElement}
+                </MemberRowContextMenu>
+              )}
               className="min-h-fit"
+              noResultsMessage={
+                <Stack
+                  gap={2}
+                  className="bg-background h-full p-8"
+                  align="center"
+                  justify="center"
+                >
+                  <Users className="text-muted-foreground h-12 w-12" />
+                  <Text variant="body" className="text-muted-foreground">
+                    {search
+                      ? "No members matching your search"
+                      : "No team members yet"}
+                  </Text>
+                </Stack>
+              }
             />
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between border-t px-4 py-3">
+                <Text variant="body" className="text-muted-foreground text-sm">
+                  {safePage * MEMBERS_PAGE_SIZE + 1}–
+                  {Math.min((safePage + 1) * MEMBERS_PAGE_SIZE, members.length)}{" "}
+                  of {members.length}
+                </Text>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="tertiary"
+                    size="sm"
+                    onClick={() => setPage((p) => p - 1)}
+                    disabled={safePage === 0}
+                  >
+                    <Button.LeftIcon>
+                      <ChevronLeft className="size-4" />
+                    </Button.LeftIcon>
+                    <Button.Text className="sr-only">Previous page</Button.Text>
+                  </Button>
+                  <Button
+                    variant="tertiary"
+                    size="sm"
+                    onClick={() => setPage((p) => p + 1)}
+                    disabled={safePage >= totalPages - 1}
+                  >
+                    <Button.LeftIcon>
+                      <ChevronRight className="size-4" />
+                    </Button.LeftIcon>
+                    <Button.Text className="sr-only">Next page</Button.Text>
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
-        )}
-        {/* Identity signpost */}
-        <div className="border-border border-t pt-8">
-          {organization.scimEnabled ? (
-            <div className="border-border bg-muted/30 flex items-start gap-3 border px-4 py-3">
-              <FolderSync className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-              <div className="min-w-0 flex-1">
-                <Text variant="body" className="text-sm font-medium">
-                  Directory Sync is enabled
+
+          {/* Pending Invites Section */}
+          {invites.length > 0 && (
+            <div>
+              <Stack direction="vertical" gap={1} className="mb-4">
+                <h3 className="text-eyebrow">Pending Invites</h3>
+                <Text variant="body" className="text-muted-foreground">
+                  Invitations that haven't been accepted yet
                 </Text>
-                <Text muted small className="mt-0.5">
-                  Team membership and role assignments are managed by your
-                  identity provider.{" "}
-                  <Link
-                    to={orgRoutes.identity.href()}
-                    className="text-foreground underline underline-offset-4"
-                  >
-                    Manage identity settings
-                  </Link>
-                </Text>
-              </div>
-            </div>
-          ) : (
-            <div className="border-border bg-muted/30 flex items-start gap-3 border px-4 py-3">
-              <Shield className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-              <div className="min-w-0 flex-1">
-                <Text variant="body" className="text-sm font-medium">
-                  SSO & Directory Sync
-                </Text>
-                <Text muted small className="mt-0.5">
-                  Automate member provisioning and enforce identity provider
-                  authentication.{" "}
-                  <Link
-                    to={orgRoutes.identity.href()}
-                    className="text-foreground underline underline-offset-4"
-                  >
-                    Set up SSO & SCIM
-                  </Link>
-                </Text>
-              </div>
+              </Stack>
+
+              <Table
+                columns={inviteColumns}
+                data={invites}
+                rowKey={(row) => row.id}
+                className="min-h-fit"
+              />
             </div>
           )}
-        </div>
-      </Stack>
+          {/* Identity signpost */}
+          <div className="border-border border-t pt-8">
+            {organization.scimEnabled ? (
+              <div className="border-border bg-muted/30 flex items-start gap-3 border px-4 py-3">
+                <FolderSync className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <Text variant="body" className="text-sm font-medium">
+                    Directory Sync is enabled
+                  </Text>
+                  <Text muted small className="mt-0.5">
+                    Team membership and role assignments are managed by your
+                    identity provider.{" "}
+                    <Link
+                      to={orgRoutes.identity.href()}
+                      className="text-foreground underline underline-offset-4"
+                    >
+                      Manage identity settings
+                    </Link>
+                  </Text>
+                </div>
+              </div>
+            ) : (
+              <div className="border-border bg-muted/30 flex items-start gap-3 border px-4 py-3">
+                <Shield className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <Text variant="body" className="text-sm font-medium">
+                    SSO & Directory Sync
+                  </Text>
+                  <Text muted small className="mt-0.5">
+                    Automate member provisioning and enforce identity provider
+                    authentication.{" "}
+                    <Link
+                      to={orgRoutes.identity.href()}
+                      className="text-foreground underline underline-offset-4"
+                    >
+                      Set up SSO & SCIM
+                    </Link>
+                  </Text>
+                </div>
+              </div>
+            )}
+          </div>
+        </Stack>
+      </ResourceListPage>
 
       {/* Invite Dialog */}
       <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>

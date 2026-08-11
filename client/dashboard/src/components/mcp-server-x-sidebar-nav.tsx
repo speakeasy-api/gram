@@ -1,8 +1,8 @@
 import {
-  McpSidebarInfoLabel,
-  McpSidebarNavShell,
-  type McpSidebarNavItem,
-} from "@/components/mcp-sidebar-nav-shell";
+  DetailSidebarInfoLabel,
+  DetailSidebarNav,
+  type DetailSidebarNavItem,
+} from "@/components/detail/detail-sidebar-nav";
 import {
   McpServerReadinessBar,
   type ReadinessCheck,
@@ -196,7 +196,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
       ]
     : [];
 
-  const items: McpSidebarNavItem[] = [
+  const items: DetailSidebarNavItem[] = [
     {
       key: "overview",
       title: "Overview",
@@ -260,24 +260,24 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
           {mcpServer.name || "MCP Server"}
         </Text>
         {isRemoteBacked && (
-          <McpSidebarInfoLabel>Remote MCP</McpSidebarInfoLabel>
+          <DetailSidebarInfoLabel>Remote MCP</DetailSidebarInfoLabel>
         )}
         {isTunneledBacked && (
-          <McpSidebarInfoLabel>Tunneled MCP</McpSidebarInfoLabel>
+          <DetailSidebarInfoLabel>Tunneled MCP</DetailSidebarInfoLabel>
         )}
         {isUnproxied && (
-          <McpSidebarInfoLabel>Unproxied MCP</McpSidebarInfoLabel>
+          <DetailSidebarInfoLabel>Unproxied MCP</DetailSidebarInfoLabel>
         )}
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <McpSidebarInfoLabel>Visibility</McpSidebarInfoLabel>
+        <DetailSidebarInfoLabel>Visibility</DetailSidebarInfoLabel>
         <MCPServerStatusDropdown server={mcpServer} />
       </div>
 
       {mcpUrl && (
         <div className="flex flex-col gap-1">
-          <McpSidebarInfoLabel>URL</McpSidebarInfoLabel>
+          <DetailSidebarInfoLabel>URL</DetailSidebarInfoLabel>
           <div className="flex items-start gap-1">
             <Text
               variant="small"
@@ -298,7 +298,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
 
       {upstreamUrl && (
         <div className="flex flex-col gap-1">
-          <McpSidebarInfoLabel>Upstream URL</McpSidebarInfoLabel>
+          <DetailSidebarInfoLabel>Upstream URL</DetailSidebarInfoLabel>
           <div className="flex items-start gap-1">
             <Text
               variant="small"
@@ -360,7 +360,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   );
 
   return (
-    <McpSidebarNavShell
+    <DetailSidebarNav
       backHref={routes.mcp.href()}
       topTitle="Readiness"
       topContent={

@@ -3,10 +3,12 @@ package platformtools
 import (
 	"context"
 	"log/slog"
+	"net/url"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/logs"
@@ -58,6 +60,12 @@ type Dependencies struct {
 	TriggerApp       *bgtriggers.App
 	SlackHTTPClient  *guardian.HTTPClient
 	Audit            *audit.Logger
+
+	// Encryption seals the payload behind minted asset download URLs.
+	Encryption *encryption.Client
+
+	// ServerURL is the public base URL minted download URLs point at.
+	ServerURL *url.URL
 }
 
 // FeatureChecker reports whether a product feature is enabled for an

@@ -1,6 +1,10 @@
 import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
 import { isProjectOverviewQueryKey } from "@/components/project/projectOverviewQuery";
-import { clearStorageForLogout } from "@/lib/logout-storage";
+import {
+  capturePreservedStorage,
+  clearStorageForLogout,
+  type PreservedStorage,
+} from "@/lib/logout-storage";
 import { getApiBaseURL } from "@/lib/utils";
 import { datadogRum } from "@datadog/browser-rum";
 import { Gram } from "@gram/client";
@@ -19,6 +23,8 @@ import {
   useSlugs,
 } from "./Sdk";
 
+const LOGOUT_PATH = "/rpc/auth.logout";
+
 export const SdkProvider = ({
   children,
 }: {
@@ -33,6 +39,14 @@ export const SdkProvider = ({
 
   // Memoize the httpClient and gram instances
   const gram = useMemo(() => {
+    // Values held across the logout round-trip. The logout response tells the
+    // browser to wipe storage for the origin, which happens before the response
+    // hook below runs, so anything meant to outlive the session has to be read
+    // off localStorage before the request is sent. Keyed by request so
+    // overlapping logouts — a double-clicked menu item — each restore their own
+    // snapshot rather than racing over one slot.
+    const preservedAcrossLogout = new WeakMap<Request, PreservedStorage>();
+
     const httpClient = new HTTPClient({
       fetcher: (request) => {
         const newRequest = new Request(request, {
@@ -54,13 +68,19 @@ export const SdkProvider = ({
       },
     });
 
+    httpClient.addHook("beforeRequest", (request) => {
+      if (new URL(request.url).pathname === LOGOUT_PATH) {
+        preservedAcrossLogout.set(request, capturePreservedStorage());
+      }
+    });
+
     httpClient.addHook("response", (res, request) => {
       if (!res.ok) {
         return;
       }
 
       const u = new URL(request.url);
-      if (u.pathname !== "/rpc/auth.logout") {
+      if (u.pathname !== LOGOUT_PATH) {
         return;
       }
 
@@ -68,7 +88,12 @@ export const SdkProvider = ({
       datadogRum.clearUser();
       telemetry.reset();
       document.cookie = "gram_admin_override=; path=/; max-age=0;";
-      clearStorageForLogout();
+      // Still clear explicitly: Clear-Site-Data is a no-op on origins the
+      // browser does not treat as trustworthy, and on engines that don't
+      // implement it. Where it did apply, storage is already empty and the
+      // pre-request snapshot holds the only copy of the preserved entries.
+      clearStorageForLogout(preservedAcrossLogout.get(request));
+      preservedAcrossLogout.delete(request);
     });
 
     const gram = new Gram({

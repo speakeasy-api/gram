@@ -129,9 +129,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	authContext.ProjectSlug = &project.Slug
 	ctx = contextvalues.SetAuthContext(ctx, authContext)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 	signaler := &captureSuggestionSignaler{signals: nil, err: nil}
 	siteURL, err := url.Parse("https://app.getgram.test")

@@ -54,6 +54,11 @@ func TestService_Register(t *testing.T) {
 
 		err = instance.service.Register(ctx, payload)
 		require.NoError(t, err)
+
+		storedSession, err := instance.sessionManager.GetSession(ctx, session.SessionID)
+		require.NoError(t, err)
+		require.NotEmpty(t, storedSession.ActiveOrganizationID)
+		require.Empty(t, instance.trialNotifier.trialStarted)
 	})
 
 	t.Run("register fails when user already has active organization", func(t *testing.T) {
