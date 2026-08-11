@@ -2,12 +2,43 @@ package polar
 
 import (
 	"testing"
+	"time"
 
 	polarComponents "github.com/polarsource/polar-go/models/components"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
+
+func TestNewClient_HTTPTimeoutAccommodatesSlowMeterQueries(t *testing.T) {
+	t.Parallel()
+
+	tracerProvider := testenv.NewTracerProvider(t)
+
+	client := NewClient(
+		guardian.NewDefaultPolicy(tracerProvider),
+		nil,
+		"test-token",
+		testenv.NewLogger(t),
+		tracerProvider,
+		nil,
+		&Catalog{
+			ProductIDBase:       "prod_base",
+			ProductIDPro:        "prod_pro",
+			ProductIDsTopUp:     nil,
+			ProductIDAssistants: "",
+			MeterIDToolCalls:    "meter_tool_calls",
+			MeterIDServers:      "meter_servers",
+			MeterIDCredits:      "meter_credits",
+		},
+		"",
+	)
+
+	require.Equal(t, 2*time.Minute, client.httpClient.Timeout,
+		"Polar /quantities meter queries are serialized per-meter on Polar's side and can exceed a minute during degraded periods")
+}
 
 func TestCatalog_IsTopUpProductID(t *testing.T) {
 	t.Parallel()

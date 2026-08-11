@@ -4,6 +4,7 @@ import (
 	"context"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
@@ -12,6 +13,65 @@ import (
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 )
+
+func TestRefreshBillingUsageWorkflow_ActivityStartToCloseTimeouts(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+
+	orgIDs := []string{"org_1"}
+
+	// The test environment stamps Deadline from the real clock, so the
+	// difference carries sub-second scheduling skew; round it away.
+	startToClose := func(ctx context.Context) time.Duration {
+		info := activity.GetInfo(ctx)
+		return info.Deadline.Sub(info.StartedTime).Round(time.Minute)
+	}
+
+	var refreshTimeout time.Duration
+	env.RegisterActivityWithOptions(
+		func(ctx context.Context, _ []string) error {
+			refreshTimeout = startToClose(ctx)
+			return nil
+		},
+		activity.RegisterOptions{Name: "RefreshBillingUsage"},
+	)
+
+	var snapshotTimeout time.Duration
+	env.RegisterActivityWithOptions(
+		func(ctx context.Context, _ []string) error {
+			snapshotTimeout = startToClose(ctx)
+			return nil
+		},
+		activity.RegisterOptions{Name: "SnapshotBillingCycleUsage"},
+	)
+
+	var forwardTimeout time.Duration
+	env.RegisterActivityWithOptions(
+		func(ctx context.Context, _ []string) error {
+			forwardTimeout = startToClose(ctx)
+			return nil
+		},
+		activity.RegisterOptions{Name: "ForwardTokenUsageToPostHog"},
+	)
+
+	env.ExecuteWorkflow(RefreshBillingUsageWorkflow, RefreshBillingUsageInput{
+		OrgIDs:           orgIDs,
+		StartIndex:       0,
+		FailedBatchCount: 0,
+		FailedOrgCount:   0,
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+	require.Equal(t, 2*time.Minute, refreshTimeout,
+		"Polar refresh needs headroom for slow serialized /quantities meter queries")
+	require.Equal(t, 5*time.Minute, snapshotTimeout,
+		"snapshot keeps its wider first-run backfill deadline")
+	require.Equal(t, time.Minute, forwardTimeout,
+		"posthog forward keeps a short deadline so the batch worst-case window stays inside the run timeout")
+}
 
 func TestRefreshBillingUsageWorkflow_ContinuesAsNewNearRunTimeout(t *testing.T) {
 	t.Parallel()
