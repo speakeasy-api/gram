@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"unicode/utf8"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
@@ -158,13 +159,20 @@ const maxDeclarationFieldBytes = 4096
 const truncationMarker = "…[truncated]"
 
 // boundField clips one free-text declaration field at the byte cap, marking
-// the cut explicitly.
+// the cut explicitly. The marker fits inside the cap and the cut retreats to
+// a rune boundary, so a bounded field never exceeds maxDeclarationFieldBytes
+// and never carries a mangled half-rune into the stored document.
 func boundField(value string) string {
 	if len(value) <= maxDeclarationFieldBytes {
 		return value
 	}
 
-	return value[:maxDeclarationFieldBytes] + truncationMarker
+	cut := maxDeclarationFieldBytes - len(truncationMarker)
+	for cut > 0 && !utf8.RuneStart(value[cut]) {
+		cut--
+	}
+
+	return value[:cut] + truncationMarker
 }
 
 // boundSchema drops an oversized input schema entirely instead of clipping

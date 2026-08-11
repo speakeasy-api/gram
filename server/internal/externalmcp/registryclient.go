@@ -100,7 +100,8 @@ const maxRegistryResponseBytes = 32 << 20
 
 // readBoundedBody reads a response body up to maxRegistryResponseBytes,
 // reporting an oversized body as a size error rather than as a decode failure
-// on truncated JSON.
+// on truncated JSON. Shared beyond registry fetches (OAuth metadata probes
+// reuse it), so the error names neither.
 func readBoundedBody(body io.Reader) ([]byte, error) {
 	// Read one byte past the cap so an oversized body is detected as such.
 	data, err := io.ReadAll(io.LimitReader(body, maxRegistryResponseBytes+1))
@@ -108,7 +109,7 @@ func readBoundedBody(body io.Reader) ([]byte, error) {
 		return nil, fmt.Errorf("read response body: %w", err)
 	}
 	if len(data) > maxRegistryResponseBytes {
-		return nil, fmt.Errorf("registry response exceeded the %d-byte limit", maxRegistryResponseBytes)
+		return nil, fmt.Errorf("response body exceeded the %d-byte limit", maxRegistryResponseBytes)
 	}
 	return data, nil
 }

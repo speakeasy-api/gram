@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/require"
 
@@ -120,8 +121,17 @@ func TestBoundField(t *testing.T) {
 
 	long := strings.Repeat("a", maxDeclarationFieldBytes+1)
 	bounded := boundField(long)
-	require.Len(t, bounded, maxDeclarationFieldBytes+len(truncationMarker))
+	require.Len(t, bounded, maxDeclarationFieldBytes)
 	require.True(t, strings.HasSuffix(bounded, truncationMarker))
+
+	// A cut landing inside a multi-byte rune retreats to the rune's start:
+	// the bounded value stays valid UTF-8 and within the cap, never carrying
+	// a mangled half-rune into the stored document.
+	multibyte := strings.Repeat("é", maxDeclarationFieldBytes)
+	boundedMultibyte := boundField(multibyte)
+	require.LessOrEqual(t, len(boundedMultibyte), maxDeclarationFieldBytes)
+	require.True(t, strings.HasSuffix(boundedMultibyte, truncationMarker))
+	require.True(t, utf8.ValidString(boundedMultibyte))
 }
 
 // An oversized schema is dropped rather than clipped: truncated JSON would
