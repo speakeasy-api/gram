@@ -732,7 +732,16 @@ export function StatusBadge({ status }: { status: string }): JSX.Element {
     case "requested":
       return <Badge variant="information">Awaiting decision</Badge>;
     case "unreviewed":
-      return <Badge variant="warning">Review requested</Badge>;
+      // The token palette has no yellow family; the stock yellow scale keeps
+      // this state visually distinct from destructive-adjacent orange.
+      return (
+        <Badge
+          variant="warning"
+          className="border-yellow-300 text-yellow-600 dark:border-yellow-800 dark:text-yellow-500"
+        >
+          Review requested
+        </Badge>
+      );
     default:
       return <Badge variant="neutral">{status}</Badge>;
   }
