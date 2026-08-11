@@ -42,7 +42,7 @@ func buildIssuerDraft(doc rfc8414Document, issuerURL string, warnings []string) 
 		// Revocation endpoints that are not HTTPS are filtered out: tokens are
 		// sensitive credentials that must not be transmitted in plaintext. Only
 		// https:// revocation endpoints are accepted.
-		RevocationEndpoint:   conv.PtrEmpty(conv.Ternary(urls.IsAbsoluteHTTPS(doc.RevocationEndpoint), doc.RevocationEndpoint, "")),
+		RevocationEndpoint:   conv.PtrEmpty(conv.Ternary(urls.IsAbsoluteHTTPSOrLoopback(doc.RevocationEndpoint), doc.RevocationEndpoint, "")),
 		RegistrationEndpoint: conv.PtrEmpty(doc.RegistrationEndpoint),
 		JwksURI:              conv.PtrEmpty(doc.JwksURI),
 		// The issuer controls these and downstream surfaces render them as
@@ -191,7 +191,7 @@ func refreshIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuer 
 		//
 		// Revocation endpoints that are not HTTPS are filtered out: tokens are
 		// sensitive credentials that must not be transmitted in plaintext.
-		RevocationEndpoint:   conv.Ternary(urls.IsAbsoluteHTTPS(doc.RevocationEndpoint), doc.RevocationEndpoint, ""),
+		RevocationEndpoint:   conv.Ternary(urls.IsAbsoluteHTTPSOrLoopback(doc.RevocationEndpoint), doc.RevocationEndpoint, ""),
 		RegistrationEndpoint: doc.RegistrationEndpoint,
 		JwksUri:              doc.JwksURI,
 		// Downstream surfaces render these as links, so a value that is not an
