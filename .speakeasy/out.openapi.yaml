@@ -33332,6 +33332,13 @@ paths:
           schema:
             description: Session header
             type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
       requestBody:
         content:
           application/json:
@@ -33401,6 +33408,7 @@ paths:
           description: 'gateway_error: an unexpected error occurred'
       security:
         - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
         - {}
       summary: createRiskPolicyBypassRequest risk
       tags:
