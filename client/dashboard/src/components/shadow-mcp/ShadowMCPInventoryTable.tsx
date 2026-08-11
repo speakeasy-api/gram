@@ -411,6 +411,14 @@ export function ShadowMCPInventoryTable({
             setReviewSheetServer(null);
           }
         }}
+        onDecide={(request) => {
+          setDecideTarget({
+            targetKind: "stdio_command",
+            canonicalServerUrl: request.targetRaw,
+            displayName: request.targetRaw,
+            approvalRequestId: request.id,
+          });
+        }}
       />
       <DecideAccessSheet
         target={decideTarget}
