@@ -1786,6 +1786,14 @@ const UserMessage: FC = () => {
   const r = useRadius();
   const { config } = useElements();
   const allowEdit = config.allowMessageEdit !== false;
+  // An attachment-only turn carries no text part (or an empty one). Without
+  // this the bubble still renders as an empty coloured pill under the file,
+  // and the edit affordance offers to edit nothing.
+  const hasText = useAuiState(({ message }) =>
+    message.parts.some(
+      (part) => part.type === "text" && part.text.trim() !== "",
+    ),
+  );
   return (
     <MessagePrimitive.Root asChild>
       <div
@@ -1796,15 +1804,17 @@ const UserMessage: FC = () => {
 
         <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
           <UserMessageHeader />
-          <div
-            className={cn(
-              "aui-user-message-content bg-primary text-primary-foreground ml-auto w-fit px-5 py-2.5 wrap-break-word",
-              r("xl"),
-            )}
-          >
-            <MessagePrimitive.Parts components={{ Text: UserMessageText }} />
-          </div>
-          {allowEdit && (
+          {hasText && (
+            <div
+              className={cn(
+                "aui-user-message-content bg-primary text-primary-foreground ml-auto w-fit px-5 py-2.5 wrap-break-word",
+                r("xl"),
+              )}
+            >
+              <MessagePrimitive.Parts components={{ Text: UserMessageText }} />
+            </div>
+          )}
+          {allowEdit && hasText && (
             <div className="aui-user-action-bar-wrapper absolute top-1/2 left-0 -translate-x-full -translate-y-1/2 pr-2">
               <UserActionBar />
             </div>

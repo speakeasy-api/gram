@@ -59,5 +59,6 @@ func TestDashboardTurnAttachmentPartsInlinesText(t *testing.T) {
 	require.Len(t, parts, 1)
 	require.Equal(t, contentPartTypeText, parts[0].Type)
 	require.Contains(t, parts[0].Text, "title: Petstore")
-	require.Contains(t, parts[0].Text, `name="petstore.yaml"`)
+	require.Contains(t, parts[0].Text, "<attachment-context>")
+	require.Contains(t, parts[0].Text, "name: petstore.yaml")
 }

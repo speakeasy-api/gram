@@ -157,7 +157,12 @@ const AttachmentUI: FC = () => {
           <TooltipTrigger asChild>
             <div
               className={cn(
-                "aui-attachment-tile size-14 cursor-pointer overflow-hidden rounded-[14px] border bg-muted transition-opacity hover:opacity-75",
+                "aui-attachment-tile cursor-pointer overflow-hidden rounded-[14px] border bg-muted transition-opacity hover:opacity-75",
+                // An image is its own label; anything else is an icon that
+                // only reads as a specific file once the name is on the card.
+                isImage
+                  ? "size-14"
+                  : "aui-attachment-tile-file flex w-36 flex-col",
                 isComposer &&
                   "aui-attachment-tile-composer border-foreground/20",
               )}
@@ -165,7 +170,18 @@ const AttachmentUI: FC = () => {
               id="attachment-tile"
               aria-label={`${typeLabel} attachment`}
             >
-              <AttachmentThumb />
+              {isImage ? (
+                <AttachmentThumb />
+              ) : (
+                <>
+                  <div className="aui-attachment-tile-file-icon flex h-14 items-center justify-center">
+                    <FileText className="size-7 text-muted-foreground" />
+                  </div>
+                  <div className="aui-attachment-tile-name truncate border-t bg-background/70 px-2 py-1 text-center text-[11px] leading-4 text-muted-foreground">
+                    <AttachmentPrimitive.Name />
+                  </div>
+                </>
+              )}
             </div>
           </TooltipTrigger>
         </AttachmentPreviewDialog>

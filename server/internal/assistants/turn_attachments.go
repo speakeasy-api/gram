@@ -159,9 +159,12 @@ func (s *ServiceCore) dashboardTurnAttachmentParts(ctx context.Context, projectI
 		if int64(len(data)) >= limit {
 			truncated = "\n… (truncated)"
 		}
+		// `*-context` tag: Elements folds a leading context block into a
+		// collapsed disclosure, so the file's bytes stay available to the model
+		// without dumping the whole file into the user's own chat bubble.
 		parts = append(parts, runtimeContentPart{
 			Type:     contentPartTypeText,
-			Text:     fmt.Sprintf("<attachment name=%q type=%q>\n%s%s\n</attachment>", attachment.Name, attachment.ContentType, data, truncated),
+			Text:     fmt.Sprintf("<attachment-context>\nname: %s\ntype: %s\n\n%s%s\n</attachment-context>", attachment.Name, attachment.ContentType, data, truncated),
 			ImageURL: nil,
 		})
 	}
@@ -172,7 +175,7 @@ func (s *ServiceCore) dashboardTurnAttachmentParts(ctx context.Context, projectI
 	// in DecodeTurn because the prompt must stay byte-stable across replay.
 	if links := s.dashboardTurnAttachmentLinks(ctx, projectID, payload.Attachments, needsLink); len(links) > 0 {
 		var b strings.Builder
-		b.WriteString("<attachment-downloads>\n")
+		b.WriteString("<attachment-downloads-context>\n")
 		for _, attachment := range payload.Attachments {
 			link, ok := links[attachment.AssetID]
 			if !ok {
@@ -180,7 +183,7 @@ func (s *ServiceCore) dashboardTurnAttachmentParts(ctx context.Context, projectI
 			}
 			fmt.Fprintf(&b, "- %s (%s): %s\n", attachment.Name, attachment.ContentType, link)
 		}
-		b.WriteString("</attachment-downloads>")
+		b.WriteString("</attachment-downloads-context>")
 		parts = append(parts, runtimeContentPart{Type: contentPartTypeText, Text: b.String(), ImageURL: nil})
 	}
 
