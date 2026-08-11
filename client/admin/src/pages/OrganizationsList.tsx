@@ -20,6 +20,7 @@ import {
 import { DataTable as Table, type Column } from "@/components/data-table";
 import { cn } from "@/lib/utils";
 import { listOrganizations, type AdminOrganization } from "@/lib/gramAdminApi";
+import { ACCOUNT_TYPE_OPTIONS } from "@/lib/accountTypes";
 
 function fmtDateShort(iso?: string): string {
   if (!iso) return "-";
@@ -27,8 +28,6 @@ function fmtDateShort(iso?: string): string {
   if (Number.isNaN(d.getTime())) return "-";
   return d.toLocaleDateString();
 }
-
-const accountTypeOptions = ["free", "pro", "enterprise"];
 
 // The columns and the empty list stay at module scope so the memoized rows
 // below keep their identity while the operator types in the search box.
@@ -163,12 +162,11 @@ export function OrganizationsList(): JSX.Element {
   };
 
   const goPrev = () => {
-    setCursorStack((s) => {
-      if (s.length === 0) return s;
-      const prev = s[s.length - 1];
-      setCursor(prev || undefined);
-      return s.slice(0, -1);
-    });
+    if (cursorStack.length === 0) return;
+    // An empty string on the stack is the first page, which has no cursor.
+    const prev = cursorStack[cursorStack.length - 1];
+    setCursor(prev || undefined);
+    setCursorStack(cursorStack.slice(0, -1));
   };
 
   const handleRowClick = useCallback(
@@ -222,7 +220,7 @@ export function OrganizationsList(): JSX.Element {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All types</SelectItem>
-              {accountTypeOptions.map((t) => (
+              {ACCOUNT_TYPE_OPTIONS.map((t) => (
                 <SelectItem key={t} value={t}>
                   {t}
                 </SelectItem>
@@ -237,9 +235,18 @@ export function OrganizationsList(): JSX.Element {
               resetPaging();
             }}
           >
-            {includeDisabled ? "Hiding none" : "Hide disabled"}
+            {includeDisabled ? "Hide disabled" : "Show disabled"}
           </Button>
         </div>
+
+        {/* A failed refetch keeps the previous rows, so the failure has to show
+            outside the empty state or the operator reads stale data as fresh. */}
+        {isError && (
+          <div className="text-muted-foreground mb-2 text-sm">
+            Could not refresh organizations:{" "}
+            {(error as Error)?.message ?? "unknown error"}
+          </div>
+        )}
 
         <div
           className={cn(
@@ -253,11 +260,7 @@ export function OrganizationsList(): JSX.Element {
               {orgs.length === 0 ? (
                 <Table.NoResultsMessage>
                   <span className="text-muted-foreground text-sm">
-                    {isLoading
-                      ? "Loading..."
-                      : isError
-                        ? `Error: ${(error as Error)?.message ?? "unknown"}`
-                        : "No organizations found"}
+                    {isLoading ? "Loading..." : "No organizations found"}
                   </span>
                 </Table.NoResultsMessage>
               ) : (

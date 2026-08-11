@@ -31,15 +31,17 @@ fi
 # As with PRESIDIO below, the `{{env.GRAM_ADMIN_PORT}}` template is the proof
 # the pair was machine generated: only `zero:remap-ports` writes that literal,
 # copied verbatim from the old mise.toml value. A hand-pinned admin URL lacks
-# the marker and is left entirely alone.
+# the marker and is left entirely alone. The allowlist carries its own marker,
+# the `{{env.GRAM_ADMIN_SERVER_URL}}` template, so a hand-written allowlist
+# survives even when the URL beside it is cleared.
 if grep -E '^GRAM_ADMIN_SERVER_URL[[:space:]]*=' mise.local.toml \
      | grep -qF '{{env.GRAM_ADMIN_PORT}}'; then
-  for key in GRAM_ADMIN_SERVER_URL GRAM_ADMIN_ALLOWED_ORIGINS; do
-    if grep -qE "^${key}[[:space:]]*=" mise.local.toml; then
-      mise unset --file mise.local.toml "$key"
-    fi
-  done
-  echo "✅ Cleared the stale admin origin declarations; re-mapped below."
+  mise unset --file mise.local.toml GRAM_ADMIN_SERVER_URL
+  if grep -E '^GRAM_ADMIN_ALLOWED_ORIGINS[[:space:]]*=' mise.local.toml \
+       | grep -qF '{{env.GRAM_ADMIN_SERVER_URL}}'; then
+    mise unset --file mise.local.toml GRAM_ADMIN_ALLOWED_ORIGINS
+  fi
+  echo "✅ Cleared the stale admin origin declaration(s); re-mapped below."
 fi
 
 echo "⏳ Syncing port mappings..."

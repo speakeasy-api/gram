@@ -1,5 +1,10 @@
 import type { JSX } from "react";
-import { LogOutIcon, MoreVerticalIcon } from "lucide-react";
+import {
+  LogOutIcon,
+  MoreVerticalIcon,
+  RefreshCwIcon,
+  TriangleAlertIcon,
+} from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { getSession, logout } from "@/lib/gramAdminApi";
@@ -42,11 +47,31 @@ export function NavUser(): JSX.Element {
 
   const logoutMutation = useMutation({ mutationFn: logout });
 
-  if (!session.data) {
+  if (session.isPending) {
     return (
       <SidebarMenu>
         <SidebarMenuItem>
           <SidebarMenuSkeleton showIcon />
+        </SidebarMenuItem>
+      </SidebarMenu>
+    );
+  }
+
+  // A failed background refetch keeps the last session, so the menu only gives
+  // up when it holds nothing to render.
+  if (!session.data) {
+    return (
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            tooltip="Session unavailable. Select to retry."
+            disabled={session.isFetching}
+            onClick={() => void session.refetch()}
+          >
+            <TriangleAlertIcon className="text-destructive" />
+            <span className="truncate">Session unavailable</span>
+            <RefreshCwIcon className="ml-auto" />
+          </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>
     );

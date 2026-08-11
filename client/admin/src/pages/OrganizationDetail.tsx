@@ -10,9 +10,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable as Table, type Column } from "@/components/data-table";
 import { useConfirmDialog } from "@/components/ConfirmDialog";
+import { ACCOUNT_TYPE_OPTIONS } from "@/lib/accountTypes";
 import { cn } from "@/lib/utils";
 import {
   getOrganization,
@@ -85,15 +86,14 @@ export function OrganizationDetail(): JSX.Element {
           </span>
         )}
 
-        {data && <OrgDetailsCard org={data} />}
+        {/* Keyed so an unsaved draft cannot follow the operator to another org. */}
+        {data && <OrgDetailsCard key={data.id} org={data} />}
       </section>
 
       {data && <OrgBottomPanel org={data} />}
     </div>
   );
 }
-
-const accountTypeOptions = ["free", "pro", "enterprise"];
 
 function yesNo(v: boolean): string {
   return v ? "yes" : "no";
@@ -171,18 +171,19 @@ function OrgDetailsCard({ org }: { org: AdminOrganization }) {
       <Row label="Account type">
         <Select
           value={accountType}
+          disabled={mut.isPending}
           onValueChange={(v) => setDraft((d) => ({ ...d, account_type: v }))}
         >
           <SelectTrigger className="h-auto w-auto px-2 py-1.5">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {accountTypeOptions.map((t) => (
+            {ACCOUNT_TYPE_OPTIONS.map((t) => (
               <SelectItem key={t} value={t}>
                 {t}
               </SelectItem>
             ))}
-            {!accountTypeOptions.includes(org.account_type) && (
+            {!ACCOUNT_TYPE_OPTIONS.includes(org.account_type) && (
               <SelectItem value={org.account_type}>
                 {org.account_type}
               </SelectItem>
@@ -196,6 +197,7 @@ function OrgDetailsCard({ org }: { org: AdminOrganization }) {
       <Row label="Whitelisted">
         <Switch
           checked={whitelisted}
+          disabled={mut.isPending}
           onCheckedChange={(v) => setDraft((d) => ({ ...d, whitelisted: v }))}
         />
       </Row>
@@ -260,24 +262,21 @@ function OrgDetailsCard({ org }: { org: AdminOrganization }) {
 }
 
 function OrgBottomPanel({ org }: { org: AdminOrganization }) {
-  const [activeTab, setActiveTab] = useState<"projects" | "members">(
-    "projects",
-  );
-
   return (
-    <section className="space-y-3">
-      <Tabs
-        value={activeTab}
-        onValueChange={(tab) => setActiveTab(tab as "projects" | "members")}
-      >
+    <section>
+      <Tabs defaultValue="projects" className="gap-3">
         <TabsList>
           <TabsTrigger value="projects">Projects</TabsTrigger>
           <TabsTrigger value="members">Members</TabsTrigger>
         </TabsList>
-      </Tabs>
 
-      {activeTab === "projects" && <OrgProjectsPanel orgID={org.id} />}
-      {activeTab === "members" && <OrgMembersPanel orgID={org.id} />}
+        <TabsContent value="projects">
+          <OrgProjectsPanel orgID={org.id} />
+        </TabsContent>
+        <TabsContent value="members">
+          <OrgMembersPanel orgID={org.id} />
+        </TabsContent>
+      </Tabs>
     </section>
   );
 }

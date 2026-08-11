@@ -161,10 +161,30 @@ function DataTableRow<T extends object>({
   onClick?: (row: T) => void;
   className?: string;
 }) {
+  const handleKeyDown = onClick
+    ? (event: React.KeyboardEvent<HTMLTableRowElement>) => {
+        // Buttons and links inside a cell handle their own keys and bubble the
+        // event up, so only act when the row itself is the focused element.
+        if (event.target !== event.currentTarget) return;
+        if (event.key !== "Enter" && event.key !== " ") return;
+        // Space would otherwise scroll the page.
+        event.preventDefault();
+        onClick(row);
+      }
+    : undefined;
+
   return (
     <TableRow
-      className={cn(onClick && "cursor-pointer", className)}
+      className={cn(
+        onClick &&
+          "cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
+        className,
+      )}
+      // A row keeps its implicit `row` role: `button` would break the table
+      // structure the assistive technology walks.
+      tabIndex={onClick ? 0 : undefined}
       onClick={onClick ? () => onClick(row) : undefined}
+      onKeyDown={handleKeyDown}
     >
       {columns.map((column) => (
         <TableCell key={String(column.key)}>

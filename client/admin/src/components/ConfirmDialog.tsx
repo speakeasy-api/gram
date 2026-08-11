@@ -27,6 +27,9 @@ export function useConfirmDialog(): [ConfirmFn, React.ReactNode] {
   const resolveRef = useRef<((v: boolean) => void) | null>(null);
 
   const confirm: ConfirmFn = useCallback((options) => {
+    // A second call replaces the dialog, so settle the caller it displaced
+    // instead of leaving it awaiting a promise nothing will resolve.
+    resolveRef.current?.(false);
     setOpts(options);
     setOpen(true);
     return new Promise<boolean>((resolve) => {
