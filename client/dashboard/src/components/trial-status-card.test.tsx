@@ -69,6 +69,9 @@ describe("TrialStatusCard", () => {
     render(<TrialStatusCard />);
 
     expect(screen.getByText("1 day left")).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Talk to sales about upgrading" }),
+    ).toBeTruthy();
   });
 
   it("renders nothing without a trial", () => {
@@ -79,12 +82,22 @@ describe("TrialStatusCard", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("renders nothing once the trial has expired", () => {
+  it("renders the ended state once the trial has expired", () => {
     vi.setSystemTime(new Date("2026-08-19T00:00:00.000Z"));
 
-    const { container } = render(<TrialStatusCard />);
+    render(<TrialStatusCard />);
 
-    expect(container.firstChild).toBeNull();
+    expect(screen.getByText("Your trial has ended")).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Talk to sales about upgrading" }),
+    ).toBeTruthy();
+    const progressBar = screen.getByRole("progressbar", {
+      name: "Trial ended",
+    });
+    expect(progressBar.getAttribute("aria-valuenow")).toBe("100");
+    expect(progressBar.firstElementChild?.getAttribute("style")).toBe(
+      "width: 100%;",
+    );
   });
 
   it.each([
@@ -113,10 +126,10 @@ describe("TrialStatusCard", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("removes the card when the trial expires without a parent rerender", async () => {
+  it("shows the ended state when the trial expires without a parent rerender", async () => {
     vi.setSystemTime(new Date("2026-08-18T23:59:59.999Z"));
 
-    const { container } = render(<TrialStatusCard />);
+    render(<TrialStatusCard />);
 
     expect(screen.getByText("1 day left")).toBeTruthy();
 
@@ -124,7 +137,13 @@ describe("TrialStatusCard", () => {
       await vi.advanceTimersByTimeAsync(1);
     });
 
-    expect(container.firstChild).toBeNull();
+    expect(screen.getByText("Your trial has ended")).toBeTruthy();
+    expect(
+      screen.getByRole("progressbar", { name: "Trial ended" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Talk to sales about upgrading" }),
+    ).toBeTruthy();
   });
 
   it("updates the displayed day at a day boundary without a parent rerender", async () => {
