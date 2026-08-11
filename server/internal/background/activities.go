@@ -66,6 +66,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	"github.com/speakeasy-api/gram/server/internal/trialemails"
 )
 
 type Publishers struct {
@@ -140,9 +141,6 @@ type Activities struct {
 	reapSoftDeletedAssistantMems    *activities.ReapSoftDeletedAssistantMemories
 	signalAssistantCoordinator      *activities.SignalAssistantCoordinator
 	signalAssistantThread           *activities.SignalAssistantThread
-	listWorkOSOrganizations         *activities.ListWorkOSOrganizations
-	backfillWorkOSOrganization      *activities.BackfillWorkOSOrganization
-	backfillWorkOSGlobalRoles       *activities.BackfillWorkOSGlobalRoles
 	processWorkOSOrganizationEvents *activities.ProcessWorkOSOrganizationEvents
 	processWorkOSGlobalRoleEvents   *activities.ProcessWorkOSGlobalRoleEvents
 	processWorkOSUserEvents         *activities.ProcessWorkOSUserEvents
@@ -158,6 +156,7 @@ type Activities struct {
 	chatAnalysisScorer              *activities.ChatAnalysisScorer
 	remoteSessionRefresh            *activities.RemoteSessionRefresh
 	demoteExpiredTrials             *activities.DemoteExpiredTrials
+	trialEmails                     *trialemails.Service
 }
 
 func NewActivities(
@@ -204,6 +203,7 @@ func NewActivities(
 	celEng *celenv.Engine,
 	judgeRateLimiter *ratelimit.Limiter,
 	builtinPresets *presetlib.Library,
+	trialEmailsService *trialemails.Service,
 ) *Activities {
 	// Spend rule evaluation reads ClickHouse; workers without a ClickHouse
 	// connection get a nil repo and the activity fails loudly if scheduled.
@@ -331,9 +331,6 @@ func NewActivities(
 		reapSoftDeletedAssistantMems:    activities.NewReapSoftDeletedAssistantMemories(logger, db),
 		signalAssistantCoordinator:      activities.NewSignalAssistantCoordinator(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
 		signalAssistantThread:           activities.NewSignalAssistantThread(&AssistantWorkflowSignaler{TemporalEnv: temporalEnv}),
-		listWorkOSOrganizations:         activities.NewListWorkOSOrganizations(logger, workosClient),
-		backfillWorkOSOrganization:      activities.NewBackfillWorkOSOrganization(logger, db, workosClient),
-		backfillWorkOSGlobalRoles:       activities.NewBackfillWorkOSGlobalRoles(logger, db, workosClient),
 		processWorkOSOrganizationEvents: activities.NewProcessWorkOSOrganizationEvents(logger, db, workosClient, cacheAdapter),
 		processWorkOSGlobalRoleEvents:   activities.NewProcessWorkOSGlobalRoleEvents(logger, db, workosClient),
 		processWorkOSUserEvents:         activities.NewProcessWorkOSUserEvents(logger, db, workosClient),
@@ -358,6 +355,7 @@ func NewActivities(
 		),
 		skillSuggestionAnalyzer: skillSuggestionAnalyzer,
 		remoteSessionRefresh:    remoteSessionRefresh,
+		trialEmails:             trialEmailsService,
 		// The judges draw on the same per-(org, model) bucket and the same
 		// completion client as every other platform judge, so chat analysis
 		// cannot outspend the org's key behind their backs.
@@ -370,16 +368,30 @@ func NewActivities(
 	}
 }
 
-func (a *Activities) ListWorkOSOrganizations(ctx context.Context) ([]string, error) {
-	return a.listWorkOSOrganizations.Do(ctx)
-}
+func (a *Activities) SendTrialLifecycleEmail(ctx context.Context, input TrialLifecycleEmailInput) error {
+	if a.trialEmails == nil {
+		return fmt.Errorf("trial email service is not configured")
+	}
 
-func (a *Activities) BackfillWorkOSOrganization(ctx context.Context, params activities.BackfillWorkOSOrganizationParams) error {
-	return a.backfillWorkOSOrganization.Do(ctx, params)
-}
-
-func (a *Activities) BackfillWorkOSGlobalRoles(ctx context.Context) error {
-	return a.backfillWorkOSGlobalRoles.Do(ctx)
+	switch input.Kind {
+	case TrialStartedEmailKind:
+		if err := a.trialEmails.TrialStarted(ctx, input.OrganizationID); err != nil {
+			return fmt.Errorf("trial started: %w", err)
+		}
+		return nil
+	case AdminAddedEmailKind:
+		if err := a.trialEmails.AdminAdded(ctx, input.OrganizationID, input.UserID); err != nil {
+			return fmt.Errorf("admin added: %w", err)
+		}
+		return nil
+	case TrialInactiveEmailKind:
+		if err := a.trialEmails.TrialInactive(ctx, input.OrganizationID); err != nil {
+			return fmt.Errorf("trial inactive: %w", err)
+		}
+		return nil
+	default:
+		return fmt.Errorf("unsupported trial lifecycle email kind %q", input.Kind)
+	}
 }
 
 func (a *Activities) ProcessWorkOSOrganizationEvents(ctx context.Context, params activities.ProcessWorkOSOrganizationEventsParams) (*activities.ProcessWorkOSOrganizationEventsResult, error) {

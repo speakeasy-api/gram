@@ -701,6 +701,39 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskRuleBreakdown"}`)
 	})
 
+	Method("getRiskSignals", func() {
+		Description("Get clustered risk signals — findings grouped by rule and ranked by severity score — plus window-level KPI stats and the exposure breakdown by category. Powers the Watchdog page. Served from the ClickHouse findings store.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("from", String, "Inclusive start of the signals window. Defaults to the start of the 7-day calendar window ending at to.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Exclusive end of the signals window. Defaults to now.", func() {
+				Format(FormatDateTime)
+			})
+		})
+
+		Result(RiskSignalsResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.getSignals")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("from")
+			Param("to")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getRiskSignals")
+		Meta("openapi:extension:x-speakeasy-group", "risk.signals")
+		Meta("openapi:extension:x-speakeasy-name-override", "get")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskSignals"}`)
+	})
+
 	Method("getRiskPolicyStatus", func() {
 		Description("Get the analysis status of a risk policy including progress and workflow state.")
 
@@ -1920,4 +1953,71 @@ var RiskPolicyBypassApprovalRequestBody = Type("RiskPolicyBypassApprovalRequestB
 var ListRiskPolicyBypassRequestsResult = Type("ListRiskPolicyBypassRequestsResult", func() {
 	Attribute("requests", ArrayOf(RiskPolicyBypassRequest), "Current risk policy bypass request records.")
 	Required("requests")
+})
+
+var RiskSignalTopUser = Type("RiskSignalTopUser", func() {
+	Attribute("email", String, "User email, or Unknown user when unavailable.")
+	Attribute("external_user_id", String, "External user identifier as recorded on chats, when known. Empty when the finding cannot be attributed to an external user.")
+	Attribute("team", String, "WorkOS directory department of the user when known; empty otherwise.")
+	Attribute("findings", Int64, "Finding count for this user within the signal and window.")
+
+	Required("email", "external_user_id", "team", "findings")
+})
+
+var RiskSignal = Type("RiskSignal", func() {
+	Description("One clustered risk signal: all live findings for a single rule in the window, with a heuristic severity score and trend/spread stats.")
+
+	Attribute("key", String, "Stable client identity for the signal. Currently 'rule:<rule_id>'.")
+	Attribute("rule_id", String, "Rule identifier the signal clusters on (e.g. 'secret.aws_access_token', 'pii.email_address').")
+	Attribute("category", String, "Canonical risk category of the rule (secrets, pii, ...).")
+	Attribute("description", String, "Representative finding description for this rule. Empty when findings carry no description.")
+	Attribute("detection_sources", ArrayOf(String), "Detector sources that produced findings in this signal (gitleaks, presidio, prompt_injection, ...).")
+	Attribute("apps", ArrayOf(String), "Source apps (chat surfaces) the findings were observed in. Empty until app attribution is recorded on findings.")
+	Attribute("severity", String, "Severity rating derived from the risk score.", func() {
+		Enum("low", "medium", "high", "critical")
+	})
+	Attribute("risk_score", Float64, "Heuristic severity score on the 0.1-10 scale used across risk surfaces.")
+	Attribute("findings", Int64, "Deduplicated finding count in the window.")
+	Attribute("previous_findings", Int64, "Finding count in the equal-length window immediately before from.")
+	Attribute("users", Int64, "Distinct users with at least one finding in the window.")
+	Attribute("teams", Int64, "Distinct teams with at least one finding in the window. Zero until team attribution is recorded on findings.")
+	Attribute("first_seen", String, "Event time of the earliest finding in the window.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("last_seen", String, "Event time of the latest finding in the window.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("top_users", ArrayOf(RiskSignalTopUser), "Top users by finding count within the signal.")
+	Attribute("sparkline", ArrayOf(Int64), "Deduplicated finding counts per equal-width time bucket across the window, oldest bucket first. Powers the per-signal trend sparkline.")
+
+	Required("key", "rule_id", "category", "description", "detection_sources", "apps", "severity", "risk_score", "findings", "previous_findings", "users", "teams", "first_seen", "last_seen", "top_users", "sparkline")
+})
+
+var RiskExposureSlice = Type("RiskExposureSlice", func() {
+	Attribute("category", String, "Canonical risk category key.")
+	Attribute("findings", Int64, "Deduplicated finding count for this category in the window.")
+	Attribute("share", Float64, "Fraction of the window's findings in this category (0-1).")
+
+	Required("category", "findings", "share")
+})
+
+var RiskSignalsResult = Type("RiskSignalsResult", func() {
+	Attribute("from", String, "Inclusive start of the signals window.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("to", String, "Exclusive end of the signals window.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("org_risk_score", Float64, "Heuristic organization risk score on the 0.1-10 scale, blended from the top signal scores and finding volume. Zero when the window has no findings.")
+	Attribute("previous_org_risk_score", Float64, "Organization risk score computed the same way over the equal-length window immediately before from.")
+	Attribute("findings_24h", Int64, "Deduplicated findings in the 24 hours ending at to.")
+	Attribute("previous_findings_24h", Int64, "Deduplicated findings in the 24 hours before that.")
+	Attribute("open_signals", Int64, "Signals with at least one live finding in the window.")
+	Attribute("critical_signals", Int64, "Signals rated critical in the window.")
+	Attribute("users_exposed", Int64, "Distinct users with at least one finding in the window.")
+	Attribute("previous_users_exposed", Int64, "Distinct users with at least one finding in the equal-length window immediately before from.")
+	Attribute("exposure", ArrayOf(RiskExposureSlice), "Finding counts by category, largest first.")
+	Attribute("signals", ArrayOf(RiskSignal), "Signals ranked by risk score, highest first.")
+
+	Required("from", "to", "org_risk_score", "previous_org_risk_score", "findings_24h", "previous_findings_24h", "open_signals", "critical_signals", "users_exposed", "previous_users_exposed", "exposure", "signals")
 })

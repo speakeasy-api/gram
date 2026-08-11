@@ -1324,7 +1324,18 @@ CREATE TABLE IF NOT EXISTS risk_findings (
     surface LowCardinality(String) DEFAULT '' COMMENT 'Which text start_pos and end_pos index: content, scan_surface, tool_args, json_path, derived, legacy_presidio or none. Empty for rows written before this column existed, where reveal falls back to a verified candidate cascade.',
     field LowCardinality(String) DEFAULT '' COMMENT 'Scanner field the finding was detected in, e.g. content or tool.args, copied from the scanner span. Empty when unknown.',
     path String DEFAULT '' COMMENT 'JSON path of the extracted value within the field for json_path surfaces, gjson syntax. Empty otherwise.' CODEC(ZSTD),
-    tool_call_id String DEFAULT '' COMMENT 'Recorded tool call id anchoring the finding when the scanned text belongs to a tool call. Empty when not applicable or unknown.' CODEC(ZSTD)
+    tool_call_id String DEFAULT '' COMMENT 'Recorded tool call id anchoring the finding when the scanned text belongs to a tool call. Empty when not applicable or unknown.' CODEC(ZSTD),
+
+    -- Watchdog attribution, resolved from Postgres at ingest alongside the
+    -- chat/user ids above. Declared last on purpose: the migrations add these
+    -- with a bare ADD COLUMN (appended at the table end) and the Atlas
+    -- ClickHouse driver does not track column position, so listing them
+    -- mid-table would silently give schema.sql-built databases (the test
+    -- container inits from this file) a different physical order than
+    -- migration-built ones.
+    chat_source LowCardinality(String) DEFAULT '' COMMENT 'Canonical product surface the scanned message came from (chat_messages.source canonicalized at ingest, e.g. codex, cursor, claude-code). Empty for rows written before the column existed or when attribution is unresolved.',
+    team LowCardinality(String) DEFAULT '' COMMENT 'WorkOS directory department_name of the resolved user at ingest. Empty when the user has no directory profile or attribution is unresolved.',
+    user_email String DEFAULT '' COMMENT 'Email of the resolved internal user at ingest (users.email), letting the Watchdog display users without a Postgres lookup. Empty for external-only users or when attribution is unresolved.' CODEC(ZSTD)
 ) ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(created_at)
 ORDER BY (organization_id, project_id, created_at, id)

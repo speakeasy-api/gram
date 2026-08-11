@@ -27,11 +27,9 @@ func TestPrepareContext_demoOrgGetsReadOnlyGrants(t *testing.T) {
 
 	ctx := demoTestCtx(t)
 	conn := newTestDB(t)
-	chConn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
-	ctx, err = engine.PrepareContext(ctx)
+	ctx, err := engine.PrepareContext(ctx)
 	require.NoError(t, err)
 
 	grants, ok := GrantsFromContext(ctx)
@@ -63,11 +61,9 @@ func TestPrepareContext_demoOrgReadOnlyEvenForAdminOverride(t *testing.T) {
 	ctx = contextvalues.SetRBACScopeOverride(ctx, "project:write")
 
 	conn := newTestDB(t)
-	chConn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	engine := NewEngine(testenv.NewLogger(t), conn, chConn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
-	ctx, err = engine.PrepareContext(ctx)
+	ctx, err := engine.PrepareContext(ctx)
 	require.NoError(t, err)
 
 	// The demo branch wins over the admin-override allScopeGrants branch.

@@ -87,9 +87,6 @@ func newTestProjectsService(t *testing.T) (context.Context, *testInstance) {
 	// Create test asset storage for testing
 	assetStorage := assetstest.NewTestBlobStore(t)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	auditLogger := audit.NewLogger()
 
 	svc := projects.NewService(
@@ -100,10 +97,10 @@ func newTestProjectsService(t *testing.T) (context.Context, *testInstance) {
 		authz.NewEngine(
 			logger,
 			conn,
-			chConn,
+
 			authztest.ChallengeLoggingAlwaysDisabled,
-			workos.NewStubClient(),
-		),
+			workos.NewStubClient()),
+
 		auditLogger,
 		nil,
 		false,

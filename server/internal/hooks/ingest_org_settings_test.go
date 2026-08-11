@@ -73,7 +73,7 @@ func TestWithOrgSettings_MergesSkillCaptureEffects(t *testing.T) {
 	res := canonicalAllowResult()
 	res.Effects = map[string]any{"existing": true}
 
-	res = ti.service.withOrgSettings(t.Context(), "org", res, &skillCaptureSignal{rawSHA256: strings.Repeat("a", 64), known: false})
+	res = ti.service.withOrgSettings(t.Context(), "org", res, &skillCaptureSignal{rawSHA256: strings.Repeat("a", 64), contentRequired: true})
 	require.Equal(t, true, res.Effects["existing"])
 	require.Equal(t, true, requireEffectMap(t, res.Effects, "skill_capture")["content_required"])
 	settings := requireEffectMap(t, res.Effects, "org_settings")

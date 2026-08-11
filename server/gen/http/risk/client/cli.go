@@ -1291,6 +1291,58 @@ func BuildGetRiskRuleBreakdownPayload(riskGetRiskRuleBreakdownCategory string, r
 	return v, nil
 }
 
+// BuildGetRiskSignalsPayload builds the payload for the risk getRiskSignals
+// endpoint from CLI flags.
+func BuildGetRiskSignalsPayload(riskGetRiskSignalsFrom string, riskGetRiskSignalsTo string, riskGetRiskSignalsApikeyToken string, riskGetRiskSignalsSessionToken string, riskGetRiskSignalsProjectSlugInput string) (*risk.GetRiskSignalsPayload, error) {
+	var err error
+	var from *string
+	{
+		if riskGetRiskSignalsFrom != "" {
+			from = &riskGetRiskSignalsFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if riskGetRiskSignalsTo != "" {
+			to = &riskGetRiskSignalsTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskGetRiskSignalsApikeyToken != "" {
+			apikeyToken = &riskGetRiskSignalsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskGetRiskSignalsSessionToken != "" {
+			sessionToken = &riskGetRiskSignalsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskGetRiskSignalsProjectSlugInput != "" {
+			projectSlugInput = &riskGetRiskSignalsProjectSlugInput
+		}
+	}
+	v := &risk.GetRiskSignalsPayload{}
+	v.From = from
+	v.To = to
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildGetRiskPolicyStatusPayload builds the payload for the risk
 // getRiskPolicyStatus endpoint from CLI flags.
 func BuildGetRiskPolicyStatusPayload(riskGetRiskPolicyStatusID string, riskGetRiskPolicyStatusApikeyToken string, riskGetRiskPolicyStatusSessionToken string, riskGetRiskPolicyStatusProjectSlugInput string) (*risk.GetRiskPolicyStatusPayload, error) {

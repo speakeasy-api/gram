@@ -111,7 +111,7 @@ func newTestAccessService(t *testing.T) (context.Context, *testInstance) {
 
 	auditLogger := audit.NewLogger()
 
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	roleManager := NewRoleManager(logger, conn, roles, auditLogger)
 	emailSender := &recordingEmailSender{mu: sync.Mutex{}, sent: nil}
 	emailService := email.NewService(logger, emailSender)

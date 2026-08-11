@@ -100,6 +100,7 @@ import (
 	platformdocs "github.com/speakeasy-api/gram/server/internal/platformtools/docs"
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	platformskills "github.com/speakeasy-api/gram/server/internal/platformtools/skills"
+	platformslack "github.com/speakeasy-api/gram/server/internal/platformtools/slack"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/projects"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -131,8 +132,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
+	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	"github.com/speakeasy-api/gram/server/internal/triggers"
 	"github.com/speakeasy-api/gram/server/internal/unproxiedmcp"
 
@@ -678,6 +681,9 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to parse site url: %w", err)
 			}
+			trialEmailNotifier := &background.TemporalTrialEmailNotifier{TemporalEnv: temporalEnv}
+			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
+			trialEmailsService := trialemails.NewService(db, loopsWorkflowClient, logger, siteURL.String())
 
 			tigrisStore, shutdown, err := newTigrisStore(ctx, c, logger)
 			if err != nil {
@@ -702,15 +708,6 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create access role provider: %w", err)
 			}
-			authzEngine := authz.NewEngine(
-				logger,
-				db,
-				chDB,
-				challengeLoggingEnabled,
-				roleClient,
-				authz.EngineOpts{DevMode: c.String("environment") == "local"},
-			)
-
 			var (
 				litellmTraceProcessor   *litellm.TraceProcessor
 				litellmMetricProcessor  *litellm.MetricProcessor
@@ -760,6 +757,14 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create publishers: %w", err)
 			}
+			authzEngine := authz.NewEngine(
+				logger,
+				db,
+				challengeLoggingEnabled,
+				roleClient,
+				authz.EngineOpts{
+					DevMode: c.String("environment") == "local",
+				})
 
 			telemetryLogPublisher := tm.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs)
 
@@ -872,6 +877,7 @@ func newStartCommand() *cli.Command {
 				auditLogger,
 				platformtoolsruntime.WithTriggerTools(triggerApp),
 				platformtoolsruntime.WithSlackHTTPClient(guardianPolicy.PooledClient()),
+				platformtoolsruntime.WithFileURLMinting(encryptionClient, serverURL),
 				platformtoolsruntime.WithFeatureChecker(platformFeatureChecker),
 				platformtoolsruntime.WithExternalTools(assistantPlatformExtras),
 			)
@@ -971,6 +977,8 @@ func newStartCommand() *cli.Command {
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
 			assistantsCore.SetChatMessageWriter(chatWriter)
+			assistantsCore.SetAssetStorage(assetStorage)
+			assistantsCore.SetSlackImageInlining(env, slackapi.NewClient("", guardianPolicy.PooledClient()))
 			assistantsCore.SetFeatureProvider(featureFlags)
 			assistantsSvc := assistants.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, assistantsCore, &background.AssistantWorkflowSignaler{TemporalEnv: temporalEnv}, ratelimit.NewRedisStore(redisClient))
 			triggerApp.RegisterDispatcher(assistantsSvc)
@@ -1157,6 +1165,7 @@ func newStartCommand() *cli.Command {
 			}
 
 			about.Attach(mux, about.NewService(logger, tracerProvider, guardianPolicy))
+			platformslack.NewFileProxy(logger, encryptionClient, guardianPolicy.PooledClient()).Attach(mux)
 			external.AttachWebhookHandler(mux, external.NewWebhookHandler(logger, tracerProvider, newWorkOSWebhooksClient(c), temporalEnv))
 			roleManager := access.NewRoleManager(logger, db, roleClient, auditLogger)
 			access.Attach(mux, access.NewService(logger, tracerProvider, db, chDB, sessionManager, roleManager, authzEngine, auditLogger, emailService, siteURL))
@@ -1192,6 +1201,7 @@ func newStartCommand() *cli.Command {
 				productFeatures,
 				&background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv},
 				riskScanner,
+				hookPIScanner,
 				policyBypass,
 				spendGate,
 				shadowMCPClient,
@@ -1230,8 +1240,9 @@ func newStartCommand() *cli.Command {
 				authzProvisioner,
 				productfeatures.SeedEnterpriseTrialBundleTx,
 				auditLogger,
+				trialEmailNotifier,
 			))
-			organizationsService := organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, identityResolver, productFeatures, telemetryrepo.New(chDB), authzEngine, emailService, serverURL.String(), siteURL.String(), auditLogger, svixClient)
+			organizationsService := organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, identityResolver, productFeatures, telemetryrepo.New(chDB), authzEngine, emailService, trialEmailNotifier, serverURL.String(), siteURL.String(), auditLogger, svixClient)
 			organizations.Attach(mux, organizationsService)
 			pluginsGitHub, err := plugins.NewGitHubConfig(plugins.GitHubConfigInput{
 				Client:         ghClient,
@@ -1514,6 +1525,7 @@ func newStartCommand() *cli.Command {
 						ProductFeatures:     productFeatures,
 						PluginPublisher:     pluginPublisher,
 						Publishers:          publishers,
+						TrialEmailsService:  trialEmailsService,
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))

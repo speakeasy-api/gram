@@ -1,7 +1,7 @@
 import { CreateResourceCard } from "@/components/create-resource-card";
 import { type FilterValue, useFilterState } from "@/components/filters";
 import { InputField } from "@/components/moon/input-field";
-import { Page } from "@/components/page-layout";
+import { ResourceListPage } from "@/components/page-templates";
 import { Dialog } from "@/components/ui/Dialog";
 import { Card } from "@/components/ui/Card";
 import { Text } from "@/components/ui/Text";
@@ -286,246 +286,235 @@ export default function Plugins(): JSX.Element {
   );
 
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <Page.Section>
-          <Page.Section.Title>Plugins</Page.Section.Title>
-          <Page.Section.Description className={hasPlugins ? "w-3/4" : ""}>
+    <>
+      <ResourceListPage
+        title="Plugins"
+        description={
+          <span className={hasPlugins ? "block w-3/4" : undefined}>
             Create distributable plugin bundles that package MCP servers and
             skills together. Assign plugins to roles and publish them to
             supported agent marketplaces via GitHub.
-          </Page.Section.Description>
-          <Page.Section.Body>
-            <Stack direction="vertical" gap={8}>
-              {publishStatus?.configured &&
-                (publishStatus.connected && publishStatus.repoUrl ? (
-                  publishStatus.hasCollaborators === false ? (
-                    <>
-                      <UninitializedMarketplaceCard
-                        publishStatus={publishStatus}
-                        defaultName={
-                          marketplaceSettings.marketplaceName ??
-                          marketplaceSettings.defaultName
-                        }
-                        onSetup={handleStartSetup}
-                        onAddCollaborators={() =>
-                          setIsManageCollaboratorsOpen(true)
-                        }
-                      />
-                      <div className="border-border border-t" />
-                    </>
-                  ) : (
-                    <>
-                      <MarketplaceCard
-                        publishStatus={publishStatus}
-                        onManageCollaborators={() =>
-                          setIsManageCollaboratorsOpen(true)
-                        }
-                        onRename={handleOpenMarketplaceSettings}
-                        onSync={() => handlePublish([])}
-                        isSyncing={publishMutation.isPending}
-                      />
-                      <div className="border-border border-t" />
-                    </>
-                  )
-                ) : (
-                  <>
-                    <UninitializedMarketplaceCard
-                      publishStatus={publishStatus}
-                      defaultName={
-                        marketplaceSettings.marketplaceName ??
-                        marketplaceSettings.defaultName
-                      }
-                      onSetup={handleStartSetup}
-                      onAddCollaborators={() =>
-                        setIsManageCollaboratorsOpen(true)
-                      }
-                    />
-                    <div className="border-border border-t" />
-                  </>
-                ))}
-              {hasPlugins && (
-                <Page.Toolbar>
-                  <Page.Toolbar.Search
-                    value={search}
-                    onChange={setSearch}
-                    placeholder="Search plugins"
-                  />
-                  <Page.Toolbar.Filters
-                    schema={PLUGINS_FILTERS}
-                    values={pluginFilters.values}
-                    optionsById={pluginFilterOptions}
-                    onChange={
-                      pluginFilters.setValue as (
-                        id: string,
-                        value: FilterValue,
-                      ) => void
+          </span>
+        }
+        hideToolbar={!hasPlugins}
+        search={{
+          value: search,
+          onChange: setSearch,
+          placeholder: "Search plugins",
+        }}
+        filters={{
+          schema: PLUGINS_FILTERS,
+          values: pluginFilters.values,
+          optionsById: pluginFilterOptions,
+          onChange: pluginFilters.setValue as (
+            id: string,
+            value: FilterValue,
+          ) => void,
+          onClear: pluginFilters.clearValue as (id: string) => void,
+          onClearAll: pluginFilters.clearAll,
+        }}
+      >
+        <Stack direction="vertical" gap={8}>
+          {publishStatus?.configured &&
+            (publishStatus.connected && publishStatus.repoUrl ? (
+              publishStatus.hasCollaborators === false ? (
+                <>
+                  <UninitializedMarketplaceCard
+                    publishStatus={publishStatus}
+                    defaultName={
+                      marketplaceSettings.marketplaceName ??
+                      marketplaceSettings.defaultName
                     }
-                    onClear={pluginFilters.clearValue as (id: string) => void}
-                    onClearAll={pluginFilters.clearAll}
+                    onSetup={handleStartSetup}
+                    onAddCollaborators={() =>
+                      setIsManageCollaboratorsOpen(true)
+                    }
                   />
-                </Page.Toolbar>
-              )}
-              <Text small muted>
-                The default plugin is where all newly created MCP servers will
-                be automatically published to. If you have the default plugin
-                installed in your coding agent, then any new MCP servers will
-                become instantly available for installation.
-              </Text>
-              <PluginGrid
-                plugins={filteredPlugins}
-                publishStatus={publishStatus}
-                searchQuery={hasPlugins ? search : ""}
-                createCard={createCard}
-              />
-              <div className="flex items-center gap-3">
-                <div className="border-border flex-1 border-t" />
-                <Text
-                  small
-                  muted
-                  className="shrink-0 font-mono text-xs tracking-wide uppercase"
-                >
-                  Platform Plugins
-                </Text>
-                <div className="border-border flex-1 border-t" />
-              </div>
-              <div className="grid grid-cols-2 gap-6">
-                <ObservabilityPluginCard
+                  <div className="border-border border-t" />
+                </>
+              ) : (
+                <>
+                  <MarketplaceCard
+                    publishStatus={publishStatus}
+                    onManageCollaborators={() =>
+                      setIsManageCollaboratorsOpen(true)
+                    }
+                    onRename={handleOpenMarketplaceSettings}
+                    onSync={() => handlePublish([])}
+                    isSyncing={publishMutation.isPending}
+                  />
+                  <div className="border-border border-t" />
+                </>
+              )
+            ) : (
+              <>
+                <UninitializedMarketplaceCard
                   publishStatus={publishStatus}
-                  isDownloadMenuOpen={isObservabilityDownloadMenuOpen}
-                  onDownloadMenuOpenChange={setIsObservabilityDownloadMenuOpen}
-                  isDownloading={isDownloadingObservability !== null}
-                  onDownload={(platform) => {
-                    void handleObservabilityDownload(platform);
-                  }}
-                />
-              </div>
-            </Stack>
-          </Page.Section.Body>
-        </Page.Section>
-
-        {/* Create Dialog */}
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <Dialog.Content>
-            <Dialog.Header>
-              <Dialog.Title>Create Plugin</Dialog.Title>
-              <Dialog.Description>
-                Create a new plugin bundle for distributing MCP servers.
-              </Dialog.Description>
-            </Dialog.Header>
-            <form onSubmit={handleCreate} className="flex flex-col gap-4">
-              <InputField label="Name" name="name" required autoFocus />
-              <InputField label="Description" name="description" />
-              <Dialog.Footer>
-                <Button
-                  variant="secondary"
-                  onClick={() => setIsCreateDialogOpen(false)}
-                  type="button"
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={createMutation.isPending}>
-                  Create
-                </Button>
-              </Dialog.Footer>
-            </form>
-          </Dialog.Content>
-        </Dialog>
-
-        <PublishDialog
-          open={isPublishDialogOpen}
-          onOpenChange={setIsPublishDialogOpen}
-          onPublish={handlePublish}
-          isPending={publishMutation.isPending}
-        />
-        <PublishDialog
-          mode="manage"
-          open={isManageCollaboratorsOpen}
-          onOpenChange={setIsManageCollaboratorsOpen}
-          onPublish={handlePublish}
-          isPending={publishMutation.isPending}
-        />
-
-        {/* Marketplace Settings Dialog */}
-        <Dialog
-          open={isMarketplaceSettingsDialogOpen}
-          onOpenChange={setIsMarketplaceSettingsDialogOpen}
-        >
-          <Dialog.Content>
-            <Dialog.Header>
-              <Dialog.Title>Marketplace settings</Dialog.Title>
-              <Dialog.Description>
-                The marketplace name is the identifier your team types after the
-                plugin slug ({"<plugin>@<marketplace>"}) when installing from a
-                supported agent marketplace. Applies to all plugins in this
-                project.
-              </Dialog.Description>
-            </Dialog.Header>
-            <form
-              className="flex flex-col gap-4"
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleSaveMarketplaceName();
-              }}
-            >
-              <InputField
-                label="Marketplace name"
-                name="marketplace_name"
-                value={marketplaceNameInput}
-                onChange={(e) => setMarketplaceNameInput(e.target.value)}
-                placeholder={marketplaceSettings.defaultName}
-                pattern="^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$"
-                title="Lowercase letters, digits, and hyphens. May not start or end with a hyphen."
-                // Renaming an already-published marketplace can fall back to
-                // the default name, so it's genuinely optional there — but
-                // mid-Setup this is the one deliberate naming step, so it
-                // reads as required (also hides the "optional" label via
-                // AnyField's group-has-[[required]] rule).
-                required={chainToPublishAfterSave}
-                autoFocus
-              />
-              <Text small muted>
-                Will publish as{" "}
-                <code>
-                  {trimmedMarketplaceName || marketplaceSettings.defaultName}
-                </code>
-                .{" "}
-                {publishStatus?.connected
-                  ? "Saving will regenerate the marketplace and push to GitHub."
-                  : "Will take effect on your next publish."}
-              </Text>
-              <Dialog.Footer>
-                <Button
-                  variant="secondary"
-                  type="button"
-                  onClick={() => setIsMarketplaceSettingsDialogOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={
-                    !marketplaceNameDirty ||
-                    updateMarketplaceSettingsMutation.isPending
+                  defaultName={
+                    marketplaceSettings.marketplaceName ??
+                    marketplaceSettings.defaultName
                   }
-                >
-                  <Button.Text>
-                    {updateMarketplaceSettingsMutation.isPending
-                      ? publishStatus?.connected
-                        ? "Republishing..."
-                        : "Saving..."
-                      : "Save"}
-                  </Button.Text>
-                </Button>
-              </Dialog.Footer>
-            </form>
-          </Dialog.Content>
-        </Dialog>
-      </Page.Body>
-    </Page>
+                  onSetup={handleStartSetup}
+                  onAddCollaborators={() => setIsManageCollaboratorsOpen(true)}
+                />
+                <div className="border-border border-t" />
+              </>
+            ))}
+          <Text small muted>
+            The default plugin is where all newly created MCP servers will be
+            automatically published to. If you have the default plugin installed
+            in your coding agent, then any new MCP servers will become instantly
+            available for installation.
+          </Text>
+          <PluginGrid
+            plugins={filteredPlugins}
+            publishStatus={publishStatus}
+            searchQuery={hasPlugins ? search : ""}
+            createCard={createCard}
+          />
+          <div className="flex items-center gap-3">
+            <div className="border-border flex-1 border-t" />
+            <Text
+              small
+              muted
+              className="shrink-0 font-mono text-xs tracking-wide uppercase"
+            >
+              Platform Plugins
+            </Text>
+            <div className="border-border flex-1 border-t" />
+          </div>
+          <div className="grid grid-cols-2 gap-6">
+            <ObservabilityPluginCard
+              publishStatus={publishStatus}
+              isDownloadMenuOpen={isObservabilityDownloadMenuOpen}
+              onDownloadMenuOpenChange={setIsObservabilityDownloadMenuOpen}
+              isDownloading={isDownloadingObservability !== null}
+              onDownload={(platform) => {
+                void handleObservabilityDownload(platform);
+              }}
+            />
+          </div>
+        </Stack>
+      </ResourceListPage>
+
+      {/* Create Dialog */}
+      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <Dialog.Content>
+          <Dialog.Header>
+            <Dialog.Title>Create Plugin</Dialog.Title>
+            <Dialog.Description>
+              Create a new plugin bundle for distributing MCP servers.
+            </Dialog.Description>
+          </Dialog.Header>
+          <form onSubmit={handleCreate} className="flex flex-col gap-4">
+            <InputField label="Name" name="name" required autoFocus />
+            <InputField label="Description" name="description" />
+            <Dialog.Footer>
+              <Button
+                variant="secondary"
+                onClick={() => setIsCreateDialogOpen(false)}
+                type="button"
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={createMutation.isPending}>
+                Create
+              </Button>
+            </Dialog.Footer>
+          </form>
+        </Dialog.Content>
+      </Dialog>
+
+      <PublishDialog
+        open={isPublishDialogOpen}
+        onOpenChange={setIsPublishDialogOpen}
+        onPublish={handlePublish}
+        isPending={publishMutation.isPending}
+      />
+      <PublishDialog
+        mode="manage"
+        open={isManageCollaboratorsOpen}
+        onOpenChange={setIsManageCollaboratorsOpen}
+        onPublish={handlePublish}
+        isPending={publishMutation.isPending}
+      />
+
+      {/* Marketplace Settings Dialog */}
+      <Dialog
+        open={isMarketplaceSettingsDialogOpen}
+        onOpenChange={setIsMarketplaceSettingsDialogOpen}
+      >
+        <Dialog.Content>
+          <Dialog.Header>
+            <Dialog.Title>Marketplace settings</Dialog.Title>
+            <Dialog.Description>
+              The marketplace name is the identifier your team types after the
+              plugin slug ({"<plugin>@<marketplace>"}) when installing from a
+              supported agent marketplace. Applies to all plugins in this
+              project.
+            </Dialog.Description>
+          </Dialog.Header>
+          <form
+            className="flex flex-col gap-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSaveMarketplaceName();
+            }}
+          >
+            <InputField
+              label="Marketplace name"
+              name="marketplace_name"
+              value={marketplaceNameInput}
+              onChange={(e) => setMarketplaceNameInput(e.target.value)}
+              placeholder={marketplaceSettings.defaultName}
+              pattern="^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$"
+              title="Lowercase letters, digits, and hyphens. May not start or end with a hyphen."
+              // Renaming an already-published marketplace can fall back to
+              // the default name, so it's genuinely optional there — but
+              // mid-Setup this is the one deliberate naming step, so it
+              // reads as required (also hides the "optional" label via
+              // AnyField's group-has-[[required]] rule).
+              required={chainToPublishAfterSave}
+              autoFocus
+            />
+            <Text small muted>
+              Will publish as{" "}
+              <code>
+                {trimmedMarketplaceName || marketplaceSettings.defaultName}
+              </code>
+              .{" "}
+              {publishStatus?.connected
+                ? "Saving will regenerate the marketplace and push to GitHub."
+                : "Will take effect on your next publish."}
+            </Text>
+            <Dialog.Footer>
+              <Button
+                variant="secondary"
+                type="button"
+                onClick={() => setIsMarketplaceSettingsDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={
+                  !marketplaceNameDirty ||
+                  updateMarketplaceSettingsMutation.isPending
+                }
+              >
+                <Button.Text>
+                  {updateMarketplaceSettingsMutation.isPending
+                    ? publishStatus?.connected
+                      ? "Republishing..."
+                      : "Saving..."
+                    : "Save"}
+                </Button.Text>
+              </Button>
+            </Dialog.Footer>
+          </form>
+        </Dialog.Content>
+      </Dialog>
+    </>
   );
 }
 

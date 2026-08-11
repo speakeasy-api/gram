@@ -16,7 +16,7 @@ export type ReadinessCheck = {
 // of brand-colored segments (one per check) that expands into per-check rows
 // linking to the sub-page where that check can be resolved. Mirrors the
 // "Essentials" checklist pattern from the production dashboard, restyled to
-// match Gram's existing sidebar card language (McpSidebarNavShell's card)
+// match Gram's existing sidebar card language (DetailSidebarNav's card)
 // instead of copying its pill/badge treatment verbatim.
 export function McpServerReadinessBar({
   checks,

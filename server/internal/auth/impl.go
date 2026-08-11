@@ -46,6 +46,7 @@ import (
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
@@ -118,6 +119,7 @@ type Service struct {
 	authzProvisioner    *authz.Provisioner
 	trialBundleSeeder   EnterpriseTrialBundleSeeder
 	auditLogger         *audit.Logger
+	trialNotifier       trialemails.Notifier
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -137,8 +139,12 @@ func NewService(
 	authzProvisioner *authz.Provisioner,
 	trialBundleSeeder EnterpriseTrialBundleSeeder,
 	auditLogger *audit.Logger,
+	trialNotifier trialemails.Notifier,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("auth"))
+	if trialNotifier == nil {
+		trialNotifier = trialemails.NoopNotifier{}
+	}
 
 	return &Service{
 		tracer:              tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/auth"),
@@ -158,6 +164,7 @@ func NewService(
 		authzProvisioner:    authzProvisioner,
 		trialBundleSeeder:   trialBundleSeeder,
 		auditLogger:         auditLogger,
+		trialNotifier:       trialNotifier,
 	}
 }
 
@@ -335,6 +342,10 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 			session.ActiveOrganizationID = org.ID
 			if err := s.sessions.StoreSession(ctx, session); err != nil {
 				return s.redirectSignupError(ctx, err)
+			}
+
+			if err := s.trialNotifier.TrialStarted(ctx, org.ID); err != nil {
+				s.logger.ErrorContext(ctx, "failed to notify trial started", attr.SlogError(err), attr.SlogOrganizationID(org.ID), attr.SlogUserID(userID))
 			}
 
 			s.captureSignupTelemetry(ctx, userInfo.Email, intent.OrgName, org)
@@ -745,10 +756,10 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	trial := loadActiveTrial(
+	trial := loadTrial(
 		ctx,
 		authCtx.ActiveOrganizationID,
-		trialsRepo.New(s.db).GetActiveTrial,
+		trialsRepo.New(s.db).GetSessionTrial,
 		s.logger,
 	)
 
@@ -877,10 +888,14 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 	}, nil
 }
 
-func loadActiveTrial(
+// loadTrial returns the organization's trial unless it converted, including
+// trials that have ended or been demoted so the dashboard can tell an expired
+// trial apart from an organization that never trialed. A lookup failure is
+// logged and reported as no trial rather than failing the whole session.
+func loadTrial(
 	ctx context.Context,
 	organizationID string,
-	getTrial func(context.Context, string) (trialsRepo.GetActiveTrialRow, error),
+	getTrial func(context.Context, string) (trialsRepo.GetSessionTrialRow, error),
 	logger *slog.Logger,
 ) *gen.Trial {
 	trial, err := getTrial(ctx, organizationID)
@@ -890,7 +905,7 @@ func loadActiveTrial(
 	case err != nil:
 		logger.ErrorContext(
 			ctx,
-			"error loading active trial; continuing without trial status",
+			"error loading trial; continuing without trial status",
 			attr.SlogError(err),
 			attr.SlogOrganizationID(organizationID),
 		)

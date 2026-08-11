@@ -127,6 +127,12 @@ WHERE public_id = @public_id;
 -- name: CountPublishOutboxRows :one
 SELECT COUNT(*) FROM publish_outbox;
 
+-- name: ListPublishOutboxRows :many
+SELECT id, public_id, organization_id, topic, message, attributes,
+       attempts, last_error, retry_after, locked_until, lease_token, created_at
+FROM publish_outbox
+ORDER BY id;
+
 -- name: SeedPublishOutboxRow :one
 -- Fixture insert that can set the retry/lease columns a producer never touches.
 INSERT INTO publish_outbox (
@@ -352,3 +358,18 @@ WHERE id = @id;
 SELECT chat_id, chat_message_id, risk_result_id, risk_policy_id
 FROM tool_call_blocks
 WHERE id = @id;
+
+-- name: CountSkillScanRecords :one
+-- Test-only fixture: counts recorded scans of a version of the named skill.
+-- found_only narrows the count to prompt-injection findings; otherwise every
+-- recorded scan counts, clean coverage rows included.
+SELECT count(*)
+FROM risk_results rr
+JOIN skill_versions sv ON sv.id = rr.skill_version_id
+JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = @project_id
+  AND s.name = @skill_name
+  AND (
+    NOT @found_only::boolean
+    OR (rr.source = 'prompt_injection' AND rr.found IS TRUE)
+  );
