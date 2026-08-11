@@ -45,11 +45,9 @@ func AdminCORS(allowedOrigins []string) func(http.Handler) http.Handler {
 // arrived on. CSRF defence for cookie-based admin auth when SameSite=None is
 // required for cross-origin web UIs.
 //
-// The allowlist covers the split deployment, where the admin web UI is served
-// from a different origin than the admin API. The same-host rule covers the
-// single-origin deployment, where the UI and the API share one ingress: a
-// browser sends Origin on every unsafe method, including a same-origin one,
-// so an empty allowlist would otherwise reject every write.
+// The same-host rule keeps a single-origin deployment working: a browser sends
+// Origin on a same-origin unsafe method too, so an empty allowlist would
+// otherwise reject every write.
 func AdminOriginCheck(allowedOrigins []string) func(http.Handler) http.Handler {
 	set := make(map[string]struct{}, len(allowedOrigins))
 	for _, o := range allowedOrigins {
@@ -91,15 +89,12 @@ func AdminOriginCheck(allowedOrigins []string) func(http.Handler) http.Handler {
 
 // sameHost reports whether origin names the host the request arrived on.
 //
-// Only the host is compared. Behind a TLS-terminating ingress the server sees
-// a plain HTTP request, so the scheme it observes says nothing about the
-// scheme the browser used.
-//
-// X-Forwarded-Host wins when present, because an ingress that rewrites Host to
-// an internal service name leaves the public host only in that header. A
-// browser cannot forge either header across sites: it sets Host itself, and a
-// cross-site request that carries X-Forwarded-Host needs a preflight, which
-// AdminCORS answers for allowlisted origins only.
+// The scheme is not compared: a TLS-terminating ingress leaves the server
+// seeing plain HTTP. X-Forwarded-Host wins over Host because such an ingress
+// can rewrite Host to an internal service name. Neither header is forgeable
+// across sites: the browser sets Host, and X-Forwarded-Host makes the request
+// non-simple, so it needs a preflight that AdminCORS answers only for an
+// allowlisted origin.
 func sameHost(r *http.Request, origin string) bool {
 	if origin == "" {
 		return false
@@ -114,8 +109,7 @@ func sameHost(r *http.Request, origin string) bool {
 	if host == "" {
 		host = r.Host
 	}
-	// A comma separated chain means several proxies appended to the header.
-	// The first entry is the host the browser asked for.
+	// Several proxies append to the header; the browser's host comes first.
 	host, _, _ = strings.Cut(host, ",")
 
 	return strings.EqualFold(strings.TrimSpace(host), u.Host)
