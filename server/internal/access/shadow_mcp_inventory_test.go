@@ -1313,3 +1313,97 @@ func TestService_GetShadowMCPInventoryServer_ResolvesRequestOnlyServer(t *testin
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
+
+func seedShadowMCPStdioApprovalRequest(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID uuid.UUID, command string, status string) mcpapprovalrepo.UpsertApprovalRequestRow {
+	t.Helper()
+
+	request, err := mcpapprovalrepo.New(ti.conn).UpsertApprovalRequest(ctx, mcpapprovalrepo.UpsertApprovalRequestParams{
+		OrganizationID:            organizationID,
+		ProjectID:                 projectID,
+		TargetKind:                "stdio_command",
+		TargetRaw:                 command,
+		TargetKey:                 command,
+		ArtifactRef:               conv.ToPGTextEmpty(""),
+		VersionPinned:             false,
+		Status:                    status,
+		RiskPolicyBypassRequestID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+
+	return request
+}
+
+func TestService_ListShadowMCPInventory_UnionsRequestOnlyTargets(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	projectID := authCtx.ProjectID.String()
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
+	now := time.Now().UTC()
+
+	require.NoError(t, telemetryRepo.New(ti.chConn).UpsertShadowMCPInventoryURLs(ctx, []telemetryRepo.UpsertShadowMCPInventoryURLParams{
+		{
+			GramProjectID:      projectID,
+			CanonicalServerURL: "https://observed.example.com/mcp",
+			URLHost:            "observed.example.com",
+			ServerName:         "Observed MCP",
+			SeenAt:             now.Add(-2 * time.Hour),
+			FirstSeen:          now.Add(-2 * time.Hour),
+			LastSeen:           now.Add(-1 * time.Hour),
+			UpdatedAt:          now.Add(-1 * time.Hour),
+		},
+	}))
+
+	// Observed AND requested: must appear once, as the observed row.
+	seedShadowMCPApprovalRequest(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "https://observed.example.com/mcp", "requested", 2)
+	// Requested, never observed: appears as a synthesized first-page row.
+	urlOnly := seedShadowMCPApprovalRequest(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "https://asked-only.example.com/mcp", "denied", 1)
+	// Stdio commands are known only through their reviews.
+	stdio := seedShadowMCPStdioApprovalRequest(t, ctx, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID, "npx -y example-package", "requested")
+
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	result, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
+		ProjectID: projectID,
+		Limit:     10,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Servers, 3)
+
+	byURL := make(map[string]*gen.ShadowMCPInventoryServer, len(result.Servers))
+	for _, server := range result.Servers {
+		byURL[server.CanonicalServerURL] = server
+	}
+
+	observed := byURL["https://observed.example.com/mcp"]
+	require.Equal(t, "server_url", *observed.TargetKind)
+	require.NotNil(t, observed.ApprovalRequest)
+	require.Equal(t, "requested", observed.ApprovalRequest.Status)
+
+	askedOnly := byURL["https://asked-only.example.com/mcp"]
+	require.Equal(t, "server_url", *askedOnly.TargetKind)
+	require.Equal(t, 0, askedOnly.ObservedUseCount)
+	require.NotNil(t, askedOnly.ApprovalRequest)
+	require.Equal(t, urlOnly.ID.String(), askedOnly.ApprovalRequest.ID)
+	require.Equal(t, "denied", askedOnly.ApprovalRequest.Status)
+
+	stdioRow := byURL["npx -y example-package"]
+	require.NotNil(t, stdioRow)
+	require.Equal(t, "stdio_command", *stdioRow.TargetKind)
+	require.Empty(t, stdioRow.URLHost)
+	require.NotNil(t, stdioRow.ApprovalRequest)
+	require.Equal(t, stdio.ID.String(), stdioRow.ApprovalRequest.ID)
+
+	// Later pages carry no synthesized rows.
+	paged, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
+		ProjectID: projectID,
+		Limit:     10,
+		Cursor:    conv.PtrEmpty("nonsense-cursor"),
+	})
+	if err == nil {
+		for _, server := range paged.Servers {
+			require.NotEqual(t, "npx -y example-package", server.CanonicalServerURL)
+		}
+	}
+}

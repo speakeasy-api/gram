@@ -46,6 +46,9 @@ const (
 
 	shadowMCPInventoryDecisionAllow = "allow"
 	shadowMCPInventoryDecisionDeny  = "deny"
+
+	shadowMCPTargetKindServerURL    = "server_url"
+	shadowMCPTargetKindStdioCommand = "stdio_command"
 )
 
 func (s *Service) requireOrgAdmin(ctx context.Context) (*contextvalues.AuthContext, error) {
@@ -144,20 +147,138 @@ func (s *Service) ListShadowMCPInventory(ctx context.Context, payload *gen.ListS
 		usageByURL = shadowMCPInventoryUsageByURL(usageRows)
 	}
 
-	policyState, err := s.shadowMCPInventoryPolicyState(ctx, ac.ActiveOrganizationID, projectID, shadowMCPInventoryCanonicalURLs(inventoryRows))
+	// The table is the union of what telemetry observed and what reviews
+	// know: targets someone asked about (or an admin opened a dossier on)
+	// that traffic has never shown appear once, on the first page, ahead of
+	// the cursor-paginated observed set. Later pages are purely observed.
+	var requestOnly []mcpapprovalrepo.ListApprovalRequestTargetsRow
+	if payload.Cursor == nil {
+		requestOnly, err = s.shadowMCPRequestOnlyTargets(ctx, chRepo, projectID)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	policyURLs := shadowMCPInventoryCanonicalURLs(inventoryRows)
+	for _, request := range requestOnly {
+		if request.TargetKind == shadowMCPTargetKindServerURL {
+			policyURLs = append(policyURLs, request.TargetKey)
+		}
+	}
+
+	policyState, err := s.shadowMCPInventoryPolicyState(ctx, ac.ActiveOrganizationID, projectID, policyURLs)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load shadow mcp inventory policy state").LogError(ctx, s.logger)
 	}
 
-	servers := make([]*gen.ShadowMCPInventoryServer, 0, len(inventoryRows))
+	servers := make([]*gen.ShadowMCPInventoryServer, 0, len(requestOnly)+len(inventoryRows))
+	for _, request := range requestOnly {
+		servers = append(servers, buildShadowMCPRequestOnlyServer(request, policyState))
+	}
 	for _, row := range inventoryRows {
-		servers = append(servers, buildShadowMCPInventoryServer(row, usageByURL[row.CanonicalServerURL], policyState.forURL(row.CanonicalServerURL)))
+		servers = append(servers, buildShadowMCPInventoryServer(row, usageByURL[row.CanonicalServerURL], policyState.forURL(row.CanonicalServerURL), shadowMCPTargetKindServerURL))
 	}
 
 	return &gen.ListShadowMCPInventoryResult{
 		Servers:    servers,
 		NextCursor: nextCursor,
 	}, nil
+}
+
+// shadowMCPRequestOnlyTargets lists the reviews whose targets telemetry has
+// never observed: every stdio command, and the server URLs absent from the
+// inventory. These are the rows only the review system knows about.
+func (s *Service) shadowMCPRequestOnlyTargets(ctx context.Context, chRepo *telemetryrepo.Queries, projectID uuid.UUID) ([]mcpapprovalrepo.ListApprovalRequestTargetsRow, error) {
+	requests, err := mcpapprovalrepo.New(s.db).ListApprovalRequestTargets(ctx, projectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list approval request targets").LogError(ctx, s.logger)
+	}
+	if len(requests) == 0 {
+		return nil, nil
+	}
+
+	urlKeys := make([]string, 0, len(requests))
+	for _, request := range requests {
+		if request.TargetKind == shadowMCPTargetKindServerURL {
+			urlKeys = append(urlKeys, request.TargetKey)
+		}
+	}
+
+	observed := map[string]struct{}{}
+	if len(urlKeys) > 0 {
+		observedKeys, err := chRepo.ListExistingShadowMCPInventoryURLs(ctx, telemetryrepo.ListExistingShadowMCPInventoryURLsParams{
+			GramProjectID:       projectID.String(),
+			CanonicalServerURLs: urlKeys,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "check observed shadow mcp urls").LogError(ctx, s.logger)
+		}
+		for _, key := range observedKeys {
+			observed[key] = struct{}{}
+		}
+	}
+
+	out := make([]mcpapprovalrepo.ListApprovalRequestTargetsRow, 0, len(requests))
+	for _, request := range requests {
+		if request.TargetKind == shadowMCPTargetKindServerURL {
+			if _, ok := observed[request.TargetKey]; ok {
+				continue
+			}
+		}
+		out = append(out, request)
+	}
+	return out, nil
+}
+
+// buildShadowMCPRequestOnlyServer synthesizes a servers-table row from a
+// review with no telemetry behind it: zero usage, zero seen-times (the
+// never-observed sentinel), and the review carried as the row's approval
+// state. Stdio commands have no URL host and no server page.
+func buildShadowMCPRequestOnlyServer(request mcpapprovalrepo.ListApprovalRequestTargetsRow, policyState shadowMCPInventoryPolicyState) *gen.ShadowMCPInventoryServer {
+	targetKind := shadowMCPTargetKindStdioCommand
+	urlHost := ""
+	rowState := shadowMCPInventoryRowState{
+		Access:           shadowMCPInventoryAccessNone,
+		RequestCount:     0,
+		LatestRequest:    nil,
+		ApprovalRequest:  nil,
+		AllowedPolicyIDs: nil,
+		BlockedPolicyIDs: nil,
+	}
+	if request.TargetKind == shadowMCPTargetKindServerURL {
+		targetKind = shadowMCPTargetKindServerURL
+		inventoryURL, _ := shadowmcp.CanonicalizeInventoryURL(request.TargetKey)
+		urlHost = inventoryURL.URLHost
+		rowState = policyState.forURL(request.TargetKey)
+	}
+	// The review is authoritative for its own row whether or not the batched
+	// join saw it (the join only covers server_url targets).
+	rowState.ApprovalRequest = &gen.ShadowMCPInventoryApprovalRequest{
+		ID:             request.ID.String(),
+		Status:         request.Status,
+		RequesterCount: int(request.RequesterCount),
+	}
+
+	row := telemetryrepo.ShadowMCPInventoryURLRow{
+		CanonicalServerURL: request.TargetKey,
+		URLHost:            urlHost,
+		ServerName:         "",
+		ServerNameOverride: "",
+		FirstSeen:          time.Time{},
+		LastSeen:           time.Time{},
+		LastCalledUnixNano: 0,
+		UpdatedAt:          request.UpdatedAt.Time,
+	}
+	usage := telemetryrepo.ShadowMCPInventoryUsageRow{
+		CanonicalServerURL: request.TargetKey,
+		ServerName:         "",
+		FirstCalled:        nil,
+		LastCalled:         nil,
+		CallCount:          0,
+		UserCount:          0,
+		TopUsers:           []string{},
+	}
+	return buildShadowMCPInventoryServer(row, usage, rowState, targetKind)
 }
 
 func (s *Service) GetShadowMCPInventoryServer(ctx context.Context, payload *gen.GetShadowMCPInventoryServerPayload) (*gen.ShadowMCPInventoryServer, error) {
@@ -200,7 +321,7 @@ func (s *Service) GetShadowMCPInventoryServer(ctx context.Context, payload *gen.
 		return nil, oops.E(oops.CodeUnexpected, err, "load shadow mcp inventory policy state").LogError(ctx, s.logger)
 	}
 
-	return buildShadowMCPInventoryServer(*inventoryRow, usageByURL[inventoryRow.CanonicalServerURL], policyState.forURL(inventoryRow.CanonicalServerURL)), nil
+	return buildShadowMCPInventoryServer(*inventoryRow, usageByURL[inventoryRow.CanonicalServerURL], policyState.forURL(inventoryRow.CanonicalServerURL), shadowMCPTargetKindServerURL), nil
 }
 
 // shadowMCPServerFromApprovalRequest resolves a server page slug against the
@@ -249,7 +370,7 @@ func (s *Service) shadowMCPServerFromApprovalRequest(ctx context.Context, organi
 			UserCount:          0,
 			TopUsers:           []string{},
 		}
-		return buildShadowMCPInventoryServer(row, usage, policyState.forURL(request.TargetKey)), nil
+		return buildShadowMCPInventoryServer(row, usage, policyState.forURL(request.TargetKey), shadowMCPTargetKindServerURL), nil
 	}
 
 	return nil, oops.E(oops.CodeNotFound, nil, "shadow mcp inventory url not found").LogError(ctx, s.logger)
@@ -930,7 +1051,7 @@ func shadowMCPInventoryBypassDimensions(raw []byte) (map[string]string, error) {
 	return dimensions, nil
 }
 
-func buildShadowMCPInventoryServer(row telemetryrepo.ShadowMCPInventoryURLRow, usage telemetryrepo.ShadowMCPInventoryUsageRow, rowState shadowMCPInventoryRowState) *gen.ShadowMCPInventoryServer {
+func buildShadowMCPInventoryServer(row telemetryrepo.ShadowMCPInventoryURLRow, usage telemetryrepo.ShadowMCPInventoryUsageRow, rowState shadowMCPInventoryRowState, targetKind string) *gen.ShadowMCPInventoryServer {
 	var serverName *string
 	serverNameValue := row.ServerNameOverride
 	if serverNameValue == "" {
@@ -951,6 +1072,7 @@ func buildShadowMCPInventoryServer(row telemetryrepo.ShadowMCPInventoryURLRow, u
 		CanonicalServerURL: row.CanonicalServerURL,
 		ServerSlug:         shadowMCPInventoryServerSlug(row.CanonicalServerURL),
 		URLHost:            row.URLHost,
+		TargetKind:         conv.PtrEmpty(targetKind),
 		ServerName:         serverName,
 		FirstSeen:          formatTimeValue(row.FirstSeen),
 		LastSeen:           formatTimeValue(row.LastSeen),

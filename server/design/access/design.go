@@ -764,6 +764,10 @@ var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
 	Attribute("canonical_server_url", String)
 	Attribute("server_slug", String)
 	Attribute("url_host", String)
+	Attribute("target_kind", String, func() {
+		Description("What the row identifies: a server URL observed or requested, or a local stdio command known only through its review. Absent means server_url.")
+		Enum("server_url", "stdio_command")
+	})
 	Attribute("server_name", String)
 	Attribute("first_seen", String, func() {
 		Format(FormatDateTime)

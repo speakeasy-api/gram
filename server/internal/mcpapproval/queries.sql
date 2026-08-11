@@ -78,6 +78,29 @@ WHERE r.project_id = @project_id
   AND r.target_key = ANY (@target_keys::text[])
   AND r.deleted IS FALSE;
 
+-- name: ListApprovalRequestTargets :many
+-- Every review in a project, any kind and any status, with the requester
+-- count the unified servers table displays. Bounded by the one-review-per-
+-- target invariant, so the scan is as small as the project's server set.
+SELECT
+  r.id
+  , r.target_kind
+  , r.target_raw
+  , r.target_key
+  , r.status
+  , r.created_at
+  , r.updated_at
+  , (
+      SELECT count(*)
+      FROM mcp_approval_request_requesters req
+      WHERE req.mcp_approval_request_id = r.id
+        AND req.project_id = r.project_id
+        AND req.deleted IS FALSE
+    ) AS requester_count
+FROM mcp_approval_requests r
+WHERE r.project_id = @project_id
+  AND r.deleted IS FALSE;
+
 -- name: ListServerURLApprovalRequests :many
 -- Every server_url review in a project, for resolving a server page slug to
 -- the request tracking it. A server known only through a request has no

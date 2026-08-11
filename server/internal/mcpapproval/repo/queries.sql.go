@@ -437,6 +437,70 @@ func (q *Queries) GetResearchReportForDecision(ctx context.Context, arg GetResea
 	return id, err
 }
 
+const listApprovalRequestTargets = `-- name: ListApprovalRequestTargets :many
+SELECT
+  r.id
+  , r.target_kind
+  , r.target_raw
+  , r.target_key
+  , r.status
+  , r.created_at
+  , r.updated_at
+  , (
+      SELECT count(*)
+      FROM mcp_approval_request_requesters req
+      WHERE req.mcp_approval_request_id = r.id
+        AND req.project_id = r.project_id
+        AND req.deleted IS FALSE
+    ) AS requester_count
+FROM mcp_approval_requests r
+WHERE r.project_id = $1
+  AND r.deleted IS FALSE
+`
+
+type ListApprovalRequestTargetsRow struct {
+	ID             uuid.UUID
+	TargetKind     string
+	TargetRaw      string
+	TargetKey      string
+	Status         string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	RequesterCount int64
+}
+
+// Every review in a project, any kind and any status, with the requester
+// count the unified servers table displays. Bounded by the one-review-per-
+// target invariant, so the scan is as small as the project's server set.
+func (q *Queries) ListApprovalRequestTargets(ctx context.Context, projectID uuid.UUID) ([]ListApprovalRequestTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listApprovalRequestTargets, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListApprovalRequestTargetsRow
+	for rows.Next() {
+		var i ListApprovalRequestTargetsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TargetKind,
+			&i.TargetRaw,
+			&i.TargetKey,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.RequesterCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listApprovalRequests = `-- name: ListApprovalRequests :many
 SELECT
   r.id, r.organization_id, r.project_id, r.target_kind, r.target_raw, r.target_key, r.artifact_ref, r.version_pinned, r.risk_policy_bypass_request_id, r.status, r.current_evidence, r.evidence_version, r.evidence_collected_at, r.created_at, r.updated_at, r.deleted_at, r.deleted

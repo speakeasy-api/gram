@@ -4497,6 +4497,7 @@ func unmarshalShadowMCPInventoryServerResponseBodyToAccessShadowMCPInventoryServ
 		CanonicalServerURL: *v.CanonicalServerURL,
 		ServerSlug:         *v.ServerSlug,
 		URLHost:            *v.URLHost,
+		TargetKind:         v.TargetKind,
 		ServerName:         v.ServerName,
 		FirstSeen:          *v.FirstSeen,
 		LastSeen:           *v.LastSeen,

@@ -732,7 +732,7 @@ export function StatusBadge({ status }: { status: string }): JSX.Element {
     case "requested":
       return <Badge variant="information">Awaiting decision</Badge>;
     case "unreviewed":
-      return <Badge variant="neutral">Not reviewed</Badge>;
+      return <Badge variant="warning">Review requested</Badge>;
     default:
       return <Badge variant="neutral">{status}</Badge>;
   }

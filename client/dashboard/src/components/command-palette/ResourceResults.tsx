@@ -340,11 +340,12 @@ function ApprovalRequestsGroup({ onNavigate }: GroupProps) {
           sublabel={request.status}
           icon="inbox"
           onSelect={() => {
-            // stdio targets have no server page; they review from the queue.
+            // stdio targets have no server page; their row on the servers
+            // table opens the review sheet.
             void navigate(
               request.serverSlug
                 ? routes.shadowMCP.detail.href(request.serverSlug)
-                : `${routes.shadowMCP.href()}?tab=requests`,
+                : routes.shadowMCP.href(),
             );
             onNavigate();
           }}

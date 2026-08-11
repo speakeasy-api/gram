@@ -8,6 +8,7 @@ import {
   within,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router";
 import type { MouseEvent, ReactElement, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
@@ -95,11 +96,29 @@ vi.mock("@/components/page-layout", () => {
           value={value}
         />
       ),
+      Filters: () => <div data-testid="toolbar-filters" />,
     },
   );
 
   return { Page: { Toolbar } };
 });
+
+vi.mock("@/components/mcp-approvals/ReviewRequestSheet", () => ({
+  ReviewRequestSheet: ({
+    request,
+    open,
+  }: {
+    request: { id: string; targetRaw: string; requesterCount: number } | null;
+    open: boolean;
+  }) =>
+    open && request ? (
+      <div
+        data-testid="review-request-sheet"
+        data-request-id={request.id}
+        data-target-raw={request.targetRaw}
+      />
+    ) : null,
+}));
 
 vi.mock("@/components/ui/Badge", () => ({
   Badge: Object.assign(
@@ -307,7 +326,10 @@ function inventoryServer(
     serverName: undefined,
     serverSlug: "github-example-com-mcp-d8860eea",
     topUsers: [],
-    urlHost: new URL(canonicalServerUrl).host,
+    // Stdio commands are not URLs; their host is empty.
+    urlHost: URL.canParse(canonicalServerUrl)
+      ? new URL(canonicalServerUrl).host
+      : "",
     userCount: 0,
     ...rest,
   };
@@ -330,34 +352,6 @@ function blockingPolicy(
   };
 }
 
-function role(overrides: Partial<Role> = {}): Role {
-  return {
-    createdAt: new Date("2026-01-01T00:00:00Z"),
-    description: "Admin role",
-    grants: [],
-    id: "019f1e9c-09f8-7084-8011-678312db54fe",
-    isSystem: false,
-    memberCount: 1,
-    name: "Admin",
-    principalUrn: "role:organization:019f1e9c-09f8-7084-8011-678312db54fe",
-    slug: "admin",
-    updatedAt: new Date("2026-01-01T00:00:00Z"),
-    ...overrides,
-  };
-}
-
-function member(overrides: Partial<AccessMember> = {}): AccessMember {
-  return {
-    email: "admin@example.com",
-    id: "user-1",
-    joinedAt: new Date("2026-01-01T00:00:00Z"),
-    name: "Admin User",
-    principalUrn: "user:user-1",
-    roleIds: [],
-    ...overrides,
-  };
-}
-
 function renderInventoryTable(
   projectID = "project-id-1",
   policyState: "blocking" | "flagging" | "none" | "unavailable" = "blocking",
@@ -368,15 +362,17 @@ function renderInventoryTable(
   const queryClient = new QueryClient();
 
   return render(
-    <QueryClientProvider client={queryClient}>
-      <ShadowMCPInventoryTable
-        members={members}
-        policyState={policyState}
-        projectID={projectID}
-        roles={roles}
-        shadowMCPPolicies={shadowMCPPolicies}
-      />
-    </QueryClientProvider>,
+    <MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <ShadowMCPInventoryTable
+          members={members}
+          policyState={policyState}
+          projectID={projectID}
+          roles={roles}
+          shadowMCPPolicies={shadowMCPPolicies}
+        />
+      </QueryClientProvider>
+    </MemoryRouter>,
   );
 }
 
@@ -577,18 +573,20 @@ describe("ShadowMCPInventoryTable", () => {
     const onOpenServer = vi.fn();
 
     render(
-      <QueryClientProvider client={queryClient}>
-        <ShadowMCPInventoryTable
-          members={[]}
-          onOpenServer={(server) => {
-            onOpenServer(server);
-          }}
-          policyState="blocking"
-          projectID="project-id-1"
-          roles={[]}
-          shadowMCPPolicies={[blockingPolicy()]}
-        />
-      </QueryClientProvider>,
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <ShadowMCPInventoryTable
+            members={[]}
+            onOpenServer={(server) => {
+              onOpenServer(server);
+            }}
+            policyState="blocking"
+            projectID="project-id-1"
+            roles={[]}
+            shadowMCPPolicies={[blockingPolicy()]}
+          />
+        </QueryClientProvider>
+      </MemoryRouter>,
     );
 
     await waitFor(() => {
@@ -603,67 +601,6 @@ describe("ShadowMCPInventoryTable", () => {
         serverSlug: "github-example-com-mcp-d8860eea",
       }),
     );
-  });
-
-  it("opens the decide access sheet from the row Decide button without navigating", async () => {
-    mockShadowMCPInventory({
-      servers: [
-        inventoryServer({
-          approvalRequest: {
-            id: "request-1",
-            requesterCount: 2,
-            status: "requested",
-          },
-          canonicalServerUrl: "https://github.example.com/mcp",
-          requestCount: 2,
-          serverName: "GitHub MCP",
-        }),
-      ],
-    });
-    const queryClient = new QueryClient();
-    const onOpenServer = vi.fn();
-    const roles = [role()];
-    const members = [member()];
-
-    render(
-      <QueryClientProvider client={queryClient}>
-        <ShadowMCPInventoryTable
-          members={members}
-          onOpenServer={(server) => {
-            onOpenServer(server);
-          }}
-          policyState="blocking"
-          projectID="project-id-1"
-          roles={roles}
-          shadowMCPPolicies={[blockingPolicy()]}
-        />
-      </QueryClientProvider>,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText("GitHub MCP")).toBeTruthy();
-    });
-    expect(screen.queryByTestId("decide-access-sheet")).toBeNull();
-
-    const row = screen.getByText("GitHub MCP").closest("tr");
-    if (!row) {
-      throw new Error("Inventory row not found");
-    }
-
-    fireEvent.click(within(row).getByRole("button", { name: "Decide" }));
-
-    const sheet = await screen.findByTestId("decide-access-sheet");
-    expect(sheet.getAttribute("data-canonical-server-url")).toBe(
-      "https://github.example.com/mcp",
-    );
-    expect(sheet.getAttribute("data-display-name")).toBe("GitHub MCP");
-    expect(sheet.getAttribute("data-approval-request-id")).toBe("request-1");
-    expect(onOpenServer).not.toHaveBeenCalled();
-
-    const sheetProps = lastDecideAccessSheetProps();
-    expect(sheetProps.disposition).toBe("block_all");
-    expect(sheetProps.members).toEqual(members);
-    expect(sheetProps.roles).toEqual(roles);
   });
 
   it("opens the decide access sheet from the row context menu action", async () => {
@@ -702,6 +639,43 @@ describe("ShadowMCPInventoryTable", () => {
     expect(sheet.getAttribute("data-approval-request-id")).toBeNull();
   });
 
+  it("renders stdio rows and reviews them in the sheet", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          canonicalServerUrl: "npx -y example-package",
+          serverName: undefined,
+          urlHost: "",
+          targetKind: "stdio_command",
+          approvalRequest: {
+            id: "stdio-request-1",
+            requesterCount: 1,
+            status: "requested",
+          },
+        }),
+      ],
+    });
+    const onOpenServer = vi.fn();
+
+    renderInventoryTable();
+
+    await waitFor(() => {
+      expect(screen.getByText("npx -y example-package")).toBeTruthy();
+    });
+    expect(
+      screen.getByText("Local command — known only from its access request"),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByText("npx -y example-package").closest("tr")!);
+
+    const sheet = await screen.findByTestId("review-request-sheet");
+    expect(sheet.getAttribute("data-request-id")).toBe("stdio-request-1");
+    expect(sheet.getAttribute("data-target-raw")).toBe(
+      "npx -y example-package",
+    );
+    expect(onOpenServer).not.toHaveBeenCalled();
+  });
+
   it("closes the decide access sheet when the sheet requests it", async () => {
     mockShadowMCPInventory({
       servers: [
@@ -718,7 +692,11 @@ describe("ShadowMCPInventoryTable", () => {
       expect(screen.getByText("GitHub MCP")).toBeTruthy();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Decide" }));
+    const lastCall = mocks.rowContextMenu.mock.calls.at(-1)!;
+    const rowActions = lastCall[0] as Array<{ onClick: () => void }>;
+    act(() => {
+      rowActions[0]!.onClick();
+    });
     expect(await screen.findByTestId("decide-access-sheet")).toBeTruthy();
 
     const sheetProps = lastDecideAccessSheetProps();
@@ -1006,15 +984,17 @@ describe("ShadowMCPInventoryTable", () => {
     );
     const queryClient = new QueryClient();
     const { rerender } = render(
-      <QueryClientProvider client={queryClient}>
-        <ShadowMCPInventoryTable
-          members={[]}
-          policyState="blocking"
-          projectID="project-id-1"
-          roles={[]}
-          shadowMCPPolicies={[blockingPolicy()]}
-        />
-      </QueryClientProvider>,
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <ShadowMCPInventoryTable
+            members={[]}
+            policyState="blocking"
+            projectID="project-id-1"
+            roles={[]}
+            shadowMCPPolicies={[blockingPolicy()]}
+          />
+        </QueryClientProvider>
+      </MemoryRouter>,
     );
 
     await waitFor(() => {
@@ -1022,15 +1002,17 @@ describe("ShadowMCPInventoryTable", () => {
     });
 
     rerender(
-      <QueryClientProvider client={queryClient}>
-        <ShadowMCPInventoryTable
-          members={[]}
-          policyState="blocking"
-          projectID="project-id-2"
-          roles={[]}
-          shadowMCPPolicies={[blockingPolicy()]}
-        />
-      </QueryClientProvider>,
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <ShadowMCPInventoryTable
+            members={[]}
+            policyState="blocking"
+            projectID="project-id-2"
+            roles={[]}
+            shadowMCPPolicies={[blockingPolicy()]}
+          />
+        </QueryClientProvider>
+      </MemoryRouter>,
     );
 
     expect(screen.queryByText("First Project MCP")).toBeFalsy();
@@ -1051,16 +1033,18 @@ describe("ShadowMCPInventoryTable", () => {
     mocks.useShadowMCPInventory.mockReturnValue(enabledResponse);
     const queryClient = new QueryClient();
     const { rerender } = render(
-      <QueryClientProvider client={queryClient}>
-        <ShadowMCPInventoryTable
-          enabled
-          members={[]}
-          policyState="blocking"
-          projectID="project-id-1"
-          roles={[]}
-          shadowMCPPolicies={[blockingPolicy()]}
-        />
-      </QueryClientProvider>,
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <ShadowMCPInventoryTable
+            enabled
+            members={[]}
+            policyState="blocking"
+            projectID="project-id-1"
+            roles={[]}
+            shadowMCPPolicies={[blockingPolicy()]}
+          />
+        </QueryClientProvider>
+      </MemoryRouter>,
     );
 
     await waitFor(() => {
@@ -1068,16 +1052,18 @@ describe("ShadowMCPInventoryTable", () => {
     });
 
     rerender(
-      <QueryClientProvider client={queryClient}>
-        <ShadowMCPInventoryTable
-          enabled={false}
-          members={[]}
-          policyState="blocking"
-          projectID="project-id-1"
-          roles={[]}
-          shadowMCPPolicies={[blockingPolicy()]}
-        />
-      </QueryClientProvider>,
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <ShadowMCPInventoryTable
+            enabled={false}
+            members={[]}
+            policyState="blocking"
+            projectID="project-id-1"
+            roles={[]}
+            shadowMCPPolicies={[blockingPolicy()]}
+          />
+        </QueryClientProvider>
+      </MemoryRouter>,
     );
 
     expect(screen.queryByText("Enabled MCP")).toBeFalsy();

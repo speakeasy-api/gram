@@ -185,9 +185,7 @@ describe("ShadowMCP", () => {
 
     expect(screen.getByRole("heading", { name: "Shadow MCP" })).toBeTruthy();
     expect(
-      screen.getByText(
-        "Manage the Shadow MCP server inventory, allow decisions, and requests.",
-      ),
+      screen.getByText(/Every MCP server this project knows about/),
     ).toBeTruthy();
     expect(screen.getByText("No Policy")).toBeTruthy();
     expect(

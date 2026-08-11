@@ -69379,6 +69379,12 @@ components:
                     type: string
                 server_slug:
                     type: string
+                target_kind:
+                    type: string
+                    description: 'What the row identifies: a server URL observed or requested, or a local stdio command known only through its review. Absent means server_url.'
+                    enum:
+                        - server_url
+                        - stdio_command
                 top_users:
                     type: array
                     items:

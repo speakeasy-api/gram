@@ -231,21 +231,24 @@ type ListShadowMCPInventoryResponseBody struct {
 // GetShadowMCPInventoryServerResponseBody is the type of the "access" service
 // "getShadowMCPInventoryServer" endpoint HTTP response body.
 type GetShadowMCPInventoryServerResponseBody struct {
-	CanonicalServerURL string                                         `form:"canonical_server_url" json:"canonical_server_url" xml:"canonical_server_url"`
-	ServerSlug         string                                         `form:"server_slug" json:"server_slug" xml:"server_slug"`
-	URLHost            string                                         `form:"url_host" json:"url_host" xml:"url_host"`
-	ServerName         *string                                        `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
-	FirstSeen          string                                         `form:"first_seen" json:"first_seen" xml:"first_seen"`
-	LastSeen           string                                         `form:"last_seen" json:"last_seen" xml:"last_seen"`
-	LastCalled         *string                                        `form:"last_called,omitempty" json:"last_called,omitempty" xml:"last_called,omitempty"`
-	ObservedUseCount   int                                            `form:"observed_use_count" json:"observed_use_count" xml:"observed_use_count"`
-	UserCount          int                                            `form:"user_count" json:"user_count" xml:"user_count"`
-	TopUsers           []string                                       `form:"top_users" json:"top_users" xml:"top_users"`
-	Access             string                                         `form:"access" json:"access" xml:"access"`
-	RequestCount       int                                            `form:"request_count" json:"request_count" xml:"request_count"`
-	LatestRequest      *ShadowMCPInventoryRequestSummaryResponseBody  `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
-	ApprovalRequest    *ShadowMCPInventoryApprovalRequestResponseBody `form:"approval_request,omitempty" json:"approval_request,omitempty" xml:"approval_request,omitempty"`
-	AllowedPolicyIds   []string                                       `form:"allowed_policy_ids" json:"allowed_policy_ids" xml:"allowed_policy_ids"`
+	CanonicalServerURL string `form:"canonical_server_url" json:"canonical_server_url" xml:"canonical_server_url"`
+	ServerSlug         string `form:"server_slug" json:"server_slug" xml:"server_slug"`
+	URLHost            string `form:"url_host" json:"url_host" xml:"url_host"`
+	// What the row identifies: a server URL observed or requested, or a local
+	// stdio command known only through its review. Absent means server_url.
+	TargetKind       *string                                        `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
+	ServerName       *string                                        `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
+	FirstSeen        string                                         `form:"first_seen" json:"first_seen" xml:"first_seen"`
+	LastSeen         string                                         `form:"last_seen" json:"last_seen" xml:"last_seen"`
+	LastCalled       *string                                        `form:"last_called,omitempty" json:"last_called,omitempty" xml:"last_called,omitempty"`
+	ObservedUseCount int                                            `form:"observed_use_count" json:"observed_use_count" xml:"observed_use_count"`
+	UserCount        int                                            `form:"user_count" json:"user_count" xml:"user_count"`
+	TopUsers         []string                                       `form:"top_users" json:"top_users" xml:"top_users"`
+	Access           string                                         `form:"access" json:"access" xml:"access"`
+	RequestCount     int                                            `form:"request_count" json:"request_count" xml:"request_count"`
+	LatestRequest    *ShadowMCPInventoryRequestSummaryResponseBody  `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
+	ApprovalRequest  *ShadowMCPInventoryApprovalRequestResponseBody `form:"approval_request,omitempty" json:"approval_request,omitempty" xml:"approval_request,omitempty"`
+	AllowedPolicyIds []string                                       `form:"allowed_policy_ids" json:"allowed_policy_ids" xml:"allowed_policy_ids"`
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string `form:"blocked_policy_ids" json:"blocked_policy_ids" xml:"blocked_policy_ids"`
@@ -3706,21 +3709,24 @@ type ListRoleGrantResponseBody struct {
 // ShadowMCPInventoryServerResponseBody is used to define fields on response
 // body types.
 type ShadowMCPInventoryServerResponseBody struct {
-	CanonicalServerURL string                                         `form:"canonical_server_url" json:"canonical_server_url" xml:"canonical_server_url"`
-	ServerSlug         string                                         `form:"server_slug" json:"server_slug" xml:"server_slug"`
-	URLHost            string                                         `form:"url_host" json:"url_host" xml:"url_host"`
-	ServerName         *string                                        `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
-	FirstSeen          string                                         `form:"first_seen" json:"first_seen" xml:"first_seen"`
-	LastSeen           string                                         `form:"last_seen" json:"last_seen" xml:"last_seen"`
-	LastCalled         *string                                        `form:"last_called,omitempty" json:"last_called,omitempty" xml:"last_called,omitempty"`
-	ObservedUseCount   int                                            `form:"observed_use_count" json:"observed_use_count" xml:"observed_use_count"`
-	UserCount          int                                            `form:"user_count" json:"user_count" xml:"user_count"`
-	TopUsers           []string                                       `form:"top_users" json:"top_users" xml:"top_users"`
-	Access             string                                         `form:"access" json:"access" xml:"access"`
-	RequestCount       int                                            `form:"request_count" json:"request_count" xml:"request_count"`
-	LatestRequest      *ShadowMCPInventoryRequestSummaryResponseBody  `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
-	ApprovalRequest    *ShadowMCPInventoryApprovalRequestResponseBody `form:"approval_request,omitempty" json:"approval_request,omitempty" xml:"approval_request,omitempty"`
-	AllowedPolicyIds   []string                                       `form:"allowed_policy_ids" json:"allowed_policy_ids" xml:"allowed_policy_ids"`
+	CanonicalServerURL string `form:"canonical_server_url" json:"canonical_server_url" xml:"canonical_server_url"`
+	ServerSlug         string `form:"server_slug" json:"server_slug" xml:"server_slug"`
+	URLHost            string `form:"url_host" json:"url_host" xml:"url_host"`
+	// What the row identifies: a server URL observed or requested, or a local
+	// stdio command known only through its review. Absent means server_url.
+	TargetKind       *string                                        `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
+	ServerName       *string                                        `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
+	FirstSeen        string                                         `form:"first_seen" json:"first_seen" xml:"first_seen"`
+	LastSeen         string                                         `form:"last_seen" json:"last_seen" xml:"last_seen"`
+	LastCalled       *string                                        `form:"last_called,omitempty" json:"last_called,omitempty" xml:"last_called,omitempty"`
+	ObservedUseCount int                                            `form:"observed_use_count" json:"observed_use_count" xml:"observed_use_count"`
+	UserCount        int                                            `form:"user_count" json:"user_count" xml:"user_count"`
+	TopUsers         []string                                       `form:"top_users" json:"top_users" xml:"top_users"`
+	Access           string                                         `form:"access" json:"access" xml:"access"`
+	RequestCount     int                                            `form:"request_count" json:"request_count" xml:"request_count"`
+	LatestRequest    *ShadowMCPInventoryRequestSummaryResponseBody  `form:"latest_request,omitempty" json:"latest_request,omitempty" xml:"latest_request,omitempty"`
+	ApprovalRequest  *ShadowMCPInventoryApprovalRequestResponseBody `form:"approval_request,omitempty" json:"approval_request,omitempty" xml:"approval_request,omitempty"`
+	AllowedPolicyIds []string                                       `form:"allowed_policy_ids" json:"allowed_policy_ids" xml:"allowed_policy_ids"`
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string `form:"blocked_policy_ids" json:"blocked_policy_ids" xml:"blocked_policy_ids"`
@@ -4120,6 +4126,7 @@ func NewGetShadowMCPInventoryServerResponseBody(res *access.ShadowMCPInventorySe
 		CanonicalServerURL: res.CanonicalServerURL,
 		ServerSlug:         res.ServerSlug,
 		URLHost:            res.URLHost,
+		TargetKind:         res.TargetKind,
 		ServerName:         res.ServerName,
 		FirstSeen:          res.FirstSeen,
 		LastSeen:           res.LastSeen,

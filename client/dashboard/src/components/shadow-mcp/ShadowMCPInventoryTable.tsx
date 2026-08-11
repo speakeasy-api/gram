@@ -17,11 +17,17 @@ import {
   type DecideAccessTarget,
   DecideAccessSheet,
 } from "@/components/mcp-approvals/DecideAccessSheet";
-import { Button } from "@/components/ui/Button";
 import {
+  ShadowMCPInventoryReviewCell,
   ShadowMCPInventoryServerCell,
   ShadowMCPInventoryUsageCell,
 } from "./ShadowMCPInventoryCells";
+import { ReviewRequestSheet } from "@/components/mcp-approvals/ReviewRequestSheet";
+import {
+  defineFilters,
+  type FilterValue,
+  useFilterState,
+} from "@/components/filters";
 import {
   shadowMCPBlockingPolicyDisposition,
   shadowMCPInventoryStatus,
@@ -32,6 +38,42 @@ import {
   type ShadowMCPPolicyDisposition,
   type ShadowMCPPolicyState,
 } from "./shadowMCPInventoryStatus";
+
+const REVIEW_FILTER_OPTIONS = [
+  { value: "requested", label: "Awaiting decision" },
+  { value: "approved", label: "Approved" },
+  { value: "denied", label: "Denied" },
+  { value: "unreviewed", label: "Not reviewed" },
+  { value: "none", label: "No review" },
+];
+
+const INVENTORY_FILTERS = defineFilters([
+  { id: "review", label: "Review", kind: "select" },
+]);
+
+/** Pending decisions sort first; the rest follow the review lifecycle. */
+function reviewSortRank(server: ShadowMCPInventoryServer): number {
+  switch (server.approvalRequest?.status) {
+    case "requested":
+      return 0;
+    case "unreviewed":
+      return 2;
+    case "approved":
+    case "denied":
+      return 1;
+    case undefined:
+      return 3;
+  }
+}
+
+function matchesReviewFilter(
+  server: ShadowMCPInventoryServer,
+  review: string | undefined,
+): boolean {
+  if (!review) return true;
+  if (review === "none") return server.approvalRequest === undefined;
+  return server.approvalRequest?.status === review;
+}
 
 const INVENTORY_PAGE_LIMIT = 50;
 const FIRST_PAGE_CURSOR = "";
@@ -122,12 +164,16 @@ export function ShadowMCPInventoryTable({
   });
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortDescriptor | null>({
-    id: "lastCalled",
-    direction: "desc",
+    id: "review",
+    direction: "asc",
   });
   const [decideTarget, setDecideTarget] = useState<DecideAccessTarget | null>(
     null,
   );
+  const [reviewSheetServer, setReviewSheetServer] =
+    useState<ShadowMCPInventoryServer | null>(null);
+  const { values, setValue, clearValue, clearAll } =
+    useFilterState(INVENTORY_FILTERS);
   const disposition = shadowMCPBlockingPolicyDisposition(shadowMCPPolicies);
 
   useEffect(() => {
@@ -203,7 +249,23 @@ export function ShadowMCPInventoryTable({
     setCursor(nextCursor);
   };
 
+  const isStdio = (server: ShadowMCPInventoryServer) =>
+    server.targetKind === "stdio_command";
+
+  const openRow = (server: ShadowMCPInventoryServer) => {
+    // Local commands have no server page; their review lives in a sheet.
+    if (isStdio(server)) {
+      setReviewSheetServer(server);
+      return;
+    }
+    onOpenServer?.(server);
+  };
+
   const openDecide = (server: ShadowMCPInventoryServer) => {
+    if (isStdio(server)) {
+      setReviewSheetServer(server);
+      return;
+    }
     setDecideTarget({
       canonicalServerUrl: server.canonicalServerUrl,
       displayName:
@@ -213,21 +275,6 @@ export function ShadowMCPInventoryTable({
       // into the review and the decision drains it too.
       pendingBypassRequestId: server.latestRequest?.id,
     });
-  };
-
-  const renderActionsCell = (server: ShadowMCPInventoryServer) => {
-    return (
-      <Button
-        onClick={(event) => {
-          event.stopPropagation();
-          openDecide(server);
-        }}
-        size="xs"
-        variant="tertiary"
-      >
-        <Button.Text>Decide</Button.Text>
-      </Button>
-    );
   };
 
   const columns: Column<ShadowMCPInventoryServer>[] = [
@@ -260,6 +307,14 @@ export function ShadowMCPInventoryTable({
       ),
     },
     {
+      key: "review",
+      header: "Review",
+      sortable: true,
+      sortValue: reviewSortRank,
+      width: "0.8fr",
+      render: (server) => <ShadowMCPInventoryReviewCell server={server} />,
+    },
+    {
       key: "lastCalled",
       header: "Last called",
       sortable: true,
@@ -287,12 +342,6 @@ export function ShadowMCPInventoryTable({
       width: "0.5fr",
       render: (server) => <ShadowMCPInventoryUsageCell server={server} />,
     },
-    {
-      key: "actions",
-      header: "",
-      width: "0.3fr",
-      render: renderActionsCell,
-    },
   ];
 
   const servers = useMemo(() => {
@@ -303,17 +352,18 @@ export function ShadowMCPInventoryTable({
     return canUseInventoryQueryData ? (inventoryQuery.data?.servers ?? []) : [];
   }, [canUseInventoryQueryData, inventoryQuery.data?.servers, loadedServers]);
   const normalizedSearch = search.trim().toLowerCase();
+  const reviewFilter = values.review ?? undefined;
   const filteredServers = useMemo(() => {
-    if (normalizedSearch.length === 0) {
-      return servers;
-    }
-
-    return servers.filter((server) =>
-      [server.serverName, server.urlHost, server.canonicalServerUrl].some(
-        (value) => value?.toLowerCase().includes(normalizedSearch),
-      ),
-    );
-  }, [normalizedSearch, servers]);
+    return servers.filter((server) => {
+      if (!matchesReviewFilter(server, reviewFilter)) return false;
+      if (normalizedSearch.length === 0) return true;
+      return [
+        server.serverName,
+        server.urlHost,
+        server.canonicalServerUrl,
+      ].some((value) => value?.toLowerCase().includes(normalizedSearch));
+    });
+  }, [normalizedSearch, reviewFilter, servers]);
   const sortedServers = sortTableData(
     filteredServers,
     columns,
@@ -352,6 +402,24 @@ export function ShadowMCPInventoryTable({
         className,
       )}
     >
+      <ReviewRequestSheet
+        request={
+          reviewSheetServer?.approvalRequest
+            ? {
+                id: reviewSheetServer.approvalRequest.id,
+                targetRaw: reviewSheetServer.canonicalServerUrl,
+                requesterCount:
+                  reviewSheetServer.approvalRequest.requesterCount,
+              }
+            : null
+        }
+        open={reviewSheetServer !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setReviewSheetServer(null);
+          }
+        }}
+      />
       <DecideAccessSheet
         target={decideTarget}
         open={decideTarget !== null}
@@ -374,6 +442,14 @@ export function ShadowMCPInventoryTable({
           placeholder="Search servers..."
           value={search}
         />
+        <Page.Toolbar.Filters
+          schema={INVENTORY_FILTERS}
+          values={values}
+          optionsById={{ review: REVIEW_FILTER_OPTIONS }}
+          onChange={setValue as (id: string, value: FilterValue) => void}
+          onClear={clearValue as (id: string) => void}
+          onClearAll={clearAll}
+        />
       </Page.Toolbar>
       <Table
         columns={columns}
@@ -387,7 +463,7 @@ export function ShadowMCPInventoryTable({
           hasMore={Boolean(nextCursor)}
           isLoading={isLoadingMore}
           noResultsMessage={noResultsMessage}
-          onRowClick={onOpenServer}
+          onRowClick={openRow}
           rowKey={(row) => row.canonicalServerUrl}
           className="min-h-0 content-start overflow-y-auto"
           renderRow={(row, rowElement) => (

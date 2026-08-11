@@ -10,7 +10,6 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { useProject } from "@/contexts/Auth";
-import type { ApprovalRequestSummary } from "@gram/client/models/components/approvalrequestsummary.js";
 
 /**
  * The review surface for approval requests with no server page to live on
@@ -18,12 +17,19 @@ import type { ApprovalRequestSummary } from "@gram/client/models/components/appr
  * their Shadow MCP server page; this sheet keeps stdio reviews inside the
  * queue rather than on a page of their own.
  */
+/** The slice of a review the sheet header needs; the body fetches the rest. */
+export type ReviewSheetRequest = {
+  id: string;
+  targetRaw: string;
+  requesterCount: number;
+};
+
 export function ReviewRequestSheet({
   request,
   open,
   onOpenChange,
 }: {
-  request: ApprovalRequestSummary | null;
+  request: ReviewSheetRequest | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }): JSX.Element | null {

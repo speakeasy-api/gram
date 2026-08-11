@@ -573,18 +573,21 @@ type ShadowMCPInventoryServer struct {
 	CanonicalServerURL string
 	ServerSlug         string
 	URLHost            string
-	ServerName         *string
-	FirstSeen          string
-	LastSeen           string
-	LastCalled         *string
-	ObservedUseCount   int
-	UserCount          int
-	TopUsers           []string
-	Access             string
-	RequestCount       int
-	LatestRequest      *ShadowMCPInventoryRequestSummary
-	ApprovalRequest    *ShadowMCPInventoryApprovalRequest
-	AllowedPolicyIds   []string
+	// What the row identifies: a server URL observed or requested, or a local
+	// stdio command known only through its review. Absent means server_url.
+	TargetKind       *string
+	ServerName       *string
+	FirstSeen        string
+	LastSeen         string
+	LastCalled       *string
+	ObservedUseCount int
+	UserCount        int
+	TopUsers         []string
+	Access           string
+	RequestCount     int
+	LatestRequest    *ShadowMCPInventoryRequestSummary
+	ApprovalRequest  *ShadowMCPInventoryApprovalRequest
+	AllowedPolicyIds []string
 	// Enabled blocking policies that block this server via a risk_policy:block
 	// grant (allow_all policies only).
 	BlockedPolicyIds []string
