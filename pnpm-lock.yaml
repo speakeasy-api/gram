@@ -312,7 +312,7 @@ importers:
         specifier: ^2.9.0
         version: 2.9.0(@tanstack/react-router@1.170.18(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-router@8.3.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)
       posthog-js:
-        specifier: ^1.402.3
+        specifier: ^1.411.0
         version: 1.411.0
       radix-ui:
         specifier: ^1.6.0
