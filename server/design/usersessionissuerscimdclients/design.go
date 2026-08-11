@@ -40,7 +40,7 @@ var _ = Service("userSessionIssuersCimdClients", func() {
 	})
 
 	Method("createUserSessionIssuerCimdClient", func() {
-		Description("Allow an additional CIMD document URL on a user_session_issuer, beyond the preset catalog. The URL is validated for draft-ietf-oauth-client-id-metadata-document-02 §3 syntax and rejected outright when malformed. Gram also probes the document and returns a warning when the fetch or validation fails, but still saves the entry — a vendor's document host being briefly unreachable must not block configuration.")
+		Description("Allow an additional CIMD document URL on a user_session_issuer, beyond the preset catalog. The URL is validated for draft-ietf-oauth-client-id-metadata-document-02 §3 syntax and rejected outright when malformed. The document itself is deliberately NOT fetched here: a vendor's host being briefly unreachable must not block configuration, and an advisory warning nobody can act on is not worth an outbound request on every write. Call verifyURL first to check that the document is reachable and valid.")
 
 		Payload(func() {
 			Extend(CreateUserSessionIssuerCimdClientForm)
@@ -62,6 +62,32 @@ var _ = Service("userSessionIssuersCimdClients", func() {
 		Meta("openapi:operationId", "createUserSessionIssuerCimdClient")
 		Meta("openapi:extension:x-speakeasy-name-override", "create")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateUserSessionIssuerCimdClient"}`)
+	})
+
+	Method("verifyURL", func() {
+		Description("Check that a CIMD document URL is reachable and spec-compliant, without saving anything. A pre-flight for create: the same fetch and validation the authorization server performs, reported in full so an operator can fix the URL before adding it. Every probe outcome is a 200 with verified true or false — errors are reserved for a malformed request, missing authorization, or an exceeded rate limit. Rate limited per project, since this is the one endpoint that makes Gram fetch a caller-chosen URL.")
+
+		Payload(func() {
+			Attribute("client_id_metadata_uri", String, "The https URL to probe.")
+			Required("client_id_metadata_uri")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(VerifyCimdURLResult)
+
+		HTTP(func() {
+			POST("/rpc/userSessionIssuersCimdClients.verifyURL")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "verifyUserSessionIssuerCimdClientURL")
+		Meta("openapi:extension:x-speakeasy-name-override", "verifyURL")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "VerifyUserSessionIssuerCimdClientURL"}`)
 	})
 
 	Method("listUserSessionIssuerCimdClients", func() {
@@ -169,10 +195,9 @@ var CreateUserSessionIssuerCimdClientForm = Type("CreateUserSessionIssuerCimdCli
 })
 
 var CreateUserSessionIssuerCimdClientResult = Type("CreateUserSessionIssuerCimdClientResult", func() {
-	Description("Result of allowing a CIMD document URL, including any non-fatal probe warning.")
+	Description("Result of allowing a CIMD document URL. Reachability is not reported here — call verifyURL for that.")
 
 	Attribute("client", UserSessionIssuerCimdClient)
-	Attribute("probe_warning", String, "Set when Gram could not fetch or validate the document at this URL. The entry was still saved; the URL will be admitted, but a client presenting it will fail at authorization time until the document is reachable and valid.")
 
 	Required("client")
 })
@@ -209,6 +234,21 @@ var ListUserSessionIssuerCimdClientsResult = Type("ListUserSessionIssuerCimdClie
 	Attribute("next_cursor", String, "Cursor for the next page; empty when exhausted.")
 
 	Required("items")
+})
+
+var VerifyCimdURLResult = Type("VerifyCimdURLResult", func() {
+	Description("Outcome of probing a CIMD document URL. Nothing is persisted.")
+
+	Attribute("verified", Boolean, "True when the document was fetched and passed every check the authorization server applies. A client presenting this URL will not be rejected for its document.")
+	Attribute("outcome", String, "Why the probe ended as it did.", func() {
+		Enum("valid", "invalid_url", "unreachable", "unparseable", "invalid_document")
+	})
+	Attribute("http_status", Int, "Status the document endpoint returned; omitted when no response was received.")
+	Attribute("reason", String, "Stable machine label for the rule that rejected the document, e.g. client_id_mismatch. Set only for invalid_url and invalid_document.")
+	Attribute("detail", String, "Human-readable explanation, safe to display to the operator.")
+	Attribute("client_name", String, "The document's client_name, set only when verified. Lets an operator confirm the URL names the client they intended.")
+
+	Required("verified", "outcome", "detail")
 })
 
 var CimdClientPreset = Type("CimdClientPreset", func() {

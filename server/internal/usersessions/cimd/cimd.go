@@ -7,14 +7,34 @@
 // The Resolver owns the fetch lifecycle and its telemetry (metrics + logs) but
 // deliberately nothing else: no caching (until AIS-216) and no persistence.
 // Callers own the upsert of the resolved client and the mapping of returned
-// errors onto their wire format. Spec-defined rejections are returned as
-// *oauthwire.Error with a client-safe description; transport-level fetch
-// failures are returned as plain wrapped errors whose text may reference
-// internal details and MUST NOT be echoed to the OAuth client verbatim. The
-// same opacity rule applies to the internal result taxonomy: parse failures
-// are distinguished from fetch failures only in metrics and logs, never in the
-// returned error shape, so unauthenticated callers cannot use the wire
+// errors onto their wire format.
+//
+// # Two entry points, two disclosure levels
+//
+// Resolve is the OAuth path. It serves an UNAUTHENTICATED surface, so it
+// deliberately discloses as little as possible: spec-defined rejections come
+// back as *oauthwire.Error with a client-safe description, while every
+// transport-level failure comes back as a plain wrapped error whose text may
+// reference internal details and MUST NOT be echoed to the OAuth client
+// verbatim. The opacity rule extends to the result taxonomy — a parse failure
+// is distinguished from a fetch failure only in metrics and logs, never in the
+// returned error shape, so an unauthenticated caller cannot use the wire
 // response as an oracle for probing external hosts through Gram.
+//
+// Inspect is the management path. It serves an AUTHENTICATED, project-scoped
+// surface where the caller is an operator configuring their own issuer, and
+// the oracle concern above does not apply: they are entitled to know whether
+// the URL they just typed is unreachable, serving something that is not JSON,
+// or serving a document that violates the spec, because that is the whole
+// point of asking. It therefore returns the full outcome taxonomy plus an
+// operator-facing explanation.
+//
+// Inspect still does NOT leak Gram's internals. Its Detail is composed from
+// the outcome, never from the raw transport error, so guardian SSRF denials,
+// DNS failures, and internal hostnames stay in the logs where they belong.
+// Both entry points run exactly the same fetch and validation logic and emit
+// exactly the same telemetry; they differ only in how much of what was
+// learned reaches the caller.
 package cimd
 
 import (
@@ -70,6 +90,16 @@ const (
 	maxRedirectURIs      = 32
 	maxRedirectURILength = 2048
 )
+
+// ErrDocumentTooLarge marks the one fetch failure that arrives with a
+// successful HTTP status: the response began, but the body ran past
+// maxDocumentBytes. It exists so Inspect can tell an operator their document
+// is oversized instead of guessing at a 200 that failed to read.
+//
+// It is wrapped behind the existing descriptive prefix rather than replacing
+// it, so the "document exceeds N byte limit" text every log and the opaque
+// OAuth error already carried is preserved; the sentinel is appended to it.
+var ErrDocumentTooLarge = errors.New("document exceeds size limit")
 
 // Document is the subset of a Client ID Metadata Document that the
 // user-session AS honours, plus the fields it must detect to reject a
@@ -200,6 +230,21 @@ func newFetchClientFrom(base *guardian.HTTPClient) *guardian.HTTPClient {
 // auth method, secret/private-key bans, and Gram's same-origin redirect-URI
 // binding.
 func (r *Resolver) Resolve(ctx context.Context, clientID string) (*Document, error) {
+	// The OAuth path takes only the document and the error, discarding the
+	// outcome taxonomy. That discard is the disclosure boundary described in
+	// the package doc: everything Inspect would reveal is computed here too,
+	// and deliberately dropped before it can reach an unauthenticated caller.
+	result := r.inspect(ctx, clientID)
+	if result.err != nil {
+		return nil, result.err
+	}
+	return result.Document, nil
+}
+
+// inspect runs the full resolution and records the telemetry. It is the sole
+// implementation behind both Resolve and Inspect, so the two can never drift
+// in what they fetch, what they accept, or what they report to o11y.
+func (r *Resolver) inspect(ctx context.Context, clientID string) inspection {
 	clientIDURL, err := ValidateClientIDURL(clientID)
 	if err != nil {
 		// Pre-fetch rejection: no origin has been established (the URL did
@@ -216,7 +261,15 @@ func (r *Resolver) Resolve(ctx context.Context, clientID string) (*Document, err
 			responseBytes: 0,
 			err:           err,
 		})
-		return nil, err
+		return inspection{
+			Document:        nil,
+			outcome:         OutcomeInvalidURL,
+			status:          0,
+			reason:          validationReasonOf(err),
+			err:             err,
+			safeDescription: safeDescriptionOf(err),
+			tooLarge:        false,
+		}
 	}
 	origin := clientIDURL.Host
 
@@ -234,14 +287,23 @@ func (r *Resolver) Resolve(ctx context.Context, clientID string) (*Document, err
 			responseBytes: 0,
 			err:           err,
 		})
-		return nil, fmt.Errorf("fetch client metadata document: %w", err)
+		return inspection{
+			Document:        nil,
+			outcome:         OutcomeUnreachable,
+			status:          status,
+			reason:          "",
+			err:             fmt.Errorf("fetch client metadata document: %w", err),
+			safeDescription: "",
+			tooLarge:        errors.Is(err, ErrDocumentTooLarge),
+		}
 	}
 
-	// A malformed body is reported like any other fetch failure (plain
-	// wrapped error, generic wire response) rather than as a distinct OAuth
-	// error: a distinguishable "reachable but not JSON" response would give
-	// unauthenticated callers an oracle for probing external hosts through
-	// Gram. The parse_error result exists only in telemetry.
+	// On the OAuth path a malformed body is reported like any other fetch
+	// failure (plain wrapped error, generic wire response) rather than as a
+	// distinct OAuth error: a distinguishable "reachable but not JSON"
+	// response would give unauthenticated callers an oracle for probing
+	// external hosts through Gram. The distinction lives in telemetry and on
+	// the authenticated Inspect path only.
 	var doc Document
 	if err := json.Unmarshal(body, &doc); err != nil {
 		r.observe(ctx, resolveObservation{
@@ -255,7 +317,15 @@ func (r *Resolver) Resolve(ctx context.Context, clientID string) (*Document, err
 			responseBytes: len(body),
 			err:           err,
 		})
-		return nil, fmt.Errorf("parse client metadata document: %w", err)
+		return inspection{
+			Document:        nil,
+			outcome:         OutcomeUnparseable,
+			status:          status,
+			reason:          "",
+			err:             fmt.Errorf("parse client metadata document: %w", err),
+			safeDescription: "",
+			tooLarge:        false,
+		}
 	}
 
 	if err := validateDocument(&doc, clientID, clientIDURL); err != nil {
@@ -270,7 +340,15 @@ func (r *Resolver) Resolve(ctx context.Context, clientID string) (*Document, err
 			responseBytes: len(body),
 			err:           err,
 		})
-		return nil, err
+		return inspection{
+			Document:        nil,
+			outcome:         OutcomeInvalidDocument,
+			status:          status,
+			reason:          validationReasonOf(err),
+			err:             err,
+			safeDescription: safeDescriptionOf(err),
+			tooLarge:        false,
+		}
 	}
 
 	r.observe(ctx, resolveObservation{
@@ -284,7 +362,15 @@ func (r *Resolver) Resolve(ctx context.Context, clientID string) (*Document, err
 		responseBytes: len(body),
 		err:           nil,
 	})
-	return &doc, nil
+	return inspection{
+		Document:        &doc,
+		outcome:         OutcomeValid,
+		status:          status,
+		reason:          "",
+		err:             nil,
+		safeDescription: "",
+		tooLarge:        false,
+	}
 }
 
 // resolveObservation carries everything one Resolve attempt learned to the
@@ -382,7 +468,7 @@ func (r *Resolver) fetchDocument(ctx context.Context, origin string, clientID st
 	if err != nil {
 		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			r.metrics.RecordResponseSize(ctx, origin, maxDocumentBytes)
-			return nil, resp.StatusCode, fmt.Errorf("document exceeds %d byte limit", maxDocumentBytes)
+			return nil, resp.StatusCode, fmt.Errorf("document exceeds %d byte limit: %w", maxDocumentBytes, ErrDocumentTooLarge)
 		}
 		return nil, resp.StatusCode, fmt.Errorf("read document body: %w", err)
 	}
