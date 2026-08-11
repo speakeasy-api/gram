@@ -88,11 +88,9 @@ export function ResourceLink({
     }
   } else if (resourceKind === "skill") {
     IconEl = Terminal;
-    // Skill scopes are project-scoped: the resource id is the project id. Fall
-    // back to the bucket's projectId if that lookup misses.
-    const proj =
-      projectMap.get(resourceId) ??
-      (projectId ? projectMap.get(projectId) : undefined);
+    // Skill scopes are project-scoped: the resource id is the project id, so a
+    // direct project lookup is enough (same as the "project" branch above).
+    const proj = projectMap.get(resourceId);
     if (proj) {
       label = proj.name;
       to = `/${orgSlug}/projects/${proj.slug}/skills`;
