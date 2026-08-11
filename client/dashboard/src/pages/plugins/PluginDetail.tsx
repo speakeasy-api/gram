@@ -1,4 +1,4 @@
-import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
+import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
 import { MCPStatusIndicator } from "@/components/mcp/MCPStatusIndicator";
@@ -16,7 +16,7 @@ import { mcpServerRouteParam } from "@/lib/sources";
 import {
   DangerSettingsSection,
   SettingsSection,
-} from "@/pages/mcp/x/tabs/settings/SettingsSection";
+} from "@/components/detail/settings-section";
 import { useRoutes } from "@/routes";
 import {
   invalidateAllPlugin,
@@ -578,15 +578,15 @@ export default function PluginDetail(): JSX.Element | null {
                 </Stack>
               </div>
 
-              <MetricCardGroup>
-                <MetricCard
+              <StatTileGroup>
+                <StatTile
                   title="MCP servers"
                   value={plugin.serverCount ?? servers.length}
                   tone="information"
                   format="number"
                   icon="network"
                 />
-                <MetricCard
+                <StatTile
                   title="Skills"
                   value={plugin.skillCount ?? 0}
                   tone="information"
@@ -595,7 +595,7 @@ export default function PluginDetail(): JSX.Element | null {
                 />
                 {showAssignments && (
                   <>
-                    <MetricCard
+                    <StatTile
                       title="Assignments"
                       value={plugin.assignmentCount ?? assignments.length}
                       tone="information"
@@ -603,7 +603,7 @@ export default function PluginDetail(): JSX.Element | null {
                       icon="users"
                       subtext="Roles, users, and emails"
                     />
-                    <MetricCard
+                    <StatTile
                       title="Installs"
                       value={installs}
                       tone="information"
@@ -624,7 +624,7 @@ export default function PluginDetail(): JSX.Element | null {
                     />
                   </>
                 )}
-              </MetricCardGroup>
+              </StatTileGroup>
 
               <PublishFreshnessIndicator publishStatus={publishStatus} />
             </section>

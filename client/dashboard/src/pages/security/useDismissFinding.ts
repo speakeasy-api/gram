@@ -8,6 +8,7 @@ import { invalidateAllRiskListDismissedResults } from "@gram/client/react-query/
 import { invalidateAllRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { invalidateAllRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { invalidateAllRiskRuleBreakdown } from "@gram/client/react-query/riskRuleBreakdown.js";
+import { invalidateAllRiskSignals } from "@gram/client/react-query/riskSignals.js";
 import { invalidateAllRiskUserBreakdown } from "@gram/client/react-query/riskUserBreakdown.js";
 import { showUndoToast } from "@/lib/toast-undo";
 
@@ -85,6 +86,8 @@ export function useDismissFinding(): {
     void invalidateAllRiskOverview(queryClient);
     void invalidateAllRiskRuleBreakdown(queryClient);
     void invalidateAllRiskUserBreakdown(queryClient);
+    // The Watchdog page clusters the same findings into signals.
+    void invalidateAllRiskSignals(queryClient);
   }, [queryClient]);
 
   const removeOptimistic = useCallback((ids: string[]) => {

@@ -307,8 +307,11 @@ FROM risk_results rr
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE rr.project_id = $1
   AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+  AND rr.skill_version_id IS NULL
 `
 
+// Total for ListRiskResultsByProjectFound, which drops skill-anchored rows;
+// counting them here would page an empty list against a non-zero total.
 func (q *Queries) CountAllFindings(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, countAllFindings, projectID)
 	var column_1 int64
@@ -366,8 +369,10 @@ SELECT COUNT(*)::BIGINT
 FROM risk_results
 WHERE project_id = $1
   AND false_positive_at IS NOT NULL
+  AND skill_version_id IS NULL
 `
 
+// Total for ListFalsePositiveRiskResults, which drops skill-anchored rows.
 func (q *Queries) CountFalsePositiveRiskResults(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, countFalsePositiveRiskResults, projectID)
 	var column_1 int64
@@ -384,6 +389,7 @@ WHERE project_id = $1
   AND found IS TRUE
   AND excluded_at IS NULL
   AND false_positive_at IS NULL
+  AND skill_version_id IS NULL
 `
 
 type CountFindingsByPolicyParams struct {
@@ -392,6 +398,9 @@ type CountFindingsByPolicyParams struct {
 	RiskPolicyVersion int64
 }
 
+// Reported next to CountAnalyzedMessages, so it stays message-scoped: a
+// skill-anchored finding has no message behind it and would inflate the
+// numerator over a denominator that never counted it. (cubic)
 func (q *Queries) CountFindingsByPolicy(ctx context.Context, arg CountFindingsByPolicyParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countFindingsByPolicy, arg.ProjectID, arg.RiskPolicyID, arg.RiskPolicyVersion)
 	var column_1 int64
@@ -425,6 +434,7 @@ JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
 WHERE rr.project_id = $1
   AND rr.risk_policy_id = $2
   AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+  AND rr.skill_version_id IS NULL
 `
 
 type CountRiskResultsByProjectAndPolicyParams struct {
@@ -1286,6 +1296,12 @@ SELECT
   , ccp.project_id
   , COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::text AS user_id
   , COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::text AS external_user_id
+  -- The part's own source wins: the parent message may be absent or carry a
+  -- NULL source, and the content-part listing reports ccp.source for the same
+  -- part.
+  , COALESCE(ccp.source, cm.source, '')::text AS chat_source
+  , COALESCE(dir.department_name, '')::text AS team
+  , COALESCE(u.email, '')::text AS user_email
 FROM chat_content_parts ccp
 LEFT JOIN chat_messages cm
   ON cm.id = ccp.parent_chat_message_id
@@ -1293,6 +1309,22 @@ LEFT JOIN chat_messages cm
 LEFT JOIN chats c
   ON c.id = ccp.chat_id
   AND c.deleted IS FALSE
+LEFT JOIN users u
+  ON u.id = COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''))
+LEFT JOIN LATERAL (
+  SELECT d.attributes->>'department_name' AS department_name
+  FROM directory_users d
+  WHERE d.organization_id = c.organization_id
+    AND d.deleted IS FALSE
+    AND d.workos_deleted IS FALSE
+    AND (d.user_id = u.id OR LOWER(d.email) = LOWER(u.email))
+  -- NULLS LAST: an email-matched row leaves the equality NULL (d.user_id is
+  -- unset), and DESC would otherwise sort NULL above TRUE, letting a stale
+  -- email row shadow the linked profile. d.id makes equal-timestamp ties
+  -- deterministic.
+  ORDER BY (d.user_id = u.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
+  LIMIT 1
+) dir ON TRUE
 WHERE ccp.id = ANY($1::uuid[])
   AND ccp.project_id = ANY($2::uuid[])
   AND ccp.deleted IS FALSE
@@ -1320,6 +1352,9 @@ type GetChatContentPartAttributionRow struct {
 	ProjectID      uuid.NullUUID
 	UserID         string
 	ExternalUserID string
+	ChatSource     string
+	Team           string
+	UserEmail      string
 }
 
 // Resolves denormalized attribution for a content-part finding. The parent
@@ -1346,6 +1381,9 @@ func (q *Queries) GetChatContentPartAttribution(ctx context.Context, arg GetChat
 			&i.ProjectID,
 			&i.UserID,
 			&i.ExternalUserID,
+			&i.ChatSource,
+			&i.Team,
+			&i.UserEmail,
 		); err != nil {
 			return nil, err
 		}
@@ -1399,10 +1437,14 @@ const getChatMessageAttribution = `-- name: GetChatMessageAttribution :many
 SELECT
     cm.id
   , cm.chat_id
+  , cm.project_id
   , cm.created_at AS message_created_at
   , COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''), '')::text AS user_id
   , COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::text AS external_user_id
   , COALESCE(thread.assistant_id, '00000000-0000-0000-0000-000000000000'::uuid) AS assistant_id
+  , COALESCE(cm.source, '')::text AS chat_source
+  , COALESCE(dir.department_name, '')::text AS team
+  , COALESCE(u.email, '')::text AS user_email
 FROM chat_messages cm
 LEFT JOIN chats c
   ON c.id = cm.chat_id
@@ -1415,25 +1457,70 @@ LEFT JOIN LATERAL (
   ORDER BY at.created_at DESC
   LIMIT 1
 ) thread ON TRUE
+LEFT JOIN users u
+  ON u.id = COALESCE(NULLIF(cm.user_id, ''), NULLIF(c.user_id, ''))
+LEFT JOIN LATERAL (
+  SELECT d.attributes->>'department_name' AS department_name
+  FROM directory_users d
+  WHERE d.organization_id = c.organization_id
+    AND d.deleted IS FALSE
+    AND d.workos_deleted IS FALSE
+    AND (d.user_id = u.id OR LOWER(d.email) = LOWER(u.email))
+  -- NULLS LAST: an email-matched row leaves the equality NULL (d.user_id is
+  -- unset), and DESC would otherwise sort NULL above TRUE, letting a stale
+  -- email row shadow the linked profile. d.id makes equal-timestamp ties
+  -- deterministic.
+  ORDER BY (d.user_id = u.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
+  LIMIT 1
+) dir ON TRUE
 WHERE cm.id = ANY($1::uuid[])
+  AND cm.project_id = ANY($2::uuid[])
+  -- Nothing in the schema ties a message's project_id to its chat's, so a
+  -- message pointing at a chat in another project is rejected outright rather
+  -- than attributed: the chat-level user ids, the assistant link, and the
+  -- directory lookup's organization all come from that chat.
+  AND EXISTS (
+    SELECT 1
+    FROM chats pc
+    WHERE pc.id = cm.chat_id
+      AND pc.project_id = cm.project_id
+  )
 `
+
+type GetChatMessageAttributionParams struct {
+	Ids        []uuid.UUID
+	ProjectIds []uuid.UUID
+}
 
 type GetChatMessageAttributionRow struct {
 	ID               uuid.UUID
 	ChatID           uuid.UUID
+	ProjectID        uuid.NullUUID
 	MessageCreatedAt pgtype.Timestamptz
 	UserID           string
 	ExternalUserID   string
 	AssistantID      uuid.UUID
+	ChatSource       string
+	Team             string
+	UserEmail        string
 }
 
 // Resolves the denormalized attribution (chat id, user ids, message event
-// time, assistant link) the ClickHouse finding writer stamps on risk_findings
-// rows at ingest. Message-level ids win over chat-level ids; both empty and
-// NULL collapse to ”. The assistant id is the chat's most recent live
-// assistant_threads link, or the nil UUID when the chat has no assistant.
-func (q *Queries) GetChatMessageAttribution(ctx context.Context, ids []uuid.UUID) ([]GetChatMessageAttributionRow, error) {
-	rows, err := q.db.Query(ctx, getChatMessageAttribution, ids)
+// time, assistant link, source surface, directory team) the ClickHouse finding
+// writer stamps on risk_findings rows at ingest. Message-level ids win over
+// chat-level ids; both empty and NULL collapse to ”. The assistant id is the
+// chat's most recent live assistant_threads link, or the nil UUID when the
+// chat has no assistant. The team is the resolved user's WorkOS directory
+// department, preferring an explicit user link over an email match (same
+// precedence as the spend-rules directory lookup) so a stale email row cannot
+// shadow the linked profile; empty when the org has no directory or the user
+// has no profile. A findings batch can span projects, so the scope is the
+// batch's set of project ids rather than a single id. project_id is still
+// returned because that set only proves the message belongs to SOME project
+// in the batch: the caller re-checks it against the individual finding's
+// project before stamping attribution.
+func (q *Queries) GetChatMessageAttribution(ctx context.Context, arg GetChatMessageAttributionParams) ([]GetChatMessageAttributionRow, error) {
+	rows, err := q.db.Query(ctx, getChatMessageAttribution, arg.Ids, arg.ProjectIds)
 	if err != nil {
 		return nil, err
 	}
@@ -1444,10 +1531,14 @@ func (q *Queries) GetChatMessageAttribution(ctx context.Context, ids []uuid.UUID
 		if err := rows.Scan(
 			&i.ID,
 			&i.ChatID,
+			&i.ProjectID,
 			&i.MessageCreatedAt,
 			&i.UserID,
 			&i.ExternalUserID,
 			&i.AssistantID,
+			&i.ChatSource,
+			&i.Team,
+			&i.UserEmail,
 		); err != nil {
 			return nil, err
 		}
@@ -2026,6 +2117,9 @@ WHERE rr.id = $1
   AND rr.found IS TRUE
   AND rr.excluded_at IS NULL
   AND rr.false_positive_at IS NULL
+  -- Skill-anchored findings have no chat, so chat_id would come back NULL and
+  -- fail the non-null scan. They need their own read path, not this one.
+  AND rr.skill_version_id IS NULL
 `
 
 type GetRiskResultByIDParams struct {
@@ -2059,7 +2153,7 @@ func (q *Queries) GetRiskResultByID(ctx context.Context, arg GetRiskResultByIDPa
 
 const getRiskResultsByIDs = `-- name: GetRiskResultsByIDs :many
 
-SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, chat_content_part_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, spans, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
+SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, chat_content_part_id, skill_version_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, spans, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
 FROM risk_results
 WHERE project_id = $1
   AND id = ANY($2::uuid[])
@@ -2100,6 +2194,7 @@ func (q *Queries) GetRiskResultsByIDs(ctx context.Context, arg GetRiskResultsByI
 			&i.RiskPolicyVersion,
 			&i.ChatMessageID,
 			&i.ChatContentPartID,
+			&i.SkillVersionID,
 			&i.Source,
 			&i.Found,
 			&i.RuleID,
@@ -2631,6 +2726,9 @@ LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
 LEFT JOIN chats c ON c.id = COALESCE(cm.chat_id, ccp.chat_id) AND c.deleted IS FALSE
 WHERE rr.project_id = $1
   AND rr.false_positive_at IS NOT NULL
+  -- Skill-anchored findings have no chat, so chat_id would come back NULL and
+  -- fail the non-null scan. They need their own read path, not this one.
+  AND rr.skill_version_id IS NULL
   AND (
     $2::timestamptz IS NULL
     OR (rr.false_positive_at, rr.id) < ($2::timestamptz, $3::uuid)
@@ -2872,6 +2970,7 @@ categorized AS (
   FROM risk_results rr
   WHERE rr.project_id = $3::uuid
     AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+    AND rr.skill_version_id IS NULL
     AND rr.created_at >= $1
     AND rr.created_at < $2
 ),
@@ -2937,6 +3036,7 @@ SELECT
 FROM risk_results rr
 WHERE rr.project_id = $1
   AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+  AND rr.skill_version_id IS NULL
   AND rr.created_at >= $2
   AND rr.created_at < $3
 GROUP BY rr.rule_id, rr.source
@@ -3216,7 +3316,7 @@ func (q *Queries) ListRiskPolicyEvalReviews(ctx context.Context, arg ListRiskPol
 }
 
 const listRiskResultsByChatFound = `-- name: ListRiskResultsByChatFound :many
-SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.chat_content_part_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.spans, rr.dead_letter_reason, rr.excluded_at, rr.excluded_exclusion_id, rr.false_positive_at, rr.false_positive_reason, rr.created_at, COALESCE(cm.chat_id, ccp.chat_id) AS chat_id, COALESCE(cm.created_at, ccp.created_at) AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
+SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.chat_content_part_id, rr.skill_version_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.spans, rr.dead_letter_reason, rr.excluded_at, rr.excluded_exclusion_id, rr.false_positive_at, rr.false_positive_reason, rr.created_at, COALESCE(cm.chat_id, ccp.chat_id) AS chat_id, COALESCE(cm.created_at, ccp.created_at) AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
 FROM risk_results rr
 LEFT JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
@@ -3256,6 +3356,7 @@ type ListRiskResultsByChatFoundRow struct {
 	RiskPolicyVersion   int64
 	ChatMessageID       uuid.NullUUID
 	ChatContentPartID   uuid.NullUUID
+	SkillVersionID      uuid.NullUUID
 	Source              string
 	Found               bool
 	RuleID              pgtype.Text
@@ -3302,6 +3403,7 @@ func (q *Queries) ListRiskResultsByChatFound(ctx context.Context, arg ListRiskRe
 			&i.RiskPolicyVersion,
 			&i.ChatMessageID,
 			&i.ChatContentPartID,
+			&i.SkillVersionID,
 			&i.Source,
 			&i.Found,
 			&i.RuleID,
@@ -3335,7 +3437,7 @@ func (q *Queries) ListRiskResultsByChatFound(ctx context.Context, arg ListRiskRe
 }
 
 const listRiskResultsByProjectAndPolicy = `-- name: ListRiskResultsByProjectAndPolicy :many
-SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.chat_content_part_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.spans, rr.dead_letter_reason, rr.excluded_at, rr.excluded_exclusion_id, rr.false_positive_at, rr.false_positive_reason, rr.created_at, COALESCE(cm.chat_id, ccp.chat_id) AS chat_id, COALESCE(cm.created_at, ccp.created_at) AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
+SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.chat_content_part_id, rr.skill_version_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.spans, rr.dead_letter_reason, rr.excluded_at, rr.excluded_exclusion_id, rr.false_positive_at, rr.false_positive_reason, rr.created_at, COALESCE(cm.chat_id, ccp.chat_id) AS chat_id, COALESCE(cm.created_at, ccp.created_at) AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
 FROM risk_results rr
 LEFT JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
@@ -3351,6 +3453,9 @@ LEFT JOIN LATERAL (
 WHERE rr.project_id = $1
   AND rr.risk_policy_id = $2
   AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+  -- Skill-anchored findings have no chat, so chat_id would come back NULL and
+  -- fail the non-null scan. They need their own read path, not this one.
+  AND rr.skill_version_id IS NULL
   AND (
     $3::timestamptz IS NULL
     OR (COALESCE(cm.created_at, ccp.created_at), rr.id) < ($3::timestamptz, $4::uuid)
@@ -3375,6 +3480,7 @@ type ListRiskResultsByProjectAndPolicyRow struct {
 	RiskPolicyVersion   int64
 	ChatMessageID       uuid.NullUUID
 	ChatContentPartID   uuid.NullUUID
+	SkillVersionID      uuid.NullUUID
 	Source              string
 	Found               bool
 	RuleID              pgtype.Text
@@ -3426,6 +3532,7 @@ func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg Lis
 			&i.RiskPolicyVersion,
 			&i.ChatMessageID,
 			&i.ChatContentPartID,
+			&i.SkillVersionID,
 			&i.Source,
 			&i.Found,
 			&i.RuleID,
@@ -3498,6 +3605,9 @@ FROM (
   ) blk ON TRUE
   WHERE rr.project_id = $3
     AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+    -- Skill-anchored findings have no chat, so chat_id would come back NULL and
+    -- fail the non-null scan. They need their own read path, not this one.
+    AND rr.skill_version_id IS NULL
     AND ($2::uuid IS NULL OR rr.risk_policy_id = $2::uuid)
     AND ($4::timestamptz IS NULL OR COALESCE(cm.created_at, ccp.created_at) >= $4::timestamptz)
     AND ($5::timestamptz IS NULL OR COALESCE(cm.created_at, ccp.created_at) < $5::timestamptz)
@@ -3806,6 +3916,7 @@ WITH categorized AS (
   FROM risk_results rr
   WHERE rr.project_id = $2
     AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
+    AND rr.skill_version_id IS NULL
     AND rr.created_at >= $3
     AND rr.created_at < $4
 )
@@ -4282,7 +4393,7 @@ SET false_positive_at = clock_timestamp()
 WHERE project_id = $2
   AND id = ANY($3::uuid[])
   AND false_positive_at IS NULL
-RETURNING id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, chat_content_part_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, spans, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
+RETURNING id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, chat_content_part_id, skill_version_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, spans, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
 `
 
 type MarkRiskResultsFalsePositiveParams struct {
@@ -4311,6 +4422,7 @@ func (q *Queries) MarkRiskResultsFalsePositive(ctx context.Context, arg MarkRisk
 			&i.RiskPolicyVersion,
 			&i.ChatMessageID,
 			&i.ChatContentPartID,
+			&i.SkillVersionID,
 			&i.Source,
 			&i.Found,
 			&i.RuleID,
@@ -4336,6 +4448,68 @@ func (q *Queries) MarkRiskResultsFalsePositive(ctx context.Context, arg MarkRisk
 		return nil, err
 	}
 	return items, nil
+}
+
+const recordSkillPromptInjectionScan = `-- name: RecordSkillPromptInjectionScan :exec
+INSERT INTO risk_results (project_id, organization_id, risk_policy_id, risk_policy_version, skill_version_id, source, found, rule_id, description, match, confidence)
+SELECT p.project_id, p.organization_id, p.id, p.version, $1, $2::text, $3::boolean, $4::text, $5::text, $6::text, $7::double precision
+FROM risk_policies p
+WHERE p.project_id = $8
+  AND p.enabled IS TRUE
+  AND p.deleted IS FALSE
+  AND 'prompt_injection' = ANY (p.sources)
+  -- Pin the anchor to the same project as the policy. The caller passes a
+  -- version id it just captured under the authed project, so this is
+  -- defence in depth: it keeps a foreign version id from being anchored
+  -- under a local policy if a future caller is less careful.
+  AND EXISTS (
+    SELECT 1
+    FROM skill_versions sv
+    JOIN skills sk ON sk.id = sv.skill_id
+    WHERE sv.id = $1
+      AND sk.project_id = p.project_id
+  )
+ON CONFLICT (skill_version_id, risk_policy_id, risk_policy_version) WHERE skill_version_id IS NOT NULL
+DO UPDATE SET
+  source = EXCLUDED.source,
+  found = TRUE,
+  rule_id = EXCLUDED.rule_id,
+  description = EXCLUDED.description,
+  match = EXCLUDED.match,
+  confidence = EXCLUDED.confidence
+WHERE EXCLUDED.found IS TRUE
+  AND risk_results.found IS FALSE
+`
+
+type RecordSkillPromptInjectionScanParams struct {
+	SkillVersionID uuid.NullUUID
+	Source         string
+	Found          bool
+	RuleID         pgtype.Text
+	Description    pgtype.Text
+	Match          pgtype.Text
+	Confidence     pgtype.Float8
+	ProjectID      uuid.UUID
+}
+
+// Records one row per enabled prompt-injection policy, anchored on the version
+// rather than a chat message.
+// Called for any completed judgement: a found = FALSE row is the coverage
+// record, mirroring the empty result rows the chat batch path writes.
+// Concurrent scans can race after the state check. A finding upgrades a clean
+// row, while a clean result can never erase a finding.
+func (q *Queries) RecordSkillPromptInjectionScan(ctx context.Context, arg RecordSkillPromptInjectionScanParams) error {
+	_, err := q.db.Exec(ctx, recordSkillPromptInjectionScan,
+		arg.SkillVersionID,
+		arg.Source,
+		arg.Found,
+		arg.RuleID,
+		arg.Description,
+		arg.Match,
+		arg.Confidence,
+		arg.ProjectID,
+	)
+	return err
 }
 
 const refreshAccountIdentityFindingMatch = `-- name: RefreshAccountIdentityFindingMatch :execrows
@@ -4478,6 +4652,49 @@ func (q *Queries) SetRiskResultFalsePositiveForTest(ctx context.Context, id uuid
 	return err
 }
 
+const skillVersionNeedsPromptInjectionScan = `-- name: SkillVersionNeedsPromptInjectionScan :one
+SELECT EXISTS (
+  SELECT 1
+  FROM risk_policies p
+  WHERE p.project_id = $1
+    AND p.enabled IS TRUE
+    AND p.deleted IS FALSE
+    AND 'prompt_injection' = ANY (p.sources)
+    AND NOT EXISTS (
+      SELECT 1
+      FROM risk_results rr
+      WHERE rr.skill_version_id = $2
+        AND rr.risk_policy_id = p.id
+        AND rr.risk_policy_version = p.version
+    )
+    -- Same anchor/project pin as RecordSkillPromptInjectionScan. Without it a
+    -- foreign version id opens the gate and burns a judge call on content the
+    -- record query will refuse to write. (cubic)
+    AND EXISTS (
+      SELECT 1
+      FROM skill_versions sv
+      JOIN skills sk ON sk.id = sv.skill_id
+      WHERE sv.id = $2
+        AND sk.project_id = p.project_id
+    )
+)
+`
+
+type SkillVersionNeedsPromptInjectionScanParams struct {
+	ProjectID      uuid.UUID
+	SkillVersionID uuid.NullUUID
+}
+
+// True when some enabled prompt-injection policy has no recorded scan of this
+// skill version under the current policy version yet. Gates the judge call:
+// content is immutable per version, but policy configuration can change.
+func (q *Queries) SkillVersionNeedsPromptInjectionScan(ctx context.Context, arg SkillVersionNeedsPromptInjectionScanParams) (bool, error) {
+	row := q.db.QueryRow(ctx, skillVersionNeedsPromptInjectionScan, arg.ProjectID, arg.SkillVersionID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const softDeleteRiskPolicyEvalReview = `-- name: SoftDeleteRiskPolicyEvalReview :one
 UPDATE risk_policy_eval_reviews
 SET deleted_at = clock_timestamp(),
@@ -4531,7 +4748,7 @@ SET false_positive_at = NULL
 WHERE project_id = $1
   AND id = ANY($2::uuid[])
   AND false_positive_at IS NOT NULL
-RETURNING id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, chat_content_part_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, spans, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
+RETURNING id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, chat_content_part_id, skill_version_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, spans, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
 `
 
 type UnmarkRiskResultsFalsePositiveParams struct {
@@ -4556,6 +4773,7 @@ func (q *Queries) UnmarkRiskResultsFalsePositive(ctx context.Context, arg Unmark
 			&i.RiskPolicyVersion,
 			&i.ChatMessageID,
 			&i.ChatContentPartID,
+			&i.SkillVersionID,
 			&i.Source,
 			&i.Found,
 			&i.RuleID,

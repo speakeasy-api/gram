@@ -150,9 +150,7 @@ func newTestService(t *testing.T, billingRepo billing.Repository, orgID string, 
 	require.NoError(t, err)
 	seedEnabledToolsets(t, db, orgID, serverCount)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	authzEngine := authz.NewEngine(logger, db, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, db, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	return &Service{
 		tracer:      tp.Tracer("test"),

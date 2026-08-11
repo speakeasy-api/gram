@@ -1,4 +1,4 @@
-import { Page } from "@/components/page-layout";
+import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import type { Action } from "@/components/ui/MoreActions";
@@ -27,19 +27,30 @@ import { useActiveDeployment } from "./useActiveDeployment";
 import { useRedeployDeployment } from "./useRedeployDeployment";
 
 export default function DeploymentsPage(): JSX.Element {
+  const routes = useRoutes();
+  const { data: activeDeployment } = useActiveDeployment();
+
+  const viewActiveDeploymentButton = activeDeployment ? (
+    <routes.deployments.deployment.Link params={[activeDeployment.id]}>
+      <Button variant="secondary" size="sm">
+        <Button.LeftIcon>
+          <Icon name="radio" className="size-4" />
+        </Button.LeftIcon>
+        <Button.Text>View Active Deployment</Button.Text>
+      </Button>
+    </routes.deployments.deployment.Link>
+  ) : undefined;
+
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope={["project:read", "project:write"]} level="page">
-          <Suspense fallback={<div>Loading...</div>}>
-            <DeploymentsTable />
-          </Suspense>
-        </RequireScope>
-      </Page.Body>
-    </Page>
+    <ResourceListPage
+      scope={["project:read", "project:write"]}
+      title="Recent Deployments"
+      primaryAction={viewActiveDeploymentButton}
+    >
+      <Suspense fallback={<div>Loading...</div>}>
+        <DeploymentsTable />
+      </Suspense>
+    </ResourceListPage>
   );
 }
 
@@ -201,17 +212,21 @@ function DeploymentRowContextMenu({
   );
 }
 
-function DeploymentsTable({
-  showHeader = true,
-}: { showHeader?: boolean } = {}) {
-  const routes = useRoutes();
+function DeploymentsTable() {
   const { data: res } = useListDeploymentsSuspense();
   const deployments = res.items ?? [];
 
   const { data: activeDeployment } = useActiveDeployment();
 
   if (deployments.length === 0) {
-    return <DeploymentsEmptyState />;
+    // Keep the "what creates a deployment" copy visible for first-time users;
+    // it explains the empty state rather than only annotating a populated list.
+    return (
+      <>
+        <DeploymentsExplainer />
+        <DeploymentsEmptyState />
+      </>
+    );
   }
 
   const columnsWithData: TableProps<DeploymentSummary>["columns"] = [
@@ -294,37 +309,7 @@ function DeploymentsTable({
 
   return (
     <>
-      {showHeader && (
-        <>
-          <Page.Eyebrow className="mb-2" />
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-display-sm font-thin">Recent Deployments</h2>
-            {activeDeployment && (
-              <routes.deployments.deployment.Link
-                params={[activeDeployment.id]}
-              >
-                <Button variant="secondary" size="sm">
-                  <Button.LeftIcon>
-                    <Icon name="radio" className="size-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>View Active Deployment</Button.Text>
-                </Button>
-              </routes.deployments.deployment.Link>
-            )}
-          </div>
-
-          <div className="bg-card border-border mb-6 space-y-2 border p-6">
-            <p className="text-muted-foreground text-sm">
-              Each time you add a new source or update an existing source a new
-              deployment is created.
-            </p>
-            <p className="text-muted-foreground text-sm">
-              For each deployment all sources are analyzed in the project to
-              generate or update the corresponding tool definitions.
-            </p>
-          </div>
-        </>
-      )}
+      <DeploymentsExplainer />
 
       <Table<DeploymentSummary>
         columns={columnsWithData}
@@ -342,6 +327,21 @@ function DeploymentsTable({
         )}
       />
     </>
+  );
+}
+
+function DeploymentsExplainer() {
+  return (
+    <div className="bg-card border-border mb-6 space-y-2 border p-6">
+      <p className="text-muted-foreground text-sm">
+        Each time you add a new source or update an existing source a new
+        deployment is created.
+      </p>
+      <p className="text-muted-foreground text-sm">
+        For each deployment all sources are analyzed in the project to generate
+        or update the corresponding tool definitions.
+      </p>
+    </div>
   );
 }
 

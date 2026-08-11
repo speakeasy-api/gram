@@ -19,6 +19,7 @@ import {
   type ApprovalHelpers,
 } from "@/elements/lib/tools";
 import { compactForModel } from "@/elements/lib/contextCompaction";
+import { dictationAdapter } from "@/elements/lib/dictation";
 import { describeStreamError } from "@/elements/lib/streamErrorMessage";
 import { cn } from "@/lib/utils";
 import { recommended } from "@/elements/plugins";
@@ -761,6 +762,7 @@ const ElementsProviderWithHistory = ({
     return useChatRuntime({
       transport,
       sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+      adapters: { dictation: dictationAdapter },
     });
   }, [transport]);
 
@@ -851,6 +853,7 @@ const ElementsProviderWithoutHistory = ({
   const runtime = useChatRuntime({
     transport,
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    adapters: { dictation: dictationAdapter },
   });
 
   // Populate runtimeRef so transport can access thread context

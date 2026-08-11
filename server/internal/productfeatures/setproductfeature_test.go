@@ -6,6 +6,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/features"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -165,6 +167,75 @@ func TestProductFeaturesService_SetProductFeature(t *testing.T) {
 		require.ErrorAs(t, err, &oopsErr)
 		require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 	})
+}
+
+func TestProductFeaturesService_SetRemoteSessionAutoRefreshPolicy(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProductFeaturesService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	q := repo.New(ti.conn)
+	requirePolicy := func(visible, enforced bool) {
+		t.Helper()
+
+		visibleEnabled, err := q.IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			FeatureName:    string(productfeatures.FeatureRemoteSessionAutoRefresh),
+		})
+		require.NoError(t, err)
+		require.Equal(t, visible, visibleEnabled)
+
+		enforcedEnabled, err := q.IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
+			OrganizationID: authCtx.ActiveOrganizationID,
+			FeatureName:    string(productfeatures.FeatureRemoteSessionAutoRefreshEnforced),
+		})
+		require.NoError(t, err)
+		require.Equal(t, enforced, enforcedEnabled)
+	}
+
+	err := ti.service.SetRemoteSessionAutoRefreshPolicy(ctx, &gen.SetRemoteSessionAutoRefreshPolicyPayload{
+		Policy:       "user_controlled",
+		SessionToken: nil,
+	})
+	require.NoError(t, err)
+	requirePolicy(true, false)
+
+	err = ti.service.SetRemoteSessionAutoRefreshPolicy(ctx, &gen.SetRemoteSessionAutoRefreshPolicyPayload{
+		Policy:       "enforced",
+		SessionToken: nil,
+	})
+	require.NoError(t, err)
+	requirePolicy(false, true)
+
+	err = ti.service.SetRemoteSessionAutoRefreshPolicy(ctx, &gen.SetRemoteSessionAutoRefreshPolicyPayload{
+		Policy:       "disabled",
+		SessionToken: nil,
+	})
+	require.NoError(t, err)
+	requirePolicy(false, false)
+}
+
+func TestProductFeaturesService_SetRemoteSessionAutoRefreshPolicyRequiresOrgAdmin(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestProductFeaturesService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgRead, authCtx.ActiveOrganizationID))
+
+	err := ti.service.SetRemoteSessionAutoRefreshPolicy(ctx, &gen.SetRemoteSessionAutoRefreshPolicyPayload{
+		Policy:       "enforced",
+		SessionToken: nil,
+	})
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
 func TestProductFeaturesClient_IsFeatureEnabled(t *testing.T) {
