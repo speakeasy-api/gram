@@ -352,3 +352,18 @@ WHERE id = @id;
 SELECT chat_id, chat_message_id, risk_result_id, risk_policy_id
 FROM tool_call_blocks
 WHERE id = @id;
+
+-- name: CountSkillScanRecords :one
+-- Test-only fixture: counts recorded scans of a version of the named skill.
+-- found_only narrows the count to prompt-injection findings; otherwise every
+-- recorded scan counts, clean coverage rows included.
+SELECT count(*)
+FROM risk_results rr
+JOIN skill_versions sv ON sv.id = rr.skill_version_id
+JOIN skills s ON s.id = sv.skill_id
+WHERE s.project_id = @project_id
+  AND s.name = @skill_name
+  AND (
+    NOT @found_only::boolean
+    OR (rr.source = 'prompt_injection' AND rr.found IS TRUE)
+  );

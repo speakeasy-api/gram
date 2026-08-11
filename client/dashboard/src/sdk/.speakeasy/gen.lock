@@ -1168,6 +1168,7 @@ trackedFiles:
   src/models/components/skillfeedbacktimelinepoint.ts: {}
   src/models/components/skillinsightmetrics.ts: {}
   src/models/components/skillinsightpoint.ts: {}
+  src/models/components/skillpromptinjectionfinding.ts: {}
   src/models/components/skillsharelink.ts: {}
   src/models/components/skillsightingtimelinepoint.ts: {}
   src/models/components/skillsuggestionapprovalitem.ts: {}
@@ -5101,7 +5102,7 @@ examples:
           id: "3600ba92-a629-4238-b118-2374ee531ccc"
       responses:
         "200":
-          application/json: {"adoption": {"activations_in_window": 193282, "distinct_hostnames": 385005, "window_end": "2024-02-17T23:16:40.002Z", "window_start": "2024-01-07T02:41:01.226Z"}, "assistant_count": 728301, "drift": {"active_machines": 675725, "drifted_machines": 591176, "indeterminate_machines": 139736, "on_target_machines": 674561, "target_state": "single", "target_version_ids": [], "window_end": "2025-09-18T07:28:40.508Z", "window_start": "2024-06-13T03:54:30.891Z"}, "sighting_timeline": [], "skill": {"classification": "<value>", "created_at": "2026-06-16T05:42:51.497Z", "display_name": "Adan_Parisian83", "has_valid_version": true, "id": "2f844f68-8ade-4021-927e-ce44754f24fc", "name": "<value>", "project_id": "cb362ec4-4029-48dd-8e7d-90248980a327", "seen_count": 500904, "source_kind": "<value>", "tags": [], "updated_at": "2024-08-06T14:28:41.275Z", "version_count": 278392}}
+          application/json: {"adoption": {"activations_in_window": 193282, "distinct_hostnames": 385005, "window_end": "2024-02-17T23:16:40.002Z", "window_start": "2024-01-07T02:41:01.226Z"}, "assistant_count": 728301, "drift": {"active_machines": 675725, "drifted_machines": 591176, "indeterminate_machines": 139736, "on_target_machines": 674561, "target_state": "single", "target_version_ids": [], "window_end": "2025-09-18T07:28:40.508Z", "window_start": "2024-06-13T03:54:30.891Z"}, "prompt_injection_findings": [], "sighting_timeline": [], "skill": {"classification": "<value>", "created_at": "2026-06-16T05:42:51.497Z", "display_name": "Adan_Parisian83", "has_valid_version": true, "id": "2f844f68-8ade-4021-927e-ce44754f24fc", "name": "<value>", "project_id": "cb362ec4-4029-48dd-8e7d-90248980a327", "seen_count": 500904, "source_kind": "<value>", "tags": [], "updated_at": "2024-08-06T14:28:41.275Z", "version_count": 278392}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

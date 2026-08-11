@@ -108,6 +108,7 @@ import { DetectorCard } from "./DetectorCard";
 import { builtInRuleDisabledReason } from "./policy-built-in-rule-exclusivity";
 import {
   ALL_CATEGORIES,
+  AVAILABLE_CATEGORIES,
   CATEGORY_LEVEL_DETECTORS,
   FLAG_ONLY_CATEGORIES,
   PRESIDIO_CATEGORIES,
@@ -281,7 +282,20 @@ function PolicyDetailContent({ policyId }: { policyId: string }): JSX.Element {
 // ── Create page (serves both standard and prompt policies) ───────────────────
 
 export function PolicyNew(): JSX.Element {
+  return (
+    <RequireScope scope="org:admin" level="page">
+      <PolicyNewContent />
+    </RequireScope>
+  );
+}
+
+function PolicyNewContent(): JSX.Element {
   const [kind] = useQueryState("kind");
+  const [category] = useQueryState("category");
+  const initialCategories =
+    category && AVAILABLE_CATEGORIES.has(category as RuleCategory)
+      ? new Set<RuleCategory>([category as RuleCategory])
+      : undefined;
   if (kind === "standard") {
     return (
       <Page>
@@ -289,7 +303,10 @@ export function PolicyNew(): JSX.Element {
           <Page.Header.Breadcrumbs />
         </Page.Header>
         <Page.Body>
-          <StandardPolicyEditor policy={null} />
+          <StandardPolicyEditor
+            policy={null}
+            initialCategories={initialCategories}
+          />
         </Page.Body>
       </Page>
     );
@@ -3447,8 +3464,10 @@ function ReviewAgreementControl({
 
 export function StandardPolicyEditor({
   policy,
+  initialCategories,
 }: {
   policy: RiskPolicy | null;
+  initialCategories?: ReadonlySet<RuleCategory>;
 }): JSX.Element {
   const routes = useRoutes();
   const project = useProject();
@@ -3491,7 +3510,7 @@ export function StandardPolicyEditor({
   const [name, setName] = useState(policy?.name ?? "");
   const [selectedCategories, setSelectedCategories] = useState<
     Set<RuleCategory>
-  >(() => orig?.categories ?? new Set<RuleCategory>());
+  >(() => new Set(orig?.categories ?? initialCategories));
   const [disabledRules, setDisabledRules] = useState<Set<string>>(
     () => new Set(policy?.disabledRules ?? []),
   );

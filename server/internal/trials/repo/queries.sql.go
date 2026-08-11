@@ -84,6 +84,30 @@ func (q *Queries) GetActiveTrial(ctx context.Context, organizationID string) (Ge
 	return i, err
 }
 
+const getSessionTrial = `-- name: GetSessionTrial :one
+SELECT organization_id, created_at, ends_at
+FROM trials
+WHERE organization_id = $1
+  AND converted_at IS NULL
+`
+
+type GetSessionTrialRow struct {
+	OrganizationID string
+	CreatedAt      pgtype.Timestamptz
+	EndsAt         pgtype.Timestamptz
+}
+
+// Backs the trial status the dashboard renders for a session. Ended and demoted
+// rows are deliberately kept so the dashboard can tell the user their trial
+// ended, while converted rows are dropped so a paying customer never sees
+// trial UI.
+func (q *Queries) GetSessionTrial(ctx context.Context, organizationID string) (GetSessionTrialRow, error) {
+	row := q.db.QueryRow(ctx, getSessionTrial, organizationID)
+	var i GetSessionTrialRow
+	err := row.Scan(&i.OrganizationID, &i.CreatedAt, &i.EndsAt)
+	return i, err
+}
+
 const getTrial = `-- name: GetTrial :one
 SELECT organization_id, tier, ends_at, converted_at, demoted_at, created_at, updated_at
 FROM trials

@@ -1,4 +1,4 @@
-import { Page } from "@/components/page-layout";
+import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { Dialog } from "@/components/ui/Dialog";
 import { DotRow } from "@/components/ui/DotRow";
@@ -56,16 +56,9 @@ export function RemoteIdentityProvidersRoot(): JSX.Element {
 
 export function RemoteIdentityProvidersPage(): JSX.Element {
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope={["org:read", "org:admin"]} level="page">
-          <RemoteIdentityProvidersOverview />
-        </RequireScope>
-      </Page.Body>
-    </Page>
+    <RequireScope scope={["org:read", "org:admin"]} level="page">
+      <RemoteIdentityProvidersOverview />
+    </RequireScope>
   );
 }
 
@@ -170,11 +163,10 @@ function RemoteIdentityProvidersOverview() {
 
   return (
     <>
-      <Page.Section>
-        <Page.Section.Title>
-          Organizational Remote Identity Providers
-        </Page.Section.Title>
-        <Page.Section.CTA>
+      <ResourceListPage
+        title="Organizational Remote Identity Providers"
+        description="Identity providers shared across every project in the organization. Prefer creating clients on platform maintained providers when available unless client setup documentation needs customization for your organization workflows."
+        primaryAction={
           <RequireScope scope="org:admin" level="component">
             <Button size="sm" onClick={() => setCreateOpen(true)}>
               <Button.LeftIcon>
@@ -183,49 +175,13 @@ function RemoteIdentityProvidersOverview() {
               <Button.Text>New Remote Identity Provider</Button.Text>
             </Button>
           </RequireScope>
-        </Page.Section.CTA>
-        <Page.Section.Description className="max-w-2xl">
-          Identity providers shared across every project in the organization.
-          Prefer creating clients on platform maintained providers when
-          available unless client setup documentation needs customization for
-          your organization workflows.
-        </Page.Section.Description>
-        <Page.Section.Body>
-          <IssuerTable
-            items={organizational}
-            isLoading={isLoading}
-            showProject={false}
-            emptyMessage="No organizational identity providers yet."
-            onDelete={setDeleteTarget}
-            onMakeOrganizational={handleMakeOrganizational}
-            onMoveToProject={setMoveTarget}
-            onConsolidate={setMigrateSource}
-            onRefreshMetadata={handleRefreshMetadata}
-            refreshPending={refreshMetadata.isPending}
-          />
-        </Page.Section.Body>
-      </Page.Section>
-
-      {/* The page header (eyebrow + display title) is rendered once by the
-          organizational section above; the remaining tiers are plain section
-          headings. */}
-      <Stack gap={6} className="mt-3 mb-6">
-        <div>
-          <Heading variant="h4" className="mb-2">
-            Project-Specific Remote Identity Providers
-          </Heading>
-          <Text muted small className="max-w-2xl">
-            Identity providers within a single project in the organization.
-            Prefer creating clients on platform maintained providers when
-            available unless client setup documentation needs customization for
-            your organization workflows.
-          </Text>
-        </div>
+        }
+      >
         <IssuerTable
-          items={projectSpecific}
+          items={organizational}
           isLoading={isLoading}
-          showProject
-          emptyMessage="No project-specific identity providers yet."
+          showProject={false}
+          emptyMessage="No organizational identity providers yet."
           onDelete={setDeleteTarget}
           onMakeOrganizational={handleMakeOrganizational}
           onMoveToProject={setMoveTarget}
@@ -233,49 +189,26 @@ function RemoteIdentityProvidersOverview() {
           onRefreshMetadata={handleRefreshMetadata}
           refreshPending={refreshMetadata.isPending}
         />
-      </Stack>
 
-      {platform.length > 0 && (
+        {/* The page header (eyebrow + display title) is rendered once by the
+            template above; the remaining tiers are plain section headings. */}
         <Stack gap={6} className="mt-3 mb-6">
-          <Stack
-            direction="horizontal"
-            justify="space-between"
-            align="center"
-            gap={4}
-          >
-            <div className="min-w-0">
-              <Heading variant="h4" className="mb-2">
-                Platform Remote Identity Providers
-              </Heading>
-              <Text muted small className="max-w-2xl">
-                Common identity providers maintained by the platform
-                administrators for configuring your own clients. Prefer using
-                these over creating duplicate providers unless the client setup
-                documentation needs to be customized when creating MCP Servers.
-              </Text>
-            </div>
-            {/* Platform admins curate these on their own page. The CTA is the
-                only platform-admin-aware chrome on this tenant surface, and it
-                is a link — it grants nothing that the catalog page does not
-                gate again on its own. */}
-            {isPlatformAdmin ? (
-              <Button
-                size="sm"
-                variant="secondary"
-                className="shrink-0"
-                onClick={() => orgRoutes.platformRemoteIdentityProviders.goTo()}
-              >
-                <Button.Text>Manage Platform Providers</Button.Text>
-              </Button>
-            ) : null}
-          </Stack>
+          <div>
+            <Heading variant="h4" className="mb-2">
+              Project-Specific Remote Identity Providers
+            </Heading>
+            <Text muted small className="max-w-2xl">
+              Identity providers within a single project in the organization.
+              Prefer creating clients on platform maintained providers when
+              available unless client setup documentation needs customization
+              for your organization workflows.
+            </Text>
+          </div>
           <IssuerTable
-            items={platform}
+            items={projectSpecific}
             isLoading={isLoading}
-            showProject={false}
-            readOnly
-            onAddClient={setAddClientTarget}
-            emptyMessage="No platform identity providers available."
+            showProject
+            emptyMessage="No project-specific identity providers yet."
             onDelete={setDeleteTarget}
             onMakeOrganizational={handleMakeOrganizational}
             onMoveToProject={setMoveTarget}
@@ -284,7 +217,61 @@ function RemoteIdentityProvidersOverview() {
             refreshPending={refreshMetadata.isPending}
           />
         </Stack>
-      )}
+
+        {platform.length > 0 && (
+          <Stack gap={6} className="mt-3 mb-6">
+            <Stack
+              direction="horizontal"
+              justify="space-between"
+              align="center"
+              gap={4}
+            >
+              <div className="min-w-0">
+                <Heading variant="h4" className="mb-2">
+                  Platform Remote Identity Providers
+                </Heading>
+                <Text muted small className="max-w-2xl">
+                  Common identity providers maintained by the platform
+                  administrators for configuring your own clients. Prefer using
+                  these over creating duplicate providers unless the client
+                  setup documentation needs to be customized when creating MCP
+                  Servers.
+                </Text>
+              </div>
+              {/* Platform admins curate these on their own page. The CTA is the
+                  only platform-admin-aware chrome on this tenant surface, and it
+                  is a link — it grants nothing that the catalog page does not
+                  gate again on its own. */}
+              {isPlatformAdmin ? (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="shrink-0"
+                  onClick={() =>
+                    orgRoutes.platformRemoteIdentityProviders.goTo()
+                  }
+                >
+                  <Button.Text>Manage Platform Providers</Button.Text>
+                </Button>
+              ) : null}
+            </Stack>
+            <IssuerTable
+              items={platform}
+              isLoading={isLoading}
+              showProject={false}
+              readOnly
+              onAddClient={setAddClientTarget}
+              emptyMessage="No platform identity providers available."
+              onDelete={setDeleteTarget}
+              onMakeOrganizational={handleMakeOrganizational}
+              onMoveToProject={setMoveTarget}
+              onConsolidate={setMigrateSource}
+              onRefreshMetadata={handleRefreshMetadata}
+              refreshPending={refreshMetadata.isPending}
+            />
+          </Stack>
+        )}
+      </ResourceListPage>
 
       <CreateRemoteIdentityProviderSheet
         open={createOpen}

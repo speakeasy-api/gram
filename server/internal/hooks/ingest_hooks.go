@@ -277,8 +277,8 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 }
 
 type skillCaptureSignal struct {
-	rawSHA256 string
-	known     bool
+	rawSHA256       string
+	contentRequired bool
 }
 
 // recordSkillActivation durably records one skill activation. The second
@@ -307,7 +307,17 @@ func (s *Service) recordSkillActivation(ctx context.Context, payload *gen.Ingest
 		if err != nil {
 			return nil, false, fmt.Errorf("resolve known skill raw hash: %w", err)
 		}
-		capture = &skillCaptureSignal{rawSHA256: rawSHA256, known: known}
+		contentRequired := !known
+		if known && s.piScanner != nil {
+			contentRequired, err = s.repo.SkillRawHashNeedsPromptInjectionScan(writeCtx, repo.SkillRawHashNeedsPromptInjectionScanParams{
+				ProjectID: *authCtx.ProjectID,
+				RawSha256: rawSHA256,
+			})
+			if err != nil {
+				return nil, false, fmt.Errorf("check known skill scan state: %w", err)
+			}
+		}
+		capture = &skillCaptureSignal{rawSHA256: rawSHA256, contentRequired: contentRequired}
 	}
 	written, err := s.repo.InsertSkillObservation(writeCtx, repo.InsertSkillObservationParams{
 		ProjectID:      *authCtx.ProjectID,
@@ -397,7 +407,7 @@ func (s *Service) withOrgSettings(ctx context.Context, orgID string, res *gen.In
 		} else if skillsEnabled {
 			res.Effects["skill_capture"] = map[string]any{
 				"raw_sha256":       capture.rawSHA256,
-				"content_required": !capture.known,
+				"content_required": capture.contentRequired,
 			}
 		}
 	}

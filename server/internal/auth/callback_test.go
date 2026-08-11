@@ -3,6 +3,7 @@ package auth_test
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	redisCache "github.com/go-redis/cache/v9"
@@ -637,6 +638,7 @@ func TestService_Callback_SignupIntent(t *testing.T) {
 		session, err := instance.sessionManager.GetSession(ctx, result.SessionToken)
 		require.NoError(t, err)
 		require.NotEmpty(t, session.ActiveOrganizationID, "the signup org must be active on the session")
+		require.Equal(t, []string{session.ActiveOrganizationID}, instance.trialNotifier.trialStarted)
 
 		org, err := orgRepo.New(instance.conn).GetOrganizationMetadata(ctx, session.ActiveOrganizationID)
 		require.NoError(t, err)
@@ -647,6 +649,24 @@ func TestService_Callback_SignupIntent(t *testing.T) {
 		trial, err := trialsRepo.New(instance.conn).GetTrial(ctx, session.ActiveOrganizationID)
 		require.NoError(t, err)
 		require.Equal(t, "enterprise", trial.Tier)
+	})
+
+	t.Run("trial notifier failure does not fail signup", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		userInfo.Organizations = nil
+		ctx, instance := newTestAuthServiceForOrganizationProvisioning(t, userInfo)
+		instance.trialNotifier.trialStartedErr = errors.New("notify failed")
+
+		ctx, stateParam := instance.stateWithSignupIntent(ctx, t, "", "Acme Inc")
+		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
+			Code:  "mock_code",
+			State: &stateParam,
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, result.SessionToken)
+		require.Len(t, instance.trialNotifier.trialStarted, 1)
 	})
 
 	t.Run("intent is consumed so it cannot be replayed", func(t *testing.T) {
