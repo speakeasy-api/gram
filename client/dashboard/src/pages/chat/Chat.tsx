@@ -3,13 +3,14 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent,
   type ReactElement,
 } from "react";
 import { Link, Outlet, useNavigate, useParams } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { useAui, useAuiState } from "@assistant-ui/react";
-import { ActiveChatTitle, Chat } from "@/elements";
+import { ActiveChatTitle, Chat, ChatComposer } from "@/elements";
 import {
   ChevronLeft,
   Home,
@@ -160,7 +161,8 @@ export function ChatLanding({
   const { user } = useSession();
   const navigate = useNavigate();
   const routes = useRoutes();
-  const { sendPrompt, assistantNeedsAdmin } = useInsightsState();
+  const { sendPrompt, assistantNeedsAdmin, assistantReady } =
+    useInsightsState();
   const [value, setValue] = useState("");
   const [inputFocused, setInputFocused] = useState(false);
   const [activeCommand, setActiveCommand] = useState(0);
@@ -259,6 +261,34 @@ export function ChatLanding({
           <p className="border-border bg-card text-muted-foreground border px-4 py-3 text-sm">
             Ask an admin to enable the Project Assistant for this project.
           </p>
+        ) : assistantReady ? (
+          // The real AUI composer, bound to the shared runtime: sending happens
+          // in the runtime itself, so this entry point has dictation,
+          // attachments, tool mentions and skill context like every other one.
+          // Navigation to the conversation view is driven by the first message
+          // landing in the thread, not by this component sending.
+          // `gram-chat-landing` is read from inside the Elements shadow root
+          // via :host-context, so it must sit on an ancestor of the host — not
+          // on anything ChatComposer renders inside it.
+          <div
+            className="gram-chat-landing border-border bg-card border"
+            // Cycling example prompts ride in as custom properties: they
+            // inherit into the Elements shadow root, so the placeholder can
+            // crossfade without re-rendering the composer (see
+            // CHAT_LANDING_COMPOSER_CSS).
+            style={
+              {
+                "--gram-composer-placeholder": JSON.stringify(placeholder),
+                "--gram-composer-placeholder-opacity": placeholderVisible
+                  ? 1
+                  : 0,
+              } as CSSProperties
+            }
+          >
+            <ChatComposer />
+            <StartFreshThread />
+            <NavigateOnFirstMessage />
+          </div>
         ) : (
           <form
             onSubmit={(e) => {
@@ -337,6 +367,56 @@ export function ChatLanding({
       )}
     </div>
   );
+}
+
+/**
+ * Drops into the full-page conversation as soon as the shared composer puts a
+ * message on the thread. The landing composer sends through the runtime
+ * directly, so there is no submit handler to navigate from — the first message
+ * appearing IS the signal. `/chat/new` then syncs to `/chat/:id` once the
+ * server mints the id.
+ */
+/**
+ * The landing widgets always start a NEW conversation: they share one runtime
+ * with the dock, and the dock is the only surface that deliberately continues
+ * an existing chat. Without this, opening /chat (or project home) after a dock
+ * conversation would drop the next message into that thread.
+ */
+function StartFreshThread(): null {
+  const aui = useAui();
+  // Running counts as "in use" too: coming back to /chat while the dock's turn
+  // is still streaming must still hand the user an empty thread, otherwise the
+  // composer inherits that run (its send button becomes a stop button for a
+  // conversation that isn't on screen).
+  // Unconditional, exactly once, as soon as the thread list has loaded.
+  // Reacting to "the thread has messages" instead would fire on the user's OWN
+  // send — switching the just-sent message out from under them and leaving an
+  // empty /chat/new. Thread ids are minted lazily (deferThreadIdMinting), so a
+  // visit that sends nothing costs no server chat.
+  const listLoading = useAuiState(({ threads }) => threads.isLoading);
+  const switchedRef = useRef(false);
+  useEffect(() => {
+    if (switchedRef.current || listLoading) return;
+    switchedRef.current = true;
+    aui.threads().switchToNewThread();
+  }, [aui, listLoading]);
+  return null;
+}
+
+function NavigateOnFirstMessage(): null {
+  const navigate = useNavigate();
+  const routes = useRoutes();
+  const messageCount = useAuiState(({ thread }) => thread.messages.length);
+  // Latch the count at mount: the shared runtime often already holds a live
+  // conversation (started in the dock), and navigating on "has messages" would
+  // bounce straight back into it every time the user opened /chat.
+  const seenRef = useRef(messageCount);
+  useEffect(() => {
+    const grew = messageCount > seenRef.current;
+    seenRef.current = messageCount;
+    if (grew) void navigate(routes.chat.conversation.href("new"));
+  }, [messageCount, navigate, routes]);
+  return null;
 }
 
 /**
