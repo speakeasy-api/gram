@@ -198,30 +198,6 @@ func NewEnsureServerReviewEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
 		}
 		if err != nil {
-			sc := security.APIKeyScheme{
-				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.ApikeyToken != nil {
-				key = *p.ApikeyToken
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-			if err == nil {
-				sc := security.APIKeyScheme{
-					Name:           "project_slug",
-					Scopes:         []string{},
-					RequiredScopes: []string{},
-				}
-				var key string
-				if p.ProjectSlugInput != nil {
-					key = *p.ProjectSlugInput
-				}
-				ctx, err = authAPIKeyFn(ctx, key, &sc)
-			}
-		}
-		if err != nil {
 			return nil, err
 		}
 		return s.EnsureServerReview(ctx, p)
@@ -255,30 +231,6 @@ func NewCreateRequestEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 				key = *p.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
-		}
-		if err != nil {
-			sc := security.APIKeyScheme{
-				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.ApikeyToken != nil {
-				key = *p.ApikeyToken
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-			if err == nil {
-				sc := security.APIKeyScheme{
-					Name:           "project_slug",
-					Scopes:         []string{},
-					RequiredScopes: []string{},
-				}
-				var key string
-				if p.ProjectSlugInput != nil {
-					key = *p.ProjectSlugInput
-				}
-				ctx, err = authAPIKeyFn(ctx, key, &sc)
-			}
 		}
 		if err != nil {
 			return nil, err
@@ -316,30 +268,6 @@ func NewPromoteEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.End
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
 		}
 		if err != nil {
-			sc := security.APIKeyScheme{
-				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.ApikeyToken != nil {
-				key = *p.ApikeyToken
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-			if err == nil {
-				sc := security.APIKeyScheme{
-					Name:           "project_slug",
-					Scopes:         []string{},
-					RequiredScopes: []string{},
-				}
-				var key string
-				if p.ProjectSlugInput != nil {
-					key = *p.ProjectSlugInput
-				}
-				ctx, err = authAPIKeyFn(ctx, key, &sc)
-			}
-		}
-		if err != nil {
 			return nil, err
 		}
 		return s.Promote(ctx, p)
@@ -373,30 +301,6 @@ func NewRefreshEvidenceEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 				key = *p.ProjectSlugInput
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
-		}
-		if err != nil {
-			sc := security.APIKeyScheme{
-				Name:           "apikey",
-				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.ApikeyToken != nil {
-				key = *p.ApikeyToken
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-			if err == nil {
-				sc := security.APIKeyScheme{
-					Name:           "project_slug",
-					Scopes:         []string{},
-					RequiredScopes: []string{},
-				}
-				var key string
-				if p.ProjectSlugInput != nil {
-					key = *p.ProjectSlugInput
-				}
-				ctx, err = authAPIKeyFn(ctx, key, &sc)
-			}
 		}
 		if err != nil {
 			return nil, err

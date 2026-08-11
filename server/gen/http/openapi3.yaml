@@ -19874,8 +19874,6 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
             summary: createRequest mcpApproval
             tags:
                 - mcpApproval
@@ -19978,8 +19976,6 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
             summary: ensureServerReview mcpApproval
             tags:
                 - mcpApproval
@@ -20301,8 +20297,6 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
             summary: promote mcpApproval
             tags:
                 - mcpApproval
@@ -20511,8 +20505,6 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
-                - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
             summary: refreshEvidence mcpApproval
             tags:
                 - mcpApproval
