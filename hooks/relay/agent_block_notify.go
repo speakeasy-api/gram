@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"strings"
@@ -124,39 +125,68 @@ func (r *Relay) notifyAgentBlock(ctx context.Context, effect *wire.BlockEffect, 
 // into map[string]any, so an unmarshal into the struct would need a marshal
 // round-trip). The keys are pinned to wire.BlockEffect's JSON tags by
 // TestDecodeBlockEffectMatchesWireContract. Returns nil for anything that
-// isn't the object shape this version understands — a non-object, or a
-// non-numeric "v" (the version gates the consumer's guard, so a garbled one
-// must not decode to a trusted zero). Other mistyped fields degrade to their
-// zero values, which the consumer's requestable/token guards already reject.
+// isn't the object shape this version understands: a non-object, or any
+// present field of the wrong type (including a fractional "v") — a garbled
+// effect suppresses the notify entirely rather than posting a degraded
+// report, matching what an unmarshal into the struct would do. Absent fields
+// are fine; they decode to zero values the consumer's guards treat as absent.
 func decodeBlockEffect(raw any) *wire.BlockEffect {
-	object, ok := raw.(map[string]any)
-	if !ok {
+	object, isObject := raw.(map[string]any)
+	if !isObject {
 		return nil
 	}
-	version := 0
-	if v, present := object["v"]; present {
-		f, ok := v.(float64) // JSON numbers decode as float64
-		if !ok {
-			return nil
+	valid := true
+	intField := func(key string) int {
+		value, present := object[key]
+		if !present {
+			return 0
 		}
-		version = int(f)
+		f, ok := value.(float64) // JSON numbers decode as float64
+		if !ok || f != math.Trunc(f) {
+			valid = false
+			return 0
+		}
+		return int(f)
 	}
-	str := func(key string) string {
-		s, _ := object[key].(string)
+	boolField := func(key string) bool {
+		value, present := object[key]
+		if !present {
+			return false
+		}
+		b, ok := value.(bool)
+		if !ok {
+			valid = false
+			return false
+		}
+		return b
+	}
+	strField := func(key string) string {
+		value, present := object[key]
+		if !present {
+			return ""
+		}
+		s, ok := value.(string)
+		if !ok {
+			valid = false
+			return ""
+		}
 		return s
 	}
-	requestable, _ := object["requestable"].(bool)
-	return &wire.BlockEffect{
-		V:                version,
-		Category:         str("category"),
-		Requestable:      requestable,
-		RequestToken:     str("request_token"),
-		RequestURL:       str("request_url"),
-		RequestExpiresAt: str("request_expires_at"),
-		ServerName:       str("server_name"),
-		ServerURL:        str("server_url"),
-		PolicyName:       str("policy_name"),
-		ToolName:         str("tool_name"),
-		BlockURL:         str("block_url"),
+	effect := wire.BlockEffect{
+		V:                intField("v"),
+		Category:         strField("category"),
+		Requestable:      boolField("requestable"),
+		RequestToken:     strField("request_token"),
+		RequestURL:       strField("request_url"),
+		RequestExpiresAt: strField("request_expires_at"),
+		ServerName:       strField("server_name"),
+		ServerURL:        strField("server_url"),
+		PolicyName:       strField("policy_name"),
+		ToolName:         strField("tool_name"),
+		BlockURL:         strField("block_url"),
 	}
+	if !valid {
+		return nil
+	}
+	return &effect
 }

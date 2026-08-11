@@ -251,6 +251,21 @@ func TestDecodeBlockEffectRejectsNonObjects(t *testing.T) {
 	require.Nil(t, decodeBlockEffect(map[string]any{"v": "not-a-number"}))
 }
 
+// Any present-but-mistyped field rejects the whole effect — a garbled payload
+// must suppress the notify, not POST a degraded report — while absent fields
+// stay acceptable (older servers omit optional ones).
+func TestDecodeBlockEffectRejectsMistypedFields(t *testing.T) {
+	require.Nil(t, decodeBlockEffect(map[string]any{"v": 1.5}),
+		"a fractional version must not truncate past the version guard")
+	require.Nil(t, decodeBlockEffect(map[string]any{"requestable": "yes"}))
+	require.Nil(t, decodeBlockEffect(map[string]any{"server_name": 42.0}))
+	require.Nil(t, decodeBlockEffect(map[string]any{"request_token": true}))
+
+	got := decodeBlockEffect(map[string]any{"v": 1.0, "requestable": true, "request_token": "rpbr2.min"})
+	require.NotNil(t, got, "absent optional fields must not reject the effect")
+	require.Equal(t, "rpbr2.min", got.RequestToken)
+}
+
 // decodeBlockEffect reads keys off the map by hand (the SDK pre-decodes
 // Effects, so there are no raw bytes to unmarshal); this pins those keys to
 // wire.BlockEffect's JSON tags so the reader and the shared type cannot
