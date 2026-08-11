@@ -194,6 +194,41 @@ var _ = Service("mcpApproval", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RefreshMcpApprovalEvidence"}`)
 	})
 
+	Method("startResearch", func() {
+		Description("Start a research-agent run for an approval request. The agent searches the web and reads pages about the server's vendor, then files a cited report; it never decides. Runs are additive — a re-run adds a report rather than replacing one — and at most one run per request is in flight at a time: starting while one runs returns the running report.")
+		Security(security.Session, security.ProjectSlug)
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The approval request ID.")
+			Required("id")
+		})
+
+		Result(ResearchReport)
+
+		HTTP(func() {
+			POST("/rpc/mcpApproval.startResearch")
+			// The id travels as a query parameter, leaving the POST bodyless:
+			// an id-only JSON body is structurally identical to other one-field
+			// forms and the OpenAPI generator dedupes it into whichever named
+			// type hashed first, which mislabels the SDK surface.
+			Param("id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "startMcpResearch")
+		Meta("openapi:extension:x-speakeasy-name-override", "startResearch")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "StartMcpResearch"}`)
+	})
+
 	Method("recordDecision", func() {
 		Description("Approve or deny an MCP approval request, recording the rationale and who it applies to.")
 		Security(security.Session, security.ProjectSlug)

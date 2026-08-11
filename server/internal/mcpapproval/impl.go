@@ -20,6 +20,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -37,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/identity"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/researchagent"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -110,6 +112,19 @@ var statusFor = map[string]string{
 	decisionDenied:   "denied",
 }
 
+// ResearchRun identifies one research-agent run to enqueue.
+type ResearchRun struct {
+	ReportID  uuid.UUID
+	RequestID uuid.UUID
+	ProjectID uuid.UUID
+	OrgID     string
+}
+
+// ResearchStarter enqueues a research run for later execution. Production
+// wiring starts the Temporal research workflow; a nil starter reports
+// research as unavailable rather than stranding report rows in running.
+type ResearchStarter func(ctx context.Context, run ResearchRun) error
+
 type Service struct {
 	tracer   trace.Tracer
 	logger   *slog.Logger
@@ -119,6 +134,7 @@ type Service struct {
 	features *productfeatures.Client
 	audit    *audit.Logger
 	evidence *evidence.Assembler
+	research ResearchStarter
 
 	// gapRetryMu guards gapRetryAt.
 	gapRetryMu sync.Mutex
@@ -133,7 +149,7 @@ var (
 	_ gen.Auther  = (*Service)(nil)
 )
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, features *productfeatures.Client, auditLogger *audit.Logger, assembler *evidence.Assembler) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, features *productfeatures.Client, auditLogger *audit.Logger, assembler *evidence.Assembler, research ResearchStarter) *Service {
 	logger = logger.With(attr.SlogComponent("mcpapproval"))
 
 	return &Service{
@@ -145,6 +161,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		features:   features,
 		audit:      auditLogger,
 		evidence:   assembler,
+		research:   research,
 		gapRetryMu: sync.Mutex{},
 		gapRetryAt: make(map[uuid.UUID]time.Time),
 	}
@@ -779,6 +796,93 @@ func (s *Service) GetRequest(ctx context.Context, payload *gen.GetRequestPayload
 // every remote source while the stored document did not: an all-gaps document
 // carries strictly less than what it would replace, so the write is skipped
 // and the failure surfaced.
+// researchStatusRunning mirrors the report table's app-validated lifecycle
+// states.
+const researchStatusRunning = "running"
+
+func (s *Service) StartResearch(ctx context.Context, payload *gen.StartResearchPayload) (*gen.ResearchReport, error) {
+	projectID, orgID, err := s.project(ctx, authz.ScopeMCPApprovalDecide)
+	if err != nil {
+		return nil, err
+	}
+
+	requestID, err := uuid.Parse(payload.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid approval request id")
+	}
+
+	queries := repo.New(s.db)
+
+	// Resolved with the project id in the predicate, so a caller who learns an
+	// id from a dashboard URL cannot research another tenant's request.
+	if _, err := queries.GetApprovalRequest(ctx, repo.GetApprovalRequestParams{ID: requestID, ProjectID: projectID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "approval request not found")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading approval request").LogError(ctx, s.logger)
+	}
+
+	// At most one run per request in flight: a start while one runs returns
+	// the running report, so a double-click cannot spend twice.
+	running, err := queries.GetRunningResearchReport(ctx, repo.GetRunningResearchReportParams{
+		McpApprovalRequestID: requestID,
+		ProjectID:            projectID,
+	})
+	switch {
+	case err == nil:
+		return researchReportView(running), nil
+	case !errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading research reports").LogError(ctx, s.logger)
+	}
+
+	if s.research == nil {
+		return nil, oops.E(oops.CodeUnexpected, nil, "the research runner is not available").LogError(ctx, s.logger)
+	}
+
+	requestedBy := ""
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
+		requestedBy = authCtx.UserID
+	}
+
+	report, err := queries.CreateResearchReport(ctx, repo.CreateResearchReportParams{
+		OrganizationID:       orgID,
+		ProjectID:            projectID,
+		McpApprovalRequestID: requestID,
+		Status:               researchStatusRunning,
+		Report:               []byte("{}"),
+		ReportVersion:        researchagent.ReportVersion,
+		Model:                conv.ToPGText(researchagent.Model),
+		PromptVersion:        conv.ToPGText(researchagent.PromptVersion),
+		RequestedBy:          conv.ToPGTextEmpty(requestedBy),
+		StartedAt:            pgtype.Timestamptz{Time: time.Now(), Valid: true, InfinityModifier: pgtype.Finite},
+		CompletedAt:          pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
+		Error:                pgtype.Text{String: "", Valid: false},
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error creating research report").LogError(ctx, s.logger)
+	}
+
+	// The request's return must not cancel the enqueue.
+	if err := s.research(context.WithoutCancel(ctx), ResearchRun{
+		ReportID:  report.ID,
+		RequestID: requestID,
+		ProjectID: projectID,
+		OrgID:     orgID,
+	}); err != nil {
+		// The run never started; leaving the row running would strand it.
+		if _, failErr := queries.FailResearchReport(ctx, repo.FailResearchReportParams{
+			ID:        report.ID,
+			ProjectID: projectID,
+			Error:     conv.ToPGText("the research run could not be started"),
+		}); failErr != nil {
+			s.logger.ErrorContext(ctx, "record research start failure", attr.SlogError(failErr))
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "error starting research run").LogError(ctx, s.logger)
+	}
+
+	return researchReportView(report), nil
+}
+
 func (s *Service) RefreshEvidence(ctx context.Context, payload *gen.RefreshEvidencePayload) (*gen.ApprovalRequestDetail, error) {
 	projectID, _, err := s.project(ctx, authz.ScopeMCPApprovalRead)
 	if err != nil {

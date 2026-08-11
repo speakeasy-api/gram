@@ -1,0 +1,137 @@
+package activities
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	approvalrepo "github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/researchagent"
+)
+
+// McpResearchInput identifies one research run. Everything else is loaded
+// from the report and request rows, so a stale queue item cannot carry stale
+// evidence into the run.
+type McpResearchInput struct {
+	ReportID  uuid.UUID
+	RequestID uuid.UUID
+	ProjectID uuid.UUID
+	OrgID     string
+}
+
+// McpResearch runs the research agent for approval requests and lands the
+// result on the report row.
+type McpResearch struct {
+	logger *slog.Logger
+	db     *pgxpool.Pool
+	runner *researchagent.Runner
+}
+
+// NewMcpResearch builds the research activity over the supplied runner.
+func NewMcpResearch(logger *slog.Logger, db *pgxpool.Pool, runner *researchagent.Runner) *McpResearch {
+	return &McpResearch{
+		logger: logger.With(attr.SlogComponent("mcp-research")),
+		db:     db,
+		runner: runner,
+	}
+}
+
+// Run executes the research run named by input and records the outcome on
+// the report row. The report row is the durable record: a failure lands
+// there as status failed with the reason, so the workflow's single attempt
+// never strands a report in running.
+func (m *McpResearch) Run(ctx context.Context, input McpResearchInput) error {
+	stopHeartbeat := startActivityHeartbeat(ctx)
+	defer stopHeartbeat()
+
+	queries := approvalrepo.New(m.db)
+
+	request, err := queries.GetApprovalRequest(ctx, approvalrepo.GetApprovalRequestParams{
+		ID:        input.RequestID,
+		ProjectID: input.ProjectID,
+	})
+	if err != nil {
+		m.failReport(ctx, queries, input, "the approval request could not be loaded")
+		return fmt.Errorf("load approval request for research: %w", err)
+	}
+
+	document, meta, err := m.runner.Run(ctx, researchagent.RunInput{
+		OrgID:       input.OrgID,
+		ProjectID:   input.ProjectID,
+		ReportID:    input.ReportID,
+		TargetKind:  request.TargetKind,
+		TargetRaw:   request.TargetRaw,
+		ArtifactRef: conv.PtrValOr(conv.FromPGText[string](request.ArtifactRef), ""),
+		Evidence:    request.CurrentEvidence,
+	})
+	if err != nil {
+		m.logger.ErrorContext(ctx, "mcp research run failed", attr.SlogError(err))
+		m.failReport(ctx, queries, input, err.Error())
+		return fmt.Errorf("run research agent: %w", err)
+	}
+
+	if _, err := queries.CompleteResearchReport(ctx, approvalrepo.CompleteResearchReportParams{
+		ID:            input.ReportID,
+		ProjectID:     input.ProjectID,
+		Report:        document,
+		ReportVersion: researchagent.ReportVersion,
+		Model:         conv.ToPGText(meta.Model),
+	}); err != nil {
+		return fmt.Errorf("complete research report: %w", err)
+	}
+
+	m.logger.InfoContext(ctx, "mcp research run completed",
+		attr.SlogGenAIRequestModel(meta.Model),
+	)
+
+	return nil
+}
+
+// MarkInterrupted resolves a report whose run died without reaching its own
+// failure handling — a crashed worker or a heartbeat timeout. Marking a row
+// that already resolved is a no-op: the failure update only touches rows
+// still in running.
+func (m *McpResearch) MarkInterrupted(ctx context.Context, input McpResearchInput) error {
+	queries := approvalrepo.New(m.db)
+	_, err := queries.FailResearchReport(ctx, approvalrepo.FailResearchReportParams{
+		ID:        input.ReportID,
+		ProjectID: input.ProjectID,
+		Error:     conv.ToPGText("the research run was interrupted before it finished"),
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// Already resolved — completed, failed, or gone.
+		return nil
+	case err != nil:
+		return fmt.Errorf("mark research report interrupted: %w", err)
+	}
+
+	return nil
+}
+
+// failReport lands the failure on the report row, best-effort: the returned
+// activity error is what surfaces operationally, and the row is what the
+// admin sees.
+func (m *McpResearch) failReport(ctx context.Context, queries *approvalrepo.Queries, input McpResearchInput, reason string) {
+	// The run's context may already be dead — that must not keep the failure
+	// off the row.
+	ctx = context.WithoutCancel(ctx)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	if _, err := queries.FailResearchReport(ctx, approvalrepo.FailResearchReportParams{
+		ID:        input.ReportID,
+		ProjectID: input.ProjectID,
+		Error:     conv.ToPGText(reason),
+	}); err != nil {
+		m.logger.ErrorContext(ctx, "record research failure", attr.SlogError(err))
+	}
+}

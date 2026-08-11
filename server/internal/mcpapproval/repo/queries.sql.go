@@ -12,6 +12,59 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const completeResearchReport = `-- name: CompleteResearchReport :one
+UPDATE mcp_research_reports
+SET status = 'completed'
+  , report = $1
+  , report_version = $2
+  , model = $3::text
+  , completed_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id = $4
+  AND project_id = $5
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, mcp_approval_request_id, status, report, report_version, model, prompt_version, requested_by, started_at, completed_at, error, created_at, updated_at, deleted_at, deleted
+`
+
+type CompleteResearchReportParams struct {
+	Report        []byte
+	ReportVersion int32
+	Model         pgtype.Text
+	ID            uuid.UUID
+	ProjectID     uuid.UUID
+}
+
+func (q *Queries) CompleteResearchReport(ctx context.Context, arg CompleteResearchReportParams) (McpResearchReport, error) {
+	row := q.db.QueryRow(ctx, completeResearchReport,
+		arg.Report,
+		arg.ReportVersion,
+		arg.Model,
+		arg.ID,
+		arg.ProjectID,
+	)
+	var i McpResearchReport
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.McpApprovalRequestID,
+		&i.Status,
+		&i.Report,
+		&i.ReportVersion,
+		&i.Model,
+		&i.PromptVersion,
+		&i.RequestedBy,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.Error,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const createApprovalDecision = `-- name: CreateApprovalDecision :one
 INSERT INTO mcp_approval_decisions (
   organization_id
@@ -151,6 +204,52 @@ func (q *Queries) CreateResearchReport(ctx context.Context, arg CreateResearchRe
 		arg.CompletedAt,
 		arg.Error,
 	)
+	var i McpResearchReport
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.McpApprovalRequestID,
+		&i.Status,
+		&i.Report,
+		&i.ReportVersion,
+		&i.Model,
+		&i.PromptVersion,
+		&i.RequestedBy,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.Error,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const failResearchReport = `-- name: FailResearchReport :one
+UPDATE mcp_research_reports
+SET status = 'failed'
+  , error = $1::text
+  , completed_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id = $2
+  AND project_id = $3
+  AND status = 'running'
+  AND deleted IS FALSE
+RETURNING id, organization_id, project_id, mcp_approval_request_id, status, report, report_version, model, prompt_version, requested_by, started_at, completed_at, error, created_at, updated_at, deleted_at, deleted
+`
+
+type FailResearchReportParams struct {
+	Error     pgtype.Text
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Only a run still in flight can fail: a completed report must never be
+// retro-marked failed by a late compensation whose activity result got lost.
+func (q *Queries) FailResearchReport(ctx context.Context, arg FailResearchReportParams) (McpResearchReport, error) {
+	row := q.db.QueryRow(ctx, failResearchReport, arg.Error, arg.ID, arg.ProjectID)
 	var i McpResearchReport
 	err := row.Scan(
 		&i.ID,
@@ -412,6 +511,44 @@ func (q *Queries) GetBypassRequestForPromotion(ctx context.Context, arg GetBypas
 	return i, err
 }
 
+const getResearchReport = `-- name: GetResearchReport :one
+SELECT id, organization_id, project_id, mcp_approval_request_id, status, report, report_version, model, prompt_version, requested_by, started_at, completed_at, error, created_at, updated_at, deleted_at, deleted
+FROM mcp_research_reports
+WHERE id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+`
+
+type GetResearchReportParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) GetResearchReport(ctx context.Context, arg GetResearchReportParams) (McpResearchReport, error) {
+	row := q.db.QueryRow(ctx, getResearchReport, arg.ID, arg.ProjectID)
+	var i McpResearchReport
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.McpApprovalRequestID,
+		&i.Status,
+		&i.Report,
+		&i.ReportVersion,
+		&i.Model,
+		&i.PromptVersion,
+		&i.RequestedBy,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.Error,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getResearchReportForDecision = `-- name: GetResearchReportForDecision :one
 SELECT id
 FROM mcp_research_reports
@@ -435,6 +572,70 @@ func (q *Queries) GetResearchReportForDecision(ctx context.Context, arg GetResea
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const getRunningResearchReport = `-- name: GetRunningResearchReport :one
+SELECT id, organization_id, project_id, mcp_approval_request_id, status, report, report_version, model, prompt_version, requested_by, started_at, completed_at, error, created_at, updated_at, deleted_at, deleted
+FROM mcp_research_reports
+WHERE mcp_approval_request_id = $1
+  AND project_id = $2
+  AND status = 'running'
+  AND deleted IS FALSE
+ORDER BY created_at DESC
+LIMIT 1
+`
+
+type GetRunningResearchReportParams struct {
+	McpApprovalRequestID uuid.UUID
+	ProjectID            uuid.UUID
+}
+
+func (q *Queries) GetRunningResearchReport(ctx context.Context, arg GetRunningResearchReportParams) (McpResearchReport, error) {
+	row := q.db.QueryRow(ctx, getRunningResearchReport, arg.McpApprovalRequestID, arg.ProjectID)
+	var i McpResearchReport
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.McpApprovalRequestID,
+		&i.Status,
+		&i.Report,
+		&i.ReportVersion,
+		&i.Model,
+		&i.PromptVersion,
+		&i.RequestedBy,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.Error,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const hasRunningResearchReport = `-- name: HasRunningResearchReport :one
+SELECT EXISTS(
+  SELECT 1
+  FROM mcp_research_reports
+  WHERE mcp_approval_request_id = $1
+    AND project_id = $2
+    AND status = 'running'
+    AND deleted IS FALSE
+)
+`
+
+type HasRunningResearchReportParams struct {
+	McpApprovalRequestID uuid.UUID
+	ProjectID            uuid.UUID
+}
+
+func (q *Queries) HasRunningResearchReport(ctx context.Context, arg HasRunningResearchReportParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasRunningResearchReport, arg.McpApprovalRequestID, arg.ProjectID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const listApprovalRequestTargets = `-- name: ListApprovalRequestTargets :many

@@ -218,6 +218,7 @@ func (c *Client) AgentChat(
 			CacheControl:              nil,
 			NormalizeOutboundMessages: false,
 			WebSearch:                 nil,
+			DisableResponseHealing:    false,
 		}
 
 		if opts.UsageSource != "" {

@@ -22,6 +22,7 @@ type Endpoints struct {
 	CreateRequest      goa.Endpoint
 	Promote            goa.Endpoint
 	RefreshEvidence    goa.Endpoint
+	StartResearch      goa.Endpoint
 	RecordDecision     goa.Endpoint
 }
 
@@ -36,6 +37,7 @@ func NewEndpoints(s Service) *Endpoints {
 		CreateRequest:      NewCreateRequestEndpoint(s, a.APIKeyAuth),
 		Promote:            NewPromoteEndpoint(s, a.APIKeyAuth),
 		RefreshEvidence:    NewRefreshEvidenceEndpoint(s, a.APIKeyAuth),
+		StartResearch:      NewStartResearchEndpoint(s, a.APIKeyAuth),
 		RecordDecision:     NewRecordDecisionEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -48,6 +50,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateRequest = m(e.CreateRequest)
 	e.Promote = m(e.Promote)
 	e.RefreshEvidence = m(e.RefreshEvidence)
+	e.StartResearch = m(e.StartResearch)
 	e.RecordDecision = m(e.RecordDecision)
 }
 
@@ -306,6 +309,65 @@ func NewRefreshEvidenceEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			return nil, err
 		}
 		return s.RefreshEvidence(ctx, p)
+	}
+}
+
+// NewStartResearchEndpoint returns an endpoint function that calls the method
+// "startResearch" of service "mcpApproval".
+func NewStartResearchEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*StartResearchPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.StartResearch(ctx, p)
 	}
 }
 

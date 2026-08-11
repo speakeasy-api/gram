@@ -1335,7 +1335,19 @@ func newStartCommand() *cli.Command {
 					remoteProber,
 					remoteProber,
 					mcpapprovalcatalog.New(logger, db, mcpRegistryClient),
-				))
+				),
+				func(ctx context.Context, run mcpapproval.ResearchRun) error {
+					_, err := background.ExecuteMcpResearchWorkflow(ctx, temporalEnv, activities.McpResearchInput{
+						ReportID:  run.ReportID,
+						RequestID: run.RequestID,
+						ProjectID: run.ProjectID,
+						OrgID:     run.OrgID,
+					})
+					if err != nil {
+						return fmt.Errorf("execute research workflow: %w", err)
+					}
+					return nil
+				})
 			mcpapproval.Attach(mux, mcpApprovalService)
 			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, billingTracker, telemLogger, productFeatures, serverURL, authzEngine))
 			mcpmetadata.Attach(mux, mcpMetadataService)

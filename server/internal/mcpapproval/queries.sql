@@ -362,3 +362,57 @@ FROM risk_policy_bypass_requests
 WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
+
+-- name: HasRunningResearchReport :one
+SELECT EXISTS(
+  SELECT 1
+  FROM mcp_research_reports
+  WHERE mcp_approval_request_id = @mcp_approval_request_id
+    AND project_id = @project_id
+    AND status = 'running'
+    AND deleted IS FALSE
+);
+
+-- name: GetRunningResearchReport :one
+SELECT *
+FROM mcp_research_reports
+WHERE mcp_approval_request_id = @mcp_approval_request_id
+  AND project_id = @project_id
+  AND status = 'running'
+  AND deleted IS FALSE
+ORDER BY created_at DESC
+LIMIT 1;
+
+-- name: GetResearchReport :one
+SELECT *
+FROM mcp_research_reports
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE;
+
+-- name: CompleteResearchReport :one
+UPDATE mcp_research_reports
+SET status = 'completed'
+  , report = @report
+  , report_version = @report_version
+  , model = sqlc.narg(model)::text
+  , completed_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+RETURNING *;
+
+-- name: FailResearchReport :one
+-- Only a run still in flight can fail: a completed report must never be
+-- retro-marked failed by a late compensation whose activity result got lost.
+UPDATE mcp_research_reports
+SET status = 'failed'
+  , error = sqlc.narg(error)::text
+  , completed_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND status = 'running'
+  AND deleted IS FALSE
+RETURNING *;

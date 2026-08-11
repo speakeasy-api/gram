@@ -122,6 +122,13 @@ type CompletionRequest struct {
 	// response. Search carries its own per-result charge on top of the
 	// completion tokens.
 	WebSearch *WebSearchOptions
+
+	// DisableResponseHealing turns off OpenRouter's response-healing plugin
+	// for the request. Healing "repairs" malformed structured output into a
+	// schema-valid object by stuffing unparseable content into string fields
+	// and inventing literal "placeholder" filler — a caller that validates
+	// its output wants the malformed original to fail loudly instead.
+	DisableResponseHealing bool
 }
 
 // WebSearchOptions configures the web-search plugin for one request.
@@ -157,6 +164,11 @@ type ObjectCompletionRequest struct {
 	// mandatory for this endpoint"), so a caller that needs such a model must
 	// set an effort here rather than silently taking a 400.
 	Reasoning *Reasoning
+
+	// DisableResponseHealing turns off OpenRouter's response-healing plugin,
+	// so malformed structured output fails the caller's validation instead
+	// of being "repaired" into schema-valid placeholder filler.
+	DisableResponseHealing bool
 }
 
 // CompletionResponse encapsulates the result of a completion call.

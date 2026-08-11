@@ -45,6 +45,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/researchagent"
+	platformresearch "github.com/speakeasy-api/gram/server/internal/platformtools/research"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
@@ -157,6 +159,7 @@ type Activities struct {
 	remoteSessionRefresh            *activities.RemoteSessionRefresh
 	demoteExpiredTrials             *activities.DemoteExpiredTrials
 	trialEmails                     *trialemails.Service
+	mcpResearch                     *activities.McpResearch
 }
 
 func NewActivities(
@@ -267,6 +270,18 @@ func NewActivities(
 		)
 	}
 
+	// The research agent needs completions and guardian egress; workers wired
+	// without either (test workers) get a nil activity and the wrapper fails
+	// loudly if a research run is ever scheduled there.
+	var mcpResearch *activities.McpResearch
+	if db != nil && chatClient != nil && guardianPolicy != nil {
+		mcpResearch = activities.NewMcpResearch(logger, db, researchagent.New(
+			chatClient,
+			platformresearch.NewWebSearchTool(platformresearch.NewSearchClient(chatClient)),
+			platformresearch.NewFetchPageTool(platformresearch.ConfigureFetchClient(guardianPolicy.Client())),
+		))
+	}
+
 	var skillSuggestionAnalyzer *activities.SkillSuggestionAnalyzer
 	if db != nil && telemetryRepo != nil && chatClient != nil && temporalEnv != nil && judgeRateLimiter != nil {
 		engine, err := suggest.NewEngine(suggest.DefaultConfig(), logger, db, telemetryRepo, chatrepo.New(db), chatClient, judgeRateLimiter)
@@ -356,6 +371,7 @@ func NewActivities(
 		skillSuggestionAnalyzer: skillSuggestionAnalyzer,
 		remoteSessionRefresh:    remoteSessionRefresh,
 		trialEmails:             trialEmailsService,
+		mcpResearch:             mcpResearch,
 		// The judges draw on the same per-(org, model) bucket and the same
 		// completion client as every other platform judge, so chat analysis
 		// cannot outspend the org's key behind their backs.
@@ -849,6 +865,31 @@ func (a *Activities) ListExpiredTrials(ctx context.Context) ([]string, error) {
 func (a *Activities) DemoteExpiredTrial(ctx context.Context, args activities.DemoteExpiredTrialArgs) error {
 	if err := a.demoteExpiredTrials.Demote(ctx, args); err != nil {
 		return fmt.Errorf("demote expired trial: %w", err)
+	}
+	return nil
+}
+
+// RunMcpResearch executes one research-agent run for an MCP approval request
+// and lands the outcome on its report row.
+func (a *Activities) RunMcpResearch(ctx context.Context, input activities.McpResearchInput) error {
+	if a.mcpResearch == nil {
+		return fmt.Errorf("run mcp research: research activity not configured on this worker")
+	}
+	if err := a.mcpResearch.Run(ctx, input); err != nil {
+		return fmt.Errorf("run mcp research: %w", err)
+	}
+	return nil
+}
+
+// MarkMcpResearchInterrupted resolves a research report whose run died
+// without reaching its own failure handling. A no-op for reports that
+// already resolved.
+func (a *Activities) MarkMcpResearchInterrupted(ctx context.Context, input activities.McpResearchInput) error {
+	if a.mcpResearch == nil {
+		return fmt.Errorf("mark mcp research interrupted: research activity not configured on this worker")
+	}
+	if err := a.mcpResearch.MarkInterrupted(ctx, input); err != nil {
+		return fmt.Errorf("mark mcp research interrupted: %w", err)
 	}
 	return nil
 }

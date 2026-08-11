@@ -209,21 +209,22 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input) (judgeCallResul
 	defer cancel()
 
 	response, err := j.client.GetObjectCompletion(callCtx, openrouter.ObjectCompletionRequest{
-		OrgID:          in.OrgID,
-		ProjectID:      in.ProjectID,
-		Model:          model,
-		SystemPrompt:   SystemPrompt,
-		Prompt:         judgePrompt,
-		Temperature:    &temperature,
-		UsageSource:    billing.ModelUsageSourceRiskAnalysis,
-		KeyType:        openrouter.KeyTypeInternal,
-		KeySlot:        billing.ModelUsageSourceRiskPolicy,
-		UserID:         in.UserID,
-		ExternalUserID: "",
-		UserEmail:      "",
-		HTTPMetadata:   nil,
-		JSONSchema:     &jsonSchema,
-		Reasoning:      nil,
+		OrgID:                  in.OrgID,
+		ProjectID:              in.ProjectID,
+		Model:                  model,
+		SystemPrompt:           SystemPrompt,
+		Prompt:                 judgePrompt,
+		Temperature:            &temperature,
+		UsageSource:            billing.ModelUsageSourceRiskAnalysis,
+		KeyType:                openrouter.KeyTypeInternal,
+		KeySlot:                billing.ModelUsageSourceRiskPolicy,
+		UserID:                 in.UserID,
+		ExternalUserID:         "",
+		UserEmail:              "",
+		HTTPMetadata:           nil,
+		JSONSchema:             &jsonSchema,
+		Reasoning:              nil,
+		DisableResponseHealing: false,
 	})
 	if err != nil {
 		return judgeCallResult{}, fmt.Errorf("openrouter object completion: %w", err)

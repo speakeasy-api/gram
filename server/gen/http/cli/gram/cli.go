@@ -123,7 +123,7 @@ func UsageCommands() []string {
 		"integrations (get|list)",
 		"keys (create-key|list-keys|revoke-key|verify-key)",
 		"litellm (create-instance|list-instances|rotate-instance-key|revoke-instance|ingest|traces)",
-		"mcp-approval (list-requests|get-request|ensure-server-review|create-request|promote|refresh-evidence|record-decision)",
+		"mcp-approval (list-requests|get-request|ensure-server-review|create-request|promote|refresh-evidence|start-research|record-decision)",
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|check-mcp-endpoint-slug-availability|delete-mcp-endpoint)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|list-mcp-servers-for-org|update-mcp-server|list-tool-filters|set-tool-metadata-batch|add-tool-metadata-batch|list-tool-metadata|set-tool-metadata|delete-tool-metadata|delete-mcp-server)",
@@ -1239,6 +1239,12 @@ func ParseEndpoint(
 		mcpApprovalRefreshEvidenceSessionTokenFlag     = mcpApprovalRefreshEvidenceFlags.String("session-token", "", "")
 		mcpApprovalRefreshEvidenceApikeyTokenFlag      = mcpApprovalRefreshEvidenceFlags.String("apikey-token", "", "")
 		mcpApprovalRefreshEvidenceProjectSlugInputFlag = mcpApprovalRefreshEvidenceFlags.String("project-slug-input", "", "")
+
+		mcpApprovalStartResearchFlags                = flag.NewFlagSet("start-research", flag.ExitOnError)
+		mcpApprovalStartResearchIDFlag               = mcpApprovalStartResearchFlags.String("id", "REQUIRED", "")
+		mcpApprovalStartResearchSessionTokenFlag     = mcpApprovalStartResearchFlags.String("session-token", "", "")
+		mcpApprovalStartResearchApikeyTokenFlag      = mcpApprovalStartResearchFlags.String("apikey-token", "", "")
+		mcpApprovalStartResearchProjectSlugInputFlag = mcpApprovalStartResearchFlags.String("project-slug-input", "", "")
 
 		mcpApprovalRecordDecisionFlags                = flag.NewFlagSet("record-decision", flag.ExitOnError)
 		mcpApprovalRecordDecisionBodyFlag             = mcpApprovalRecordDecisionFlags.String("body", "REQUIRED", "")
@@ -3506,6 +3512,7 @@ func ParseEndpoint(
 	mcpApprovalCreateRequestFlags.Usage = mcpApprovalCreateRequestUsage
 	mcpApprovalPromoteFlags.Usage = mcpApprovalPromoteUsage
 	mcpApprovalRefreshEvidenceFlags.Usage = mcpApprovalRefreshEvidenceUsage
+	mcpApprovalStartResearchFlags.Usage = mcpApprovalStartResearchUsage
 	mcpApprovalRecordDecisionFlags.Usage = mcpApprovalRecordDecisionUsage
 
 	mcpEndpointsFlags.Usage = mcpEndpointsUsage
@@ -4797,6 +4804,9 @@ func ParseEndpoint(
 
 			case "refresh-evidence":
 				epf = mcpApprovalRefreshEvidenceFlags
+
+			case "start-research":
+				epf = mcpApprovalStartResearchFlags
 
 			case "record-decision":
 				epf = mcpApprovalRecordDecisionFlags
@@ -6716,6 +6726,9 @@ func ParseEndpoint(
 			case "refresh-evidence":
 				endpoint = c.RefreshEvidence()
 				data, err = mcpapprovalc.BuildRefreshEvidencePayload(*mcpApprovalRefreshEvidenceIDFlag, *mcpApprovalRefreshEvidenceSessionTokenFlag, *mcpApprovalRefreshEvidenceApikeyTokenFlag, *mcpApprovalRefreshEvidenceProjectSlugInputFlag)
+			case "start-research":
+				endpoint = c.StartResearch()
+				data, err = mcpapprovalc.BuildStartResearchPayload(*mcpApprovalStartResearchIDFlag, *mcpApprovalStartResearchSessionTokenFlag, *mcpApprovalStartResearchApikeyTokenFlag, *mcpApprovalStartResearchProjectSlugInputFlag)
 			case "record-decision":
 				endpoint = c.RecordDecision()
 				data, err = mcpapprovalc.BuildRecordDecisionPayload(*mcpApprovalRecordDecisionBodyFlag, *mcpApprovalRecordDecisionSessionTokenFlag, *mcpApprovalRecordDecisionApikeyTokenFlag, *mcpApprovalRecordDecisionProjectSlugInputFlag)
@@ -12533,6 +12546,7 @@ func mcpApprovalUsage() {
 	fmt.Fprintln(os.Stderr, `    create-request: Ask for an MCP server to be reviewed. Repeat asks for the same server attach to the existing review rather than opening a second one.`)
 	fmt.Fprintln(os.Stderr, `    promote: Promote a risk-policy bypass request into an approval request, carrying its requester and justification into the review queue.`)
 	fmt.Fprintln(os.Stderr, `    refresh-evidence: Re-run every evidence source for a request and replace its current evidence with the fresh gather. Frozen decision snapshots are never touched.`)
+	fmt.Fprintln(os.Stderr, `    start-research: Start a research-agent run for an approval request. The agent searches the web and reads pages about the server's vendor, then files a cited report; it never decides. Runs are additive — a re-run adds a report rather than replacing one — and at most one run per request is in flight at a time: starting while one runs returns the running report.`)
 	fmt.Fprintln(os.Stderr, `    record-decision: Approve or deny an MCP approval request, recording the rationale and who it applies to.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -12682,6 +12696,30 @@ func mcpApprovalRefreshEvidenceUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-approval refresh-evidence --id \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpApprovalStartResearchUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-approval start-research", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Start a research-agent run for an approval request. The agent searches the web and reads pages about the server's vendor, then files a cited report; it never decides. Runs are additive — a re-run adds a report rather than replacing one — and at most one run per request is in flight at a time: starting while one runs returns the running report.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-approval start-research --id \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func mcpApprovalRecordDecisionUsage() {

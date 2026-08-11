@@ -194,10 +194,13 @@ type OpenAIChatRequest struct {
 	Plugins   []RequestPlugin   `json:"plugins,omitempty"`
 }
 
-// RequestPlugin is one entry in the outbound `plugins` array. Currently only
-// the web-search plugin ("web") is issued.
+// RequestPlugin is one entry in the outbound `plugins` array: the web-search
+// plugin ("web") and the response-healing plugin ("response-healing").
 type RequestPlugin struct {
 	ID string `json:"id"`
+
+	// Enabled turns a default-on plugin off when explicitly false.
+	Enabled *bool `json:"enabled,omitempty"`
 
 	// MaxResults caps how many web results the search plugin returns. Zero
 	// leaves the provider default.

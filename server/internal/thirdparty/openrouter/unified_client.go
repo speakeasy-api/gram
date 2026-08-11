@@ -173,7 +173,12 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 	}
 
 	if req.WebSearch != nil {
-		reqBody.Plugins = []RequestPlugin{{ID: "web", MaxResults: req.WebSearch.MaxResults}}
+		reqBody.Plugins = append(reqBody.Plugins, RequestPlugin{ID: "web", Enabled: nil, MaxResults: req.WebSearch.MaxResults})
+	}
+
+	if req.DisableResponseHealing {
+		healingOff := false
+		reqBody.Plugins = append(reqBody.Plugins, RequestPlugin{ID: "response-healing", Enabled: &healingOff, MaxResults: 0})
 	}
 
 	if req.ChatID != uuid.Nil {
@@ -568,6 +573,7 @@ func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompleti
 		Reasoning:                 reasoning,
 		NormalizeOutboundMessages: false,
 		WebSearch:                 nil,
+		DisableResponseHealing:    req.DisableResponseHealing,
 	}
 
 	return c.GetCompletion(ctx, completionReq)

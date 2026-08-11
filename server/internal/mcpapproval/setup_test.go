@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -74,6 +75,34 @@ type testInstance struct {
 
 	// probes is the instance's remote-probe stand-in, reconfigurable per test.
 	probes *testProbes
+
+	// research records the runs the service enqueued.
+	research *fakeResearchStarter
+}
+
+// fakeResearchStarter stands in for the Temporal research workflow.
+type fakeResearchStarter struct {
+	mu        sync.Mutex
+	runs      []mcpapproval.ResearchRun
+	failStart bool
+}
+
+func (f *fakeResearchStarter) start(_ context.Context, run mcpapproval.ResearchRun) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.failStart {
+		return errors.New("temporal unavailable")
+	}
+	f.runs = append(f.runs, run)
+	return nil
+}
+
+func (f *fakeResearchStarter) started() []mcpapproval.ResearchRun {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]mcpapproval.ResearchRun, len(f.runs))
+	copy(out, f.runs)
+	return out
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -127,8 +156,12 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		probes,
 	)
 
+	// The research starter records enqueued runs instead of reaching
+	// Temporal; a test flips failStart to exercise the enqueue-failed path.
+	starter := &fakeResearchStarter{mu: sync.Mutex{}, runs: nil, failStart: false}
+
 	ti := &testInstance{
-		service:        mcpapproval.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, features, audit.NewLogger(), assembler),
+		service:        mcpapproval.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, features, audit.NewLogger(), assembler, starter.start),
 		conn:           conn,
 		repo:           repo.New(conn),
 		features:       features,
@@ -137,6 +170,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		organizationID: organizationID,
 		projectID:      projectID,
 		probes:         probes,
+		research:       starter,
 	}
 
 	enableMCPApproval(t, ctx, ti)

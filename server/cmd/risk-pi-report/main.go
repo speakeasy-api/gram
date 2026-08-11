@@ -664,21 +664,22 @@ func judgeOne(ctx context.Context, client openrouter.CompletionClient, model str
 	defer cancel()
 
 	resp, err := client.GetObjectCompletion(callCtx, openrouter.ObjectCompletionRequest{
-		OrgID:          benchOrgID,
-		ProjectID:      benchProjectID,
-		Model:          model,
-		SystemPrompt:   piopenrouter.SystemPrompt,
-		Prompt:         string(payload),
-		Temperature:    &temp,
-		UsageSource:    billing.ModelUsageSourceGram,
-		KeyType:        openrouter.KeyTypeInternal,
-		KeySlot:        "",
-		UserID:         "",
-		ExternalUserID: "",
-		UserEmail:      "",
-		HTTPMetadata:   nil,
-		JSONSchema:     &schema,
-		Reasoning:      reasoning,
+		OrgID:                  benchOrgID,
+		ProjectID:              benchProjectID,
+		Model:                  model,
+		SystemPrompt:           piopenrouter.SystemPrompt,
+		Prompt:                 string(payload),
+		Temperature:            &temp,
+		UsageSource:            billing.ModelUsageSourceGram,
+		KeyType:                openrouter.KeyTypeInternal,
+		KeySlot:                "",
+		UserID:                 "",
+		ExternalUserID:         "",
+		UserEmail:              "",
+		HTTPMetadata:           nil,
+		JSONSchema:             &schema,
+		Reasoning:              reasoning,
+		DisableResponseHealing: false,
 	})
 	if err != nil {
 		return false, 0, fmt.Errorf("openrouter object completion: %w", err)

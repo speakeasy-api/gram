@@ -98,6 +98,9 @@ func TestWebSearch(t *testing.T) {
 	require.NotNil(t, completions.request.WebSearch)
 	require.Equal(t, 5, completions.request.WebSearch.MaxResults)
 	require.Equal(t, "org-1", completions.request.OrgID)
+	// The search route rejects a disabled reasoning setting with a 400, so
+	// the override must stay unset.
+	require.Nil(t, completions.request.Reasoning)
 }
 
 func TestWebSearch_ClampsMaxResults(t *testing.T) {

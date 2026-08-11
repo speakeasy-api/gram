@@ -1563,6 +1563,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		CacheControl:              chatRequest.CacheControl,
 		NormalizeOutboundMessages: r.URL.Query().Get("unstable_normalizeOutboundMessages") == "1",
 		WebSearch:                 nil,
+		DisableResponseHealing:    false,
 	}
 
 	// Opt-in: callers must pass includeContextWindow=1 to receive the
@@ -2073,6 +2074,7 @@ func (s *Service) Summarize(ctx context.Context, payload *gen.SummarizePayload) 
 		CacheControl:              nil,
 		NormalizeOutboundMessages: false,
 		WebSearch:                 nil,
+		DisableResponseHealing:    false,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate summary").LogError(ctx, s.logger)

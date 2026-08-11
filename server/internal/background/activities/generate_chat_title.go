@@ -182,6 +182,7 @@ func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, projectID 
 		CacheControl:              nil,
 		NormalizeOutboundMessages: false,
 		WebSearch:                 nil,
+		DisableResponseHealing:    false,
 	})
 	if err != nil {
 		g.logger.WarnContext(ctx, "failed to generate chat title via OpenRouter", attr.SlogError(err))

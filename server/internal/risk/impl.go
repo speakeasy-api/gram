@@ -2783,12 +2783,13 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 		KeySlot:      "",
 		// The admin who asked for the suggestion — this completion is
 		// user-initiated, so usage attributes to them, not "(unset)". (cubic)
-		UserID:         userID,
-		ExternalUserID: "",
-		UserEmail:      userEmail,
-		HTTPMetadata:   nil,
-		JSONSchema:     &jsonSchema,
-		Reasoning:      nil,
+		UserID:                 userID,
+		ExternalUserID:         "",
+		UserEmail:              userEmail,
+		HTTPMetadata:           nil,
+		JSONSchema:             &jsonSchema,
+		Reasoning:              nil,
+		DisableResponseHealing: false,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("openrouter object completion: %w", err)
@@ -2936,12 +2937,13 @@ Output ONLY the JSON object. No prose, no markdown fences.`
 		KeySlot:      "",
 		// The admin who asked for the suggestion — this completion is
 		// user-initiated, so usage attributes to them, not "(unset)".
-		UserID:         userID,
-		ExternalUserID: "",
-		UserEmail:      userEmail,
-		HTTPMetadata:   nil,
-		JSONSchema:     &jsonSchema,
-		Reasoning:      nil,
+		UserID:                 userID,
+		ExternalUserID:         "",
+		UserEmail:              userEmail,
+		HTTPMetadata:           nil,
+		JSONSchema:             &jsonSchema,
+		Reasoning:              nil,
+		DisableResponseHealing: false,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("openrouter object completion: %w", err)
@@ -3670,6 +3672,7 @@ func (s *Service) generatePolicyName(ctx context.Context, orgID, projectID strin
 		CacheControl:              nil,
 		NormalizeOutboundMessages: false,
 		WebSearch:                 nil,
+		DisableResponseHealing:    false,
 	})
 	if err != nil {
 		s.logger.WarnContext(ctx, "failed to generate policy name via OpenRouter", attr.SlogError(err))
@@ -3820,6 +3823,7 @@ func (s *Service) generatePromptPolicyName(ctx context.Context, orgID, projectID
 		CacheControl:              nil,
 		NormalizeOutboundMessages: false,
 		WebSearch:                 nil,
+		DisableResponseHealing:    false,
 	})
 	if err != nil {
 		s.logger.WarnContext(ctx, "failed to generate prompt policy name via OpenRouter", attr.SlogError(err))

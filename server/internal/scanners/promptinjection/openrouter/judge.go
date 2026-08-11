@@ -334,6 +334,7 @@ func (c *Engine) call(ctx context.Context, req promptinjection.Request, msg judg
 		CacheControl:              nil,
 		NormalizeOutboundMessages: false,
 		WebSearch:                 nil,
+		DisableResponseHealing:    false,
 	})
 	if err != nil {
 		return judgeVerdict{}, fmt.Errorf("openrouter completion: %w", err)

@@ -124,12 +124,16 @@ func (c *SearchClient) Search(ctx context.Context, orgID, projectID, query strin
 		KeyType:        openrouter.KeyTypeChat,
 		KeySlot:        "",
 		JSONSchema:     nil,
-		// The answer text is discarded, so reasoning tokens would be pure
-		// waste.
-		Reasoning:                 &openrouter.Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil},
+		// The answer text is discarded, so reasoning tokens are waste — but
+		// this route REJECTS a disabled setting outright ("Reasoning is
+		// mandatory for this endpoint"), so the override stays nil and the
+		// provider default stands. Do not "optimize" this back to
+		// effort none: it turns every search into a 400.
+		Reasoning:                 nil,
 		CacheControl:              nil,
 		NormalizeOutboundMessages: false,
 		WebSearch:                 &openrouter.WebSearchOptions{MaxResults: maxResults},
+		DisableResponseHealing:    false,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("run web search: %w", err)

@@ -4,6 +4,7 @@ import {
 } from "@/components/mcp-approvals/EvidencePanel";
 import { parseEvidenceDocument } from "@/components/mcp-approvals/evidence";
 import { Button } from "@/components/ui/Button";
+import { Heading } from "@/components/ui/Heading";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { useProject } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
@@ -16,8 +17,10 @@ import {
 } from "@gram/client/react-query/getMcpApprovalRequest.js";
 import { invalidateAllListMcpApprovalRequests } from "@gram/client/react-query/listMcpApprovalRequests.js";
 import { useRefreshMcpApprovalEvidenceMutation } from "@gram/client/react-query/refreshMcpApprovalEvidence.js";
+import { useStartMcpResearchMutation } from "@gram/client/react-query/startMcpResearch.js";
+import { RequireScope } from "@/components/require-scope";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronUp, Loader2, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -39,7 +42,17 @@ export function ApprovalReview({
   const detailQuery = useGetMcpApprovalRequest(
     { id: requestId, gramProject: project.slug },
     undefined,
-    { enabled: requestId.length > 0 && project.slug.length > 0 },
+    {
+      enabled: requestId.length > 0 && project.slug.length > 0,
+      // A running research report resolves server-side; poll until it does
+      // so the report appears without a manual refresh.
+      refetchInterval: (query) =>
+        query.state.data?.researchReports.some(
+          (report) => report.status === "running",
+        )
+          ? 5_000
+          : false,
+    },
   );
 
   const detail = detailQuery.data;
@@ -73,34 +86,33 @@ export function ApprovalReview({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
-      <div className="space-y-6">
-        <EvidencePanel
-          document={document}
-          collectedAt={detail.evidenceCollectedAt}
-        />
-        <ResearchReports reports={detail.researchReports} />
-      </div>
-      <aside className="space-y-5">
-        {/* An unreviewed dossier is evidence without a review: no status to
-            report, nobody waiting. The request card and requester list only
-            exist once someone actually asks or decides. */}
-        {detail.request.status === "unreviewed" ? (
-          <p className="text-muted-foreground text-sm">
-            No one has asked for this server and no decision has been recorded.
-          </p>
-        ) : (
-          <>
-            <RequestSummary
-              status={detail.request.status}
-              createdAt={detail.request.createdAt}
-              versionPinned={detail.request.versionPinned}
-            />
-            <Requesters requesters={detail.requesters} />
-          </>
-        )}
-        <PriorDecisions decisions={detail.decisions} />
-      </aside>
+    <div className="space-y-6">
+      {/* Request context and decision history read before the evidence: one
+          column, so a sparse review (nobody asked, no decisions) is two short
+          lines instead of a mostly-empty rail. */}
+      {/* An unreviewed dossier is evidence without a review: no status to
+          report, nobody waiting. The request card and requester list only
+          exist once someone actually asks or decides. */}
+      {detail.request.status === "unreviewed" ? (
+        <p className="text-muted-foreground text-sm">
+          No one has asked for this server and no decision has been recorded.
+        </p>
+      ) : (
+        <>
+          <RequestSummary
+            status={detail.request.status}
+            createdAt={detail.request.createdAt}
+            versionPinned={detail.request.versionPinned}
+          />
+          <Requesters requesters={detail.requesters} />
+        </>
+      )}
+      <PriorDecisions decisions={detail.decisions} />
+      <EvidencePanel
+        document={document}
+        collectedAt={detail.evidenceCollectedAt}
+      />
+      <ResearchReports reports={detail.researchReports} requestId={requestId} />
     </div>
   );
 }
@@ -334,42 +346,221 @@ function reportStatusLabel(status: string): string {
 
 function ResearchReports({
   reports,
+  requestId,
 }: {
   reports: ResearchReport[];
-}): JSX.Element | null {
-  if (reports.length === 0) {
-    // No dead button until the research agent exists; the page is fully
-    // usable on deterministic evidence alone.
-    return null;
-  }
+  requestId: string;
+}): JSX.Element {
+  const project = useProject();
+  const queryClient = useQueryClient();
+  const startResearch = useStartMcpResearchMutation({
+    onSuccess: async () => {
+      await invalidateGetMcpApprovalRequest(queryClient, [
+        { id: requestId, gramProject: project.slug },
+      ]);
+    },
+    onError: () => {
+      toast.error("Starting the research run failed — nothing was spent");
+    },
+  });
+
+  const [showPrevious, setShowPrevious] = useState(false);
+  const running = reports.some((report) => report.status === "running");
+
+  // Newest first from the API: the latest run is the report; earlier runs
+  // are history behind a toggle.
+  const latest = reports[0];
+  const previous = reports.slice(1);
 
   return (
     <section className="space-y-2">
-      <h3 className="text-eyebrow">Research reports</h3>
+      <div className="flex items-center justify-between gap-2">
+        <Heading variant="h3" className="text-lg font-thin">
+          Web research
+        </Heading>
+        <RequireScope scope="mcp_approval:decide" level="component">
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={running || startResearch.isPending}
+            onClick={() =>
+              startResearch.mutate({
+                request: { id: requestId, gramProject: project.slug },
+              })
+            }
+          >
+            {running && (
+              <Button.LeftIcon>
+                <Loader2 className="animate-spin" />
+              </Button.LeftIcon>
+            )}
+            <Button.Text>
+              {running ? "Researching…" : "Run Research"}
+            </Button.Text>
+          </Button>
+        </RequireScope>
+      </div>
       <p className="text-muted-foreground text-xs">
         Gathered by an agent from public web sources, which may be inaccurate,
         incomplete, or deliberately seeded. Read them as leads to verify, not as
-        findings.
+        findings — the agent gathers and cites, it never decides.
       </p>
-      <ul className="space-y-3">
-        {reports.map((report) => (
-          <li key={report.id} className="border-border border p-2.5 text-xs">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-medium">
-                {reportStatusLabel(report.status)}
-              </span>
-              <span className="text-muted-foreground shrink-0 text-xs">
-                <HumanizeDateTime date={report.createdAt} />
-              </span>
-            </div>
-            {report.error && (
-              <p className="text-muted-foreground mt-1">{report.error}</p>
+      <p className="border-warning border px-2.5 py-1.5 text-xs">
+        <span className="font-medium">
+          A research run spends real AI credits.
+        </span>{" "}
+        The agent makes dozens of model calls, web searches, and page reads —
+        typically several hundred thousand tokens, several minutes per run.
+      </p>
+      {!latest && (
+        <p className="border-border text-muted-foreground border border-dashed px-2.5 py-1.5 text-xs">
+          No research has been run for this server.
+        </p>
+      )}
+      {latest && <ResearchReportCard report={latest} />}
+      {previous.length > 0 && (
+        <>
+          <button
+            type="button"
+            aria-expanded={showPrevious}
+            onClick={() => setShowPrevious((current) => !current)}
+            className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs"
+          >
+            {showPrevious ? (
+              <>
+                Hide previous runs
+                <ChevronUp className="size-3" />
+              </>
+            ) : (
+              <>
+                Show {previous.length} previous{" "}
+                {previous.length === 1 ? "run" : "runs"}
+                <ChevronDown className="size-3" />
+              </>
             )}
-            <ReportClaims report={report.report} />
-          </li>
-        ))}
-      </ul>
+          </button>
+          {showPrevious && (
+            <ul className="space-y-3">
+              {previous.map((report) => (
+                <li key={report.id}>
+                  <ResearchReportCard report={report} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
     </section>
+  );
+}
+
+function ResearchReportCard({
+  report,
+}: {
+  report: ResearchReport;
+}): JSX.Element {
+  return (
+    <div className="border-border border p-2.5 text-xs">
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex items-center gap-1.5 font-medium">
+          {report.status === "running" && (
+            <Loader2 className="size-3 animate-spin" />
+          )}
+          {reportStatusLabel(report.status)}
+        </span>
+        <span className="text-muted-foreground shrink-0 text-xs">
+          <HumanizeDateTime date={report.createdAt} />
+        </span>
+      </div>
+      {report.status === "running" && (
+        <p className="text-muted-foreground mt-1">
+          The agent is searching and reading — this usually takes a few minutes.
+        </p>
+      )}
+      {report.error && (
+        <p className="text-muted-foreground mt-1">{report.error}</p>
+      )}
+      <ReportBody report={report.report} />
+      <ReportRunMeta report={report} />
+    </div>
+  );
+}
+
+/**
+ * The report's summary and coverage, rendered above the claims. Thin or
+ * absent coverage is the headline finding, so it renders as a bordered
+ * callout rather than fine print.
+ */
+function ReportBody({ report }: { report: unknown }): JSX.Element | null {
+  if (typeof report !== "object" || report === null || Array.isArray(report)) {
+    return null;
+  }
+  const record = report as Record<string, unknown>;
+  const summary =
+    typeof record["summary"] === "string" ? record["summary"] : "";
+  const coverage =
+    typeof record["coverage"] === "object" &&
+    record["coverage"] !== null &&
+    !Array.isArray(record["coverage"])
+      ? (record["coverage"] as Record<string, unknown>)
+      : null;
+  const coverageLevel =
+    coverage && typeof coverage["level"] === "string" ? coverage["level"] : "";
+  const coverageNote =
+    coverage && typeof coverage["note"] === "string" ? coverage["note"] : "";
+
+  return (
+    <>
+      {summary && <p className="mt-2">{summary}</p>}
+      {(coverageLevel === "none" || coverageLevel === "thin") && (
+        <p className="border-warning mt-2 border px-2.5 py-1.5">
+          <span className="font-medium">
+            {coverageLevel === "none"
+              ? "No independent coverage exists."
+              : "Independent coverage is thin."}
+          </span>
+          {coverageNote && (
+            <span className="text-muted-foreground"> {coverageNote}</span>
+          )}
+        </p>
+      )}
+      <ReportClaims report={report} />
+    </>
+  );
+}
+
+/** What produced the report, from its embedded run metadata. */
+function ReportRunMeta({
+  report,
+}: {
+  report: ResearchReport;
+}): JSX.Element | null {
+  if (report.status !== "completed") return null;
+
+  const parts: string[] = [];
+  if (report.model) parts.push(report.model);
+  const raw = report.report;
+  if (typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
+    const run = (raw as Record<string, unknown>)["run"];
+    if (typeof run === "object" && run !== null && !Array.isArray(run)) {
+      const meta = run as Record<string, unknown>;
+      if (typeof meta["searches"] === "number") {
+        parts.push(`${meta["searches"]} searches`);
+      }
+      if (typeof meta["fetches"] === "number") {
+        parts.push(`${meta["fetches"]} pages read`);
+      }
+      const prompt = meta["prompt_tokens"];
+      const completion = meta["completion_tokens"];
+      if (typeof prompt === "number" && typeof completion === "number") {
+        parts.push(`${(prompt + completion).toLocaleString()} tokens`);
+      }
+    }
+  }
+  if (parts.length === 0) return null;
+
+  return (
+    <p className="text-muted-foreground mt-2 text-xs">{parts.join(" · ")}</p>
   );
 }
 
@@ -397,16 +588,34 @@ function reportClaims(report: unknown): ReportClaim[] {
     const record = entry as Record<string, unknown>;
     const text = record["text"];
     if (typeof text !== "string" || text === "") continue;
-    const citations = record["citations"];
     out.push({
       text,
       tier: typeof record["tier"] === "string" ? record["tier"] : undefined,
-      citations: Array.isArray(citations)
-        ? citations.filter(
-            (citation): citation is string => typeof citation === "string",
-          )
-        : [],
+      citations: citationURLs(record["citations"]),
     });
+  }
+
+  return out;
+}
+
+/**
+ * Reads a claim's citation list. The runner stores citations as {url, title}
+ * objects; bare string URLs are accepted too so older payloads keep
+ * rendering.
+ */
+function citationURLs(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+
+  const out: string[] = [];
+  for (const entry of value) {
+    if (typeof entry === "string" && entry !== "") {
+      out.push(entry);
+      continue;
+    }
+    if (typeof entry === "object" && entry !== null && !Array.isArray(entry)) {
+      const url = (entry as Record<string, unknown>)["url"];
+      if (typeof url === "string" && url !== "") out.push(url);
+    }
   }
 
   return out;
