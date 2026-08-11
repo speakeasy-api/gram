@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -10,10 +11,27 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/hooks/wire"
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 )
+
+// requireWireBlockEffect returns the "block" effect as the JSON object a
+// client sees. The server stores the shared wire.BlockEffect struct in
+// Effects, so asserting on wire shape (keys present and omitted) means
+// round-tripping it through encoding/json exactly as the response encoder
+// will.
+func requireWireBlockEffect(t *testing.T, effects map[string]any) map[string]any {
+	t.Helper()
+	value, ok := effects[wire.BlockEffectKey]
+	require.True(t, ok)
+	raw, err := json.Marshal(value)
+	require.NoError(t, err)
+	var object map[string]any
+	require.NoError(t, json.Unmarshal(raw, &object))
+	return object
+}
 
 // blockEffectShadowMCPScanner is ingestUserScopedShadowMCPScanner with a real
 // policy UUID: request-link minting validates risk_policy_id as a UUID, and
@@ -68,8 +86,8 @@ func TestIngest_ShadowMCPDenyCarriesBlockEffect(t *testing.T) {
 	require.NotNil(t, result)
 	require.Equal(t, "deny", result.Decision)
 
-	effect := requireEffectMap(t, result.Effects, "block")
-	require.Equal(t, blockEffectContractVersion, effect["v"])
+	effect := requireWireBlockEffect(t, result.Effects)
+	require.EqualValues(t, wire.BlockEffectVersion, effect["v"])
 	require.Equal(t, "shadow_mcp", effect["category"])
 	require.Equal(t, true, effect["requestable"])
 
@@ -182,12 +200,12 @@ func TestIngest_DuplicateDeliveryBlockEffectOmitsBlockURL(t *testing.T) {
 	first, err := ti.service.Ingest(ctx, payload)
 	require.NoError(t, err)
 	require.Equal(t, "deny", first.Decision)
-	require.Contains(t, requireEffectMap(t, first.Effects, "block"), "block_url")
+	require.Contains(t, requireWireBlockEffect(t, first.Effects), "block_url")
 
 	retry, err := ti.service.Ingest(ctx, payload)
 	require.NoError(t, err)
 	require.Equal(t, "deny", retry.Decision)
-	retryEffect := requireEffectMap(t, retry.Effects, "block")
+	retryEffect := requireWireBlockEffect(t, retry.Effects)
 	require.NotContains(t, retryEffect, "block_url",
 		"a duplicate delivery must not reference a block row it never minted")
 	require.Contains(t, retryEffect["request_token"], "rpbr2.")
