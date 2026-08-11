@@ -101,9 +101,10 @@ func seedChatWithSource(t *testing.T, ctx context.Context, ti *chatTestInstance,
 	t.Helper()
 	chatID := seedChat(t, ctx, ti, "", externalUserID, "chat for "+source)
 	_, err := repo.New(ti.conn).SeedChatMessageWithSource(ctx, repo.SeedChatMessageWithSourceParams{
-		ChatID:    chatID,
-		ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
-		Source:    pgtype.Text{String: source, Valid: true},
+		ChatID:            chatID,
+		ProjectID:         uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		Source:            pgtype.Text{String: source, Valid: true},
+		OriginatingClient: pgtype.Text{},
 	})
 	require.NoError(t, err)
 	return chatID
@@ -912,6 +913,30 @@ func TestListChats_Filter_Source(t *testing.T) {
 	}
 	require.True(t, got[claude.String()], "expected claude-code chat in results")
 	require.True(t, got[playground.String()], "expected playground chat in results")
+}
+
+func TestListChats_LiteLLMOriginatingClient(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+	chatID := seedChat(t, ctx, ti, "", "ext-litellm", "chat through litellm")
+
+	_, err := repo.New(ti.conn).SeedChatMessageWithSource(ctx, repo.SeedChatMessageWithSourceParams{
+		ChatID:            chatID,
+		ProjectID:         uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		Source:            pgtype.Text{String: "litellm", Valid: true},
+		OriginatingClient: pgtype.Text{String: "claude-code", Valid: true},
+	})
+	require.NoError(t, err)
+
+	source := "litellm"
+	payload := defaultPayload()
+	payload.Source = &source
+	result, err := ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, "litellm", conv.PtrValOr(result.Chats[0].Source, ""))
+	require.Equal(t, "claude-code", conv.PtrValOr(result.Chats[0].OriginatingClient, ""))
 }
 
 // TestListChats_Filter_Source_EmptyReturnsAll guards against the regression

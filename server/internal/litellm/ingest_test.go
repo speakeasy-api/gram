@@ -222,6 +222,7 @@ func TestIngestTranslatesLatestStructuredUserMessage(t *testing.T) {
 	require.False(t, call.options.AllowWarnAcknowledgement)
 	require.False(t, call.options.AllowSessionIdentityFallback)
 	require.Nil(t, call.options.OutputToolCalls)
+	require.Empty(t, call.options.OriginatingClient)
 	require.Equal(t, "call-1", call.options.SourceAttributes[attr.LiteLLMCallIDKey])
 	require.Equal(t, "trace-1", call.options.SourceAttributes[attr.LiteLLMTraceIDKey])
 	require.Equal(t, "virtual-key-user", call.options.SourceAttributes[attr.LiteLLMUserIDKey])
@@ -233,12 +234,13 @@ func TestIngestTranslatesLatestStructuredUserMessage(t *testing.T) {
 	cached, err := service.calls.Get(t.Context(), *authCtx.ProjectID, "call-1")
 	require.NoError(t, err)
 	require.Equal(t, callcache.Record{
-		ProjectID: *authCtx.ProjectID,
-		CallID:    "call-1",
-		TraceID:   "trace-1",
-		SessionID: "session-from-header",
-		UserID:    "resolved-user",
-		Email:     "member@example.test",
+		ProjectID:         *authCtx.ProjectID,
+		CallID:            "call-1",
+		TraceID:           "trace-1",
+		SessionID:         "session-from-header",
+		UserID:            "resolved-user",
+		Email:             "member@example.test",
+		OriginatingClient: "",
 	}, cached)
 }
 
@@ -290,24 +292,38 @@ func TestSessionHeaderUsesNativeClientHeadersInPrecedenceOrder(t *testing.T) {
 		"X-Gram-Session-ID":        "gram-session",
 	}
 
-	require.Equal(t, "gram-session", sessionHeader(headers))
+	require.Equal(t, "gram-session", agentAttributionFromHeaders(headers).SessionID)
 	delete(headers, "X-Gram-Session-ID")
-	require.Equal(t, "claude-session", sessionHeader(headers))
+	require.Equal(t, "claude-session", agentAttributionFromHeaders(headers).SessionID)
 	delete(headers, "X-Claude-Code-Session-ID")
-	require.Equal(t, "codex-session", sessionHeader(headers))
+	require.Equal(t, "codex-session", agentAttributionFromHeaders(headers).SessionID)
 	delete(headers, "Session-ID")
-	require.Equal(t, "codex-thread", sessionHeader(headers))
+	require.Equal(t, "codex-thread", agentAttributionFromHeaders(headers).SessionID)
 	delete(headers, "Thread-ID")
-	require.Equal(t, "opencode-session", sessionHeader(headers))
+	require.Equal(t, "opencode-session", agentAttributionFromHeaders(headers).SessionID)
 
 	headers["X-Gram-Session-ID"] = "[present]"
-	require.Equal(t, "opencode-session", sessionHeader(headers))
+	require.Equal(t, "opencode-session", agentAttributionFromHeaders(headers).SessionID)
 }
 
-func TestRequestHeaderIgnoresRedactedValues(t *testing.T) {
+func TestOriginatingClientUsesSupportedClientHeaders(t *testing.T) {
 	t.Parallel()
-	require.Empty(t, requestHeader(map[string]string{"X-Gram-Agent-Turn-ID": "[present]"}, "x-gram-agent-turn-id"))
-	require.Equal(t, "message-1", requestHeader(map[string]string{"X-Gram-Agent-Turn-ID": " message-1 "}, "x-gram-agent-turn-id"))
+	require.Equal(t, "claude-code", agentAttributionFromHeaders(map[string]string{"X-Claude-Code-Session-ID": "session-1"}).OriginatingClient)
+	require.Equal(t, "codex", agentAttributionFromHeaders(map[string]string{"Session-ID": "session-1"}).OriginatingClient)
+	require.Equal(t, "codex", agentAttributionFromHeaders(map[string]string{"Thread-ID": "thread-1"}).OriginatingClient)
+	require.Equal(t, "codex", agentAttributionFromHeaders(map[string]string{"X-Codex-Turn-Metadata": `{"session_id":"session-1","turn_id":"turn-1"}`}).OriginatingClient)
+	require.Equal(t, "opencode", agentAttributionFromHeaders(map[string]string{"X-Session-ID": "session-1"}).OriginatingClient)
+	require.Equal(t, "opencode", agentAttributionFromHeaders(map[string]string{"X-OpenCode-Session": "session-1"}).OriginatingClient)
+	require.Equal(t, "opencode", agentAttributionFromHeaders(map[string]string{
+		"X-Gram-Agent-Provider":   "opencode",
+		"X-Gram-Agent-Session-ID": "session-1",
+	}).OriginatingClient)
+	require.Empty(t, agentAttributionFromHeaders(map[string]string{"X-Gram-Session-ID": "session-1"}).OriginatingClient)
+	require.Empty(t, agentAttributionFromHeaders(map[string]string{
+		"X-Gram-Agent-Provider":   "unsupported",
+		"X-Gram-Agent-Session-ID": "session-1",
+	}).OriginatingClient)
+	require.Empty(t, agentAttributionFromHeaders(map[string]string{"X-Claude-Code-Session-ID": "[present]"}).OriginatingClient)
 }
 
 func TestAgentTurnFromHeadersUsesCodexMetadataAndOpenCodeFallback(t *testing.T) {
@@ -315,21 +331,21 @@ func TestAgentTurnFromHeadersUsesCodexMetadataAndOpenCodeFallback(t *testing.T) 
 	headers := map[string]string{
 		"X-Codex-Turn-Metadata": `{"session_id":"session-1","turn_id":"turn-1"}`,
 	}
-	require.Equal(t, "session-1", sessionHeader(headers))
-	provider, turnID := agentTurnFromHeaders(headers)
-	require.Equal(t, "codex", provider)
-	require.Equal(t, "turn-1", turnID)
+	attribution := agentAttributionFromHeaders(headers)
+	require.Equal(t, "session-1", attribution.SessionID)
+	require.Equal(t, "codex", attribution.TurnProvider)
+	require.Equal(t, "turn-1", attribution.TurnID)
 
-	provider, turnID = agentTurnFromHeaders(map[string]string{"X-OpenCode-Request": "message-1"})
-	require.Equal(t, "opencode", provider)
-	require.Equal(t, "message-1", turnID)
+	attribution = agentAttributionFromHeaders(map[string]string{"X-OpenCode-Request": "message-1"})
+	require.Equal(t, "opencode", attribution.TurnProvider)
+	require.Equal(t, "message-1", attribution.TurnID)
 
-	provider, turnID = agentTurnFromHeaders(map[string]string{
+	attribution = agentAttributionFromHeaders(map[string]string{
 		"X-Gram-Agent-Provider": "claude",
 		"X-Gram-Agent-Turn-ID":  "turn-1",
 	})
-	require.Empty(t, provider)
-	require.Empty(t, turnID)
+	require.Empty(t, attribution.TurnProvider)
+	require.Empty(t, attribution.TurnID)
 }
 
 func TestIngestResponseUsesCachedActorAndSession(t *testing.T) {
@@ -338,12 +354,13 @@ func TestIngestResponseUsesCachedActorAndSession(t *testing.T) {
 	ingester := &captureIngester{result: allowResult(hooks.ResolvedActor{UserID: "cached-user", Email: "cached@example.test"}), err: nil, calls: nil}
 	service := unitService(t, ingester, authCtx)
 	require.NoError(t, service.calls.Store(t.Context(), callcache.Record{
-		ProjectID: *authCtx.ProjectID,
-		CallID:    "call-1",
-		TraceID:   "request-trace",
-		SessionID: "request-session",
-		UserID:    "cached-user",
-		Email:     "cached@example.test",
+		ProjectID:         *authCtx.ProjectID,
+		CallID:            "call-1",
+		TraceID:           "request-trace",
+		SessionID:         "request-session",
+		UserID:            "cached-user",
+		Email:             "cached@example.test",
+		OriginatingClient: "codex",
 	}))
 
 	payload := testPayload()
@@ -375,6 +392,7 @@ func TestIngestResponseUsesCachedActorAndSession(t *testing.T) {
 	require.False(t, call.auth.OrgWidePluginHooksKey)
 	require.Equal(t, "cached@example.test", *call.payload.Source.UserEmail)
 	require.Equal(t, payload.ToolCalls, call.options.OutputToolCalls)
+	require.Equal(t, "codex", call.options.OriginatingClient)
 }
 
 func TestIngestResponseCacheMissUsesTrustedEmailWithoutKeyOwner(t *testing.T) {
@@ -400,6 +418,30 @@ func TestIngestResponseCacheMissUsesTrustedEmailWithoutKeyOwner(t *testing.T) {
 	require.False(t, call.auth.OrgWidePluginHooksKey)
 	require.Equal(t, "member@example.test", *call.payload.Source.UserEmail)
 	require.Equal(t, "response-trace", *call.payload.Session.ID)
+}
+
+func TestIngestResponseUsesHeadersWhenCachedClientIsEmpty(t *testing.T) {
+	t.Parallel()
+	authCtx := testAuthContext()
+	ingester := &captureIngester{result: allowResult(hooks.ResolvedActor{UserID: "", Email: ""}), err: nil, calls: nil}
+	service := unitService(t, ingester, authCtx)
+	require.NoError(t, service.calls.Store(t.Context(), callcache.Record{
+		ProjectID:         *authCtx.ProjectID,
+		CallID:            "call-1",
+		TraceID:           "request-trace",
+		SessionID:         "request-session",
+		UserID:            "",
+		Email:             "",
+		OriginatingClient: "",
+	}))
+	payload := testPayload()
+	payload.InputType = "response"
+	payload.Texts = []string{"response"}
+	payload.RequestHeaders = map[string]string{"x-claude-code-session-id": "response-session"}
+
+	_, err := service.Ingest(contextvalues.SetAuthContext(t.Context(), authCtx), payload)
+	require.NoError(t, err)
+	require.Equal(t, "claude-code", ingester.calls[0].options.OriginatingClient)
 }
 
 func TestIngestValidatesAndSkipsEmptyPrompt(t *testing.T) {

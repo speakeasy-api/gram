@@ -348,6 +348,11 @@ export function HookSourceIcon({
   if (normalizedSource?.includes("opencode")) {
     return <OpencodeIcon className={className} />;
   }
+  if (normalizedSource?.includes("litellm")) {
+    return (
+      <img src="/icons/platforms/litellm.png" alt="" className={className} />
+    );
+  }
   if (normalizedSource?.includes("devin")) {
     return <DevinIcon className={className} />;
   }

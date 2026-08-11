@@ -753,6 +753,20 @@ limited_chats AS (
     fc.id DESC
   LIMIT @page_limit
   OFFSET @page_offset
+),
+chat_attribution AS (
+  SELECT
+    lc.*,
+    COALESCE(CASE WHEN lc.source = 'litellm' THEN (
+      SELECT user_agent
+      FROM chat_messages
+      WHERE chat_id = lc.id
+        AND source = 'litellm'
+        AND user_agent = ANY (ARRAY['claude-code', 'codex', 'opencode']::text[])
+      ORDER BY created_at DESC
+      LIMIT 1
+    ) END, '')::text AS originating_client
+  FROM limited_chats lc
 )
 SELECT
   lc.id,
@@ -760,6 +774,7 @@ SELECT
   lc.user_id,
   lc.external_user_id,
   lc.source,
+  lc.originating_client,
   lc.created_at,
   lc.updated_at,
   lc.pinned_at,
@@ -783,7 +798,7 @@ SELECT
   lc.assistant_id,
   lc.assistant_name,
   lc.total_count
-FROM limited_chats lc;
+FROM chat_attribution lc;
 
 -- name: ListChatSources :many
 -- Distinct inferred source (the latest non-null message source) across the
@@ -1539,11 +1554,12 @@ VALUES (@chat_id, @project_id, 'user', 'test message', COALESCE(sqlc.narg('creat
 RETURNING id;
 
 -- name: SeedChatMessageWithSource :one
--- Test fixture: insert a chat message carrying a specific source. The per-chat
+-- Test fixture: insert a chat message carrying a specific source and optional
+-- originating client. The per-chat
 -- inferred source (used by the agent-type filter and ListChatSources) is the
 -- latest non-null message source, so source-filter tests seed messages this way.
-INSERT INTO chat_messages (chat_id, project_id, role, content, source, created_at)
-VALUES (@chat_id, @project_id, 'user', 'test message', @source, COALESCE(sqlc.narg('created_at')::timestamptz, clock_timestamp()))
+INSERT INTO chat_messages (chat_id, project_id, role, content, source, user_agent, created_at)
+VALUES (@chat_id, @project_id, 'user', 'test message', @source, sqlc.narg('originating_client')::text, COALESCE(sqlc.narg('created_at')::timestamptz, clock_timestamp()))
 RETURNING id;
 
 -- name: SeedChatTranscriptMessage :one

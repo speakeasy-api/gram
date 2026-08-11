@@ -158,6 +158,30 @@ describe("ChatLogsTable", () => {
     expect(screen.queryByText("claude")).toBeNull();
   });
 
+  it("shows the originating client for a session routed through LiteLLM", () => {
+    renderTable(
+      <ChatLogsTable
+        chats={[
+          {
+            ...makeChat("chat_01HXQ1P84WV3S9J7Z52DKVE7NE"),
+            source: "litellm",
+            originatingClient: "claude-code",
+          },
+        ]}
+        onDeleteChat={() => {
+          /* test stub */
+        }}
+        onSelectChat={() => {
+          /* test stub */
+        }}
+        isLoading={false}
+        error={null}
+      />,
+    );
+
+    expect(screen.getByText("Claude Code via LiteLLM")).toBeTruthy();
+  });
+
   it("shows a resolved member name for a compliance chat", () => {
     renderTable(
       <ChatLogsTable

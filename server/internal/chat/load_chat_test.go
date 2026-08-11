@@ -207,6 +207,27 @@ func TestLoadChat_ContentPartAssetReadFailureLeavesTranscriptIntact(t *testing.T
 	require.Empty(t, partsByDisplayPath["missing.txt"].Content)
 }
 
+func TestLoadChat_LiteLLMOriginatingClient(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := authztest.WithAdminGrants(initSessionCtx(t, ti))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	chatID := seedChat(t, ctx, ti, authCtx.UserID, "", "LiteLLM session")
+	_, err := repo.New(ti.conn).SeedChatMessageWithSource(ctx, repo.SeedChatMessageWithSourceParams{
+		ChatID:            chatID,
+		ProjectID:         uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		Source:            pgtype.Text{String: "litellm", Valid: true},
+		OriginatingClient: pgtype.Text{String: "claude-code", Valid: true},
+	})
+	require.NoError(t, err)
+
+	result, err := ti.service.LoadChat(ctx, loadPayload(chatID.String()))
+	require.NoError(t, err)
+	require.Equal(t, "litellm", *result.Source)
+	require.Equal(t, "claude-code", *result.OriginatingClient)
+}
+
 // TestLoadChat_ContentPartsScopedToPage asserts a page only carries the content
 // parts it can anchor. Each part costs an asset read, so returning parts whose
 // parent is off-page would re-read every attachment body in the chat on every

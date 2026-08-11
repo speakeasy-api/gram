@@ -42,6 +42,7 @@ type AuthenticatedIngestOptions struct {
 	AllowSessionIdentityFallback bool
 	SourceAttributes             map[attr.Key]any
 	OutputToolCalls              []any
+	OriginatingClient            string
 }
 
 // ResolvedActor is the exact actor selected by canonical hook attribution.
@@ -63,6 +64,7 @@ func defaultAuthenticatedIngestOptions() AuthenticatedIngestOptions {
 		AllowSessionIdentityFallback: true,
 		SourceAttributes:             nil,
 		OutputToolCalls:              nil,
+		OriginatingClient:            "",
 	}
 }
 
@@ -1400,7 +1402,7 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 			CompletionTokens: 0,
 			TotalTokens:      0,
 			Origin:           conv.ToPGTextEmpty(""),
-			UserAgent:        conv.ToPGTextEmpty(""),
+			UserAgent:        conv.ToPGTextEmpty(authenticatedIngestOptions(ctx).OriginatingClient),
 			IpAddress:        conv.ToPGTextEmpty(""),
 			Source:           conv.ToPGTextEmpty(hookSource),
 			ContentHash:      nil,

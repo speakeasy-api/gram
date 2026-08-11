@@ -375,6 +375,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 			AssistantID:          conv.FromNullableUUID(row.AssistantID),
 			AssistantName:        conv.FromPGText[string](row.AssistantName),
 			Source:               conv.FromPGText[string](row.Source),
+			OriginatingClient:    conv.PtrEmpty(row.OriginatingClient),
 			Title:                row.Title.String,
 			NumMessages:          int(row.NumMessages),
 			CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
@@ -1122,12 +1123,22 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	_ = contentPartGroup.Wait()
 
 	var source *string
+	var originatingClient *string
 	if isInitialLatest {
 		for i := len(latestPageRows) - 1; i >= 0; i-- {
 			if latestPageRows[i].Source.Valid && latestPageRows[i].Source.String != "" {
 				v := latestPageRows[i].Source.String
 				source = &v
 				break
+			}
+		}
+		if source != nil && *source == "litellm" {
+			for i := len(latestPageRows) - 1; i >= 0; i-- {
+				client := latestPageRows[i].UserAgent.String
+				if latestPageRows[i].Source.String == "litellm" && (client == "claude-code" || client == "codex" || client == "opencode") {
+					originatingClient = &client
+					break
+				}
 			}
 		}
 	}
@@ -1141,6 +1152,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		AssistantID:          conv.FromNullableUUID(chat.AssistantID),
 		AssistantName:        conv.FromPGText[string](chat.AssistantName),
 		Source:               source,
+		OriginatingClient:    originatingClient,
 		NumMessages:          int(stats.Total),
 		CreatedAt:            chat.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:            chat.UpdatedAt.Time.Format(time.RFC3339),

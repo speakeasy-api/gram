@@ -128,6 +128,9 @@ type LoadChatResponseBody struct {
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
 	// messages)
 	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	// The supported client that originated a chat routed through the source, when
+	// known
+	OriginatingClient *string `form:"originating_client,omitempty" json:"originating_client,omitempty" xml:"originating_client,omitempty"`
 	// When the chat was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the chat was last updated.
@@ -2034,6 +2037,9 @@ type ChatOverviewResponseBody struct {
 	// The source of the chat: Elements, Playground, ClaudeCode (inferred from
 	// messages)
 	Source *string `form:"source,omitempty" json:"source,omitempty" xml:"source,omitempty"`
+	// The supported client that originated a chat routed through the source, when
+	// known
+	OriginatingClient *string `form:"originating_client,omitempty" json:"originating_client,omitempty" xml:"originating_client,omitempty"`
 	// When the chat was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the chat was last updated.
@@ -2298,6 +2304,7 @@ func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 		AssistantName:        res.AssistantName,
 		NumMessages:          res.NumMessages,
 		Source:               res.Source,
+		OriginatingClient:    res.OriginatingClient,
 		CreatedAt:            res.CreatedAt,
 		UpdatedAt:            res.UpdatedAt,
 		TotalInputTokens:     res.TotalInputTokens,
