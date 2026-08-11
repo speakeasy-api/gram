@@ -426,6 +426,8 @@ function InsightsDock({
   const inputRef = useRef<HTMLInputElement>(null);
   /** Wraps the shared composer; also the focus target for Cmd+/. */
   const composerHostRef = useRef<HTMLDivElement>(null);
+  /** Whether the shared composer holds a draft (see ComposerDraftReporter). */
+  const [sharedDraft, setSharedDraft] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const collapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Stamped only by grace-timer collapses (blur/outside click), never by
@@ -501,7 +503,11 @@ function InsightsDock({
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [expanded, scheduleCollapse]);
 
-  const composerExpanded = !open && (expanded || value.trim().length > 0);
+  // `value` only backs the fallback input; the shared composer keeps its draft
+  // on the runtime, so it reports emptiness up through `sharedDraft`. Both feed
+  // the same rule: a non-empty draft holds the dock open even without focus.
+  const hasDraft = value.trim().length > 0 || sharedDraft;
+  const composerExpanded = !open && (expanded || hasDraft);
 
   const shortcutAria = isMacPlatform() ? "Meta+/" : "Control+/";
 
@@ -535,6 +541,7 @@ function InsightsDock({
       className="gram-chat-dock min-w-0 flex-1"
       tabIndex={open ? -1 : undefined}
     >
+      <ComposerDraftReporter onChange={setSharedDraft} />
       <ChatComposer />
     </div>
   ) : (
@@ -1615,10 +1622,10 @@ function ExpandToPageButton({
 }
 
 /**
- * Opens the chat panel when the docked composer sends. The dock's composer now
- * sends through the runtime itself, so there is no submit handler to hook —
- * the message landing on the thread IS the signal. Disabled on chat routes and
- * while the panel is already open, where the panel must not steal the view.
+ * Opens the chat panel when the docked composer sends. The dock's composer
+ * submits through the runtime itself, so there is no submit handler to hook.
+ * Disabled on chat routes and while the panel is already open, where the panel
+ * must not steal the view.
  */
 function OpenPanelOnSend({
   enabled,
@@ -1627,13 +1634,35 @@ function OpenPanelOnSend({
   enabled: boolean;
   onSend: () => void;
 }): null {
-  const messageCount = useAuiState(({ thread }) => thread.messages.length);
-  const seenRef = useRef(messageCount);
+  // A run starting, not the message count growing: loading an existing
+  // conversation into the shared runtime also grows that count, which would
+  // pop the panel open on its own.
+  const isRunning = useAuiState(({ thread }) => thread.isRunning);
+  const wasRunningRef = useRef(isRunning);
   useEffect(() => {
-    const grew = messageCount > seenRef.current;
-    seenRef.current = messageCount;
-    if (grew && enabled) onSend();
-  }, [messageCount, enabled, onSend]);
+    const justStarted = isRunning && !wasRunningRef.current;
+    wasRunningRef.current = isRunning;
+    if (justStarted && enabled) onSend();
+  }, [isRunning, enabled, onSend]);
+  return null;
+}
+
+/**
+ * Reports whether the shared composer holds a draft. The docked pill stays
+ * expanded while the user has text in it — with the legacy input that was
+ * local state, but the shared composer keeps its draft on the runtime, so the
+ * dock has to be told. Without this a typed draft is hidden the moment focus
+ * leaves the composer.
+ */
+function ComposerDraftReporter({
+  onChange,
+}: {
+  onChange: (hasDraft: boolean) => void;
+}): null {
+  const hasDraft = useAuiState(({ composer }) => composer.text.trim() !== "");
+  useEffect(() => {
+    onChange(hasDraft);
+  }, [hasDraft, onChange]);
   return null;
 }
 

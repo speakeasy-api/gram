@@ -35,17 +35,20 @@ export function useDictationLevels(
   useEffect(() => {
     let frame: number | undefined;
     let level = 0;
+    let phase = 0;
 
     const tick = () => {
+      phase += 1;
       if (transcriptRef.current !== lastSeenRef.current) {
         lastSeenRef.current = transcriptRef.current;
         level = SPEECH_LEVEL;
       } else {
         level = Math.max(IDLE_LEVEL, level * DECAY);
       }
-      // Jitter so neighbouring bars differ; a flat ramp reads as a progress
-      // bar rather than a voice trace.
-      const jittered = level * (0.55 + 0.45 * Math.abs(Math.sin(level * 37)));
+      // Jitter on the frame counter, not the level: keyed off `level` alone the
+      // idle floor is a constant, so the trail froze into a flat line a second
+      // into any silence while the mic was still listening.
+      const jittered = level * (0.55 + 0.45 * Math.abs(Math.sin(phase * 0.37)));
       historyRef.current = [...historyRef.current.slice(1), jittered];
       setLevels(historyRef.current);
       frame = requestAnimationFrame(tick);

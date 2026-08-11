@@ -1,5 +1,8 @@
 import type { DictationAdapter } from "@assistant-ui/react";
 
+/** How long `stop()` waits for the recognizer's `end` event before giving up. */
+const STOP_TIMEOUT_MS = 2000;
+
 const getSpeechRecognition = ():
   | (new () => SpeechRecognitionLike)
   | undefined =>
@@ -96,10 +99,18 @@ class CumulativeWebSpeechDictationAdapter implements DictationAdapter {
       status: { type: "starting" },
       stop: async () => {
         recognition.stop();
+        // Resolve on the recognizer's `end` event, but never wait forever for
+        // it: a stale or already-aborted session may never fire one, and the
+        // caller (composer teardown, navigating away) would hang on a poll
+        // loop that outlives the page.
         return new Promise<void>((resolve) => {
+          const deadline = Date.now() + STOP_TIMEOUT_MS;
           const check = () => {
-            if (session.status.type === "ended") resolve();
-            else setTimeout(check, 50);
+            if (session.status.type === "ended" || Date.now() >= deadline) {
+              resolve();
+              return;
+            }
+            setTimeout(check, 50);
           };
           check();
         });

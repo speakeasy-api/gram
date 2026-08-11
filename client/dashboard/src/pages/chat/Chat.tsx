@@ -287,6 +287,7 @@ export function ChatLanding({
           >
             <ChatComposer />
             <StartFreshThread />
+            <SeedComposerDraft value={value} onSeeded={() => setValue("")} />
             <NavigateOnFirstMessage />
           </div>
         ) : (
@@ -370,12 +371,31 @@ export function ChatLanding({
 }
 
 /**
- * Drops into the full-page conversation as soon as the shared composer puts a
- * message on the thread. The landing composer sends through the runtime
- * directly, so there is no submit handler to navigate from — the first message
- * appearing IS the signal. `/chat/new` then syncs to `/chat/:id` once the
- * server mints the id.
+ * Carries a draft typed into the fallback input over to the shared composer.
+ *
+ * The fallback renders only until the assistant runtime is ready; the two
+ * controls keep their drafts in different places, so without this a message
+ * typed during that window vanishes when the composer swaps in. Runs after
+ * StartFreshThread so the text lands on the new thread, not the old one.
  */
+function SeedComposerDraft({
+  value,
+  onSeeded,
+}: {
+  value: string;
+  onSeeded: () => void;
+}): null {
+  const aui = useAui();
+  const seededRef = useRef(false);
+  useEffect(() => {
+    if (seededRef.current || !value.trim()) return;
+    seededRef.current = true;
+    aui.composer().setText(value);
+    onSeeded();
+  }, [aui, value, onSeeded]);
+  return null;
+}
+
 /**
  * The landing widgets always start a NEW conversation: they share one runtime
  * with the dock, and the dock is the only surface that deliberately continues
@@ -384,15 +404,11 @@ export function ChatLanding({
  */
 function StartFreshThread(): null {
   const aui = useAui();
-  // Running counts as "in use" too: coming back to /chat while the dock's turn
-  // is still streaming must still hand the user an empty thread, otherwise the
-  // composer inherits that run (its send button becomes a stop button for a
-  // conversation that isn't on screen).
-  // Unconditional, exactly once, as soon as the thread list has loaded.
-  // Reacting to "the thread has messages" instead would fire on the user's OWN
-  // send — switching the just-sent message out from under them and leaving an
-  // empty /chat/new. Thread ids are minted lazily (deferThreadIdMinting), so a
-  // visit that sends nothing costs no server chat.
+  // Switch unconditionally, exactly once, as soon as the thread list has
+  // loaded. Reacting to "the thread has messages" instead would fire on the
+  // user's OWN send — switching the just-sent message out from under them and
+  // leaving an empty /chat/new. Thread ids are minted lazily
+  // (deferThreadIdMinting), so a visit that sends nothing costs no server chat.
   const listLoading = useAuiState(({ threads }) => threads.isLoading);
   const switchedRef = useRef(false);
   useEffect(() => {
@@ -403,19 +419,26 @@ function StartFreshThread(): null {
   return null;
 }
 
+/**
+ * Drops into the full-page conversation when the landing composer sends. The
+ * composer submits through the runtime directly, so there is no submit handler
+ * to navigate from — the turn starting is the signal. `/chat/new` then syncs
+ * to `/chat/:id` once the server mints the id.
+ */
 function NavigateOnFirstMessage(): null {
   const navigate = useNavigate();
   const routes = useRoutes();
-  const messageCount = useAuiState(({ thread }) => thread.messages.length);
-  // Latch the count at mount: the shared runtime often already holds a live
-  // conversation (started in the dock), and navigating on "has messages" would
-  // bounce straight back into it every time the user opened /chat.
-  const seenRef = useRef(messageCount);
+  // A run starting is the signal. Watching the message count instead would
+  // also fire when an existing conversation hydrates into the shared runtime
+  // (history loading grows the count), bouncing the user into a chat they
+  // never opened; `isRunning` only goes true for an actual stream.
+  const isRunning = useAuiState(({ thread }) => thread.isRunning);
+  const wasRunningRef = useRef(isRunning);
   useEffect(() => {
-    const grew = messageCount > seenRef.current;
-    seenRef.current = messageCount;
-    if (grew) void navigate(routes.chat.conversation.href("new"));
-  }, [messageCount, navigate, routes]);
+    const justStarted = isRunning && !wasRunningRef.current;
+    wasRunningRef.current = isRunning;
+    if (justStarted) void navigate(routes.chat.conversation.href("new"));
+  }, [isRunning, navigate, routes]);
   return null;
 }
 
