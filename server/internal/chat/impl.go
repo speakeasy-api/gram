@@ -1562,6 +1562,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		Reasoning:                 reasoning,
 		CacheControl:              chatRequest.CacheControl,
 		NormalizeOutboundMessages: r.URL.Query().Get("unstable_normalizeOutboundMessages") == "1",
+		WebSearch:                 nil,
 	}
 
 	// Opt-in: callers must pass includeContextWindow=1 to receive the
@@ -1644,13 +1645,11 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		Object:  "chat.completion",
 		Created: time.Now().Unix(),
 		Model:   response.Model,
-		Choices: []struct {
-			Message      or.ChatMessages `json:"message"`
-			FinishReason string          `json:"finish_reason"`
-		}{
+		Choices: []openrouter.ResponseChoice{
 			{
 				Message:      *response.Message,
 				FinishReason: conv.PtrValOr(response.FinishReason, "stop"),
+				Annotations:  nil,
 			},
 		},
 		Usage:        &response.Usage,
@@ -2073,6 +2072,7 @@ func (s *Service) Summarize(ctx context.Context, payload *gen.SummarizePayload) 
 		Reasoning:                 &openrouter.Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil},
 		CacheControl:              nil,
 		NormalizeOutboundMessages: false,
+		WebSearch:                 nil,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate summary").LogError(ctx, s.logger)

@@ -116,6 +116,19 @@ type CompletionRequest struct {
 	// that also carry tool_calls before forwarding to OpenRouter. Opt-in via
 	// the `unstable_normalizeOutboundMessages=1` query string on the proxy.
 	NormalizeOutboundMessages bool
+
+	// WebSearch, when set, runs OpenRouter's web-search plugin for the
+	// request. Results come back as url_citation annotations on the
+	// response. Search carries its own per-result charge on top of the
+	// completion tokens.
+	WebSearch *WebSearchOptions
+}
+
+// WebSearchOptions configures the web-search plugin for one request.
+type WebSearchOptions struct {
+	// MaxResults caps how many results the plugin returns; zero leaves the
+	// provider default.
+	MaxResults int
 }
 
 type ObjectCompletionRequest struct {
@@ -156,6 +169,11 @@ type CompletionResponse struct {
 	FinishReason *string
 	ToolCalls    []ToolCall
 	Content      string // Text content extracted from message
+
+	// Annotations carries the response message's annotations — the
+	// web-search plugin's url_citation results land here. Nil when the
+	// request ran no plugin or the route emitted none.
+	Annotations []ResponseAnnotation
 }
 
 // CaptureSession carries strategy-specific state between StartOrResumeChat and

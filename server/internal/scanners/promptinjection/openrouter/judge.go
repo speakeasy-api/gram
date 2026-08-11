@@ -333,6 +333,7 @@ func (c *Engine) call(ctx context.Context, req promptinjection.Request, msg judg
 		Reasoning:                 &gramopenrouter.Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil},
 		CacheControl:              nil,
 		NormalizeOutboundMessages: false,
+		WebSearch:                 nil,
 	})
 	if err != nil {
 		return judgeVerdict{}, fmt.Errorf("openrouter completion: %w", err)

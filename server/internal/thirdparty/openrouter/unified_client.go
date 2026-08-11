@@ -169,6 +169,11 @@ func (c *ChatClient) initializeRequest(ctx context.Context, req CompletionReques
 		User:           req.OrgID,
 		Metadata:       nil,
 		Trace:          nil,
+		Plugins:        nil,
+	}
+
+	if req.WebSearch != nil {
+		reqBody.Plugins = []RequestPlugin{{ID: "web", MaxResults: req.WebSearch.MaxResults}}
 	}
 
 	if req.ChatID != uuid.Nil {
@@ -448,6 +453,7 @@ func (c *ChatClient) GetCompletion(ctx context.Context, req CompletionRequest) (
 		FinishReason: &finishReason,
 		ToolCalls:    toolCalls,
 		Content:      content,
+		Annotations:  chatResp.Choices[0].Annotations,
 	}
 
 	// Apply message capture and usage tracking strategies
@@ -561,6 +567,7 @@ func (c *ChatClient) GetObjectCompletion(ctx context.Context, req ObjectCompleti
 		APIKeyID:                  "",
 		Reasoning:                 reasoning,
 		NormalizeOutboundMessages: false,
+		WebSearch:                 nil,
 	}
 
 	return c.GetCompletion(ctx, completionReq)
@@ -625,6 +632,7 @@ func (r *streamingResponseReader) Close() error {
 			MessageID:    r.messageID,
 			Model:        r.model,
 			Content:      r.messageContent.String(),
+			Annotations:  nil,
 			FinishReason: r.finishReason,
 			Usage:        r.usage,
 			ToolCalls:    make([]ToolCall, 0, len(r.accumulatedToolCalls)),

@@ -1475,6 +1475,11 @@ func newStartCommand() *cli.Command {
 				AssistantTriggerTools:         triggerTools,
 				ManagedAssistantInsightsTools: managedInsightsTools,
 				PlatformMCPReadTools:          platformtoolsruntime.PlatformMCPReadTools(platformmcp.NewPostgresReader(db)),
+				// The fetch client is dedicated to the research tools: they
+				// fetch arbitrary public pages about servers under review, and
+				// ConfigureFetchClient sets bounds a shared client must not
+				// inherit.
+				ResearchTools: platformtoolsruntime.ResearchTools(completionsClient, guardianPolicy.Client()),
 			}))
 
 			srv := &http.Server{

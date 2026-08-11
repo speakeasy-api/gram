@@ -217,6 +217,7 @@ func (c *Client) AgentChat(
 			Reasoning:                 &openrouter.Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil},
 			CacheControl:              nil,
 			NormalizeOutboundMessages: false,
+			WebSearch:                 nil,
 		}
 
 		if opts.UsageSource != "" {
