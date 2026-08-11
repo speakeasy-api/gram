@@ -594,10 +594,14 @@ SET deleted_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
--- name: SoftDeleteRemoteSessionsByClientID :execrows
+-- name: SoftDeleteRemoteSessionsByClientID :many
+-- Returns the stored credentials of every session it tombstones so the caller
+-- can push RFC 7009 revocations upstream after the transaction commits. The
+-- row count callers previously read is the length of the result.
 UPDATE remote_sessions
 SET deleted_at = clock_timestamp()
-WHERE remote_session_client_id = @remote_session_client_id AND deleted IS FALSE;
+WHERE remote_session_client_id = @remote_session_client_id AND deleted IS FALSE
+RETURNING remote_session_client_id, access_token_encrypted, refresh_token_encrypted;
 
 -- name: CountActiveRemoteSessionsByClientID :one
 SELECT COUNT(*)
@@ -795,6 +799,29 @@ JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.id = @id
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE;
+
+-- name: GetRemoteSessionClientRevocationTargetByID :one
+-- Everything the post-commit RFC 7009 revoke needs to address one upstream:
+-- where to POST, and how to authenticate as the client the grant belongs to.
+--
+-- Deliberately does NOT filter on c.deleted / i.deleted, unlike every other
+-- client lookup. Deleting a client or an issuer cascades a soft-delete to its
+-- sessions, and telling the upstream about those tokens is exactly when
+-- revocation matters most — a predicate on deleted would make the cascade
+-- paths silently no-op. Safe because the only callers pass an id belonging to
+-- rows they themselves just tombstoned; this is never reachable from a
+-- request-supplied identifier.
+SELECT
+    c.client_id                            AS external_client_id,
+    c.client_secret_encrypted              AS client_secret_encrypted,
+    c.token_endpoint_auth_method           AS token_endpoint_auth_method,
+    c.remote_session_issuer_id             AS remote_session_issuer_id,
+    i.slug                                 AS issuer_slug,
+    i.issuer                               AS issuer_url,
+    i.revocation_endpoint                  AS revocation_endpoint
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+WHERE c.id = @id;
 
 -- name: ListRemoteSessionClientsForUserSessionIssuer :many
 -- Joined client + issuer view used by the consent renderer and the

@@ -11,10 +11,12 @@ package remotesessions_test
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -24,6 +26,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	orgsessionsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_sessions"
+	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -37,19 +41,44 @@ import (
 // after the call returns — but the httptest handler still runs on its own
 // goroutine, so the mutex is load-bearing under -race.
 type revocationSpy struct {
-	mu      sync.Mutex
-	calls   int
-	form    url.Values
+	mu    sync.Mutex
+	calls int
+	// forms holds every request body received, in arrival order. A bulk revoke
+	// sends one per session, so the batch tests assert on the whole set.
+	forms   []url.Values
 	authHdr string
 	// status is what the fake upstream answers with. Zero means 200, which is
 	// what RFC 7009 §2.2 requires on success.
 	status int
 }
 
+// snapshot returns the call count and the most recent request. The
+// single-session tests expect exactly one call, for which "most recent" and
+// "the one" are the same thing.
 func (s *revocationSpy) snapshot() (calls int, form url.Values, authHdr string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.calls, s.form, s.authHdr
+
+	var last url.Values
+	if len(s.forms) > 0 {
+		last = s.forms[len(s.forms)-1]
+	}
+	return s.calls, last, s.authHdr
+}
+
+// revokedTokens returns the token value of every request received, sorted.
+// Sorted because a batch runs under bounded concurrency and its completion
+// order is not a property worth pinning.
+func (s *revocationSpy) revokedTokens() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	tokens := make([]string, 0, len(s.forms))
+	for _, form := range s.forms {
+		tokens = append(tokens, form.Get("token"))
+	}
+	slices.Sort(tokens)
+	return tokens
 }
 
 // newRevocationUpstream starts a fake authorization server whose /revoke
@@ -73,7 +102,7 @@ func newRevocationUpstream(t *testing.T, spy *revocationSpy) *httptest.Server {
 
 		spy.mu.Lock()
 		spy.calls++
-		spy.form = form
+		spy.forms = append(spy.forms, form)
 		spy.authHdr = r.Header.Get("Authorization")
 		status := spy.status
 		spy.mu.Unlock()
@@ -211,6 +240,107 @@ func seedRevocableSession(
 	}
 }
 
+// seedRevocableClient creates one issuer → client carrying sessionCount
+// sessions, the shape the bulk and cascade paths operate on. Every session gets
+// a distinct refresh token so a test can prove each one was sent individually
+// rather than one being sent repeatedly.
+func seedRevocableClient(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	slug string,
+	revocationEndpoint string,
+	sessionCount int,
+) (clientID uuid.UUID, fixtures []revokeFixture) {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	enc := testenv.NewEncryptionClient(t)
+	q := repo.New(ti.conn)
+
+	issuer, err := q.CreateRemoteSessionIssuer(ctx, repo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		OrganizationID:                    conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
+		Slug:                              slug,
+		Issuer:                            "https://idp.example.com",
+		AuthorizationEndpoint:             conv.ToPGText("https://idp.example.com/authorize"),
+		TokenEndpoint:                     conv.ToPGText("https://idp.example.com/token"),
+		RevocationEndpoint:                conv.ToPGTextEmpty(revocationEndpoint),
+		RegistrationEndpoint:              pgtype.Text{String: "", Valid: false},
+		JwksUri:                           pgtype.Text{String: "", Valid: false},
+		ScopesSupported:                   []string{"openid"},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
+		ResponseTypesSupported:            []string{"code"},
+		TokenEndpointAuthMethodsSupported: []string{"client_secret_post"},
+		Oidc:                              false,
+		Passthrough:                       false,
+	})
+	require.NoError(t, err)
+
+	userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "usi-"+slug)
+
+	externalCID := slug + "-cid"
+	secretCiphertext, err := enc.Encrypt([]byte("s3cret"))
+	require.NoError(t, err)
+
+	client, err := q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
+		ProjectID:               conv.ToNullUUID(*authCtx.ProjectID),
+		OrganizationID:          conv.ToPGTextEmpty(authCtx.ActiveOrganizationID),
+		RemoteSessionIssuerID:   issuer.ID,
+		ClientID:                externalCID,
+		ClientSecretEncrypted:   conv.ToPGText(secretCiphertext),
+		ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now()),
+		ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+		TokenEndpointAuthMethod: conv.ToPGTextEmpty("client_secret_post"),
+	})
+	require.NoError(t, err)
+
+	err = q.AttachRemoteSessionClientToUserSessionIssuer(ctx, repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: client.ID,
+		UserSessionIssuerID:   userIssuer,
+	})
+	require.NoError(t, err)
+
+	fixtures = make([]revokeFixture, 0, sessionCount)
+	for i := range sessionCount {
+		suffix := fmt.Sprintf("%s-%d", slug, i)
+
+		accessEnc, encErr := enc.Encrypt([]byte(suffix + "-access"))
+		require.NoError(t, encErr)
+		refreshToken := suffix + "-refresh"
+		refreshEnc, encErr := enc.Encrypt([]byte(refreshToken))
+		require.NoError(t, encErr)
+
+		subject := urn.NewUserSubject("revoke-subject-" + suffix)
+		session, sessErr := q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+			SubjectUrn:            subject,
+			UserSessionIssuerID:   userIssuer,
+			RemoteSessionClientID: client.ID,
+			AccessTokenEncrypted:  accessEnc,
+			AccessExpiresAt:       conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
+			RefreshTokenEncrypted: conv.ToPGText(refreshEnc),
+			RefreshExpiresAt:      pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
+			Scopes:                []string{},
+			Resource:              pgtype.Text{String: "", Valid: false},
+		})
+		require.NoError(t, sessErr)
+
+		fixtures = append(fixtures, revokeFixture{
+			sessionID:    session.ID,
+			subject:      subject,
+			clientID:     client.ID,
+			accessToken:  suffix + "-access",
+			refreshToken: refreshToken,
+			externalCID:  externalCID,
+		})
+	}
+
+	return client.ID, fixtures
+}
+
 // requireSessionRevoked asserts the local soft-delete committed. Every test
 // here checks it, because the whole point of the best-effort design is that
 // the local revoke is unconditional.
@@ -339,4 +469,121 @@ func TestRevokeRemoteSession_UnreachableUpstreamStillSucceeds(t *testing.T) {
 	require.NoError(t, err, "an unreachable identity provider must not surface to the caller")
 
 	requireSessionRevoked(t, ctx, ti, fx)
+}
+
+// A bulk revoke has to reach the upstream once per session. The failure this
+// guards against is a batch that revokes locally and pushes one token, or none.
+func TestRevokeAllClientSessions_RevokesEverySessionUpstream(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	spy := &revocationSpy{}
+	upstream := newRevocationUpstream(t, spy)
+
+	clientID, fixtures := seedRevocableClient(t, ctx, ti, "revokeall-upstream", upstream.URL+"/revoke", 3)
+
+	result, err := ti.service.RevokeAllClientSessions(ctx, &orgsessionsgen.RevokeAllClientSessionsPayload{
+		ClientID:     clientID.String(),
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 3, result.RevokedCount)
+
+	want := []string{
+		fixtures[0].refreshToken,
+		fixtures[1].refreshToken,
+		fixtures[2].refreshToken,
+	}
+	slices.Sort(want)
+	require.Equal(t, want, spy.revokedTokens(), "every session's refresh token must be sent, exactly once each")
+
+	for _, fx := range fixtures {
+		requireSessionRevoked(t, ctx, ti, fx)
+	}
+}
+
+// The quiet-skip guarantee has to hold for batches too: an issuer advertising
+// no revocation endpoint means no requests at all, not one per session.
+func TestRevokeAllClientSessions_NoRevocationEndpointSkipsUpstream(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	spy := &revocationSpy{}
+	newRevocationUpstream(t, spy)
+
+	clientID, fixtures := seedRevocableClient(t, ctx, ti, "revokeall-no-endpoint", "", 3)
+
+	result, err := ti.service.RevokeAllClientSessions(ctx, &orgsessionsgen.RevokeAllClientSessionsPayload{
+		ClientID:     clientID.String(),
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 3, result.RevokedCount)
+
+	calls, _, _ := spy.snapshot()
+	require.Zero(t, calls, "an issuer advertising no revocation endpoint must not be contacted")
+
+	for _, fx := range fixtures {
+		requireSessionRevoked(t, ctx, ti, fx)
+	}
+}
+
+// RevokedCount reports local tombstones, which are what the operator asked for.
+// An upstream refusing every request must not change it or fail the call.
+func TestRevokeAllClientSessions_UpstreamErrorsStillSucceed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	spy := &revocationSpy{status: http.StatusInternalServerError}
+	upstream := newRevocationUpstream(t, spy)
+
+	clientID, fixtures := seedRevocableClient(t, ctx, ti, "revokeall-upstream-500", upstream.URL+"/revoke", 2)
+
+	result, err := ti.service.RevokeAllClientSessions(ctx, &orgsessionsgen.RevokeAllClientSessionsPayload{
+		ClientID:     clientID.String(),
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err, "an upstream 5xx must not surface to the caller")
+	require.Equal(t, 2, result.RevokedCount, "RevokedCount counts local tombstones, not upstream acknowledgements")
+
+	calls, _, _ := spy.snapshot()
+	require.Equal(t, 2, calls, "both attempts were made")
+
+	for _, fx := range fixtures {
+		requireSessionRevoked(t, ctx, ti, fx)
+	}
+}
+
+// Deleting a client cascades a soft-delete to its sessions, and those tokens
+// are exactly the ones that must die upstream — the operator is dismantling the
+// integration. The client row is tombstoned in the same transaction, so this
+// also pins the revoker's lookup tolerating a soft-deleted client: a lookup
+// filtering on deleted would make this path silently revoke nothing.
+func TestDeleteRemoteSessionClient_RevokesCascadedSessionsUpstream(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	spy := &revocationSpy{}
+	upstream := newRevocationUpstream(t, spy)
+
+	clientID, fixtures := seedRevocableClient(t, ctx, ti, "delete-client-cascade", upstream.URL+"/revoke", 2)
+
+	err := ti.service.DeleteRemoteSessionClient(ctx, &clientsgen.DeleteRemoteSessionClientPayload{
+		ID:               clientID.String(),
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	want := []string{fixtures[0].refreshToken, fixtures[1].refreshToken}
+	slices.Sort(want)
+	require.Equal(t, want, spy.revokedTokens(), "a cascaded soft-delete must still push every token upstream")
+
+	for _, fx := range fixtures {
+		requireSessionRevoked(t, ctx, ti, fx)
+	}
 }

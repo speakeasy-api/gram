@@ -25,6 +25,7 @@ import (
 	"io"
 	"log/slog"
 	"net/url"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -32,6 +33,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -49,6 +51,19 @@ const (
 	// lifetime. The caller is already blocked post-commit, so the shorter the
 	// better.
 	upstreamRevokeTimeout = 5 * time.Second
+
+	// bulkRevokeTimeout bounds a whole batch, however many sessions it holds.
+	// Revoking every session on a client is an operator action performed from a
+	// dashboard that is waiting on the response, so the batch cannot be allowed
+	// to grow a deadline proportional to its size. Sessions still unattempted
+	// when it expires are counted and logged rather than silently dropped.
+	bulkRevokeTimeout = 30 * time.Second
+
+	// bulkRevokeConcurrency caps in-flight POSTs within one batch. Every session
+	// on a client shares that client's issuer, so the whole batch lands on a
+	// single upstream host and an unbounded fan-out would read as a burst from
+	// Gram against one customer's identity provider.
+	bulkRevokeConcurrency = 8
 )
 
 // revokeOutcome labels the metric series. Distinguishing "skipped" from
@@ -75,6 +90,11 @@ const (
 	// from the upstream-fault outcomes because it is Gram's bug to fix, not an
 	// upstream's behavior to tolerate.
 	revokeOutcomeInternal revokeOutcome = "internal_error"
+	// revokeOutcomeDropped means a bulk batch ran out of budget before the
+	// session was attempted at all. Its own series so the batch total still adds
+	// up and a rising share is legible as "batches are outgrowing the budget"
+	// rather than hiding inside skipped.
+	revokeOutcomeDropped revokeOutcome = "dropped"
 )
 
 const meterUpstreamRevoke = "gram.remote_session.upstream_revoke"
@@ -147,9 +167,32 @@ func NewUpstreamRevoker(logger *slog.Logger, meterProvider metric.MeterProvider,
 // canonical than the others. Naming the three fields the revocation actually
 // reads keeps every caller honest about what it is handing over.
 type RevokedCredentials struct {
+	// RemoteSessionClientID identifies the client whose registration and issuer
+	// supply the revocation endpoint and the client authentication to use.
 	RemoteSessionClientID uuid.UUID
-	AccessTokenEncrypted  string
+
+	// AccessTokenEncrypted is the session's stored access token, sent only when
+	// no refresh token is stored.
+	AccessTokenEncrypted string
+
+	// RefreshTokenEncrypted is the session's stored refresh token, preferred
+	// over the access token when present. Invalid when the grant never issued
+	// one or a prior invalid_grant cleared it.
 	RefreshTokenEncrypted pgtype.Text
+}
+
+// revokedCredentials adapts the rows returned by a bulk soft-delete into the
+// shape the revoker consumes.
+func revokedCredentials(rows []repo.SoftDeleteRemoteSessionsByClientIDRow) []RevokedCredentials {
+	creds := make([]RevokedCredentials, 0, len(rows))
+	for _, row := range rows {
+		creds = append(creds, RevokedCredentials{
+			RemoteSessionClientID: row.RemoteSessionClientID,
+			AccessTokenEncrypted:  row.AccessTokenEncrypted,
+			RefreshTokenEncrypted: row.RefreshTokenEncrypted,
+		})
+	}
+	return creds
 }
 
 // RevokeDetached runs the upstream revocation for an already-soft-deleted
@@ -179,19 +222,84 @@ func (r *UpstreamRevoker) RevokeDetached(ctx context.Context, cred RevokedCreden
 	r.revoke(revokeCtx, cred)
 }
 
+// RevokeAllDetached runs upstream revocations for a batch of sessions that have
+// already been soft-deleted together — every session on a client, whether the
+// operator revoked them explicitly or deleted the client out from under them.
+//
+// Post-commit and off the caller's cancellation for the same reasons as
+// RevokeDetached. Two bounds on top of that, because a batch is unbounded in a
+// way a single revoke is not:
+//
+//   - bulkRevokeConcurrency in flight at once. The batch shares one issuer, so
+//     the fan-out is aimed at a single upstream host.
+//   - bulkRevokeTimeout across the whole batch, with each session still holding
+//     its own upstreamRevokeTimeout inside it. Without the per-session bound one
+//     unresponsive upstream would hold a concurrency slot for the entire batch
+//     budget and starve the sessions behind it.
+//
+// A batch that exhausts the budget leaves its remainder unattempted. Those are
+// counted, logged, and metered as dropped rather than passed off as done: the
+// local revoke is complete either way, but an operator reading "revoked" should
+// not have to guess whether the upstream heard about it.
+func (r *UpstreamRevoker) RevokeAllDetached(ctx context.Context, creds []RevokedCredentials) {
+	if len(creds) == 0 {
+		return
+	}
+
+	batchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), bulkRevokeTimeout)
+	defer cancel()
+
+	// A plain Group rather than errgroup.WithContext: revoke never returns an
+	// error (it records outcomes instead), so there is no first-error to
+	// propagate and cancelling siblings on one failure would be wrong here —
+	// each session's revocation is independent of the others.
+	group := &errgroup.Group{}
+	group.SetLimit(bulkRevokeConcurrency)
+
+	var attempted atomic.Int64
+	for _, cred := range creds {
+		group.Go(func() error {
+			if batchCtx.Err() != nil {
+				return nil
+			}
+			attempted.Add(1)
+
+			revokeCtx, cancelOne := context.WithTimeout(batchCtx, upstreamRevokeTimeout)
+			defer cancelOne()
+
+			r.revoke(revokeCtx, cred)
+			return nil
+		})
+	}
+	_ = group.Wait()
+
+	dropped := len(creds) - int(attempted.Load())
+	if dropped <= 0 {
+		return
+	}
+
+	r.logger.WarnContext(ctx, "upstream revoke: batch budget exhausted before every session was attempted",
+		attr.SlogRemoteSessionClientID(creds[0].RemoteSessionClientID.String()),
+		attr.SlogRemoteSessionRevokeDroppedCount(dropped),
+	)
+	for range dropped {
+		r.metrics.record(ctx, "", revokeOutcomeDropped)
+	}
+}
+
 // revoke performs the whole sequence for one session and records exactly one
-// outcome. Split from RevokeDetached so the bulk path can supply its own shared
-// budget rather than paying a fresh timeout per session.
+// outcome. Split from RevokeDetached so the bulk path can drive it directly
+// under the batch's own budget and concurrency limit.
 func (r *UpstreamRevoker) revoke(ctx context.Context, cred RevokedCredentials) {
 	logger := r.logger.With(
 		attr.SlogRemoteSessionClientID(cred.RemoteSessionClientID.String()),
 	)
 
-	client, err := repo.New(r.db).GetRemoteSessionClientWithIssuerByID(ctx, cred.RemoteSessionClientID)
+	client, err := repo.New(r.db).GetRemoteSessionClientRevocationTargetByID(ctx, cred.RemoteSessionClientID)
 	if err != nil {
-		// A deleted client or issuer takes its sessions with it, and the cascade
-		// paths soft-delete the client in the same transaction as its sessions.
-		// Losing the join is therefore an ordinary outcome, not a fault.
+		// The lookup tolerates soft-deleted clients and issuers, so no rows means
+		// the row is gone outright — a hard delete racing the revoke. Nothing is
+		// addressable without it and nothing is recoverable.
 		if errors.Is(err, pgx.ErrNoRows) {
 			r.metrics.record(ctx, "", revokeOutcomeSkipped)
 			return

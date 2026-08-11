@@ -1760,6 +1760,55 @@ func (q *Queries) GetRemoteSessionClientForClientMetadataDocument(ctx context.Co
 	return i, err
 }
 
+const getRemoteSessionClientRevocationTargetByID = `-- name: GetRemoteSessionClientRevocationTargetByID :one
+SELECT
+    c.client_id                            AS external_client_id,
+    c.client_secret_encrypted              AS client_secret_encrypted,
+    c.token_endpoint_auth_method           AS token_endpoint_auth_method,
+    c.remote_session_issuer_id             AS remote_session_issuer_id,
+    i.slug                                 AS issuer_slug,
+    i.issuer                               AS issuer_url,
+    i.revocation_endpoint                  AS revocation_endpoint
+FROM remote_session_clients AS c
+JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
+WHERE c.id = $1
+`
+
+type GetRemoteSessionClientRevocationTargetByIDRow struct {
+	ExternalClientID        string
+	ClientSecretEncrypted   pgtype.Text
+	TokenEndpointAuthMethod pgtype.Text
+	RemoteSessionIssuerID   uuid.UUID
+	IssuerSlug              string
+	IssuerUrl               string
+	RevocationEndpoint      pgtype.Text
+}
+
+// Everything the post-commit RFC 7009 revoke needs to address one upstream:
+// where to POST, and how to authenticate as the client the grant belongs to.
+//
+// Deliberately does NOT filter on c.deleted / i.deleted, unlike every other
+// client lookup. Deleting a client or an issuer cascades a soft-delete to its
+// sessions, and telling the upstream about those tokens is exactly when
+// revocation matters most — a predicate on deleted would make the cascade
+// paths silently no-op. Safe because the only callers pass an id belonging to
+// rows they themselves just tombstoned; this is never reachable from a
+// request-supplied identifier.
+func (q *Queries) GetRemoteSessionClientRevocationTargetByID(ctx context.Context, id uuid.UUID) (GetRemoteSessionClientRevocationTargetByIDRow, error) {
+	row := q.db.QueryRow(ctx, getRemoteSessionClientRevocationTargetByID, id)
+	var i GetRemoteSessionClientRevocationTargetByIDRow
+	err := row.Scan(
+		&i.ExternalClientID,
+		&i.ClientSecretEncrypted,
+		&i.TokenEndpointAuthMethod,
+		&i.RemoteSessionIssuerID,
+		&i.IssuerSlug,
+		&i.IssuerUrl,
+		&i.RevocationEndpoint,
+	)
+	return i, err
+}
+
 const getRemoteSessionClientWithIssuerByID = `-- name: GetRemoteSessionClientWithIssuerByID :one
 SELECT
     c.id                                   AS client_id,
@@ -3969,18 +4018,40 @@ func (q *Queries) SoftDeleteRemoteSessionBySubjectAndClient(ctx context.Context,
 	return result.RowsAffected(), nil
 }
 
-const softDeleteRemoteSessionsByClientID = `-- name: SoftDeleteRemoteSessionsByClientID :execrows
+const softDeleteRemoteSessionsByClientID = `-- name: SoftDeleteRemoteSessionsByClientID :many
 UPDATE remote_sessions
 SET deleted_at = clock_timestamp()
 WHERE remote_session_client_id = $1 AND deleted IS FALSE
+RETURNING remote_session_client_id, access_token_encrypted, refresh_token_encrypted
 `
 
-func (q *Queries) SoftDeleteRemoteSessionsByClientID(ctx context.Context, remoteSessionClientID uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, softDeleteRemoteSessionsByClientID, remoteSessionClientID)
+type SoftDeleteRemoteSessionsByClientIDRow struct {
+	RemoteSessionClientID uuid.UUID
+	AccessTokenEncrypted  string
+	RefreshTokenEncrypted pgtype.Text
+}
+
+// Returns the stored credentials of every session it tombstones so the caller
+// can push RFC 7009 revocations upstream after the transaction commits. The
+// row count callers previously read is the length of the result.
+func (q *Queries) SoftDeleteRemoteSessionsByClientID(ctx context.Context, remoteSessionClientID uuid.UUID) ([]SoftDeleteRemoteSessionsByClientIDRow, error) {
+	rows, err := q.db.Query(ctx, softDeleteRemoteSessionsByClientID, remoteSessionClientID)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected(), nil
+	defer rows.Close()
+	var items []SoftDeleteRemoteSessionsByClientIDRow
+	for rows.Next() {
+		var i SoftDeleteRemoteSessionsByClientIDRow
+		if err := rows.Scan(&i.RemoteSessionClientID, &i.AccessTokenEncrypted, &i.RefreshTokenEncrypted); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateGlobalRemoteSessionClient = `-- name: UpdateGlobalRemoteSessionClient :one
