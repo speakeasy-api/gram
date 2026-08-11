@@ -156,7 +156,7 @@ func (c *Config) RegistryDetailsPath() string {
 	if err != nil {
 		return ""
 	}
-	return registryURL.JoinPath("v0.1", "servers", url.PathEscape(CanonicalRef), "versions", "latest").EscapedPath()
+	return "/" + registryURL.JoinPath("v0.1", "servers", url.PathEscape(CanonicalRef), "versions", "latest").EscapedPath()
 }
 
 func (c *Config) SetupResources() []platformmcp.SetupResource {

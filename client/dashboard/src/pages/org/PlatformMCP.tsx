@@ -725,7 +725,7 @@ function OnboardingProgress({
   currentProjectSlug?: string;
 }): JSX.Element {
   return (
-    <div className="grid gap-3 rounded-xl border bg-card p-4 md:grid-cols-2 xl:grid-cols-5">
+    <div className="grid gap-4 rounded-xl border bg-card p-4 sm:grid-cols-2 2xl:grid-cols-3">
       <VerificationRow
         complete={state.agentConfigurationCopied}
         label="1. Configure your agent"
@@ -773,7 +773,7 @@ function VerificationRow({
   detail: string;
 }): JSX.Element {
   return (
-    <div className="flex items-start gap-2">
+    <div className="flex h-full items-start gap-2">
       {complete ? (
         <Check
           className="mt-0.5 h-4 w-4 shrink-0 text-green-600"
@@ -786,12 +786,12 @@ function VerificationRow({
         />
       )}
       <div className="min-w-0">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <Text small className="font-medium">
             {label}
           </Text>
           {complete && (
-            <Badge variant="success" size="sm">
+            <Badge variant="success" size="sm" className="shrink-0">
               Complete
             </Badge>
           )}
