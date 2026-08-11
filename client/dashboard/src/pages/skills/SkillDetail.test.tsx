@@ -345,7 +345,7 @@ describe("SkillDetail", () => {
     }
   });
 
-  it("shows current-version prompt injection flags without raw content", () => {
+  it("shows a prompt injection warning banner without raw content", () => {
     testState.promptInjectionFindings = [
       {
         ruleId: "prompt_injection",
@@ -357,13 +357,21 @@ describe("SkillDetail", () => {
 
     render(<SkillDetail />);
 
-    expect(screen.getByText("Prompt injection flags")).toBeTruthy();
+    expect(screen.getByText("Prompt injection flagged")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Show findings"));
+
     expect(screen.getByText("prompt_injection")).toBeTruthy();
     expect(
       screen.getByText("Attempts to override trusted instructions."),
     ).toBeTruthy();
-    expect(screen.getByText("98%")).toBeTruthy();
+    expect(screen.getByText("98% confidence")).toBeTruthy();
     expect(screen.queryByText("raw manifest must not render")).toBeNull();
+  });
+
+  it("renders no prompt injection banner without findings", () => {
+    render(<SkillDetail />);
+    expect(screen.queryByText("Prompt injection flagged")).toBeNull();
   });
 
   it("lists validation errors for an invalid historical version", () => {

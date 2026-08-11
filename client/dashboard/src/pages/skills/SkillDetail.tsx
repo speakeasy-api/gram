@@ -1,5 +1,11 @@
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
+import { StatusBanner } from "@/components/status-banner";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/Collapsible";
 import {
   RouteNotFoundState,
   SecondaryRouteAction,
@@ -25,6 +31,7 @@ import { useSkill } from "@gram/client/react-query/skill.js";
 import { useSkillVersionsInfinite } from "@gram/client/react-query/skillVersions.js";
 import { Badge } from "@/components/ui/Badge";
 import { type Column, Table } from "@/components/ui/Table";
+import { AlertTriangle, ChevronRight } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import {
@@ -72,30 +79,6 @@ const SKILL_SECTION_IDS: readonly string[] = [
   SKILL_VERSIONS_SECTION_ID,
   SKILL_TIMELINE_SECTION_ID,
   SKILL_DANGER_SECTION_ID,
-];
-
-const promptInjectionFindingColumns: Column<SkillPromptInjectionFinding>[] = [
-  {
-    key: "rule",
-    header: "Rule",
-    width: "220px",
-    render: (finding) => (
-      <span className="font-mono text-sm">{finding.ruleId}</span>
-    ),
-  },
-  {
-    key: "description",
-    header: "Description",
-    render: (finding) => <Text small>{finding.description}</Text>,
-  },
-  {
-    key: "confidence",
-    header: "Confidence",
-    width: "120px",
-    render: (finding) => (
-      <Text small>{Math.round(finding.confidence * 100)}%</Text>
-    ),
-  },
 ];
 
 function versionAnchorLabel(
@@ -245,6 +228,10 @@ function SkillDetailSections({
     <>
       <SkillPluginBanner skill={skill} />
 
+      <PromptInjectionBanner
+        findings={skillQueryData.promptInjectionFindings}
+      />
+
       <SettingsSection>
         <SettingsSection.Header>
           <SettingsSection.Title>Skill details</SettingsSection.Title>
@@ -317,33 +304,6 @@ function SkillDetailSections({
           skillId={skillId}
           latestVersion={latestVersion}
         />
-      )}
-
-      {skillQueryData.promptInjectionFindings.length > 0 && (
-        <SettingsSection>
-          <SettingsSection.Header>
-            <SettingsSection.Title>
-              Prompt injection flags
-            </SettingsSection.Title>
-            <SettingsSection.Description>
-              Findings detected in the current skill version.
-            </SettingsSection.Description>
-          </SettingsSection.Header>
-          <SettingsSection.Panel>
-            <SettingsSection.Body>
-              <div className="overflow-x-auto">
-                <Table
-                  columns={promptInjectionFindingColumns}
-                  data={skillQueryData.promptInjectionFindings}
-                  rowKey={(finding) =>
-                    `${finding.ruleId}:${finding.description}:${finding.confidence}`
-                  }
-                  className="min-w-[640px]"
-                />
-              </div>
-            </SettingsSection.Body>
-          </SettingsSection.Panel>
-        </SettingsSection>
       )}
 
       <SkillInsightsSection
@@ -651,6 +611,58 @@ function VersionHistory({
         onClose={() => setRestoreTarget(null)}
       />
     </>
+  );
+}
+
+function PromptInjectionBanner({
+  findings,
+}: {
+  findings: SkillPromptInjectionFinding[];
+}): JSX.Element | null {
+  const [expanded, setExpanded] = useState(false);
+  if (findings.length === 0) return null;
+  const summary =
+    findings.length === 1
+      ? "A prompt injection finding was detected in the current skill version."
+      : `${findings.length} prompt injection findings were detected in the current skill version.`;
+  return (
+    <StatusBanner tone="warning">
+      <Collapsible open={expanded} onOpenChange={setExpanded}>
+        <div className="flex flex-col gap-3 p-6">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="text-warning-foreground h-4 w-4 shrink-0" />
+            <Text className="text-warning-foreground text-base font-semibold">
+              Prompt injection flagged
+            </Text>
+          </div>
+          <Text variant="small" className="text-muted-foreground/90">
+            {summary}
+          </Text>
+          <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex w-fit items-center gap-1 text-sm transition-colors [&[data-state=open]>svg]:rotate-90">
+            <ChevronRight className="h-4 w-4 transition-transform" />
+            {expanded ? "Hide findings" : "Show findings"}
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <ul className="divide-border divide-y">
+              {findings.map((finding) => (
+                <li
+                  key={`${finding.ruleId}:${finding.description}:${finding.confidence}`}
+                  className="space-y-1 py-3 first:pt-0 last:pb-0"
+                >
+                  <div className="flex flex-wrap items-baseline gap-x-3">
+                    <span className="font-mono text-sm">{finding.ruleId}</span>
+                    <Text small muted>
+                      {Math.round(finding.confidence * 100)}% confidence
+                    </Text>
+                  </div>
+                  <Text small>{finding.description}</Text>
+                </li>
+              ))}
+            </ul>
+          </CollapsibleContent>
+        </div>
+      </Collapsible>
+    </StatusBanner>
   );
 }
 
