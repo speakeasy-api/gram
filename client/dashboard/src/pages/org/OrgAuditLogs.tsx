@@ -31,8 +31,11 @@ import React, {
   type ReactNode,
 } from "react";
 import { Link } from "react-router";
+import { Link as TextLink } from "@/components/ui/Link";
 import {
   formatAuditAction,
+  formatAuditActionLabel,
+  formatSubjectLabel,
   getActorLabel,
   renderVerb,
 } from "@/lib/audit-log-format";
@@ -59,60 +62,11 @@ function getSubjectLabel(log: AuditLog) {
   return log.subjectDisplayName || log.subjectSlug || log.subjectId;
 }
 
-function recordString(value: unknown, key: string): string | undefined {
-  if (value == null || typeof value !== "object") return undefined;
-  const field = (value as Record<string, unknown>)[key];
-  return typeof field === "string" && field !== "" ? field : undefined;
-}
-
-function formatRoleSlug(roleSlug: string) {
-  return roleSlug.replace(/[-_]/g, " ");
-}
-
-function inviteCreatedRole(log: AuditLog): string | undefined {
-  return recordString(log.metadata, "role_slug");
-}
-
-function inviteRoleBefore(log: AuditLog): string | undefined {
-  return (
-    recordString(log.beforeSnapshot, "RoleSlug") ??
-    recordString(log.beforeSnapshot, "role_slug")
-  );
-}
-
-function inviteRoleAfter(log: AuditLog): string | undefined {
-  return (
-    recordString(log.afterSnapshot, "RoleSlug") ??
-    recordString(log.afterSnapshot, "role_slug")
-  );
-}
-
+// renderVerb already names the role ("sent org admin invite to", "changed invite
+// role from x to y for"), so the subject is just the invitee. Repeating it here
+// rendered as "... invite to someone@example.com as org admin".
 function inviteSubjectText(log: AuditLog) {
-  const subject = getSubjectLabel(log);
-
-  if (log.action === "organization_invitation:create") {
-    const role = inviteCreatedRole(log);
-    return role ? `${subject} as ${formatRoleSlug(role)}` : subject;
-  }
-
-  if (log.action === "organization_invitation:update_role") {
-    const before = inviteRoleBefore(log);
-    const after = inviteRoleAfter(log);
-    let roleText = "";
-    if (before && after && before !== after) {
-      roleText = ` from ${formatRoleSlug(before)} to ${formatRoleSlug(after)}`;
-    } else if (after) {
-      roleText = ` to ${formatRoleSlug(after)}`;
-    }
-
-    return `${subject}${roleText}`;
-  }
-
-  return subject;
-}
-
-function renderInviteSubject(log: AuditLog, monoClass: string) {
-  return <span className={monoClass}>{inviteSubjectText(log)}</span>;
+  return getSubjectLabel(log);
 }
 
 function truncateMiddle(value: string, start = 18, end = 16) {
@@ -123,14 +77,31 @@ function truncateMiddle(value: string, start = 18, end = 16) {
 }
 
 const SUBJECT_MONO_CLASS = "font-mono text-xs text-muted-foreground";
+// Same mono treatment minus the colour, so the design-system link palette wins.
+const SUBJECT_LINK_CLASS = "font-mono text-xs";
 
 // A subject rendered as a link to its detail page. Centralizes the mono styling
 // and hover affordance so every linked subject looks identical.
-function SubjectLink({ to, children }: { to: string; children: ReactNode }) {
+function SubjectLink({
+  to,
+  title,
+  children,
+}: {
+  to: string;
+  title?: string;
+  children: ReactNode;
+}) {
   return (
-    <Link to={to} className={cn(SUBJECT_MONO_CLASS, "hover:underline")}>
-      {children}
-    </Link>
+    <TextLink
+      asChild
+      size="xs"
+      underline={false}
+      className={SUBJECT_LINK_CLASS}
+    >
+      <Link to={to} title={title}>
+        {children}
+      </Link>
+    </TextLink>
   );
 }
 
@@ -155,13 +126,16 @@ function subjectLinkText(log: AuditLog): string {
 function renderSubject(log: AuditLog, orgSlug: string) {
   const monoClass = SUBJECT_MONO_CLASS;
 
-  if (log.subjectType === "organization_invitation") {
-    return renderInviteSubject(log, monoClass);
-  }
-
   const href = subjectHref(log, orgSlug);
   if (href) {
-    return <SubjectLink to={href}>{subjectLinkText(log)}</SubjectLink>;
+    // The humanized label drops most of the identifier, so keep the raw value
+    // reachable on hover the way the asset subject below does.
+    const raw = subjectLinkText(log);
+    return (
+      <SubjectLink to={href} title={raw}>
+        {formatSubjectLabel(raw, log.subjectType)}
+      </SubjectLink>
+    );
   }
 
   if (log.subjectType === "asset") {
@@ -174,7 +148,7 @@ function renderSubject(log: AuditLog, orgSlug: string) {
             "inline-block max-w-[34ch] truncate align-bottom",
           )}
         >
-          {truncateMiddle(subjectLabel)}
+          {truncateMiddle(formatSubjectLabel(subjectLabel, log.subjectType))}
         </span>
       </SimpleTooltip>
     );
@@ -194,7 +168,11 @@ function renderSubject(log: AuditLog, orgSlug: string) {
     return null;
   }
 
-  return <span className={monoClass}>{getSubjectLabel(log)}</span>;
+  return (
+    <span className={monoClass}>
+      {formatSubjectLabel(getSubjectLabel(log), log.subjectType)}
+    </span>
+  );
 }
 
 function hasDiff(log: AuditLog): boolean {
@@ -227,7 +205,6 @@ function AuditLogRow({
 
   const actorLabel = getActorLabel(log);
   const verbText = renderVerb(log);
-  const subjectLink = subjectHref(log, orgSlug);
 
   const rowContent = (
     <div className="group flex items-center gap-3 px-4 py-2.5">
@@ -252,18 +229,9 @@ function AuditLogRow({
           </button>
         )}
       </div>
-      <span className="text-muted-foreground shrink-0 font-mono text-xs">
+      <span className="text-muted-foreground w-[5.5rem] shrink-0 text-right font-mono text-xs tabular-nums">
         {formatTimeOnly(log.createdAt, timestampMode)}
       </span>
-      {subjectLink && (
-        <Link
-          to={subjectLink}
-          aria-label={`Open ${getSubjectLabel(log)}`}
-          className="text-muted-foreground hover:text-foreground focus-visible:text-foreground shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-        >
-          <Icon name="arrow-right" className="size-4" />
-        </Link>
-      )}
     </div>
   );
 
@@ -448,7 +416,7 @@ function OrgAuditLogsInner() {
     () =>
       (facetsData?.actions ?? []).map((option) => ({
         ...option,
-        displayName: formatAuditAction(option.value),
+        displayName: formatAuditActionLabel(option.value),
       })),
     [facetsData?.actions],
   );

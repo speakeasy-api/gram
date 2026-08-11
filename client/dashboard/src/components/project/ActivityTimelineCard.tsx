@@ -1,10 +1,12 @@
 import { ChevronRight } from "lucide-react";
 import { Link } from "react-router";
+import { Link as TextLink } from "@/components/ui/Link";
 import { Card } from "@/components/ui/Card";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ActionIconTile } from "@/components/auditlogs/feed";
 import { subjectHref } from "@/components/auditlogs/subject-href";
 import { useSlugs } from "@/contexts/Sdk";
+import { formatSubjectLabel, renderVerb } from "@/lib/audit-log-format";
 import { format, formatDistanceToNow, isToday, isYesterday } from "date-fns";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 
@@ -53,7 +55,13 @@ export function ActivityTimelineCard({
                 {group.logs.map((log) => {
                   const actor =
                     log.actorDisplayName ?? log.actorSlug ?? "Unknown";
-                  const actionLabel = getActionLabel(log);
+                  const actionLabel = renderVerb(log);
+                  const subjectLabel = log.subjectDisplayName
+                    ? formatSubjectLabel(
+                        log.subjectDisplayName,
+                        log.subjectType,
+                      )
+                    : null;
                   const href = orgSlug ? subjectHref(log, orgSlug) : null;
                   return (
                     <li
@@ -71,15 +79,25 @@ export function ActivityTimelineCard({
                             <>
                               {" "}
                               {href ? (
-                                <Link
-                                  to={href}
-                                  className="font-medium hover:underline"
+                                <TextLink
+                                  asChild
+                                  size="sm"
+                                  underline={false}
+                                  className="font-medium"
                                 >
-                                  {log.subjectDisplayName}
-                                </Link>
+                                  <Link
+                                    to={href}
+                                    title={log.subjectDisplayName}
+                                  >
+                                    {subjectLabel}
+                                  </Link>
+                                </TextLink>
                               ) : (
-                                <span className="font-medium">
-                                  {log.subjectDisplayName}
+                                <span
+                                  className="font-medium"
+                                  title={log.subjectDisplayName}
+                                >
+                                  {subjectLabel}
                                 </span>
                               )}
                             </>
@@ -105,95 +123,16 @@ export function ActivityTimelineCard({
 
 // --- Helpers ---
 
-const ACTION_LABELS: Record<string, string> = {
-  "deployments:create": "deployed",
-  "deployments:evolve": "evolved deployment",
-  "deployments:redeploy": "redeployed",
-  "api_key:create": "created API key",
-  "api_key:revoke": "revoked API key",
-  "access_role:create": "created role",
-  "access_role:update": "updated role",
-  "access_role:delete": "deleted role",
-  "access_member:update_role": "updated member role",
-  "organization_invitation:create": "sent invite to",
-  "organization_invitation:revoke": "revoked invite for",
-  "organization_invitation:update_role": "changed invite role for",
-  "project:create": "created project",
-  "project:update": "updated project",
-  "project:delete": "deleted project",
-  "toolset:create": "added",
-  "toolset:update": "updated MCP server",
-  "toolset:delete": "deleted MCP server",
-  "toolset:attach_external_oauth": "connected OAuth",
-  "toolset:detach_external_oauth": "disconnected OAuth",
-  "toolset:attach_oauth_proxy": "attached OAuth proxy",
-  "toolset:update_oauth_proxy": "updated OAuth proxy",
-  "toolset:detach_oauth_proxy": "detached OAuth proxy",
-  "environment:create": "created environment",
-  "environment:update": "updated environment",
-  "environment:delete": "deleted environment",
-  "custom_domains:create": "added custom domain",
-  "custom_domains:delete": "removed custom domain",
-  "template:create": "created template",
-  "template:update": "updated template",
-  "template:delete": "deleted template",
-  "asset:create": "created asset",
-  "variation:update_global": "updated variation",
-  "variation:delete_global": "deleted variation",
-  "plugin:create": "created plugin",
-  "plugin:update": "updated plugin",
-  "plugin:delete": "deleted plugin",
-  "plugin:server_add": "added server to plugin",
-  "plugin:server_update": "updated plugin server",
-  "plugin:server_remove": "removed server from plugin",
-  "plugin:assignments_set": "updated plugin access",
-  "plugin:publish": "published plugins",
-  "chat_session:access": "accessed chat session",
-};
-
-function recordString(value: unknown, key: string): string | undefined {
-  if (value == null || typeof value !== "object") return undefined;
-  const field = (value as Record<string, unknown>)[key];
-  return typeof field === "string" && field !== "" ? field : undefined;
-}
-
-function formatRoleSlug(roleSlug: string) {
-  return roleSlug.replace(/[-_]/g, " ");
-}
-
-function getInviteActionLabel(log: AuditLog): string | undefined {
-  if (log.action === "organization_invitation:create") {
-    const role = recordString(log.metadata, "role_slug");
-    return role ? `sent ${formatRoleSlug(role)} invite to` : undefined;
-  }
-
-  if (log.action === "organization_invitation:update_role") {
-    const before =
-      recordString(log.beforeSnapshot, "RoleSlug") ??
-      recordString(log.beforeSnapshot, "role_slug");
-    const after =
-      recordString(log.afterSnapshot, "RoleSlug") ??
-      recordString(log.afterSnapshot, "role_slug");
-    if (before && after && before !== after) {
-      return `changed invite role from ${formatRoleSlug(before)} to ${formatRoleSlug(after)} for`;
-    }
-    if (after) {
-      return `changed invite role to ${formatRoleSlug(after)} for`;
-    }
-  }
-
-  return undefined;
-}
-
-function getActionLabel(log: AuditLog): string {
-  return getInviteActionLabel(log) ?? ACTION_LABELS[log.action] ?? log.action;
-}
-
 type LogGroup = { label: string; logs: AuditLog[] };
 
 function groupLogsByDate(logs: AuditLog[]): LogGroup[] {
   const map = new Map<string, AuditLog[]>();
-  for (const log of logs) {
+  // Newest first, matching the org audit log feed — the API is not guaranteed
+  // to hand these back in display order.
+  const ordered = [...logs].sort(
+    (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+  );
+  for (const log of ordered) {
     const label = isToday(log.createdAt)
       ? "Today"
       : isYesterday(log.createdAt)
