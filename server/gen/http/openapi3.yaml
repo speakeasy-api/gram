@@ -16814,7 +16814,7 @@ paths:
                 name: CreateGcpKmsKey
     /rpc/externalKeys.deleteAwsKms:
         delete:
-            description: Soft-delete an AWS KMS external key by ID. Requires org:admin.
+            description: Soft-delete an AWS KMS external key by ID. Requires org:admin. Refused with a conflict while any JSON Web Key Set or published JSON Web Key still references the key, since deleting it would break verification for every already-published kid.
             operationId: deleteAwsKmsKey
             parameters:
                 - allowEmptyValue: true
@@ -16900,7 +16900,7 @@ paths:
                 name: DeleteAwsKmsKey
     /rpc/externalKeys.deleteGcpKms:
         delete:
-            description: Soft-delete a GCP KMS external key by ID. Requires org:admin.
+            description: Soft-delete a GCP KMS external key by ID. Requires org:admin. Refused with a conflict while any JSON Web Key Set or published JSON Web Key still references the key, since deleting it would break verification for every already-published kid.
             operationId: deleteGcpKmsKey
             parameters:
                 - allowEmptyValue: true
@@ -17419,7 +17419,7 @@ paths:
                 name: ListGcpKmsKeys
     /rpc/externalKeys.updateAwsKms:
         post:
-            description: Replace an AWS KMS external key's configuration. Requires org:admin.
+            description: 'Update an AWS KMS external key''s name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The key ARN and algorithm are immutable: an external key identifies exactly one signable key permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Gram signs with.'
             operationId: updateAwsKmsKey
             parameters:
                 - allowEmptyValue: true
@@ -17506,7 +17506,7 @@ paths:
                 name: UpdateAwsKmsKey
     /rpc/externalKeys.updateGcpKms:
         post:
-            description: Replace a GCP KMS external key's configuration. Requires org:admin.
+            description: 'Update a GCP KMS external key''s name, backing credential and customer grant reference. Requires org:admin. These three fields are replaced, not patched: omitting the optional customer_grant_reference clears it. The resource name and algorithm are immutable: an external key identifies exactly one signable crypto key version permanently, so changing what the key is means deleting it and creating a new one. The backing credential stays editable because repairing the path to a key does not change the key material Gram signs with.'
             operationId: updateGcpKmsKey
             parameters:
                 - allowEmptyValue: true
@@ -73180,37 +73180,42 @@ components:
             required:
                 - id
                 - name
+        UpdateAwsKmsKeyForm:
+            type: object
+            properties:
+                customer_grant_reference:
+                    type: string
+                    description: Optional. The AWS principal ARN the customer granted on the key in its key policy. Not a secret.
+                external_credential_id:
+                    type: string
+                    description: The external credential Gram uses to authenticate to the key. Must be an aws_iam credential belonging to the same organization.
+                    format: uuid
+                name:
+                    type: string
+                    description: A human-readable name for the key.
+            required:
+                - external_credential_id
+                - name
         UpdateAwsKmsKeyRequestBody:
             type: object
             properties:
-                algorithm:
-                    type: string
-                    description: The signing algorithm of the key.
-                    enum:
-                        - RS256
-                        - ES256
                 customer_grant_reference:
                     type: string
-                    description: Optional. The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
+                    description: Optional. The AWS principal ARN the customer granted on the key in its key policy. Not a secret.
                 external_credential_id:
                     type: string
-                    description: The external credential Gram uses to authenticate to the key. Must belong to the same organization and matching cloud family (an aws_kms key requires an aws_iam credential; a gcp_kms key requires a gcp_iam credential).
+                    description: The external credential Gram uses to authenticate to the key. Must be an aws_iam credential belonging to the same organization.
                     format: uuid
                 id:
                     type: string
                     description: The ID of the key to update.
                     format: uuid
-                key_arn:
-                    type: string
-                    description: The ARN of the AWS KMS key.
                 name:
                     type: string
                     description: A human-readable name for the key.
             required:
                 - id
-                - key_arn
                 - external_credential_id
-                - algorithm
                 - name
         UpdateConfigurationRequestBody:
             type: object
@@ -73357,21 +73362,31 @@ components:
             required:
                 - id
                 - name
+        UpdateGcpKmsKeyForm:
+            type: object
+            properties:
+                customer_grant_reference:
+                    type: string
+                    description: Optional. The Gram service-account email the customer granted on the key in an IAM binding. Not a secret.
+                external_credential_id:
+                    type: string
+                    description: The external credential Gram uses to authenticate to the key. Must be a gcp_iam credential belonging to the same organization.
+                    format: uuid
+                name:
+                    type: string
+                    description: A human-readable name for the key.
+            required:
+                - external_credential_id
+                - name
         UpdateGcpKmsKeyRequestBody:
             type: object
             properties:
-                algorithm:
-                    type: string
-                    description: The signing algorithm of the key.
-                    enum:
-                        - RS256
-                        - ES256
                 customer_grant_reference:
                     type: string
-                    description: Optional. The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
+                    description: Optional. The Gram service-account email the customer granted on the key in an IAM binding. Not a secret.
                 external_credential_id:
                     type: string
-                    description: The external credential Gram uses to authenticate to the key. Must belong to the same organization and matching cloud family (an aws_kms key requires an aws_iam credential; a gcp_kms key requires a gcp_iam credential).
+                    description: The external credential Gram uses to authenticate to the key. Must be a gcp_iam credential belonging to the same organization.
                     format: uuid
                 id:
                     type: string
@@ -73380,14 +73395,9 @@ components:
                 name:
                     type: string
                     description: A human-readable name for the key.
-                resource_name:
-                    type: string
-                    description: The resource name of the GCP KMS key (projects/.../cryptoKeyVersions/...).
             required:
                 - id
-                - resource_name
                 - external_credential_id
-                - algorithm
                 - name
         UpdateInviteRoleRequestBody:
             type: object

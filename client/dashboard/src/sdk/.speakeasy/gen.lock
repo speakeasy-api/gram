@@ -7932,7 +7932,7 @@ examples:
   updateAwsKmsKey:
     speakeasy-default-update-aws-kms-key:
       requestBody:
-        application/json: {"algorithm": "ES256", "external_credential_id": "767efd9e-72ba-4d37-8c1d-121b40001df6", "id": "8231ba93-c0dc-4784-bea2-0bd650f4a7e3", "key_arn": "<value>", "name": "<value>"}
+        application/json: {"external_credential_id": "767efd9e-72ba-4d37-8c1d-121b40001df6", "id": "8231ba93-c0dc-4784-bea2-0bd650f4a7e3", "name": "<value>"}
       responses:
         "200":
           application/json: {"algorithm": "ES256", "created_at": "2026-06-20T04:28:23.176Z", "external_credential_id": "4b8171b0-f222-41e6-b3cd-bfc184ecd7ab", "id": "f85c191f-247c-4c50-bc07-94e8654c09c7", "key_arn": "<value>", "name": "<value>", "organization_id": "<id>", "provider": "gcp_kms", "updated_at": "2024-01-24T06:54:53.273Z"}
@@ -8023,7 +8023,7 @@ examples:
   updateGcpKmsKey:
     speakeasy-default-update-gcp-kms-key:
       requestBody:
-        application/json: {"algorithm": "RS256", "external_credential_id": "a8be83fd-214d-4c1f-8d08-91c90f8bc01e", "id": "9fb1d7bd-6dbe-43e9-b91f-95d3af8f4e05", "name": "<value>", "resource_name": "<value>"}
+        application/json: {"external_credential_id": "a8be83fd-214d-4c1f-8d08-91c90f8bc01e", "id": "9fb1d7bd-6dbe-43e9-b91f-95d3af8f4e05", "name": "<value>"}
       responses:
         "200":
           application/json: {"algorithm": "RS256", "created_at": "2026-08-17T16:12:16.667Z", "external_credential_id": "6652bf84-a4b7-4595-9ab9-f37eb46e38fb", "id": "b8ea1a4f-c136-4185-8f4e-2fb6dc1a48a5", "name": "<value>", "organization_id": "<id>", "provider": "aws_kms", "resource_name": "<value>", "updated_at": "2026-10-31T16:16:26.096Z"}

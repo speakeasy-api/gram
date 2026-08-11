@@ -4,33 +4,14 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { ClosedEnum } from "../../types/enums.js";
-
-/**
- * The signing algorithm of the key.
- */
-export const UpdateGcpKmsKeyRequestBodyAlgorithm = {
-  Rs256: "RS256",
-  Es256: "ES256",
-} as const;
-/**
- * The signing algorithm of the key.
- */
-export type UpdateGcpKmsKeyRequestBodyAlgorithm = ClosedEnum<
-  typeof UpdateGcpKmsKeyRequestBodyAlgorithm
->;
 
 export type UpdateGcpKmsKeyRequestBody = {
   /**
-   * The signing algorithm of the key.
-   */
-  algorithm: UpdateGcpKmsKeyRequestBodyAlgorithm;
-  /**
-   * Optional. The Gram identity (GCP service-account email or AWS principal ARN) the customer granted on the key for the key-policy / IAM-grant model. Not a secret.
+   * Optional. The Gram service-account email the customer granted on the key in an IAM binding. Not a secret.
    */
   customerGrantReference?: string | undefined;
   /**
-   * The external credential Gram uses to authenticate to the key. Must belong to the same organization and matching cloud family (an aws_kms key requires an aws_iam credential; a gcp_kms key requires a gcp_iam credential).
+   * The external credential Gram uses to authenticate to the key. Must be a gcp_iam credential belonging to the same organization.
    */
   externalCredentialId: string;
   /**
@@ -41,25 +22,14 @@ export type UpdateGcpKmsKeyRequestBody = {
    * A human-readable name for the key.
    */
   name: string;
-  /**
-   * The resource name of the GCP KMS key (projects/.../cryptoKeyVersions/...).
-   */
-  resourceName: string;
 };
 
 /** @internal */
-export const UpdateGcpKmsKeyRequestBodyAlgorithm$outboundSchema: z.ZodMiniEnum<
-  typeof UpdateGcpKmsKeyRequestBodyAlgorithm
-> = z.enum(UpdateGcpKmsKeyRequestBodyAlgorithm);
-
-/** @internal */
 export type UpdateGcpKmsKeyRequestBody$Outbound = {
-  algorithm: string;
   customer_grant_reference?: string | undefined;
   external_credential_id: string;
   id: string;
   name: string;
-  resource_name: string;
 };
 
 /** @internal */
@@ -68,18 +38,15 @@ export const UpdateGcpKmsKeyRequestBody$outboundSchema: z.ZodMiniType<
   UpdateGcpKmsKeyRequestBody
 > = z.pipe(
   z.object({
-    algorithm: UpdateGcpKmsKeyRequestBodyAlgorithm$outboundSchema,
     customerGrantReference: z.optional(z.string()),
     externalCredentialId: z.string(),
     id: z.string(),
     name: z.string(),
-    resourceName: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
       customerGrantReference: "customer_grant_reference",
       externalCredentialId: "external_credential_id",
-      resourceName: "resource_name",
     });
   }),
 );
