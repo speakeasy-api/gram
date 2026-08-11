@@ -318,6 +318,17 @@ trackedFiles:
   src/funcs/packagesListVersions.ts: {}
   src/funcs/packagesPublish.ts: {}
   src/funcs/packagesUpdate.ts: {}
+  src/funcs/platformMcpDismissOnboarding.ts: {}
+  src/funcs/platformMcpDistributeOnboardingCandidate.ts: {}
+  src/funcs/platformMcpGetOnboarding.ts: {}
+  src/funcs/platformMcpRecheckOnboardingReadiness.ts: {}
+  src/funcs/platformMcpRecordAgentConfigurationCopied.ts: {}
+  src/funcs/platformMcpRecordInstallIntent.ts: {}
+  src/funcs/platformMcpRegisterOnboardingCandidate.ts: {}
+  src/funcs/platformMcpRemoveOnboardingDistribution.ts: {}
+  src/funcs/platformMcpRepairOnboardingPublication.ts: {}
+  src/funcs/platformMcpStartOnboarding.ts: {}
+  src/funcs/platformMcpStartOnboardingSetup.ts: {}
   src/funcs/pluginsAddPluginServer.ts: {}
   src/funcs/pluginsCreatePlugin.ts: {}
   src/funcs/pluginsDeletePlugin.ts: {}
@@ -724,6 +735,7 @@ trackedFiles:
   src/models/components/disableopenrouterkeyrequestbody.ts: {}
   src/models/components/discoverprotectedresourcemetadatarequestbody.ts: {}
   src/models/components/dismissskillsuggestionrequestbody.ts: {}
+  src/models/components/distributeonboardingcandidaterequestbody.ts: {}
   src/models/components/distributeskillrequestbody.ts: {}
   src/models/components/employeedataflowedge.ts: {}
   src/models/components/employeedataflownode.ts: {}
@@ -1024,6 +1036,8 @@ trackedFiles:
   src/models/components/package.ts: {}
   src/models/components/packageversion.ts: {}
   src/models/components/periodusage.ts: {}
+  src/models/components/platformmcponboardingsetuphandoff.ts: {}
+  src/models/components/platformmcponboardingstate.ts: {}
   src/models/components/platformtooldefinition.ts: {}
   src/models/components/plugin.ts: {}
   src/models/components/pluginassignment.ts: {}
@@ -1055,11 +1069,13 @@ trackedFiles:
   src/models/components/queryresult.ts: {}
   src/models/components/queryrow.ts: {}
   src/models/components/queryseries.ts: {}
+  src/models/components/recordinstallintentrequestbody.ts: {}
   src/models/components/recordskillresult.ts: {}
   src/models/components/redeemrequestbody.ts: {}
   src/models/components/redeemresponsebody.ts: {}
   src/models/components/redeployrequestbody.ts: {}
   src/models/components/redeployresult.ts: {}
+  src/models/components/registeronboardingcandidaterequestbody.ts: {}
   src/models/components/registerrequestbody.ts: {}
   src/models/components/remotemcpserver.ts: {}
   src/models/components/remotemcpserverheader.ts: {}
@@ -1501,7 +1517,9 @@ trackedFiles:
   src/models/operations/disableadminopenrouterkey.ts: {}
   src/models/operations/disablewebhooks.ts: {}
   src/models/operations/discoverremotemcpprotectedresourcemetadata.ts: {}
+  src/models/operations/dismissplatformmcponboarding.ts: {}
   src/models/operations/dismissskillsuggestion.ts: {}
+  src/models/operations/distributeplatformmcponboardingcandidate.ts: {}
   src/models/operations/distributeskill.ts: {}
   src/models/operations/downloadcodexinstallscript.ts: {}
   src/models/operations/downloadobservabilityplugin.ts: {}
@@ -1568,6 +1586,7 @@ trackedFiles:
   src/models/operations/getorganizationremotesessionissuermigratepreflight.ts: {}
   src/models/operations/getotelforwardingconfig.ts: {}
   src/models/operations/getperiodusage.ts: {}
+  src/models/operations/getplatformmcponboarding.ts: {}
   src/models/operations/getplugin.ts: {}
   src/models/operations/getproductfeatures.ts: {}
   src/models/operations/getproject.ts: {}
@@ -1759,6 +1778,9 @@ trackedFiles:
   src/models/operations/queryskillefficacyinsights.ts: {}
   src/models/operations/querytumdetails.ts: {}
   src/models/operations/receiveworkoswebhook.ts: {}
+  src/models/operations/recheckplatformmcponboardingreadiness.ts: {}
+  src/models/operations/recordplatformmcpagentconfigurationcopied.ts: {}
+  src/models/operations/recordplatformmcpinstallintent.ts: {}
   src/models/operations/redeploydeployment.ts: {}
   src/models/operations/refreshglobalremotesessionissuermetadata.ts: {}
   src/models/operations/refreshorganizationremotesession.ts: {}
@@ -1766,12 +1788,15 @@ trackedFiles:
   src/models/operations/refreshremotesessionissuermetadata.ts: {}
   src/models/operations/register.ts: {}
   src/models/operations/registerdomain.ts: {}
+  src/models/operations/registerplatformmcponboardingcandidate.ts: {}
   src/models/operations/removeoauthserver.ts: {}
   src/models/operations/removeorganizationremotesessionclientfrommcpserver.ts: {}
   src/models/operations/removeorganizationuser.ts: {}
+  src/models/operations/removeplatformmcponboardingdistribution.ts: {}
   src/models/operations/removepluginserver.ts: {}
   src/models/operations/rendertemplate.ts: {}
   src/models/operations/rendertemplatebyid.ts: {}
+  src/models/operations/repairplatformmcponboardingpublication.ts: {}
   src/models/operations/requestaccess.ts: {}
   src/models/operations/resolvechallenge.ts: {}
   src/models/operations/resolveshadowmcpinventoryrequest.ts: {}
@@ -1827,6 +1852,8 @@ trackedFiles:
   src/models/operations/settoolsetusersessionissuer.ts: {}
   src/models/operations/shareskill.ts: {}
   src/models/operations/skillfeedback.ts: {}
+  src/models/operations/startplatformmcponboarding.ts: {}
+  src/models/operations/startplatformmcponboardingsetup.ts: {}
   src/models/operations/submitfeedback.ts: {}
   src/models/operations/submitriskblockfeedback.ts: {}
   src/models/operations/suggestcustomdetectionrule.ts: {}
@@ -2071,7 +2098,9 @@ trackedFiles:
   src/react-query/disableAdminOpenRouterKey.ts: {}
   src/react-query/disableWebhooks.ts: {}
   src/react-query/discoverRemoteMcpProtectedResourceMetadata.ts: {}
+  src/react-query/dismissPlatformMCPOnboarding.ts: {}
   src/react-query/dismissSkillSuggestion.ts: {}
+  src/react-query/distributePlatformMCPOnboardingCandidate.ts: {}
   src/react-query/distributeSkill.ts: {}
   src/react-query/enableAdminOpenRouterKey.ts: {}
   src/react-query/enableWebhooks.ts: {}
@@ -2345,6 +2374,8 @@ trackedFiles:
   src/react-query/otelForwardingConfig.core.ts: {}
   src/react-query/otelForwardingConfig.ts: {}
   src/react-query/pauseTrigger.ts: {}
+  src/react-query/platformMCPOnboarding.core.ts: {}
+  src/react-query/platformMCPOnboarding.ts: {}
   src/react-query/plugin.core.ts: {}
   src/react-query/plugin.ts: {}
   src/react-query/plugins.core.ts: {}
@@ -2364,6 +2395,9 @@ trackedFiles:
   src/react-query/publishPlugins.ts: {}
   src/react-query/publishStatus.core.ts: {}
   src/react-query/publishStatus.ts: {}
+  src/react-query/recheckPlatformMCPOnboardingReadiness.ts: {}
+  src/react-query/recordPlatformMCPAgentConfigurationCopied.ts: {}
+  src/react-query/recordPlatformMCPInstallIntent.ts: {}
   src/react-query/redeployDeployment.ts: {}
   src/react-query/refreshGlobalRemoteSessionIssuerMetadata.ts: {}
   src/react-query/refreshOrganizationRemoteSession.ts: {}
@@ -2371,6 +2405,7 @@ trackedFiles:
   src/react-query/refreshRemoteSessionIssuerMetadata.ts: {}
   src/react-query/register.ts: {}
   src/react-query/registerDomain.ts: {}
+  src/react-query/registerPlatformMCPOnboardingCandidate.ts: {}
   src/react-query/remoteMcpServerHeaders.core.ts: {}
   src/react-query/remoteMcpServerHeaders.ts: {}
   src/react-query/remoteMcpServers.core.ts: {}
@@ -2390,11 +2425,13 @@ trackedFiles:
   src/react-query/removeOAuthServer.ts: {}
   src/react-query/removeOrganizationRemoteSessionClientFromMcpServer.ts: {}
   src/react-query/removeOrganizationUser.ts: {}
+  src/react-query/removePlatformMCPOnboardingDistribution.ts: {}
   src/react-query/removePluginServer.ts: {}
   src/react-query/renderTemplate.core.ts: {}
   src/react-query/renderTemplate.ts: {}
   src/react-query/renderTemplateByID.core.ts: {}
   src/react-query/renderTemplateByID.ts: {}
+  src/react-query/repairPlatformMCPOnboardingPublication.ts: {}
   src/react-query/requestAccess.ts: {}
   src/react-query/resolveChallenge.ts: {}
   src/react-query/resolveShadowMCPInventoryRequest.ts: {}
@@ -2562,6 +2599,8 @@ trackedFiles:
   src/react-query/spendRulesOverview.ts: {}
   src/react-query/spendRulesPreviewRule.ts: {}
   src/react-query/spendRulesUpdateRule.ts: {}
+  src/react-query/startPlatformMCPOnboarding.ts: {}
+  src/react-query/startPlatformMCPOnboardingSetup.ts: {}
   src/react-query/summarizeChat.ts: {}
   src/react-query/summarizeToolCall.ts: {}
   src/react-query/switchScopes.ts: {}
@@ -2730,6 +2769,7 @@ trackedFiles:
   src/sdk/otelforwarding.ts: {}
   src/sdk/overview.ts: {}
   src/sdk/packages.ts: {}
+  src/sdk/platformmcp.ts: {}
   src/sdk/plugins.ts: {}
   src/sdk/policies.ts: {}
   src/sdk/policybypassrequests.ts: {}
@@ -4242,6 +4282,13 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  dismissPlatformMCPOnboarding:
+    speakeasy-default-dismiss-platform-MCP-onboarding:
+      responses:
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   dismissSkillSuggestion:
     speakeasy-default-dismiss-skill-suggestion:
       requestBody:
@@ -4249,6 +4296,17 @@ examples:
       responses:
         "200":
           application/json: {"applies_cleanly": true, "base_version_id": "e898c584-e5fa-4d65-9aa7-8cf9573af6d6", "changes": [], "created_at": "2024-08-08T02:54:44.724Z", "feedback_count": 625492, "feedback_session_count": 690841, "id": "0f38e644-a0a6-4c21-baa1-06cb6afdbf3b", "proposed_content": "<value>", "rationale": "<value>", "scored_session_count": 650075, "skill_display_name": "<value>", "skill_id": "951dc8a1-ecdb-476e-a3bf-eda4fa2084f4", "skill_name": "<value>", "status": "dismissed", "updated_at": "2025-01-05T22:26:20.944Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  distributePlatformMCPOnboardingCandidate:
+    speakeasy-default-distribute-platform-MCP-onboarding-candidate:
+      requestBody:
+        application/json: {"expected_version": "<value>", "project_slug": "<value>"}
+      responses:
+        "200":
+          application/json: {"agent_configuration_copied": true, "catalog_explored": true, "client_family": "<value>", "connection_authorized": true, "connection_ready": true, "distribution_attached": false, "distribution_expected_version": "<value>", "distribution_publication_state": "", "distribution_state": "", "distribution_tool_succeeded": false, "enabled": false, "mcp_url": "https://soft-bidet.net/", "readiness_freshness": "unavailable", "readiness_state": "guide_unavailable", "readiness_verified": true, "registration_complete": false, "repair_action": "", "selected_project_name": "<value>", "selected_project_slug": "<value>", "selected_use_verified": true, "stage": "authorized", "workflow_active": false}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -5008,6 +5066,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getPlatformMCPOnboarding:
+    speakeasy-default-get-platform-MCP-onboarding:
+      responses:
+        "200":
+          application/json: {"agent_configuration_copied": false, "catalog_explored": false, "client_family": "<value>", "connection_authorized": false, "connection_ready": false, "distribution_attached": false, "distribution_expected_version": "<value>", "distribution_publication_state": "repair_required", "distribution_state": "removed", "distribution_tool_succeeded": false, "enabled": false, "mcp_url": "https://sneaky-knickers.name/", "readiness_freshness": "unavailable", "readiness_state": "guide_unavailable", "readiness_verified": true, "registration_complete": false, "repair_action": "authorize_platform_mcp", "selected_project_name": "<value>", "selected_project_slug": "<value>", "selected_use_verified": false, "stage": "install_instructions", "workflow_active": false}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   getPlugin:
     speakeasy-default-get-plugin:
       parameters:
@@ -7173,6 +7240,35 @@ examples:
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   receiveWorkOSWebhook: {}
+  recheckPlatformMCPOnboardingReadiness:
+    speakeasy-default-recheck-platform-MCP-onboarding-readiness:
+      responses:
+        "200":
+          application/json: {"agent_configuration_copied": false, "catalog_explored": true, "client_family": "<value>", "connection_authorized": false, "connection_ready": true, "distribution_attached": false, "distribution_expected_version": "<value>", "distribution_publication_state": "current", "distribution_state": "", "distribution_tool_succeeded": true, "enabled": true, "mcp_url": "https://milky-lyre.org", "readiness_freshness": "stale", "readiness_state": "unsupported", "readiness_verified": false, "registration_complete": false, "repair_action": "", "selected_project_name": "<value>", "selected_project_slug": "<value>", "selected_use_verified": false, "stage": "authorized", "workflow_active": false}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  recordPlatformMCPAgentConfigurationCopied:
+    speakeasy-default-record-platform-MCP-agent-configuration-copied:
+      responses:
+        "200":
+          application/json: {"agent_configuration_copied": true, "catalog_explored": false, "client_family": "<value>", "connection_authorized": true, "connection_ready": true, "distribution_attached": true, "distribution_expected_version": "<value>", "distribution_publication_state": "repair_required", "distribution_state": "removed", "distribution_tool_succeeded": true, "enabled": true, "mcp_url": "https://shameful-impact.net", "readiness_freshness": "fresh", "readiness_state": "ready", "readiness_verified": false, "registration_complete": false, "repair_action": "distribute_to_default_plugin", "selected_project_name": "<value>", "selected_project_slug": "<value>", "selected_use_verified": false, "stage": "install_instructions", "workflow_active": true}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  recordPlatformMCPInstallIntent:
+    speakeasy-default-record-platform-MCP-install-intent:
+      requestBody:
+        application/json: {"client_family": "cursor"}
+      responses:
+        "200":
+          application/json: {"agent_configuration_copied": false, "catalog_explored": true, "client_family": "<value>", "connection_authorized": true, "connection_ready": true, "distribution_attached": false, "distribution_expected_version": "<value>", "distribution_publication_state": "current", "distribution_state": "", "distribution_tool_succeeded": true, "enabled": true, "mcp_url": "https://greedy-tectonics.net", "readiness_freshness": "stale", "readiness_state": "ready", "readiness_verified": true, "registration_complete": true, "repair_action": "", "selected_project_name": "<value>", "selected_project_slug": "<value>", "selected_use_verified": false, "stage": "not_started", "workflow_active": false}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   redeployDeployment:
     speakeasy-default-redeploy-deployment:
       requestBody:
@@ -7249,6 +7345,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  registerPlatformMCPOnboardingCandidate:
+    speakeasy-default-register-platform-MCP-onboarding-candidate:
+      requestBody:
+        application/json: {"project_slug": "<value>"}
+      responses:
+        "200":
+          application/json: {"agent_configuration_copied": true, "catalog_explored": false, "client_family": "<value>", "connection_authorized": true, "connection_ready": false, "distribution_attached": true, "distribution_expected_version": "<value>", "distribution_publication_state": "", "distribution_state": "removed", "distribution_tool_succeeded": true, "enabled": true, "mcp_url": "https://pricey-scorpion.org/", "readiness_freshness": "unavailable", "readiness_state": "unauthorized", "readiness_verified": true, "registration_complete": true, "repair_action": "start_setup", "selected_project_name": "<value>", "selected_project_slug": "<value>", "selected_use_verified": true, "stage": "not_started", "workflow_active": true}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   removeOAuthServer:
     speakeasy-default-remove-O-auth-server:
       parameters:
@@ -7276,6 +7383,17 @@ examples:
         query:
           user_id: "<id>"
       responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  removePlatformMCPOnboardingDistribution:
+    speakeasy-default-remove-platform-MCP-onboarding-distribution:
+      requestBody:
+        application/json: {"expected_version": "<value>", "project_slug": "<value>"}
+      responses:
+        "200":
+          application/json: {"agent_configuration_copied": true, "catalog_explored": true, "client_family": "<value>", "connection_authorized": true, "connection_ready": true, "distribution_attached": false, "distribution_expected_version": "<value>", "distribution_publication_state": "pending", "distribution_state": "", "distribution_tool_succeeded": false, "enabled": true, "mcp_url": "https://buttery-integer.com", "readiness_freshness": "", "readiness_state": "needs_gram_authorization", "readiness_verified": true, "registration_complete": true, "repair_action": "select_project", "selected_project_name": "<value>", "selected_project_slug": "<value>", "selected_use_verified": true, "stage": "install_instructions", "workflow_active": false}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -7316,6 +7434,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  repairPlatformMCPOnboardingPublication:
+    speakeasy-default-repair-platform-MCP-onboarding-publication:
+      requestBody:
+        application/json: {"expected_version": "<value>", "project_slug": "<value>"}
+      responses:
+        "200":
+          application/json: {"agent_configuration_copied": true, "catalog_explored": false, "client_family": "<value>", "connection_authorized": true, "connection_ready": false, "distribution_attached": false, "distribution_expected_version": "<value>", "distribution_publication_state": "current", "distribution_state": "", "distribution_tool_succeeded": false, "enabled": false, "mcp_url": "https://whirlwind-license.com", "readiness_freshness": "fresh", "readiness_state": "unreachable", "readiness_verified": false, "registration_complete": false, "repair_action": "distribute_to_default_plugin", "selected_project_name": "<value>", "selected_project_slug": "<value>", "selected_use_verified": true, "stage": "authorized", "workflow_active": false}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   requestAccess:
     speakeasy-default-request-access:
       requestBody:
@@ -7935,6 +8064,24 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  startPlatformMCPOnboarding:
+    speakeasy-default-start-platform-MCP-onboarding:
+      responses:
+        "200":
+          application/json: {"agent_configuration_copied": true, "catalog_explored": false, "client_family": "<value>", "connection_authorized": true, "connection_ready": false, "distribution_attached": true, "distribution_expected_version": "<value>", "distribution_publication_state": "pending", "distribution_state": "attached", "distribution_tool_succeeded": true, "enabled": true, "mcp_url": "https://husky-wallaby.info", "readiness_freshness": "fresh", "readiness_state": "unreachable", "readiness_verified": false, "registration_complete": true, "repair_action": "enable_platform_mcp", "selected_project_name": "<value>", "selected_project_slug": "<value>", "selected_use_verified": true, "stage": "install_instructions", "workflow_active": true}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  startPlatformMCPOnboardingSetup:
+    speakeasy-default-start-platform-MCP-onboarding-setup:
+      responses:
+        "200":
+          application/json: {}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   submitFeedback:
     speakeasy-default-submit-feedback:
       requestBody:

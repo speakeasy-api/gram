@@ -29,10 +29,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auditapi"
 	"github.com/speakeasy-api/gram/server/internal/external"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp/localfixture"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
+	"github.com/speakeasy-api/gram/server/internal/toolcallobserver"
 
 	"github.com/speakeasy-api/gram/server/internal/about"
 	"github.com/speakeasy-api/gram/server/internal/access"
@@ -909,6 +911,7 @@ func newStartCommand() *cli.Command {
 			)
 
 			toolDispositionCache := mcpservers.NewToolDispositionCache(logger, db, cache.NewRedisCacheAdapter(redisClient))
+			var platformSelectedUseRecorder toolcallobserver.SuccessRecorder = platformmcp.NewSelectedUseRecorder(db)
 			remoteProxyManager := remotemcp.NewProxyManager(
 				logger,
 				tracerProvider,
@@ -920,6 +923,7 @@ func newStartCommand() *cli.Command {
 				billingRepo,
 				billingTracker,
 				toolDispositionCache,
+				platformSelectedUseRecorder,
 			)
 
 			// guardian.WithAllowedCIDRBlocks silently drops invalid CIDRs, so a
@@ -1271,6 +1275,10 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("plugins github config: %w", err)
 			}
+			if platformFixture != nil && pluginsGitHub == nil {
+				pluginsGitHub = &plugins.GitHubConfig{Client: localfixture.NewInMemoryGitHubPublisher(), Org: "local-fixture", InstallationID: 1}
+				logger.InfoContext(ctx, "GitHub publishing for plugins: using local fixture publisher")
+			}
 			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil))
 			packages.Attach(mux, packages.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 
@@ -1334,6 +1342,7 @@ func newStartCommand() *cli.Command {
 			if err := configurePlatformMCP(ctx, platformMCPConfig{
 				Logger:                 logger,
 				MeterProvider:          meterProvider,
+				TracerProvider:         tracerProvider,
 				Mux:                    mux,
 				DB:                     db,
 				Redis:                  redisClient,
@@ -1349,6 +1358,8 @@ func newStartCommand() *cli.Command {
 				Registry:               mcpRegistryClient,
 				GuardianPolicy:         guardianPolicy,
 				RemoteChallengeManager: remoteChallengeManager,
+				AuditLogger:            auditLogger,
+				PluginPublisher:        pluginPublisher,
 				LocalFixture:           platformFixture,
 			}); err != nil {
 				return err

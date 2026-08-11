@@ -16,7 +16,7 @@ const (
 	ProviderKey           = "local-fixture"
 	CanonicalRef          = "local-fixture/reviewed-mcp"
 	SetupIntent           = "provider_setup"
-	OAuthClientName       = "Gram Platform MCP local fixture"
+	OAuthClientName       = "Speakeasy AICP Platform MCP local fixture"
 	SetupGuideVersion     = "local-fixture-v1"
 	fixtureOAuthPath      = "platform-mcp/local-fixture"
 	fixtureIssuerSlug     = "platform-mcp-local-fixture"
@@ -166,7 +166,7 @@ func (c *Config) SetupResources() []platformmcp.SetupResource {
 		Title:       "Local fixture provider setup",
 		Description: "Reviewed local-only setup instructions for the synthetic Platform MCP fixture.",
 		Text: "# Local fixture provider setup\n\n" +
-			"Owner: Gram Platform MCP\n\n" +
+			"Owner: Speakeasy AICP Platform MCP\n\n" +
 			"Source/version: " + SetupGuideVersion + "\n\n" +
 			"Review/freshness: static synthetic fixture; reviewed with the local Platform MCP test composition.\n\n" +
 			"1. Start the authenticated dashboard setup handoff returned by `get_setup_handoff`.\n" +

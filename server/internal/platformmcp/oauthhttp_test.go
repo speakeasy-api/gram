@@ -221,6 +221,9 @@ func TestOAuthHTTPSelectsOrganizationAfterIDPCallback(t *testing.T) {
 	service.OrganizationSelectionHandler().ServeHTTP(selection, httptest.NewRequest(http.MethodGet, selectionURL.String(), nil))
 	require.Equal(t, http.StatusOK, selection.Code)
 	require.Contains(t, selection.Body.String(), "Organization one")
+	require.Contains(t, selection.Body.String(), "Choose an organization")
+	require.Contains(t, selection.Body.String(), "auth-consent-container")
+	require.Contains(t, selection.Body.String(), "Geist+Mono")
 }
 
 func TestOAuthHTTPRejectsConsentBeforeOrganizationSelection(t *testing.T) {

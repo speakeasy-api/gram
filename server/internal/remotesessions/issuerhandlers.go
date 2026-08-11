@@ -839,6 +839,44 @@ func (e *discoveryError) UserMessage() string {
 // fails the first (canonical RFC 8414) candidate's error is surfaced, wrapped
 // in a *discoveryError so the handler can attach the upstream URL and status to
 // the user-facing error.
+// DiscoveredIssuerMetadata is the server-owned subset of RFC 8414 metadata
+// required to register Gram as an OAuth client. It is deliberately an internal
+// application return type rather than an API payload: callers must not reflect
+// upstream endpoints or registration material to untrusted clients.
+type DiscoveredIssuerMetadata struct {
+	Issuer                            string
+	AuthorizationEndpoint             string
+	TokenEndpoint                     string
+	RegistrationEndpoint              string
+	ScopesSupported                   []string
+	GrantTypesSupported               []string
+	ResponseTypesSupported            []string
+	TokenEndpointAuthMethodsSupported []string
+	ClientIDMetadataDocumentSupported bool
+}
+
+// DiscoverIssuerMetadata performs issuer metadata discovery through Guardian's
+// outbound policy. It is available to trusted server-side composition such as
+// Platform MCP provider attachment; browser and MCP callers must never supply
+// an issuer URL to it.
+func DiscoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuerURL string) (DiscoveredIssuerMetadata, error) {
+	doc, _, err := discoverIssuerMetadata(ctx, policy, issuerURL)
+	if err != nil {
+		return DiscoveredIssuerMetadata{}, err
+	}
+	return DiscoveredIssuerMetadata{
+		Issuer:                            doc.Issuer,
+		AuthorizationEndpoint:             doc.AuthorizationEndpoint,
+		TokenEndpoint:                     doc.TokenEndpoint,
+		RegistrationEndpoint:              doc.RegistrationEndpoint,
+		ScopesSupported:                   append([]string(nil), doc.ScopesSupported...),
+		GrantTypesSupported:               append([]string(nil), doc.GrantTypesSupported...),
+		ResponseTypesSupported:            append([]string(nil), doc.ResponseTypesSupported...),
+		TokenEndpointAuthMethodsSupported: append([]string(nil), doc.TokenEndpointAuthMethodsSupported...),
+		ClientIDMetadataDocumentSupported: doc.ClientIDMetadataDocumentSupported,
+	}, nil
+}
+
 func discoverIssuerMetadata(ctx context.Context, policy *guardian.Policy, issuerURL string) (rfc8414Document, []string, error) {
 	candidates, err := issuerProbeCandidates(issuerURL)
 	if err != nil {

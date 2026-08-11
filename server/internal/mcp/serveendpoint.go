@@ -473,6 +473,17 @@ func (s *Service) prepareProxyBackendContext(
 	// sessions, and would reject a perfectly valid user-session JWT. Skip
 	// it and trust the gate.
 	issuerGated := mcpServer.UserSessionIssuerID.Valid && !isTunneledPublic(mcpServer)
+	if issuerGated {
+		project, err := projectsrepo.New(s.db).GetProjectByID(ctx, endpoint.ProjectID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "load issuer-gated mcp server project").LogError(ctx, logger)
+		}
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		if !ok || authCtx == nil {
+			return nil, oops.C(oops.CodeUnauthorized)
+		}
+		ctx = setProxyBackendProjectContext(ctx, authCtx, project.ID, project.Slug)
+	}
 	switch mcpServer.Visibility {
 	case mcpservers.VisibilityPrivate:
 		// Private mcp_servers require identity auth, that the caller's

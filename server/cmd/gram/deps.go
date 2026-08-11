@@ -3,6 +3,7 @@ package gram
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/csv"
 	"errors"
 	"fmt"
@@ -774,6 +775,25 @@ func newMCPRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvid
 	backend := externalmcp.NewPulseBackend(pulseURL, opts.pulseTenantID, opts.pulseAPIKey)
 
 	return externalmcp.NewRegistryClient(logger, tracerProvider, guardianPolicy, backend, opts.cacheImpl), nil
+}
+
+func newLocalFixtureMCPRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider, localCAPath string, opts mcpRegistryClientOptions) (*externalmcp.RegistryClient, error) {
+	if localCAPath == "" {
+		return nil, fmt.Errorf("local Platform MCP fixture CA path is required")
+	}
+	caPEM, err := os.ReadFile(localCAPath)
+	if err != nil {
+		return nil, fmt.Errorf("read local Platform MCP fixture CA: %w", err)
+	}
+	roots := x509.NewCertPool()
+	if !roots.AppendCertsFromPEM(caPEM) {
+		return nil, fmt.Errorf("parse local Platform MCP fixture CA")
+	}
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{}, guardian.WithTLSRootCAs(roots))
+	if err != nil {
+		return nil, fmt.Errorf("create local Platform MCP fixture HTTP policy: %w", err)
+	}
+	return newMCPRegistryClient(logger, tracerProvider, policy, opts)
 }
 
 func newFeatureChecker(logger *slog.Logger, pf *productfeatures.Client, feat productfeatures.Feature) telemetry.FeatureChecker {

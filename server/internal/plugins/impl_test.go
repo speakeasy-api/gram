@@ -2346,9 +2346,9 @@ func TestPluginsService_PublishProject_PlatformMCPAdmissionTransitions(t *testin
 	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, nil, fixedPlatformAdmission{admission: platformmcp.AdmissionEnabled})
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	setProjectSlug(t, ctx, ti.conn, *authCtx.ProjectID, "default")
-	defaultSlug := "default"
-	authCtx.ProjectSlug = &defaultSlug
+	setProjectSlug(t, ctx, ti.conn, *authCtx.ProjectID, "selected-project")
+	selectedProjectSlug := "selected-project"
+	authCtx.ProjectSlug = &selectedProjectSlug
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
 	_, err := ti.service.PublishProject(ctx, plugins.PublishProjectInput{

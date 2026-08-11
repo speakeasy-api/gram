@@ -6,3 +6,4 @@ export { InstrumentAgentsStep } from "./instrument-agents-step";
 export { AdditionalAgentConfigStep } from "./additional-agent-config-step";
 export { ConfirmTrafficStep } from "./confirm-traffic-step";
 export { ConfigurePoliciesStep } from "./configure-policies-step";
+export { PlatformMCPSetupStep } from "./platform-mcp-setup-step";

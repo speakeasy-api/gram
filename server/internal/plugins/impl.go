@@ -1670,15 +1670,12 @@ func (s *Service) publishUpToDate(ctx context.Context, ac *contextvalues.AuthCon
 
 	cfg := s.generateConfig(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug, projectSlug, *ac.ProjectID)
 	publishedMCPFingerprints := decodeMCPFingerprints(conn.PublishedMcpFingerprints)
-	admission := platformmcp.AdmissionDisabled
-	if projectSlug == "default" {
-		admission = platformmcp.AdmissionIndeterminate
-		if s.platformAdmission != nil {
-			admission, err = s.platformAdmission.Evaluate(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug)
-			if err != nil {
-				s.logger.WarnContext(ctx, "publish freshness: evaluate platform mcp admission", attr.SlogError(err))
-				admission = platformmcp.AdmissionIndeterminate
-			}
+	admission := platformmcp.AdmissionIndeterminate
+	if s.platformAdmission != nil {
+		admission, err = s.platformAdmission.Evaluate(ctx, ac.ActiveOrganizationID, ac.OrganizationSlug)
+		if err != nil {
+			s.logger.WarnContext(ctx, "publish freshness: evaluate platform mcp admission", attr.SlogError(err))
+			admission = platformmcp.AdmissionIndeterminate
 		}
 	}
 	platformWasPublished := publishedMCPFingerprints[mcpPlatformFingerprintKey] != ""
@@ -1975,23 +1972,21 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	firstPublish := errors.Is(connErr, pgx.ErrNoRows)
 	publishedMCPFingerprints := decodeMCPFingerprints(existing.PublishedMcpFingerprints)
 
-	// Platform publishing is bound to the literal default project slug, not the
-	// oldest-project convention used by marketplace naming.
-	admission := platformmcp.AdmissionDisabled
-	if input.ProjectSlug == "default" {
-		admission = platformmcp.AdmissionIndeterminate
-		if s.platformAdmission != nil {
-			var admissionErr error
-			admission, admissionErr = s.platformAdmission.Evaluate(ctx, input.OrganizationID, input.OrganizationSlug)
-			if admissionErr != nil {
-				if errors.Is(admissionErr, context.Canceled) || errors.Is(admissionErr, context.DeadlineExceeded) {
-					return nil, fmt.Errorf("evaluate platform mcp package admission: %w", admissionErr)
-				}
-				s.logger.WarnContext(ctx, "platform mcp package admission is indeterminate; preserving prior state",
-					attr.SlogOrganizationID(input.OrganizationID),
-					attr.SlogError(admissionErr))
-				admission = platformmcp.AdmissionIndeterminate
+	// Platform package admission applies to the exact project being published.
+	// Onboarding may select any eligible project, whose own existing Default
+	// plugin remains the attachment authority.
+	admission := platformmcp.AdmissionIndeterminate
+	if s.platformAdmission != nil {
+		var admissionErr error
+		admission, admissionErr = s.platformAdmission.Evaluate(ctx, input.OrganizationID, input.OrganizationSlug)
+		if admissionErr != nil {
+			if errors.Is(admissionErr, context.Canceled) || errors.Is(admissionErr, context.DeadlineExceeded) {
+				return nil, fmt.Errorf("evaluate platform mcp package admission: %w", admissionErr)
 			}
+			s.logger.WarnContext(ctx, "platform mcp package admission is indeterminate; preserving prior state",
+				attr.SlogOrganizationID(input.OrganizationID),
+				attr.SlogError(admissionErr))
+			admission = platformmcp.AdmissionIndeterminate
 		}
 	}
 	platformWasPublished := publishedMCPFingerprints[mcpPlatformFingerprintKey] != ""

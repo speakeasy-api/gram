@@ -25,7 +25,7 @@ type InspectCatalogCandidateInput struct {
 	CatalogRef  string `json:"catalog_ref" jsonschema:"canonical catalog reference returned by search_mcp_catalog"`
 }
 
-func registerCatalogTools(server *mcp.Server, catalog Catalog, budget OperationBudget, cursorCodec *catalogCursorCodec) {
+func registerCatalogTools(server *mcp.Server, catalog Catalog, budget OperationBudget, cursorCodec *catalogCursorCodec, onboarding *OnboardingService) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "search_mcp_catalog",
 		Title:       "Search MCP Catalog",
@@ -69,6 +69,11 @@ func registerCatalogTools(server *mcp.Server, catalog Catalog, budget OperationB
 		page, nextPosition, err := catalogSearchPage(filtered, position)
 		if err != nil {
 			return nil, SearchCatalogOutput{}, err
+		}
+		if onboarding != nil {
+			if err := onboarding.RecordCatalogExplored(ctx, principal); err != nil {
+				return nil, SearchCatalogOutput{}, err
+			}
 		}
 		output := SearchCatalogOutput{Candidates: page}
 		if nextPosition > 0 {

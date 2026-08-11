@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"time"
@@ -15,7 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -33,6 +33,19 @@ type ProxyRegisterResponse struct {
 	ClientID                string `json:"client_id"`
 	ClientSecret            string `json:"client_secret,omitempty"`
 	TokenEndpointAuthMethod string `json:"token_endpoint_auth_method,omitempty"`
+}
+
+// DynamicClientRegistrationError classifies a refusal from the upstream
+// registration endpoint without retaining the response body. Callers can keep
+// the existing dashboard distinction between non-retryable 4xx rejections and
+// retryable upstream failures without exposing provider details.
+type DynamicClientRegistrationError struct {
+	StatusCode int
+	Detail     string
+}
+
+func (e *DynamicClientRegistrationError) Error() string {
+	return fmt.Sprintf("registration endpoint returned %d: %s", e.StatusCode, e.Detail)
 }
 
 // DCRRequest is the RFC 7591 Dynamic Client Registration request Gram sends to
@@ -60,13 +73,85 @@ type DCRResponse struct {
 	ClientName              string   `json:"client_name,omitempty"`
 }
 
+// RegisterDynamicClient performs Dynamic Client Registration against an
+// upstream provider. Trusted server-side callers use it when the provider and
+// registration endpoint were discovered from a persisted resource, never from
+// an MCP or browser input. The returned secret is transient and callers must
+// encrypt it before persistence without returning or logging it.
+func RegisterDynamicClient(ctx context.Context, policy *guardian.Policy, serverURL *url.URL, request ProxyRegisterRequest) (ProxyRegisterResponse, error) {
+	if policy == nil || serverURL == nil {
+		return ProxyRegisterResponse{}, fmt.Errorf("dynamic client registration is not configured")
+	}
+
+	endpoint, err := url.Parse(request.RegistrationEndpoint)
+	if err != nil || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.Host == "" {
+		return ProxyRegisterResponse{}, fmt.Errorf("invalid registration endpoint")
+	}
+
+	origin := serverURL.String()
+	redirectURIs := []string{
+		fmt.Sprintf("%s/oauth/callback", origin),
+		fmt.Sprintf("%s/mcp/remote_login_callback", origin),
+		fmt.Sprintf("%s/x/mcp/remote_login_callback", origin),
+	}
+
+	dcrReq := DCRRequest{
+		RedirectURIs:            redirectURIs,
+		TokenEndpointAuthMethod: conv.PtrValOr(request.TokenEndpointAuthMethod, ""),
+		GrantTypes:              []string{"authorization_code", "refresh_token"},
+		ResponseTypes:           []string{"code"},
+		ClientName:              "Speakeasy",
+		ClientURI:               origin,
+		Scope:                   conv.PtrValOr(request.Scope, ""),
+	}
+
+	body, err := json.Marshal(dcrReq)
+	if err != nil {
+		return ProxyRegisterResponse{}, fmt.Errorf("marshal DCR request: %w", err)
+	}
+
+	upstreamCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	httpReq, err := http.NewRequestWithContext(upstreamCtx, http.MethodPost, endpoint.String(), bytes.NewReader(body))
+	if err != nil {
+		return ProxyRegisterResponse{}, fmt.Errorf("create DCR request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "application/json")
+
+	resp, err := policy.Client().Do(httpReq)
+	if err != nil {
+		return ProxyRegisterResponse{}, fmt.Errorf("reach registration endpoint: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, proxyRegisterMaxBodyBytes))
+	if err != nil {
+		return ProxyRegisterResponse{}, fmt.Errorf("read DCR response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return ProxyRegisterResponse{}, &DynamicClientRegistrationError{StatusCode: resp.StatusCode, Detail: dcrErrorDetail(respBody, resp.StatusCode)}
+	}
+
+	var dcrResp DCRResponse
+	if err := json.Unmarshal(respBody, &dcrResp); err != nil {
+		return ProxyRegisterResponse{}, fmt.Errorf("decode DCR response: %w", err)
+	}
+	if dcrResp.ClientID == "" {
+		return ProxyRegisterResponse{}, errors.New("DCR response missing client_id")
+	}
+	return ProxyRegisterResponse{
+		ClientID:                dcrResp.ClientID,
+		ClientSecret:            dcrResp.ClientSecret,
+		TokenEndpointAuthMethod: dcrResp.TokenEndpointAuthMethod,
+	}, nil
+}
+
 // handleProxyRegister performs Dynamic Client Registration against an upstream
 // OAuth provider on behalf of the dashboard user so the dashboard can wire up
 // remote_session_clients without hitting the upstream's registration_endpoint
-// from the browser (CORS). The handler forwards the caller's `scope` and
-// `token_endpoint_auth_method` verbatim when supplied and omits them otherwise
-// — interpreting RFC 7591 spec defaults is the upstream's job, not Gram's. SSRF
-// is gated by the guardian policy's HTTP client.
+// from the browser (CORS). SSRF is gated by the guardian policy's HTTP client.
 func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
@@ -94,99 +179,18 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 		return oops.E(oops.CodeBadRequest, err, "invalid JSON in request body").LogError(ctx, s.logger)
 	}
 
-	endpoint, err := url.Parse(req.RegistrationEndpoint)
-	if err != nil || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.Host == "" {
-		return oops.E(oops.CodeBadRequest, err, "invalid registration_endpoint").LogError(ctx, s.logger)
-	}
-
-	serverURL := s.serverURL.String()
-	redirectURIs := []string{
-		fmt.Sprintf("%s/oauth/callback", serverURL),
-		fmt.Sprintf("%s/mcp/remote_login_callback", serverURL),
-		fmt.Sprintf("%s/x/mcp/remote_login_callback", serverURL),
-	}
-
-	dcrReq := DCRRequest{
-		RedirectURIs:            redirectURIs,
-		TokenEndpointAuthMethod: conv.PtrValOr(req.TokenEndpointAuthMethod, ""),
-		GrantTypes:              []string{"authorization_code", "refresh_token"},
-		ResponseTypes:           []string{"code"},
-		ClientName:              "Speakeasy",
-		ClientURI:               serverURL,
-		Scope:                   conv.PtrValOr(req.Scope, ""),
-	}
-
-	body, err := json.Marshal(dcrReq)
+	registered, err := RegisterDynamicClient(ctx, s.policy, s.serverURL, req)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to marshal DCR request").LogError(ctx, s.logger)
-	}
-
-	upstreamCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
-	httpReq, err := http.NewRequestWithContext(upstreamCtx, http.MethodPost, endpoint.String(), bytes.NewReader(body))
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to create DCR request").LogError(ctx, s.logger)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Accept", "application/json")
-
-	resp, err := s.policy.Client().Do(httpReq)
-	if err != nil {
-		return oops.E(oops.CodeGatewayError, err, "failed to reach registration endpoint").LogError(ctx, s.logger)
-	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
-		if closeErr := resp.Body.Close(); closeErr != nil {
-			return fmt.Errorf("close DCR response body: %w", closeErr)
+		var registrationErr *DynamicClientRegistrationError
+		if errors.As(err, &registrationErr) && registrationErr.StatusCode >= http.StatusBadRequest && registrationErr.StatusCode < http.StatusInternalServerError {
+			return oops.E(oops.CodeBadRequest, err, "identity provider rejected the client registration: %s", registrationErr.Detail).LogWarn(ctx, s.logger)
 		}
-		return nil
-	})
-
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, proxyRegisterMaxBodyBytes))
-	if err != nil {
-		return oops.E(oops.CodeGatewayError, err, "failed to read DCR response").LogError(ctx, s.logger)
-	}
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		logAttrs := []slog.Attr{
-			attr.SlogHTTPResponseStatusCode(resp.StatusCode),
-			attr.SlogHTTPResponseBody(string(respBody)),
-		}
-
-		// A 4xx means the upstream refused this particular registration —
-		// e.g. an unsupported scope, a restricted set of redirect URIs, or a
-		// token-endpoint auth method it does not offer. That's a configuration
-		// mismatch the operator can act on, not a gateway fault, so surface the
-		// upstream error/error_description and classify it as a bad request
-		// rather than flattening it into an opaque 502.
-		if resp.StatusCode >= http.StatusBadRequest && resp.StatusCode < http.StatusInternalServerError {
-			return oops.E(oops.CodeBadRequest, nil,
-				"identity provider rejected the client registration: %s",
-				dcrErrorDetail(respBody, resp.StatusCode),
-			).LogWarn(ctx, s.logger, logAttrs...)
-		}
-
-		// A 5xx (or any other unexpected status) is a genuine upstream failure.
-		return oops.E(oops.CodeGatewayError, nil,
-			"registration endpoint returned %d", resp.StatusCode,
-		).LogError(ctx, s.logger, logAttrs...)
-	}
-
-	var dcrResp DCRResponse
-	if err := json.Unmarshal(respBody, &dcrResp); err != nil {
-		return oops.E(oops.CodeGatewayError, err, "invalid DCR response").LogError(ctx, s.logger)
-	}
-	if dcrResp.ClientID == "" {
-		return oops.E(oops.CodeGatewayError, nil, "DCR response missing client_id").LogError(ctx, s.logger)
+		return oops.E(oops.CodeGatewayError, err, "failed to register client with identity provider").LogError(ctx, s.logger)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(ProxyRegisterResponse{
-		ClientID:                dcrResp.ClientID,
-		ClientSecret:            dcrResp.ClientSecret,
-		TokenEndpointAuthMethod: dcrResp.TokenEndpointAuthMethod,
-	}); err != nil {
+	if err := json.NewEncoder(w).Encode(registered); err != nil {
 		s.logger.ErrorContext(ctx, "failed to encode proxyRegister response", attr.SlogError(err))
 	}
 	return nil
