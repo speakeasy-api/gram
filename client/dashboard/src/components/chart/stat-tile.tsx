@@ -3,20 +3,18 @@ import { type IconName } from "@/components/ui/Icon/names";
 import { MetricCard as UiMetricCard } from "@/components/ui/MetricCard";
 
 /**
- * Lays MetricCards flush in one bordered strip with hairline dividers — the
- * prototype's stat-row idiom. Wrap every row of MetricCards in this (a single
+ * Lays StatTiles flush in one bordered strip with hairline dividers — the
+ * prototype's stat-row idiom. Wrap every row of StatTiles in this (a single
  * card still gets its border from the group).
  */
-export const MetricCardGroup = UiMetricCard.Group;
+export const StatTileGroup = UiMetricCard.Group;
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { formatCompact } from "@/lib/format";
 import { ThresholdConfig } from "./chartUtils";
 import { Loader2 } from "lucide-react";
 import { Link } from "react-router";
 
-type AccentColor = "red" | "orange" | "yellow" | "green" | "blue" | "purple";
-
-export type MetricCardProps = {
+export type StatTileProps = {
   title: string;
   value: number;
   /** Renders in place of the formatted value (e.g. "-" when not applicable). */
@@ -29,7 +27,6 @@ export type MetricCardProps = {
   invertDelta?: boolean;
   thresholds?: ThresholdConfig;
   comparisonLabel?: string;
-  accentColor?: AccentColor;
   subtext?: string;
   tooltip?: string;
   link?: string;
@@ -60,7 +57,7 @@ function getValueTone(value: number, thresholds?: ThresholdConfig): Tone {
   }
 }
 
-export function MetricCard(props: MetricCardProps): JSX.Element {
+export function StatTile(props: StatTileProps): JSX.Element {
   const {
     title,
     value,

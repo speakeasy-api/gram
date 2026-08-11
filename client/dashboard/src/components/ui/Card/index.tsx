@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import React, { FC, PropsWithChildren, ReactNode } from "react";
 import { Icon } from "../Icon";
+import { SimpleTooltip } from "../Tooltip";
 import { Stack } from "../Stack";
 import { Button } from "../Button";
 import { Grid } from "../Grid";
@@ -294,6 +295,48 @@ const CardEntity: FC<CardEntityProps> = ({
 );
 CardEntity.displayName = "CardEntity";
 
+type CardDashboardProps = {
+  title: string;
+  action?: ReactNode;
+  children: ReactNode;
+  tooltip?: string;
+};
+
+/**
+ * Card.Dashboard — a titled dashboard panel: an eyebrow title bar (with an
+ * optional info tooltip and a right-aligned action) over a divider and a body.
+ * Formerly the standalone DashboardCard.
+ */
+function CardDashboard({
+  title,
+  action,
+  children,
+  tooltip,
+}: CardDashboardProps): JSX.Element {
+  return (
+    <div className="bg-card text-card-foreground relative flex h-full w-full flex-col border">
+      <div className="flex w-full flex-row items-center justify-between gap-4 border-b px-6 py-4">
+        <div className="flex items-center gap-1.5">
+          <h3 className="text-eyebrow">{title}</h3>
+          {tooltip && (
+            <SimpleTooltip tooltip={tooltip}>
+              <button
+                type="button"
+                aria-label={`About ${title}`}
+                className="text-muted-foreground hover:text-foreground inline-flex cursor-help items-center"
+              >
+                <Icon name="info" className="size-3.5" />
+              </button>
+            </SimpleTooltip>
+          )}
+        </div>
+        {action}
+      </div>
+      <div className="px-6 py-5">{children}</div>
+    </div>
+  );
+}
+
 const CardWithSubcomponents = Object.assign(Card, {
   Entity: CardEntity,
   Header: CardHeader,
@@ -303,6 +346,7 @@ const CardWithSubcomponents = Object.assign(Card, {
   Actions: CardActions,
   Content: CardContent,
   Footer: CardFooter,
+  Dashboard: CardDashboard,
 });
 
 export { CardWithSubcomponents as Card };

@@ -1,6 +1,4 @@
-import { Page } from "@/components/page-layout";
-import { RequireScope } from "@/components/require-scope";
-import { Heading } from "@/components/ui/Heading";
+import { FormPage } from "@/components/page-templates";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
 import { mcpServerRouteParam, validateMcpServerUrl } from "@/lib/sources";
@@ -8,7 +6,7 @@ import { useRoutes } from "@/routes";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
-import { AlertCircle, Loader2, Network } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useCreateRemoteMcpSource } from "./hooks";
@@ -19,18 +17,7 @@ import {
 } from "./VerifyRemoteMcpUrlButton";
 
 export default function CreateRemoteMcp(): JSX.Element {
-  return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope="mcp:write" level="page">
-          <CreateRemoteMcpForm />
-        </RequireScope>
-      </Page.Body>
-    </Page>
-  );
+  return <CreateRemoteMcpForm />;
 }
 
 function CreateRemoteMcpForm() {
@@ -82,20 +69,11 @@ function CreateRemoteMcpForm() {
   };
 
   return (
-    <div className="max-w-2xl">
-      <Stack gap={3} className="mb-8">
-        <Stack direction="horizontal" gap={3} align="center">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-violet-500/10 dark:bg-violet-500/20">
-            <Network className="h-5 w-5 text-violet-600 dark:text-violet-400" />
-          </div>
-          <Heading variant="h3">Add a custom remote MCP server</Heading>
-        </Stack>
-        <Text muted>
-          Register an existing remote MCP server by URL. We&apos;ll proxy
-          requests to it using streamable-http transport.
-        </Text>
-      </Stack>
-
+    <FormPage
+      scope="mcp:write"
+      title="New remote MCP server"
+      description="Register an existing remote MCP server by URL. We'll proxy requests to it using streamable-http transport."
+    >
       <form
         onSubmit={(e) => {
           void handleSubmit(e);
@@ -195,6 +173,6 @@ function CreateRemoteMcpForm() {
           </Stack>
         </Stack>
       </form>
-    </div>
+    </FormPage>
   );
 }

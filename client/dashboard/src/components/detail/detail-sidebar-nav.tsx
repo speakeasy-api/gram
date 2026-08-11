@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { ArrowLeft } from "lucide-react";
 import * as React from "react";
 
-export function McpSidebarInfoLabel({
+export function DetailSidebarInfoLabel({
   children,
 }: {
   children: React.ReactNode;
@@ -47,12 +47,12 @@ function SidebarEyebrow({
         align === "card" ? "pb-1 pl-5" : "pb-2 pl-4",
       )}
     >
-      <McpSidebarInfoLabel>{children}</McpSidebarInfoLabel>
+      <DetailSidebarInfoLabel>{children}</DetailSidebarInfoLabel>
     </li>
   );
 }
 
-export type McpSidebarNavItem = {
+export type DetailSidebarNavItem = {
   key: string;
   title: string;
   titleNode?: React.ReactNode;
@@ -61,7 +61,7 @@ export type McpSidebarNavItem = {
   active: boolean;
 };
 
-export function McpSidebarNavShell({
+export function DetailSidebarNav({
   backHref,
   backLabel = "Back to all servers",
   topTitle,
@@ -77,7 +77,7 @@ export function McpSidebarNavShell({
   /** Rendered above the "At a glance" card, e.g. a readiness summary. */
   topContent?: React.ReactNode;
   cardContent?: React.ReactNode;
-  items: McpSidebarNavItem[];
+  items: DetailSidebarNavItem[];
   /** Eyebrow label above the nav items. */
   itemsTitle?: string;
 }): React.JSX.Element {
