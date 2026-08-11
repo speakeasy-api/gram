@@ -140,11 +140,20 @@ func (m *revokeMetrics) record(ctx context.Context, issuerSlug string, outcome r
 // bulk and cascade paths — which do not run inside a Goa handler — can hold one
 // without dragging the whole service in, and so tests can drive it directly.
 type UpstreamRevoker struct {
-	logger  *slog.Logger
-	tracer  trace.Tracer
-	db      *pgxpool.Pool
-	enc     *encryption.Client
-	policy  *guardian.Policy
+	logger *slog.Logger
+	tracer trace.Tracer
+	db     *pgxpool.Pool
+	enc    *encryption.Client
+
+	// client is built once and shared by every revocation. Guardian's pooled
+	// transport is meant for exactly this — a long-lived client making repeated
+	// requests to the same hosts — and a bulk revoke is the case it pays off on,
+	// since every session in a batch shares one issuer. Constructing one per
+	// call instead would open a connection per session and hold each idle until
+	// it timed out, which is the file-descriptor leak PooledClient's own
+	// documentation warns against.
+	client *guardian.HTTPClient
+
 	metrics *revokeMetrics
 }
 
@@ -155,7 +164,7 @@ func NewUpstreamRevoker(logger *slog.Logger, tracerProvider trace.TracerProvider
 		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotesessions"),
 		db:      db,
 		enc:     enc,
-		policy:  policy,
+		client:  policy.PooledClient(),
 		metrics: newRevokeMetrics(logger, meterProvider),
 	}
 }
@@ -436,7 +445,7 @@ func (r *UpstreamRevoker) revokeOnce(ctx context.Context, cred RevokedCredential
 		return client.IssuerSlug, revokeOutcomeInternal
 	}
 
-	resp, err := r.policy.PooledClient().Do(req)
+	resp, err := r.client.Do(req)
 	if err != nil {
 		logger.WarnContext(ctx, "upstream revoke: identity provider unreachable",
 			attr.SlogOAuthGrant(hint),
