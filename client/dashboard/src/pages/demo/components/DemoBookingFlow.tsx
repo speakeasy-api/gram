@@ -69,14 +69,25 @@ const DEFAULT_INTRO = (
   </div>
 );
 
+/**
+ * Values to prefill on the booking form, keyed by the question's identifier on
+ * the Cal event. The form carries more questions than any one caller fills:
+ * `source` ("How'd you hear about us?"), `notes` ("Additional notes"), `title`,
+ * `attendeePhoneNumber`. Name, email and `Company-Name` come from the session
+ * and are always sent. Anything omitted is left for the user to answer.
+ */
+export type BookingFormDefaults = Record<string, string | undefined>;
+
 export function DemoBookingFlow({
   intro = DEFAULT_INTRO,
   eventLabel = "AI transformation — 30 min",
+  formDefaults,
 }: {
   /** Rendered above the booking card. Pass `null` to omit it entirely. */
   intro?: React.ReactNode;
   /** Names the meeting in the card header, which the embed itself hides. */
   eventLabel?: string;
+  formDefaults?: BookingFormDefaults;
 } = {}): JSX.Element {
   const { session } = useSessionData();
   const telemetry = useTelemetry();
@@ -142,8 +153,13 @@ export function DemoBookingFlow({
               theme: "light",
               name,
               email,
-              // Must match the booking question's identifier on the Cal event.
+              // Keys must match the booking questions' identifiers on the Cal
+              // event. Empty entries are dropped rather than sent, so an unset
+              // default leaves the field open instead of blanking it.
               "Company-Name": companyName,
+              ...Object.fromEntries(
+                Object.entries(formDefaults ?? {}).filter(([, v]) => v),
+              ),
             }}
             style={{ width: "100%", height: "100%", overflow: "auto" }}
           />

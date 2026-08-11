@@ -35,6 +35,8 @@ describe("getGateCopy", () => {
     expect(copy.status).toBe("Trial ended Aug 9th, 2026");
     expect(copy.dotClassName).toContain("vermilion");
     expect(copy.detail).toContain("still here when you upgrade");
+    expect(copy.source).toBe("Trial: Expired");
+    expect(copy.notes).toBe("Upgrade expired trial");
   });
 
   it("treats the end instant itself as ended", () => {
@@ -57,6 +59,8 @@ describe("getGateCopy", () => {
     expect(copy.status).toBe("Trial · 8 days left");
     expect(copy.dotClassName).toContain("moss");
     expect(copy.body).toContain("before your trial ends");
+    expect(copy.source).toBe("Trial: Active");
+    expect(copy.notes).toBe("Upgrade trial");
   });
 
   it("says day, not days, on the final day", () => {

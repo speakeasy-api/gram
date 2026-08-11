@@ -24,14 +24,18 @@ vi.mock("@calcom/embed-react", () => ({
     config,
   }: {
     calLink: string;
-    config?: { name?: string; email?: string; company?: string };
+    config?: Record<string, string | undefined>;
   }) => (
     <div
       data-testid="cal-embed"
       data-cal-link={calLink}
       data-cal-name={config?.name ?? ""}
       data-cal-email={config?.email ?? ""}
-      data-cal-company={config?.company ?? ""}
+      // Keyed by the booking question's identifier on the Cal event, which is
+      // what the embed actually matches on.
+      data-cal-company={config?.["Company-Name"] ?? ""}
+      data-cal-source={config?.source ?? ""}
+      data-cal-notes={config?.notes ?? ""}
     />
   ),
   getCalApi: () => Promise.resolve(calUiMock),
@@ -71,6 +75,24 @@ describe("DemoBookingFlow", () => {
     expect(embed.getAttribute("data-cal-name")).toBe("Jane Smith");
     expect(embed.getAttribute("data-cal-email")).toBe("jane@acme.com");
     expect(embed.getAttribute("data-cal-company")).toBe("Acme Inc");
+  });
+
+  it("leaves the form defaults blank when the caller sets none", () => {
+    render(<DemoBookingFlow />);
+    const embed = screen.getByTestId("cal-embed");
+    expect(embed.getAttribute("data-cal-source")).toBe("");
+    expect(embed.getAttribute("data-cal-notes")).toBe("");
+  });
+
+  it("passes the caller's form defaults through to the embed", () => {
+    render(
+      <DemoBookingFlow
+        formDefaults={{ source: "Trial", notes: "Upgrade trial account" }}
+      />,
+    );
+    const embed = screen.getByTestId("cal-embed");
+    expect(embed.getAttribute("data-cal-source")).toBe("Trial");
+    expect(embed.getAttribute("data-cal-notes")).toBe("Upgrade trial account");
   });
 
   it("renders the embed even before the session resolves", () => {

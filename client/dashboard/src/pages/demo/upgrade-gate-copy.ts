@@ -14,6 +14,10 @@ export type GateCopy = {
   status: string;
   body: string;
   detail: string;
+  /** Prefills the booking form's "How'd you hear about us?" question. */
+  source: string;
+  /** Prefills the booking form's "Additional notes" question. */
+  notes: string;
 };
 
 // The upgrade page serves two audiences: an org walled after its trial ran out,
@@ -38,6 +42,8 @@ export function getGateCopy(
       body: `Trials run 14 days. ${SHARED_BODY}`,
       detail:
         "Your MCP servers, observability data, and policies are still here when you upgrade.",
+      source: "Trial: Expired",
+      notes: "Upgrade expired trial",
     };
   }
 
@@ -51,5 +57,7 @@ export function getGateCopy(
     body: `Upgrade before your trial ends and nothing pauses. ${SHARED_BODY}`,
     detail:
       "Your MCP servers, observability data, and policies carry over unchanged.",
+    source: "Trial: Active",
+    notes: "Upgrade trial",
   };
 }

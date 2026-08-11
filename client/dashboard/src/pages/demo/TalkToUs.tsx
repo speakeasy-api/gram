@@ -87,6 +87,7 @@ function UpgradeGate({
     >
       <DemoBookingFlow
         eventLabel="Upgrade Trial — 30 min"
+        formDefaults={{ source: copy.source, notes: copy.notes }}
         intro={
           <div className="grid w-full grid-cols-1 items-start gap-4 md:grid-cols-[2fr_2.25fr]">
             <div className="flex flex-col gap-2">
