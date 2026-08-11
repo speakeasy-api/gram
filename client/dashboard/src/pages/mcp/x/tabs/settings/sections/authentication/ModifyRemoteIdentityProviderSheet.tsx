@@ -31,6 +31,8 @@ import {
 import { parseScopes } from "./issuerFormUtils";
 import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
 import { useIssuerDiscovery } from "./useIssuerDiscovery";
+import { IssuerDuplicateWarning } from "./IssuerDuplicateWarning";
+import { useIssuerDuplicatePreflight } from "./useIssuerDuplicatePreflight";
 
 export function ModifyRemoteIdentityProviderSheet({
   open,
@@ -173,6 +175,22 @@ function ModifyRemoteIdentityProviderSheetBody({
   // fresh per open. Submitting an empty string clears the name to NULL on the
   // backend.
   const [name, setName] = useState(issuer.name ?? "");
+
+  // Repointing a provider can duplicate an existing one just as creating it
+  // can, so the same preflight runs here. Gated on the URL having diverged from
+  // what is saved: while they match, the only record it could report is this
+  // one. excludeId covers the remaining case, a normalization-equivalent edit
+  // (a trailing slash on your own URL) that the shared candidate set still
+  // matches.
+  const [settledIssuerUrl, setSettledIssuerUrl] = useState(issuer.issuer);
+  const { matches: duplicateMatches } = useIssuerDuplicatePreflight({
+    issuerUrl: settledIssuerUrl,
+    scope: "project",
+    // No `open` gate: this body only mounts while the sheet is open, so closing
+    // it unmounts the query rather than leaving it live.
+    enabled: settledIssuerUrl.trim() !== issuer.issuer,
+    excludeId: issuer.id,
+  });
 
   // Client-side form state. clientId is informational only — the API has no
   // rotate path, so it stays read-only. clientSecret starts blank; a typed
@@ -317,8 +335,18 @@ function ModifyRemoteIdentityProviderSheetBody({
 
         <IssuerUrlField
           issuerUrl={issuerUrl}
+          onIssuerUrlSettled={setSettledIssuerUrl}
+          duplicateWarning={
+            <IssuerDuplicateWarning
+              matches={duplicateMatches}
+              viewerScope="project"
+            />
+          }
           onIssuerUrlChange={(value) => {
             setIssuerUrl(value);
+            // Any edit invalidates the last blur, so a warning cannot outlive
+            // the URL it describes.
+            setSettledIssuerUrl("");
             clearDiscoverError();
             // Same reset semantics as Attach: when the URL diverges from the
             // settled state, every downstream field was tied to that prior

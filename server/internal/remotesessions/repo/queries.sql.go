@@ -2464,6 +2464,86 @@ func (q *Queries) ListGlobalRemoteSessionIssuers(ctx context.Context, arg ListGl
 	return items, nil
 }
 
+const listGlobalRemoteSessionIssuersByIssuerURL = `-- name: ListGlobalRemoteSessionIssuersByIssuerURL :many
+SELECT id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
+FROM remote_session_issuers
+WHERE issuer = ANY($1::text[])
+  AND project_id IS NULL
+  AND organization_id IS NULL
+  AND deleted IS FALSE
+ORDER BY created_at ASC, id ASC
+LIMIT $2
+`
+
+type ListGlobalRemoteSessionIssuersByIssuerURLParams struct {
+	Issuers    []string
+	LimitValue int32
+}
+
+// Global issuers describing a given upstream authorization server. Feeds the
+// platform-tier duplicate preflight, which warns a platform administrator
+// before they curate a second catalog entry for one authorization server (the
+// global tier is unique on slug, but not on issuer).
+//
+// Scoped to the global partition explicitly, matching every other query in that
+// block, rather than reusing ListRemoteSessionIssuersByIssuerURL with a NULL
+// project_id. That would return the same rows today only because `project_id =
+// NULL` is NULL and never TRUE — a tenancy boundary resting on three-valued
+// logic that nothing in the SQL states, which a plausible rewrite to `IS NOT
+// DISTINCT FROM` would silently turn into a listing of every issuer in the
+// database.
+//
+// Matching is literal equality against a caller-supplied candidate set for the
+// same index reason as the queries above. Every row here is one tier, so
+// created_at ordering is the whole order.
+func (q *Queries) ListGlobalRemoteSessionIssuersByIssuerURL(ctx context.Context, arg ListGlobalRemoteSessionIssuersByIssuerURLParams) ([]RemoteSessionIssuer, error) {
+	rows, err := q.db.Query(ctx, listGlobalRemoteSessionIssuersByIssuerURL, arg.Issuers, arg.LimitValue)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RemoteSessionIssuer
+	for rows.Next() {
+		var i RemoteSessionIssuer
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.Slug,
+			&i.Issuer,
+			&i.AuthorizationEndpoint,
+			&i.TokenEndpoint,
+			&i.RevocationEndpoint,
+			&i.RegistrationEndpoint,
+			&i.JwksUri,
+			&i.ServiceDocumentation,
+			&i.OpPolicyUri,
+			&i.OpTosUri,
+			&i.ScopesSupported,
+			&i.GrantTypesSupported,
+			&i.ResponseTypesSupported,
+			&i.TokenEndpointAuthMethodsSupported,
+			&i.ClientIDMetadataDocumentSupported,
+			&i.Oidc,
+			&i.Passthrough,
+			&i.Name,
+			&i.LogoAssetID,
+			&i.ClientSetupDocumentationUrl,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOrganizationMcpServerNamesForIssuer = `-- name: ListOrganizationMcpServerNamesForIssuer :many
 SELECT DISTINCT
     m.id,
@@ -2809,6 +2889,131 @@ func (q *Queries) ListOrganizationRemoteSessionIssuers(ctx context.Context, arg 
 			&i.RemoteSessionIssuer.Deleted,
 			&i.ProjectName,
 			&i.ClientCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationRemoteSessionIssuersByIssuerURL = `-- name: ListOrganizationRemoteSessionIssuersByIssuerURL :many
+WITH candidates AS (
+    SELECT
+        i.id,
+        i.slug,
+        i.name,
+        i.issuer,
+        i.project_id,
+        i.organization_id,
+        COALESCE(p.name, '')::text AS project_name,
+        CASE
+            WHEN i.project_id IS NOT NULL THEN 2
+            WHEN i.organization_id IS NOT NULL THEN 1
+            ELSE 0
+        END AS tier,
+        ROW_NUMBER() OVER (
+            PARTITION BY CASE
+                WHEN i.project_id IS NOT NULL THEN 2
+                WHEN i.organization_id IS NOT NULL THEN 1
+                ELSE 0
+            END
+            ORDER BY i.created_at ASC, i.id ASC
+        ) AS tier_rank
+    FROM remote_session_issuers AS i
+    LEFT JOIN projects AS p ON p.id = i.project_id
+    WHERE i.issuer = ANY($2::text[])
+      AND (
+        i.organization_id = $3
+        OR ($4::boolean AND i.project_id IS NULL AND i.organization_id IS NULL)
+      )
+      AND i.deleted IS FALSE
+)
+SELECT
+    id,
+    slug,
+    name,
+    issuer,
+    project_id,
+    organization_id,
+    project_name
+FROM candidates
+WHERE tier_rank <= $1::int
+ORDER BY tier ASC, tier_rank ASC
+`
+
+type ListOrganizationRemoteSessionIssuersByIssuerURLParams struct {
+	PerTierLimit   int32
+	Issuers        []string
+	OrganizationID pgtype.Text
+	IncludeGlobal  bool
+}
+
+type ListOrganizationRemoteSessionIssuersByIssuerURLRow struct {
+	ID             uuid.UUID
+	Slug           string
+	Name           pgtype.Text
+	Issuer         string
+	ProjectID      uuid.NullUUID
+	OrganizationID pgtype.Text
+	ProjectName    string
+}
+
+// Every issuer an organization administrator can see that already describes a
+// given upstream authorization server: the whole organization partition
+// (organization-level AND project-specific alike) plus the platform catalog.
+// Feeds the org-tier duplicate preflight.
+//
+// The organization arm is deliberately the wide one, with no `project_id IS
+// NULL` qualifier, unlike arm two of ListRemoteSessionIssuersByIssuerURL. That
+// narrow arm exists because a project caller must not learn what a sibling
+// project configured; an org administrator already holds org:read over the whole
+// organization, and project-specific duplicates are the most useful thing this
+// can report, being precisely the rows migrateIssuer consolidates. Tenancy still
+// comes from the issuer's OWN organization_id, so a project row predating that
+// column is missed — matching every other org-scoped read, and under-reporting a
+// warning is the safe direction.
+//
+// Bounded per tier via ROW_NUMBER rather than by one LIMIT, and that is the
+// whole reason for the window function. A single budget is spent in arrival
+// order, so one project holding many records on a URL would push the
+// organization-level and platform rows past the cut, discarding the two most
+// useful things this can report. Some bound is necessary because tenants control
+// this row count and this runs from a form. The tier expression must keep
+// agreeing with scopeOf in Go, which ranks the result by the same ladder.
+//
+// Matching is literal equality against a caller-supplied candidate set, not a
+// normalizing expression: remote_session_issuers_issuer_idx is on the raw
+// column, so wrapping `issuer` in anything turns this into a sequential scan.
+// ORDER BY rides created_at, not id, because generate_uuidv7 carries only
+// millisecond resolution and ties sort randomly.
+// The caller's display order, so its ranking pass is a no-op here rather than
+// load-bearing. tier_rank is the within-tier created_at ordinal.
+func (q *Queries) ListOrganizationRemoteSessionIssuersByIssuerURL(ctx context.Context, arg ListOrganizationRemoteSessionIssuersByIssuerURLParams) ([]ListOrganizationRemoteSessionIssuersByIssuerURLRow, error) {
+	rows, err := q.db.Query(ctx, listOrganizationRemoteSessionIssuersByIssuerURL,
+		arg.PerTierLimit,
+		arg.Issuers,
+		arg.OrganizationID,
+		arg.IncludeGlobal,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOrganizationRemoteSessionIssuersByIssuerURLRow
+	for rows.Next() {
+		var i ListOrganizationRemoteSessionIssuersByIssuerURLRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Name,
+			&i.Issuer,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.ProjectName,
 		); err != nil {
 			return nil, err
 		}

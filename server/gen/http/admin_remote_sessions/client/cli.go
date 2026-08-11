@@ -86,6 +86,29 @@ func BuildCreateGlobalIssuerPayload(adminRemoteSessionsCreateGlobalIssuerBody st
 	return v, nil
 }
 
+// BuildGetGlobalIssuerDuplicatePreflightPayload builds the payload for the
+// adminRemoteSessions getGlobalIssuerDuplicatePreflight endpoint from CLI
+// flags.
+func BuildGetGlobalIssuerDuplicatePreflightPayload(adminRemoteSessionsGetGlobalIssuerDuplicatePreflightIssuer string, adminRemoteSessionsGetGlobalIssuerDuplicatePreflightSessionToken string) (*adminremotesessions.GetGlobalIssuerDuplicatePreflightPayload, error) {
+	var issuer *string
+	{
+		if adminRemoteSessionsGetGlobalIssuerDuplicatePreflightIssuer != "" {
+			issuer = &adminRemoteSessionsGetGlobalIssuerDuplicatePreflightIssuer
+		}
+	}
+	var sessionToken *string
+	{
+		if adminRemoteSessionsGetGlobalIssuerDuplicatePreflightSessionToken != "" {
+			sessionToken = &adminRemoteSessionsGetGlobalIssuerDuplicatePreflightSessionToken
+		}
+	}
+	v := &adminremotesessions.GetGlobalIssuerDuplicatePreflightPayload{}
+	v.Issuer = issuer
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildListGlobalIssuersPayload builds the payload for the adminRemoteSessions
 // listGlobalIssuers endpoint from CLI flags.
 func BuildListGlobalIssuersPayload(adminRemoteSessionsListGlobalIssuersCursor string, adminRemoteSessionsListGlobalIssuersLimit string, adminRemoteSessionsListGlobalIssuersSessionToken string) (*adminremotesessions.ListGlobalIssuersPayload, error) {

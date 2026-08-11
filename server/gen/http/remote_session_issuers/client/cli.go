@@ -373,6 +373,43 @@ func BuildGetRemoteSessionIssuerPayload(remoteSessionIssuersGetRemoteSessionIssu
 	return v, nil
 }
 
+// BuildGetRemoteSessionIssuerDuplicatePreflightPayload builds the payload for
+// the remoteSessionIssuers getRemoteSessionIssuerDuplicatePreflight endpoint
+// from CLI flags.
+func BuildGetRemoteSessionIssuerDuplicatePreflightPayload(remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightIssuer string, remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightSessionToken string, remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightApikeyToken string, remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightProjectSlugInput string) (*remotesessionissuers.GetRemoteSessionIssuerDuplicatePreflightPayload, error) {
+	var issuer *string
+	{
+		if remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightIssuer != "" {
+			issuer = &remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightIssuer
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightSessionToken != "" {
+			sessionToken = &remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightApikeyToken != "" {
+			apikeyToken = &remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionIssuersGetRemoteSessionIssuerDuplicatePreflightProjectSlugInput
+		}
+	}
+	v := &remotesessionissuers.GetRemoteSessionIssuerDuplicatePreflightPayload{}
+	v.Issuer = issuer
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildDeleteRemoteSessionIssuerPayload builds the payload for the
 // remoteSessionIssuers deleteRemoteSessionIssuer endpoint from CLI flags.
 func BuildDeleteRemoteSessionIssuerPayload(remoteSessionIssuersDeleteRemoteSessionIssuerID string, remoteSessionIssuersDeleteRemoteSessionIssuerSessionToken string, remoteSessionIssuersDeleteRemoteSessionIssuerApikeyToken string, remoteSessionIssuersDeleteRemoteSessionIssuerProjectSlugInput string) (*remotesessionissuers.DeleteRemoteSessionIssuerPayload, error) {

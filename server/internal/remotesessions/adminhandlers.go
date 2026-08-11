@@ -158,6 +158,41 @@ func (s *Service) CreateGlobalIssuer(ctx context.Context, payload *adminrsgen.Cr
 	return mv.BuildRemoteSessionIssuerView(issuer), nil
 }
 
+// GetGlobalIssuerDuplicatePreflight reports the global issuers that already
+// describe a given upstream authorization server, so the catalog create and edit
+// forms can warn before curating a second entry for one issuer.
+//
+// Scoped to the global partition. Tenant issuers naming the same URL are not
+// reported: ListGlobalIssuerConvergenceCandidates is the surface for those, and
+// answering that question here would put another organization's configuration
+// in front of a form that is only asking about the shared catalog.
+func (s *Service) GetGlobalIssuerDuplicatePreflight(ctx context.Context, payload *adminrsgen.GetGlobalIssuerDuplicatePreflightPayload) (*types.RemoteSessionIssuerDuplicatePreflight, error) {
+	_, logger, err := s.requirePlatformAdmin(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	canonical, err := parseCanonicalIssuerURL(conv.PtrValOrEmpty(payload.Issuer, ""))
+	if err != nil {
+		return emptyIssuerDuplicatePreflight(), nil
+	}
+
+	candidates, err := repo.New(s.db).ListGlobalRemoteSessionIssuersByIssuerURL(ctx, repo.ListGlobalRemoteSessionIssuersByIssuerURLParams{
+		Issuers:    canonical.matchCandidates(),
+		LimitValue: maxIssuerDuplicateMatchesPerTier,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list global remote session issuers by issuer url").LogError(ctx, logger)
+	}
+
+	rows := make([]issuerDuplicateCandidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		rows = append(rows, issuerDuplicateCandidateFromRecord(candidate))
+	}
+
+	return buildIssuerDuplicatePreflight(rows), nil
+}
+
 // ListGlobalIssuers lists the global remote_session_issuers, each with the
 // global and tenant-owned client counts that decide whether it can be deleted.
 func (s *Service) ListGlobalIssuers(ctx context.Context, payload *adminrsgen.ListGlobalIssuersPayload) (*adminrsgen.ListGlobalRemoteSessionIssuersResult, error) {

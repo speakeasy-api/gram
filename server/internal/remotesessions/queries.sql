@@ -1080,6 +1080,106 @@ WHERE (
 ORDER BY i.id DESC
 LIMIT sqlc.arg('limit_value');
 
+-- name: ListOrganizationRemoteSessionIssuersByIssuerURL :many
+-- Every issuer an organization administrator can see that already describes a
+-- given upstream authorization server: the whole organization partition
+-- (organization-level AND project-specific alike) plus the platform catalog.
+-- Feeds the org-tier duplicate preflight.
+--
+-- The organization arm is deliberately the wide one, with no `project_id IS
+-- NULL` qualifier, unlike arm two of ListRemoteSessionIssuersByIssuerURL. That
+-- narrow arm exists because a project caller must not learn what a sibling
+-- project configured; an org administrator already holds org:read over the whole
+-- organization, and project-specific duplicates are the most useful thing this
+-- can report, being precisely the rows migrateIssuer consolidates. Tenancy still
+-- comes from the issuer's OWN organization_id, so a project row predating that
+-- column is missed — matching every other org-scoped read, and under-reporting a
+-- warning is the safe direction.
+--
+-- Bounded per tier via ROW_NUMBER rather than by one LIMIT, and that is the
+-- whole reason for the window function. A single budget is spent in arrival
+-- order, so one project holding many records on a URL would push the
+-- organization-level and platform rows past the cut, discarding the two most
+-- useful things this can report. Some bound is necessary because tenants control
+-- this row count and this runs from a form. The tier expression must keep
+-- agreeing with scopeOf in Go, which ranks the result by the same ladder.
+--
+-- Matching is literal equality against a caller-supplied candidate set, not a
+-- normalizing expression: remote_session_issuers_issuer_idx is on the raw
+-- column, so wrapping `issuer` in anything turns this into a sequential scan.
+-- ORDER BY rides created_at, not id, because generate_uuidv7 carries only
+-- millisecond resolution and ties sort randomly.
+WITH candidates AS (
+    SELECT
+        i.id,
+        i.slug,
+        i.name,
+        i.issuer,
+        i.project_id,
+        i.organization_id,
+        COALESCE(p.name, '')::text AS project_name,
+        CASE
+            WHEN i.project_id IS NOT NULL THEN 2
+            WHEN i.organization_id IS NOT NULL THEN 1
+            ELSE 0
+        END AS tier,
+        ROW_NUMBER() OVER (
+            PARTITION BY CASE
+                WHEN i.project_id IS NOT NULL THEN 2
+                WHEN i.organization_id IS NOT NULL THEN 1
+                ELSE 0
+            END
+            ORDER BY i.created_at ASC, i.id ASC
+        ) AS tier_rank
+    FROM remote_session_issuers AS i
+    LEFT JOIN projects AS p ON p.id = i.project_id
+    WHERE i.issuer = ANY(@issuers::text[])
+      AND (
+        i.organization_id = @organization_id
+        OR (@include_global::boolean AND i.project_id IS NULL AND i.organization_id IS NULL)
+      )
+      AND i.deleted IS FALSE
+)
+SELECT
+    id,
+    slug,
+    name,
+    issuer,
+    project_id,
+    organization_id,
+    project_name
+FROM candidates
+WHERE tier_rank <= @per_tier_limit::int
+-- The caller's display order, so its ranking pass is a no-op here rather than
+-- load-bearing. tier_rank is the within-tier created_at ordinal.
+ORDER BY tier ASC, tier_rank ASC;
+
+-- name: ListGlobalRemoteSessionIssuersByIssuerURL :many
+-- Global issuers describing a given upstream authorization server. Feeds the
+-- platform-tier duplicate preflight, which warns a platform administrator
+-- before they curate a second catalog entry for one authorization server (the
+-- global tier is unique on slug, but not on issuer).
+--
+-- Scoped to the global partition explicitly, matching every other query in that
+-- block, rather than reusing ListRemoteSessionIssuersByIssuerURL with a NULL
+-- project_id. That would return the same rows today only because `project_id =
+-- NULL` is NULL and never TRUE — a tenancy boundary resting on three-valued
+-- logic that nothing in the SQL states, which a plausible rewrite to `IS NOT
+-- DISTINCT FROM` would silently turn into a listing of every issuer in the
+-- database.
+--
+-- Matching is literal equality against a caller-supplied candidate set for the
+-- same index reason as the queries above. Every row here is one tier, so
+-- created_at ordering is the whole order.
+SELECT *
+FROM remote_session_issuers
+WHERE issuer = ANY(@issuers::text[])
+  AND project_id IS NULL
+  AND organization_id IS NULL
+  AND deleted IS FALSE
+ORDER BY created_at ASC, id ASC
+LIMIT sqlc.arg('limit_value');
+
 -- name: GetOrganizationRemoteSessionIssuerByID :one
 -- Any issuer in the org by id — organizational or project-specific — and, when
 -- the caller opts in with include_global, any platform issuer.
