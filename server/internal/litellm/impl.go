@@ -455,7 +455,7 @@ func agentAttributionFromHeaders(headers map[string]string) agentAttribution {
 	metadata.TurnID = strings.TrimSpace(metadata.TurnID)
 
 	sessionID := ""
-	for _, header := range []string{"x-gram-agent-session-id", "x-gram-session-id", "x-claude-code-session-id", "session-id", "thread-id", "x-session-id", "x-opencode-session"} {
+	for _, header := range []string{"x-gram-agent-session-id", "x-gram-session-id", "x-claude-code-session-id", "x-session-id", "x-opencode-session", "session-id", "thread-id"} {
 		if normalized[header] != "" {
 			sessionID = normalized[header]
 			break
@@ -471,9 +471,11 @@ func agentAttributionFromHeaders(headers map[string]string) agentAttribution {
 		originatingClient = provider
 	case normalized["x-claude-code-session-id"] != "":
 		originatingClient = "claude-code"
-	case normalized["session-id"] != "" || normalized["thread-id"] != "" || metadata.SessionID != "":
-		originatingClient = "codex"
 	case normalized["x-session-id"] != "" || normalized["x-opencode-session"] != "":
+		originatingClient = "opencode"
+	case normalized["session-id"] != "" || normalized["thread-id"] != "" || metadata.SessionID != "" || metadata.TurnID != "":
+		originatingClient = "codex"
+	case normalized["x-opencode-request"] != "":
 		originatingClient = "opencode"
 	}
 

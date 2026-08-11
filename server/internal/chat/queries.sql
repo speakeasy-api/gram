@@ -758,11 +758,13 @@ chat_attribution AS (
   SELECT
     lc.*,
     COALESCE(CASE WHEN lc.source = 'litellm' THEN (
-      SELECT user_agent
+      SELECT CASE
+        WHEN user_agent = ANY (ARRAY['claude-code', 'codex', 'opencode']::text[]) THEN user_agent
+        ELSE ''
+      END
       FROM chat_messages
       WHERE chat_id = lc.id
         AND source = 'litellm'
-        AND user_agent = ANY (ARRAY['claude-code', 'codex', 'opencode']::text[])
       ORDER BY created_at DESC
       LIMIT 1
     ) END, '')::text AS originating_client

@@ -2075,11 +2075,13 @@ chat_attribution AS (
   SELECT
     lc.id, lc.title, lc.user_id, lc.external_user_id, lc.created_at, lc.updated_at, lc.pinned_at, lc.num_messages, lc.source, lc.last_message_timestamp, lc.account_type, lc.account_email, lc.assistant_id, lc.assistant_name, lc.total_count,
     COALESCE(CASE WHEN lc.source = 'litellm' THEN (
-      SELECT user_agent
+      SELECT CASE
+        WHEN user_agent = ANY (ARRAY['claude-code', 'codex', 'opencode']::text[]) THEN user_agent
+        ELSE ''
+      END
       FROM chat_messages
       WHERE chat_id = lc.id
         AND source = 'litellm'
-        AND user_agent = ANY (ARRAY['claude-code', 'codex', 'opencode']::text[])
       ORDER BY created_at DESC
       LIMIT 1
     ) END, '')::text AS originating_client

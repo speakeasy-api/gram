@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -224,8 +225,8 @@ func TestLoadChat_LiteLLMOriginatingClient(t *testing.T) {
 
 	result, err := ti.service.LoadChat(ctx, loadPayload(chatID.String()))
 	require.NoError(t, err)
-	require.Equal(t, "litellm", *result.Source)
-	require.Equal(t, "claude-code", *result.OriginatingClient)
+	require.Equal(t, "litellm", conv.PtrValOr(result.Source, ""))
+	require.Equal(t, "claude-code", conv.PtrValOr(result.OriginatingClient, ""))
 }
 
 // TestLoadChat_ContentPartsScopedToPage asserts a page only carries the content

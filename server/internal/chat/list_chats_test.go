@@ -920,6 +920,7 @@ func TestListChats_LiteLLMOriginatingClient(t *testing.T) {
 	ti := newTestChatService(t)
 	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
 	chatID := seedChat(t, ctx, ti, "", "ext-litellm", "chat through litellm")
+	unknownChatID := seedChat(t, ctx, ti, "", "ext-litellm", "unknown client through litellm")
 
 	_, err := repo.New(ti.conn).SeedChatMessageWithSource(ctx, repo.SeedChatMessageWithSourceParams{
 		ChatID:            chatID,
@@ -928,15 +929,28 @@ func TestListChats_LiteLLMOriginatingClient(t *testing.T) {
 		OriginatingClient: pgtype.Text{String: "claude-code", Valid: true},
 	})
 	require.NoError(t, err)
+	_, err = repo.New(ti.conn).SeedChatMessageWithSource(ctx, repo.SeedChatMessageWithSourceParams{
+		ChatID:            unknownChatID,
+		ProjectID:         uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		Source:            pgtype.Text{String: "litellm", Valid: true},
+		OriginatingClient: pgtype.Text{String: "unsupported-client", Valid: true},
+	})
+	require.NoError(t, err)
 
 	source := "litellm"
 	payload := defaultPayload()
 	payload.Source = &source
 	result, err := ti.service.ListChats(ctx, payload)
 	require.NoError(t, err)
-	require.Len(t, result.Chats, 1)
-	require.Equal(t, "litellm", conv.PtrValOr(result.Chats[0].Source, ""))
-	require.Equal(t, "claude-code", conv.PtrValOr(result.Chats[0].OriginatingClient, ""))
+	require.Len(t, result.Chats, 2)
+	byID := make(map[string]*gen.ChatOverview, len(result.Chats))
+	for _, chat := range result.Chats {
+		byID[chat.ID] = chat
+	}
+	require.Equal(t, "litellm", conv.PtrValOr(byID[chatID.String()].Source, ""))
+	require.Equal(t, "claude-code", conv.PtrValOr(byID[chatID.String()].OriginatingClient, ""))
+	require.Equal(t, "litellm", conv.PtrValOr(byID[unknownChatID.String()].Source, ""))
+	require.Empty(t, conv.PtrValOr(byID[unknownChatID.String()].OriginatingClient, ""))
 }
 
 // TestListChats_Filter_Source_EmptyReturnsAll guards against the regression

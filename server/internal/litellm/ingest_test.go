@@ -296,12 +296,14 @@ func TestSessionHeaderUsesNativeClientHeadersInPrecedenceOrder(t *testing.T) {
 	delete(headers, "X-Gram-Session-ID")
 	require.Equal(t, "claude-session", agentAttributionFromHeaders(headers).SessionID)
 	delete(headers, "X-Claude-Code-Session-ID")
+	require.Equal(t, "opencode-session", agentAttributionFromHeaders(headers).SessionID)
+	delete(headers, "X-Session-ID")
 	require.Equal(t, "codex-session", agentAttributionFromHeaders(headers).SessionID)
 	delete(headers, "Session-ID")
 	require.Equal(t, "codex-thread", agentAttributionFromHeaders(headers).SessionID)
-	delete(headers, "Thread-ID")
-	require.Equal(t, "opencode-session", agentAttributionFromHeaders(headers).SessionID)
 
+	delete(headers, "Thread-ID")
+	headers["X-Session-ID"] = "opencode-session"
 	headers["X-Gram-Session-ID"] = "[present]"
 	require.Equal(t, "opencode-session", agentAttributionFromHeaders(headers).SessionID)
 }
@@ -314,6 +316,12 @@ func TestOriginatingClientUsesSupportedClientHeaders(t *testing.T) {
 	require.Equal(t, "codex", agentAttributionFromHeaders(map[string]string{"X-Codex-Turn-Metadata": `{"session_id":"session-1","turn_id":"turn-1"}`}).OriginatingClient)
 	require.Equal(t, "opencode", agentAttributionFromHeaders(map[string]string{"X-Session-ID": "session-1"}).OriginatingClient)
 	require.Equal(t, "opencode", agentAttributionFromHeaders(map[string]string{"X-OpenCode-Session": "session-1"}).OriginatingClient)
+	require.Equal(t, "opencode", agentAttributionFromHeaders(map[string]string{
+		"Session-ID":         "codex-session",
+		"X-OpenCode-Session": "opencode-session",
+	}).OriginatingClient)
+	require.Equal(t, "codex", agentAttributionFromHeaders(map[string]string{"X-Codex-Turn-Metadata": `{"turn_id":"turn-1"}`}).OriginatingClient)
+	require.Equal(t, "opencode", agentAttributionFromHeaders(map[string]string{"X-OpenCode-Request": "request-1"}).OriginatingClient)
 	require.Equal(t, "opencode", agentAttributionFromHeaders(map[string]string{
 		"X-Gram-Agent-Provider":   "opencode",
 		"X-Gram-Agent-Session-ID": "session-1",
