@@ -1,6 +1,11 @@
 import type { JSX } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useParams, useNavigate, Link } from "react-router";
+import {
+  useNavigate,
+  useParams,
+  useRouter,
+  Link,
+} from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getProject, type AdminProjectDetail } from "@/lib/gramAdminApi";
@@ -36,8 +41,9 @@ function CountTile({ label, value }: { label: string; value: number }) {
 }
 
 export function ProjectDetail(): JSX.Element {
-  const { idOrSlug = "" } = useParams<{ idOrSlug: string }>();
+  const { idOrSlug } = useParams({ from: "/projects/$idOrSlug" });
   const navigate = useNavigate();
+  const router = useRouter();
 
   const { data, isLoading, isError, error } = useQuery<AdminProjectDetail>({
     queryKey: ["gram-admin-project", idOrSlug],
@@ -60,11 +66,12 @@ export function ProjectDetail(): JSX.Element {
             size="xs"
             onClick={() => {
               if (data?.organization_id) {
-                void navigate(
-                  `/organizations/${encodeURIComponent(data.organization_id)}`,
-                );
+                void navigate({
+                  to: "/organizations/$idOrSlug",
+                  params: { idOrSlug: data.organization_id },
+                });
               } else {
-                void navigate(-1);
+                router.history.back();
               }
             }}
           >
@@ -95,7 +102,8 @@ export function ProjectDetail(): JSX.Element {
               </Row>
               <Row label="Organization ID">
                 <Link
-                  to={`/organizations/${encodeURIComponent(data.organization_id)}`}
+                  to="/organizations/$idOrSlug"
+                  params={{ idOrSlug: data.organization_id }}
                   className="text-primary hover:underline"
                 >
                   {data.organization_id}

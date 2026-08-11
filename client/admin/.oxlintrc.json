@@ -6,7 +6,7 @@
     "es2022": true,
     "node": true
   },
-  "ignorePatterns": ["dist", "node_modules"],
+  "ignorePatterns": ["dist", "node_modules", "src/routeTree.gen.ts"],
   "categories": {
     "correctness": "error"
   },

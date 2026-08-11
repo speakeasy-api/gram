@@ -1,5 +1,5 @@
 import { useState, type JSX } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -11,7 +11,7 @@ export function ProjectLookup(): JSX.Element {
     e.preventDefault();
     const trimmed = idOrSlug.trim();
     if (!trimmed) return;
-    void navigate(`/projects/${encodeURIComponent(trimmed)}`);
+    void navigate({ to: "/projects/$idOrSlug", params: { idOrSlug: trimmed } });
   };
 
   return (

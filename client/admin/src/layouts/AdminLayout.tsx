@@ -1,14 +1,20 @@
 import type { CSSProperties, JSX } from "react";
-import { Outlet } from "react-router";
+import { Outlet } from "@tanstack/react-router";
 
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
+// Stock shadcn writes this cookie on every toggle but leaves the read to the
+// application. The value only decides the first mount, so read it once.
+const SIDEBAR_OPEN = !document.cookie
+  .split("; ")
+  .includes("sidebar_state=false");
+
 export function AdminLayout(): JSX.Element {
   return (
     <SidebarProvider
-      defaultOpen
+      defaultOpen={SIDEBAR_OPEN}
       style={
         {
           "--sidebar-width": "calc(var(--spacing) * 72)",

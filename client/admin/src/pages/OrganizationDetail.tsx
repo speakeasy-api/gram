@@ -1,6 +1,6 @@
-import { useState, useEffect, type JSX } from "react";
+import { useState, type JSX } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useParams, useNavigate } from "react-router";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -46,7 +46,7 @@ function Row({
 }
 
 export function OrganizationDetail(): JSX.Element {
-  const { idOrSlug = "" } = useParams<{ idOrSlug: string }>();
+  const { idOrSlug } = useParams({ from: "/organizations/$idOrSlug" });
   const navigate = useNavigate();
 
   const { data, isLoading, isError, error } = useQuery<AdminOrganization>({
@@ -69,7 +69,7 @@ export function OrganizationDetail(): JSX.Element {
             variant="ghost"
             size="xs"
             onClick={() => {
-              void navigate("/organizations");
+              void navigate({ to: "/organizations" });
             }}
           >
             ← Back to list
@@ -102,13 +102,16 @@ function yesNo(v: boolean): string {
 function OrgDetailsCard({ org }: { org: AdminOrganization }) {
   const qc = useQueryClient();
   const [confirm, confirmDialog] = useConfirmDialog();
-  const [accountType, setAccountType] = useState(org.account_type);
-  const [whitelisted, setWhitelisted] = useState(org.whitelisted);
 
-  useEffect(() => {
-    setAccountType(org.account_type);
-    setWhitelisted(org.whitelisted);
-  }, [org.account_type, org.whitelisted]);
+  // Only the fields the operator touched live here. The rest read straight
+  // from the server record, so a refetch cannot discard an unsaved edit and
+  // cannot leave an untouched field showing a stale value.
+  const [draft, setDraft] = useState<{
+    account_type?: string;
+    whitelisted?: boolean;
+  }>({});
+  const accountType = draft.account_type ?? org.account_type;
+  const whitelisted = draft.whitelisted ?? org.whitelisted;
 
   const mut = useMutation({
     mutationFn: () =>
@@ -119,6 +122,7 @@ function OrgDetailsCard({ org }: { org: AdminOrganization }) {
         whitelisted: whitelisted !== org.whitelisted ? whitelisted : undefined,
       }),
     onSuccess: (updated) => {
+      setDraft({});
       qc.setQueryData(["gram-admin-organization", org.id], updated);
       qc.setQueryData(["gram-admin-organization", org.slug], updated);
       void qc.invalidateQueries({ queryKey: ["gram-admin-organizations"] });
@@ -129,8 +133,7 @@ function OrgDetailsCard({ org }: { org: AdminOrganization }) {
     accountType !== org.account_type || whitelisted !== org.whitelisted;
 
   const handleCancel = () => {
-    setAccountType(org.account_type);
-    setWhitelisted(org.whitelisted);
+    setDraft({});
   };
 
   const handleSave = async () => {
@@ -166,7 +169,10 @@ function OrgDetailsCard({ org }: { org: AdminOrganization }) {
         <span className="text-sm">{org.slug}</span>
       </Row>
       <Row label="Account type">
-        <Select value={accountType} onValueChange={setAccountType}>
+        <Select
+          value={accountType}
+          onValueChange={(v) => setDraft((d) => ({ ...d, account_type: v }))}
+        >
           <SelectTrigger className="h-auto w-auto px-2 py-1.5">
             <SelectValue />
           </SelectTrigger>
@@ -188,7 +194,10 @@ function OrgDetailsCard({ org }: { org: AdminOrganization }) {
         <span className="text-sm">{org.member_count}</span>
       </Row>
       <Row label="Whitelisted">
-        <Switch checked={whitelisted} onCheckedChange={setWhitelisted} />
+        <Switch
+          checked={whitelisted}
+          onCheckedChange={(v) => setDraft((d) => ({ ...d, whitelisted: v }))}
+        />
       </Row>
       <Row label="WorkOS ID">
         <span
@@ -273,6 +282,31 @@ function OrgBottomPanel({ org }: { org: AdminOrganization }) {
   );
 }
 
+const PROJECT_COLUMNS: Column<AdminProject>[] = [
+  {
+    key: "name",
+    header: "Name",
+    render: (p) => <span className="text-sm">{p.name}</span>,
+  },
+  {
+    key: "slug",
+    header: "Slug",
+    render: (p) => <span className="text-sm">{p.slug}</span>,
+  },
+  {
+    key: "id",
+    header: "ID",
+    render: (p) => (
+      <span className="text-muted-foreground text-sm">{p.id}</span>
+    ),
+  },
+  {
+    key: "created_at",
+    header: "Created",
+    render: (p) => <span className="text-sm">{fmtDate(p.created_at)}</span>,
+  },
+];
+
 function OrgProjectsPanel({ orgID }: { orgID: string }) {
   const navigate = useNavigate();
   const { data, isLoading, isError, error } = useQuery({
@@ -281,37 +315,12 @@ function OrgProjectsPanel({ orgID }: { orgID: string }) {
     enabled: !!orgID,
   });
 
-  const columns: Column<AdminProject>[] = [
-    {
-      key: "name",
-      header: "Name",
-      render: (p) => <span className="text-sm">{p.name}</span>,
-    },
-    {
-      key: "slug",
-      header: "Slug",
-      render: (p) => <span className="text-sm">{p.slug}</span>,
-    },
-    {
-      key: "id",
-      header: "ID",
-      render: (p) => (
-        <span className="text-muted-foreground text-sm">{p.id}</span>
-      ),
-    },
-    {
-      key: "created_at",
-      header: "Created",
-      render: (p) => <span className="text-sm">{fmtDate(p.created_at)}</span>,
-    },
-  ];
-
   const projects = data?.projects ?? [];
 
   return (
     <div className="max-h-96 overflow-auto rounded-lg border">
-      <Table columns={columns} cellPadding="condensed">
-        <Table.Header columns={columns} />
+      <Table columns={PROJECT_COLUMNS} cellPadding="condensed">
+        <Table.Header columns={PROJECT_COLUMNS} />
         <Table.Body>
           {isLoading || projects.length === 0 ? (
             <Table.NoResultsMessage>
@@ -328,11 +337,12 @@ function OrgProjectsPanel({ orgID }: { orgID: string }) {
               <Table.Row
                 key={p.id}
                 row={p}
-                columns={columns}
+                columns={PROJECT_COLUMNS}
                 onClick={() => {
-                  void navigate(
-                    `/projects/${encodeURIComponent(p.slug || p.id)}`,
-                  );
+                  void navigate({
+                    to: "/projects/$idOrSlug",
+                    params: { idOrSlug: p.slug || p.id },
+                  });
                 }}
               />
             ))
@@ -343,6 +353,40 @@ function OrgProjectsPanel({ orgID }: { orgID: string }) {
   );
 }
 
+const MEMBER_COLUMNS: Column<AdminOrganizationMember>[] = [
+  {
+    key: "email",
+    header: "Email",
+    render: (m) => <span className="text-sm">{m.email}</span>,
+  },
+  {
+    key: "display_name",
+    header: "Name",
+    render: (m) => <span className="text-sm">{m.display_name}</span>,
+  },
+  {
+    key: "id",
+    header: "ID",
+    render: (m) => (
+      <span className="text-muted-foreground text-sm">{m.id}</span>
+    ),
+  },
+  {
+    key: "last_login",
+    header: "Last login",
+    render: (m) => (
+      <span className={cn("text-sm", !m.last_login && "text-muted-foreground")}>
+        {fmtDate(m.last_login)}
+      </span>
+    ),
+  },
+  {
+    key: "created_at",
+    header: "Joined",
+    render: (m) => <span className="text-sm">{fmtDate(m.created_at)}</span>,
+  },
+];
+
 function OrgMembersPanel({ orgID }: { orgID: string }) {
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["gram-admin-organization-members", orgID],
@@ -350,48 +394,12 @@ function OrgMembersPanel({ orgID }: { orgID: string }) {
     enabled: !!orgID,
   });
 
-  const columns: Column<AdminOrganizationMember>[] = [
-    {
-      key: "email",
-      header: "Email",
-      render: (m) => <span className="text-sm">{m.email}</span>,
-    },
-    {
-      key: "display_name",
-      header: "Name",
-      render: (m) => <span className="text-sm">{m.display_name}</span>,
-    },
-    {
-      key: "id",
-      header: "ID",
-      render: (m) => (
-        <span className="text-muted-foreground text-sm">{m.id}</span>
-      ),
-    },
-    {
-      key: "last_login",
-      header: "Last login",
-      render: (m) => (
-        <span
-          className={cn("text-sm", !m.last_login && "text-muted-foreground")}
-        >
-          {fmtDate(m.last_login)}
-        </span>
-      ),
-    },
-    {
-      key: "created_at",
-      header: "Joined",
-      render: (m) => <span className="text-sm">{fmtDate(m.created_at)}</span>,
-    },
-  ];
-
   const members = data?.members ?? [];
 
   return (
     <div className="max-h-96 overflow-auto rounded-lg border">
-      <Table columns={columns} cellPadding="condensed">
-        <Table.Header columns={columns} />
+      <Table columns={MEMBER_COLUMNS} cellPadding="condensed">
+        <Table.Header columns={MEMBER_COLUMNS} />
         <Table.Body>
           {isLoading || members.length === 0 ? (
             <Table.NoResultsMessage>
@@ -405,7 +413,7 @@ function OrgMembersPanel({ orgID }: { orgID: string }) {
             </Table.NoResultsMessage>
           ) : (
             members.map((m) => (
-              <Table.Row key={m.id} row={m} columns={columns} />
+              <Table.Row key={m.id} row={m} columns={MEMBER_COLUMNS} />
             ))
           )}
         </Table.Body>

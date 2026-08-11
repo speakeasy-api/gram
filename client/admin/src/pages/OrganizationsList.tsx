@@ -1,6 +1,10 @@
-import { useState, useEffect, useMemo, type JSX } from "react";
-import { useNavigate } from "react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect, useCallback, useMemo, type JSX } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import {
+  keepPreviousData,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { SearchIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { badgeTone } from "@/lib/badgeTone";
@@ -26,6 +30,80 @@ function fmtDateShort(iso?: string): string {
 
 const accountTypeOptions = ["free", "pro", "enterprise"];
 
+// The columns and the empty list stay at module scope so the memoized rows
+// below keep their identity while the operator types in the search box.
+const ORG_COLUMNS: Column<AdminOrganization>[] = [
+  {
+    key: "name",
+    header: "Name",
+    render: (org) => <span className="text-sm">{org.name}</span>,
+  },
+  {
+    key: "slug",
+    header: "Slug",
+    render: (org) => <span className="text-sm">{org.slug}</span>,
+  },
+  {
+    key: "account_type",
+    header: "Type",
+    render: (org) => (
+      <Badge variant="outline" className={badgeTone.neutral}>
+        {org.account_type}
+      </Badge>
+    ),
+  },
+  {
+    key: "member_count",
+    header: "Members",
+    render: (org) => <span className="text-sm">{org.member_count}</span>,
+  },
+  {
+    key: "workos_id",
+    header: "WorkOS",
+    render: (org) => (
+      <span
+        className={cn("text-sm", !org.workos_id && "text-muted-foreground")}
+      >
+        {org.workos_id ? `${org.workos_id.substring(0, 12)}...` : "-"}
+      </span>
+    ),
+  },
+  {
+    key: "disabled_at",
+    header: "Disabled",
+    render: (org) => (
+      <span
+        className={cn("text-sm", !org.disabled_at && "text-muted-foreground")}
+      >
+        {org.disabled_at ? fmtDateShort(org.disabled_at) : "-"}
+      </span>
+    ),
+  },
+  {
+    key: "free_trial_ends_at",
+    header: "Trial ends",
+    render: (org) => (
+      <span
+        className={cn(
+          "text-sm",
+          !org.free_trial_ends_at && "text-muted-foreground",
+        )}
+      >
+        {fmtDateShort(org.free_trial_ends_at)}
+      </span>
+    ),
+  },
+  {
+    key: "created_at",
+    header: "Created",
+    render: (org) => (
+      <span className="text-sm">{fmtDateShort(org.created_at)}</span>
+    ),
+  },
+];
+
+const NO_ORGS: AdminOrganization[] = [];
+
 export function OrganizationsList(): JSX.Element {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -34,21 +112,26 @@ export function OrganizationsList(): JSX.Element {
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [cursorStack, setCursorStack] = useState<string[]>([]);
   const navigate = useNavigate();
+  const qc = useQueryClient();
 
+  // The functional updater lets React skip the render when paging is already
+  // reset, which is the usual case.
+  const resetPaging = useCallback(() => {
+    setCursor(undefined);
+    setCursorStack((s) => (s.length === 0 ? s : []));
+  }, []);
+
+  // A search term that settles back on the current one leaves paging alone, so
+  // a typo and a backspace do not throw the operator back to the first page.
   useEffect(() => {
+    const next = search.trim();
+    if (next === debouncedSearch) return;
     const t = setTimeout(() => {
-      setDebouncedSearch(search.trim());
-      setCursor(undefined);
-      setCursorStack([]);
+      setDebouncedSearch(next);
+      resetPaging();
     }, 300);
     return () => clearTimeout(t);
-  }, [search]);
-
-  // Reset paging when filters change.
-  useEffect(() => {
-    setCursor(undefined);
-    setCursorStack([]);
-  }, [accountType, includeDisabled]);
+  }, [search, debouncedSearch, resetPaging]);
 
   const queryKey = useMemo(
     () => [
@@ -58,7 +141,7 @@ export function OrganizationsList(): JSX.Element {
     [debouncedSearch, accountType, includeDisabled, cursor],
   );
 
-  const { data, isLoading, isError, error } = useQuery({
+  const { data, isLoading, isError, error, isPlaceholderData } = useQuery({
     queryKey,
     queryFn: () =>
       listOrganizations({
@@ -68,6 +151,9 @@ export function OrganizationsList(): JSX.Element {
         cursor,
         limit: 50,
       }),
+    // Every filter and every page is a separate cache entry. Without this the
+    // table empties on each change and the rows jump.
+    placeholderData: keepPreviousData,
   });
 
   const goNext = () => {
@@ -85,77 +171,31 @@ export function OrganizationsList(): JSX.Element {
     });
   };
 
-  const columns: Column<AdminOrganization>[] = [
-    {
-      key: "name",
-      header: "Name",
-      render: (org) => <span className="text-sm">{org.name}</span>,
+  const handleRowClick = useCallback(
+    (org: AdminOrganization) => {
+      const idOrSlug = org.slug || org.id;
+      // The row already holds the whole record, so the detail page paints and
+      // starts its own queries without a round trip to organization.get.
+      qc.setQueryData(["gram-admin-organization", idOrSlug], org);
+      void navigate({ to: "/organizations/$idOrSlug", params: { idOrSlug } });
     },
-    {
-      key: "slug",
-      header: "Slug",
-      render: (org) => <span className="text-sm">{org.slug}</span>,
-    },
-    {
-      key: "account_type",
-      header: "Type",
-      render: (org) => (
-        <Badge variant="outline" className={badgeTone.neutral}>
-          {org.account_type}
-        </Badge>
-      ),
-    },
-    {
-      key: "member_count",
-      header: "Members",
-      render: (org) => <span className="text-sm">{org.member_count}</span>,
-    },
-    {
-      key: "workos_id",
-      header: "WorkOS",
-      render: (org) => (
-        <span
-          className={cn("text-sm", !org.workos_id && "text-muted-foreground")}
-        >
-          {org.workos_id ? `${org.workos_id.substring(0, 12)}...` : "-"}
-        </span>
-      ),
-    },
-    {
-      key: "disabled_at",
-      header: "Disabled",
-      render: (org) => (
-        <span
-          className={cn("text-sm", !org.disabled_at && "text-muted-foreground")}
-        >
-          {org.disabled_at ? fmtDateShort(org.disabled_at) : "-"}
-        </span>
-      ),
-    },
-    {
-      key: "free_trial_ends_at",
-      header: "Trial ends",
-      render: (org) => (
-        <span
-          className={cn(
-            "text-sm",
-            !org.free_trial_ends_at && "text-muted-foreground",
-          )}
-        >
-          {fmtDateShort(org.free_trial_ends_at)}
-        </span>
-      ),
-    },
-    {
-      key: "created_at",
-      header: "Created",
-      render: (org) => (
-        <span className="text-sm">{fmtDateShort(org.created_at)}</span>
-      ),
-    },
-  ];
+    [navigate, qc],
+  );
 
-  const orgs = data?.organizations ?? [];
+  const orgs = data?.organizations ?? NO_ORGS;
+
+  const rows = useMemo(
+    () =>
+      orgs.map((org) => (
+        <Table.Row
+          key={org.id}
+          row={org}
+          columns={ORG_COLUMNS}
+          onClick={handleRowClick}
+        />
+      )),
+    [orgs, handleRowClick],
+  );
 
   return (
     <div className="space-y-6">
@@ -172,7 +212,10 @@ export function OrganizationsList(): JSX.Element {
           </div>
           <Select
             value={accountType || "all"}
-            onValueChange={(v) => setAccountType(v === "all" ? "" : v)}
+            onValueChange={(v) => {
+              setAccountType(v === "all" ? "" : v);
+              resetPaging();
+            }}
           >
             <SelectTrigger className="h-auto w-auto px-2 py-1.5">
               <SelectValue placeholder="All types" />
@@ -189,17 +232,25 @@ export function OrganizationsList(): JSX.Element {
           <Button
             variant={includeDisabled ? "default" : "ghost"}
             size="xs"
-            onClick={() => setIncludeDisabled((v) => !v)}
+            onClick={() => {
+              setIncludeDisabled((v) => !v);
+              resetPaging();
+            }}
           >
             {includeDisabled ? "Hiding none" : "Hide disabled"}
           </Button>
         </div>
 
-        <div className="max-h-[60vh] overflow-auto rounded-lg border">
-          <Table columns={columns} cellPadding="condensed">
-            <Table.Header columns={columns} />
+        <div
+          className={cn(
+            "max-h-[60vh] overflow-auto rounded-lg border",
+            isPlaceholderData && "opacity-60",
+          )}
+        >
+          <Table columns={ORG_COLUMNS} cellPadding="condensed">
+            <Table.Header columns={ORG_COLUMNS} />
             <Table.Body>
-              {isLoading || orgs.length === 0 ? (
+              {orgs.length === 0 ? (
                 <Table.NoResultsMessage>
                   <span className="text-muted-foreground text-sm">
                     {isLoading
@@ -210,18 +261,7 @@ export function OrganizationsList(): JSX.Element {
                   </span>
                 </Table.NoResultsMessage>
               ) : (
-                orgs.map((org) => (
-                  <Table.Row
-                    key={org.id}
-                    row={org}
-                    columns={columns}
-                    onClick={() => {
-                      void navigate(
-                        `/organizations/${encodeURIComponent(org.slug || org.id)}`,
-                      );
-                    }}
-                  />
-                ))
+                rows
               )}
             </Table.Body>
           </Table>

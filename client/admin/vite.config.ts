@@ -4,6 +4,7 @@ import path from "node:path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { tanstackRouter } from "@tanstack/router-plugin/vite";
 
 // In production the admin dashboard and the Gram admin API share one origin,
 // so this config needs no CDN base and no build-time server URL.
@@ -54,7 +55,14 @@ export default defineConfig(({ command }) => {
   }
 
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      // The generator reads src/routes and writes src/routeTree.gen.ts. It has
+      // to run before the react plugin, because the react plugin transforms the
+      // route files it emits. autoCodeSplitting gives each route its own chunk.
+      tanstackRouter({ target: "react", autoCodeSplitting: true }),
+      react(),
+      tailwindcss(),
+    ],
     build: {
       sourcemap: true,
     },

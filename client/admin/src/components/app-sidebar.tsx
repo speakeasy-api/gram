@@ -1,13 +1,9 @@
 import type { ComponentProps, JSX } from "react";
-import {
-  BuildingIcon,
-  CommandIcon,
-  FolderIcon,
-  type LucideIcon,
-} from "lucide-react";
-import { NavLink, useLocation } from "react-router";
+import { BuildingIcon, FolderIcon } from "lucide-react";
+import { Link, useLocation } from "@tanstack/react-router";
 
 import { NavUser } from "@/components/nav-user";
+import { SpeakeasyMark } from "@/components/speakeasy-mark";
 import {
   Sidebar,
   SidebarContent,
@@ -20,10 +16,12 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 
-const navItems: { to: string; label: string; icon: LucideIcon }[] = [
+// `as const` keeps each `to` a literal, which is what the router types check
+// the link against.
+const navItems = [
   { to: "/organizations", label: "Organizations", icon: BuildingIcon },
   { to: "/projects", label: "Projects", icon: FolderIcon },
-];
+] as const;
 
 export function AppSidebar({
   ...props
@@ -39,10 +37,10 @@ export function AppSidebar({
               asChild
               className="data-[slot=sidebar-menu-button]:!p-1.5"
             >
-              <NavLink to="/">
-                <CommandIcon className="!size-5 group-data-[collapsible=icon]:!size-4" />
-                <span className="text-base font-semibold">Gram Admin</span>
-              </NavLink>
+              <Link to="/">
+                <SpeakeasyMark className="!size-5 group-data-[collapsible=icon]:!size-4" />
+                <span className="text-base font-semibold">AICP Admin</span>
+              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
@@ -59,10 +57,10 @@ export function AppSidebar({
                     isActive={pathname.startsWith(to)}
                     tooltip={label}
                   >
-                    <NavLink to={to}>
+                    <Link to={to}>
                       <Icon />
                       <span>{label}</span>
-                    </NavLink>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
