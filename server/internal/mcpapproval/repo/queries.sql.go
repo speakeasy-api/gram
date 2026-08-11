@@ -731,6 +731,45 @@ func (q *Queries) ListResearchReportsForApprovalRequest(ctx context.Context, arg
 	return items, nil
 }
 
+const refreshApprovalRequestEvidence = `-- name: RefreshApprovalRequestEvidence :execrows
+UPDATE mcp_approval_requests
+SET current_evidence = $1
+  , evidence_version = $2
+  , evidence_collected_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id = $3
+  AND project_id = $4
+  AND evidence_collected_at = $5::timestamptz
+  AND deleted IS FALSE
+`
+
+type RefreshApprovalRequestEvidenceParams struct {
+	CurrentEvidence     []byte
+	EvidenceVersion     int32
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	ObservedCollectedAt pgtype.Timestamptz
+}
+
+// Compare-and-set variant used by the read-path gap retry. The fresh document
+// lands only while the stored evidence is still the exact gather the caller
+// read and judged gapped: a slower gather losing a race to a concurrent
+// refresh matches zero rows instead of replacing the newer document, and the
+// loser re-reads the winner's evidence.
+func (q *Queries) RefreshApprovalRequestEvidence(ctx context.Context, arg RefreshApprovalRequestEvidenceParams) (int64, error) {
+	result, err := q.db.Exec(ctx, refreshApprovalRequestEvidence,
+		arg.CurrentEvidence,
+		arg.EvidenceVersion,
+		arg.ID,
+		arg.ProjectID,
+		arg.ObservedCollectedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setApprovalRequestEvidence = `-- name: SetApprovalRequestEvidence :exec
 UPDATE mcp_approval_requests
 SET current_evidence = $1

@@ -231,6 +231,22 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
+-- name: RefreshApprovalRequestEvidence :execrows
+-- Compare-and-set variant used by the read-path gap retry. The fresh document
+-- lands only while the stored evidence is still the exact gather the caller
+-- read and judged gapped: a slower gather losing a race to a concurrent
+-- refresh matches zero rows instead of replacing the newer document, and the
+-- loser re-reads the winner's evidence.
+UPDATE mcp_approval_requests
+SET current_evidence = @current_evidence
+  , evidence_version = @evidence_version
+  , evidence_collected_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND evidence_collected_at = sqlc.arg(observed_collected_at)::timestamptz
+  AND deleted IS FALSE;
+
 -- name: GetApprovalRequestForDecision :one
 -- Locking read used inside the decision transaction. Serialises concurrent
 -- decisions on the same request, so the request's status always matches the

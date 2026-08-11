@@ -554,20 +554,79 @@ func TestRedactCommand_StripsSecretShapedValues(t *testing.T) {
 
 	got := identity.RedactCommand(`FAKE_TOKEN=fabricated123 npx  -y mcp-remote https://mcp.example.com/sse?key=fabricated456 --header "Authorization: Bearer fabricated789" --api-key=fabricated000`)
 	require.Equal(t,
-		"FAKE_TOKEN=<redacted> npx -y mcp-remote https://mcp.example.com/sse --header <redacted> --api-key=<redacted>",
+		"FAKE_TOKEN=<redacted> npx -y mcp-remote https://mcp.example.com/sse --header=<redacted> --api-key=<redacted>",
 		got)
 }
 
-// A secret flag with a separate unquoted value loses the value, not the flag,
-// and non-secret flags keep theirs.
+// A secret flag with a separate value folds the redacted value into the flag
+// (`--token=<redacted>`), never emitting it as a free-standing token, and
+// non-secret flags keep theirs.
 func TestRedactCommand_SeparateFlagValueIsRedacted(t *testing.T) {
 	t.Parallel()
 
 	got := identity.RedactCommand("npx -y some-server --token fabricated123 --port 8080")
-	require.Equal(t, "npx -y some-server --token <redacted> --port 8080", got)
+	require.Equal(t, "npx -y some-server --token=<redacted> --port 8080", got)
 
 	shortHeader := identity.RedactCommand(`npx -y some-server -H "X-Api-Key: fabricated456"`)
-	require.Equal(t, "npx -y some-server -H <redacted>", shortHeader)
+	require.Equal(t, "npx -y some-server -H=<redacted>", shortHeader)
+}
+
+// A credential flag placed before the package spec must not displace the
+// package: the redacted value stays glued to its flag, so resolution of the
+// stored form still reads the real package rather than `<redacted>`.
+func TestRedactCommand_CredentialFlagBeforePackageKeepsResolution(t *testing.T) {
+	t.Parallel()
+
+	redacted := identity.RedactCommand("npx -y --token fabricated123 @scope/server@1.2.3")
+	require.Equal(t, "npx -y --token=<redacted> @scope/server@1.2.3", redacted)
+	require.Equal(t, "npm:@scope/server@1.2.3", identity.Resolve(redacted).ArtifactRef)
+}
+
+// A quoted environment value with spaces splits into several tokens; all of
+// them are the secret, and every one must go.
+func TestRedactCommand_QuotedEnvValueIsFullyConsumed(t *testing.T) {
+	t.Parallel()
+
+	got := identity.RedactCommand(`FAKE_TOKEN="fabricated one two" npx -y @scope/server`)
+	require.Equal(t, "FAKE_TOKEN=<redacted> npx -y @scope/server", got)
+
+	joined := identity.RedactCommand(`npx -y some-server --header="Authorization: Bearer fabricated123"`)
+	require.Equal(t, "npx -y some-server --header=<redacted>", joined)
+}
+
+// A curl-style short option carries its value attached (`-Hvalue`,
+// `-H"a b"`); the attached value is a credential and must not survive.
+func TestRedactCommand_AttachedShortHeaderValueIsRedacted(t *testing.T) {
+	t.Parallel()
+
+	quoted := identity.RedactCommand(`npx -y some-server -H"Authorization: Bearer fabricated123"`)
+	require.Equal(t, "npx -y some-server -H=<redacted>", quoted)
+
+	bare := identity.RedactCommand("npx -y some-server -HX-Api-Key:fabricated456")
+	require.Equal(t, "npx -y some-server -H=<redacted>", bare)
+}
+
+// A shell-quoted endpoint is still a URL: the quotes must not smuggle its
+// userinfo and query tokens past redaction.
+func TestRedactCommand_QuotedURLIsStillRedacted(t *testing.T) {
+	t.Parallel()
+
+	got := identity.RedactCommand(`npx -y mcp-remote 'https://user:fabricated@mcp.example.com/sse?key=fabricated123'`)
+	require.Equal(t, "npx -y mcp-remote https://mcp.example.com/sse", got)
+
+	joined := identity.RedactCommand(`npx -y some-server --url="https://mcp.example.com/sse?key=fabricated456"`)
+	require.Equal(t, "npx -y some-server --url=https://mcp.example.com/sse", joined)
+}
+
+// An exact PyPI spec whose package name contains a secret marker is a package,
+// not an environment assignment: the version pin must survive redaction.
+func TestRedactCommand_PyPIExactSpecIsNotAnEnvAssignment(t *testing.T) {
+	t.Parallel()
+
+	got := identity.RedactCommand("uvx authlib==1.3.0")
+	require.Equal(t, "uvx authlib==1.3.0", got)
+	require.Equal(t, "pypi:authlib@1.3.0", identity.Resolve(got).ArtifactRef)
+	require.True(t, identity.Resolve(got).VersionPinned)
 }
 
 // Rotated secrets must not split one server into two reviews: the same
