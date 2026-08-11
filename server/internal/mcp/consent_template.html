@@ -364,6 +364,21 @@
         max-width: 100%;
       }
 
+      .info .auto-refresh-managed {
+        font-family: var(--font-diatype-mono);
+        font-size: 0.8125rem;
+      }
+
+      .info .auto-refresh-managed.on {
+        color: var(--text-default-success);
+      }
+
+      /* Refresh being off is the organization's choice, not a failure, so the
+         off state stays neutral rather than borrowing a feedback color. */
+      .info .auto-refresh-managed.off {
+        color: var(--text-default);
+      }
+
       .remote-card button.btn-link[aria-disabled="true"] {
         pointer-events: none;
         opacity: 0.65;
@@ -494,7 +509,7 @@
             </select>
           </dd>
           {{end}}
-          {{if .AutoRefreshSupported}}
+          {{if .RemoteSessionCards}}
           <dt>
             <span
               class="tooltip"
@@ -514,6 +529,7 @@
             </span>
           </dt>
           <dd>
+            {{if .AutoRefreshPolicy.IsUserControlled}}
             <select
               name="auto_refresh"
               form="auto-refresh-form"
@@ -525,11 +541,20 @@
                 Off
               </option>
             </select>
+            {{else if .AutoRefreshPolicy.IsEnforced}}
+            <span class="auto-refresh-managed on" data-auto-refresh-managed>
+              On · Managed by your organization
+            </span>
+            {{else}}
+            <span class="auto-refresh-managed off" data-auto-refresh-managed>
+              Off · Managed by your organization
+            </span>
+            {{end}}
           </dd>
           {{end}}
         </dl>
 
-        {{if .AutoRefreshSupported}}
+        {{if .AutoRefreshPolicy.IsUserControlled}}
         <form
           method="POST"
           action="/{{.MCPRouteBase}}/{{.MCPSlug}}/connect/remote-session"
@@ -565,23 +590,21 @@
             <input type="hidden" name="state" value="{{$.State}}" />
             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}" />
             <input type="hidden" name="client_id" value="{{.ClientID}}" />
-            {{if .AutoRefreshSupported}}
             <input
               type="hidden"
               name="auto_refresh"
               value="{{if $.AutoRefreshOn}}on{{else}}off{{end}}"
               data-auto-refresh-input
             />
-            {{end}}
             <div class="meta">
               <div class="issuer">{{.IssuerSlug}}</div>
               {{if .Connected}}
               <div class="state connected">✓ Connected</div>
-              {{if .AutoRefreshSupported}} {{if .AutoRefreshChecked}}
+              {{if .AutoRefreshChecked}}
               <div class="detail auto-refresh-on">✓ Auto refresh on</div>
               {{else}}
               <div class="detail">Auto refresh off</div>
-              {{end}} {{end}}
+              {{end}}
               {{else if .Expired}}
               <div class="state expired">⚠ Expired — reconnect</div>
               {{else}}

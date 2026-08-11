@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
@@ -196,7 +197,7 @@ func (s *Service) handlePlatformToolsetRequest(
 	case "ping":
 		return handlePing(ctx, s.logger, req.ID)
 	case "initialize":
-		return handlePlatformInitialize(ctx, s.logger, req)
+		return handlePlatformInitialize(ctx, s.logger, s.metrics, req)
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
@@ -208,11 +209,26 @@ func (s *Service) handlePlatformToolsetRequest(
 	}
 }
 
-func handlePlatformInitialize(ctx context.Context, logger *slog.Logger, req *rawRequest) (json.RawMessage, error) {
+func handlePlatformInitialize(ctx context.Context, logger *slog.Logger, telemetry *metrics, req *rawRequest) (json.RawMessage, error) {
+	// This path answers ServedPlatformToolset unconditionally and does not
+	// otherwise read the request params. Parsing them purely for telemetry is
+	// the point: without it the platform surface is the one inbound path where
+	// the client's requested revision is invisible, which reads as a hole in
+	// the data rather than as "platform clients don't negotiate". Malformed
+	// params must not fail the handshake, so a parse error is logged and the
+	// requested version is simply left unrecorded.
+	params, _, err := parseInitializeParams(req.Params)
+	if err != nil {
+		logger.WarnContext(ctx, "failed to parse platform mcp initialize params", attr.SlogError(err))
+	}
+
+	recordMCPProtocolVersionSpan(ctx, params.ProtocolVersion, mcpversions.ServedPlatformToolset)
+	telemetry.RecordMCPInitialize(ctx, params.ProtocolVersion, mcpversions.ServedPlatformToolset)
+
 	result := &result[initializeResult]{
 		ID: req.ID,
 		Result: initializeResult{
-			ProtocolVersion: "2025-03-26",
+			ProtocolVersion: mcpversions.ServedPlatformToolset,
 			Capabilities: map[string]json.RawMessage{
 				"tools": json.RawMessage("{}"),
 			},

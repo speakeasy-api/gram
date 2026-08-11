@@ -110,6 +110,40 @@ func TestListChallengeBuckets_GroupsByDimensions(t *testing.T) {
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
+func TestListChallengeBuckets_DeduplicatesRepeatedChallengeIDs(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newChallengeTestService(t)
+	authCtx := challengeAuthContext(t, ctx)
+	challengeID := uuid.NewString()
+
+	// Repeated physical rows are collapsed by stable challenge ID in reads.
+	insertCHChallenge(t, ti, authCtx.ActiveOrganizationID, challengeID, "allow", "user:u1", "org:read")
+	insertCHChallenge(t, ti, authCtx.ActiveOrganizationID, challengeID, "allow", "user:u1", "org:read")
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		result, err := ti.service.ListChallengeBuckets(ctx, &gen.ListChallengeBucketsPayload{
+			Outcome:      nil,
+			PrincipalUrn: nil,
+			Scope:        nil,
+			ProjectID:    nil,
+			Resolved:     nil,
+			Limit:        20,
+			Offset:       0,
+			ApikeyToken:  nil,
+			SessionToken: nil,
+		})
+		if !assert.NoError(c, err) || !assert.NotNil(c, result) {
+			return
+		}
+		if !assert.Len(c, result.Buckets, 1) {
+			return
+		}
+		assert.Equal(c, 1, result.Buckets[0].ChallengeCount)
+		assert.Equal(c, []string{challengeID}, result.Buckets[0].ChallengeIds)
+	}, 10*time.Second, 100*time.Millisecond)
+}
+
 func TestListChallengeBuckets_FilterByOutcome(t *testing.T) {
 	t.Parallel()
 

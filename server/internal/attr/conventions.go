@@ -262,18 +262,38 @@ const (
 	AccessRequestSentCountKey           = attribute.Key("gram.access_request.sent_count")
 	AccessRequestRecipientKey           = attribute.Key("gram.access_request.recipient")
 	McpMethodKey                        = attribute.Key("gram.mcp.method")
-	McpRequestedTagsKey                 = attribute.Key("gram.mcp.requested_tags")
-	McpToolsReturnedKey                 = attribute.Key("gram.mcp.tools_returned")
-	McpToolsFilteredKey                 = attribute.Key("gram.mcp.tools_filtered")
-	McpServerIDKey                      = attribute.Key("gram.mcp_server.id")
-	McpURLKey                           = attribute.Key("gram.mcp.url")
-	ToolVariationsGroupIDKey            = attribute.Key("gram.tool_variations_group.id")
-	MetricNameKey                       = attribute.Key("gram.metric.name")
-	MimeTypeKey                         = attribute.Key("mime.type")
-	OAuthAuthorizationEndpointKey       = attribute.Key("gram.oauth.authorization_endpoint")
-	OAuthClientIDKey                    = attribute.Key("gram.oauth.client_id")
-	OAuthClientNameKey                  = attribute.Key("gram.oauth.client_name")
-	OAuthClientSecretGeneratedKey       = attribute.Key("gram.oauth.client_secret_generated")
+	// McpRequestedProtocolVersionKey is the MCP protocol revision a client
+	// asked for in its `initialize` request params, before any negotiation.
+	// Only the handshake-based revisions (2025-11-25 and earlier) have this
+	// concept: 2026-07-28 removed `initialize`, so requests from clients on
+	// that revision carry only McpNegotiatedProtocolVersionKey.
+	McpRequestedProtocolVersionKey = attribute.Key("gram.mcp.requested_protocol_version")
+	// McpNegotiatedProtocolVersionKey is the MCP protocol revision actually in
+	// effect for a request. Under the handshake-based revisions this is what
+	// the serving side answered at `initialize` — which on Gram's own hosted
+	// and platform paths is the surface's mcpversions.Served* constant,
+	// answered unconditionally regardless of what the client asked for, and on
+	// the proxy paths is whatever the upstream server answered. Under
+	// 2026-07-28 there is no negotiation at all and the value is simply what
+	// the client declared on this request.
+	//
+	// Sourced from the `MCP-Protocol-Version` header where present (it carries
+	// the negotiated value per the Streamable HTTP transport spec, and mirrors
+	// the `io.modelcontextprotocol/protocolVersion` `_meta` key under
+	// 2026-07-28), otherwise from the observed `initialize` response.
+	McpNegotiatedProtocolVersionKey = attribute.Key("gram.mcp.negotiated_protocol_version")
+	McpRequestedTagsKey             = attribute.Key("gram.mcp.requested_tags")
+	McpToolsReturnedKey             = attribute.Key("gram.mcp.tools_returned")
+	McpToolsFilteredKey             = attribute.Key("gram.mcp.tools_filtered")
+	McpServerIDKey                  = attribute.Key("gram.mcp_server.id")
+	McpURLKey                       = attribute.Key("gram.mcp.url")
+	ToolVariationsGroupIDKey        = attribute.Key("gram.tool_variations_group.id")
+	MetricNameKey                   = attribute.Key("gram.metric.name")
+	MimeTypeKey                     = attribute.Key("mime.type")
+	OAuthAuthorizationEndpointKey   = attribute.Key("gram.oauth.authorization_endpoint")
+	OAuthClientIDKey                = attribute.Key("gram.oauth.client_id")
+	OAuthClientNameKey              = attribute.Key("gram.oauth.client_name")
+	OAuthClientSecretGeneratedKey   = attribute.Key("gram.oauth.client_secret_generated")
 	// OAuthErrorKey / OAuthErrorDescriptionKey carry the `error` /
 	// `error_description` parameters from RFC 6749 / RFC 7591 error responses
 	// — used across DCR registration, /authorize, /token, and /revoke.
@@ -1769,6 +1789,20 @@ func SlogMcpURL(v string) slog.Attr      { return slog.String(string(McpURLKey),
 
 func McpMethod(v string) attribute.KeyValue { return McpMethodKey.String(v) }
 func SlogMcpMethod(v string) slog.Attr      { return slog.String(string(McpMethodKey), v) }
+
+func MCPRequestedProtocolVersion(v string) attribute.KeyValue {
+	return McpRequestedProtocolVersionKey.String(v)
+}
+func SlogMCPRequestedProtocolVersion(v string) slog.Attr {
+	return slog.String(string(McpRequestedProtocolVersionKey), v)
+}
+
+func MCPNegotiatedProtocolVersion(v string) attribute.KeyValue {
+	return McpNegotiatedProtocolVersionKey.String(v)
+}
+func SlogMCPNegotiatedProtocolVersion(v string) slog.Attr {
+	return slog.String(string(McpNegotiatedProtocolVersionKey), v)
+}
 
 func MCPRequestedTags(v []string) attribute.KeyValue { return McpRequestedTagsKey.StringSlice(v) }
 func SlogMCPRequestedTags(v []string) slog.Attr {

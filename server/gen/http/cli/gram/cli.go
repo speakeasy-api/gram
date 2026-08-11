@@ -134,7 +134,7 @@ func UsageCommands() []string {
 		"admin-chat-analysis (get-settings|upsert-work-units-settings|upsert-business-memory-settings|trigger-analysis)",
 		"admin-external-credentials (create-gcp-iam-platform-credential|list-platform-external-credentials|update-gcp-iam-platform-credential|get-gcp-iam-platform-credential|verify-gcp-iam-platform-credential|delete-gcp-iam-platform-credential)",
 		"plugins (list-plugins|get-plugin|create-plugin|update-plugin|delete-plugin|add-plugin-server|update-plugin-server|remove-plugin-server|set-plugin-assignments|download-plugin-package|download-observability-plugin|download-codex-install-script|get-publish-status|publish-plugins|get-marketplace-settings|update-marketplace-settings)",
-		"features (get-product-features|set-product-feature)",
+		"features (get-product-features|set-product-feature|set-remote-session-auto-refresh-policy)",
 		"projects (get-project|create-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|list-servers|get-server|update-server|discover-protected-resource-metadata|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
 		"organization-remote-session-clients (list-clients|get-client|get-client-delete-preflight|list-client-mcp-servers|create-client|create-cimd-client|update-client|delete-client|remove-client-from-mcp-server)",
@@ -145,7 +145,7 @@ func UsageCommands() []string {
 		"organization-remote-sessions (list-client-sessions|revoke-session|refresh-session|revoke-all-client-sessions)",
 		"remote-sessions (list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
-		"risk (create-risk-policy|list-risk-policies|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
+		"risk (create-risk-policy|list-risk-policies|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-signals|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
 		"skill-efficacy (get-settings|upsert-settings|query-insights)",
 		"skills (create|add-version|restore-version|update|list|list-tags|list-suggestions|list-feedback|trigger-suggestion|approve-suggestion|dismiss-suggestion|list-suggestion-feedback|approve-all-suggestions|get|list-unknown-activations|list-versions|archive|distribute|undistribute|share|unshare|get-shared|list-distributions)",
 		"spend-rules (create-spend-rule|list-spend-rules|get-spend-rule|update-spend-rule|archive-spend-rule|preview-spend-rule|list-spend-rule-events|get-spend-rules-overview|list-actor-attributes)",
@@ -601,6 +601,7 @@ func ParseEndpoint(
 		chatListChatsFlags                 = flag.NewFlagSet("list-chats", flag.ExitOnError)
 		chatListChatsSearchFlag            = chatListChatsFlags.String("search", "", "")
 		chatListChatsExternalUserIDFlag    = chatListChatsFlags.String("external-user-id", "", "")
+		chatListChatsUserIDFlag            = chatListChatsFlags.String("user-id", "", "")
 		chatListChatsSourceFlag            = chatListChatsFlags.String("source", "", "")
 		chatListChatsAssistantIDFlag       = chatListChatsFlags.String("assistant-id", "", "")
 		chatListChatsSourceKindFlag        = chatListChatsFlags.String("source-kind", "", "")
@@ -1638,6 +1639,10 @@ func ParseEndpoint(
 		featuresSetProductFeatureBodyFlag         = featuresSetProductFeatureFlags.String("body", "REQUIRED", "")
 		featuresSetProductFeatureSessionTokenFlag = featuresSetProductFeatureFlags.String("session-token", "", "")
 
+		featuresSetRemoteSessionAutoRefreshPolicyFlags            = flag.NewFlagSet("set-remote-session-auto-refresh-policy", flag.ExitOnError)
+		featuresSetRemoteSessionAutoRefreshPolicyBodyFlag         = featuresSetRemoteSessionAutoRefreshPolicyFlags.String("body", "REQUIRED", "")
+		featuresSetRemoteSessionAutoRefreshPolicySessionTokenFlag = featuresSetRemoteSessionAutoRefreshPolicyFlags.String("session-token", "", "")
+
 		projectsFlags = flag.NewFlagSet("projects", flag.ContinueOnError)
 
 		projectsGetProjectFlags            = flag.NewFlagSet("get-project", flag.ExitOnError)
@@ -2216,6 +2221,13 @@ func ParseEndpoint(
 		riskGetRiskRuleBreakdownApikeyTokenFlag      = riskGetRiskRuleBreakdownFlags.String("apikey-token", "", "")
 		riskGetRiskRuleBreakdownSessionTokenFlag     = riskGetRiskRuleBreakdownFlags.String("session-token", "", "")
 		riskGetRiskRuleBreakdownProjectSlugInputFlag = riskGetRiskRuleBreakdownFlags.String("project-slug-input", "", "")
+
+		riskGetRiskSignalsFlags                = flag.NewFlagSet("get-risk-signals", flag.ExitOnError)
+		riskGetRiskSignalsFromFlag             = riskGetRiskSignalsFlags.String("from", "", "")
+		riskGetRiskSignalsToFlag               = riskGetRiskSignalsFlags.String("to", "", "")
+		riskGetRiskSignalsApikeyTokenFlag      = riskGetRiskSignalsFlags.String("apikey-token", "", "")
+		riskGetRiskSignalsSessionTokenFlag     = riskGetRiskSignalsFlags.String("session-token", "", "")
+		riskGetRiskSignalsProjectSlugInputFlag = riskGetRiskSignalsFlags.String("project-slug-input", "", "")
 
 		riskGetRiskPolicyStatusFlags                = flag.NewFlagSet("get-risk-policy-status", flag.ExitOnError)
 		riskGetRiskPolicyStatusIDFlag               = riskGetRiskPolicyStatusFlags.String("id", "REQUIRED", "")
@@ -3592,6 +3604,7 @@ func ParseEndpoint(
 	featuresFlags.Usage = featuresUsage
 	featuresGetProductFeaturesFlags.Usage = featuresGetProductFeaturesUsage
 	featuresSetProductFeatureFlags.Usage = featuresSetProductFeatureUsage
+	featuresSetRemoteSessionAutoRefreshPolicyFlags.Usage = featuresSetRemoteSessionAutoRefreshPolicyUsage
 
 	projectsFlags.Usage = projectsUsage
 	projectsGetProjectFlags.Usage = projectsGetProjectUsage
@@ -3709,6 +3722,7 @@ func ParseEndpoint(
 	riskCompileExprFlags.Usage = riskCompileExprUsage
 	riskGetRiskUserBreakdownFlags.Usage = riskGetRiskUserBreakdownUsage
 	riskGetRiskRuleBreakdownFlags.Usage = riskGetRiskRuleBreakdownUsage
+	riskGetRiskSignalsFlags.Usage = riskGetRiskSignalsUsage
 	riskGetRiskPolicyStatusFlags.Usage = riskGetRiskPolicyStatusUsage
 	riskCreateRiskPolicyBypassRequestFlags.Usage = riskCreateRiskPolicyBypassRequestUsage
 	riskAcknowledgeRiskPolicyChallengeFlags.Usage = riskAcknowledgeRiskPolicyChallengeUsage
@@ -5056,6 +5070,9 @@ func ParseEndpoint(
 			case "set-product-feature":
 				epf = featuresSetProductFeatureFlags
 
+			case "set-remote-session-auto-refresh-policy":
+				epf = featuresSetRemoteSessionAutoRefreshPolicyFlags
+
 			}
 
 		case "projects":
@@ -5384,6 +5401,9 @@ func ParseEndpoint(
 
 			case "get-risk-rule-breakdown":
 				epf = riskGetRiskRuleBreakdownFlags
+
+			case "get-risk-signals":
+				epf = riskGetRiskSignalsFlags
 
 			case "get-risk-policy-status":
 				epf = riskGetRiskPolicyStatusFlags
@@ -6272,7 +6292,7 @@ func ParseEndpoint(
 			switch epn {
 			case "list-chats":
 				endpoint = c.ListChats()
-				data, err = chatc.BuildListChatsPayload(*chatListChatsSearchFlag, *chatListChatsExternalUserIDFlag, *chatListChatsSourceFlag, *chatListChatsAssistantIDFlag, *chatListChatsSourceKindFlag, *chatListChatsExcludeSourceKindFlag, *chatListChatsHasRiskFlag, *chatListChatsAccountTypeFlag, *chatListChatsPinnedFlag, *chatListChatsMinRiskScoreFlag, *chatListChatsFromFlag, *chatListChatsToFlag, *chatListChatsLimitFlag, *chatListChatsOffsetFlag, *chatListChatsSortByFlag, *chatListChatsSortOrderFlag, *chatListChatsSessionTokenFlag, *chatListChatsProjectSlugInputFlag, *chatListChatsChatSessionsTokenFlag)
+				data, err = chatc.BuildListChatsPayload(*chatListChatsSearchFlag, *chatListChatsExternalUserIDFlag, *chatListChatsUserIDFlag, *chatListChatsSourceFlag, *chatListChatsAssistantIDFlag, *chatListChatsSourceKindFlag, *chatListChatsExcludeSourceKindFlag, *chatListChatsHasRiskFlag, *chatListChatsAccountTypeFlag, *chatListChatsPinnedFlag, *chatListChatsMinRiskScoreFlag, *chatListChatsFromFlag, *chatListChatsToFlag, *chatListChatsLimitFlag, *chatListChatsOffsetFlag, *chatListChatsSortByFlag, *chatListChatsSortOrderFlag, *chatListChatsSessionTokenFlag, *chatListChatsProjectSlugInputFlag, *chatListChatsChatSessionsTokenFlag)
 			case "get-work-units-trend":
 				endpoint = c.GetWorkUnitsTrend()
 				data, err = chatc.BuildGetWorkUnitsTrendPayload(*chatGetWorkUnitsTrendFromFlag, *chatGetWorkUnitsTrendToFlag, *chatGetWorkUnitsTrendSessionTokenFlag, *chatGetWorkUnitsTrendProjectSlugInputFlag)
@@ -6968,6 +6988,9 @@ func ParseEndpoint(
 			case "set-product-feature":
 				endpoint = c.SetProductFeature()
 				data, err = featuresc.BuildSetProductFeaturePayload(*featuresSetProductFeatureBodyFlag, *featuresSetProductFeatureSessionTokenFlag)
+			case "set-remote-session-auto-refresh-policy":
+				endpoint = c.SetRemoteSessionAutoRefreshPolicy()
+				data, err = featuresc.BuildSetRemoteSessionAutoRefreshPolicyPayload(*featuresSetRemoteSessionAutoRefreshPolicyBodyFlag, *featuresSetRemoteSessionAutoRefreshPolicySessionTokenFlag)
 			}
 		case "projects":
 			c := projectsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -7297,6 +7320,9 @@ func ParseEndpoint(
 			case "get-risk-rule-breakdown":
 				endpoint = c.GetRiskRuleBreakdown()
 				data, err = riskc.BuildGetRiskRuleBreakdownPayload(*riskGetRiskRuleBreakdownCategoryFlag, *riskGetRiskRuleBreakdownFromFlag, *riskGetRiskRuleBreakdownToFlag, *riskGetRiskRuleBreakdownApikeyTokenFlag, *riskGetRiskRuleBreakdownSessionTokenFlag, *riskGetRiskRuleBreakdownProjectSlugInputFlag)
+			case "get-risk-signals":
+				endpoint = c.GetRiskSignals()
+				data, err = riskc.BuildGetRiskSignalsPayload(*riskGetRiskSignalsFromFlag, *riskGetRiskSignalsToFlag, *riskGetRiskSignalsApikeyTokenFlag, *riskGetRiskSignalsSessionTokenFlag, *riskGetRiskSignalsProjectSlugInputFlag)
 			case "get-risk-policy-status":
 				endpoint = c.GetRiskPolicyStatus()
 				data, err = riskc.BuildGetRiskPolicyStatusPayload(*riskGetRiskPolicyStatusIDFlag, *riskGetRiskPolicyStatusApikeyTokenFlag, *riskGetRiskPolicyStatusSessionTokenFlag, *riskGetRiskPolicyStatusProjectSlugInputFlag)
@@ -9751,6 +9777,7 @@ func chatListChatsUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] chat list-chats", os.Args[0])
 	fmt.Fprint(os.Stderr, " -search STRING")
 	fmt.Fprint(os.Stderr, " -external-user-id STRING")
+	fmt.Fprint(os.Stderr, " -user-id STRING")
 	fmt.Fprint(os.Stderr, " -source STRING")
 	fmt.Fprint(os.Stderr, " -assistant-id STRING")
 	fmt.Fprint(os.Stderr, " -source-kind STRING")
@@ -9777,6 +9804,7 @@ func chatListChatsUsage() {
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -search STRING: `)
 	fmt.Fprintln(os.Stderr, `    -external-user-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -user-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -source STRING: `)
 	fmt.Fprintln(os.Stderr, `    -assistant-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -source-kind STRING: `)
@@ -9797,7 +9825,7 @@ func chatListChatsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat list-chats --search \"abc123\" --external-user-id \"abc123\" --source \"abc123\" --assistant-id \"550e8400-e29b-41d4-a716-446655440000\" --source-kind \"abc123\" --exclude-source-kind \"abc123\" --has-risk \"true\" --account-type \"team\" --pinned \"true\" --min-risk-score 1 --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --limit 2 --offset 1 --sort-by \"num_messages\" --sort-order \"desc\" --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat list-chats --search \"abc123\" --external-user-id \"abc123\" --user-id \"abc123\" --source \"abc123\" --assistant-id \"550e8400-e29b-41d4-a716-446655440000\" --source-kind \"abc123\" --exclude-source-kind \"abc123\" --has-risk \"true\" --account-type \"team\" --pinned \"true\" --min-risk-score 1 --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --limit 2 --offset 1 --sort-by \"num_messages\" --sort-order \"desc\" --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
 }
 
 func chatGetWorkUnitsTrendUsage() {
@@ -14462,6 +14490,7 @@ func featuresUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    get-product-features: Get the current state of all product feature flags.`)
 	fmt.Fprintln(os.Stderr, `    set-product-feature: Enable or disable an organization feature flag.`)
+	fmt.Fprintln(os.Stderr, `    set-remote-session-auto-refresh-policy: Set the organization policy for automatic remote-session refresh.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s features COMMAND --help\n", os.Args[0])
@@ -14502,6 +14531,26 @@ func featuresSetProductFeatureUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features set-product-feature --body '{\n      \"enabled\": false,\n      \"feature_name\": \"aaa\"\n   }' --session-token \"abc123\"")
+}
+
+func featuresSetRemoteSessionAutoRefreshPolicyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] features set-remote-session-auto-refresh-policy", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Set the organization policy for automatic remote-session refresh.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "features set-remote-session-auto-refresh-policy --body '{\n      \"policy\": \"user_controlled\"\n   }' --session-token \"abc123\"")
 }
 
 // projectsUsage displays the usage of the projects command and its subcommands.
@@ -16481,6 +16530,7 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    compile-expr: Compile a single CEL expression (a detection predicate or a policy scope predicate) without evaluating it, so the editor can validate as the author types. Returns ok=true when it compiles, otherwise ok=false with the compiler error message. An empty expression is valid (ok=true).`)
 	fmt.Fprintln(os.Stderr, `    get-risk-user-breakdown: Per-user breakdowns of findings by category and by rule_id within a time window. Powers the user drill-down on /risk-overview.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-rule-breakdown: Get per-rule_id finding counts for a category within a time window. Powers the per-category drill-down chart on /risk-overview.`)
+	fmt.Fprintln(os.Stderr, `    get-risk-signals: Get clustered risk signals — findings grouped by rule and ranked by severity score — plus window-level KPI stats and the exposure breakdown by category. Powers the Watchdog page. Served from the ClickHouse findings store.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-policy-status: Get the analysis status of a risk policy including progress and workflow state.`)
 	fmt.Fprintln(os.Stderr, `    create-risk-policy-bypass-request: Create or refresh a risk policy bypass request from a signed request URL token.`)
 	fmt.Fprintln(os.Stderr, `    acknowledge-risk-policy-challenge: Acknowledge a risk policy warn/challenge from a warning-link token. Records the acknowledgement so the user's retried action proceeds; self-service (no admin approval).`)
@@ -16995,6 +17045,32 @@ func riskGetRiskRuleBreakdownUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk get-risk-rule-breakdown --category \"abc123\" --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskGetRiskSignalsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk get-risk-signals", os.Args[0])
+	fmt.Fprint(os.Stderr, " -from STRING")
+	fmt.Fprint(os.Stderr, " -to STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get clustered risk signals — findings grouped by rule and ranked by severity score — plus window-level KPI stats and the exposure breakdown by category. Powers the Watchdog page. Served from the ClickHouse findings store.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -from STRING: `)
+	fmt.Fprintln(os.Stderr, `    -to STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk get-risk-signals --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskGetRiskPolicyStatusUsage() {

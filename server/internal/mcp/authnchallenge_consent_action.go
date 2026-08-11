@@ -99,16 +99,29 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 
 	backURL := fmt.Sprintf("/%s/%s/connect?state=%s", endpoint.RouteBase, endpoint.Slug, url.QueryEscape(stateID))
 
+	// Auto refresh is only the subject's choice while the organization lets
+	// them choose. Under either managed policy the posted value is ignored, so
+	// a crafted form can neither disable a required connection nor opt into
+	// refresh the organization disabled.
+	autoRefreshPolicy := s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID)
+
 	switch r.PostForm.Get("action") {
 	case "connect":
 		client, cerr := resolveClient()
 		if cerr != nil {
 			return cerr
 		}
+		// Only a user-controlled policy authors a stored preference. Managed
+		// policies leave it unset so remote_sessions.auto_refresh stays purely
+		// user-originated: the keepalive applies the policy at query time, so
+		// persisting a forced value would buy nothing and would overwrite the
+		// choice a subject made before the organization took over.
 		var autoRefresh *bool
-		if _, posted := r.PostForm["auto_refresh"]; posted {
-			v := r.PostForm.Get("auto_refresh") == "on"
-			autoRefresh = &v
+		if autoRefreshPolicy == autoRefreshUserControlled {
+			if _, posted := r.PostForm["auto_refresh"]; posted {
+				v := r.PostForm.Get("auto_refresh") == "on"
+				autoRefresh = &v
+			}
 		}
 		challengeURL, berr := s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
 			ID:                  challengeState.ID,
@@ -172,7 +185,14 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 	case "set_auto_refresh":
 		// Page-level "Auto refresh": persist the choice for every bound client.
 		// Clients without a stored session update zero rows; their preference
-		// rides the next connect instead.
+		// rides the next connect instead. Managed policies ignore this action:
+		// their effective value comes from organization policy, while the stored
+		// user preference remains intact if the organization later restores
+		// user-controlled refresh.
+		if autoRefreshPolicy != autoRefreshUserControlled {
+			http.Redirect(w, r, backURL, http.StatusSeeOther)
+			return nil
+		}
 		enabled := r.PostForm.Get("auto_refresh") == "on"
 		for i := range clients {
 			if _, err := s.remoteChallengeMgr.SetRemoteSessionAutoRefresh(ctx, subject, endpoint.ProjectID, endpoint.UserSessionIssuerID, clients[i].ID, enabled); err != nil {

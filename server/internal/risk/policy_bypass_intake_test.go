@@ -315,7 +315,7 @@ func TestCreatePolicyBypassRequest_RealIntakeOpensApprovalRequest(t *testing.T) 
 		redisClient, err := infra.NewRedisClient(t, 0)
 		require.NoError(t, err)
 
-		authzEngine := authz.NewEngine(logger, instance.conn, instance.chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+		authzEngine := authz.NewEngine(logger, instance.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 		features = productfeatures.NewClient(logger, tracerProvider, instance.conn, redisClient)
 		assembler := evidence.NewAssembler(
 			packagemeta.NewClient(riskIntakeNotFoundRegistry{}),

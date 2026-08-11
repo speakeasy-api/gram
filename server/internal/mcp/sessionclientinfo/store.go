@@ -42,6 +42,13 @@ var ErrNotFound = errors.New("session client info not found")
 type Info struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
+
+	// ProtocolVersion is the MCP protocol revision the client asked for in its
+	// initialize params — what it requested, not what it was answered with.
+	// Carried so later requests in the same session can be attributed to a
+	// protocol generation without the client having to repeat it. Empty when
+	// the client omits it, which callers treat as "generation unknown".
+	ProtocolVersion string `json:"protocol_version"`
 }
 
 // Store reads and writes session identities in Redis.
@@ -175,7 +182,12 @@ func (s *Store) Load(ctx context.Context, projectID uuid.UUID, toolsetSlug, sess
 	if err := json.Unmarshal([]byte(raw), &info); err != nil {
 		return Info{}, fmt.Errorf("unmarshal session client info: %w", err)
 	}
-	if info.Name == "" {
+	// A record carrying nothing tells a caller no more than a missing one, so
+	// it reports as absent. A record with only a protocol version is not empty
+	// in this sense: it still attributes the session to a protocol generation,
+	// which is the whole reason a client that omits clientInfo.name is worth
+	// recording at all.
+	if info.Name == "" && info.ProtocolVersion == "" {
 		return Info{}, ErrNotFound
 	}
 

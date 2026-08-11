@@ -25,7 +25,7 @@ import (
 // ChatMessageWriter is the only sanctioned way to persist chat messages.
 // It wraps repo.CreateChatMessage and notifies observers after a successful
 // write that stored at least one message. External packages must use Write,
-// WriteTurn, or WriteWithAssets.
+// WriteCorrelated, WriteTurn, or WriteWithAssets.
 type ChatMessageWriter struct {
 	db           *pgxpool.Pool
 	logger       *slog.Logger
@@ -179,6 +179,50 @@ func (w *ChatMessageWriter) Write(ctx context.Context, projectID uuid.UUID, para
 	return n, nil
 }
 
+// WriteCorrelated atomically inserts a message or promotes an earlier LiteLLM
+// observation of the same turn to the authoritative native-hook source.
+func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.UUID, param repo.CreateChatMessageParams, externalMessageID string) (int64, error) {
+	params := []repo.CreateChatMessageParams{param}
+	stampUnsetCreatedAt(params)
+	param = params[0]
+
+	n, err := repo.New(w.db).UpsertCorrelatedChatMessage(ctx, repo.UpsertCorrelatedChatMessageParams{
+		ChatID:            param.ChatID,
+		Role:              param.Role,
+		ProjectID:         param.ProjectID,
+		Content:           param.Content,
+		ContentRaw:        param.ContentRaw,
+		ContentAssetUrl:   param.ContentAssetUrl,
+		StorageError:      param.StorageError,
+		Model:             param.Model,
+		MessageID:         param.MessageID,
+		ToolCallID:        param.ToolCallID,
+		UserID:            param.UserID,
+		ExternalUserID:    param.ExternalUserID,
+		ExternalMessageID: conv.ToPGText(externalMessageID),
+		FinishReason:      param.FinishReason,
+		ToolCalls:         param.ToolCalls,
+		PromptTokens:      param.PromptTokens,
+		CompletionTokens:  param.CompletionTokens,
+		TotalTokens:       param.TotalTokens,
+		Origin:            param.Origin,
+		UserAgent:         param.UserAgent,
+		IpAddress:         param.IpAddress,
+		Source:            param.Source,
+		ContentHash:       param.ContentHash,
+		Generation:        param.Generation,
+		Replayed:          param.Replayed,
+		CreatedAt:         param.CreatedAt,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("upsert correlated chat message: %w", err)
+	}
+	if n > 0 {
+		w.notifyMessagesStored(ctx, projectID)
+	}
+	return n, nil
+}
+
 // WriteExternal inserts imported provider messages idempotently and notifies
 // observers when at least one new row is stored.
 func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UUID, params []repo.CreateExternalChatMessageParams) (int64, error) {
@@ -198,10 +242,10 @@ func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UU
 }
 
 // WriteInTx inserts messages via a caller-provided transaction. Observers are
-// NOT fired here — the caller must invoke NotifyStored after commit so observers
-// never see a write that ended up rolled back. Use when the write must be
-// atomic with surrounding DB operations (e.g. a row-level lock for generation
-// serialisation).
+// NOT fired here — the caller must invoke NotifyStored or NotifyStoredRows after
+// commit so observers never see a write that ended up rolled back. Use when the
+// write must be atomic with surrounding DB operations (e.g. a row-level lock
+// for generation serialisation).
 func (w *ChatMessageWriter) WriteInTx(ctx context.Context, tx repo.DBTX, params []repo.CreateChatMessageParams) (int64, error) {
 	return insertChatMessages(ctx, tx, params)
 }
@@ -209,6 +253,12 @@ func (w *ChatMessageWriter) WriteInTx(ctx context.Context, tx repo.DBTX, params 
 // NotifyStored fans out a stored-messages signal to registered observers.
 // Pair with WriteInTx: invoke after the surrounding transaction commits.
 func (w *ChatMessageWriter) NotifyStored(ctx context.Context, projectID uuid.UUID) {
+	w.notifyMessagesStored(ctx, projectID)
+}
+
+// NotifyStoredRows publishes rows inserted through WriteInTx after commit.
+func (w *ChatMessageWriter) NotifyStoredRows(ctx context.Context, projectID uuid.UUID, params []repo.CreateChatMessageParams) {
+	w.publishTurnFrames(ctx, nil, params)
 	w.notifyMessagesStored(ctx, projectID)
 }
 

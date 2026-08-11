@@ -148,9 +148,6 @@ func TestRuntimeMethods_MountedOnMux(t *testing.T) {
 
 	ctx, ti := newTestMCPService(t)
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	metadataService := mcpmetadata.NewService(
 		ti.logger,
 		ti.tracerProvider,
@@ -159,7 +156,7 @@ func TestRuntimeMethods_MountedOnMux(t *testing.T) {
 		ti.serverURL,
 		ti.siteURL,
 		ti.cacheAdapter,
-		authz.NewEngine(ti.logger, ti.conn, chConn, nil, workos.NewStubClient()),
+		authz.NewEngine(ti.logger, ti.conn, nil, workos.NewStubClient()),
 		ti.audit,
 	)
 

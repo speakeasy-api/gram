@@ -100,6 +100,7 @@ import TriggersIndex, { TriggersRoot } from "./pages/triggers/Triggers";
 import SecurityOverview, {
   RiskOverviewRoot,
 } from "./pages/security/SecurityOverview";
+import Watchdog from "./pages/security/watchdog/Watchdog";
 import RiskEventsPage from "./pages/security/RiskEventsPage";
 import ShadowMCP, { ShadowMCPRoot } from "./pages/shadow-mcp/ShadowMCP";
 import ShadowMCPServerDetail from "./pages/shadow-mcp/ShadowMCPServerDetail";
@@ -572,6 +573,12 @@ const ROUTE_STRUCTURE = {
     icon: "brain",
     stage: "preview",
     component: OrgMemory,
+  },
+  watchdog: {
+    title: "Watchdog",
+    url: "watchdog",
+    icon: "radar",
+    component: Watchdog,
   },
   riskOverview: {
     title: "Risk Overview",

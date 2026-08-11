@@ -170,14 +170,13 @@ func newE2EAuthService(t *testing.T, userInfo *MockUserInfo, fetcher *mockWorkOS
 		Environment:       "test",
 	}
 
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
 	nonceStore := cache.NewRedisCacheAdapter(redisClient)
-	authzEngine := authz.NewEngine(logger, conn, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthogClient, nonceStore, authzProvisioner, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	trialNotifier := &fakeTrialNotifier{}
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthogClient, nonceStore, authzProvisioner, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger(), trialNotifier)
 
 	ti := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
+	ti.trialNotifier = trialNotifier
 	return ctx, &e2eInstance{testInstance: *ti, fetcher: fetcher}
 }
 
