@@ -60,6 +60,7 @@ import {
 import type { InsightsConfigOptions } from "./insights-context";
 import { InsightsContext, useInsightsState } from "./insights-context";
 import { InsightsShortcutKeys } from "./insights-dock-shortcut-hint";
+import { pageHostsOwnAssistantRuntime } from "./insights-dock-routes";
 import { useAskAiListener } from "./command-palette/askAiBridge";
 
 // Types-only re-export (erased at compile time, won't break Fast Refresh)
@@ -1027,26 +1028,17 @@ export function InsightsProvider({
     [user.id, user.email],
   );
 
-  // Mount the shared runtime only where it's actually used: a chat route (the
-  // page owns the chat) or the open dock — and only where the dock is shown.
-  // Pages with their own chat runtime (Playground, Elements, assistant
-  // onboarding) hide the dock, so `!hideTrigger` keeps the shared provider out
-  // of their tree and the two RemoteThreadListRuntimes never nest. Maximize
-  // stays seamless because the expand handler navigates WITHOUT collapsing, so
-  // `onChatRoute` takes over before `isExpanded` flips (no unmount gap).
-  // Everything runtime-dependent — the dock panel's chat view, the provider
-  // mount, and (via context) the chat pages — gates on this single flag.
-  // Mounted wherever a composer can appear — every surface now renders the
-  // same AUI composer, and that needs the runtime present, not just when the
-  // chat panel happens to be open. MCP discovery is a react-query on a
-  // module-level client, so the extra mounts reuse one cached result.
-  // Mounted as soon as the assistant resolves, not only where chat is visible:
-  // every entry point (dock pill, /chat landing, project home widget, full
-  // page) now renders the same AUI composer, and that needs the runtime in the
-  // tree. Pages that hide the dock still embed the landing widget, so gating on
-  // dock visibility left those surfaces on the legacy input. MCP discovery is a
-  // react-query on a module-level client, so the extra mounts share one result.
-  const runtimeMounted = assistantReady;
+  // Mount the shared runtime as soon as the assistant resolves, wherever a
+  // composer can appear: every entry point (dock pill, /chat landing, project
+  // home widget, full page) now renders the same AUI composer, and that needs
+  // the runtime in the tree. Pages that hide the dock still embed the landing
+  // widget, so gating on dock visibility would leave those surfaces on the
+  // legacy input. MCP discovery is a react-query on a module-level client, so
+  // the extra mounts share one cached result. Pages that host their own chat
+  // runtime are excluded (see pageHostsOwnAssistantRuntime) so the two
+  // RemoteThreadListRuntimes never nest — assistant-ui throws when they do.
+  const runtimeMounted =
+    assistantReady && !pageHostsOwnAssistantRuntime(pathname);
 
   // Read inside the transport wrapper via ref so override churn doesn't
   // re-create the transport identity on every parent re-render.
