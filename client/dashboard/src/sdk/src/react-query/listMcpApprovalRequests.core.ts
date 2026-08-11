@@ -50,7 +50,6 @@ export function buildListMcpApprovalRequestsQuery(
   return {
     queryKey: queryKeyListMcpApprovalRequests({
       status: request?.status,
-      cursor: request?.cursor,
       limit: request?.limit,
       gramSession: request?.gramSession,
       gramKey: request?.gramKey,
@@ -83,7 +82,6 @@ export function buildListMcpApprovalRequestsQuery(
 export function queryKeyListMcpApprovalRequests(
   parameters: {
     status?: string | undefined;
-    cursor?: string | undefined;
     limit?: number | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;

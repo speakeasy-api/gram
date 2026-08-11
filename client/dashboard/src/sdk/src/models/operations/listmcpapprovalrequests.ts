@@ -26,10 +26,6 @@ export type ListMcpApprovalRequestsRequest = {
    */
   status?: string | undefined;
   /**
-   * The cursor to fetch results from
-   */
-  cursor?: string | undefined;
-  /**
    * The number of requests to return per page
    */
   limit?: number | undefined;
@@ -157,7 +153,6 @@ export function listMcpApprovalRequestsSecurityToJSON(
 /** @internal */
 export type ListMcpApprovalRequestsRequest$Outbound = {
   status?: string | undefined;
-  cursor?: string | undefined;
   limit?: number | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Key"?: string | undefined;
@@ -171,7 +166,6 @@ export const ListMcpApprovalRequestsRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     status: z.optional(z.string()),
-    cursor: z.optional(z.string()),
     limit: z.optional(z.int()),
     gramSession: z.optional(z.string()),
     gramKey: z.optional(z.string()),

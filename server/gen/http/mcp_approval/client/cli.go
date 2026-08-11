@@ -13,22 +13,17 @@ import (
 	"strconv"
 
 	mcpapproval "github.com/speakeasy-api/gram/server/gen/mcp_approval"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildListRequestsPayload builds the payload for the mcpApproval listRequests
 // endpoint from CLI flags.
-func BuildListRequestsPayload(mcpApprovalListRequestsStatus string, mcpApprovalListRequestsCursor string, mcpApprovalListRequestsLimit string, mcpApprovalListRequestsSessionToken string, mcpApprovalListRequestsApikeyToken string, mcpApprovalListRequestsProjectSlugInput string) (*mcpapproval.ListRequestsPayload, error) {
+func BuildListRequestsPayload(mcpApprovalListRequestsStatus string, mcpApprovalListRequestsLimit string, mcpApprovalListRequestsSessionToken string, mcpApprovalListRequestsApikeyToken string, mcpApprovalListRequestsProjectSlugInput string) (*mcpapproval.ListRequestsPayload, error) {
 	var err error
 	var status *string
 	{
 		if mcpApprovalListRequestsStatus != "" {
 			status = &mcpApprovalListRequestsStatus
-		}
-	}
-	var cursor *string
-	{
-		if mcpApprovalListRequestsCursor != "" {
-			cursor = &mcpApprovalListRequestsCursor
 		}
 	}
 	var limit *int32
@@ -63,7 +58,6 @@ func BuildListRequestsPayload(mcpApprovalListRequestsStatus string, mcpApprovalL
 	}
 	v := &mcpapproval.ListRequestsPayload{}
 	v.Status = status
-	v.Cursor = cursor
 	v.Limit = limit
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -114,7 +108,13 @@ func BuildRecordDecisionPayload(mcpApprovalRecordDecisionBody string, mcpApprova
 	{
 		err = json.Unmarshal([]byte(mcpApprovalRecordDecisionBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"decision\": \"abc123\",\n      \"granted_principal_urns\": [\n         \"abc123\"\n      ],\n      \"id\": \"abc123\",\n      \"rationale\": \"abc123\",\n      \"research_report_id\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"decision\": \"denied\",\n      \"granted_principal_urns\": [\n         \"abc123\"\n      ],\n      \"id\": \"abc123\",\n      \"rationale\": \"abc123\",\n      \"research_report_id\": \"abc123\"\n   }'")
+		}
+		if !(body.Decision == "approved" || body.Decision == "denied") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.decision", body.Decision, []any{"approved", "denied"}))
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 	var sessionToken *string

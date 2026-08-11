@@ -108,7 +108,6 @@ async function $do(
   const path = pathToFunc("/rpc/mcpApproval.listRequests")();
 
   const query = encodeFormQuery({
-    "cursor": payload?.cursor,
     "limit": payload?.limit,
     "status": payload?.status,
   });

@@ -40,7 +40,9 @@ func (q *Queries) CountAuditLogsByAction(ctx context.Context, action string) (in
 const getLatestAuditLogByAction = `-- name: GetLatestAuditLogByAction :one
 SELECT
   action,
+  organization_id,
   project_id,
+  subject_id,
   subject_type,
   subject_display_name,
   subject_slug,
@@ -55,7 +57,9 @@ LIMIT 1
 
 type GetLatestAuditLogByActionRow struct {
 	Action             string
+	OrganizationID     string
 	ProjectID          uuid.NullUUID
+	SubjectID          string
 	SubjectType        string
 	SubjectDisplayName pgtype.Text
 	SubjectSlug        pgtype.Text
@@ -69,7 +73,9 @@ func (q *Queries) GetLatestAuditLogByAction(ctx context.Context, action string) 
 	var i GetLatestAuditLogByActionRow
 	err := row.Scan(
 		&i.Action,
+		&i.OrganizationID,
 		&i.ProjectID,
+		&i.SubjectID,
 		&i.SubjectType,
 		&i.SubjectDisplayName,
 		&i.SubjectSlug,

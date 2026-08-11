@@ -100,6 +100,41 @@ func TestGetRequest_ChildQueriesAreProjectBounded(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Empty(t, decisions)
+
+	seedResearchReport(t, otherCtx, ti, otherProject, theirs, "completed", `{"claims":[]}`)
+	reports, err := ti.repo.ListResearchReportsForApprovalRequest(ctx, repo.ListResearchReportsForApprovalRequestParams{
+		McpApprovalRequestID: theirs,
+		ProjectID:            ti.projectID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, reports)
+}
+
+// A request whose evidence has never been gathered reports that plainly: no
+// collected-at timestamp, and an empty evidence object rather than an invented
+// one.
+func TestGetRequest_NeverGatheredEvidence(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	// Zero evidence and version leave the row at its column defaults, the state
+	// a request is in before the first gather runs.
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "", status: "", evidence: "", version: 0})
+
+	detail, err := ti.service.GetRequest(ctx, getPayload(requestID.String()))
+	require.NoError(t, err)
+
+	require.Nil(t, detail.EvidenceCollectedAt)
+
+	decoded, ok := detail.Evidence.(map[string]any)
+	require.True(t, ok, "the default evidence document is an empty object")
+	require.Empty(t, decoded)
+
+	// The shape version still travels, so the empty document stays
+	// interpretable against the current shape.
+	require.NotNil(t, detail.EvidenceVersion)
+	require.Equal(t, 1, *detail.EvidenceVersion)
 }
 
 func TestGetRequest_UnknownID(t *testing.T) {

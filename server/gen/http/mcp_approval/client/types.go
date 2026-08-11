@@ -32,8 +32,6 @@ type RecordDecisionRequestBody struct {
 // ListRequestsResponseBody is the type of the "mcpApproval" service
 // "listRequests" endpoint HTTP response body.
 type ListRequestsResponseBody struct {
-	// The cursor to fetch results from
-	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 	// The list of approval requests
 	Requests []*ApprovalRequestSummaryResponseBody `form:"requests,omitempty" json:"requests,omitempty" xml:"requests,omitempty"`
 }
@@ -756,9 +754,7 @@ func NewRecordDecisionRequestBody(p *mcpapproval.RecordDecisionPayload) *RecordD
 // NewListRequestsListApprovalRequestsResultOK builds a "mcpApproval" service
 // "listRequests" endpoint result from a HTTP "OK" response.
 func NewListRequestsListApprovalRequestsResultOK(body *ListRequestsResponseBody) *mcpapproval.ListApprovalRequestsResult {
-	v := &mcpapproval.ListApprovalRequestsResult{
-		NextCursor: body.NextCursor,
-	}
+	v := &mcpapproval.ListApprovalRequestsResult{}
 	v.Requests = make([]*mcpapproval.ApprovalRequestSummary, len(body.Requests))
 	for i, val := range body.Requests {
 		if val == nil {
