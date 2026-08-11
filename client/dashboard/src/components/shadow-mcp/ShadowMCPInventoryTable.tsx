@@ -51,6 +51,16 @@ const INVENTORY_FILTERS = defineFilters([
   { id: "review", label: "Review", kind: "select" },
 ]);
 
+/**
+ * A seen-time is real only when telemetry produced it: synthesized
+ * review-only rows carry the zero time, which must read as never observed
+ * rather than as January of year one.
+ */
+function observedDate(date: Date | undefined): Date | undefined {
+  if (!date || date.getTime() <= 0) return undefined;
+  return date;
+}
+
 /** Pending decisions sort first; the rest follow the review lifecycle. */
 function reviewSortRank(server: ShadowMCPInventoryServer): number {
   switch (server.approvalRequest?.status) {
@@ -298,13 +308,18 @@ export function ShadowMCPInventoryTable({
           shadowMCPInventoryStatus(server, policyState),
         ),
       width: "0.9fr",
-      render: (server) => (
-        <InventoryStatusCell
-          disposition={disposition}
-          policyState={policyState}
-          server={server}
-        />
-      ),
+      render: (server) =>
+        server.targetKind === "stdio_command" ? (
+          <Text muted small>
+            —
+          </Text>
+        ) : (
+          <InventoryStatusCell
+            disposition={disposition}
+            policyState={policyState}
+            server={server}
+          />
+        ),
     },
     {
       key: "review",
@@ -328,10 +343,12 @@ export function ShadowMCPInventoryTable({
       key: "lastSeen",
       header: "Last seen",
       sortable: true,
-      sortValue: (server) => server.lastSeen.getTime(),
+      sortValue: (server) => observedDate(server.lastSeen)?.getTime() ?? 0,
       width: "0.7fr",
       render: (server) => (
-        <Text variant="small">{formatShortDate(server.lastSeen)}</Text>
+        <Text variant="small">
+          {formatShortDate(observedDate(server.lastSeen))}
+        </Text>
       ),
     },
     {
