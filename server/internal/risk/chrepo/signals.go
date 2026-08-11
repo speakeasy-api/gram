@@ -61,9 +61,13 @@ const (
 // stay empty/zero for rows written before the chat_source and team
 // attribution columns existed.
 type RiskSignalAggregate struct {
-	RuleID            string
-	Category          string
-	Sources           []string
+	RuleID   string
+	Category string
+	Sources  []string
+	// PolicyIDs are the distinct non-empty risk_policy_id values stamped on
+	// the rule's findings across the doubled window. The handler resolves
+	// them to configured policy scores; empty for pre-policy rows.
+	PolicyIDs         []string
 	Description       string
 	Apps              []string
 	FindingsCur       uint64
@@ -91,6 +95,7 @@ func (q *Queries) ListRiskSignalAggregates(ctx context.Context, p RiskSignalWind
 		squirrel.Expr("rule_id"),
 		squirrel.Alias(squirrel.Expr("any(category)"), "g_category"),
 		squirrel.Alias(squirrel.Expr("groupUniqArray(source)"), "g_sources"),
+		squirrel.Alias(squirrel.Expr("groupUniqArrayIf(risk_policy_id, risk_policy_id != '')"), "g_policy_ids"),
 		squirrel.Alias(squirrel.Expr("any(description)"), "g_description"),
 		squirrel.Alias(squirrel.Expr("groupUniqArrayIf(chat_source, chat_source != '' AND created_at >= ?)", p.From), "g_apps"),
 		squirrel.Alias(squirrel.Expr("uniqExactIf(id, created_at >= ?)", p.From), "findings_cur"),
@@ -126,6 +131,7 @@ func (q *Queries) ListRiskSignalAggregates(ctx context.Context, p RiskSignalWind
 			&row.RuleID,
 			&row.Category,
 			&row.Sources,
+			&row.PolicyIDs,
 			&row.Description,
 			&row.Apps,
 			&row.FindingsCur,
