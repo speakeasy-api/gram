@@ -4094,7 +4094,7 @@ SET
     oidc = COALESCE($19, oidc),
     passthrough = COALESCE($20, passthrough),
     updated_at = clock_timestamp()
-WHERE id = $20 AND project_id IS NULL AND organization_id IS NULL AND deleted IS FALSE
+WHERE id = $21 AND project_id IS NULL AND organization_id IS NULL AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
 `
 
@@ -4301,7 +4301,7 @@ SET
     oidc = COALESCE($19, oidc),
     passthrough = COALESCE($20, passthrough),
     updated_at = clock_timestamp()
-WHERE id = $20 AND organization_id = $21 AND deleted IS FALSE
+WHERE id = $21 AND organization_id = $22 AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
 `
 
@@ -4539,7 +4539,7 @@ SET
     oidc = COALESCE($19, oidc),
     passthrough = COALESCE($20, passthrough),
     updated_at = clock_timestamp()
-WHERE id = $20 AND project_id = $21 AND deleted IS FALSE
+WHERE id = $21 AND project_id = $22 AND deleted IS FALSE
 RETURNING id, project_id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, response_types_supported, token_endpoint_auth_methods_supported, client_id_metadata_document_supported, oidc, passthrough, name, logo_asset_id, client_setup_documentation_url, created_at, updated_at, deleted_at, deleted
 `
 
