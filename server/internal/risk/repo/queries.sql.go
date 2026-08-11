@@ -2140,7 +2140,7 @@ func (q *Queries) GetRiskResultByID(ctx context.Context, arg GetRiskResultByIDPa
 
 const getRiskResultsByIDs = `-- name: GetRiskResultsByIDs :many
 
-SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, chat_content_part_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, spans, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
+SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, chat_content_part_id, skill_version_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, spans, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
 FROM risk_results
 WHERE project_id = $1
   AND id = ANY($2::uuid[])
@@ -2181,6 +2181,7 @@ func (q *Queries) GetRiskResultsByIDs(ctx context.Context, arg GetRiskResultsByI
 			&i.RiskPolicyVersion,
 			&i.ChatMessageID,
 			&i.ChatContentPartID,
+			&i.SkillVersionID,
 			&i.Source,
 			&i.Found,
 			&i.RuleID,
@@ -3297,7 +3298,7 @@ func (q *Queries) ListRiskPolicyEvalReviews(ctx context.Context, arg ListRiskPol
 }
 
 const listRiskResultsByChatFound = `-- name: ListRiskResultsByChatFound :many
-SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.chat_content_part_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.spans, rr.dead_letter_reason, rr.excluded_at, rr.excluded_exclusion_id, rr.false_positive_at, rr.false_positive_reason, rr.created_at, COALESCE(cm.chat_id, ccp.chat_id) AS chat_id, COALESCE(cm.created_at, ccp.created_at) AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
+SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.chat_content_part_id, rr.skill_version_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.spans, rr.dead_letter_reason, rr.excluded_at, rr.excluded_exclusion_id, rr.false_positive_at, rr.false_positive_reason, rr.created_at, COALESCE(cm.chat_id, ccp.chat_id) AS chat_id, COALESCE(cm.created_at, ccp.created_at) AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
 FROM risk_results rr
 LEFT JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
@@ -3337,6 +3338,7 @@ type ListRiskResultsByChatFoundRow struct {
 	RiskPolicyVersion   int64
 	ChatMessageID       uuid.NullUUID
 	ChatContentPartID   uuid.NullUUID
+	SkillVersionID      uuid.NullUUID
 	Source              string
 	Found               bool
 	RuleID              pgtype.Text
@@ -3383,6 +3385,7 @@ func (q *Queries) ListRiskResultsByChatFound(ctx context.Context, arg ListRiskRe
 			&i.RiskPolicyVersion,
 			&i.ChatMessageID,
 			&i.ChatContentPartID,
+			&i.SkillVersionID,
 			&i.Source,
 			&i.Found,
 			&i.RuleID,
@@ -3416,7 +3419,7 @@ func (q *Queries) ListRiskResultsByChatFound(ctx context.Context, arg ListRiskRe
 }
 
 const listRiskResultsByProjectAndPolicy = `-- name: ListRiskResultsByProjectAndPolicy :many
-SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.chat_content_part_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.spans, rr.dead_letter_reason, rr.excluded_at, rr.excluded_exclusion_id, rr.false_positive_at, rr.false_positive_reason, rr.created_at, COALESCE(cm.chat_id, ccp.chat_id) AS chat_id, COALESCE(cm.created_at, ccp.created_at) AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
+SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.chat_content_part_id, rr.skill_version_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.spans, rr.dead_letter_reason, rr.excluded_at, rr.excluded_exclusion_id, rr.false_positive_at, rr.false_positive_reason, rr.created_at, COALESCE(cm.chat_id, ccp.chat_id) AS chat_id, COALESCE(cm.created_at, ccp.created_at) AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
 FROM risk_results rr
 LEFT JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
@@ -3456,6 +3459,7 @@ type ListRiskResultsByProjectAndPolicyRow struct {
 	RiskPolicyVersion   int64
 	ChatMessageID       uuid.NullUUID
 	ChatContentPartID   uuid.NullUUID
+	SkillVersionID      uuid.NullUUID
 	Source              string
 	Found               bool
 	RuleID              pgtype.Text
@@ -3507,6 +3511,7 @@ func (q *Queries) ListRiskResultsByProjectAndPolicy(ctx context.Context, arg Lis
 			&i.RiskPolicyVersion,
 			&i.ChatMessageID,
 			&i.ChatContentPartID,
+			&i.SkillVersionID,
 			&i.Source,
 			&i.Found,
 			&i.RuleID,
@@ -4363,7 +4368,7 @@ SET false_positive_at = clock_timestamp()
 WHERE project_id = $2
   AND id = ANY($3::uuid[])
   AND false_positive_at IS NULL
-RETURNING id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, chat_content_part_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, spans, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
+RETURNING id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, chat_content_part_id, skill_version_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, spans, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
 `
 
 type MarkRiskResultsFalsePositiveParams struct {
@@ -4392,6 +4397,7 @@ func (q *Queries) MarkRiskResultsFalsePositive(ctx context.Context, arg MarkRisk
 			&i.RiskPolicyVersion,
 			&i.ChatMessageID,
 			&i.ChatContentPartID,
+			&i.SkillVersionID,
 			&i.Source,
 			&i.Found,
 			&i.RuleID,
@@ -4612,7 +4618,7 @@ SET false_positive_at = NULL
 WHERE project_id = $1
   AND id = ANY($2::uuid[])
   AND false_positive_at IS NOT NULL
-RETURNING id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, chat_content_part_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, spans, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
+RETURNING id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, chat_content_part_id, skill_version_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, spans, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
 `
 
 type UnmarkRiskResultsFalsePositiveParams struct {
@@ -4637,6 +4643,7 @@ func (q *Queries) UnmarkRiskResultsFalsePositive(ctx context.Context, arg Unmark
 			&i.RiskPolicyVersion,
 			&i.ChatMessageID,
 			&i.ChatContentPartID,
+			&i.SkillVersionID,
 			&i.Source,
 			&i.Found,
 			&i.RuleID,

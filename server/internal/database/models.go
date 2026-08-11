@@ -2000,6 +2000,7 @@ type RiskResult struct {
 	RiskPolicyVersion   int64
 	ChatMessageID       uuid.NullUUID
 	ChatContentPartID   uuid.NullUUID
+	SkillVersionID      uuid.NullUUID
 	Source              string
 	Found               bool
 	RuleID              pgtype.Text
