@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"goa.design/goa/v3/security"
 
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -1018,4 +1019,37 @@ func TestCreateRiskPolicyBypassRequest_OrgKeyAttributedTokenForbidden(t *testing
 		RequestToken: token,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+// The `agent_user` scope gate lives in the generated security wiring — the
+// design's Security(ByKey, Scope("agent_user")) becomes the key scheme's
+// RequiredScopes in gen/risk — not in the handler, so the direct-call tests
+// above cannot see it. Drive the generated endpoint with a recording
+// authorizer to pin that boundary: key auth must demand agent_user, and an
+// authorization failure must short-circuit before the service method runs.
+func TestCreateRiskPolicyBypassRequest_EndpointKeyAuthDemandsAgentUserScope(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	var schemes []*security.APIKeyScheme
+	forbidden := oops.C(oops.CodeForbidden)
+	endpoint := gen.NewCreateRiskPolicyBypassRequestEndpoint(ti.service,
+		func(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error) {
+			schemes = append(schemes, scheme)
+			return ctx, forbidden
+		})
+
+	_, err := endpoint(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
+		SessionToken: nil,
+		ApikeyToken:  new("gram_test_key"),
+		RequestToken: "rpbr2.never-redeemed",
+	})
+	require.Equal(t, forbidden, err, "the authorizer's rejection must surface, not a handler error")
+
+	require.Len(t, schemes, 2, "session scheme tried first, then the key scheme")
+	require.Equal(t, "session", schemes[0].Name)
+	require.Empty(t, schemes[0].RequiredScopes)
+	require.Equal(t, "apikey", schemes[1].Name)
+	require.Equal(t, []string{"agent_user"}, schemes[1].RequiredScopes,
+		"key auth must demand agent_user; removing the design's Scope() regenerates this away and fails here")
 }
