@@ -81,7 +81,6 @@ export function EvidencePanel({
         exposure={document.exposure}
         identity={document.identity}
       />
-      <OrgKnowledgeSection />
     </div>
   );
 }
@@ -340,16 +339,7 @@ function AuthoritySection({
               Scopes it will ask to be granted — the one item here the
               authorization server actually enforces:
             </p>
-            <div className="flex flex-wrap gap-1">
-              {authority.scopes.map((scope) => (
-                <span
-                  key={scope}
-                  className="border-border border px-1.5 py-px font-mono text-xs"
-                >
-                  {scope}
-                </span>
-              ))}
-            </div>
+            <ScopeChips scopes={authority.scopes} />
           </div>
         )}
       </div>
@@ -361,6 +351,53 @@ function AuthoritySection({
         </div>
       )}
     </EvidenceGroup>
+  );
+}
+
+/** How many scope chips show before the rest collapses behind the toggle. */
+const SCOPE_PREVIEW_COUNT = 4;
+
+/**
+ * The wrap of scope chips, with the tail collapsed behind a "+N more" toggle
+ * chip once the list exceeds the preview count.
+ */
+function ScopeChips({ scopes }: { scopes: string[] }): JSX.Element {
+  const [expanded, setExpanded] = useState(false);
+  const collapsible = scopes.length > SCOPE_PREVIEW_COUNT;
+  const visible =
+    collapsible && !expanded ? scopes.slice(0, SCOPE_PREVIEW_COUNT) : scopes;
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {visible.map((scope) => (
+        <span
+          key={scope}
+          className="border-border border px-1.5 py-px font-mono text-xs"
+        >
+          {scope}
+        </span>
+      ))}
+      {collapsible && (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((current) => !current)}
+          className="text-muted-foreground hover:text-foreground flex items-center gap-1 px-1.5 py-px text-xs"
+        >
+          {expanded ? (
+            <>
+              Show fewer
+              <ChevronUp className="size-3" />
+            </>
+          ) : (
+            <>
+              +{scopes.length - SCOPE_PREVIEW_COUNT} more
+              <ChevronDown className="size-3" />
+            </>
+          )}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -957,17 +994,6 @@ function ExposureSection({
         </div>
       )}
       <FactList facts={facts} />
-    </EvidenceGroup>
-  );
-}
-
-function OrgKnowledgeSection(): JSX.Element {
-  return (
-    <EvidenceGroup question="What do we already know?">
-      <UnknownBlock>
-        Nothing on file — existing contract and prior security review are
-        unrecorded.
-      </UnknownBlock>
     </EvidenceGroup>
   );
 }
