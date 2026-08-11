@@ -125,7 +125,7 @@ func TestValidatePrincipal(t *testing.T) {
 	require.ErrorIs(t, err, ErrPrincipalNotFound)
 
 	err = ValidatePrincipal(ctx, conn, organizationID, urn.NewPrincipal(urn.PrincipalTypeRole, "principal-validator"))
-	require.ErrorContains(t, err, "invalid role principal")
+	require.ErrorIs(t, err, ErrPrincipalInvalid)
 }
 
 func seedActiveOrganizationUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, userID string) {

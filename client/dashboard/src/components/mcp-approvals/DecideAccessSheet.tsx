@@ -206,11 +206,13 @@ export function DecideAccessSheet({
       });
     } catch {
       // The request row exists (and now sits in the queue); only the
-      // decision failed. Saying "nothing changed" here would be a lie.
+      // decision failed. Saying "nothing changed" here would be a lie — and
+      // an existing review that just absorbed a promoted bypass request is
+      // not unchanged either.
       toast.error(
-        target.approvalRequestId
+        target.approvalRequestId && !target.pendingBypassRequestId
           ? "Recording the decision failed — the request is unchanged"
-          : "The access request was opened, but recording the decision failed — retry to decide it",
+          : "The access request was opened or updated, but recording the decision failed — retry to decide it",
       );
       if (!target.approvalRequestId || target.pendingBypassRequestId) {
         // This submit changed request state before failing; refresh the

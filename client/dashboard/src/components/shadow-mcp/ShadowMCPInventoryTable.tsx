@@ -43,7 +43,7 @@ const REVIEW_FILTER_OPTIONS = [
   { value: "requested", label: "Awaiting decision" },
   { value: "approved", label: "Approved" },
   { value: "denied", label: "Denied" },
-  { value: "unreviewed", label: "Not reviewed" },
+  { value: "unreviewed", label: "Review initiated" },
   { value: "none", label: "No review" },
 ];
 
@@ -386,10 +386,15 @@ export function ShadowMCPInventoryTable({
     columns,
     sort,
   ) as ShadowMCPInventoryServer[];
+  const reviewFilterLabel = REVIEW_FILTER_OPTIONS.find(
+    (option) => option.value === reviewFilter,
+  )?.label;
   const noResultsMessage =
     normalizedSearch.length > 0
       ? `No servers matching “${search.trim()}”`
-      : undefined;
+      : reviewFilterLabel
+        ? `No servers with review state “${reviewFilterLabel}”`
+        : undefined;
 
   if (isInitialLoading) {
     return <SkeletonTable />;

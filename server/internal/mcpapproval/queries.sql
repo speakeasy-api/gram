@@ -99,7 +99,8 @@ SELECT
     ) AS requester_count
 FROM mcp_approval_requests r
 WHERE r.project_id = @project_id
-  AND r.deleted IS FALSE;
+  AND r.deleted IS FALSE
+ORDER BY r.updated_at DESC, r.id DESC;
 
 -- name: ListServerURLApprovalRequests :many
 -- Every server_url review in a project, for resolving a server page slug to

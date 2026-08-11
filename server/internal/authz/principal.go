@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -86,7 +87,9 @@ func ResolveUserPrincipals(ctx context.Context, db repo.DBTX, organizationID str
 // ValidatePrincipal verifies that principal is a valid grant target in the
 // organization. Unlike ResolveUserPrincipals, this is strict: concrete users
 // must be active organization members and role principals must identify an
-// active role in the organization.
+// active role in the organization. Caller-input problems are reported via
+// ErrPrincipalInvalid and ErrPrincipalNotFound; any other error is an
+// infrastructure failure, not a verdict on the principal.
 func ValidatePrincipal(ctx context.Context, db repo.DBTX, organizationID string, principal urn.Principal) error {
 	if organizationID == "" {
 		return fmt.Errorf("organization id is required")
@@ -113,27 +116,30 @@ func ValidatePrincipal(ctx context.Context, db repo.DBTX, organizationID string,
 	case urn.PrincipalTypeRole:
 		roleKind, rawRoleID, ok := strings.Cut(principal.ID, ":")
 		if !ok {
-			return fmt.Errorf("invalid role principal %q", principal.String())
+			return fmt.Errorf("%w: role principal %q", ErrPrincipalInvalid, principal.String())
 		}
 		if roleKind != "organization" && roleKind != "global" {
-			return fmt.Errorf("invalid role principal %q", principal.String())
+			return fmt.Errorf("%w: role principal %q", ErrPrincipalInvalid, principal.String())
 		}
 		roleID, err := uuid.Parse(rawRoleID)
 		if err != nil {
-			return fmt.Errorf("invalid role principal %q: %w", principal.String(), err)
+			return fmt.Errorf("%w: role principal %q: %w", ErrPrincipalInvalid, principal.String(), err)
 		}
 		row, err := repo.New(db).GetOrganizationRoleByID(ctx, repo.GetOrganizationRoleByIDParams{
 			OrganizationID: organizationID,
 			ID:             roleID,
 		})
 		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("validate role principal %q: %w", principal.String(), ErrPrincipalNotFound)
+			}
 			return fmt.Errorf("validate role principal %q: %w", principal.String(), err)
 		}
 		if row.RoleUrn != principal.String() {
-			return fmt.Errorf("role principal %q does not match active role %q", principal.String(), row.RoleUrn)
+			return fmt.Errorf("%w: role principal %q does not match active role %q", ErrPrincipalNotFound, principal.String(), row.RoleUrn)
 		}
 	default:
-		return fmt.Errorf("unsupported principal type %q", principal.Type)
+		return fmt.Errorf("%w: unsupported principal type %q", ErrPrincipalInvalid, principal.Type)
 	}
 
 	return nil

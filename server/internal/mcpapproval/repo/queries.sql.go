@@ -456,6 +456,7 @@ SELECT
 FROM mcp_approval_requests r
 WHERE r.project_id = $1
   AND r.deleted IS FALSE
+ORDER BY r.updated_at DESC, r.id DESC
 `
 
 type ListApprovalRequestTargetsRow struct {

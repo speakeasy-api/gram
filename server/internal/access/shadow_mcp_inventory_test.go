@@ -1353,6 +1353,18 @@ func TestService_ListShadowMCPInventory_UnionsRequestOnlyTargets(t *testing.T) {
 			LastSeen:           now.Add(-1 * time.Hour),
 			UpdatedAt:          now.Add(-1 * time.Hour),
 		},
+		// A second observed server so a one-row page spills past the limit
+		// and produces a real cursor for the later-pages assertion.
+		{
+			GramProjectID:      projectID,
+			CanonicalServerURL: "https://observed-2.example.com/mcp",
+			URLHost:            "observed-2.example.com",
+			ServerName:         "Observed MCP Two",
+			SeenAt:             now.Add(-4 * time.Hour),
+			FirstSeen:          now.Add(-4 * time.Hour),
+			LastSeen:           now.Add(-3 * time.Hour),
+			UpdatedAt:          now.Add(-3 * time.Hour),
+		},
 	}))
 
 	// Observed AND requested: must appear once, as the observed row.
@@ -1369,7 +1381,7 @@ func TestService_ListShadowMCPInventory_UnionsRequestOnlyTargets(t *testing.T) {
 		Limit:     10,
 	})
 	require.NoError(t, err)
-	require.Len(t, result.Servers, 3)
+	require.Len(t, result.Servers, 4)
 
 	byURL := make(map[string]*gen.ShadowMCPInventoryServer, len(result.Servers))
 	for _, server := range result.Servers {
@@ -1395,15 +1407,26 @@ func TestService_ListShadowMCPInventory_UnionsRequestOnlyTargets(t *testing.T) {
 	require.NotNil(t, stdioRow.ApprovalRequest)
 	require.Equal(t, stdio.ID.String(), stdioRow.ApprovalRequest.ID)
 
-	// Later pages carry no synthesized rows.
+	// Later pages carry no synthesized rows: a one-row page spills the
+	// observed set past the limit, and the cursor-driven second page holds
+	// only observed servers.
+	firstPage, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
+		ProjectID: projectID,
+		Limit:     1,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, firstPage.NextCursor)
+
 	paged, err := ti.service.ListShadowMCPInventory(ctx, &gen.ListShadowMCPInventoryPayload{
 		ProjectID: projectID,
-		Limit:     10,
-		Cursor:    conv.PtrEmpty("nonsense-cursor"),
+		Limit:     1,
+		Cursor:    firstPage.NextCursor,
 	})
-	if err == nil {
-		for _, server := range paged.Servers {
-			require.NotEqual(t, "npx -y example-package", server.CanonicalServerURL)
-		}
+	require.NoError(t, err)
+	require.NotEmpty(t, paged.Servers)
+	for _, server := range paged.Servers {
+		require.Equal(t, "server_url", *server.TargetKind)
+		require.NotEqual(t, "npx -y example-package", server.CanonicalServerURL)
+		require.NotEqual(t, "https://asked-only.example.com/mcp", server.CanonicalServerURL)
 	}
 }

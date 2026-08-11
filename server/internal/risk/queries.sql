@@ -421,6 +421,23 @@ WHERE id = @id
   AND deleted IS FALSE
 RETURNING *;
 
+-- name: ResolveRequestedRiskPolicyBypassRequest :one
+-- Resolves a bypass request only while it still awaits a decision. Used when
+-- a promoted approval review is decided: a row already decided through the
+-- legacy queue keeps its recorded outcome instead of being overwritten by
+-- the review's.
+UPDATE risk_policy_bypass_requests
+SET status = @status
+  , decided_by = @decided_by
+  , granted_principal_urns = @granted_principal_urns
+  , decided_at = clock_timestamp()
+  , updated_at = clock_timestamp()
+WHERE id = @id
+  AND project_id = @project_id
+  AND status = 'requested'
+  AND deleted IS FALSE
+RETURNING *;
+
 -- name: CreateCustomDetectionRule :one
 INSERT INTO risk_custom_detection_rules (
     project_id

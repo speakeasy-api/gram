@@ -818,7 +818,13 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid granted principal urn")
 		}
 		if err := authz.ValidatePrincipal(ctx, s.db, organizationID, principal); err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "granted principal does not resolve in this organization")
+			// Only a verdict on the principal is the caller's error; an
+			// infrastructure failure during the lookup must not read as
+			// invalid input.
+			if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {
+				return nil, oops.E(oops.CodeBadRequest, err, "granted principal does not resolve in this organization")
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "error validating granted principal").LogError(ctx, s.logger)
 		}
 		grantedPrincipals = append(grantedPrincipals, principal)
 	}
@@ -909,17 +915,18 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 	// A promoted request carries the legacy bypass request it grew out of.
 	// The decision resolves that ask too — in the same transaction — so a
 	// promoted request cannot stay pending in the legacy queue (and on the
-	// inventory's request counters) after its review is decided.
+	// inventory's request counters) after its review is decided. Only a
+	// still-requested row resolves: one already decided (or deleted) through
+	// the legacy drain keeps its recorded outcome, and the decision on the
+	// review itself still stands.
 	if request.RiskPolicyBypassRequestID.Valid {
-		if _, err := riskrepo.New(dbtx).UpdateRiskPolicyBypassRequestStatus(ctx, riskrepo.UpdateRiskPolicyBypassRequestStatusParams{
+		if _, err := riskrepo.New(dbtx).ResolveRequestedRiskPolicyBypassRequest(ctx, riskrepo.ResolveRequestedRiskPolicyBypassRequestParams{
 			Status:               statusFor[payload.Decision],
 			DecidedBy:            conv.ToPGText(authCtx.UserID),
 			GrantedPrincipalUrns: granted,
 			ID:                   request.RiskPolicyBypassRequestID.UUID,
 			ProjectID:            projectID,
 		}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			// A since-deleted bypass request has nothing left to resolve; the
-			// decision on the review itself still stands.
 			return nil, oops.E(oops.CodeUnexpected, err, "error resolving promoted bypass request").LogError(ctx, s.logger)
 		}
 	}

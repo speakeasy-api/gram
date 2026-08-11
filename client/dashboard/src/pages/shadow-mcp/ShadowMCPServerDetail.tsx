@@ -285,7 +285,12 @@ function EnsureServerReview({
           },
         });
       } catch {
-        setFailed(true);
+        // A failure only marks the run it belongs to: navigating to another
+        // server starts a new run, and a stale rejection must not overwrite
+        // that server's state.
+        if (startedRunRef.current === runKey) {
+          setFailed(true);
+        }
         return;
       }
       await Promise.all([

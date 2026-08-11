@@ -358,6 +358,7 @@ function renderInventoryTable(
   shadowMCPPolicies = [blockingPolicy()],
   roles: Role[] = [],
   members: AccessMember[] = [],
+  onOpenServer?: (server: ShadowMCPInventoryServer) => void,
 ) {
   const queryClient = new QueryClient();
 
@@ -366,6 +367,7 @@ function renderInventoryTable(
       <QueryClientProvider client={queryClient}>
         <ShadowMCPInventoryTable
           members={members}
+          onOpenServer={onOpenServer}
           policyState={policyState}
           projectID={projectID}
           roles={roles}
@@ -655,9 +657,16 @@ describe("ShadowMCPInventoryTable", () => {
         }),
       ],
     });
-    const onOpenServer = vi.fn();
+    const onOpenServer = vi.fn<(server: ShadowMCPInventoryServer) => void>();
 
-    renderInventoryTable();
+    renderInventoryTable(
+      "project-id-1",
+      "blocking",
+      [blockingPolicy()],
+      [],
+      [],
+      onOpenServer,
+    );
 
     await waitFor(() => {
       expect(screen.getByText("npx -y example-package")).toBeTruthy();
