@@ -327,6 +327,7 @@ export function SignalDrawer({
                 <ExclusionEditor
                   state={exclusionState}
                   onDone={() => setExclusionState(null)}
+                  embedded
                   secondaryAction={
                     <Button
                       variant="tertiary"

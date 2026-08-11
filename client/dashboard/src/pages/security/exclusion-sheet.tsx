@@ -68,12 +68,15 @@ export function ExclusionEditor({
   state,
   onDone,
   secondaryAction,
+  embedded,
 }: {
   state: ExclusionSheetState;
   onDone: () => void;
   /** Optional extra control rendered beside the save button — see
    * {@link ExclusionFormProps.secondaryAction}. */
   secondaryAction?: ReactNode;
+  /** See {@link ExclusionFormProps.embedded}. */
+  embedded?: boolean;
 }): JSX.Element {
   const queryClient = useQueryClient();
   const { data: policyData } = useRiskListPolicies();
@@ -119,6 +122,7 @@ export function ExclusionEditor({
       state={state}
       submitting={submitting}
       secondaryAction={secondaryAction}
+      embedded={embedded}
       onSubmit={({ fields, scope, enabled }) => {
         const riskPolicyId = scope === GLOBAL_SCOPE ? undefined : scope;
         if (editing) {
@@ -205,6 +209,9 @@ interface ExclusionFormProps {
   /** Optional extra control rendered beside the save button (e.g. the
    * Watchdog drawer's Back button when the editor is embedded in place). */
   secondaryAction?: ReactNode;
+  /** Embedded hosts (the Watchdog drawer) control their own horizontal
+   * inset, so the form drops the standalone sheet's px-6 padding. */
+  embedded?: boolean;
 }
 
 function ExclusionForm({
@@ -213,6 +220,7 @@ function ExclusionForm({
   submitting,
   onSubmit,
   secondaryAction,
+  embedded = false,
 }: ExclusionFormProps) {
   const editing = state.mode === "edit" ? state.exclusion : null;
   const results = state.mode === "create" ? (state.results ?? []) : [];
@@ -324,7 +332,12 @@ function ExclusionForm({
 
   return (
     <>
-      <div className="flex-1 space-y-5 overflow-y-auto px-6 py-2">
+      <div
+        className={cn(
+          "flex-1 space-y-5 overflow-y-auto py-2",
+          !embedded && "px-6",
+        )}
+      >
         {options.length > 1 && (
           <div className="space-y-2">
             <Label>What should we stop flagging?</Label>
@@ -442,7 +455,9 @@ function ExclusionForm({
 
       <SheetFooter
         className={cn(
-          "px-6 pb-6",
+          "pb-6",
+          !embedded && "px-6",
+          embedded && "px-0",
           secondaryAction && "flex-row items-center justify-between",
         )}
       >
