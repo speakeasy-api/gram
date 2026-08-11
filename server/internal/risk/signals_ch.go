@@ -175,7 +175,7 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 	prevScores := make([]float64, 0, len(aggregates))
 	for _, agg := range aggregates {
 		if agg.FindingsPrev > 0 {
-			prevScores = append(prevScores, signalScore(maxPolicyScore(agg.PolicyIDs, policyScores), agg.Category))
+			prevScores = append(prevScores, signalScore(maxPolicyScore(agg.PolicyIDsPrev, policyScores), agg.Category))
 		}
 	}
 
@@ -189,7 +189,7 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 	signals := make([]*gen.RiskSignal, 0, len(aggregates))
 	scores := make([]float64, 0, len(aggregates))
 	for _, agg := range aggregates {
-		score := signalScore(maxPolicyScore(agg.PolicyIDs, policyScores), agg.Category)
+		score := signalScore(maxPolicyScore(agg.PolicyIDsCur, policyScores), agg.Category)
 		scores = append(scores, score)
 
 		topUsers := topUsersByRule[agg.RuleID]

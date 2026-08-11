@@ -286,9 +286,13 @@ func TestGetRiskSignals_PolicyScoreDrivesBase(t *testing.T) {
 	attributed := chOverviewFinding(t, projectID, orgID, chat, msg(), from.Add(36*time.Hour), "gitleaks", "secret.github_pat", "alice@example.com")
 	attributed.RiskPolicyID = policy.ID
 	bare := chOverviewFinding(t, projectID, orgID, chat, msg(), from.Add(37*time.Hour), "gitleaks", "secret.aws_access_key", "alice@example.com")
+	// Previous-window finding for the SAME rule, without policy attribution:
+	// the policy that matched only the current window must not leak into the
+	// previous-window baseline.
+	prevBare := chOverviewFinding(t, projectID, orgID, chat, msg(), from.Add(-24*time.Hour), "gitleaks", "secret.github_pat", "alice@example.com")
 
 	chQueries := chrepo.New(ti.chConn)
-	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{attributed, bare}))
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{attributed, bare, prevBare}))
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
 	result, err := ti.service.GetRiskSignals(ctx, &gen.GetRiskSignalsPayload{
@@ -312,4 +316,10 @@ func TestGetRiskSignals_PolicyScoreDrivesBase(t *testing.T) {
 	fallback := byRule["secret.aws_access_key"]
 	require.NotNil(t, fallback)
 	require.InDelta(t, 8.5, fallback.RiskScore, 0.001)
+
+	// The previous-window baseline scores its unattributed finding at the
+	// category weight (8.5) — not the 2.0 policy that only matched the
+	// current window: 0.5*8.5 + 0.3*8.5 + 0.2*1.2*log10(2) = 6.87 -> 6.9.
+	// A window-union policy leak would drag this down to 1.7.
+	require.InDelta(t, 6.9, result.PreviousOrgRiskScore, 0.001)
 }
