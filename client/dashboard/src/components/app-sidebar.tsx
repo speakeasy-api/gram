@@ -90,6 +90,7 @@ export function AppSidebar({
   const isAssistantsEnabled = navAccess.has(routes.assistants.url);
   const isOrgMemoryEnabled = navAccess.has(routes.orgMemory.url);
   const isDeploymentsPageEnabled = navAccess.has(routes.deployments.url);
+  const isRiskWatchdogEnabled = navAccess.has(routes.watchdog.url);
 
   // Shared with the page-title eyebrow (Page.Eyebrow) so the sidebar group
   // highlight and the page header always agree on the area. "Organization"
@@ -180,9 +181,25 @@ export function AppSidebar({
             Icon={(p) => <Icon {...p} name="shield" />}
             stage="beta"
             items={[
-              { item: routes.riskOverview, ...accessFor(routes.riskOverview) },
+              // Watchdog supersedes Risk Overview and Risk Events: exactly one
+              // of the two sets shows, mirroring useProjectNavRoutes.
+              ...(isRiskWatchdogEnabled
+                ? [{ item: routes.watchdog, ...accessFor(routes.watchdog) }]
+                : [
+                    {
+                      item: routes.riskOverview,
+                      ...accessFor(routes.riskOverview),
+                    },
+                  ]),
               { item: routes.policyCenter, ...accessFor(routes.policyCenter) },
-              { item: routes.riskEvents, ...accessFor(routes.riskEvents) },
+              ...(isRiskWatchdogEnabled
+                ? []
+                : [
+                    {
+                      item: routes.riskEvents,
+                      ...accessFor(routes.riskEvents),
+                    },
+                  ]),
               { item: routes.shadowMCP, ...accessFor(routes.shadowMCP) },
               {
                 item: routes.detectionRules,
