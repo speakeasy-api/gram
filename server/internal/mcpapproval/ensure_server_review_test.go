@@ -238,6 +238,93 @@ func TestEnsureServerReview_GappedDossierRetriesTheGather(t *testing.T) {
 	require.Equal(t, audits, auditsAfter, "the refresh path must not audit a create")
 }
 
+// The gap retry is rate limited: a second view of a still-gapped dossier
+// inside the cooldown reads the stored document as-is instead of paying for
+// another gather, so a persistent source outage does not turn every page view
+// into user-visible gather latency and load on the struggling sources.
+func TestEnsureServerReview_GapRetryHonoursCooldown(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	target := "https://cooldown.example.com/mcp"
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{
+		targetKey: target,
+		status:    "unreviewed",
+		evidence:  `{"identity":{"kind":"remote","version_pinned":false},"gaps":["exposure_lookup_failed"]}`,
+		version:   1,
+	})
+
+	// The first view retries the gather and records the attempt.
+	first, err := ti.service.EnsureServerReview(ctx, ensurePayload(target))
+	require.NoError(t, err)
+	require.Equal(t, requestID.String(), first.ID)
+
+	// Plant a gapped document again, standing in for a retry whose gather
+	// still recorded gaps: the stored document stays gapped and the attempt
+	// has been spent.
+	gapped := `{"identity":{"kind":"remote","version_pinned":false},"gaps":["exposure_lookup_failed"]}`
+	seedEvidence(t, ctx, ti, ti.projectID, requestID, gapped, 1)
+	seeded, err := ti.repo.GetApprovalRequest(ctx, repo.GetApprovalRequestParams{ID: requestID, ProjectID: ti.projectID})
+	require.NoError(t, err)
+
+	again, err := ti.service.EnsureServerReview(ctx, ensurePayload(target))
+	require.NoError(t, err)
+	require.Equal(t, requestID.String(), again.ID)
+
+	after, err := ti.repo.GetApprovalRequest(ctx, repo.GetApprovalRequestParams{ID: requestID, ProjectID: ti.projectID})
+	require.NoError(t, err)
+	require.Equal(t, seeded.EvidenceCollectedAt.Time, after.EvidenceCollectedAt.Time, "a view inside the cooldown must not re-gather")
+	require.JSONEq(t, gapped, string(after.CurrentEvidence), "the stored gapped document is served as-is")
+}
+
+// The refresh write is a compare-and-set on the document the refresher read:
+// once a concurrent refresh has replaced the evidence, a slower gather holding
+// the older observation matches nothing rather than clobbering the newer
+// document.
+func TestRefreshApprovalRequestEvidence_StaleObservationWritesNothing(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{
+		targetKey: "https://cas.example.com/mcp",
+		status:    "unreviewed",
+		evidence:  `{"identity":{"kind":"remote","version_pinned":false},"gaps":["exposure_lookup_failed"]}`,
+		version:   1,
+	})
+	seeded, err := ti.repo.GetApprovalRequest(ctx, repo.GetApprovalRequestParams{ID: requestID, ProjectID: ti.projectID})
+	require.NoError(t, err)
+
+	// The winner observed the seeded document and replaces it.
+	winner := []byte(`{"identity":{"kind":"remote","version_pinned":false}}`)
+	affected, err := ti.repo.RefreshApprovalRequestEvidence(ctx, repo.RefreshApprovalRequestEvidenceParams{
+		CurrentEvidence:     winner,
+		EvidenceVersion:     1,
+		ID:                  requestID,
+		ProjectID:           ti.projectID,
+		ObservedCollectedAt: seeded.EvidenceCollectedAt,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, affected)
+
+	// The loser still holds the pre-race observation; its write must land on
+	// zero rows and leave the winner's document in place.
+	affected, err = ti.repo.RefreshApprovalRequestEvidence(ctx, repo.RefreshApprovalRequestEvidenceParams{
+		CurrentEvidence:     []byte(`{"identity":{"kind":"remote","version_pinned":false},"gaps":["package_lookup_failed"]}`),
+		EvidenceVersion:     1,
+		ID:                  requestID,
+		ProjectID:           ti.projectID,
+		ObservedCollectedAt: seeded.EvidenceCollectedAt,
+	})
+	require.NoError(t, err)
+	require.Zero(t, affected)
+
+	final, err := ti.repo.GetApprovalRequest(ctx, repo.GetApprovalRequestParams{ID: requestID, ProjectID: ti.projectID})
+	require.NoError(t, err)
+	require.JSONEq(t, string(winner), string(final.CurrentEvidence))
+}
+
 func TestEnsureServerReview_RejectsNonURLTargets(t *testing.T) {
 	t.Parallel()
 
