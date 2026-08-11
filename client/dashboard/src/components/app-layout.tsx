@@ -8,9 +8,7 @@ import { cn } from "@/lib/utils";
 import { DEMO_ORG_SLUG, PRE_DEMO_ORG_KEY } from "@/lib/demo";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
-import { ModalProvider } from "@/components/ui/context/ModalContext";
 import { Icon } from "@/components/ui/Icon";
-import { Modal } from "@/components/ui/Modal";
 import { ShieldAlert } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
@@ -56,11 +54,9 @@ export const AppLayout = (): JSX.Element => {
         } as React.CSSProperties
       }
     >
-      <ModalProvider>
-        <SidePanelProvider>
-          <AppLayoutContent isImpersonating={isImpersonating} />
-        </SidePanelProvider>
-      </ModalProvider>
+      <SidePanelProvider>
+        <AppLayoutContent isImpersonating={isImpersonating} />
+      </SidePanelProvider>
     </SidebarProvider>
   );
 };
@@ -165,11 +161,6 @@ const AppLayoutContent = ({
             <MembershipSyncGuard>
               <Outlet />
             </MembershipSyncGuard>
-            <Modal
-              closable
-              className="h-full max-h-[450px] min-h-auto w-9/12 max-w-[1100px] min-w-auto p-0 2xl:w-2/3 2xl:max-w-[1000px]"
-              layout="custom"
-            />
           </GlobalInsightsWrapper>
         </SidebarInset>
         {/* Sibling of the content, not an overlay: the page reflows into the
@@ -259,19 +250,17 @@ export const OrgLayout = (): JSX.Element => {
         } as React.CSSProperties
       }
     >
-      <ModalProvider>
-        <div className="flex h-screen w-full flex-col">
-          {isImpersonating && <ImpersonationBanner />}
-          <div className="flex w-full flex-1 overflow-hidden">
-            <OrgSidebar variant="inset" />
-            <SidebarInset>
-              <MembershipSyncGuard>
-                <Outlet />
-              </MembershipSyncGuard>
-            </SidebarInset>
-          </div>
+      <div className="flex h-screen w-full flex-col">
+        {isImpersonating && <ImpersonationBanner />}
+        <div className="flex w-full flex-1 overflow-hidden">
+          <OrgSidebar variant="inset" />
+          <SidebarInset>
+            <MembershipSyncGuard>
+              <Outlet />
+            </MembershipSyncGuard>
+          </SidebarInset>
         </div>
-      </ModalProvider>
+      </div>
     </SidebarProvider>
   );
 };

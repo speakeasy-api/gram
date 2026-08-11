@@ -983,6 +983,7 @@ dependencies = [
  "agentkit-tools-derive",
  "async-trait",
  "axum",
+ "base64",
  "chrono",
  "clap",
  "dashmap",

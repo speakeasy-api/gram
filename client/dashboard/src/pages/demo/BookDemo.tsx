@@ -31,7 +31,7 @@ export default function BookDemo(): JSX.Element {
         <button
           type="button"
           onClick={() => void handleLogout()}
-          className="auth-mono text-[12px] text-[var(--muted)] transition-colors hover:text-black"
+          className="auth-mono text-[13px] leading-none text-(--muted) transition-colors hover:text-black"
         >
           Log out
         </button>
@@ -41,7 +41,7 @@ export default function BookDemo(): JSX.Element {
       <div className="mt-6 text-center">
         <Link
           to="/explore-demo"
-          className="auth-mono text-[12px] text-[var(--muted)] underline underline-offset-4 transition-colors hover:text-black"
+          className="auth-mono text-xs text-(--muted) underline underline-offset-4 transition-colors hover:text-black"
         >
           Or explore a live demo org →
         </Link>

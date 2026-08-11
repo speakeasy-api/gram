@@ -137,7 +137,7 @@ function FilterPill({
   );
 }
 
-export function ChallengesEmptyState({
+function ChallengesEmptyState({
   outcomeFilter,
 }: {
   outcomeFilter: OutcomeFilter;

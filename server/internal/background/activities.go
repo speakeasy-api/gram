@@ -66,6 +66,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	"github.com/speakeasy-api/gram/server/internal/trialemails"
 )
 
 type Publishers struct {
@@ -155,6 +156,7 @@ type Activities struct {
 	chatAnalysisScorer              *activities.ChatAnalysisScorer
 	remoteSessionRefresh            *activities.RemoteSessionRefresh
 	demoteExpiredTrials             *activities.DemoteExpiredTrials
+	trialEmails                     *trialemails.Service
 }
 
 func NewActivities(
@@ -201,6 +203,7 @@ func NewActivities(
 	celEng *celenv.Engine,
 	judgeRateLimiter *ratelimit.Limiter,
 	builtinPresets *presetlib.Library,
+	trialEmailsService *trialemails.Service,
 ) *Activities {
 	// Spend rule evaluation reads ClickHouse; workers without a ClickHouse
 	// connection get a nil repo and the activity fails loudly if scheduled.
@@ -352,6 +355,7 @@ func NewActivities(
 		),
 		skillSuggestionAnalyzer: skillSuggestionAnalyzer,
 		remoteSessionRefresh:    remoteSessionRefresh,
+		trialEmails:             trialEmailsService,
 		// The judges draw on the same per-(org, model) bucket and the same
 		// completion client as every other platform judge, so chat analysis
 		// cannot outspend the org's key behind their backs.
@@ -361,6 +365,32 @@ func NewActivities(
 			analysis.NewPublisher(logger, tracerProvider, db, telemetryRepo, telemetryLogger, chatAnalysisJudges),
 			&TemporalChatAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger},
 		),
+	}
+}
+
+func (a *Activities) SendTrialLifecycleEmail(ctx context.Context, input TrialLifecycleEmailInput) error {
+	if a.trialEmails == nil {
+		return fmt.Errorf("trial email service is not configured")
+	}
+
+	switch input.Kind {
+	case TrialStartedEmailKind:
+		if err := a.trialEmails.TrialStarted(ctx, input.OrganizationID); err != nil {
+			return fmt.Errorf("trial started: %w", err)
+		}
+		return nil
+	case AdminAddedEmailKind:
+		if err := a.trialEmails.AdminAdded(ctx, input.OrganizationID, input.UserID); err != nil {
+			return fmt.Errorf("admin added: %w", err)
+		}
+		return nil
+	case TrialInactiveEmailKind:
+		if err := a.trialEmails.TrialInactive(ctx, input.OrganizationID); err != nil {
+			return fmt.Errorf("trial inactive: %w", err)
+		}
+		return nil
+	default:
+		return fmt.Errorf("unsupported trial lifecycle email kind %q", input.Kind)
 	}
 }
 

@@ -44,6 +44,7 @@ const routes = {
   policyCenter: route("Risk Policies", "risk-policies"),
   riskEvents: route("Risk Events", "risk-events"),
   riskOverview: route("Risk Overview", "risk"),
+  watchdog: route("Watchdog", "watchdog"),
   settings: route("Project settings", "settings"),
   shadowMCP: route("Shadow MCP", "shadow-mcp"),
   sources: route("Sources", "sources"),
@@ -79,6 +80,7 @@ beforeEach(() => {
   testState.featureFlags = {
     [FEATURE_FLAGS.assistants]: unavailableFeatureFlag("loading"),
     [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag("loading"),
+    [FEATURE_FLAGS.riskWatchdog]: unavailableFeatureFlag("loading"),
   };
 });
 
@@ -124,13 +126,18 @@ describe("useProjectNavRoutes", () => {
       testState.featureFlags = {
         [FEATURE_FLAGS.assistants]: unavailableFeatureFlag(status),
         [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag(status),
+        [FEATURE_FLAGS.riskWatchdog]: unavailableFeatureFlag(status),
       };
 
       const { result } = renderHook(() => useProjectNavRoutes());
       const navRoutes = result.current.map((entry) => entry.route);
 
       expect(navRoutes).not.toContain(routes.assistants);
+      expect(navRoutes).not.toContain(routes.watchdog);
       expect(navRoutes).toContain(routes.deployments);
+      // Without Watchdog, the legacy risk pages stay in the nav.
+      expect(navRoutes).toContain(routes.riskOverview);
+      expect(navRoutes).toContain(routes.riskEvents);
     },
   );
 
@@ -138,12 +145,17 @@ describe("useProjectNavRoutes", () => {
     testState.featureFlags = {
       [FEATURE_FLAGS.assistants]: { status: "enabled" },
       [FEATURE_FLAGS.deploymentsPage]: { status: "disabled" },
+      [FEATURE_FLAGS.riskWatchdog]: { status: "enabled" },
     };
 
     const { result } = renderHook(() => useProjectNavRoutes());
     const navRoutes = result.current.map((entry) => entry.route);
 
     expect(navRoutes).toContain(routes.assistants);
+    expect(navRoutes).toContain(routes.watchdog);
     expect(navRoutes).not.toContain(routes.deployments);
+    // Watchdog supersedes the legacy risk pages in the nav.
+    expect(navRoutes).not.toContain(routes.riskOverview);
+    expect(navRoutes).not.toContain(routes.riskEvents);
   });
 });

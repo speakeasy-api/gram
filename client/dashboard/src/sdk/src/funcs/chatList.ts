@@ -123,6 +123,7 @@ async function $do(
     "source": payload?.source,
     "source_kind": payload?.source_kind,
     "to": payload?.to,
+    "user_id": payload?.user_id,
   });
 
   const headers = new Headers(compactMap({

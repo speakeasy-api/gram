@@ -42,10 +42,12 @@ var rawToCanonicalSource = func() map[string]string {
 	return m
 }()
 
-// canonicalSource returns the canonical source for a raw message source. Input
+// CanonicalSource returns the canonical source for a raw message source. Input
 // is trimmed; whitespace-only values return "" so callers can drop them. Values
-// without a known alias are returned trimmed and unchanged.
-func canonicalSource(raw string) string {
+// without a known alias are returned trimmed and unchanged. Exported for the
+// risk finding writer, which stamps the canonical slug onto ClickHouse rows so
+// the LowCardinality column stays clean and values match the agent-type filter.
+func CanonicalSource(raw string) string {
 	s := strings.TrimSpace(raw)
 	if s == "" {
 		return ""
@@ -63,7 +65,7 @@ func canonicalizeSources(raws []string) []string {
 	seen := make(map[string]struct{}, len(raws))
 	out := make([]string, 0, len(raws))
 	for _, raw := range raws {
-		s := canonicalSource(raw)
+		s := CanonicalSource(raw)
 		if s == "" {
 			continue
 		}

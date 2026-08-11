@@ -67,6 +67,10 @@ const (
 	// Postgres, which is the only store holding raw match content. Per-org
 	// rollout gate; removed once the ClickHouse read path is GA.
 	FlagRiskListFromClickHouse Flag = "risk-list-from-clickhouse"
+	// FlagRiskWatchdog gates the Watchdog signals endpoint (risk.getSignals).
+	// Key matches the dashboard's page-level flag so a single PostHog flag
+	// controls both the UI and the API surface.
+	FlagRiskWatchdog Flag = "gram-risk-watchdog"
 
 	// FlagHooksRollout gates the phased rollout of new observability (hooks)
 	// plugin generator versions. Unlike the other flags it is consulted via its
