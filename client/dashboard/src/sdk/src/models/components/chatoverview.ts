@@ -34,6 +34,10 @@ export type ChatOverview = {
    */
   externalUserId?: string | undefined;
   /**
+   * Number of distinct active findings whose policy severity is high or critical (score >= 7.0). Only populated by endpoints that join risk data.
+   */
+  highRiskFindingsCount?: number | undefined;
+  /**
    * The ID of the chat
    */
   id: string;
@@ -41,6 +45,14 @@ export type ChatOverview = {
    * When the last message in the chat was created.
    */
   lastMessageTimestamp: Date;
+  /**
+   * Number of distinct active findings (same dedup as risk_findings_count) whose policy severity is low (score < 4.0). Only populated by endpoints that join risk data.
+   */
+  lowRiskFindingsCount?: number | undefined;
+  /**
+   * Number of distinct active findings whose policy severity is medium (4.0 <= score < 7.0). Only populated by endpoints that join risk data.
+   */
+  mediumRiskFindingsCount?: number | undefined;
   /**
    * The number of messages in the chat
    */
@@ -50,7 +62,7 @@ export type ChatOverview = {
    */
   pinned?: boolean | undefined;
   /**
-   * Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
+   * Number of distinct risk findings recorded against messages in this chat (deduped by source/rule/match; project-scoped, found=true, excluding excluded and false-positive results). Only populated by endpoints that join risk data; absent elsewhere.
    */
   riskFindingsCount?: number | undefined;
   /**
@@ -112,11 +124,14 @@ export const ChatOverview$inboundSchema: z.ZodMiniType<ChatOverview, unknown> =
         z.transform(v => new Date(v)),
       ),
       external_user_id: z.optional(z.string()),
+      high_risk_findings_count: z.optional(z.int()),
       id: z.string(),
       last_message_timestamp: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
       ),
+      low_risk_findings_count: z.optional(z.int()),
+      medium_risk_findings_count: z.optional(z.int()),
       num_messages: z.int(),
       pinned: z.optional(z.boolean()),
       risk_findings_count: z.optional(z.int()),
@@ -145,7 +160,10 @@ export const ChatOverview$inboundSchema: z.ZodMiniType<ChatOverview, unknown> =
         "assistant_name": "assistantName",
         "created_at": "createdAt",
         "external_user_id": "externalUserId",
+        "high_risk_findings_count": "highRiskFindingsCount",
         "last_message_timestamp": "lastMessageTimestamp",
+        "low_risk_findings_count": "lowRiskFindingsCount",
+        "medium_risk_findings_count": "mediumRiskFindingsCount",
         "num_messages": "numMessages",
         "risk_findings_count": "riskFindingsCount",
         "summary_generated_at": "summaryGeneratedAt",

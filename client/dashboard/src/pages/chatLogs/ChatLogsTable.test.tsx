@@ -20,7 +20,17 @@ vi.mock("@/components/ui/Icon", () => ({
 }));
 
 vi.mock("@/components/ui/Tooltip", () => ({
-  SimpleTooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
+  SimpleTooltip: ({
+    tooltip,
+    children,
+  }: {
+    tooltip: string;
+    children: ReactNode;
+  }) => (
+    <div data-testid="tooltip-content" data-tooltip={tooltip}>
+      {children}
+    </div>
+  ),
 }));
 
 vi.mock("@gram/client/react-query/members.js", () => ({
@@ -181,5 +191,61 @@ describe("ChatLogsTable", () => {
 
     expect(screen.getByText("Ada Lovelace")).toBeTruthy();
     expect(screen.queryByText("user_01HXXXXXXXXXXXXXXXXXXXXXXX")).toBeNull();
+  });
+
+  it("colors the low severity band with the success token, not neutral gray", () => {
+    const { container } = renderTable(
+      <ChatLogsTable
+        chats={[
+          {
+            ...makeChat("chat_01HXQ1P84WV3S9J7Z52DKVE7NE"),
+            lowRiskFindingsCount: 1,
+            riskFindingsCount: 1,
+          },
+        ]}
+        onDeleteChat={() => {
+          /* test stub */
+        }}
+        onSelectChat={() => {
+          /* test stub */
+        }}
+        isLoading={false}
+        error={null}
+      />,
+    );
+
+    expect(container.querySelector(".bg-success-foreground")).toBeTruthy();
+    expect(container.querySelector(".bg-foreground\\/60")).toBeNull();
+  });
+
+  it("labels the risk histogram tooltip by finding counts, not a percentage of messages", () => {
+    renderTable(
+      <ChatLogsTable
+        chats={[
+          {
+            ...makeChat("chat_01HXQ1P84WV3S9J7Z52DKVE7NE"),
+            numMessages: 1,
+            lowRiskFindingsCount: 3,
+            riskFindingsCount: 3,
+          },
+        ]}
+        onDeleteChat={() => {
+          /* test stub */
+        }}
+        onSelectChat={() => {
+          /* test stub */
+        }}
+        isLoading={false}
+        error={null}
+      />,
+    );
+
+    const riskTooltip = screen
+      .getAllByTestId("tooltip-content")
+      .find((el) => el.textContent?.includes("Risk"));
+    const tooltip = riskTooltip?.dataset["tooltip"];
+    expect(tooltip).toBe("Low: 3 findings");
+    expect(tooltip).not.toContain("%");
+    expect(tooltip).not.toContain("of messages");
   });
 });

@@ -59,6 +59,10 @@ export type Chat = {
    */
   hasMoreBefore: boolean;
   /**
+   * Number of distinct active findings whose policy severity is high or critical (score >= 7.0). Only populated by endpoints that join risk data.
+   */
+  highRiskFindingsCount?: number | undefined;
+  /**
    * The ID of the chat
    */
   id: string;
@@ -67,6 +71,10 @@ export type Chat = {
    */
   lastMessageTimestamp: Date;
   /**
+   * Number of distinct active findings (same dedup as risk_findings_count) whose policy severity is low (score < 4.0). Only populated by endpoints that join risk data.
+   */
+  lowRiskFindingsCount?: number | undefined;
+  /**
    * Present only when `query` was requested: contiguous runs of returned messages, each spanning one or more query matches and their surrounding context. Use each segment's cursors to expand it.
    */
   matchSegments?: Array<RiskSegment> | undefined;
@@ -74,6 +82,10 @@ export type Chat = {
    * The highest generation number present for this chat. To load the full history, walk from `max_generation` down to 0, requesting each generation in turn.
    */
   maxGeneration: number;
+  /**
+   * Number of distinct active findings whose policy severity is medium (4.0 <= score < 7.0). Only populated by endpoints that join risk data.
+   */
+  mediumRiskFindingsCount?: number | undefined;
   /**
    * The list of messages in the chat for the returned generation, ordered oldest to newest by `seq`.
    */
@@ -87,7 +99,7 @@ export type Chat = {
    */
   pinned?: boolean | undefined;
   /**
-   * Number of risk findings recorded against messages in this chat (project-scoped, found=true). Only populated by endpoints that join risk data; absent elsewhere.
+   * Number of distinct risk findings recorded against messages in this chat (deduped by source/rule/match; project-scoped, found=true, excluding excluded and false-positive results). Only populated by endpoints that join risk data; absent elsewhere.
    */
   riskFindingsCount?: number | undefined;
   /**
@@ -165,13 +177,16 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
     generation: z.int(),
     has_more_after: z.boolean(),
     has_more_before: z.boolean(),
+    high_risk_findings_count: z.optional(z.int()),
     id: z.string(),
     last_message_timestamp: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    low_risk_findings_count: z.optional(z.int()),
     match_segments: z.optional(z.array(RiskSegment$inboundSchema)),
     max_generation: z.int(),
+    medium_risk_findings_count: z.optional(z.int()),
     messages: z.array(ChatMessage$inboundSchema),
     num_messages: z.int(),
     pinned: z.optional(z.boolean()),
@@ -208,9 +223,12 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
       "external_user_id": "externalUserId",
       "has_more_after": "hasMoreAfter",
       "has_more_before": "hasMoreBefore",
+      "high_risk_findings_count": "highRiskFindingsCount",
       "last_message_timestamp": "lastMessageTimestamp",
+      "low_risk_findings_count": "lowRiskFindingsCount",
       "match_segments": "matchSegments",
       "max_generation": "maxGeneration",
+      "medium_risk_findings_count": "mediumRiskFindingsCount",
       "num_messages": "numMessages",
       "risk_findings_count": "riskFindingsCount",
       "risk_segments": "riskSegments",

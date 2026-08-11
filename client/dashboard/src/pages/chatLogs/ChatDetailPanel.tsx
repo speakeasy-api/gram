@@ -158,6 +158,47 @@ function findingKey(r: RiskResult): string {
   return `${r.source}|${r.ruleId ?? ""}|${r.match ?? ""}`;
 }
 
+/** Adjust list-cache risk counts after an exclusion. RiskResult carries no
+ * policy score, so band attribution is best-effort: if only one severity band
+ * was non-zero, decrement that band; if the total hits zero, clear all bands;
+ * otherwise leave the band split alone (color may briefly overstate until
+ * reconcile) while still dropping the deduped total. */
+function applyOptimisticRiskExclusion(
+  chat: ChatOverview,
+  removed: number,
+): ChatOverview {
+  const nextTotal = Math.max(0, (chat.riskFindingsCount ?? 0) - removed);
+  const low = chat.lowRiskFindingsCount ?? 0;
+  const medium = chat.mediumRiskFindingsCount ?? 0;
+  const high = chat.highRiskFindingsCount ?? 0;
+  const bands = { low, medium, high } as const;
+  const active = (["high", "medium", "low"] as const).filter(
+    (band) => bands[band] > 0,
+  );
+
+  let nextLow = low;
+  let nextMedium = medium;
+  let nextHigh = high;
+  if (nextTotal === 0) {
+    nextLow = 0;
+    nextMedium = 0;
+    nextHigh = 0;
+  } else if (active.length === 1) {
+    const band = active[0];
+    if (band === "low") nextLow = Math.max(0, low - removed);
+    else if (band === "medium") nextMedium = Math.max(0, medium - removed);
+    else nextHigh = Math.max(0, high - removed);
+  }
+
+  return {
+    ...chat,
+    riskFindingsCount: nextTotal,
+    lowRiskFindingsCount: nextLow,
+    mediumRiskFindingsCount: nextMedium,
+    highRiskFindingsCount: nextHigh,
+  };
+}
+
 function getTraceId(chatId: string): string {
   return `trace-${chatId.slice(0, 3)}`;
 }
@@ -1425,30 +1466,26 @@ function ChatDetailPanel({
         next.add(pendingExclusionKey);
         return next;
       });
-      // The server reconcile lags, so refetching chat.list still returns the old
-      // per-session risk count. Optimistically drop this chat's count in the
-      // Agent Sessions list cache by the findings the exclusion suppresses here.
+      // The server reconcile lags, so refetching chat.list still returns the
+      // old per-session risk counts. Optimistically drop this chat's deduped
+      // totals in the Agent Sessions list cache. Dedup key includes
+      // risk_policy_id, so count distinct policies among the suppressed rows
+      // (not raw row count) — matching what the list indicator displays.
+      const matching = (riskData?.results ?? []).filter(
+        (r) => findingKey(r) === pendingExclusionKey,
+      );
       const removed =
-        (riskData?.results ?? []).filter(
-          (r) => findingKey(r) === pendingExclusionKey,
-        ).length || 1;
+        new Set(matching.map((r) => r.policyId)).size || matching.length || 1;
       queryClient.setQueriesData<{ chats?: ChatOverview[] }>(
         { queryKey: ["@gram/client", "chat", "list"] },
         (old) => {
           if (!old?.chats) return old;
           return {
             ...old,
-            chats: old.chats.map((c) =>
-              c.id === chatId
-                ? {
-                    ...c,
-                    riskFindingsCount: Math.max(
-                      0,
-                      (c.riskFindingsCount ?? 0) - removed,
-                    ),
-                  }
-                : c,
-            ),
+            chats: old.chats.map((c) => {
+              if (c.id !== chatId) return c;
+              return applyOptimisticRiskExclusion(c, removed);
+            }),
           };
         },
       );
