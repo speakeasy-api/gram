@@ -199,10 +199,6 @@ func (l *LocalRuntimeBackend) ServerURL() *url.URL { return l.config.ServerURL }
 
 func (l *LocalRuntimeBackend) ImageRef() string { return l.desiredImageRef() }
 
-// ReusesIdleRuntimes is true: Stop leaves the container and its workspace
-// volume in place, and the next admission restarts the same container.
-func (l *LocalRuntimeBackend) ReusesIdleRuntimes() bool { return true }
-
 func (l *LocalRuntimeBackend) desiredImageRef() string {
 	return runtimeImageRef(l.config.OCIImage, l.config.ImageTag)
 }
@@ -301,8 +297,7 @@ func (l *LocalRuntimeBackend) runnerBusy(ctx context.Context, info localContaine
 	if err != nil {
 		return true
 	}
-	idle := state.minThreadIdle()
-	return idle != nil && *idle == 0
+	return state.turnInFlight()
 }
 
 // startContainer converges the named container onto a running, healthy state
