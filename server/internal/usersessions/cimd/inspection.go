@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
@@ -40,7 +41,10 @@ type Inspection struct {
 // surfaces only — never the OAuth endpoints, whose callers must not be able
 // to use Gram as a probe oracle for external hosts.
 func (r *Resolver) Inspect(ctx context.Context, clientID string) Inspection {
-	result := r.inspect(ctx, clientID)
+	// Always uncached. An operator asking what a URL serves is asking about
+	// right now, so answering from the copy the authorize path stored would
+	// defeat the point of the question.
+	result := r.inspect(ctx, clientID, CacheState{ExpiresAt: time.Time{}, ETag: ""})
 	return Inspection{
 		Outcome:    result.outcome,
 		Document:   result.Document,
@@ -71,6 +75,19 @@ type inspection struct {
 	// 200: the body ran past the size cap. Without it, every 200 that failed
 	// to read would be blamed on size.
 	tooLarge bool
+
+	// cacheOutcome is what the caller must persist, read only by Resolve.
+	// It is CacheOutcomeRefreshed on every path that ran a full fetch,
+	// including the failures, where Resolve discards it along with the rest
+	// of the result.
+	cacheOutcome CacheOutcome
+
+	// etag is the validator to persist, empty when the upstream offers none.
+	etag string
+
+	// ttl is the lifetime to add to the stored expiry, already clamped. Zero
+	// on CacheOutcomeCached, where the existing expiry stands.
+	ttl time.Duration
 }
 
 // detail renders the operator-facing explanation. Validation rejections reuse
