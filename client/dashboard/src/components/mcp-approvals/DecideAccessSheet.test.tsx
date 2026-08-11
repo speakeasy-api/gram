@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   invalidateInventoryServer: vi.fn(),
   invalidateApprovalList: vi.fn(),
   invalidateApprovalGet: vi.fn(),
+  invalidatePolicyInventory: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
 }));
@@ -64,6 +65,32 @@ vi.mock("@gram/client/react-query/listMcpApprovalRequests.js", () => ({
 
 vi.mock("@gram/client/react-query/getMcpApprovalRequest.js", () => ({
   invalidateGetMcpApprovalRequest: mocks.invalidateApprovalGet,
+}));
+
+vi.mock("@/components/shadow-mcp/useShadowMCPPolicyInventory", () => ({
+  invalidateShadowMCPPolicyInventory: mocks.invalidatePolicyInventory,
+}));
+
+// The real MultiSelect drives a Radix popover; the sheet only needs its
+// onValueChange plumbed through, so a marker button stands in.
+vi.mock("@/components/ui/MultiSelect", () => ({
+  MultiSelect: ({
+    onValueChange,
+    placeholder,
+  }: {
+    onValueChange: (values: string[]) => void;
+    placeholder?: string;
+  }) => (
+    <button
+      data-testid="audience-select"
+      onClick={() =>
+        onValueChange(["user:user-one", "role:organization:role-one"])
+      }
+      type="button"
+    >
+      {placeholder}
+    </button>
+  ),
 }));
 
 vi.mock("@tanstack/react-query", () => ({
@@ -256,5 +283,179 @@ describe("DecideAccessSheet", () => {
     });
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
     expect(mocks.invalidateInventory).not.toHaveBeenCalled();
+  });
+
+  it("retries onto the request the first submit created instead of opening another", async () => {
+    mocks.decideMutateAsync.mockRejectedValueOnce(new Error("boom"));
+    renderSheet();
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve Server" }));
+    await waitFor(() => {
+      expect(mocks.toastError).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.createMutateAsync).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve Server" }));
+    await waitFor(() => {
+      expect(mocks.decideMutateAsync).toHaveBeenCalledTimes(2);
+    });
+    // No second request was opened; the retry decided the same review.
+    expect(mocks.createMutateAsync).toHaveBeenCalledTimes(1);
+    expect(mocks.decideMutateAsync).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          recordDecisionRequestBody: expect.objectContaining({
+            id: "created-request-id",
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("retries onto the promoted request without promoting twice", async () => {
+    mocks.decideMutateAsync.mockRejectedValueOnce(new Error("boom"));
+    renderSheet({
+      target: { ...target, pendingBypassRequestId: "legacy-bypass-id" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve Server" }));
+    await waitFor(() => {
+      expect(mocks.toastError).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.promoteMutateAsync).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve Server" }));
+    await waitFor(() => {
+      expect(mocks.decideMutateAsync).toHaveBeenCalledTimes(2);
+    });
+    expect(mocks.promoteMutateAsync).toHaveBeenCalledTimes(1);
+    expect(mocks.createMutateAsync).not.toHaveBeenCalled();
+    expect(mocks.decideMutateAsync).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          recordDecisionRequestBody: expect.objectContaining({
+            id: "promoted-request-id",
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("sends the selected audience as the decision's granted principals", async () => {
+    renderSheet({
+      target: { ...target, approvalRequestId: "existing-request-id" },
+    });
+
+    fireEvent.click(screen.getByTestId("audience-select"));
+    fireEvent.click(screen.getByRole("button", { name: "Approve Server" }));
+
+    await waitFor(() => {
+      expect(mocks.decideMutateAsync).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.decideMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          recordDecisionRequestBody: expect.objectContaining({
+            decision: "approved",
+            grantedPrincipalUrns: [
+              "user:user-one",
+              "role:organization:role-one",
+            ],
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("says nothing changed when opening the request itself fails", async () => {
+    mocks.createMutateAsync.mockRejectedValue(new Error("boom"));
+    renderSheet();
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve Server" }));
+
+    await waitFor(() => {
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        "Opening the access request failed — nothing was changed",
+      );
+    });
+    expect(mocks.decideMutateAsync).not.toHaveBeenCalled();
+    expect(mocks.invalidateInventory).not.toHaveBeenCalled();
+    expect(mocks.invalidateApprovalList).not.toHaveBeenCalled();
+  });
+
+  it("admits the opened request and refreshes views when only the decision fails", async () => {
+    mocks.decideMutateAsync.mockRejectedValue(new Error("boom"));
+    renderSheet();
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve Server" }));
+
+    await waitFor(() => {
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        "The access request was opened or updated, but recording the decision failed — retry to decide it",
+      );
+    });
+    // The request row now exists; the affected views refresh so the pending
+    // request is visible.
+    expect(mocks.invalidateInventory).toHaveBeenCalled();
+    expect(mocks.invalidateInventoryServer).toHaveBeenCalled();
+    expect(mocks.invalidateApprovalList).toHaveBeenCalled();
+  });
+
+  it("says the request is unchanged when the decision fails on an existing review", async () => {
+    mocks.decideMutateAsync.mockRejectedValue(new Error("boom"));
+    renderSheet({
+      target: { ...target, approvalRequestId: "existing-request-id" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve Server" }));
+
+    await waitFor(() => {
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        "Recording the decision failed — the request is unchanged",
+      );
+    });
+    expect(mocks.invalidateInventory).not.toHaveBeenCalled();
+  });
+
+  it("invalidates the policy editor's inventory cache after a decision", async () => {
+    renderSheet({
+      target: { ...target, approvalRequestId: "existing-request-id" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve Server" }));
+
+    await waitFor(() => {
+      expect(mocks.toastSuccess).toHaveBeenCalled();
+    });
+    expect(mocks.invalidatePolicyInventory).toHaveBeenCalledWith(
+      expect.anything(),
+      "project-id",
+    );
+  });
+
+  it("ignores a second click while the first submit is still completing", async () => {
+    let finishInvalidation!: () => void;
+    mocks.invalidateInventory.mockReturnValue(
+      new Promise<void>((resolve) => {
+        finishInvalidation = resolve;
+      }),
+    );
+    renderSheet({
+      target: { ...target, approvalRequestId: "existing-request-id" },
+    });
+
+    const submitButton = screen.getByRole("button", { name: "Approve Server" });
+    fireEvent.click(submitButton);
+    await waitFor(() => {
+      expect(mocks.decideMutateAsync).toHaveBeenCalledTimes(1);
+    });
+
+    // The decision landed but the invalidations have not settled: the
+    // mutations all read idle here, and a second click must not append a
+    // duplicate decision.
+    fireEvent.click(submitButton);
+    expect(mocks.decideMutateAsync).toHaveBeenCalledTimes(1);
+
+    finishInvalidation();
   });
 });

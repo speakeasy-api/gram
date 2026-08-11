@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -101,6 +102,7 @@ vi.mock("@/components/mcp-approvals/DecideAccessSheet", () => ({
       approvalRequestId?: string;
       canonicalServerUrl: string;
       displayName: string;
+      pendingBypassRequestId?: string;
     } | null;
   }) =>
     open && target ? (
@@ -111,6 +113,7 @@ vi.mock("@/components/mcp-approvals/DecideAccessSheet", () => ({
         data-display-name={target.displayName}
         data-disposition={disposition ?? undefined}
         data-member-count={members.length}
+        data-pending-bypass-request-id={target.pendingBypassRequestId}
         data-role-count={roles.length}
       />
     ) : null,
@@ -821,6 +824,119 @@ describe("ShadowMCPServerDetail", () => {
     expect(screen.queryByText("Gathering evidence")).toBeNull();
     const review = screen.getByTestId("approval-review");
     expect(review.getAttribute("data-request-id")).toBe("request-2");
+  });
+
+  it("carries the pending legacy bypass request into the decide sheet", () => {
+    mocks.useShadowMCPInventoryServer.mockReturnValue({
+      data: inventoryServer({
+        approvalRequest: {
+          id: "request-1",
+          requesterCount: 1,
+          status: "requested",
+        },
+        latestRequest: {
+          id: "legacy-bypass-1",
+          policyId: "policy-1",
+          requestedAt: new Date("2026-01-03T10:00:00Z"),
+          requesterEmail: "alex@example.com",
+          requesterUserId: "user-1",
+        },
+        requestCount: 1,
+      }),
+      error: null,
+      isLoading: false,
+    });
+
+    renderDetailPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Review Request" }));
+
+    const sheet = screen.getByTestId("decide-access-sheet");
+    expect(sheet.getAttribute("data-pending-bypass-request-id")).toBe(
+      "legacy-bypass-1",
+    );
+  });
+
+  it("shows a failure panel when evidence gathering fails and retries on demand", async () => {
+    mocks.useShadowMCPInventoryServer.mockReturnValue({
+      data: inventoryServer({ approvalRequest: undefined }),
+      error: null,
+      isLoading: false,
+    });
+    mocks.ensureServerReview.mockRejectedValueOnce(new Error("gather failed"));
+    mocks.ensureServerReview.mockResolvedValue({});
+
+    renderDetailPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Evidence could not be gathered")).toBeTruthy();
+    });
+    expect(mocks.ensureServerReview).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    await waitFor(() => {
+      expect(mocks.ensureServerReview).toHaveBeenCalledTimes(2);
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("Evidence could not be gathered")).toBeNull();
+    });
+    expect(screen.getByText("Gathering evidence")).toBeTruthy();
+  });
+
+  it("does not let a stale failure mark a newer server's gather as failed", async () => {
+    const rejecters: Array<(error: Error) => void> = [];
+    mocks.ensureServerReview.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejecters.push(reject);
+        }),
+    );
+    mocks.useShadowMCPInventoryServer.mockReturnValue({
+      data: inventoryServer({ approvalRequest: undefined }),
+      error: null,
+      isLoading: false,
+    });
+
+    const queryClient = new QueryClient();
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <ShadowMCPServerDetail />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => {
+      expect(mocks.ensureServerReview).toHaveBeenCalledTimes(1);
+    });
+
+    // Navigating to another unreviewed server starts a new gather run.
+    mocks.useShadowMCPInventoryServer.mockReturnValue({
+      data: inventoryServer({
+        approvalRequest: undefined,
+        canonicalServerUrl: "https://other.example.com/mcp",
+        serverName: "Other MCP",
+        urlHost: "other.example.com",
+      }),
+      error: null,
+      isLoading: false,
+    });
+    view.rerender(
+      <QueryClientProvider client={queryClient}>
+        <ShadowMCPServerDetail />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => {
+      expect(mocks.ensureServerReview).toHaveBeenCalledTimes(2);
+    });
+
+    // The first server's rejection lands late; it belongs to an older run
+    // and must not fail the newer one.
+    await act(async () => {
+      rejecters[0]!(new Error("stale failure"));
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByText("Evidence could not be gathered")).toBeNull();
+    expect(screen.getByText("Gathering evidence")).toBeTruthy();
   });
 
   it("renders the refresh evidence control only when a review exists", () => {

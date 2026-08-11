@@ -20,6 +20,15 @@ import (
 func seedShadowMCPPolicy(t *testing.T, ctx context.Context, ti *testInstance, disposition string) uuid.UUID {
 	t.Helper()
 
+	return seedShadowMCPPolicyWith(t, ctx, ti, disposition, "block", true)
+}
+
+// seedShadowMCPPolicyWith plants a shadow-MCP policy with a chosen action and
+// enabled state. An empty disposition stays NULL, the way legacy policies
+// created before the disposition column exist in the wild.
+func seedShadowMCPPolicyWith(t *testing.T, ctx context.Context, ti *testInstance, disposition, action string, enabled bool) uuid.UUID {
+	t.Helper()
+
 	policyID := uuid.New()
 	_, err := riskrepo.New(ti.conn).CreateRiskPolicy(ctx, riskrepo.CreateRiskPolicyParams{
 		ID:                   policyID,
@@ -30,8 +39,8 @@ func seedShadowMCPPolicy(t *testing.T, ctx context.Context, ti *testInstance, di
 		AnalyzerConfig:       []byte(`{}`),
 		DisabledRules:        nil,
 		ScopeExempt:          pgtype.Text{},
-		Enabled:              true,
-		Action:               "block",
+		Enabled:              enabled,
+		Action:               action,
 		AudienceType:         "everyone",
 		AutoName:             false,
 		UserMessage:          pgtype.Text{},
@@ -250,4 +259,160 @@ func TestRecordDecision_NarrowApprovalComposesAcrossDispositions(t *testing.T) {
 
 	require.Equal(t, []string{principal}, grantPrincipals(t, ctx, ti, authz.ScopeRiskPolicyBypass, blockAllPolicy, serverURL))
 	require.Empty(t, grantPrincipals(t, ctx, ti, authz.ScopeRiskPolicyBlock, allowAllPolicy, serverURL))
+}
+
+// seedLegacyVariantBypassGrant plants a bypass grant the way legacy
+// access-request approvals persisted them: a selector carrying both the
+// server URL and a server identity. At runtime these evaluate URL-only, so a
+// decision that only revoked the exact URL-only selector would leave them
+// enforcing.
+func seedLegacyVariantBypassGrant(t *testing.T, ctx context.Context, ti *testInstance, policyID uuid.UUID, serverURL string, principal urn.Principal) {
+	t.Helper()
+
+	selector := authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID.String())
+	selector[authz.SelectorKeyServerURL] = serverURL
+	selector[authz.SelectorKeyServerIdentity] = "legacy-identity"
+
+	require.NoError(t, authz.GrantResourceToPrincipals(ctx, ti.conn, authz.ResourceGrant{
+		Resource: authz.Resource{
+			OrganizationID: ti.organizationID,
+			Scope:          authz.ScopeRiskPolicyBypass,
+			ResourceID:     policyID.String(),
+		},
+		Principals: []urn.Principal{principal},
+		Selector:   selector,
+	}))
+}
+
+// A recorded denial must strip legacy {server_url, server_identity} variant
+// grants too — those selectors evaluate URL-only at runtime, so leaving them
+// standing would let a legacy-approved user survive the deny.
+func TestRecordDecision_DenyRevokesLegacyVariantGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	policyID := seedShadowMCPPolicy(t, ctx, ti, "block_all")
+	serverURL := "https://mcp.example.com/legacy-variant"
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: serverURL, status: "requested", evidence: "", version: 0})
+
+	legacyPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, "legacy-approved-user")
+	seedLegacyVariantBypassGrant(t, ctx, ti, policyID, serverURL, legacyPrincipal)
+	require.Equal(t, []string{legacyPrincipal.String()}, grantPrincipals(t, ctx, ti, authz.ScopeRiskPolicyBypass, policyID, serverURL))
+
+	_, err := ti.service.RecordDecision(ctx, decisionPayload(requestID.String(), "denied"))
+	require.NoError(t, err)
+
+	require.Empty(t, grantPrincipals(t, ctx, ti, authz.ScopeRiskPolicyBypass, policyID, serverURL))
+}
+
+// An approval replaces the whole audience, legacy variants included: the
+// decision's principals are the audience afterwards, with no legacy grant
+// silently widening it.
+func TestRecordDecision_ApprovalReplacesLegacyVariantGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	policyID := seedShadowMCPPolicy(t, ctx, ti, "block_all")
+	serverURL := "https://mcp.example.com/legacy-replaced"
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: serverURL, status: "requested", evidence: "", version: 0})
+
+	legacyPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, "legacy-approved-user")
+	seedLegacyVariantBypassGrant(t, ctx, ti, policyID, serverURL, legacyPrincipal)
+
+	principal := seedMemberPrincipal(t, ctx, ti, "user-fresh-audience")
+	payload := decisionPayload(requestID.String(), "approved")
+	payload.GrantedPrincipalUrns = []string{principal}
+
+	_, err := ti.service.RecordDecision(ctx, payload)
+	require.NoError(t, err)
+
+	require.Equal(t, []string{principal}, grantPrincipals(t, ctx, ti, authz.ScopeRiskPolicyBypass, policyID, serverURL))
+}
+
+// A policy from before the disposition column carries NULL — which enforces
+// exactly like block_all, the way the policy setup flow defaults it.
+func TestRecordDecision_NullDispositionDefaultsToBlockAll(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	policyID := seedShadowMCPPolicyWith(t, ctx, ti, "", "block", true)
+	serverURL := "https://mcp.example.com/null-disposition"
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: serverURL, status: "requested", evidence: "", version: 0})
+
+	_, err := ti.service.RecordDecision(ctx, decisionPayload(requestID.String(), "approved"))
+	require.NoError(t, err)
+
+	require.Equal(t, []string{authz.AllUsersPrincipal().String()}, grantPrincipals(t, ctx, ti, authz.ScopeRiskPolicyBypass, policyID, serverURL))
+}
+
+// A denial then an approval re-mints the bypass audience under block_all: the
+// newest decision is what enforces, in either direction.
+func TestRecordDecision_DenyThenApproveRemintsGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	policyID := seedShadowMCPPolicy(t, ctx, ti, "block_all")
+	serverURL := "https://mcp.example.com/re-minted"
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: serverURL, status: "requested", evidence: "", version: 0})
+
+	_, err := ti.service.RecordDecision(ctx, decisionPayload(requestID.String(), "denied"))
+	require.NoError(t, err)
+	require.Empty(t, grantPrincipals(t, ctx, ti, authz.ScopeRiskPolicyBypass, policyID, serverURL))
+
+	_, err = ti.service.RecordDecision(ctx, decisionPayload(requestID.String(), "approved"))
+	require.NoError(t, err)
+	require.Equal(t, []string{authz.AllUsersPrincipal().String()}, grantPrincipals(t, ctx, ti, authz.ScopeRiskPolicyBypass, policyID, serverURL))
+
+	require.Equal(t, "approved", requestStatus(t, ctx, ti, ti.projectID, requestID))
+}
+
+// Only enabled blocking policies enforce a decision: flag policies and
+// disabled block policies are skipped entirely.
+func TestRecordDecision_SkipsNonBlockingAndDisabledPolicies(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	flagPolicy := seedShadowMCPPolicyWith(t, ctx, ti, "block_all", "flag", true)
+	disabledPolicy := seedShadowMCPPolicyWith(t, ctx, ti, "block_all", "block", false)
+	serverURL := "https://mcp.example.com/skipped-policies"
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: serverURL, status: "requested", evidence: "", version: 0})
+
+	_, err := ti.service.RecordDecision(ctx, decisionPayload(requestID.String(), "approved"))
+	require.NoError(t, err)
+
+	for _, policyID := range []uuid.UUID{flagPolicy, disabledPolicy} {
+		grants, err := authz.ListGrantsForResource(ctx, ti.conn, authz.Resource{
+			OrganizationID: ti.organizationID,
+			Scope:          authz.ScopeRiskPolicyBypass,
+			ResourceID:     policyID.String(),
+		})
+		require.NoError(t, err)
+		require.Empty(t, grants)
+	}
+}
+
+// A role principal that names no role in the organization is the caller's
+// error: rejected as a bad request before anything is written, not recorded
+// as an audience the grants can never enforce.
+func TestRecordDecision_UnknownRolePrincipalRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	seedShadowMCPPolicy(t, ctx, ti, "block_all")
+	requestID := seedRequest(t, ctx, ti, ti.projectID, seededRequest{targetKey: "https://mcp.example.com/unknown-role", status: "requested", evidence: "", version: 0})
+
+	payload := decisionPayload(requestID.String(), "approved")
+	payload.GrantedPrincipalUrns = []string{urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+uuid.NewString()).String()}
+
+	_, err := ti.service.RecordDecision(ctx, payload)
+	requireOopsCode(t, err, oops.CodeBadRequest)
+
+	require.Empty(t, decisionsFor(t, ctx, ti, ti.projectID, requestID))
+	require.Equal(t, "requested", requestStatus(t, ctx, ti, ti.projectID, requestID))
 }

@@ -17,6 +17,11 @@ import type { Role } from "@gram/client/models/components/role.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import type { DecideAccessTarget } from "@/components/mcp-approvals/DecideAccessSheet";
 import type { ShadowMCPPolicyDisposition } from "./shadowMCPInventoryStatus";
+import {
+  matchesReviewFilter,
+  observedDate,
+  reviewSortRank,
+} from "./shadowMCPInventoryReview";
 import { ShadowMCPInventoryTable } from "./ShadowMCPInventoryTable";
 
 const mocks = vi.hoisted(() => ({
@@ -54,6 +59,7 @@ vi.mock("@/components/mcp-approvals/DecideAccessSheet", () => ({
         data-approval-request-id={props.target.approvalRequestId}
         data-canonical-server-url={props.target.canonicalServerUrl}
         data-display-name={props.target.displayName}
+        data-pending-bypass-request-id={props.target.pendingBypassRequestId}
         data-testid="decide-access-sheet"
       />
     );
@@ -1078,6 +1084,51 @@ describe("ShadowMCPInventoryTable", () => {
     expect(screen.queryByText("Enabled MCP")).toBeFalsy();
   });
 
+  it("carries the pending legacy bypass request into the decide sheet", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          canonicalServerUrl: "https://pending.example.com/mcp",
+          approvalRequest: {
+            id: "approval-1",
+            requesterCount: 1,
+            status: "requested",
+          },
+          latestRequest: {
+            id: "legacy-bypass-1",
+            policyId: "policy-1",
+            requestedAt: new Date("2026-01-03T10:00:00Z"),
+            requesterEmail: "alex@example.com",
+            requesterUserId: "user-1",
+          },
+          requestCount: 1,
+        }),
+      ],
+    });
+
+    renderInventoryTable();
+
+    await waitFor(() => {
+      expect(screen.getByText("https://pending.example.com/mcp")).toBeTruthy();
+    });
+
+    const lastCall = mocks.rowContextMenu.mock.lastCall as
+      | [Array<{ label: string; onClick: () => void }>]
+      | undefined;
+    if (!lastCall) {
+      throw new Error("Row context menu was not rendered");
+    }
+    act(() => {
+      lastCall[0][0]!.onClick();
+    });
+
+    const sheet = await screen.findByTestId("decide-access-sheet");
+    expect(sheet.getAttribute("data-approval-request-id")).toBe("approval-1");
+    expect(sheet.getAttribute("data-pending-bypass-request-id")).toBe(
+      "legacy-bypass-1",
+    );
+  });
+
   it("renders observed status when blocking is inactive", async () => {
     mockShadowMCPInventory({
       servers: [
@@ -1096,5 +1147,85 @@ describe("ShadowMCPInventoryTable", () => {
     });
     expect(screen.getByText("Observed")).toBeTruthy();
     expect(screen.getByText("Not blocking")).toBeTruthy();
+  });
+});
+
+describe("matchesReviewFilter", () => {
+  const url = "https://filtered.example.com/mcp";
+
+  it("passes every server when no filter is set", () => {
+    expect(
+      matchesReviewFilter(
+        inventoryServer({ canonicalServerUrl: url }),
+        undefined,
+      ),
+    ).toBe(true);
+    expect(
+      matchesReviewFilter(inventoryServer({ canonicalServerUrl: url }), ""),
+    ).toBe(true);
+  });
+
+  it("matches servers by their review status", () => {
+    const requested = inventoryServer({
+      canonicalServerUrl: url,
+      approvalRequest: { id: "r1", requesterCount: 1, status: "requested" },
+    });
+    expect(matchesReviewFilter(requested, "requested")).toBe(true);
+    expect(matchesReviewFilter(requested, "approved")).toBe(false);
+    expect(matchesReviewFilter(requested, "none")).toBe(false);
+  });
+
+  it("treats an unreviewed dossier and no review as the same 'none' state", () => {
+    const noReview = inventoryServer({ canonicalServerUrl: url });
+    const unreviewed = inventoryServer({
+      canonicalServerUrl: url,
+      approvalRequest: { id: "r1", requesterCount: 0, status: "unreviewed" },
+    });
+    expect(matchesReviewFilter(noReview, "none")).toBe(true);
+    expect(matchesReviewFilter(unreviewed, "none")).toBe(true);
+    // Neither shape reads as any decided state.
+    expect(matchesReviewFilter(unreviewed, "approved")).toBe(false);
+    expect(matchesReviewFilter(noReview, "requested")).toBe(false);
+  });
+});
+
+describe("reviewSortRank", () => {
+  const url = "https://ranked.example.com/mcp";
+
+  it("sorts pending decisions first, decided next, unreviewed last", () => {
+    const rank = (
+      status?: "requested" | "approved" | "denied" | "unreviewed",
+    ) =>
+      reviewSortRank(
+        inventoryServer({
+          canonicalServerUrl: url,
+          approvalRequest: status
+            ? { id: "r1", requesterCount: 0, status }
+            : undefined,
+        }),
+      );
+
+    expect(rank("requested")).toBe(0);
+    expect(rank("approved")).toBe(1);
+    expect(rank("denied")).toBe(1);
+    // An unreviewed dossier is a storage detail, not a state: it ranks with
+    // "no review".
+    expect(rank("unreviewed")).toBe(2);
+    expect(rank(undefined)).toBe(2);
+    expect(rank("requested")).toBeLessThan(rank("approved"));
+    expect(rank("approved")).toBeLessThan(rank("unreviewed"));
+  });
+});
+
+describe("observedDate", () => {
+  it("treats the zero time as never observed", () => {
+    expect(observedDate(undefined)).toBeUndefined();
+    expect(observedDate(new Date(0))).toBeUndefined();
+    expect(observedDate(new Date(-1))).toBeUndefined();
+  });
+
+  it("passes real telemetry timestamps through", () => {
+    const seen = new Date("2026-01-02T10:00:00Z");
+    expect(observedDate(seen)).toBe(seen);
   });
 });
