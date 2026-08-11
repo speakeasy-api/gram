@@ -616,6 +616,56 @@ func (s *Service) GetRemoteSessionIssuer(ctx context.Context, payload *gen.GetRe
 	return mv.BuildRemoteSessionIssuerView(issuer), nil
 }
 
+// GetRemoteSessionIssuerDuplicatePreflight reports the issuers this project can
+// already see that describe a given upstream authorization server, so a create
+// or edit form can warn before adding a second record for one issuer.
+//
+// Both inherited tiers are in scope, matching GetRemoteSessionIssuer's issuer
+// arm: an organization-level or platform record describing this URL is one the
+// project may attach its own client to instead. The project arm stays
+// project_id = this project, so a sibling project's records never surface.
+func (s *Service) GetRemoteSessionIssuerDuplicatePreflight(ctx context.Context, payload *gen.GetRemoteSessionIssuerDuplicatePreflightPayload) (*types.RemoteSessionIssuerDuplicatePreflight, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
+
+	canonical, err := parseCanonicalIssuerURL(conv.PtrValOrEmpty(payload.Issuer, ""))
+	if err != nil {
+		return emptyIssuerDuplicatePreflight(), nil
+	}
+
+	// Reuses the resolver's own query rather than a preflight-specific one, so
+	// the two can never disagree about which records describe a URL. It carries
+	// no LIMIT, because precedence resolution needs the whole candidate set;
+	// buildIssuerDuplicatePreflight truncates the response instead.
+	candidates, err := repo.New(s.db).ListRemoteSessionIssuersByIssuerURL(ctx, repo.ListRemoteSessionIssuersByIssuerURLParams{
+		Issuers:               canonical.matchCandidates(),
+		ProjectID:             uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
+		IncludeOrganizational: true,
+		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
+		IncludeGlobal:         true,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list remote session issuers by issuer url").LogError(ctx, logger)
+	}
+
+	// projectName stays empty at this tier: every project-specific match belongs
+	// to the caller's own project, which the caller is already looking at.
+	rows := make([]issuerDuplicateCandidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		rows = append(rows, issuerDuplicateCandidateFromRecord(candidate))
+	}
+
+	return buildIssuerDuplicatePreflight(rows), nil
+}
+
 // DeleteRemoteSessionIssuer soft-deletes an issuer. Blocked when any
 // non-deleted remote_session_clients still reference it.
 func (s *Service) DeleteRemoteSessionIssuer(ctx context.Context, payload *gen.DeleteRemoteSessionIssuerPayload) error {

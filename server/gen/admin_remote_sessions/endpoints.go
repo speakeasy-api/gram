@@ -17,6 +17,7 @@ import (
 // Endpoints wraps the "adminRemoteSessions" service endpoints.
 type Endpoints struct {
 	CreateGlobalIssuer                    goa.Endpoint
+	GetGlobalIssuerDuplicatePreflight     goa.Endpoint
 	ListGlobalIssuers                     goa.Endpoint
 	GetGlobalIssuer                       goa.Endpoint
 	UpdateGlobalIssuer                    goa.Endpoint
@@ -40,6 +41,7 @@ func NewEndpoints(s Service) *Endpoints {
 	a := s.(Auther)
 	return &Endpoints{
 		CreateGlobalIssuer:                    NewCreateGlobalIssuerEndpoint(s, a.APIKeyAuth),
+		GetGlobalIssuerDuplicatePreflight:     NewGetGlobalIssuerDuplicatePreflightEndpoint(s, a.APIKeyAuth),
 		ListGlobalIssuers:                     NewListGlobalIssuersEndpoint(s, a.APIKeyAuth),
 		GetGlobalIssuer:                       NewGetGlobalIssuerEndpoint(s, a.APIKeyAuth),
 		UpdateGlobalIssuer:                    NewUpdateGlobalIssuerEndpoint(s, a.APIKeyAuth),
@@ -61,6 +63,7 @@ func NewEndpoints(s Service) *Endpoints {
 // endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateGlobalIssuer = m(e.CreateGlobalIssuer)
+	e.GetGlobalIssuerDuplicatePreflight = m(e.GetGlobalIssuerDuplicatePreflight)
 	e.ListGlobalIssuers = m(e.ListGlobalIssuers)
 	e.GetGlobalIssuer = m(e.GetGlobalIssuer)
 	e.UpdateGlobalIssuer = m(e.UpdateGlobalIssuer)
@@ -97,6 +100,30 @@ func NewCreateGlobalIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 			return nil, err
 		}
 		return s.CreateGlobalIssuer(ctx, p)
+	}
+}
+
+// NewGetGlobalIssuerDuplicatePreflightEndpoint returns an endpoint function
+// that calls the method "getGlobalIssuerDuplicatePreflight" of service
+// "adminRemoteSessions".
+func NewGetGlobalIssuerDuplicatePreflightEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetGlobalIssuerDuplicatePreflightPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetGlobalIssuerDuplicatePreflight(ctx, p)
 	}
 }
 

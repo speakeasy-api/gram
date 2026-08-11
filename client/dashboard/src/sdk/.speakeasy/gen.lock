@@ -71,6 +71,7 @@ trackedFiles:
   src/funcs/adminRemoteSessionsFetchGlobalIssuerMetadata.ts: {}
   src/funcs/adminRemoteSessionsGetGlobalClient.ts: {}
   src/funcs/adminRemoteSessionsGetGlobalIssuer.ts: {}
+  src/funcs/adminRemoteSessionsGetGlobalIssuerDuplicatePreflight.ts: {}
   src/funcs/adminRemoteSessionsGetGlobalIssuerMigratePreflight.ts: {}
   src/funcs/adminRemoteSessionsListGlobalClients.ts: {}
   src/funcs/adminRemoteSessionsListGlobalIssuerConvergenceCandidates.ts: {}
@@ -277,6 +278,7 @@ trackedFiles:
   src/funcs/organizationRemoteSessionIssuersFetchMetadata.ts: {}
   src/funcs/organizationRemoteSessionIssuersGet.ts: {}
   src/funcs/organizationRemoteSessionIssuersGetDeletePreflight.ts: {}
+  src/funcs/organizationRemoteSessionIssuersGetDuplicatePreflight.ts: {}
   src/funcs/organizationRemoteSessionIssuersGetMigratePreflight.ts: {}
   src/funcs/organizationRemoteSessionIssuersList.ts: {}
   src/funcs/organizationRemoteSessionIssuersMigrate.ts: {}
@@ -357,6 +359,7 @@ trackedFiles:
   src/funcs/remoteSessionIssuersDelete.ts: {}
   src/funcs/remoteSessionIssuersFetchMetadata.ts: {}
   src/funcs/remoteSessionIssuersGet.ts: {}
+  src/funcs/remoteSessionIssuersGetDuplicatePreflight.ts: {}
   src/funcs/remoteSessionIssuersList.ts: {}
   src/funcs/remoteSessionIssuersRefreshMetadata.ts: {}
   src/funcs/remoteSessionIssuersUpdate.ts: {}
@@ -1045,6 +1048,8 @@ trackedFiles:
   src/models/components/remotesessionclient.ts: {}
   src/models/components/remotesessionissuer.ts: {}
   src/models/components/remotesessionissuerdraft.ts: {}
+  src/models/components/remotesessionissuerduplicatematch.ts: {}
+  src/models/components/remotesessionissuerduplicatepreflight.ts: {}
   src/models/components/remotesessionissuerrefresh.ts: {}
   src/models/components/removeclientfrommcpserverrequestbody.ts: {}
   src/models/components/rendertemplatebyidrequestbody.ts: {}
@@ -1512,6 +1517,7 @@ trackedFiles:
   src/models/operations/getgcpsetupinfo.ts: {}
   src/models/operations/getglobalremotesessionclient.ts: {}
   src/models/operations/getglobalremotesessionissuer.ts: {}
+  src/models/operations/getglobalremotesessionissuerduplicatepreflight.ts: {}
   src/models/operations/getglobalremotesessionissuermigratepreflight.ts: {}
   src/models/operations/gethookssummary.ts: {}
   src/models/operations/getinstance.ts: {}
@@ -1531,6 +1537,7 @@ trackedFiles:
   src/models/operations/getorganizationremotesessionclientdeletepreflight.ts: {}
   src/models/operations/getorganizationremotesessionissuer.ts: {}
   src/models/operations/getorganizationremotesessionissuerdeletepreflight.ts: {}
+  src/models/operations/getorganizationremotesessionissuerduplicatepreflight.ts: {}
   src/models/operations/getorganizationremotesessionissuermigratepreflight.ts: {}
   src/models/operations/getotelforwardingconfig.ts: {}
   src/models/operations/getperiodusage.ts: {}
@@ -1544,6 +1551,7 @@ trackedFiles:
   src/models/operations/getremotemcpserverheader.ts: {}
   src/models/operations/getremotesessionclient.ts: {}
   src/models/operations/getremotesessionissuer.ts: {}
+  src/models/operations/getremotesessionissuerduplicatepreflight.ts: {}
   src/models/operations/getriskblock.ts: {}
   src/models/operations/getriskoverview.ts: {}
   src/models/operations/getriskpolicy.ts: {}
@@ -2131,6 +2139,8 @@ trackedFiles:
   src/react-query/globalRemoteSessionIssuer.ts: {}
   src/react-query/globalRemoteSessionIssuerConvergenceCandidates.core.ts: {}
   src/react-query/globalRemoteSessionIssuerConvergenceCandidates.ts: {}
+  src/react-query/globalRemoteSessionIssuerDuplicatePreflight.core.ts: {}
+  src/react-query/globalRemoteSessionIssuerDuplicatePreflight.ts: {}
   src/react-query/globalRemoteSessionIssuerMigratePreflight.core.ts: {}
   src/react-query/globalRemoteSessionIssuerMigratePreflight.ts: {}
   src/react-query/globalRemoteSessionIssuers.core.ts: {}
@@ -2287,6 +2297,8 @@ trackedFiles:
   src/react-query/organizationRemoteSessionIssuer.ts: {}
   src/react-query/organizationRemoteSessionIssuerDeletePreflight.core.ts: {}
   src/react-query/organizationRemoteSessionIssuerDeletePreflight.ts: {}
+  src/react-query/organizationRemoteSessionIssuerDuplicatePreflight.core.ts: {}
+  src/react-query/organizationRemoteSessionIssuerDuplicatePreflight.ts: {}
   src/react-query/organizationRemoteSessionIssuerMigratePreflight.core.ts: {}
   src/react-query/organizationRemoteSessionIssuerMigratePreflight.ts: {}
   src/react-query/organizationRemoteSessionIssuers.core.ts: {}
@@ -2330,6 +2342,8 @@ trackedFiles:
   src/react-query/remoteSessionClients.ts: {}
   src/react-query/remoteSessionIssuer.core.ts: {}
   src/react-query/remoteSessionIssuer.ts: {}
+  src/react-query/remoteSessionIssuerDuplicatePreflight.core.ts: {}
+  src/react-query/remoteSessionIssuerDuplicatePreflight.ts: {}
   src/react-query/remoteSessionIssuers.core.ts: {}
   src/react-query/remoteSessionIssuers.ts: {}
   src/react-query/remoteSessions.core.ts: {}
@@ -4607,6 +4621,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getGlobalRemoteSessionIssuerDuplicatePreflight:
+    speakeasy-default-get-global-remote-session-issuer-duplicate-preflight:
+      parameters:
+        query:
+          issuer: "visa"
+      responses:
+        "200":
+          application/json: {"matches": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   getGlobalRemoteSessionIssuerMigratePreflight:
     speakeasy-default-get-global-remote-session-issuer-migrate-preflight:
       parameters:
@@ -4814,6 +4840,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getOrganizationRemoteSessionIssuerDuplicatePreflight:
+    speakeasy-default-get-organization-remote-session-issuer-duplicate-preflight:
+      parameters:
+        query:
+          issuer: "mastercard"
+      responses:
+        "200":
+          application/json: {"matches": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   getOrganizationRemoteSessionIssuerMigratePreflight:
     speakeasy-default-get-organization-remote-session-issuer-migrate-preflight:
       parameters:
@@ -4969,6 +5007,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getRemoteSessionIssuerDuplicatePreflight:
+    speakeasy-default-get-remote-session-issuer-duplicate-preflight:
+      parameters:
+        query:
+          issuer: "visa"
+      responses:
+        "200":
+          application/json: {"matches": [{"id": "762ccb76-d7ba-4fbc-8fb8-653c254ed01a", "issuer": "american_express", "name": "<value>", "project_name": "<value>", "slug": "<value>", "tier": "organization-level"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getRiskBlock:
     speakeasy-default-get-risk-block:
       parameters:

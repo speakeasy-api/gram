@@ -3712,6 +3712,100 @@ paths:
       x-speakeasy-name-override: getGlobalIssuer
       x-speakeasy-react-hook:
         name: GlobalRemoteSessionIssuer
+  /rpc/adminRemoteSessions.getGlobalIssuerDuplicatePreflight:
+    get:
+      description: |-
+        Report the global remote_session_issuers that already describe an upstream issuer URL, so the catalog create and edit forms can warn before curating a second entry for the same authorization server. Requires platform admin.
+
+        Scoped to the global partition only. Tenant issuers naming the same URL are deliberately not reported here — listGlobalIssuerConvergenceCandidates is the surface for those, and it is keyed on a global issuer that already exists.
+
+        The global tier is unique on slug but not on issuer, so nothing prevents a duplicate catalog entry and this warning is the only thing that will catch one. Advisory all the same: it never blocks the write. Matching uses the same canonicalization as the tenant-facing preflights, and an unparseable URL returns no matches rather than an error.
+      operationId: getGlobalRemoteSessionIssuerDuplicatePreflight
+      parameters:
+        - allowEmptyValue: true
+          description: The upstream issuer URL being entered (e.g. https://login.linear.app). Empty or unparseable returns no matches.
+          in: query
+          name: issuer
+          schema:
+            description: The upstream issuer URL being entered (e.g. https://login.linear.app). Empty or unparseable returns no matches.
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteSessionIssuerDuplicatePreflight'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getGlobalIssuerDuplicatePreflight adminRemoteSessions
+      tags:
+        - adminRemoteSessions
+      x-speakeasy-name-override: getGlobalIssuerDuplicatePreflight
+      x-speakeasy-react-hook:
+        name: GlobalRemoteSessionIssuerDuplicatePreflight
   /rpc/adminRemoteSessions.getGlobalIssuerMigratePreflight:
     get:
       description: 'Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Also reports how many tenant-owned clients the target already carries, since those permanently block deleting it. Requires platform admin.'
@@ -23839,6 +23933,108 @@ paths:
       x-speakeasy-name-override: getDeletePreflight
       x-speakeasy-react-hook:
         name: OrganizationRemoteSessionIssuerDeletePreflight
+  /rpc/organizationRemoteSessionIssuers.getDuplicatePreflight:
+    get:
+      description: |-
+        Report the existing remote_session_issuers that already describe an upstream issuer URL, so a create or edit form can warn before it duplicates one. Requires org:read.
+
+        Covers every issuer in the caller's organization — organization-level and project-specific alike — plus the platform catalog. The project-specific rows are the point: an organization administrator about to add an organization-level issuer most needs to know that several of their projects already configured the same URL separately, because those are exactly the records migrateIssuer can consolidate. The answer does not depend on whether the issuer being created is organization-level or project-scoped; an org administrator holds org:read either way.
+
+        Advisory only. Duplicating an issuer URL is legitimate, so nothing here blocks a write and no lock is taken. Matching uses the same canonicalization as getRemoteSessionIssuer, and a URL that cannot be parsed as an issuer identifier returns no matches rather than an error.
+      operationId: getOrganizationRemoteSessionIssuerDuplicatePreflight
+      parameters:
+        - allowEmptyValue: true
+          description: The upstream issuer URL being entered (e.g. https://login.linear.app). Empty or unparseable returns no matches.
+          in: query
+          name: issuer
+          schema:
+            description: The upstream issuer URL being entered (e.g. https://login.linear.app). Empty or unparseable returns no matches.
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteSessionIssuerDuplicatePreflight'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: getIssuerDuplicatePreflight organizationRemoteSessionIssuers
+      tags:
+        - organizationRemoteSessionIssuers
+      x-speakeasy-name-override: getDuplicatePreflight
+      x-speakeasy-react-hook:
+        name: OrganizationRemoteSessionIssuerDuplicatePreflight
   /rpc/organizationRemoteSessionIssuers.getMigratePreflight:
     get:
       description: 'Authoritative impact summary for migrating a remote_session_issuer''s clients onto another issuer: the clients that would move, the affected MCP servers, and every blocker (endpoint mismatches, conflicting MCP-server bindings). Requires org:read.'
@@ -32009,6 +32205,117 @@ paths:
       x-speakeasy-name-override: get
       x-speakeasy-react-hook:
         name: RemoteSessionIssuer
+  /rpc/remoteSessionIssuers.getDuplicatePreflight:
+    get:
+      description: |-
+        Report the existing remote_session_issuers that already describe an upstream issuer URL, so a create or edit form can warn before it duplicates one. Covers this project's own issuers plus those inherited from the organization and the platform catalog.
+
+        Advisory only. Duplicating an issuer URL is legitimate — a project may want its own record so it can attach different documentation, branding or scopes — so nothing here blocks a write, and no lock is taken. A create that races another create still produces two records, which is a supported state.
+
+        Matching uses the same canonicalization as getRemoteSessionIssuer. A URL that cannot be parsed as an issuer identifier returns no matches rather than an error, because a partially typed URL is the normal state of a form field.
+      operationId: getRemoteSessionIssuerDuplicatePreflight
+      parameters:
+        - allowEmptyValue: true
+          description: The upstream issuer URL being entered (e.g. https://login.linear.app). Empty or unparseable returns no matches.
+          in: query
+          name: issuer
+          schema:
+            description: The upstream issuer URL being entered (e.g. https://login.linear.app). Empty or unparseable returns no matches.
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RemoteSessionIssuerDuplicatePreflight'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getRemoteSessionIssuerDuplicatePreflight remoteSessionIssuers
+      tags:
+        - remoteSessionIssuers
+      x-speakeasy-name-override: getDuplicatePreflight
+      x-speakeasy-react-hook:
+        name: RemoteSessionIssuerDuplicatePreflight
   /rpc/remoteSessionIssuers.list:
     get:
       description: List remote_session_issuers in the caller's project.
@@ -65989,6 +66296,51 @@ components:
         - passthrough
         - client_id_metadata_document_supported
         - discovery_warnings
+    RemoteSessionIssuerDuplicateMatch:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The matching remote_session_issuer id.
+          format: uuid
+        issuer:
+          type: string
+          description: The matching issuer's stored upstream URL. May differ in spelling from the URL that was looked up, since canonicalization is applied to the supplied URL only.
+        name:
+          type: string
+          description: The matching issuer's display name. Empty when it has none, in which case a caller should fall back to the slug.
+        project_name:
+          type: string
+          description: The owning project's name, for a project-specific match an organization administrator may not otherwise be able to place. Empty for organization-level and platform-level matches, and for project-specific matches returned to a caller already scoped to that project.
+        slug:
+          type: string
+          description: The matching issuer's slug.
+        tier:
+          type: string
+          description: 'Which tenancy tier owns the match: project-specific, organization-level, or platform-level.'
+          enum:
+            - project-specific
+            - organization-level
+            - platform-level
+      description: An existing remote_session_issuer that already describes the upstream authorization server a caller is about to add.
+      required:
+        - id
+        - slug
+        - name
+        - issuer
+        - tier
+        - project_name
+    RemoteSessionIssuerDuplicatePreflight:
+      type: object
+      properties:
+        matches:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemoteSessionIssuerDuplicateMatch'
+          description: 'The matching issuers in resolution order: project-specific first, then organization-level, then platform-level, and oldest first within a tier. The first entry is therefore the issuer this caller would resolve the URL to today. Empty when nothing describes the URL yet, and empty when the supplied URL is not a usable issuer identifier. Truncated to a fixed cap, since a warning only has to establish that duplicates exist and name a few.'
+      description: 'Existing remote_session_issuers that already describe an upstream issuer URL. Advisory: a non-empty result never blocks a create or an update.'
+      required:
+        - matches
     RemoteSessionIssuerRefresh:
       type: object
       properties:
