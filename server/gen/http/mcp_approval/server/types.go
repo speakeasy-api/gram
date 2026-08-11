@@ -8,6 +8,8 @@
 package server
 
 import (
+	"unicode/utf8"
+
 	mcpapproval "github.com/speakeasy-api/gram/server/gen/mcp_approval"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -26,8 +28,8 @@ type CreateRequestRequestBody struct {
 	TargetKind *string `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
 	// The server reference: a URL, or the stdio command that launches it.
 	Target *string `form:"target,omitempty" json:"target,omitempty" xml:"target,omitempty"`
-	// Why the requester wants it. The one input no automated evidence supplies, so
-	// it cannot be blank.
+	// The requester's justification for wanting access to this server. Must not be
+	// blank.
 	Note *string `form:"note,omitempty" json:"note,omitempty" xml:"note,omitempty"`
 }
 
@@ -58,8 +60,6 @@ type RecordDecisionRequestBody struct {
 // ListRequestsResponseBody is the type of the "mcpApproval" service
 // "listRequests" endpoint HTTP response body.
 type ListRequestsResponseBody struct {
-	// The cursor to fetch results from
-	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 	// The list of approval requests
 	Requests []*ApprovalRequestSummaryResponseBody `form:"requests" json:"requests" xml:"requests"`
 }
@@ -95,7 +95,9 @@ type EnsureServerReviewResponseBody struct {
 	// The namespace of the requested reference, such as server_url or
 	// stdio_command.
 	TargetKind string `form:"target_kind" json:"target_kind" xml:"target_kind"`
-	// The reference exactly as the requester named it.
+	// The stored display form of the requested reference, with credential-shaped
+	// material (URL query strings and userinfo, secret-named flag and environment
+	// values in commands) redacted at intake.
 	TargetRaw string `form:"target_raw" json:"target_raw" xml:"target_raw"`
 	// The Shadow MCP inventory page slug for a server_url target — the same
 	// identifier the inventory derives from the canonical URL, so a request links
@@ -125,7 +127,9 @@ type CreateRequestResponseBody struct {
 	// The namespace of the requested reference, such as server_url or
 	// stdio_command.
 	TargetKind string `form:"target_kind" json:"target_kind" xml:"target_kind"`
-	// The reference exactly as the requester named it.
+	// The stored display form of the requested reference, with credential-shaped
+	// material (URL query strings and userinfo, secret-named flag and environment
+	// values in commands) redacted at intake.
 	TargetRaw string `form:"target_raw" json:"target_raw" xml:"target_raw"`
 	// The Shadow MCP inventory page slug for a server_url target — the same
 	// identifier the inventory derives from the canonical URL, so a request links
@@ -155,7 +159,9 @@ type PromoteResponseBody struct {
 	// The namespace of the requested reference, such as server_url or
 	// stdio_command.
 	TargetKind string `form:"target_kind" json:"target_kind" xml:"target_kind"`
-	// The reference exactly as the requester named it.
+	// The stored display form of the requested reference, with credential-shaped
+	// material (URL query strings and userinfo, secret-named flag and environment
+	// values in commands) redacted at intake.
 	TargetRaw string `form:"target_raw" json:"target_raw" xml:"target_raw"`
 	// The Shadow MCP inventory page slug for a server_url target — the same
 	// identifier the inventory derives from the canonical URL, so a request links
@@ -1528,7 +1534,9 @@ type ApprovalRequestSummaryResponseBody struct {
 	// The namespace of the requested reference, such as server_url or
 	// stdio_command.
 	TargetKind string `form:"target_kind" json:"target_kind" xml:"target_kind"`
-	// The reference exactly as the requester named it.
+	// The stored display form of the requested reference, with credential-shaped
+	// material (URL query strings and userinfo, secret-named flag and environment
+	// values in commands) redacted at intake.
 	TargetRaw string `form:"target_raw" json:"target_raw" xml:"target_raw"`
 	// The Shadow MCP inventory page slug for a server_url target — the same
 	// identifier the inventory derives from the canonical URL, so a request links
@@ -1619,9 +1627,7 @@ type ResearchReportResponseBody struct {
 // NewListRequestsResponseBody builds the HTTP response body from the result of
 // the "listRequests" endpoint of the "mcpApproval" service.
 func NewListRequestsResponseBody(res *mcpapproval.ListApprovalRequestsResult) *ListRequestsResponseBody {
-	body := &ListRequestsResponseBody{
-		NextCursor: res.NextCursor,
-	}
+	body := &ListRequestsResponseBody{}
 	if res.Requests != nil {
 		body.Requests = make([]*ApprovalRequestSummaryResponseBody, len(res.Requests))
 		for i, val := range res.Requests {
@@ -2808,10 +2814,9 @@ func NewRecordDecisionGatewayErrorResponseBody(res *goa.ServiceError) *RecordDec
 
 // NewListRequestsPayload builds a mcpApproval service listRequests endpoint
 // payload.
-func NewListRequestsPayload(status *string, cursor *string, limit *int32, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpapproval.ListRequestsPayload {
+func NewListRequestsPayload(status *string, limit *int32, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpapproval.ListRequestsPayload {
 	v := &mcpapproval.ListRequestsPayload{}
 	v.Status = status
-	v.Cursor = cursor
 	v.Limit = limit
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -2912,6 +2917,11 @@ func ValidateEnsureServerReviewRequestBody(body *EnsureServerReviewRequestBody) 
 	if body.Target == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("target", "body"))
 	}
+	if body.Target != nil {
+		if utf8.RuneCountInString(*body.Target) > 2048 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.target", *body.Target, utf8.RuneCountInString(*body.Target), 2048, false))
+		}
+	}
 	return
 }
 
@@ -2930,6 +2940,16 @@ func ValidateCreateRequestRequestBody(body *CreateRequestRequestBody) (err error
 	if body.TargetKind != nil {
 		if !(*body.TargetKind == "server_url" || *body.TargetKind == "stdio_command") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_kind", *body.TargetKind, []any{"server_url", "stdio_command"}))
+		}
+	}
+	if body.Target != nil {
+		if utf8.RuneCountInString(*body.Target) > 2048 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.target", *body.Target, utf8.RuneCountInString(*body.Target), 2048, false))
+		}
+	}
+	if body.Note != nil {
+		if utf8.RuneCountInString(*body.Note) > 4000 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.note", *body.Note, utf8.RuneCountInString(*body.Note), 4000, false))
 		}
 	}
 	return
@@ -2954,6 +2974,11 @@ func ValidateRecordDecisionRequestBody(body *RecordDecisionRequestBody) (err err
 	}
 	if body.Rationale == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("rationale", "body"))
+	}
+	if body.Decision != nil {
+		if !(*body.Decision == "approved" || *body.Decision == "denied") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.decision", *body.Decision, []any{"approved", "denied"}))
+		}
 	}
 	return
 }

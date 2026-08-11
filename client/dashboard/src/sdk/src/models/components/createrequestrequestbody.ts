@@ -20,7 +20,7 @@ export type TargetKind = ClosedEnum<typeof TargetKind>;
 
 export type CreateRequestRequestBody = {
   /**
-   * Why the requester wants it. The one input no automated evidence supplies, so it cannot be blank.
+   * The requester's justification for wanting access to this server. Must not be blank.
    */
   note: string;
   /**

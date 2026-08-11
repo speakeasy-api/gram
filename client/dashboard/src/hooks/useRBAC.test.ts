@@ -45,16 +45,16 @@ describe("resourceKindForScope", () => {
     expect(resourceKindForScope("risk_policy:bypass")).toBe("risk_policy");
   });
 
-  // Regression: chat scopes must map to "chat" so a restricted chat:read grant
-  // (selector {resource_kind:"chat", resource_id:"*"}) matches the hasScope
-  // check. When this returned "*" the check selector ({resource_kind:"*"}) never
-  // matched the grant, so admins with chat:read still saw the "own sessions
-  // only" banner.
   it("returns 'mcp_approval' for mcp_approval scopes", () => {
     expect(resourceKindForScope("mcp_approval:read")).toBe("mcp_approval");
     expect(resourceKindForScope("mcp_approval:decide")).toBe("mcp_approval");
   });
 
+  // Regression: chat scopes must map to "chat" so a restricted chat:read grant
+  // (selector {resource_kind:"chat", resource_id:"*"}) matches the hasScope
+  // check. When this returned "*" the check selector ({resource_kind:"*"}) never
+  // matched the grant, so admins with chat:read still saw the "own sessions
+  // only" banner.
   it("returns 'chat' for chat scopes", () => {
     expect(resourceKindForScope("chat:read")).toBe("chat");
   });

@@ -296,3 +296,26 @@ func TestLookup_UnrecognizedResponseIsAnError(t *testing.T) {
 	_, err = client.Lookup(t.Context(), identity.RegistryPyPI, "p")
 	require.Error(t, err)
 }
+
+// A crafted package name must not smuggle extra path segments — or dot
+// traversal — into the registry request once the scope separator is restored.
+func TestLookup_NPMRejectsPathSmugglingNames(t *testing.T) {
+	t.Parallel()
+
+	server, path := serve(t, http.StatusOK, npmBody)
+	client := packagemeta.NewClient(server.Client(), packagemeta.WithNPMBaseURL(server.URL))
+
+	for _, name := range []string{
+		"@scope/name/extra",
+		"@scope/..",
+		"../@scope/name",
+		"@scope/.",
+		"@scope/",
+		"//",
+	} {
+		_, err := client.Lookup(t.Context(), identity.RegistryNPM, name)
+		require.Error(t, err, "name %q must be rejected", name)
+	}
+
+	require.Empty(t, path(), "an invalid name must never produce a registry request")
+}

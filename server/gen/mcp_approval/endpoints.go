@@ -83,7 +83,7 @@ func NewListRequestsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
 				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
-				RequiredScopes: []string{},
+				RequiredScopes: []string{"consumer"},
 			}
 			var key string
 			if p.ApikeyToken != nil {
@@ -94,7 +94,7 @@ func NewListRequestsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 				sc := security.APIKeyScheme{
 					Name:           "project_slug",
 					Scopes:         []string{},
-					RequiredScopes: []string{},
+					RequiredScopes: []string{"consumer"},
 				}
 				var key string
 				if p.ProjectSlugInput != nil {
@@ -142,7 +142,7 @@ func NewGetRequestEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
 				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
-				RequiredScopes: []string{},
+				RequiredScopes: []string{"consumer"},
 			}
 			var key string
 			if p.ApikeyToken != nil {
@@ -153,7 +153,7 @@ func NewGetRequestEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 				sc := security.APIKeyScheme{
 					Name:           "project_slug",
 					Scopes:         []string{},
-					RequiredScopes: []string{},
+					RequiredScopes: []string{"consumer"},
 				}
 				var key string
 				if p.ProjectSlugInput != nil {
@@ -437,7 +437,7 @@ func NewRecordDecisionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 			sc := security.APIKeyScheme{
 				Name:           "apikey",
 				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
-				RequiredScopes: []string{},
+				RequiredScopes: []string{"producer"},
 			}
 			var key string
 			if p.ApikeyToken != nil {
@@ -448,7 +448,7 @@ func NewRecordDecisionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 				sc := security.APIKeyScheme{
 					Name:           "project_slug",
 					Scopes:         []string{},
-					RequiredScopes: []string{},
+					RequiredScopes: []string{"producer"},
 				}
 				var key string
 				if p.ProjectSlugInput != nil {

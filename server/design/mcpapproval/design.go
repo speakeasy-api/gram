@@ -9,18 +9,20 @@ import (
 var _ = Service("mcpApproval", func() {
 	Description("Dashboard API for reviewing and deciding MCP server approval requests.")
 	Security(security.Session, security.ProjectSlug)
-	Security(security.ByKey, security.ProjectSlug)
 	shared.DeclareErrorResponses()
 
 	Method("listRequests", func() {
 		Description("List MCP approval requests for a project.")
+		Security(security.Session, security.ProjectSlug)
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("consumer")
+		})
 
 		Payload(func() {
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
 			Attribute("status", String, "Only return requests in this status.")
-			Attribute("cursor", String, "The cursor to fetch results from")
 			Attribute("limit", Int32, "The number of requests to return per page")
 		})
 
@@ -29,7 +31,6 @@ var _ = Service("mcpApproval", func() {
 		HTTP(func() {
 			GET("/rpc/mcpApproval.listRequests")
 			Param("status")
-			Param("cursor")
 			Param("limit")
 			security.SessionHeader()
 			security.ByKeyHeader()
@@ -44,6 +45,10 @@ var _ = Service("mcpApproval", func() {
 
 	Method("getRequest", func() {
 		Description("Fetch one MCP approval request with its evidence and decision history.")
+		Security(security.Session, security.ProjectSlug)
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("consumer")
+		})
 
 		Payload(func() {
 			security.SessionPayload()
@@ -76,7 +81,9 @@ var _ = Service("mcpApproval", func() {
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
-			Attribute("target", String, "The server URL the dossier describes.")
+			Attribute("target", String, "The server URL the dossier describes.", func() {
+				MaxLength(2048)
+			})
 			Required("target")
 		})
 
@@ -106,8 +113,12 @@ var _ = Service("mcpApproval", func() {
 				Description("The namespace of the reference.")
 				Enum("server_url", "stdio_command")
 			})
-			Attribute("target", String, "The server reference: a URL, or the stdio command that launches it.")
-			Attribute("note", String, "Why the requester wants it. The one input no automated evidence supplies, so it cannot be blank.")
+			Attribute("target", String, "The server reference: a URL, or the stdio command that launches it.", func() {
+				MaxLength(2048)
+			})
+			Attribute("note", String, "The requester's justification for wanting access to this server. Must not be blank.", func() {
+				MaxLength(4000)
+			})
 			Required("target_kind", "target", "note")
 		})
 
@@ -185,13 +196,19 @@ var _ = Service("mcpApproval", func() {
 
 	Method("recordDecision", func() {
 		Description("Approve or deny an MCP approval request, recording the rationale and who it applies to.")
+		Security(security.Session, security.ProjectSlug)
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
 
 		Payload(func() {
 			security.SessionPayload()
 			security.ByKeyPayload()
 			security.ProjectPayload()
 			Attribute("id", String, "The approval request ID.")
-			Attribute("decision", String, "Either approved or denied.")
+			Attribute("decision", String, "Either approved or denied.", func() {
+				Enum("approved", "denied")
+			})
 			Attribute("rationale", String, "Why the decision was made. This is the artifact cited when explaining the decision to the requester, so it cannot be blank.")
 			Attribute("granted_principal_urns", ArrayOf(String), "Principals the approval covers. Empty for a denial.")
 			Attribute("research_report_id", String, "A research report this decision cites. Must belong to the request being decided.")
@@ -219,7 +236,7 @@ var ApprovalRequestSummary = Type("ApprovalRequestSummary", func() {
 
 	Attribute("id", String, "The approval request ID.")
 	Attribute("target_kind", String, "The namespace of the requested reference, such as server_url or stdio_command.")
-	Attribute("target_raw", String, "The reference exactly as the requester named it.")
+	Attribute("target_raw", String, "The stored display form of the requested reference, with credential-shaped material (URL query strings and userinfo, secret-named flag and environment values in commands) redacted at intake.")
 	Attribute("server_slug", String, "The Shadow MCP inventory page slug for a server_url target — the same identifier the inventory derives from the canonical URL, so a request links to the server page it describes. Absent for stdio targets.")
 	Attribute("artifact_ref", String, "The resolved artifact identity. Absent when the server could not be identified, which must surface as unknown rather than as an absence of findings.")
 	Attribute("version_pinned", Boolean, "Whether the reference names an exact version.")
@@ -291,7 +308,8 @@ var ApprovalRequestDetail = Type("ApprovalRequestDetail", func() {
 })
 
 var ListApprovalRequestsResult = Type("ListApprovalRequestsResult", func() {
-	Attribute("next_cursor", String, "The cursor to fetch results from")
+	Description("A page of the approval queue.")
+
 	Attribute("requests", ArrayOf(ApprovalRequestSummary), "The list of approval requests")
 	Required("requests")
 })

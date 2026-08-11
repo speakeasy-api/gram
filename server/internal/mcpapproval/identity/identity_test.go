@@ -544,3 +544,56 @@ func TestResolve_CompleteSemverStillPins(t *testing.T) {
 		require.True(t, identity.Resolve(spec).VersionPinned, "%s names one immutable release", spec)
 	}
 }
+
+// A launch command routinely embeds credentials. The redacted form keeps the
+// structure that identifies the server — launcher, package, flags — while
+// every secret-shaped value is removed, and it collapses whitespace so it
+// doubles as a dedupe key.
+func TestRedactCommand_StripsSecretShapedValues(t *testing.T) {
+	t.Parallel()
+
+	got := identity.RedactCommand(`FAKE_TOKEN=fabricated123 npx  -y mcp-remote https://mcp.example.com/sse?key=fabricated456 --header "Authorization: Bearer fabricated789" --api-key=fabricated000`)
+	require.Equal(t,
+		"FAKE_TOKEN=<redacted> npx -y mcp-remote https://mcp.example.com/sse --header <redacted> --api-key=<redacted>",
+		got)
+}
+
+// A secret flag with a separate unquoted value loses the value, not the flag,
+// and non-secret flags keep theirs.
+func TestRedactCommand_SeparateFlagValueIsRedacted(t *testing.T) {
+	t.Parallel()
+
+	got := identity.RedactCommand("npx -y some-server --token fabricated123 --port 8080")
+	require.Equal(t, "npx -y some-server --token <redacted> --port 8080", got)
+
+	shortHeader := identity.RedactCommand(`npx -y some-server -H "X-Api-Key: fabricated456"`)
+	require.Equal(t, "npx -y some-server -H <redacted>", shortHeader)
+}
+
+// Rotated secrets must not split one server into two reviews: the same
+// command with different tokens redacts to the same string.
+func TestRedactCommand_RotatedTokensRedactIdentically(t *testing.T) {
+	t.Parallel()
+
+	first := identity.RedactCommand("MY_API_KEY=fabricated-aaa npx -y @scope/server --auth-token fabricated-bbb")
+	second := identity.RedactCommand("MY_API_KEY=fabricated-ccc  npx -y @scope/server --auth-token fabricated-ddd")
+	require.Equal(t, first, second)
+}
+
+// Redaction must not disturb what identity resolution reads: selector flags,
+// package specs, and non-secret environment prefixes survive, and a URL-shaped
+// token gets the same treatment RedactServerURL gives an endpoint.
+func TestRedactCommand_KeepsNonSecretStructure(t *testing.T) {
+	t.Parallel()
+
+	got := identity.RedactCommand("NODE_ENV=production npx -y -p @scope/pkg@1.2.3 server-bin --verbose")
+	require.Equal(t, "NODE_ENV=production npx -y -p @scope/pkg@1.2.3 server-bin --verbose", got)
+
+	url := identity.RedactCommand("npx -y mcp-remote https://user:fabricated@mcp.example.com/sse#frag")
+	require.Equal(t, "npx -y mcp-remote https://mcp.example.com/sse", url)
+
+	require.Equal(t,
+		identity.Resolve("npx -y @scope/pkg@1.2.3").ArtifactRef,
+		identity.Resolve(identity.RedactCommand("npx -y @scope/pkg@1.2.3 --api-key fabricated")).ArtifactRef,
+		"resolution reads the same package off the redacted form")
+}
