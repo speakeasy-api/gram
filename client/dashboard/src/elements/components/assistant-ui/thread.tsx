@@ -55,6 +55,7 @@ import {
   ComposerAttachments,
   UserMessageAttachments,
 } from "@/elements/components/assistant-ui/attachment";
+import { AttachmentDropZone } from "@/elements/components/assistant-ui/attachment-dropzone";
 import { FollowOnSuggestions } from "@/elements/components/assistant-ui/follow-on-suggestions";
 import { MarkdownText } from "@/elements/components/assistant-ui/markdown-text";
 import { MentionedToolsBadges } from "@/elements/components/assistant-ui/mentioned-tools-badges";
@@ -163,6 +164,7 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
   // caller can view (e.g. via an admin-level read grant) but didn't create,
   // so there's no valid action to leave available.
   const composerHidden = useThreadMeta(chatId ?? undefined)?.readOnly ?? false;
+  const isReplay = useReplayContext()?.isReplay ?? false;
 
   const apiUrl = getApiUrl(config);
   const auth = useAuth({
@@ -222,63 +224,72 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
     >
       <LazyMotion features={domAnimation}>
         <MotionConfig reducedMotion="user">
-          <ThreadPrimitive.Root
-            className={cn(
-              "aui-root aui-thread-root @container relative flex h-full flex-col bg-background",
-              themeProps.className,
-              className,
-            )}
+          <AttachmentDropZone
+            // Every state that takes the composer away also refuses drops,
+            // or files queue into a composer the user cannot reach.
+            disabled={
+              composerHidden || (showFeedback && isResolved) || isReplay
+            }
+            className="flex h-full min-h-0 flex-1 flex-col"
           >
-            <ConnectionStatusIndicatorSafe />
-            <ThreadPrimitive.Viewport
+            <ThreadPrimitive.Root
               className={cn(
-                "aui-thread-viewport relative mx-auto flex w-full flex-1 flex-col overflow-x-auto overflow-y-scroll pb-0!",
-                d("p-lg"),
+                "aui-root aui-thread-root @container relative flex h-full w-full flex-col bg-background",
+                themeProps.className,
+                className,
               )}
             >
-              <ThreadPrimitive.If empty>
-                {components.ThreadWelcome ? (
-                  <components.ThreadWelcome />
-                ) : (
-                  <ThreadWelcome />
+              <ConnectionStatusIndicatorSafe />
+              <ThreadPrimitive.Viewport
+                className={cn(
+                  "aui-thread-viewport relative mx-auto flex w-full flex-1 flex-col overflow-x-auto overflow-y-scroll pb-0!",
+                  d("p-lg"),
                 )}
-              </ThreadPrimitive.If>
+              >
+                <ThreadPrimitive.If empty>
+                  {components.ThreadWelcome ? (
+                    <components.ThreadWelcome />
+                  ) : (
+                    <ThreadWelcome />
+                  )}
+                </ThreadPrimitive.If>
 
-              {showDangerousApiKeyWarning && <DangerousApiKeyWarning />}
+                {showDangerousApiKeyWarning && <DangerousApiKeyWarning />}
 
-              <ThreadPrimitive.Messages
-                components={{
-                  UserMessage: components.UserMessage ?? UserMessage,
-                  EditComposer: components.EditComposer ?? EditComposer,
-                  AssistantMessage:
-                    components.AssistantMessage ?? AssistantMessage,
-                }}
-              />
-
-              <ThreadPrimitive.If empty={false} running={false}>
-                <FollowOnSuggestions />
-              </ThreadPrimitive.If>
-
-              <ThreadPrimitive.If empty={false}>
-                <div className="aui-thread-viewport-spacer min-h-8 grow" />
-              </ThreadPrimitive.If>
-
-              {!composerHidden && <Composer showFeedback={showFeedback} />}
-            </ThreadPrimitive.Viewport>
-
-            {/* Resolution overlay - subtle readonly effect */}
-            <AnimatePresence>
-              {showFeedback && isResolved && (
-                <m.div
-                  className="pointer-events-none absolute inset-0 z-50 bg-background/40"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.3, ease: EASE_OUT_QUINT }}
+                <ThreadPrimitive.Messages
+                  components={{
+                    UserMessage: components.UserMessage ?? UserMessage,
+                    EditComposer: components.EditComposer ?? EditComposer,
+                    AssistantMessage:
+                      components.AssistantMessage ?? AssistantMessage,
+                  }}
                 />
-              )}
-            </AnimatePresence>
-          </ThreadPrimitive.Root>
+
+                <ThreadPrimitive.If empty={false} running={false}>
+                  <FollowOnSuggestions />
+                </ThreadPrimitive.If>
+
+                <ThreadPrimitive.If empty={false}>
+                  <div className="aui-thread-viewport-spacer min-h-8 grow" />
+                </ThreadPrimitive.If>
+
+                {!composerHidden && <Composer showFeedback={showFeedback} />}
+              </ThreadPrimitive.Viewport>
+
+              {/* Resolution overlay - subtle readonly effect */}
+              <AnimatePresence>
+                {showFeedback && isResolved && (
+                  <m.div
+                    className="pointer-events-none absolute inset-0 z-50 bg-background/40"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.3, ease: EASE_OUT_QUINT }}
+                  />
+                )}
+              </AnimatePresence>
+            </ThreadPrimitive.Root>
+          </AttachmentDropZone>
         </MotionConfig>
       </LazyMotion>
     </ChatResolutionContext.Provider>
@@ -741,7 +752,9 @@ export const Composer: FC<ComposerProps> = ({
             isReplay && "pointer-events-none opacity-50",
           )}
         >
-          {composerConfig.attachments && <ComposerAttachments />}
+          {(composerConfig.attachments ?? true) !== false && (
+            <ComposerAttachments />
+          )}
 
           {slashOpen && (
             <ComposerSlashCommandMenu
@@ -1526,11 +1539,15 @@ const ComposerAction: FC<{ showRunState?: boolean }> = ({
 }) => {
   const { config } = useElements();
   const r = useRadius();
-  const composerConfig = config.composer ?? { attachments: true };
+  const composerConfig = config.composer ?? {};
+  // `?? true`, not a default object: a config that sets any other composer key
+  // (placeholder, skillContext) would otherwise leave `attachments` undefined
+  // and silently drop the attach button.
+  const attachmentsEnabled = composerConfig.attachments ?? true;
   return (
     <div className="aui-composer-action-wrapper relative mx-1.5 mt-1 mb-2 flex items-center justify-between">
       <div className="aui-composer-action-wrapper-inner flex items-center gap-0.5 text-muted-foreground">
-        {composerConfig.attachments ? (
+        {attachmentsEnabled ? (
           <ComposerAddAttachment />
         ) : (
           <div className="aui-composer-add-attachment-placeholder" />
@@ -1774,6 +1791,14 @@ const UserMessage: FC = () => {
   const r = useRadius();
   const { config } = useElements();
   const allowEdit = config.allowMessageEdit !== false;
+  // An attachment-only turn carries no text part (or an empty one). Without
+  // this the bubble still renders as an empty coloured pill under the file,
+  // and the edit affordance offers to edit nothing.
+  const hasText = useAuiState(({ message }) =>
+    message.parts.some(
+      (part) => part.type === "text" && part.text.trim() !== "",
+    ),
+  );
   return (
     <MessagePrimitive.Root asChild>
       <div
@@ -1784,15 +1809,17 @@ const UserMessage: FC = () => {
 
         <div className="aui-user-message-content-wrapper relative col-start-2 min-w-0">
           <UserMessageHeader />
-          <div
-            className={cn(
-              "aui-user-message-content bg-primary text-primary-foreground ml-auto w-fit px-5 py-2.5 wrap-break-word",
-              r("xl"),
-            )}
-          >
-            <MessagePrimitive.Parts components={{ Text: UserMessageText }} />
-          </div>
-          {allowEdit && (
+          {hasText && (
+            <div
+              className={cn(
+                "aui-user-message-content bg-primary text-primary-foreground ml-auto w-fit px-5 py-2.5 wrap-break-word",
+                r("xl"),
+              )}
+            >
+              <MessagePrimitive.Parts components={{ Text: UserMessageText }} />
+            </div>
+          )}
+          {allowEdit && hasText && (
             <div className="aui-user-action-bar-wrapper absolute top-1/2 left-0 -translate-x-full -translate-y-1/2 pr-2">
               <UserActionBar />
             </div>
