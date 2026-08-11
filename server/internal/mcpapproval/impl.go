@@ -169,7 +169,7 @@ func (s *Service) ListRequests(ctx context.Context, payload *gen.ListRequestsPay
 		requests = append(requests, summaryView(fromListRow(row)))
 	}
 
-	return &gen.ListApprovalRequestsResult{NextCursor: nil, Requests: requests}, nil
+	return &gen.ListApprovalRequestsResult{Requests: requests}, nil
 }
 
 func (s *Service) GetRequest(ctx context.Context, payload *gen.GetRequestPayload) (*gen.ApprovalRequestDetail, error) {
@@ -180,9 +180,13 @@ func (s *Service) GetRequest(ctx context.Context, payload *gen.GetRequestPayload
 
 	requestID, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid approval request id")
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid approval request id").LogError(ctx, s.logger)
 	}
 
+	// The detail is assembled from four separate pool reads rather than one
+	// snapshot, so a decision committing mid-read can appear in the decision
+	// list before the request's status reflects it. Accepted for a dashboard
+	// read: the skew is transient and a refresh converges.
 	queries := repo.New(s.db)
 
 	// Resolved with the project id in the predicate, so a caller who learns an
@@ -257,19 +261,19 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 	}
 
 	if payload.Decision != decisionApproved && payload.Decision != decisionDenied {
-		return nil, oops.E(oops.CodeBadRequest, nil, "decision must be approved or denied")
+		return nil, oops.E(oops.CodeBadRequest, nil, "decision must be approved or denied").LogError(ctx, s.logger)
 	}
 
 	// The rationale is the artifact cited when explaining the decision to the
 	// requester, so a blank one is rejected rather than recorded.
 	rationale := strings.TrimSpace(payload.Rationale)
 	if rationale == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "a rationale is required")
+		return nil, oops.E(oops.CodeBadRequest, nil, "a rationale is required").LogError(ctx, s.logger)
 	}
 
 	requestID, err := uuid.Parse(payload.ID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid approval request id")
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid approval request id").LogError(ctx, s.logger)
 	}
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
@@ -283,7 +287,7 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 	if payload.ResearchReportID != nil {
 		reportID, err := uuid.Parse(*payload.ResearchReportID)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid research report id")
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid research report id").LogError(ctx, s.logger)
 		}
 		citedReportID = uuid.NullUUID{UUID: reportID, Valid: true}
 	}
@@ -321,7 +325,7 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 			ProjectID:            projectID,
 		}); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, oops.E(oops.CodeBadRequest, nil, "research report does not belong to this request")
+				return nil, oops.E(oops.CodeBadRequest, nil, "research report does not belong to this request").LogError(ctx, s.logger)
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "error reading research report").LogError(ctx, s.logger)
 		}

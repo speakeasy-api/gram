@@ -14,7 +14,9 @@ import (
 
 type LogRecord struct {
 	Action         string
+	OrganizationID string
 	ProjectID      uuid.NullUUID
+	SubjectID      string
 	SubjectType    string
 	SubjectDisplay string
 	SubjectSlug    string
@@ -31,7 +33,9 @@ func LatestAuditLogByAction(ctx context.Context, dbtx repo.DBTX, action audit.Ac
 
 	return LogRecord{
 		Action:         row.Action,
+		OrganizationID: row.OrganizationID,
 		ProjectID:      row.ProjectID,
+		SubjectID:      row.SubjectID,
 		SubjectType:    row.SubjectType,
 		SubjectDisplay: conv.PtrValOr(conv.FromPGText[string](row.SubjectDisplayName), ""),
 		SubjectSlug:    conv.PtrValOr(conv.FromPGText[string](row.SubjectSlug), ""),

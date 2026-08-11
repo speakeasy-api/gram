@@ -58,9 +58,6 @@ func EncodeListRequestsRequest(encoder func(*http.Request) goahttp.Encoder) func
 		if p.Status != nil {
 			values.Add("status", *p.Status)
 		}
-		if p.Cursor != nil {
-			values.Add("cursor", *p.Cursor)
-		}
 		if p.Limit != nil {
 			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
 		}
