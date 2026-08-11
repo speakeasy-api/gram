@@ -851,6 +851,18 @@ export const INSIGHTS_SUGGESTIONS = {
     },
   ],
 
+  /** Watchdog page: a single action chip — exclusion is the page's primary
+   * remediation, so the composer offers exactly that and nothing generic. */
+  watchdog: [
+    {
+      title: "Create exclusion",
+      label: "Stop flagging something",
+      icon: "shield",
+      prompt:
+        "Help me create a risk exclusion rule. Ask me what should stop being flagged — an exact value, a detection rule, or a whole detector — then set up the exclusion, scoped globally unless I say otherwise. Never quote redacted match content back to me.",
+    },
+  ],
+
   "detection-rules": [
     {
       title: "Which rules fire most?",
