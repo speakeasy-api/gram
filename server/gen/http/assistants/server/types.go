@@ -64,7 +64,7 @@ type UpdateAssistantRequestBody struct {
 type SendMessageRequestBody struct {
 	// The assistant to send the message to.
 	AssistantID *string `form:"assistant_id,omitempty" json:"assistant_id,omitempty" xml:"assistant_id,omitempty"`
-	// The user's message text.
+	// The user's message text. May be empty when the turn carries attachments.
 	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
 	// The conversation to continue (from listChats or a prior sendMessage). Omit
 	// to start a new conversation; the server mints and returns a fresh chat id.
@@ -74,6 +74,8 @@ type SendMessageRequestBody struct {
 	IdempotencyKey *string `form:"idempotency_key,omitempty" json:"idempotency_key,omitempty" xml:"idempotency_key,omitempty"`
 	// Project skills to make available for this turn.
 	SkillIds []string `form:"skill_ids,omitempty" json:"skill_ids,omitempty" xml:"skill_ids,omitempty"`
+	// Files uploaded through assets.uploadChatAttachment that this turn carries.
+	Attachments []*SendMessageAttachmentRequestBody `form:"attachments,omitempty" json:"attachments,omitempty" xml:"attachments,omitempty"`
 }
 
 // ListAssistantsResponseBody is the type of the "assistants" service
@@ -1835,6 +1837,15 @@ type AssistantMCPServerRefRequestBody struct {
 	EndpointSlug *string `form:"endpoint_slug,omitempty" json:"endpoint_slug,omitempty" xml:"endpoint_slug,omitempty"`
 }
 
+// SendMessageAttachmentRequestBody is used to define fields on request body
+// types.
+type SendMessageAttachmentRequestBody struct {
+	// The chat attachment asset returned by assets.uploadChatAttachment.
+	AssetID *string `form:"asset_id,omitempty" json:"asset_id,omitempty" xml:"asset_id,omitempty"`
+	// The file name to show the assistant. Falls back to the stored asset name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+}
+
 // NewListAssistantsResponseBody builds the HTTP response body from the result
 // of the "listAssistants" endpoint of the "assistants" service.
 func NewListAssistantsResponseBody(res *assistants.ListAssistantsResult) *ListAssistantsResponseBody {
@@ -3412,6 +3423,16 @@ func NewSendMessagePayload(body *SendMessageRequestBody, sessionToken *string, p
 			v.SkillIds[i] = val
 		}
 	}
+	if body.Attachments != nil {
+		v.Attachments = make([]*assistants.SendMessageAttachment, len(body.Attachments))
+		for i, val := range body.Attachments {
+			if val == nil {
+				v.Attachments[i] = nil
+				continue
+			}
+			v.Attachments[i] = unmarshalSendMessageAttachmentRequestBodyToAssistantsSendMessageAttachment(val)
+		}
+	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -3519,11 +3540,6 @@ func ValidateSendMessageRequestBody(body *SendMessageRequestBody) (err error) {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.assistant_id", *body.AssistantID, goa.FormatUUID))
 	}
 	if body.Message != nil {
-		if utf8.RuneCountInString(*body.Message) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.message", *body.Message, utf8.RuneCountInString(*body.Message), 1, true))
-		}
-	}
-	if body.Message != nil {
 		if utf8.RuneCountInString(*body.Message) > 10000 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.message", *body.Message, utf8.RuneCountInString(*body.Message), 10000, false))
 		}
@@ -3542,6 +3558,16 @@ func ValidateSendMessageRequestBody(body *SendMessageRequestBody) (err error) {
 	for _, e := range body.SkillIds {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.skill_ids[*]", e, goa.FormatUUID))
 	}
+	if len(body.Attachments) > 5 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.attachments", body.Attachments, len(body.Attachments), 5, false))
+	}
+	for _, e := range body.Attachments {
+		if e != nil {
+			if err2 := ValidateSendMessageAttachmentRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	return
 }
 
@@ -3559,6 +3585,23 @@ func ValidateAssistantToolsetRefRequestBody(body *AssistantToolsetRefRequestBody
 func ValidateAssistantMCPServerRefRequestBody(body *AssistantMCPServerRefRequestBody) (err error) {
 	if body.McpServerSlug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_slug", "body"))
+	}
+	return
+}
+
+// ValidateSendMessageAttachmentRequestBody runs the validations defined on
+// SendMessageAttachmentRequestBody
+func ValidateSendMessageAttachmentRequestBody(body *SendMessageAttachmentRequestBody) (err error) {
+	if body.AssetID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("asset_id", "body"))
+	}
+	if body.AssetID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.asset_id", *body.AssetID, goa.FormatUUID))
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 255, false))
+		}
 	}
 	return
 }

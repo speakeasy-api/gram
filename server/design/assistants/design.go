@@ -136,8 +136,7 @@ var _ = Service("assistants", func() {
 			Attribute("assistant_id", String, "The assistant to send the message to.", func() {
 				Format(FormatUUID)
 			})
-			Attribute("message", String, "The user's message text.", func() {
-				MinLength(1)
+			Attribute("message", String, "The user's message text. May be empty when the turn carries attachments.", func() {
 				MaxLength(10000)
 			})
 			Attribute("chat_id", String, "The conversation to continue (from listChats or a prior sendMessage). Omit to start a new conversation; the server mints and returns a fresh chat id.", func() {
@@ -150,6 +149,9 @@ var _ = Service("assistants", func() {
 				Format(FormatUUID)
 			}), "Project skills to make available for this turn.", func() {
 				MaxLength(10)
+			})
+			Attribute("attachments", ArrayOf(SendMessageAttachment), "Files uploaded through assets.uploadChatAttachment that this turn carries.", func() {
+				MaxLength(5)
 			})
 			Required("assistant_id", "message")
 
@@ -245,6 +247,17 @@ var UpdateAssistantForm = Type("UpdateAssistantForm", func() {
 	Attribute("max_concurrency", Int, "Maximum active warm runtimes.")
 	Attribute("status", String, "The assistant status.", func() {
 		Enum("active", "paused")
+	})
+})
+
+var SendMessageAttachment = Type("SendMessageAttachment", func() {
+	Required("asset_id")
+
+	Attribute("asset_id", String, "The chat attachment asset returned by assets.uploadChatAttachment.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "The file name to show the assistant. Falls back to the stored asset name.", func() {
+		MaxLength(255)
 	})
 })
 

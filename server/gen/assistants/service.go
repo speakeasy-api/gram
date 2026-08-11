@@ -133,12 +133,19 @@ type ListAssistantsResult struct {
 	Assistants []*types.Assistant
 }
 
+type SendMessageAttachment struct {
+	// The chat attachment asset returned by assets.uploadChatAttachment.
+	AssetID string
+	// The file name to show the assistant. Falls back to the stored asset name.
+	Name *string
+}
+
 // SendMessagePayload is the payload type of the assistants service sendMessage
 // method.
 type SendMessagePayload struct {
 	// The assistant to send the message to.
 	AssistantID string
-	// The user's message text.
+	// The user's message text. May be empty when the turn carries attachments.
 	Message string
 	// The conversation to continue (from listChats or a prior sendMessage). Omit
 	// to start a new conversation; the server mints and returns a fresh chat id.
@@ -147,7 +154,9 @@ type SendMessagePayload struct {
 	// enqueuing twice. A new key is generated server-side when omitted.
 	IdempotencyKey *string
 	// Project skills to make available for this turn.
-	SkillIds         []string
+	SkillIds []string
+	// Files uploaded through assets.uploadChatAttachment that this turn carries.
+	Attachments      []*SendMessageAttachment
 	SessionToken     *string
 	ProjectSlugInput *string
 }

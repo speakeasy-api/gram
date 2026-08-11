@@ -401,6 +401,7 @@ type ServiceCore struct {
 	wakeCanceller     WakeCanceller
 	chatWriter        *chat.ChatMessageWriter
 	assetStorage      assets.BlobStore
+	assetSigningKey   string
 	envLoader         toolconfig.EnvironmentLoader
 	slackImages       slackImageFetcher
 	dashboardIngestor DashboardIngestor
@@ -449,6 +450,7 @@ func NewServiceCore(
 		wakeCanceller:     nil,
 		chatWriter:        nil,
 		assetStorage:      nil,
+		assetSigningKey:   "",
 		envLoader:         nil,
 		slackImages:       nil,
 		dashboardIngestor: nil,
@@ -2748,10 +2750,13 @@ func (s *ServiceCore) processEventTurn(
 			return nil, fmt.Errorf("decode assistant turn: %w", err)
 		}
 		actorUserID = turnUserID(assistant, thread, event)
-		// Best-effort: image attachments on the triggering Slack message ride
-		// along as vision content. Failures degrade to the metadata-only turn.
-		if thread.SourceKind == sourceKindSlack {
+		// Best-effort: files attached to the triggering message ride along as
+		// vision/text content. Failures degrade to the metadata-only turn.
+		switch thread.SourceKind {
+		case sourceKindSlack:
 			inputParts = s.slackTurnImageParts(ctx, thread, event)
+		case sourceKindDashboard:
+			inputParts = s.dashboardTurnAttachmentParts(ctx, assistant.ProjectID, event)
 		}
 	}
 	prompt, err = insertAssistantEnvironmentChange(prompt, notice)
