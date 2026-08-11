@@ -40,7 +40,7 @@ export function DismissFindingsDialog({
                 count === 1 ? "finding" : "findings"
               } for ${subject} in the selected window as false positives.`}
           {capped &&
-            " There are more findings than can be marked at once; run this again to continue."}
+            ` Only the first ${SIGNAL_DISMISS_CAP.toLocaleString()} findings can be marked at once; run this again if more remain.`}
         </Dialog.Description>
         <Dialog.Footer>
           <Button variant="tertiary" onClick={onCancel}>

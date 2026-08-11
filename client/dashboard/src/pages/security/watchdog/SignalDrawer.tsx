@@ -192,7 +192,7 @@ function FalsePositiveConfirm({
                 count === 1 ? "finding" : "findings"
               } as false positive; they won't be displayed in the watchdog view again.`}
           {count >= SIGNAL_DISMISS_CAP &&
-            " There are more findings than can be marked at once; run this again to continue."}
+            ` Only the first ${SIGNAL_DISMISS_CAP.toLocaleString()} findings can be marked at once; run this again if more remain.`}
         </Text>
       </div>
       <div className="flex items-center gap-2">

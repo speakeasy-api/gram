@@ -597,7 +597,9 @@ function KPIRow({
       <StatTile
         title="Open signals"
         value={data.openSignals}
-        tone="neutral"
+        // Critical signals turn the count red — the tone-based replacement
+        // for the removed accentColor prop.
+        tone={data.criticalSignals > 0 ? "destructive" : "neutral"}
         icon="radar"
         subtext={`${data.criticalSignals} critical`}
       />
