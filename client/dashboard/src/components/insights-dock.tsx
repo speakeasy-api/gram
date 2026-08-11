@@ -1663,6 +1663,15 @@ function ComposerDraftReporter({
   useEffect(() => {
     onChange(hasDraft);
   }, [hasDraft, onChange]);
+  // Retract the report when the composer goes away — the dock swaps it out for
+  // the "Continue chat" button whenever a recent conversation appears, and a
+  // last report of `true` would otherwise pin the dock open with nothing in it.
+  useEffect(
+    () => () => {
+      onChange(false);
+    },
+    [onChange],
+  );
   return null;
 }
 
