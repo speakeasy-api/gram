@@ -203,6 +203,30 @@ func (q *Queries) CreateOrganizationUserRelationshipFixture(ctx context.Context,
 	return err
 }
 
+const createProjectFixture = `-- name: CreateProjectFixture :exec
+INSERT INTO projects (id, name, slug, organization_id)
+VALUES ($1, $2, $3, $4)
+`
+
+type CreateProjectFixtureParams struct {
+	ID             uuid.UUID
+	Name           string
+	Slug           string
+	OrganizationID string
+}
+
+// Test-only fixture that seeds a project with an explicit id so callers can
+// correlate it with analytics rows keyed on gram_project_id.
+func (q *Queries) CreateProjectFixture(ctx context.Context, arg CreateProjectFixtureParams) error {
+	_, err := q.db.Exec(ctx, createProjectFixture,
+		arg.ID,
+		arg.Name,
+		arg.Slug,
+		arg.OrganizationID,
+	)
+	return err
+}
+
 const deferDeviceIntegrationSyncsFixture = `-- name: DeferDeviceIntegrationSyncsFixture :exec
 UPDATE device_integration_syncs s
 SET next_poll_after = clock_timestamp() + interval '1 hour'

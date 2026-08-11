@@ -705,6 +705,107 @@ paths:
                 outputs:
                     nextCursor: $.next_cursor
                 type: cursor
+    /admin/organizations.pricingTracker:
+        get:
+            tags:
+                - admin
+            summary: listPricingTracker admin
+            description: 'Internal tracker of customer pricing exposure: per organization, the PAYG price at the current rate card (off observed tokens under management) and the Gram-hosted inference spend, both over a trailing window.'
+            operationId: adminListPricingTracker
+            parameters:
+                - name: account_type
+                  in: query
+                  description: Filter to a single gram_account_type (e.g. enterprise). When omitted, paying tiers (pro and enterprise) are included.
+                  allowEmptyValue: true
+                  schema:
+                    type: string
+                    description: Filter to a single gram_account_type (e.g. enterprise). When omitted, paying tiers (pro and enterprise) are included.
+                - name: include_free
+                  in: query
+                  description: Include free-tier organizations. Defaults to false so the tracker stays focused on paying customers.
+                  allowEmptyValue: true
+                  schema:
+                    type: boolean
+                    description: Include free-tier organizations. Defaults to false so the tracker stays focused on paying customers.
+                - name: window_days
+                  in: query
+                  description: Length of the trailing window in days. Defaults to 30, max 90.
+                  allowEmptyValue: true
+                  schema:
+                    type: integer
+                    description: Length of the trailing window in days. Defaults to 30, max 90.
+                    format: int64
+                - name: limit
+                  in: query
+                  description: Maximum number of rows to return (default 100, max 500).
+                  allowEmptyValue: true
+                  schema:
+                    type: integer
+                    description: Maximum number of rows to return (default 100, max 500).
+                    format: int64
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminListPricingTrackerResult'
+                "400":
+                    description: 'bad_request: request is invalid'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "401":
+                    description: 'unauthorized: unauthorized access'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "403":
+                    description: 'forbidden: permission denied'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "404":
+                    description: 'not_found: resource not found'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "409":
+                    description: 'conflict: resource already exists'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "415":
+                    description: 'unsupported_media: unsupported media type'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "422":
+                    description: 'invalid: request contains one or more invalidation fields'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "500":
+                    description: 'unexpected: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                "502":
+                    description: 'gateway_error: an unexpected error occurred'
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+            security:
+                - admin_auth_header_Authorization: []
     /admin/project.get:
         get:
             tags:
@@ -53452,6 +53553,31 @@ components:
                     description: The page of organizations.
             required:
                 - organizations
+        AdminListPricingTrackerResult:
+            type: object
+            properties:
+                inference_spend_available:
+                    type: boolean
+                    description: False when the analytics store is not wired into the admin service, in which case inference spend and TUM-derived PAYG figures are reported as zero.
+                rows:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminPricingTrackerRow'
+                    description: One row per organization, ordered by inference spend descending.
+                window_end:
+                    type: string
+                    description: Exclusive end of the tracker window.
+                    format: date-time
+                window_start:
+                    type: string
+                    description: Inclusive start of the tracker window.
+                    format: date-time
+            description: 'Internal pricing tracker: per-customer PAYG price and inference spend over a trailing window.'
+            required:
+                - rows
+                - window_start
+                - window_end
+                - inference_spend_available
         AdminOrganization:
             type: object
             properties:
@@ -53536,6 +53662,47 @@ components:
                 - display_name
                 - created_at
                 - updated_at
+        AdminPricingTrackerRow:
+            type: object
+            properties:
+                account_type:
+                    type: string
+                    description: Gram account type (e.g. free, pro, enterprise).
+                inference_spend:
+                    type: number
+                    description: Gram-hosted inference spend in USD over the window (playground, elements, risk analysis, assistants, and other platform-run completions).
+                    format: double
+                monthly_tum_tokens:
+                    type: integer
+                    description: Observed tokens under management over the window, used as the PAYG pricing input.
+                    format: int64
+                name:
+                    type: string
+                    description: The name of the organization (customer name).
+                organization_id:
+                    type: string
+                    description: The ID of the organization.
+                payg_effective_rate_per_million:
+                    type: number
+                    description: Blended PAYG rate in USD per million tokens at the window's volume.
+                    format: double
+                payg_monthly_price:
+                    type: number
+                    description: Pay-as-you-go price in USD for the window's volume at the current rate card.
+                    format: double
+                slug:
+                    type: string
+                    description: The slug of the organization.
+            description: 'One organization''s pricing exposure: PAYG price at the current rate card and Gram-hosted inference spend over the tracker window.'
+            required:
+                - organization_id
+                - name
+                - slug
+                - account_type
+                - monthly_tum_tokens
+                - payg_monthly_price
+                - payg_effective_rate_per_million
+                - inference_spend
         AdminProject:
             type: object
             properties:

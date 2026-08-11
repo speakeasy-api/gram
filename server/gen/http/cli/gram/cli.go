@@ -95,7 +95,7 @@ func UsageCommands() []string {
 		"external receive-work-os-webhook",
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|upsert-shadow-mcp-inventory-policy-bypass|delete-shadow-mcp-inventory-policy-bypass|block-shadow-mcp-inventory-server|unblock-shadow-mcp-inventory-server|resolve-shadow-mcp-inventory-request|request-access|list-challenges|list-challenge-buckets|resolve-challenge)",
-		"admin (login|callback|logout|get-project|update-organization|get-organization|list-organization-members|list-organization-projects|list-organizations)",
+		"admin (login|callback|logout|get-project|update-organization|get-organization|list-organization-members|list-organization-projects|list-organizations|list-pricing-tracker)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration)",
 		"ai-integrations (get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|fetch-open-ap-iv3-from-url|serve-open-ap-iv3|serve-function|list-assets|upload-chat-attachment|serve-chat-attachment|create-signed-chat-attachment-url|serve-chat-attachment-signed)",
@@ -359,6 +359,13 @@ func ParseEndpoint(
 		adminListOrganizationsCursorFlag            = adminListOrganizationsFlags.String("cursor", "", "")
 		adminListOrganizationsLimitFlag             = adminListOrganizationsFlags.String("limit", "", "")
 		adminListOrganizationsAdminSessionTokenFlag = adminListOrganizationsFlags.String("admin-session-token", "", "")
+
+		adminListPricingTrackerFlags                 = flag.NewFlagSet("list-pricing-tracker", flag.ExitOnError)
+		adminListPricingTrackerAccountTypeFlag       = adminListPricingTrackerFlags.String("account-type", "", "")
+		adminListPricingTrackerIncludeFreeFlag       = adminListPricingTrackerFlags.String("include-free", "", "")
+		adminListPricingTrackerWindowDaysFlag        = adminListPricingTrackerFlags.String("window-days", "", "")
+		adminListPricingTrackerLimitFlag             = adminListPricingTrackerFlags.String("limit", "", "")
+		adminListPricingTrackerAdminSessionTokenFlag = adminListPricingTrackerFlags.String("admin-session-token", "", "")
 
 		agentFlags = flag.NewFlagSet("agent", flag.ContinueOnError)
 
@@ -3266,6 +3273,7 @@ func ParseEndpoint(
 	adminListOrganizationMembersFlags.Usage = adminListOrganizationMembersUsage
 	adminListOrganizationProjectsFlags.Usage = adminListOrganizationProjectsUsage
 	adminListOrganizationsFlags.Usage = adminListOrganizationsUsage
+	adminListPricingTrackerFlags.Usage = adminListPricingTrackerUsage
 
 	agentFlags.Usage = agentUsage
 	agentGetPluginsFlags.Usage = agentGetPluginsUsage
@@ -4178,6 +4186,9 @@ func ParseEndpoint(
 
 			case "list-organizations":
 				epf = adminListOrganizationsFlags
+
+			case "list-pricing-tracker":
+				epf = adminListPricingTrackerFlags
 
 			}
 
@@ -6072,6 +6083,9 @@ func ParseEndpoint(
 			case "list-organizations":
 				endpoint = c.ListOrganizations()
 				data, err = adminc.BuildListOrganizationsPayload(*adminListOrganizationsQFlag, *adminListOrganizationsAccountTypeFlag, *adminListOrganizationsIncludeDisabledFlag, *adminListOrganizationsCursorFlag, *adminListOrganizationsLimitFlag, *adminListOrganizationsAdminSessionTokenFlag)
+			case "list-pricing-tracker":
+				endpoint = c.ListPricingTracker()
+				data, err = adminc.BuildListPricingTrackerPayload(*adminListPricingTrackerAccountTypeFlag, *adminListPricingTrackerIncludeFreeFlag, *adminListPricingTrackerWindowDaysFlag, *adminListPricingTrackerLimitFlag, *adminListPricingTrackerAdminSessionTokenFlag)
 			}
 		case "agent":
 			c := agentc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -8451,6 +8465,7 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    list-organization-members: Lists members of an organization (admin view, no auth scoping).`)
 	fmt.Fprintln(os.Stderr, `    list-organization-projects: Lists projects belonging to an organization (admin view, no auth scoping).`)
 	fmt.Fprintln(os.Stderr, `    list-organizations: Lists organizations for admin operations with optional search and filters.`)
+	fmt.Fprintln(os.Stderr, `    list-pricing-tracker: Internal tracker of customer pricing exposure: per organization, the PAYG price at the current rate card (off observed tokens under management) and the Gram-hosted inference spend, both over a trailing window.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s admin COMMAND --help\n", os.Args[0])
@@ -8645,6 +8660,32 @@ func adminListOrganizationsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-organizations --q \"abc123\" --account-type \"abc123\" --include-disabled false --cursor \"abc123\" --limit 1 --admin-session-token \"abc123\"")
+}
+
+func adminListPricingTrackerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin list-pricing-tracker", os.Args[0])
+	fmt.Fprint(os.Stderr, " -account-type STRING")
+	fmt.Fprint(os.Stderr, " -include-free BOOL")
+	fmt.Fprint(os.Stderr, " -window-days INT")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Internal tracker of customer pricing exposure: per organization, the PAYG price at the current rate card (off observed tokens under management) and the Gram-hosted inference spend, both over a trailing window.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -account-type STRING: `)
+	fmt.Fprintln(os.Stderr, `    -include-free BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -window-days INT: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-pricing-tracker --account-type \"abc123\" --include-free false --window-days 1 --limit 1 --admin-session-token \"abc123\"")
 }
 
 // agentUsage displays the usage of the agent command and its subcommands.

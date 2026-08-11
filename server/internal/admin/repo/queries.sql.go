@@ -378,6 +378,66 @@ func (q *Queries) AdminListProjectsForOrganization(ctx context.Context, organiza
 	return items, nil
 }
 
+const adminListProjectsWithOrganization = `-- name: AdminListProjectsWithOrganization :many
+SELECT
+    p.id AS project_id,
+    om.id AS organization_id,
+    om.name AS organization_name,
+    om.slug AS organization_slug,
+    om.gram_account_type AS account_type
+FROM projects p
+JOIN organization_metadata om ON om.id = p.organization_id
+WHERE p.deleted IS FALSE
+  AND om.disabled_at IS NULL
+  AND ($1::text IS NULL OR om.gram_account_type = $1::text)
+  AND ($2::boolean OR om.gram_account_type <> 'free')
+ORDER BY om.id ASC
+`
+
+type AdminListProjectsWithOrganizationParams struct {
+	AccountType pgtype.Text
+	IncludeFree bool
+}
+
+type AdminListProjectsWithOrganizationRow struct {
+	ProjectID        uuid.UUID
+	OrganizationID   string
+	OrganizationName string
+	OrganizationSlug string
+	AccountType      string
+}
+
+// Powers the internal pricing tracker: every active project joined to its
+// (non-disabled) organization, so per-project analytics can be rolled up to
+// the owning customer. Optionally scoped by account type; when include_free is
+// false, free-tier organizations are dropped so the tracker stays focused on
+// paying customers.
+func (q *Queries) AdminListProjectsWithOrganization(ctx context.Context, arg AdminListProjectsWithOrganizationParams) ([]AdminListProjectsWithOrganizationRow, error) {
+	rows, err := q.db.Query(ctx, adminListProjectsWithOrganization, arg.AccountType, arg.IncludeFree)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListProjectsWithOrganizationRow
+	for rows.Next() {
+		var i AdminListProjectsWithOrganizationRow
+		if err := rows.Scan(
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.OrganizationName,
+			&i.OrganizationSlug,
+			&i.AccountType,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminUpdateOrganization = `-- name: AdminUpdateOrganization :exec
 UPDATE organization_metadata
 SET

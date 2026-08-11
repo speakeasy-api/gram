@@ -51,6 +51,10 @@ type Client struct {
 	// listOrganizations endpoint.
 	ListOrganizationsDoer goahttp.Doer
 
+	// ListPricingTracker Doer is the HTTP client used to make requests to the
+	// listPricingTracker endpoint.
+	ListPricingTrackerDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -80,6 +84,7 @@ func NewClient(
 		ListOrganizationMembersDoer:  doer,
 		ListOrganizationProjectsDoer: doer,
 		ListOrganizationsDoer:        doer,
+		ListPricingTrackerDoer:       doer,
 		RestoreResponseBody:          restoreBody,
 		scheme:                       scheme,
 		host:                         host,
@@ -299,6 +304,30 @@ func (c *Client) ListOrganizations() goa.Endpoint {
 		resp, err := c.ListOrganizationsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "listOrganizations", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListPricingTracker returns an endpoint that makes HTTP requests to the admin
+// service listPricingTracker server.
+func (c *Client) ListPricingTracker() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListPricingTrackerRequest(c.encoder)
+		decodeResponse = DecodeListPricingTrackerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListPricingTrackerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListPricingTrackerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listPricingTracker", err)
 		}
 		return decodeResponse(resp)
 	}

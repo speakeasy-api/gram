@@ -261,3 +261,64 @@ func BuildListOrganizationsPayload(adminListOrganizationsQ string, adminListOrga
 
 	return v, nil
 }
+
+// BuildListPricingTrackerPayload builds the payload for the admin
+// listPricingTracker endpoint from CLI flags.
+func BuildListPricingTrackerPayload(adminListPricingTrackerAccountType string, adminListPricingTrackerIncludeFree string, adminListPricingTrackerWindowDays string, adminListPricingTrackerLimit string, adminListPricingTrackerAdminSessionToken string) (*admin.ListPricingTrackerPayload, error) {
+	var err error
+	var accountType *string
+	{
+		if adminListPricingTrackerAccountType != "" {
+			accountType = &adminListPricingTrackerAccountType
+		}
+	}
+	var includeFree *bool
+	{
+		if adminListPricingTrackerIncludeFree != "" {
+			var val bool
+			val, err = strconv.ParseBool(adminListPricingTrackerIncludeFree)
+			includeFree = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for includeFree, must be BOOL")
+			}
+		}
+	}
+	var windowDays *int
+	{
+		if adminListPricingTrackerWindowDays != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminListPricingTrackerWindowDays, 10, strconv.IntSize)
+			val := int(v)
+			windowDays = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for windowDays, must be INT")
+			}
+		}
+	}
+	var limit *int
+	{
+		if adminListPricingTrackerLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminListPricingTrackerLimit, 10, strconv.IntSize)
+			val := int(v)
+			limit = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminListPricingTrackerAdminSessionToken != "" {
+			adminSessionToken = &adminListPricingTrackerAdminSessionToken
+		}
+	}
+	v := &admin.ListPricingTrackerPayload{}
+	v.AccountType = accountType
+	v.IncludeFree = includeFree
+	v.WindowDays = windowDays
+	v.Limit = limit
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}

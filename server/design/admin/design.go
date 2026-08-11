@@ -127,6 +127,45 @@ var AdminListOrganizationsResult = Type("AdminListOrganizationsResult", func() {
 	Attribute("next_cursor", String, "Cursor for the next page; empty when exhausted.")
 })
 
+var AdminPricingTrackerRow = Type("AdminPricingTrackerRow", func() {
+	Description("One organization's pricing exposure: PAYG price at the current rate card and Gram-hosted inference spend over the tracker window.")
+	Required(
+		"organization_id",
+		"name",
+		"slug",
+		"account_type",
+		"monthly_tum_tokens",
+		"payg_monthly_price",
+		"payg_effective_rate_per_million",
+		"inference_spend",
+	)
+
+	Attribute("organization_id", String, "The ID of the organization.")
+	Attribute("name", String, "The name of the organization (customer name).")
+	Attribute("slug", String, "The slug of the organization.")
+	Attribute("account_type", String, "Gram account type (e.g. free, pro, enterprise).")
+	Attribute("monthly_tum_tokens", Int64, "Observed tokens under management over the window, used as the PAYG pricing input.")
+	Attribute("payg_monthly_price", Float64, "Pay-as-you-go price in USD for the window's volume at the current rate card.")
+	Attribute("payg_effective_rate_per_million", Float64, "Blended PAYG rate in USD per million tokens at the window's volume.")
+	Attribute("inference_spend", Float64, "Gram-hosted inference spend in USD over the window (playground, elements, risk analysis, assistants, and other platform-run completions).")
+})
+
+var AdminListPricingTrackerResult = Type("AdminListPricingTrackerResult", func() {
+	Description("Internal pricing tracker: per-customer PAYG price and inference spend over a trailing window.")
+	Required("rows", "window_start", "window_end", "inference_spend_available")
+
+	Attribute("rows", ArrayOf(AdminPricingTrackerRow), "One row per organization, ordered by inference spend descending.")
+	Attribute("window_start", String, func() {
+		Description("Inclusive start of the tracker window.")
+		Format(FormatDateTime)
+	})
+	Attribute("window_end", String, func() {
+		Description("Exclusive end of the tracker window.")
+		Format(FormatDateTime)
+	})
+	Attribute("inference_spend_available", Boolean, "False when the analytics store is not wired into the admin service, in which case inference spend and TUM-derived PAYG figures are reported as zero.")
+})
+
 var _ = Service("admin", func() {
 	Description("Operations supporting admin tasks, protected by Google workspace auth.")
 	Security(security.AdminAuth)
@@ -351,5 +390,32 @@ var _ = Service("admin", func() {
 
 		shared.CursorPagination()
 		Meta("openapi:operationId", "adminListOrganizations")
+	})
+
+	Method("listPricingTracker", func() {
+		Description("Internal tracker of customer pricing exposure: per organization, the PAYG price at the current rate card (off observed tokens under management) and the Gram-hosted inference spend, both over a trailing window.")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+
+			Attribute("account_type", String, "Filter to a single gram_account_type (e.g. enterprise). When omitted, paying tiers (pro and enterprise) are included.")
+			Attribute("include_free", Boolean, "Include free-tier organizations. Defaults to false so the tracker stays focused on paying customers.")
+			Attribute("window_days", Int, "Length of the trailing window in days. Defaults to 30, max 90.")
+			Attribute("limit", Int, "Maximum number of rows to return (default 100, max 500).")
+		})
+
+		Result(AdminListPricingTrackerResult)
+
+		HTTP(func() {
+			GET("/admin/organizations.pricingTracker")
+
+			Param("account_type")
+			Param("include_free")
+			Param("window_days")
+			Param("limit")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "adminListPricingTracker")
 	})
 })

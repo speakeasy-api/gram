@@ -135,6 +135,20 @@ type ListOrganizationsResponseBody struct {
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
 
+// ListPricingTrackerResponseBody is the type of the "admin" service
+// "listPricingTracker" endpoint HTTP response body.
+type ListPricingTrackerResponseBody struct {
+	// One row per organization, ordered by inference spend descending.
+	Rows []*AdminPricingTrackerRowResponseBody `form:"rows,omitempty" json:"rows,omitempty" xml:"rows,omitempty"`
+	// Inclusive start of the tracker window.
+	WindowStart *string `form:"window_start,omitempty" json:"window_start,omitempty" xml:"window_start,omitempty"`
+	// Exclusive end of the tracker window.
+	WindowEnd *string `form:"window_end,omitempty" json:"window_end,omitempty" xml:"window_end,omitempty"`
+	// False when the analytics store is not wired into the admin service, in which
+	// case inference spend and TUM-derived PAYG figures are reported as zero.
+	InferenceSpendAvailable *bool `form:"inference_spend_available,omitempty" json:"inference_spend_available,omitempty" xml:"inference_spend_available,omitempty"`
+}
+
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
 // endpoint HTTP response body for the "unauthorized" error.
 type LoginUnauthorizedResponseBody struct {
@@ -1784,6 +1798,190 @@ type ListOrganizationsGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// ListPricingTrackerUnauthorizedResponseBody is the type of the "admin"
+// service "listPricingTracker" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListPricingTrackerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPricingTrackerForbiddenResponseBody is the type of the "admin" service
+// "listPricingTracker" endpoint HTTP response body for the "forbidden" error.
+type ListPricingTrackerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPricingTrackerBadRequestResponseBody is the type of the "admin" service
+// "listPricingTracker" endpoint HTTP response body for the "bad_request" error.
+type ListPricingTrackerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPricingTrackerNotFoundResponseBody is the type of the "admin" service
+// "listPricingTracker" endpoint HTTP response body for the "not_found" error.
+type ListPricingTrackerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPricingTrackerConflictResponseBody is the type of the "admin" service
+// "listPricingTracker" endpoint HTTP response body for the "conflict" error.
+type ListPricingTrackerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPricingTrackerUnsupportedMediaResponseBody is the type of the "admin"
+// service "listPricingTracker" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListPricingTrackerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPricingTrackerInvalidResponseBody is the type of the "admin" service
+// "listPricingTracker" endpoint HTTP response body for the "invalid" error.
+type ListPricingTrackerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPricingTrackerInvariantViolationResponseBody is the type of the "admin"
+// service "listPricingTracker" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListPricingTrackerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPricingTrackerUnexpectedResponseBody is the type of the "admin" service
+// "listPricingTracker" endpoint HTTP response body for the "unexpected" error.
+type ListPricingTrackerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListPricingTrackerGatewayErrorResponseBody is the type of the "admin"
+// service "listPricingTracker" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListPricingTrackerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -1840,6 +2038,29 @@ type AdminOrganizationResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// The last update date of the organization.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// AdminPricingTrackerRowResponseBody is used to define fields on response body
+// types.
+type AdminPricingTrackerRowResponseBody struct {
+	// The ID of the organization.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The name of the organization (customer name).
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The slug of the organization.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// Gram account type (e.g. free, pro, enterprise).
+	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	// Observed tokens under management over the window, used as the PAYG pricing
+	// input.
+	MonthlyTumTokens *int64 `form:"monthly_tum_tokens,omitempty" json:"monthly_tum_tokens,omitempty" xml:"monthly_tum_tokens,omitempty"`
+	// Pay-as-you-go price in USD for the window's volume at the current rate card.
+	PaygMonthlyPrice *float64 `form:"payg_monthly_price,omitempty" json:"payg_monthly_price,omitempty" xml:"payg_monthly_price,omitempty"`
+	// Blended PAYG rate in USD per million tokens at the window's volume.
+	PaygEffectiveRatePerMillion *float64 `form:"payg_effective_rate_per_million,omitempty" json:"payg_effective_rate_per_million,omitempty" xml:"payg_effective_rate_per_million,omitempty"`
+	// Gram-hosted inference spend in USD over the window (playground, elements,
+	// risk analysis, assistants, and other platform-run completions).
+	InferenceSpend *float64 `form:"inference_spend,omitempty" json:"inference_spend,omitempty" xml:"inference_spend,omitempty"`
 }
 
 // NewUpdateOrganizationRequestBody builds the HTTP request body from the
@@ -3325,6 +3546,176 @@ func NewListOrganizationsGatewayError(body *ListOrganizationsGatewayErrorRespons
 	return v
 }
 
+// NewListPricingTrackerAdminListPricingTrackerResultOK builds a "admin"
+// service "listPricingTracker" endpoint result from a HTTP "OK" response.
+func NewListPricingTrackerAdminListPricingTrackerResultOK(body *ListPricingTrackerResponseBody) *admin.AdminListPricingTrackerResult {
+	v := &admin.AdminListPricingTrackerResult{
+		WindowStart:             *body.WindowStart,
+		WindowEnd:               *body.WindowEnd,
+		InferenceSpendAvailable: *body.InferenceSpendAvailable,
+	}
+	v.Rows = make([]*admin.AdminPricingTrackerRow, len(body.Rows))
+	for i, val := range body.Rows {
+		if val == nil {
+			v.Rows[i] = nil
+			continue
+		}
+		v.Rows[i] = unmarshalAdminPricingTrackerRowResponseBodyToAdminAdminPricingTrackerRow(val)
+	}
+
+	return v
+}
+
+// NewListPricingTrackerUnauthorized builds a admin service listPricingTracker
+// endpoint unauthorized error.
+func NewListPricingTrackerUnauthorized(body *ListPricingTrackerUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPricingTrackerForbidden builds a admin service listPricingTracker
+// endpoint forbidden error.
+func NewListPricingTrackerForbidden(body *ListPricingTrackerForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPricingTrackerBadRequest builds a admin service listPricingTracker
+// endpoint bad_request error.
+func NewListPricingTrackerBadRequest(body *ListPricingTrackerBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPricingTrackerNotFound builds a admin service listPricingTracker
+// endpoint not_found error.
+func NewListPricingTrackerNotFound(body *ListPricingTrackerNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPricingTrackerConflict builds a admin service listPricingTracker
+// endpoint conflict error.
+func NewListPricingTrackerConflict(body *ListPricingTrackerConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPricingTrackerUnsupportedMedia builds a admin service
+// listPricingTracker endpoint unsupported_media error.
+func NewListPricingTrackerUnsupportedMedia(body *ListPricingTrackerUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPricingTrackerInvalid builds a admin service listPricingTracker
+// endpoint invalid error.
+func NewListPricingTrackerInvalid(body *ListPricingTrackerInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPricingTrackerInvariantViolation builds a admin service
+// listPricingTracker endpoint invariant_violation error.
+func NewListPricingTrackerInvariantViolation(body *ListPricingTrackerInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPricingTrackerUnexpected builds a admin service listPricingTracker
+// endpoint unexpected error.
+func NewListPricingTrackerUnexpected(body *ListPricingTrackerUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListPricingTrackerGatewayError builds a admin service listPricingTracker
+// endpoint gateway_error error.
+func NewListPricingTrackerGatewayError(body *ListPricingTrackerGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateGetProjectResponseBody runs the validations defined on
 // GetProjectResponseBody
 func ValidateGetProjectResponseBody(body *GetProjectResponseBody) (err error) {
@@ -3507,6 +3898,37 @@ func ValidateListOrganizationsResponseBody(body *ListOrganizationsResponseBody) 
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	return
+}
+
+// ValidateListPricingTrackerResponseBody runs the validations defined on
+// ListPricingTrackerResponseBody
+func ValidateListPricingTrackerResponseBody(body *ListPricingTrackerResponseBody) (err error) {
+	if body.Rows == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("rows", "body"))
+	}
+	if body.WindowStart == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("window_start", "body"))
+	}
+	if body.WindowEnd == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("window_end", "body"))
+	}
+	if body.InferenceSpendAvailable == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("inference_spend_available", "body"))
+	}
+	for _, e := range body.Rows {
+		if e != nil {
+			if err2 := ValidateAdminPricingTrackerRowResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.WindowStart != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.window_start", *body.WindowStart, goa.FormatDateTime))
+	}
+	if body.WindowEnd != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.window_end", *body.WindowEnd, goa.FormatDateTime))
 	}
 	return
 }
@@ -5675,6 +6097,246 @@ func ValidateListOrganizationsGatewayErrorResponseBody(body *ListOrganizationsGa
 	return
 }
 
+// ValidateListPricingTrackerUnauthorizedResponseBody runs the validations
+// defined on listPricingTracker_unauthorized_response_body
+func ValidateListPricingTrackerUnauthorizedResponseBody(body *ListPricingTrackerUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPricingTrackerForbiddenResponseBody runs the validations defined
+// on listPricingTracker_forbidden_response_body
+func ValidateListPricingTrackerForbiddenResponseBody(body *ListPricingTrackerForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPricingTrackerBadRequestResponseBody runs the validations
+// defined on listPricingTracker_bad_request_response_body
+func ValidateListPricingTrackerBadRequestResponseBody(body *ListPricingTrackerBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPricingTrackerNotFoundResponseBody runs the validations defined
+// on listPricingTracker_not_found_response_body
+func ValidateListPricingTrackerNotFoundResponseBody(body *ListPricingTrackerNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPricingTrackerConflictResponseBody runs the validations defined
+// on listPricingTracker_conflict_response_body
+func ValidateListPricingTrackerConflictResponseBody(body *ListPricingTrackerConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPricingTrackerUnsupportedMediaResponseBody runs the validations
+// defined on listPricingTracker_unsupported_media_response_body
+func ValidateListPricingTrackerUnsupportedMediaResponseBody(body *ListPricingTrackerUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPricingTrackerInvalidResponseBody runs the validations defined
+// on listPricingTracker_invalid_response_body
+func ValidateListPricingTrackerInvalidResponseBody(body *ListPricingTrackerInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPricingTrackerInvariantViolationResponseBody runs the
+// validations defined on listPricingTracker_invariant_violation_response_body
+func ValidateListPricingTrackerInvariantViolationResponseBody(body *ListPricingTrackerInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPricingTrackerUnexpectedResponseBody runs the validations
+// defined on listPricingTracker_unexpected_response_body
+func ValidateListPricingTrackerUnexpectedResponseBody(body *ListPricingTrackerUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListPricingTrackerGatewayErrorResponseBody runs the validations
+// defined on listPricingTracker_gateway_error_response_body
+func ValidateListPricingTrackerGatewayErrorResponseBody(body *ListPricingTrackerGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateAdminOrganizationMemberResponseBody runs the validations defined on
 // AdminOrganizationMemberResponseBody
 func ValidateAdminOrganizationMemberResponseBody(body *AdminOrganizationMemberResponseBody) (err error) {
@@ -5773,6 +6435,36 @@ func ValidateAdminOrganizationResponseBody(body *AdminOrganizationResponseBody) 
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateAdminPricingTrackerRowResponseBody runs the validations defined on
+// AdminPricingTrackerRowResponseBody
+func ValidateAdminPricingTrackerRowResponseBody(body *AdminPricingTrackerRowResponseBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.AccountType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("account_type", "body"))
+	}
+	if body.MonthlyTumTokens == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("monthly_tum_tokens", "body"))
+	}
+	if body.PaygMonthlyPrice == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("payg_monthly_price", "body"))
+	}
+	if body.PaygEffectiveRatePerMillion == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("payg_effective_rate_per_million", "body"))
+	}
+	if body.InferenceSpend == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("inference_spend", "body"))
 	}
 	return
 }

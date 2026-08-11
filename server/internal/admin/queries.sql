@@ -88,6 +88,26 @@ SET
     updated_at = clock_timestamp()
 WHERE id = @id;
 
+-- name: AdminListProjectsWithOrganization :many
+-- Powers the internal pricing tracker: every active project joined to its
+-- (non-disabled) organization, so per-project analytics can be rolled up to
+-- the owning customer. Optionally scoped by account type; when include_free is
+-- false, free-tier organizations are dropped so the tracker stays focused on
+-- paying customers.
+SELECT
+    p.id AS project_id,
+    om.id AS organization_id,
+    om.name AS organization_name,
+    om.slug AS organization_slug,
+    om.gram_account_type AS account_type
+FROM projects p
+JOIN organization_metadata om ON om.id = p.organization_id
+WHERE p.deleted IS FALSE
+  AND om.disabled_at IS NULL
+  AND (sqlc.narg('account_type')::text IS NULL OR om.gram_account_type = sqlc.narg('account_type')::text)
+  AND (sqlc.arg('include_free')::boolean OR om.gram_account_type <> 'free')
+ORDER BY om.id ASC;
+
 -- name: AdminListProjectsForOrganization :many
 SELECT id, slug, name, created_at, updated_at
 FROM projects
