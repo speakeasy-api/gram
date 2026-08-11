@@ -1008,6 +1008,61 @@ func (q *Queries) ListDeviceAgentDeviceSyncsFixture(ctx context.Context, organiz
 	return items, nil
 }
 
+const listPublishOutboxRows = `-- name: ListPublishOutboxRows :many
+SELECT id, public_id, organization_id, topic, message, attributes,
+       attempts, last_error, retry_after, locked_until, lease_token, created_at
+FROM publish_outbox
+ORDER BY id
+`
+
+type ListPublishOutboxRowsRow struct {
+	ID             int64
+	PublicID       uuid.UUID
+	OrganizationID string
+	Topic          string
+	Message        []byte
+	Attributes     []byte
+	Attempts       int32
+	LastError      pgtype.Text
+	RetryAfter     pgtype.Timestamptz
+	LockedUntil    pgtype.Timestamptz
+	LeaseToken     uuid.NullUUID
+	CreatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) ListPublishOutboxRows(ctx context.Context) ([]ListPublishOutboxRowsRow, error) {
+	rows, err := q.db.Query(ctx, listPublishOutboxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPublishOutboxRowsRow
+	for rows.Next() {
+		var i ListPublishOutboxRowsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PublicID,
+			&i.OrganizationID,
+			&i.Topic,
+			&i.Message,
+			&i.Attributes,
+			&i.Attempts,
+			&i.LastError,
+			&i.RetryAfter,
+			&i.LockedUntil,
+			&i.LeaseToken,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRiskResultsAll = `-- name: ListRiskResultsAll :many
 SELECT id, project_id, organization_id, risk_policy_id, risk_policy_version, chat_message_id, chat_content_part_id, skill_version_id, source, found, rule_id, description, match, start_pos, end_pos, confidence, tags, spans, dead_letter_reason, excluded_at, excluded_exclusion_id, false_positive_at, false_positive_reason, created_at
 FROM risk_results

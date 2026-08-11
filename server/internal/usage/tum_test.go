@@ -74,7 +74,7 @@ func newTUMTestService(t *testing.T, orgID string) (*Service, *pgxpool.Pool, dri
 	require.NoError(t, err)
 	projectID := project.ID
 
-	authzEngine := authz.NewEngine(logger, db, chConn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, db, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	svc := &Service{
 		tracer:        tp.Tracer("test"),

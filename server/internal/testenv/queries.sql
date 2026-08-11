@@ -127,6 +127,12 @@ WHERE public_id = @public_id;
 -- name: CountPublishOutboxRows :one
 SELECT COUNT(*) FROM publish_outbox;
 
+-- name: ListPublishOutboxRows :many
+SELECT id, public_id, organization_id, topic, message, attributes,
+       attempts, last_error, retry_after, locked_until, lease_token, created_at
+FROM publish_outbox
+ORDER BY id;
+
 -- name: SeedPublishOutboxRow :one
 -- Fixture insert that can set the retry/lease columns a producer never touches.
 INSERT INTO publish_outbox (
