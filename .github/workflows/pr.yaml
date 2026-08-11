@@ -1551,21 +1551,6 @@ jobs:
           done
           echo "All login attempts failed"
           exit 1
-      - name: Build and Push Registry image to GCR
-        id: build
-        uses: ./.github/workflows/composite/build-push
-        with:
-          hub-username: ${{ secrets.DOCKERHUB_USERNAME }}
-          hub-token: ${{ secrets.DOCKERHUB_TOKEN }}
-          registry: ${{ env.REGISTRY }}
-          username: oauth2accesstoken
-          password: ${{ steps.auth.outputs.access_token }}
-          image: ${{ env.DOCKER_REPOSITORY_OWNER }}/gram-dashboard
-          context: ./client/dashboard
-          file: client/dashboard/Dockerfile
-          git-auth-token: ${{ secrets.BOT_REPO_TOKEN }}
-          cache-key: gram/dashboard-image
-
       # The Gram admin dashboard. It ships as its own image because it is
       # served from the admin origin (same host as the admin API) rather than
       # the app origin. The `pnpm build` step above already produced its dist,
@@ -1573,6 +1558,10 @@ jobs:
       # The image name must stay in step with adminDashboard.repository in the
       # deployment Helm chart. "gram-admin" would be ambiguous: the admin API
       # itself runs from the main "gram" image, not from an image of its own.
+      # Keep this ahead of the dashboard image push. A failure here fails the
+      # job, which skips upload-dashboard-assets; if the dashboard image were
+      # already pushed it would reference hashed assets that never reached the
+      # CDN bucket.
       - name: Build and Push Admin Dashboard image to GCR
         id: build-admin-dashboard
         uses: ./.github/workflows/composite/build-push
@@ -1587,6 +1576,21 @@ jobs:
           file: client/admin/Dockerfile
           git-auth-token: ${{ secrets.BOT_REPO_TOKEN }}
           cache-key: gram/admin-dashboard-image
+
+      - name: Build and Push Registry image to GCR
+        id: build
+        uses: ./.github/workflows/composite/build-push
+        with:
+          hub-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          hub-token: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ${{ env.REGISTRY }}
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+          image: ${{ env.DOCKER_REPOSITORY_OWNER }}/gram-dashboard
+          context: ./client/dashboard
+          file: client/dashboard/Dockerfile
+          git-auth-token: ${{ secrets.BOT_REPO_TOKEN }}
+          cache-key: gram/dashboard-image
 
       - name: Prune PNPM store
         if: success()
