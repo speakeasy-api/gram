@@ -24,9 +24,28 @@ type ClientFaulter interface {
 // to the caller. Errors that do not implement ClientFaulter are treated as
 // server faults, so an unclassified failure keeps full error severity.
 func IsClientFault(err error) bool {
-	var faulter ClientFaulter
-	if !errors.As(err, &faulter) {
+	if err == nil {
 		return false
 	}
-	return faulter.ClientFault()
+
+	if faulter, ok := err.(ClientFaulter); ok && faulter.ClientFault() {
+		return true
+	}
+
+	if wrapped := errors.Unwrap(err); wrapped != nil {
+		return IsClientFault(wrapped)
+	}
+
+	// The standard errors package has no helper for errors that unwrap to
+	// multiple children (for example errors.Join), so inspect that shape after
+	// using errors.Unwrap for the ordinary single-error chain.
+	if wrapped, ok := any(err).(interface{ Unwrap() []error }); ok {
+		for _, child := range wrapped.Unwrap() {
+			if IsClientFault(child) {
+				return true
+			}
+		}
+	}
+
+	return false
 }

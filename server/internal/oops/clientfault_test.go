@@ -16,6 +16,17 @@ func (e *stubFaultError) Error() string { return "stub fault" }
 
 func (e *stubFaultError) ClientFault() bool { return e.client }
 
+type wrappingStubFaultError struct {
+	client bool
+	cause  error
+}
+
+func (e *wrappingStubFaultError) Error() string { return "wrapping stub fault" }
+
+func (e *wrappingStubFaultError) Unwrap() error { return e.cause }
+
+func (e *wrappingStubFaultError) ClientFault() bool { return e.client }
+
 func TestIsClientFault_MatchesSelfAttributingError(t *testing.T) {
 	t.Parallel()
 
@@ -28,6 +39,26 @@ func TestIsClientFault_TraversesWrappedErrors(t *testing.T) {
 
 	wrapped := fmt.Errorf("execute platform tool: %w", fmt.Errorf("call upstream: %w", &stubFaultError{client: true}))
 	require.True(t, IsClientFault(wrapped))
+}
+
+func TestIsClientFault_TraversesPastNonClientFaulter(t *testing.T) {
+	t.Parallel()
+
+	wrapped := &wrappingStubFaultError{
+		client: false,
+		cause:  &stubFaultError{client: true},
+	}
+	require.True(t, IsClientFault(wrapped), "an outer faulter must not hide a caller fault deeper in the chain")
+}
+
+func TestIsClientFault_TraversesJoinedErrors(t *testing.T) {
+	t.Parallel()
+
+	joined := errors.Join(
+		&stubFaultError{client: false},
+		fmt.Errorf("call upstream: %w", &stubFaultError{client: true}),
+	)
+	require.True(t, IsClientFault(joined))
 }
 
 func TestIsClientFault_TreatsUnclassifiedErrorsAsServerFaults(t *testing.T) {
