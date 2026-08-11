@@ -1,6 +1,6 @@
 import { InsightsConfig } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
-import { Page } from "@/components/page-layout";
+import { TabbedPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import type { Action } from "@/components/ui/MoreActions";
@@ -21,7 +21,6 @@ import {
   SheetDescription,
 } from "@/components/ui/Sheet";
 import { Text } from "@/components/ui/Text";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { ExclusionsTab, type ExclusionSheetState } from "./ExclusionsTab";
 import { DismissedFindingsTab } from "./DismissedFindingsTab";
 import { Badge } from "@/components/ui/Badge";
@@ -539,13 +538,6 @@ function PolicyDateCell({ date }: { date: Date }): JSX.Element {
 }
 
 const POLICY_CENTER_TABS = ["policies", "exclusions", "dismissed"] as const;
-type PolicyCenterTab = (typeof POLICY_CENTER_TABS)[number];
-
-function toPolicyCenterTab(value: string): PolicyCenterTab {
-  return (POLICY_CENTER_TABS as readonly string[]).includes(value)
-    ? (value as PolicyCenterTab)
-    : "policies";
-}
 
 export default function PolicyCenter(): JSX.Element {
   return (
@@ -585,7 +577,7 @@ function PolicyCenterContent() {
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);
   const [policyToDelete, setPolicyToDelete] = useState<PolicyRow | null>(null);
 
-  const [activeTab, setActiveTab] = useQueryState(
+  const [activeTab] = useQueryState(
     "tab",
     parseAsStringLiteral(POLICY_CENTER_TABS).withDefault("policies"),
   );
@@ -894,133 +886,119 @@ function PolicyCenterContent() {
     policiesBody = policiesEmptyState;
   }
 
-  const cta = isLoading ? null : (
-    <Page.Section.CTA>
-      <Button onClick={headerAction.onClick}>
-        <Button.LeftIcon>
-          <Plus className="mr-2 h-4 w-4" />
-        </Button.LeftIcon>
-        <Button.Text>{headerAction.label}</Button.Text>
-      </Button>
-    </Page.Section.CTA>
+  const primaryAction = isLoading ? undefined : (
+    <Button onClick={headerAction.onClick}>
+      <Button.LeftIcon>
+        <Plus className="mr-2 h-4 w-4" />
+      </Button.LeftIcon>
+      <Button.Text>{headerAction.label}</Button.Text>
+    </Button>
   );
 
   return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <InsightsConfig
-          contextInfo={insightsContext}
-          suggestions={INSIGHTS_SUGGESTIONS["risk-policies"]}
-          title="Policy insights"
-          subtitle="Ask about policy status, coverage, and detector capabilities. Match content is redacted before it reaches the assistant."
+    <TabbedPage
+      title="Policies"
+      stage="beta"
+      description="Configure policies to detect secrets, sensitive information, and prompt-defined risks in agent session interactions."
+      primaryAction={primaryAction}
+      activeTab={activeTab}
+      tabs={[
+        { value: "policies", label: "Policies", href: "?tab=policies" },
+        {
+          value: "exclusions",
+          label: "Exclusion rules",
+          href: "?tab=exclusions",
+        },
+        {
+          value: "dismissed",
+          label: "False Positives",
+          href: "?tab=dismissed",
+        },
+      ]}
+    >
+      <InsightsConfig
+        contextInfo={insightsContext}
+        suggestions={INSIGHTS_SUGGESTIONS["risk-policies"]}
+        title="Policy insights"
+        subtitle="Ask about policy status, coverage, and detector capabilities. Match content is redacted before it reaches the assistant."
+      />
+      {activeTab === "policies" && policiesBody}
+      {activeTab === "exclusions" && (
+        <ExclusionsTab
+          policies={data?.policies ?? []}
+          sheet={exclusionSheet}
+          onSheetChange={setExclusionSheet}
         />
-        <Page.Section>
-          <Page.Section.Title stage="beta">Policies</Page.Section.Title>
-          <Page.Section.Description>
-            Configure policies to detect secrets, sensitive information, and
-            prompt-defined risks in agent session interactions.
-          </Page.Section.Description>
-          {cta}
-          <Page.Section.Body>
-            <Tabs
-              value={activeTab}
-              onValueChange={(value) =>
-                void setActiveTab(toPolicyCenterTab(value))
-              }
-            >
-              <TabsList>
-                <TabsTrigger value="policies">Policies</TabsTrigger>
-                <TabsTrigger value="exclusions">Exclusion rules</TabsTrigger>
-                <TabsTrigger value="dismissed">False Positives</TabsTrigger>
-              </TabsList>
-              <TabsContent value="policies" className="mt-6">
-                {policiesBody}
-              </TabsContent>
-              <TabsContent value="exclusions" className="mt-6">
-                <ExclusionsTab
-                  policies={data?.policies ?? []}
-                  sheet={exclusionSheet}
-                  onSheetChange={setExclusionSheet}
-                />
-              </TabsContent>
-              <TabsContent value="dismissed" className="mt-6">
-                <DismissedFindingsTab />
-              </TabsContent>
-            </Tabs>
-          </Page.Section.Body>
-        </Page.Section>
+      )}
+      {activeTab === "dismissed" && <DismissedFindingsTab />}
 
-        {/* View Run Panel */}
-        <Sheet
-          open={!!runPanelPolicy}
-          onOpenChange={(open) => {
-            if (!open) setRunPanelPolicy(null);
-          }}
-        >
-          <SheetContent side="right" className="sm:max-w-md">
-            {runPanelPolicy && <RunPanel policy={runPanelPolicy} />}
-          </SheetContent>
-        </Sheet>
+      {/* View Run Panel */}
+      <Sheet
+        open={!!runPanelPolicy}
+        onOpenChange={(open) => {
+          if (!open) setRunPanelPolicy(null);
+        }}
+      >
+        <SheetContent side="right" className="sm:max-w-md">
+          {runPanelPolicy && <RunPanel policy={runPanelPolicy} />}
+        </SheetContent>
+      </Sheet>
 
-        {/* Delete Policy Confirmation */}
-        <Dialog
-          open={!!policyToDelete}
-          onOpenChange={(open) => {
-            if (!open) setPolicyToDelete(null);
-          }}
-        >
-          <Dialog.Content>
-            <Dialog.Header>
-              <Dialog.Title>Delete Policy</Dialog.Title>
-            </Dialog.Header>
-            <Stack gap={4}>
-              <Text variant="body">
-                <code className="bg-muted px-1 py-0.5 font-mono font-bold">
-                  {policyToDelete?.policy.name}
-                </code>{" "}
-                policy will be permanently deleted.
-              </Text>
-              {policyDeleteImpactText && (
-                <Text variant="body">{policyDeleteImpactText}</Text>
-              )}
-              {policyDeleteRuleListItems.length > 0 && (
-                <div className="space-y-2">
-                  <ul className="list-disc space-y-1 pl-5">
-                    {policyDeleteRuleListItems.map((ruleName, index) => (
-                      <li key={`${ruleName}-${index}`}>
-                        <Text variant="body" muted as="span">
-                          {ruleName}
-                        </Text>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </Stack>
-            <Dialog.Footer>
-              <div className="flex justify-end gap-2">
-                <Button
-                  variant="secondary"
-                  onClick={() => setPolicyToDelete(null)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="destructive-primary"
-                  onClick={confirmDelete}
-                  disabled={deleteMutation.isPending}
-                >
-                  Delete Policy
-                </Button>
+      {/* Delete Policy Confirmation */}
+      <Dialog
+        open={!!policyToDelete}
+        onOpenChange={(open) => {
+          if (!open) setPolicyToDelete(null);
+        }}
+      >
+        <Dialog.Content>
+          <Dialog.Header>
+            <Dialog.Title>Delete Policy</Dialog.Title>
+          </Dialog.Header>
+          <Stack gap={4}>
+            <Text variant="body">
+              <code className="bg-muted px-1 py-0.5 font-mono font-bold">
+                {policyToDelete?.policy.name}
+              </code>{" "}
+              policy will be permanently deleted.
+            </Text>
+            {policyDeleteImpactText && (
+              <Text variant="body">{policyDeleteImpactText}</Text>
+            )}
+            {policyDeleteRuleListItems.length > 0 && (
+              <div className="space-y-2">
+                <ul className="list-disc space-y-1 pl-5">
+                  {policyDeleteRuleListItems.map((ruleName, index) => (
+                    <li key={`${ruleName}-${index}`}>
+                      <Text variant="body" muted as="span">
+                        {ruleName}
+                      </Text>
+                    </li>
+                  ))}
+                </ul>
               </div>
-            </Dialog.Footer>
-          </Dialog.Content>
-        </Dialog>
-      </Page.Body>
-    </Page>
+            )}
+          </Stack>
+          <Dialog.Footer>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => setPolicyToDelete(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive-primary"
+                onClick={confirmDelete}
+                disabled={deleteMutation.isPending}
+              >
+                Delete Policy
+              </Button>
+            </div>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
+    </TabbedPage>
   );
 }
 

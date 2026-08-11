@@ -12,6 +12,33 @@ const (
 	runtimeBackendFlyIO = "flyio"
 )
 
+// runTurnRequest bundles everything a backend needs to deliver one turn to
+// the runner's /threads/{thread_id}/turn endpoint.
+type runTurnRequest struct {
+	ThreadID uuid.UUID
+
+	// IdempotencyKey deduplicates redelivered turns; the runner serializes
+	// admissions per key.
+	IdempotencyKey string
+
+	// AuthToken is the thread-scoped runtime token the runner uses for its
+	// management-API calls during the turn.
+	AuthToken string
+
+	// Prompt is the turn's user input text.
+	Prompt string
+
+	// InputParts optionally attaches structured content (e.g. image_url
+	// parts with data: URIs) that the runner folds into the turn's user
+	// item after the prompt text.
+	InputParts []runtimeContentPart
+
+	// MCPServers carries the assistant's current MCP set so the runner can
+	// reconcile newly attached or detached servers into a live thread
+	// without re-running the full thread bootstrap.
+	MCPServers []runtimeMCPServer
+}
+
 type RuntimeBackend interface {
 	Backend() string
 	SupportsBackend(backend string) bool
@@ -25,29 +52,17 @@ type RuntimeBackend interface {
 	// machines with, in the "<repo>:<tag>" form. Stable for the lifetime
 	// of the process — the tag is stamped at build time.
 	ImageRef() string
-	// ReusesIdleRuntimes reports whether a stopped runtime's resources are
-	// kept for warm restart on the next admission (true) or torn down so the
-	// next admission always provisions a fresh one (false). It selects how a
-	// deploy rolls the fleet onto a new image: reusing backends (Fly) keep the
-	// machine and need an in-place RecycleImage; non-reusing backends (GKE)
-	// drop the idle runtime so re-admission adopts a fresh warm-pool pod
-	// already running the new image — no in-place swap exists or is needed.
-	ReusesIdleRuntimes() bool
 	Ensure(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendEnsureResult, error)
-	// RecycleImage rolls the runtime's existing machine onto the configured
-	// runtime image when it is running a stale one, without launching
-	// anything new: missing apps/machines are skipped, not created. Gated on
-	// the runner's idle clock so an in-flight turn is never interrupted — a
-	// busy machine is skipped and the next admission's Ensure picks the
-	// upgrade up lazily.
+	// RecycleImage rolls the runtime onto the configured runtime image when
+	// it is running a stale one, without launching anything new: missing
+	// apps/machines/claims are skipped, not created. Gated on the runner's
+	// idle clock so an in-flight turn is never interrupted — a busy runtime
+	// is skipped and the next admission's Ensure picks the upgrade up lazily.
 	RecycleImage(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendRecycleResult, error)
-	// RunTurn delivers a turn for `threadID` to the runner backing
-	// `runtime`. The call lands on /threads/{threadID}/turn so the
-	// runner can dispatch to the right per-thread tokio task.
-	// mcpServers carries the assistant's current MCP set so the runner
-	// can reconcile newly attached or detached servers into a live
-	// thread without re-running the full thread bootstrap.
-	RunTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID, idempotencyKey string, authToken string, prompt string, mcpServers []runtimeMCPServer) error
+	// RunTurn delivers a turn to the runner backing `runtime`. The call
+	// lands on /threads/{thread_id}/turn so the runner can dispatch to the
+	// right per-thread tokio task.
+	RunTurn(ctx context.Context, runtime assistantRuntimeRecord, turn runTurnRequest) error
 	Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error)
 	// Stop halts the active runtime so it can be re-admitted later. Backends
 	// may keep persisted state (e.g. Fly app + IP) intact for warm reuse.

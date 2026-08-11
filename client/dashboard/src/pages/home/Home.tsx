@@ -2,7 +2,11 @@ import { useHideInsightsDock } from "@/components/insights-context";
 import { Page } from "@/components/page-layout";
 import { ProjectDashboard } from "@/components/project/ProjectDashboard";
 import { RequireScope } from "@/components/require-scope";
-import { BrandMeshLayers } from "@/components/brand-mesh";
+import {
+  BRAND_MESH_SURFACE_CLASS,
+  BrandMeshLayers,
+} from "@/components/brand-mesh";
+import { cn } from "@/lib/utils";
 import { ChatLanding } from "@/pages/chat/Chat";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useRoutes } from "@/routes";
@@ -42,7 +46,12 @@ export default function Home(): JSX.Element {
             {/* `z-10` lifts the card's stacking context above the dashboard
                 below, so the slash menu overlays it instead of the other way
                 round. */}
-            <div className="border-border from-card to-background relative isolate z-10 border bg-gradient-to-br p-8">
+            <div
+              className={cn(
+                BRAND_MESH_SURFACE_CLASS,
+                "border-border z-10 border p-8",
+              )}
+            >
               <BrandMeshLayers />
               <ChatLanding compact />
             </div>

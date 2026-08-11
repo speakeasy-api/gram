@@ -1,16 +1,13 @@
-import { Page } from "@/components/page-layout";
-import { RequireScope } from "@/components/require-scope";
+import { FormPage } from "@/components/page-templates";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Heading } from "@/components/ui/Heading";
 import { Input } from "@/components/ui/Input";
 import { Stack } from "@/components/ui/Stack";
-import { Text } from "@/components/ui/Text";
 import { useIsSpeakeasyStaff } from "@/contexts/Auth";
 import { mcpServerRouteParam, validateMcpServerUrl } from "@/lib/sources";
 import { useRoutes } from "@/routes";
-import { AlertCircle, Loader2, Server } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useCreateUnproxiedMcpSource } from "./hooks";
@@ -25,40 +22,20 @@ export default function CreateUnproxiedMcp(): JSX.Element {
   // form submit fail.
   if (!isSpeakeasyStaff) {
     return (
-      <Page>
-        <Page.Header>
-          <Page.Header.Breadcrumbs />
-        </Page.Header>
-        <Page.Body>
-          <Stack gap={3} className="max-w-2xl">
-            <Heading variant="h3">Speakeasy staff only</Heading>
-            <Text muted>
-              Unproxied MCP servers are restricted to Speakeasy staff while we
-              validate this workflow.
-            </Text>
-            <div>
-              <Button variant="secondary" onClick={() => routes.sources.goTo()}>
-                <Button.Text>Back to Sources</Button.Text>
-              </Button>
-            </div>
-          </Stack>
-        </Page.Body>
-      </Page>
+      <FormPage
+        title="Speakeasy staff only"
+        description="Unproxied MCP servers are restricted to Speakeasy staff while we validate this workflow."
+      >
+        <div>
+          <Button variant="secondary" onClick={() => routes.sources.goTo()}>
+            <Button.Text>Back to Sources</Button.Text>
+          </Button>
+        </div>
+      </FormPage>
     );
   }
 
-  return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <RequireScope scope="mcp:write" level="page">
-          <CreateUnproxiedMcpForm />
-        </RequireScope>
-      </Page.Body>
-    </Page>
-  );
+  return <CreateUnproxiedMcpForm />;
 }
 
 function CreateUnproxiedMcpForm() {
@@ -102,25 +79,16 @@ function CreateUnproxiedMcpForm() {
   };
 
   return (
-    <div className="max-w-2xl">
-      <Stack gap={3} className="mb-8">
-        <Stack direction="horizontal" gap={3} align="center">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center bg-amber-500/10 dark:bg-amber-500/20">
-            <Server className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-          </div>
-          <Stack direction="horizontal" gap={2} align="center">
-            <Heading variant="h3">Add an unproxied MCP server</Heading>
-            <Badge variant="neutral">Speakeasy staff only</Badge>
-          </Stack>
-        </Stack>
-        <Text muted>
-          List a vendor&apos;s MCP server without proxying it. Speakeasy never
-          fetches this URL or manages OAuth for it — the customer connects to
-          the vendor directly. Use this to sidestep per-vendor OAuth callback
-          allowlisting for servers we don&apos;t need to proxy.
-        </Text>
-      </Stack>
-
+    <FormPage
+      scope="mcp:write"
+      title={
+        <>
+          New unproxied MCP server{" "}
+          <Badge variant="neutral">Speakeasy staff only</Badge>
+        </>
+      }
+      description="List a vendor's MCP server without proxying it. Speakeasy never fetches this URL or manages OAuth for it — the customer connects to the vendor directly. Use this to sidestep per-vendor OAuth callback allowlisting for servers we don't need to proxy."
+    >
       <form
         onSubmit={(e) => {
           void handleSubmit(e);
@@ -220,6 +188,6 @@ function CreateUnproxiedMcpForm() {
           </Stack>
         </Stack>
       </form>
-    </div>
+    </FormPage>
   );
 }

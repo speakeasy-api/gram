@@ -1,4 +1,10 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  render as rtlRender,
+  screen,
+} from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { emptySession } from "@/contexts/Auth";
 
@@ -15,6 +21,10 @@ vi.mock("@/contexts/Auth", async (importOriginal) => {
 });
 
 import { TrialStatusCard } from "./trial-status-card";
+
+// The card links to the in-app upgrade gate, so Link needs router context.
+const render = (ui: React.ReactElement) =>
+  rtlRender(ui, { wrapper: MemoryRouter });
 
 const activeTrial = {
   startedAt: new Date("2026-08-05T00:00:00.000Z"),
@@ -153,10 +163,10 @@ describe("TrialStatusCard", () => {
 
   it("changes the brand color as the trial progresses", () => {
     const colorByDay = [
-      [1, "bg-[var(--color-base-black)]"],
-      [5, "bg-[var(--color-brand-c)]"],
-      [9, "bg-[var(--color-brand-ruby)]"],
-      [13, "bg-[var(--color-brand-swift)]"],
+      [1, "bg-(--color-base-black)"],
+      [5, "bg-(--color-brand-c)"],
+      [9, "bg-(--color-brand-ruby)"],
+      [13, "bg-(--color-brand-swift)"],
     ] as const;
 
     for (const [day, colorClass] of colorByDay) {
@@ -187,14 +197,13 @@ describe("TrialStatusCard", () => {
     ).toBe(true);
   });
 
-  it("opens the Sales conversation safely in a new tab", () => {
+  it("sends the Sales conversation to the in-app upgrade gate", () => {
     render(<TrialStatusCard />);
 
+    // In-app rather than the marketing site: the gate prefills the booking
+    // form from the session, so it stays in the same tab.
     const salesLink = screen.getByRole("link", { name: "Talk to sales" });
-    expect(salesLink.getAttribute("href")).toBe(
-      "https://www.speakeasy.com/talk-to-us",
-    );
-    expect(salesLink.getAttribute("target")).toBe("_blank");
-    expect(salesLink.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(salesLink.getAttribute("href")).toBe("/talk-to-us");
+    expect(salesLink.getAttribute("target")).toBeNull();
   });
 });

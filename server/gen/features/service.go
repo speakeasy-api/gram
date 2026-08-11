@@ -20,6 +20,8 @@ type Service interface {
 	GetProductFeatures(context.Context, *GetProductFeaturesPayload) (res *GetProductFeaturesResult, err error)
 	// Enable or disable an organization feature flag.
 	SetProductFeature(context.Context, *SetProductFeaturePayload) (err error)
+	// Set the organization policy for automatic remote-session refresh.
+	SetRemoteSessionAutoRefreshPolicy(context.Context, *SetRemoteSessionAutoRefreshPolicyPayload) (err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -42,7 +44,7 @@ const ServiceName = "features"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [2]string{"getProductFeatures", "setProductFeature"}
+var MethodNames = [3]string{"getProductFeatures", "setProductFeature", "setRemoteSessionAutoRefreshPolicy"}
 
 // GetProductFeaturesPayload is the payload type of the features service
 // getProductFeatures method.
@@ -88,6 +90,10 @@ type GetProductFeaturesResult struct {
 	// Whether consent screens expose automatic remote-session refresh for the
 	// organization
 	RemoteSessionAutoRefreshEnabled bool
+	// Whether automatic remote-session refresh is enforced as the organization
+	// default: forced on for every user, shown locked on consent screens, and
+	// applied by the keepalive regardless of per-session preference
+	RemoteSessionAutoRefreshEnforcedEnabled bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -101,6 +107,14 @@ type SetProductFeaturePayload struct {
 	FeatureName string
 	// Whether the feature should be enabled
 	Enabled      bool
+	SessionToken *string
+}
+
+// SetRemoteSessionAutoRefreshPolicyPayload is the payload type of the features
+// service setRemoteSessionAutoRefreshPolicy method.
+type SetRemoteSessionAutoRefreshPolicyPayload struct {
+	// Organization policy for automatic remote-session refresh
+	Policy       string
 	SessionToken *string
 }
 

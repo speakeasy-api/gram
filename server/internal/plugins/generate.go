@@ -381,7 +381,7 @@ const platformMCPGeneratorVersion = "1"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "28"
+const hooksGeneratorVersion = "30"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -1531,6 +1531,15 @@ export const SpeakeasyObservability = async (ctx: any) => {
   return {
     "chat.message": forward("chat.message"),
     "chat.params": forward("chat.params"),
+    "chat.headers": async (input: any, output: any) => {
+      const messageID = input?.message?.id
+      if (messageID) output.headers = {
+        ...output.headers,
+        "x-gram-agent-provider": "opencode",
+        "x-gram-agent-session-id": input.sessionID,
+        "x-gram-agent-turn-id": messageID,
+      }
+    },
     "tool.execute.before": forward("tool.execute.before"),
     "tool.execute.after": forward("tool.execute.after"),
     event: async ({ event }: any) => {

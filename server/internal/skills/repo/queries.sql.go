@@ -4710,6 +4710,64 @@ func (q *Queries) ListSkillSuggestionProjects(ctx context.Context, arg ListSkill
 	return items, nil
 }
 
+const listSkillVersionPromptInjectionFindings = `-- name: ListSkillVersionPromptInjectionFindings :many
+SELECT DISTINCT
+  COALESCE(rr.rule_id, 'prompt_injection')::text AS rule_id,
+  COALESCE(rr.description, 'Detected a prompt injection attempt.')::text AS description,
+  COALESCE(rr.confidence, 0)::double precision AS confidence
+FROM risk_results rr
+JOIN skill_versions sv ON sv.id = rr.skill_version_id
+JOIN skills s ON s.id = sv.skill_id
+JOIN risk_policies rp
+  ON rp.id = rr.risk_policy_id
+  AND rp.project_id = s.project_id
+  AND rp.enabled IS TRUE
+  AND rp.deleted IS FALSE
+  AND rr.risk_policy_version = rp.version
+WHERE s.project_id = $1
+  AND s.id = $2
+  AND s.archived_at IS NULL
+  AND sv.id = $3
+  AND rr.project_id = s.project_id
+  AND rr.source = 'prompt_injection'
+  AND rr.found IS TRUE
+  AND rr.excluded_at IS NULL
+  AND rr.false_positive_at IS NULL
+ORDER BY 1, 2, 3 DESC
+`
+
+type ListSkillVersionPromptInjectionFindingsParams struct {
+	ProjectID      uuid.UUID
+	SkillID        uuid.UUID
+	SkillVersionID uuid.UUID
+}
+
+type ListSkillVersionPromptInjectionFindingsRow struct {
+	RuleID      string
+	Description string
+	Confidence  float64
+}
+
+func (q *Queries) ListSkillVersionPromptInjectionFindings(ctx context.Context, arg ListSkillVersionPromptInjectionFindingsParams) ([]ListSkillVersionPromptInjectionFindingsRow, error) {
+	rows, err := q.db.Query(ctx, listSkillVersionPromptInjectionFindings, arg.ProjectID, arg.SkillID, arg.SkillVersionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSkillVersionPromptInjectionFindingsRow
+	for rows.Next() {
+		var i ListSkillVersionPromptInjectionFindingsRow
+		if err := rows.Scan(&i.RuleID, &i.Description, &i.Confidence); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSkillVersions = `-- name: ListSkillVersions :many
 SELECT
   sv.id, sv.skill_id, sv.content, sv.canonical_sha256, sv.raw_sha256, sv.description, sv.metadata, sv.spec_valid, sv.validation_errors, sv.created_at, sv.promoted_at, sv.created_by_user_id,

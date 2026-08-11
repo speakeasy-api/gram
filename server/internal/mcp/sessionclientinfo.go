@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
@@ -29,19 +30,27 @@ type sessionClientInfoStore interface {
 	Load(ctx context.Context, projectID uuid.UUID, toolsetSlug, sessionID string, nowMillis int64) (sessionclientinfo.Info, error)
 }
 
-// storeSessionClientInfo records the identity a client reported at initialize.
-// A client that reports no name leaves no record, and a write failure is
-// logged rather than surfaced: losing the identity must never fail the
-// handshake.
-func storeSessionClientInfo(ctx context.Context, logger *slog.Logger, store sessionClientInfoStore, payload *mcpInputs, name, version string) {
+// storeSessionClientInfo records what a client reported about itself at
+// initialize. A client that reports neither a name nor a protocol version
+// leaves no record, and a write failure is logged rather than surfaced: losing
+// this must never fail the handshake.
+//
+// Either field alone is enough to be worth recording. A client that omits
+// clientInfo.name but sends protocolVersion is still attributable to a protocol
+// generation for the rest of its session, which is the more useful of the two
+// for diagnosing version-specific behaviour. Admitting those records does not
+// affect how much can be stored: the per-server record cap is what bounds that.
+func storeSessionClientInfo(ctx context.Context, logger *slog.Logger, store sessionClientInfoStore, payload *mcpInputs, name, version, protocolVersion string) {
 	name = sanitizeClientInfoField(name)
-	if name == "" || payload.sessionID == "" {
+	protocolVersion = mcpversions.Sanitize(protocolVersion)
+	if payload.sessionID == "" || (name == "" && protocolVersion == "") {
 		return
 	}
 
 	err := store.Store(ctx, payload.projectID, payload.toolset, payload.sessionID, sessionclientinfo.Info{
-		Name:    name,
-		Version: sanitizeClientInfoField(version),
+		Name:            name,
+		Version:         sanitizeClientInfoField(version),
+		ProtocolVersion: protocolVersion,
 	}, time.Now().UnixMilli())
 	if err != nil {
 		logger.WarnContext(ctx, "failed to record mcp session client info", attr.SlogError(err))
@@ -91,6 +100,24 @@ func resolveClientIdentity(ctx context.Context, logger *slog.Logger, store sessi
 
 	identity.Name = info.Name
 	identity.Version = info.Version
+
+	// Attribute this request to the protocol generation its session handshaked
+	// with. Piggybacking on the Load above is deliberate: it makes propagation
+	// free on the one non-initialize request that already reads the store,
+	// rather than adding a Redis round-trip to every RPC. Clients that send the
+	// MCP-Protocol-Version header are already covered on every request by
+	// middleware.MCPProtocolVersionTelemetry; this fills the gap for clients
+	// predating that header, which is why it is best-effort by design.
+	//
+	// The stored value is what the client asked for at initialize. The
+	// negotiated half is deterministic rather than stored: this store is only
+	// written by the hosted toolset handler, which answers
+	// ServedHostedToolset unconditionally. Recording it here is what gives
+	// pre-header clients a negotiated attribute at all, since the middleware
+	// has no header to read for them. A session that handshaked before a
+	// change to that constant would be attributed the current value, which is
+	// the one inaccuracy the determinism costs.
+	recordMCPProtocolVersionSpan(ctx, info.ProtocolVersion, mcpversions.ServedHostedToolset)
 
 	return identity
 }
