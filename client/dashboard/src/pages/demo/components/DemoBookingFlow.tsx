@@ -149,17 +149,21 @@ export function DemoBookingFlow({
           <Cal
             calLink={CAL_DEMO_LINK}
             config={{
+              // Caller defaults go first so the identity below wins: the type
+              // is an open record and cannot stop a caller passing `email`,
+              // but attendee details are this component's to set.
+              // Empty entries are dropped rather than sent, so an unset
+              // default leaves the field open instead of blanking it.
+              ...Object.fromEntries(
+                Object.entries(formDefaults ?? {}).filter(([, v]) => v),
+              ),
               layout: "month_view",
               theme: "light",
               name,
               email,
-              // Keys must match the booking questions' identifiers on the Cal
-              // event. Empty entries are dropped rather than sent, so an unset
-              // default leaves the field open instead of blanking it.
+              // Key must match the booking question's identifier on the Cal
+              // event.
               "Company-Name": companyName,
-              ...Object.fromEntries(
-                Object.entries(formDefaults ?? {}).filter(([, v]) => v),
-              ),
             }}
             style={{ width: "100%", height: "100%", overflow: "auto" }}
           />

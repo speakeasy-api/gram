@@ -84,6 +84,22 @@ describe("DemoBookingFlow", () => {
     expect(embed.getAttribute("data-cal-notes")).toBe("");
   });
 
+  it("keeps session identity when a caller tries to override it", () => {
+    render(
+      <DemoBookingFlow
+        formDefaults={{
+          email: "spoof@example.test",
+          name: "Someone Else",
+          "Company-Name": "Other Co",
+        }}
+      />,
+    );
+    const embed = screen.getByTestId("cal-embed");
+    expect(embed.getAttribute("data-cal-email")).toBe("jane@acme.com");
+    expect(embed.getAttribute("data-cal-name")).toBe("Jane Smith");
+    expect(embed.getAttribute("data-cal-company")).toBe("Acme Inc");
+  });
+
   it("passes the caller's form defaults through to the embed", () => {
     render(
       <DemoBookingFlow
