@@ -27,13 +27,13 @@ const MESH_VARIATIONS = [
 
 const SEEDED_BRAND_COLORS = [
   "var(--color-brand-red-200)",
-  "var(--color-brand-red-400)",
-  "var(--color-brand-red-600)",
   "var(--color-brand-green-200)",
-  "var(--color-brand-green-400)",
-  "var(--color-brand-green-600)",
   "var(--color-brand-blue-200)",
+  "var(--color-brand-red-400)",
+  "var(--color-brand-green-400)",
   "var(--color-brand-blue-400)",
+  "var(--color-brand-red-600)",
+  "var(--color-brand-green-600)",
   "var(--color-brand-blue-600)",
 ] as const;
 
