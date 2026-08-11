@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_approval"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -108,6 +110,14 @@ func TestPromote_CarriesRequesterAndLinksSource(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, row.RiskPolicyBypassRequestID.Valid)
 	require.Equal(t, bypassID, row.RiskPolicyBypassRequestID.UUID)
+
+	// The audit actor is the admin who promoted, not the blocked employee the
+	// request is attributed to — the feed records who performed the API call.
+	entry, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionMCPApprovalRequestCreate)
+	require.NoError(t, err)
+	require.Equal(t, ti.authContext.UserID, entry.ActorID)
+	require.NotEqual(t, "blocked-user", entry.ActorID)
+	require.Equal(t, promoted.TargetRaw, entry.SubjectDisplay)
 }
 
 // Promoting another project's bypass request is the sharpest IDOR risk in the
@@ -172,6 +182,16 @@ func TestPromote_JoinsAnExistingReview(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, created.ID, promoted.ID, "one server, one review, whatever the entry point")
 	require.Equal(t, 2, promoted.RequesterCount)
+
+	// The upsert's COALESCE stamps the promotion source onto the pre-existing
+	// review, so the link is not lost just because the proactive ask won the
+	// race to create the row.
+	row, err := ti.repo.GetApprovalRequest(ctx, repo.GetApprovalRequestParams{
+		ID: uuid.MustParse(created.ID), ProjectID: ti.projectID,
+	})
+	require.NoError(t, err)
+	require.True(t, row.RiskPolicyBypassRequestID.Valid, "the joined review carries the bypass link")
+	require.Equal(t, bypassID, row.RiskPolicyBypassRequestID.UUID)
 }
 
 // A promoted bypass with no note does not erase the justification the same

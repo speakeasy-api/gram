@@ -50,6 +50,15 @@ const defaultPageLimit = 50
 // maxPageLimit caps a caller-supplied page size.
 const maxPageLimit = 200
 
+// maxTargetLength and maxNoteLength bound the free-text intake fields. They
+// mirror the MaxLength bounds in the service design, enforced here as well so
+// a caller reaching the service without the generated transport validation
+// gets the same answer.
+const (
+	maxTargetLength = 2048
+	maxNoteLength   = 4000
+)
+
 // targetKindServerURL and targetKindStdioCommand are the reference namespaces
 // a request may name. Validated here rather than with a database CHECK, per
 // the schema conventions.
@@ -157,15 +166,25 @@ func (s *Service) project(ctx context.Context, scope authz.Scope) (uuid.UUID, st
 	// it at all, and holding the first must not bypass the second. RBAC runs
 	// first so an unauthorized caller costs no feature-store work and a
 	// feature lookup failure never masks a denial.
-	enabled, err := s.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureMCPApproval)
-	if err != nil {
-		return uuid.Nil, "", oops.E(oops.CodeUnexpected, err, "check mcp approval feature").LogError(ctx, s.logger)
-	}
-	if !enabled {
-		return uuid.Nil, "", oops.E(oops.CodeForbidden, nil, "MCP approval is not enabled for this organization")
+	if err := s.requireFeature(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return uuid.Nil, "", err
 	}
 
 	return *authCtx.ProjectID, authCtx.ActiveOrganizationID, nil
+}
+
+// requireFeature enforces the organization-level product gate every entry
+// point shares, whether or not that entry point also demands a scope.
+func (s *Service) requireFeature(ctx context.Context, organizationID string) error {
+	enabled, err := s.features.IsFeatureEnabled(ctx, organizationID, productfeatures.FeatureMCPApproval)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check mcp approval feature").LogError(ctx, s.logger)
+	}
+	if !enabled {
+		return oops.E(oops.CodeForbidden, nil, "MCP approval is not enabled for this organization")
+	}
+
+	return nil
 }
 
 // member resolves the caller's project and enforces the feature gate without
@@ -181,12 +200,8 @@ func (s *Service) member(ctx context.Context) (uuid.UUID, *contextvalues.AuthCon
 		return uuid.Nil, nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	enabled, err := s.features.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureMCPApproval)
-	if err != nil {
-		return uuid.Nil, nil, oops.E(oops.CodeUnexpected, err, "check mcp approval feature").LogError(ctx, s.logger)
-	}
-	if !enabled {
-		return uuid.Nil, nil, oops.E(oops.CodeForbidden, nil, "MCP approval is not enabled for this organization")
+	if err := s.requireFeature(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return uuid.Nil, nil, err
 	}
 
 	return *authCtx.ProjectID, authCtx, nil
@@ -335,20 +350,28 @@ func (s *Service) EnsureServerReview(ctx context.Context, payload *gen.EnsureSer
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	key, display, err := admittableServerURL(strings.TrimSpace(payload.Target))
+	trimmedTarget := strings.TrimSpace(payload.Target)
+	if len(trimmedTarget) > maxTargetLength {
+		return nil, oops.E(oops.CodeBadRequest, nil, "target must be at most %d characters", maxTargetLength)
+	}
+
+	key, display, err := admittableServerURL(trimmedTarget)
 	if err != nil {
 		return nil, err
 	}
 
-	// A dossier that already exists with a gathered document resolves as a
-	// plain read: the server page calls this endpoint on every view, so a
-	// repeat resolve must not re-run the evidence probes, touch the row, or
-	// audit a create that did not happen. A row whose gather previously
-	// failed (no evidence yet) falls through to admit so the gather is
-	// retried. Concurrent first opens can both miss this read and race into
-	// the upsert; admit audits a create only when the upsert actually
-	// inserted, so the loser refreshes the same dossier without a duplicate
-	// audit entry.
+	// A dossier that already exists with a complete gathered document
+	// resolves as a plain read: the server page calls this endpoint on every
+	// view, so a repeat resolve must not re-run the evidence probes, touch
+	// the row, or audit a create that did not happen. Two failure shapes
+	// retry instead. A row with no evidence at all — the whole gather
+	// errored, or a concurrent first open won the insert — falls through to
+	// admit; admit audits a create only when the upsert actually inserted,
+	// so the loser refreshes the same dossier without a duplicate audit
+	// entry. A row whose stored document recorded source gaps — an
+	// unreachable registry or a failed traffic lookup land in Gaps with
+	// evidence_collected_at still set — re-gathers in place, so an
+	// outage-time dossier does not keep its gaps forever.
 	existing, err := repo.New(s.db).GetApprovalRequestByTarget(ctx, repo.GetApprovalRequestByTargetParams{
 		ProjectID:  projectID,
 		TargetKind: targetKindServerURL,
@@ -356,7 +379,11 @@ func (s *Service) EnsureServerReview(ctx context.Context, payload *gen.EnsureSer
 	})
 	switch {
 	case err == nil && existing.EvidenceCollectedAt.Valid:
-		return summaryView(fromTargetRow(existing)), nil
+		if !storedEvidenceHasGaps(existing.CurrentEvidence, existing.EvidenceVersion) {
+			return summaryView(fromTargetRow(existing)), nil
+		}
+
+		return s.refreshGappedEvidence(ctx, projectID, existing)
 	case err != nil && !errors.Is(err, pgx.ErrNoRows):
 		return nil, oops.E(oops.CodeUnexpected, err, "error reading approval request").LogError(ctx, s.logger)
 	}
@@ -375,6 +402,58 @@ func (s *Service) EnsureServerReview(ctx context.Context, payload *gen.EnsureSer
 	})
 }
 
+// storedEvidenceHasGaps reports whether a stored evidence document recorded
+// sources it could not consult. A document that will not decode — or whose
+// version this build no longer reads — reports gapped, so the next view
+// retries the gather rather than pinning an unreadable document forever.
+func storedEvidenceHasGaps(raw []byte, version int32) bool {
+	document, err := evidence.DecodeDocument(raw, int(version))
+	if err != nil {
+		return true
+	}
+
+	return len(document.Gaps) > 0
+}
+
+// refreshGappedEvidence re-runs the gather for a dossier whose stored
+// document recorded source gaps. The never-worse property holds by
+// construction: the fresh document replaces the stored one only when it
+// closed every gap, so a retry during the same outage — or a new one — leaves
+// the richer stored document standing. This is still the read path: no audit
+// entry is written, and the request's status and requesters are untouched.
+func (s *Service) refreshGappedEvidence(ctx context.Context, projectID uuid.UUID, existing repo.GetApprovalRequestByTargetRow) (*gen.ApprovalRequestSummary, error) {
+	gatherCtx, cancelGather := context.WithTimeout(ctx, gatherTimeout)
+	defer cancelGather()
+
+	document, err := s.evidence.Assemble(gatherCtx, projectID, identity.Resolve(existing.TargetRaw))
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to re-assemble approval evidence", attr.SlogError(err))
+
+		return summaryView(fromTargetRow(existing)), nil
+	}
+
+	if refreshed, decodeErr := evidence.DecodeDocument(document, evidence.Version); decodeErr != nil || len(refreshed.Gaps) > 0 {
+		return summaryView(fromTargetRow(existing)), nil
+	}
+
+	queries := repo.New(s.db)
+	if err := queries.SetApprovalRequestEvidence(ctx, repo.SetApprovalRequestEvidenceParams{
+		CurrentEvidence: document,
+		EvidenceVersion: evidence.Version,
+		ID:              existing.ID,
+		ProjectID:       projectID,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error storing evidence").LogError(ctx, s.logger)
+	}
+
+	row, err := queries.GetApprovalRequest(ctx, repo.GetApprovalRequestParams{ID: existing.ID, ProjectID: projectID})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading approval request").LogError(ctx, s.logger)
+	}
+
+	return summaryView(fromGetRow(row)), nil
+}
+
 func (s *Service) CreateRequest(ctx context.Context, payload *gen.CreateRequestPayload) (*gen.ApprovalRequestSummary, error) {
 	projectID, authCtx, err := s.member(ctx)
 	if err != nil {
@@ -384,6 +463,9 @@ func (s *Service) CreateRequest(ctx context.Context, payload *gen.CreateRequestP
 	raw := strings.TrimSpace(payload.Target)
 	if raw == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "a server reference is required")
+	}
+	if len(raw) > maxTargetLength {
+		return nil, oops.E(oops.CodeBadRequest, nil, "target must be at most %d characters", maxTargetLength)
 	}
 
 	var key string
@@ -400,9 +482,15 @@ func (s *Service) CreateRequest(ctx context.Context, payload *gen.CreateRequestP
 		// the server anyway.
 		raw = display
 	case targetKindStdioCommand:
-		// Collapsed whitespace, so cosmetic spacing differences do not split
-		// one server into two reviews.
-		key = strings.Join(strings.Fields(raw), " ")
+		// The stored reference is the redacted form for the same reason: a
+		// launch command routinely embeds credentials (`--header
+		// "Authorization: Bearer …"`, `--api-key=…`, `TOKEN=… npx …`), and
+		// target_raw reaches the queue, the audit feed, and the webhook
+		// stream. RedactCommand also collapses whitespace, so it doubles as
+		// the dedupe key: the same command with rotated tokens — or cosmetic
+		// spacing differences — stays one review.
+		raw = identity.RedactCommand(raw)
+		key = raw
 	default:
 		return nil, oops.E(oops.CodeBadRequest, nil, "target_kind must be server_url or stdio_command")
 	}
@@ -412,6 +500,9 @@ func (s *Service) CreateRequest(ctx context.Context, payload *gen.CreateRequestP
 	trimmedNote := strings.TrimSpace(payload.Note)
 	if trimmedNote == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "a justification is required")
+	}
+	if len(trimmedNote) > maxNoteLength {
+		return nil, oops.E(oops.CodeBadRequest, nil, "note must be at most %d characters", maxNoteLength)
 	}
 	note := &trimmedNote
 

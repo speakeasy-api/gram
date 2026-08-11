@@ -1,6 +1,7 @@
 package mcpapproval_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -11,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -140,6 +142,13 @@ func TestCreateRequest_RejectsBadInput(t *testing.T) {
 	blank.Note = "   "
 	_, err = ti.service.CreateRequest(ctx, blank)
 	requireOopsCode(t, err, oops.CodeBadRequest)
+
+	// The free-text fields are bounded, mirroring the design-level MaxLength.
+	_, err = ti.service.CreateRequest(ctx, createPayload("stdio_command", "npx -y "+strings.Repeat("a", 2100), ""))
+	requireOopsCode(t, err, oops.CodeBadRequest)
+
+	_, err = ti.service.CreateRequest(ctx, createPayload("server_url", "https://mcp.example.com/sse", strings.Repeat("n", 4001)))
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
 // Raising a request deliberately needs no RBAC grant — the same posture as
@@ -167,12 +176,90 @@ func TestCreateRequest_WritesAnAuditEntry(t *testing.T) {
 	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMCPApprovalRequestCreate)
 	require.NoError(t, err)
 
-	_, err = ti.service.CreateRequest(ctx, createPayload("server_url", "https://mcp.example.com/sse", ""))
+	created, err := ti.service.CreateRequest(ctx, createPayload("server_url", "https://mcp.example.com/sse", ""))
 	require.NoError(t, err)
 
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMCPApprovalRequestCreate)
 	require.NoError(t, err)
 	require.Equal(t, before+1, after)
+
+	entry, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionMCPApprovalRequestCreate)
+	require.NoError(t, err)
+	require.Equal(t, ti.authContext.UserID, entry.ActorID)
+	require.Equal(t, "user", entry.ActorType)
+	require.Equal(t, created.TargetRaw, entry.SubjectDisplay)
+
+	// A repeat ask is accumulating demand the feed must show: a second
+	// requester audits another create against the same subject, attributed to
+	// the second requester.
+	second := *ti.authContext
+	second.UserID = "second-asker"
+	secondCtx := contextvalues.SetAuthContext(ctx, &second)
+	_, err = ti.service.CreateRequest(secondCtx, createPayload("server_url", "https://mcp.example.com/sse", "me too"))
+	require.NoError(t, err)
+
+	afterRepeat, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMCPApprovalRequestCreate)
+	require.NoError(t, err)
+	require.Equal(t, before+2, afterRepeat, "a repeat real ask audits every time")
+
+	repeatEntry, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionMCPApprovalRequestCreate)
+	require.NoError(t, err)
+	require.Equal(t, "second-asker", repeatEntry.ActorID)
+	require.Equal(t, created.TargetRaw, repeatEntry.SubjectDisplay)
+}
+
+// A stdio launch command routinely embeds credentials. The stored reference,
+// the dedupe key, and the audit feed's subject must all carry the redacted
+// form — target_raw reaches every queue reader, the immutable audit feed, and
+// the webhook stream — and the same command with rotated tokens must land on
+// the one existing review. All secret fixtures here are obviously fabricated.
+func TestCreateRequest_StdioCommandSecretsAreRedacted(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	created, err := ti.service.CreateRequest(ctx, createPayload("stdio_command",
+		`FAKE_TOKEN=fabricated-not-real-111 npx -y mcp-remote https://mcp.example.com/sse --header "Authorization: Bearer fabricated-not-real-222" --api-key=fabricated-not-real-333`,
+		"needed for oncall"))
+	require.NoError(t, err)
+
+	require.NotContains(t, created.TargetRaw, "fabricated-not-real")
+	require.Contains(t, created.TargetRaw, "npx -y mcp-remote https://mcp.example.com/sse")
+	require.Contains(t, created.TargetRaw, "FAKE_TOKEN=<redacted>")
+	require.Contains(t, created.TargetRaw, "--header <redacted>")
+	require.Contains(t, created.TargetRaw, "--api-key=<redacted>")
+
+	row, err := ti.repo.GetApprovalRequest(ctx, repo.GetApprovalRequestParams{ID: uuid.MustParse(created.ID), ProjectID: ti.projectID})
+	require.NoError(t, err)
+	require.NotContains(t, row.TargetRaw, "fabricated-not-real", "the persisted reference is redacted")
+	require.NotContains(t, row.TargetKey, "fabricated-not-real", "the dedupe key is derived from the redacted form")
+
+	entry, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionMCPApprovalRequestCreate)
+	require.NoError(t, err)
+	require.NotContains(t, entry.SubjectDisplay, "fabricated-not-real", "the immutable audit feed never sees the secret")
+	require.Contains(t, entry.SubjectDisplay, "mcp-remote")
+
+	// The same command with rotated tokens dedupes onto the same review.
+	other := *ti.authContext
+	other.UserID = "user-two"
+	otherCtx := contextvalues.SetAuthContext(ctx, &other)
+	again, err := ti.service.CreateRequest(otherCtx, createPayload("stdio_command",
+		`FAKE_TOKEN=fabricated-other-444 npx  -y mcp-remote https://mcp.example.com/sse --header "Authorization: Bearer fabricated-other-555" --api-key=fabricated-other-666`,
+		"me too"))
+	require.NoError(t, err)
+	require.Equal(t, created.ID, again.ID, "rotated tokens must not split one server into two reviews")
+	require.Equal(t, 2, again.RequesterCount)
+
+	// Redaction must not break identity resolution: the mcp-remote proxy
+	// shape still resolves to the URL it targets off the redacted form. (The
+	// env-prefixed command above resolves as unresolved with or without
+	// redaction — an env prefix hides the launcher.)
+	proxied, err := ti.service.CreateRequest(ctx, createPayload("stdio_command",
+		`npx -y mcp-remote https://proxied.example.com/sse --header "Authorization: Bearer fabricated-not-real-777"`, "proxy ask"))
+	require.NoError(t, err)
+	require.NotContains(t, proxied.TargetRaw, "fabricated-not-real")
+	require.NotNil(t, proxied.ArtifactRef)
+	require.Equal(t, "url:https://proxied.example.com/sse", *proxied.ArtifactRef)
 }
 
 // A re-request reopens a denied review through this path too.

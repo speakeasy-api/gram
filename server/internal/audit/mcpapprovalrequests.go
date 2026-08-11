@@ -27,16 +27,19 @@ type LogMCPApprovalRequestCreateEvent struct {
 
 	RequestURN urn.MCPApprovalRequest
 
-	// TargetRaw is the server reference as the requester named it, recorded
-	// as the subject display name so a feed entry is readable without a
-	// second lookup.
+	// TargetRaw is the stored (redacted) form of the server reference,
+	// recorded as the subject display name so a feed entry is readable
+	// without a second lookup. Callers must never pass the verbatim input:
+	// this feed is immutable and re-emitted over the outbox.
 	TargetRaw string
 }
 
 // LogMCPApprovalRequestCreate records that an approval request was raised or
-// re-raised — via mcpApproval.createRequest or promotion of a bypass request.
-// A repeat ask for the same server audits as another create against the same
-// subject, which is how the feed shows accumulating demand.
+// re-raised — via mcpApproval.createRequest, promotion of a bypass request,
+// or mcpApproval.ensureServerReview inserting a fresh unreviewed evidence
+// dossier (the dossier path audits only the insert itself, never a repeat
+// resolve). A repeat ask for the same server audits as another create against
+// the same subject, which is how the feed shows accumulating demand.
 func (l *Logger) LogMCPApprovalRequestCreate(ctx context.Context, dbtx repo.DBTX, event LogMCPApprovalRequestCreateEvent) error {
 	entry := repo.InsertAuditLogParams{
 		OrganizationID: event.OrganizationID,
@@ -77,9 +80,9 @@ type LogMCPApprovalRequestDecideEvent struct {
 	// denials directly.
 	Approved bool
 
-	// TargetRaw is the server reference as the requester named it, recorded
-	// as the subject display name so a feed entry is readable without a
-	// second lookup.
+	// TargetRaw is the stored (redacted) form of the server reference,
+	// recorded as the subject display name so a feed entry is readable
+	// without a second lookup.
 	TargetRaw string
 }
 

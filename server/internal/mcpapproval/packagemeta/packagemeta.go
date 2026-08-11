@@ -227,8 +227,23 @@ func (t *npmTimes) UnmarshalJSON(data []byte) error {
 }
 
 func (c *Client) lookupNPM(ctx context.Context, name string) (*Metadata, error) {
-	// A scoped name contains a slash that must survive as one path segment.
-	endpoint := c.npmURL + "/" + strings.ReplaceAll(url.PathEscape(name), "%2F", "/")
+	// A scoped name contains exactly one slash, separating scope from
+	// package. Each segment is validated and escaped individually so a
+	// crafted name cannot smuggle extra path segments — or `.`/`..`
+	// traversal — into the registry request once the intended separator is
+	// in place.
+	segments := strings.Split(name, "/")
+	if len(segments) > 2 {
+		return nil, fmt.Errorf("invalid npm package name %q", name)
+	}
+	escaped := make([]string, len(segments))
+	for i, segment := range segments {
+		if segment == "" || segment == "." || segment == ".." {
+			return nil, fmt.Errorf("invalid npm package name %q", name)
+		}
+		escaped[i] = url.PathEscape(segment)
+	}
+	endpoint := c.npmURL + "/" + strings.Join(escaped, "/")
 
 	var doc npmDocument
 	found, err := c.get(ctx, endpoint, &doc)

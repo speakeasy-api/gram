@@ -26,8 +26,8 @@ type CreateRequestRequestBody struct {
 	TargetKind string `form:"target_kind" json:"target_kind" xml:"target_kind"`
 	// The server reference: a URL, or the stdio command that launches it.
 	Target string `form:"target" json:"target" xml:"target"`
-	// Why the requester wants it. The one input no automated evidence supplies, so
-	// it cannot be blank.
+	// The requester's justification for wanting access to this server. Must not be
+	// blank.
 	Note string `form:"note" json:"note" xml:"note"`
 }
 
@@ -95,7 +95,9 @@ type EnsureServerReviewResponseBody struct {
 	// The namespace of the requested reference, such as server_url or
 	// stdio_command.
 	TargetKind *string `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
-	// The reference exactly as the requester named it.
+	// The stored display form of the requested reference, with credential-shaped
+	// material (URL query strings and userinfo, secret-named flag and environment
+	// values in commands) redacted at intake.
 	TargetRaw *string `form:"target_raw,omitempty" json:"target_raw,omitempty" xml:"target_raw,omitempty"`
 	// The Shadow MCP inventory page slug for a server_url target — the same
 	// identifier the inventory derives from the canonical URL, so a request links
@@ -125,7 +127,9 @@ type CreateRequestResponseBody struct {
 	// The namespace of the requested reference, such as server_url or
 	// stdio_command.
 	TargetKind *string `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
-	// The reference exactly as the requester named it.
+	// The stored display form of the requested reference, with credential-shaped
+	// material (URL query strings and userinfo, secret-named flag and environment
+	// values in commands) redacted at intake.
 	TargetRaw *string `form:"target_raw,omitempty" json:"target_raw,omitempty" xml:"target_raw,omitempty"`
 	// The Shadow MCP inventory page slug for a server_url target — the same
 	// identifier the inventory derives from the canonical URL, so a request links
@@ -155,7 +159,9 @@ type PromoteResponseBody struct {
 	// The namespace of the requested reference, such as server_url or
 	// stdio_command.
 	TargetKind *string `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
-	// The reference exactly as the requester named it.
+	// The stored display form of the requested reference, with credential-shaped
+	// material (URL query strings and userinfo, secret-named flag and environment
+	// values in commands) redacted at intake.
 	TargetRaw *string `form:"target_raw,omitempty" json:"target_raw,omitempty" xml:"target_raw,omitempty"`
 	// The Shadow MCP inventory page slug for a server_url target — the same
 	// identifier the inventory derives from the canonical URL, so a request links
@@ -1318,7 +1324,9 @@ type ApprovalRequestSummaryResponseBody struct {
 	// The namespace of the requested reference, such as server_url or
 	// stdio_command.
 	TargetKind *string `form:"target_kind,omitempty" json:"target_kind,omitempty" xml:"target_kind,omitempty"`
-	// The reference exactly as the requester named it.
+	// The stored display form of the requested reference, with credential-shaped
+	// material (URL query strings and userinfo, secret-named flag and environment
+	// values in commands) redacted at intake.
 	TargetRaw *string `form:"target_raw,omitempty" json:"target_raw,omitempty" xml:"target_raw,omitempty"`
 	// The Shadow MCP inventory page slug for a server_url target — the same
 	// identifier the inventory derives from the canonical URL, so a request links

@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"unicode/utf8"
 
 	mcpapproval "github.com/speakeasy-api/gram/server/gen/mcp_approval"
 	goa "goa.design/goa/v3/pkg"
@@ -115,7 +116,13 @@ func BuildEnsureServerReviewPayload(mcpApprovalEnsureServerReviewBody string, mc
 	{
 		err = json.Unmarshal([]byte(mcpApprovalEnsureServerReviewBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"target\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"target\": \"aaa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.Target) > 2048 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.target", body.Target, utf8.RuneCountInString(body.Target), 2048, false))
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 	var sessionToken *string
@@ -154,10 +161,16 @@ func BuildCreateRequestPayload(mcpApprovalCreateRequestBody string, mcpApprovalC
 	{
 		err = json.Unmarshal([]byte(mcpApprovalCreateRequestBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"note\": \"abc123\",\n      \"target\": \"abc123\",\n      \"target_kind\": \"stdio_command\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"note\": \"aaa\",\n      \"target\": \"aaa\",\n      \"target_kind\": \"stdio_command\"\n   }'")
 		}
 		if !(body.TargetKind == "server_url" || body.TargetKind == "stdio_command") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.target_kind", body.TargetKind, []any{"server_url", "stdio_command"}))
+		}
+		if utf8.RuneCountInString(body.Target) > 2048 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.target", body.Target, utf8.RuneCountInString(body.Target), 2048, false))
+		}
+		if utf8.RuneCountInString(body.Note) > 4000 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.note", body.Note, utf8.RuneCountInString(body.Note), 4000, false))
 		}
 		if err != nil {
 			return nil, err
