@@ -55,6 +55,26 @@ export function ApprovalReview({
     [detail],
   );
 
+  // A failed fetch must not read as "still loading" forever: name the
+  // failure and offer a retry.
+  if (detailQuery.error && !detail) {
+    return (
+      <div className="bg-muted/20 flex min-h-24 flex-col items-center justify-center border border-dashed px-6 py-8 text-center">
+        <p className="text-sm font-medium">The review could not be loaded</p>
+        <p className="text-muted-foreground mt-1 max-w-md text-sm">
+          It may be a temporary problem — try again.
+        </p>
+        <Button
+          className="mt-3"
+          variant="secondary"
+          onClick={() => void detailQuery.refetch()}
+        >
+          <Button.Text>Retry</Button.Text>
+        </Button>
+      </div>
+    );
+  }
+
   if (!detail) {
     return <SkeletonTable />;
   }

@@ -875,28 +875,6 @@ export const INSIGHTS_SUGGESTIONS = {
     },
   ],
 
-  "approval-requests": [
-    {
-      title: "What's pending?",
-      label: "What's waiting",
-      icon: "history",
-      prompt: "Summarize pending approval requests. Which are oldest?",
-    },
-    {
-      title: "What triggers approvals?",
-      label: "What triggers approvals",
-      icon: "search",
-      prompt: "What kinds of tool calls trigger approval requests most often?",
-    },
-    {
-      title: "Are approvals slow?",
-      label: "How long requests wait",
-      icon: "gauge",
-      prompt:
-        "Are approvals slowing anyone down? Look at how long requests wait before a decision.",
-    },
-  ],
-
   "risk-policies": [
     {
       title: "Are policies healthy?",

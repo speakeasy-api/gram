@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net/url"
 	"slices"
 	"strings"
 
@@ -136,7 +137,12 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 	// servers with no observed URL, and organizations without the approval
 	// feature (a forbidden intake error is that signal, not a failure).
 	if s.approvalIntake != nil && target.Kind == PolicyBypassTargetKindShadowMCPServer {
-		if serverURL := target.Dimensions[authz.SelectorKeyServerURL]; serverURL != "" {
+		// Only http(s) URLs are admittable: the approval intake rejects every
+		// other scheme, and the block evaluator will happily mint a ws:// (or
+		// any other schemed) server_url into the token. Those links must keep
+		// the legacy bypass flow below instead of dying on an admission error
+		// no retry can fix.
+		if serverURL := target.Dimensions[authz.SelectorKeyServerURL]; serverURLSupportsApprovalIntake(serverURL) {
 			// The legacy path below re-derives these bindings inside its
 			// transaction, but a successful admission returns before reaching
 			// it. Re-check them here: the token's project must belong to the
@@ -240,6 +246,18 @@ func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *ge
 func oopsCodeIs(err error, code oops.Code) bool {
 	var shareable *oops.ShareableError
 	return errors.As(err, &shareable) && shareable.Code == code
+}
+
+// serverURLSupportsApprovalIntake reports whether a blocked server's URL is
+// one the MCP approval workflow can admit. The intake only accepts http and
+// https URLs, so anything else must stay on the legacy bypass path.
+func serverURLSupportsApprovalIntake(raw string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return false
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	return scheme == "http" || scheme == "https"
 }
 
 func (s *Service) ApproveRiskPolicyBypassRequest(ctx context.Context, payload *gen.ApproveRiskPolicyBypassRequestPayload) (*gen.RiskPolicyBypassRequest, error) {

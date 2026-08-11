@@ -40,7 +40,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -852,6 +851,15 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 		return nil, oops.E(oops.CodeUnexpected, err, "error reading approval request").LogError(ctx, s.logger)
 	}
 
+	// The request's organization and the session's must agree. Both derive
+	// from the same project — the request row was just resolved under the
+	// session's project id — so a mismatch means tenancy state is corrupt.
+	// Refuse rather than record a decision whose audit trail names one
+	// organization while its grants enforce in another.
+	if request.OrganizationID != organizationID {
+		return nil, oops.E(oops.CodeUnexpected, nil, "approval request organization mismatch").LogError(ctx, s.logger)
+	}
+
 	// A cited report is resolved against the request being decided and the
 	// caller's project before it is written, so a decision can never
 	// attribute research about one server to another.
@@ -912,23 +920,15 @@ func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisio
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating approval request status").LogError(ctx, s.logger)
 	}
 
-	// A promoted request carries the legacy bypass request it grew out of.
-	// The decision resolves that ask too — in the same transaction — so a
-	// promoted request cannot stay pending in the legacy queue (and on the
-	// inventory's request counters) after its review is decided. Only a
-	// still-requested row resolves: one already decided (or deleted) through
-	// the legacy drain keeps its recorded outcome, and the decision on the
-	// review itself still stands.
-	if request.RiskPolicyBypassRequestID.Valid {
-		if _, err := riskrepo.New(dbtx).ResolveRequestedRiskPolicyBypassRequest(ctx, riskrepo.ResolveRequestedRiskPolicyBypassRequestParams{
-			Status:               statusFor[payload.Decision],
-			DecidedBy:            conv.ToPGText(authCtx.UserID),
-			GrantedPrincipalUrns: granted,
-			ID:                   request.RiskPolicyBypassRequestID.UUID,
-			ProjectID:            projectID,
-		}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeUnexpected, err, "error resolving promoted bypass request").LogError(ctx, s.logger)
-		}
+	// The decision resolves the legacy bypass rows it answers too — in the
+	// same transaction — so no ask this review covers can stay pending in the
+	// legacy queue (and on the inventory's request counters) after the review
+	// is decided. That means every still-requested row for the same server,
+	// not only the promotion source: bypass rows are per-requester and only
+	// one of them is ever linked. Each transition is audited alongside the
+	// decision.
+	if err := s.drainLegacyBypassRequests(ctx, dbtx, request, projectID, payload.Decision, granted, authCtx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error resolving promoted bypass request").LogError(ctx, s.logger)
 	}
 
 	// The decision enforces in the same transaction it records: the grant

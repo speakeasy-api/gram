@@ -1,6 +1,8 @@
 import { RequireScope } from "@/components/require-scope";
+import { invalidateShadowMCPPolicyInventory } from "@/components/shadow-mcp/useShadowMCPPolicyInventory";
 import { Button } from "@/components/ui/Button";
 import { TextArea } from "@/components/ui/Textarea";
+import { useProject } from "@/contexts/Auth";
 import { invalidateAllListMcpApprovalRequests } from "@gram/client/react-query/listMcpApprovalRequests.js";
 import { invalidateGetMcpApprovalRequest } from "@gram/client/react-query/getMcpApprovalRequest.js";
 import { useRecordMcpApprovalDecisionMutation } from "@gram/client/react-query/recordMcpApprovalDecision.js";
@@ -28,6 +30,7 @@ export function DecisionForm({
   projectSlug: string;
 }): JSX.Element {
   const [rationale, setRationale] = useState("");
+  const project = useProject();
   const queryClient = useQueryClient();
   const decide = useRecordMcpApprovalDecisionMutation();
 
@@ -54,6 +57,10 @@ export function DecisionForm({
       invalidateAllListMcpApprovalRequests(queryClient),
       invalidateAllShadowMCPInventory(queryClient),
       invalidateAllShadowMCPInventoryServer(queryClient),
+      // The policy editor seeds its URL sets from a grant-derived cache; a
+      // decision just rewrote those grants, and a stale cache would let the
+      // next policy save silently revert this decision's enforcement.
+      invalidateShadowMCPPolicyInventory(queryClient, project.id),
     ]);
     setRationale("");
     toast.success(

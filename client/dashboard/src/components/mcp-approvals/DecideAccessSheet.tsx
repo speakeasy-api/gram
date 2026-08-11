@@ -17,6 +17,7 @@ import { TextArea } from "@/components/ui/Textarea";
 import { useProject } from "@/contexts/Auth";
 import { cn } from "@/lib/utils";
 import type { ShadowMCPPolicyDisposition } from "@/components/shadow-mcp/shadowMCPInventoryStatus";
+import { invalidateShadowMCPPolicyInventory } from "@/components/shadow-mcp/useShadowMCPPolicyInventory";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import { useCreateMcpApprovalRequestMutation } from "@gram/client/react-query/createMcpApprovalRequest.js";
@@ -126,6 +127,10 @@ export function DecideAccessSheet({
   const [openedRequestId, setOpenedRequestId] = useState<string | undefined>(
     undefined,
   );
+  // Guards the whole submit, including the invalidation window after the
+  // decision lands: the mutations' isPending flags all read false there, and
+  // a double click in that window would append a duplicate decision.
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (!open) {
@@ -134,6 +139,7 @@ export function DecideAccessSheet({
       setRationale(RATIONALE_PREFILL.approved);
       setRationaleEdited(false);
       setOpenedRequestId(undefined);
+      setSubmitting(false);
     }
   }, [open]);
 
@@ -144,7 +150,10 @@ export function DecideAccessSheet({
   // appears when a block-by-default policy can scope who passes.
   const audienceSelectable = disposition !== "allow_all";
   const isSubmitting =
-    createRequest.isPending || promoteRequest.isPending || decide.isPending;
+    submitting ||
+    createRequest.isPending ||
+    promoteRequest.isPending ||
+    decide.isPending;
   const rationaleMissing = rationale.trim().length === 0;
 
   const selectDecision = (next: AccessDecision) => {
@@ -157,6 +166,7 @@ export function DecideAccessSheet({
   const submit = async () => {
     const trimmedRationale = rationale.trim();
     let requestId = target.approvalRequestId ?? openedRequestId;
+    setSubmitting(true);
     try {
       if (target.pendingBypassRequestId && !openedRequestId) {
         // A pending legacy ask exists: promote it so its requester and
@@ -186,6 +196,7 @@ export function DecideAccessSheet({
       }
     } catch {
       toast.error("Opening the access request failed — nothing was changed");
+      setSubmitting(false);
       return;
     }
     setOpenedRequestId(requestId);
@@ -223,6 +234,7 @@ export function DecideAccessSheet({
           invalidateAllListMcpApprovalRequests(queryClient),
         ]);
       }
+      setSubmitting(false);
       return;
     }
     await Promise.all([
@@ -230,6 +242,10 @@ export function DecideAccessSheet({
       invalidateAllShadowMCPInventoryServer(queryClient),
       invalidateAllListMcpApprovalRequests(queryClient),
       invalidateGetMcpApprovalRequest(queryClient, [{ id: requestId }]),
+      // The policy editor seeds its URL sets from a grant-derived cache; a
+      // decision just rewrote those grants, and a stale cache would let the
+      // next policy save silently revert this decision's enforcement.
+      invalidateShadowMCPPolicyInventory(queryClient, project.id),
     ]);
     toast.success(
       decision === "approved"
@@ -270,7 +286,7 @@ export function DecideAccessSheet({
               <label
                 className={cn(
                   "flex cursor-pointer items-start gap-3 border border-transparent px-3 py-2.5 transition-colors",
-                  decision === "approved" && "border-border bg-card shadow-xs",
+                  decision === "approved" && "border-border bg-card",
                 )}
               >
                 <RadioGroupItem value="approved" className="mt-1.5" />
@@ -288,7 +304,7 @@ export function DecideAccessSheet({
               <label
                 className={cn(
                   "flex cursor-pointer items-start gap-3 border border-transparent px-3 py-2.5 transition-colors",
-                  decision === "denied" && "border-border bg-card shadow-xs",
+                  decision === "denied" && "border-border bg-card",
                 )}
               >
                 <RadioGroupItem value="denied" className="mt-1.5" />
