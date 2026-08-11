@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/agenthooks"
+
+	"github.com/speakeasy-api/gram/hooks/wire"
 )
 
 // agentBlockNotifyTimeout bounds the whole best-effort notify. It runs only
@@ -50,8 +52,8 @@ type agentBlockReport struct {
 // path, never a new failure mode — all errors are swallowed, and machines
 // without the agent fail the dial instantly. Spooled/drained replays never
 // reach the gating handlers that call this, so a stale deny cannot re-notify.
-func (r *Relay) notifyAgentBlock(ctx context.Context, effect *blockEffect, typed any) {
-	if effect == nil || !effect.Requestable || effect.V > 1 || strings.TrimSpace(effect.RequestToken) == "" {
+func (r *Relay) notifyAgentBlock(ctx context.Context, effect *wire.BlockEffect, typed any) {
+	if effect == nil || !effect.Requestable || effect.V > wire.BlockEffectVersion || strings.TrimSpace(effect.RequestToken) == "" {
 		return
 	}
 	socket := agentSocketPath()
@@ -116,14 +118,17 @@ func (r *Relay) notifyAgentBlock(ctx context.Context, effect *blockEffect, typed
 	}
 }
 
-// decodeBlockEffect reads the response's "block" effect into its typed form,
+// decodeBlockEffect reads the response's "block" effect into its wire type,
 // asserting fields straight off the decoded map like the org_settings /
-// skill_capture readers in client.go. Returns nil for anything that isn't the
-// object shape this version understands — a non-object, or a non-numeric "v"
-// (the version gates the consumer's guard, so a garbled one must not decode
-// to a trusted zero). Other mistyped fields degrade to their zero values,
-// which the consumer's requestable/token guards already reject.
-func decodeBlockEffect(raw any) *blockEffect {
+// skill_capture readers in client.go (the SDK has already decoded Effects
+// into map[string]any, so an unmarshal into the struct would need a marshal
+// round-trip). The keys are pinned to wire.BlockEffect's JSON tags by
+// TestDecodeBlockEffectMatchesWireContract. Returns nil for anything that
+// isn't the object shape this version understands — a non-object, or a
+// non-numeric "v" (the version gates the consumer's guard, so a garbled one
+// must not decode to a trusted zero). Other mistyped fields degrade to their
+// zero values, which the consumer's requestable/token guards already reject.
+func decodeBlockEffect(raw any) *wire.BlockEffect {
 	object, ok := raw.(map[string]any)
 	if !ok {
 		return nil
@@ -141,7 +146,7 @@ func decodeBlockEffect(raw any) *blockEffect {
 		return s
 	}
 	requestable, _ := object["requestable"].(bool)
-	return &blockEffect{
+	return &wire.BlockEffect{
 		V:                version,
 		Category:         str("category"),
 		Requestable:      requestable,

@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
+	"github.com/speakeasy-api/gram/hooks/wire"
 )
 
 // blockReportCapture records what the fake agent socket received.
@@ -248,4 +249,33 @@ func TestDecodeBlockEffectRejectsNonObjects(t *testing.T) {
 	require.Nil(t, decodeBlockEffect("string"))
 	require.Nil(t, decodeBlockEffect([]any{"list"}))
 	require.Nil(t, decodeBlockEffect(map[string]any{"v": "not-a-number"}))
+}
+
+// decodeBlockEffect reads keys off the map by hand (the SDK pre-decodes
+// Effects, so there are no raw bytes to unmarshal); this pins those keys to
+// wire.BlockEffect's JSON tags so the reader and the shared type cannot
+// drift. exhaustruct keeps both literals below naming every field, so a field
+// added to the wire type without a matching read fails here, and a renamed
+// tag fails the round trip.
+func TestDecodeBlockEffectMatchesWireContract(t *testing.T) {
+	want := wire.BlockEffect{
+		V:                wire.BlockEffectVersion,
+		Category:         "shadow_mcp",
+		Requestable:      true,
+		RequestToken:     "rpbr2.contract",
+		RequestURL:       "https://app.example.test/risk-policy-bypass/request#request_token=rpbr2.contract",
+		RequestExpiresAt: "2026-08-14T12:00:00Z",
+		ServerName:       "mcp.example.com",
+		ServerURL:        "https://mcp.example.com/sse",
+		PolicyName:       "Shadow MCP policy",
+		ToolName:         "search",
+		BlockURL:         "https://app.example.test/blocks/0000",
+	}
+	raw, err := json.Marshal(want)
+	require.NoError(t, err)
+	var decoded map[string]any
+	require.NoError(t, json.Unmarshal(raw, &decoded))
+	got := decodeBlockEffect(decoded)
+	require.NotNil(t, got)
+	require.Equal(t, want, *got)
 }

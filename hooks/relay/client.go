@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
 	"github.com/speakeasy-api/gram/hooks/sdk/models/operations"
 	"github.com/speakeasy-api/gram/hooks/sdk/retry"
+	"github.com/speakeasy-api/gram/hooks/wire"
 )
 
 const perAttemptTime = 10 * time.Second
@@ -52,24 +53,6 @@ type skillCapture struct {
 	contentRequired bool
 }
 
-// blockEffect is the structured mirror of a requestable deny, decoded from the
-// response's "block" effect. It exists so the device agent can offer a native
-// "request access" flow without parsing the deny prose. Absence means the deny
-// is not requestable.
-type blockEffect struct {
-	V                int    `json:"v"`
-	Category         string `json:"category"`
-	Requestable      bool   `json:"requestable"`
-	RequestToken     string `json:"request_token"`
-	RequestURL       string `json:"request_url"`
-	RequestExpiresAt string `json:"request_expires_at"`
-	ServerName       string `json:"server_name"`
-	ServerURL        string `json:"server_url"`
-	PolicyName       string `json:"policy_name"`
-	ToolName         string `json:"tool_name"`
-	BlockURL         string `json:"block_url"`
-}
-
 // ingestResult reports the outcome of an ingest attempt.
 type ingestResult struct {
 	// statusCode is the final HTTP status, or 0 if the server was never
@@ -84,7 +67,7 @@ type ingestResult struct {
 	skillCapture *skillCapture
 	// blockEffect carries the structured requestable-block metadata from the
 	// response's "block" effects; nil when the server sent none.
-	blockEffect *blockEffect
+	blockEffect *wire.BlockEffect
 }
 
 // accepted reports a definitive 2xx exchange — the server stored (or

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/speakeasy-api/gram/hooks/wire"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -48,11 +49,17 @@ func (s *Service) renderShadowMCPUserBlockReason(ctx context.Context, params sha
 	if !ok {
 		return message
 	}
-	setBlockEffect(ctx, blockEffect{
+	expiresAt := ""
+	if !link.ExpiresAt.IsZero() {
+		expiresAt = link.ExpiresAt.UTC().Format(time.RFC3339)
+	}
+	setBlockEffect(ctx, wire.BlockEffect{
+		V:                wire.BlockEffectVersion,
 		Category:         string(categories.CategoryShadowMCP),
+		Requestable:      true,
 		RequestToken:     link.Token,
 		RequestURL:       link.URL,
-		RequestExpiresAt: link.ExpiresAt,
+		RequestExpiresAt: expiresAt,
 		ServerName:       link.ServerName,
 		ServerURL:        link.ServerURL,
 		PolicyName:       params.PolicyName,

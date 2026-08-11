@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/agenthooks"
 	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
+	"github.com/speakeasy-api/gram/hooks/wire"
 )
 
 // authState classifies the machine's credential posture for the ratchet.
@@ -113,7 +114,7 @@ type verdict struct {
 	nudge bool
 	// blockEffect carries the server's structured requestable-block metadata
 	// for a denied gating event; nil otherwise.
-	blockEffect *blockEffect
+	blockEffect *wire.BlockEffect
 }
 
 const brokenAuthMessage = "Speakeasy hooks are configured for this workspace but this machine's credentials are missing or invalid. Run the Speakeasy hooks login command to reconnect."
