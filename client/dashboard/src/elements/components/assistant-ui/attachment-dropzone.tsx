@@ -2,6 +2,8 @@ import { useCallback, useRef, useState, type FC, type ReactNode } from "react";
 import { useAui } from "@assistant-ui/react";
 import { Paperclip } from "lucide-react";
 
+import { useElements } from "@/elements/hooks/useElements";
+import { useRadius } from "@/elements/hooks/useRadius";
 import { cn } from "@/lib/utils";
 
 /**
@@ -14,12 +16,19 @@ import { cn } from "@/lib/utils";
  */
 export const AttachmentDropZone: FC<{
   children: ReactNode;
+  /** Extra reason to refuse drops (e.g. a read-only conversation). */
   disabled?: boolean;
   className?: string;
-}> = ({ children, disabled = false, className }) => {
+}> = ({ children, disabled: disabledProp = false, className }) => {
+  const { config } = useElements();
+  const r = useRadius();
   const aui = useAui();
   const [isDragging, setIsDragging] = useState(false);
   const depth = useRef(0);
+  // Same `?? true` default as the composer button: attachments are on unless
+  // the host turns them off.
+  const disabled =
+    disabledProp || (config.composer?.attachments ?? true) === false;
 
   const hasFiles = (event: React.DragEvent) =>
     event.dataTransfer.types.includes("Files");
@@ -64,10 +73,9 @@ export const AttachmentDropZone: FC<{
 
   return (
     <div
-      className={cn(
-        "aui-attachment-dropzone relative flex min-h-0 flex-1",
-        className,
-      )}
+      // Layout comes from the host: the thread needs a flex column that fills
+      // the viewport, a standalone composer just needs a positioning context.
+      className={cn("aui-attachment-dropzone relative", className)}
       onDragEnter={onDragEnter}
       onDragLeave={onDragLeave}
       onDragOver={onDragOver}
@@ -75,7 +83,12 @@ export const AttachmentDropZone: FC<{
     >
       {children}
       {isDragging && (
-        <div className="aui-attachment-dropzone-overlay pointer-events-none absolute inset-2 z-50 flex flex-col items-center justify-center gap-2 border-2 border-primary/40 border-dashed bg-background/85 text-muted-foreground">
+        <div
+          className={cn(
+            "aui-attachment-dropzone-overlay pointer-events-none absolute inset-2 z-50 flex flex-col items-center justify-center gap-2 border border-black/10 border-dashed bg-background/90 text-muted-foreground shadow-[0_1px_2px_rgba(0,0,0,0.04),0_10px_28px_-16px_rgba(0,0,0,0.18)] dark:border-white/15",
+            r("xl"),
+          )}
+        >
           <Paperclip className="size-5" />
           <span className="text-sm font-medium">Drop files to attach</span>
         </div>

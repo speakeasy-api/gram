@@ -164,7 +164,6 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
   // caller can view (e.g. via an admin-level read grant) but didn't create,
   // so there's no valid action to leave available.
   const composerHidden = useThreadMeta(chatId ?? undefined)?.readOnly ?? false;
-  const attachmentsEnabled = (config.composer?.attachments ?? true) !== false;
 
   const apiUrl = getApiUrl(config);
   const auth = useAuth({
@@ -225,8 +224,8 @@ export const Thread: FC<ThreadProps> = ({ className }) => {
       <LazyMotion features={domAnimation}>
         <MotionConfig reducedMotion="user">
           <AttachmentDropZone
-            disabled={!attachmentsEnabled || composerHidden}
-            className="h-full"
+            disabled={composerHidden}
+            className="flex h-full min-h-0 flex-1 flex-col"
           >
             <ThreadPrimitive.Root
               className={cn(
