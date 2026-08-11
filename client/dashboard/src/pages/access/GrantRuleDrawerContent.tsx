@@ -43,7 +43,7 @@ import {
   type ServerGroup,
 } from "./serverMerge";
 import { toolMetadataToServerTools } from "./remoteToolMetadata";
-import { ToolCapabilityBadge } from "@/components/tool-list/ToolCapabilityBadge";
+import { AnnotationBadgeIcons } from "@/components/tool-list/AnnotationBadges";
 
 interface GrantRuleDrawerContentProps {
   /** The resource type determines which resource list to show */
@@ -1194,9 +1194,11 @@ function ServerToolRow({
                     query={q}
                     className="min-w-0 flex-1 truncate text-left"
                   />
-                  <ToolCapabilityBadge
-                    annotations={tool.annotations}
-                    className="shrink-0"
+                  <AnnotationBadgeIcons
+                    readOnly={Boolean(tool.annotations?.readOnlyHint)}
+                    destructive={Boolean(tool.annotations?.destructiveHint)}
+                    idempotent={Boolean(tool.annotations?.idempotentHint)}
+                    openWorld={Boolean(tool.annotations?.openWorldHint)}
                   />
                 </button>
               );
