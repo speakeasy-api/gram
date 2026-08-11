@@ -1042,9 +1042,6 @@ const ComposerCassetteRecorder: FC = () => {
   );
 };
 
-// Sentinel for the "All" pseudo-category in the tool-mention picker.
-const TOOL_MENTION_ALL_CATEGORY = "__all__";
-
 function humanizeToolCategory(raw: string): string {
   const cleaned = raw.replace(/[-_]+/g, " ").trim();
   if (!cleaned) return "Tools";
@@ -1075,18 +1072,34 @@ interface ToolCategory {
 // inserts an @mention for the chosen one. Inserts through the composer runtime
 // so it stays in sync with the autocomplete's own textarea handling. Hidden when
 // tool mentions are disabled or there are no tools.
-const ComposerToolMentionPicker: FC = () => {
+/** Rail entry for the skills half of the context picker. */
+const CONTEXT_SKILLS_SECTION = "__skills__";
+/** Rail entry that lists every tool, ungrouped. */
+const CONTEXT_ALL_TOOLS_SECTION = "__all_tools__";
+
+/**
+ * One "Add context" control over both things a message can carry: skills and
+ * tool mentions.
+ *
+ * These were two adjacent buttons, both drawn as an `@`, which read as the
+ * same affordance twice. They stay distinct underneath — picking a skill
+ * toggles it on the composer's skill context, picking a tool writes an
+ * `@mention` into the draft — but the user makes one trip to one list.
+ */
+const ComposerContextPicker: FC = () => {
   const { config, mcpTools, mcpToolsLoading } = useElements();
   const aui = useAui();
   // Read the composer text from the same reactive source the tool-mention
   // badges parse, so an inserted mention renders a pill just like the type-`@`
   // autocomplete does.
   const composerText = useAuiState(({ composer }) => composer.text);
+  const skillContext = config.composer?.skillContext;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [activeCategory, setActiveCategory] = useState(
-    TOOL_MENTION_ALL_CATEGORY,
-  );
+  const deferredQuery = useDeferredValue(query);
+  // Null until the user picks a rail entry, so the default can follow what
+  // actually loaded rather than latching whatever was there on first render.
+  const [section, setSection] = useState<string | null>(null);
 
   const composerConfig = config.composer;
   const toolMentionsEnabled =
@@ -1113,26 +1126,77 @@ const ComposerToolMentionPicker: FC = () => {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [tools]);
 
-  // Show the button while tools are still loading (so it appears immediately
-  // rather than popping in once the async MCP list resolves) or once there are
-  // tools — but hide it when the list has loaded and is empty, so we don't
-  // expose a dead-end control.
-  if (!toolMentionsEnabled || (!mcpToolsLoading && tools.length === 0)) {
+  // Both halves stay visible while their source is still loading, so the
+  // button appears immediately rather than popping in once the async list
+  // resolves — but a half that loaded empty is dropped, and a button with
+  // nothing behind it at all is not rendered.
+  const hasSkills =
+    !!skillContext && (skillContext.skills.length > 0 || skillContext.loading);
+  const hasTools = toolMentionsEnabled && (tools.length > 0 || mcpToolsLoading);
+  if (!hasSkills && !hasTools) {
     return null;
   }
 
-  const normalizedQuery = query.trim().toLowerCase();
-  const inActiveCategory =
-    activeCategory === TOOL_MENTION_ALL_CATEGORY
+  const activeSection =
+    section ?? (hasSkills ? CONTEXT_SKILLS_SECTION : CONTEXT_ALL_TOOLS_SECTION);
+  const normalizedQuery = deferredQuery.trim().toLowerCase();
+  const searching = normalizedQuery !== "";
+
+  const selectedIDs = new Set(skillContext?.selectedSkillIds ?? []);
+  const maxSelected = skillContext?.maxSelected ?? 10;
+
+  const matchingSkills = (skillContext?.skills ?? []).filter(
+    (skill) =>
+      !searching ||
+      skill.displayName.toLowerCase().includes(normalizedQuery) ||
+      skill.name.toLowerCase().includes(normalizedQuery) ||
+      (skill.summary?.toLowerCase().includes(normalizedQuery) ?? false),
+  );
+
+  // A search spans both halves; the rail only narrows the browse view.
+  const toolsInSection =
+    searching || activeSection === CONTEXT_ALL_TOOLS_SECTION
       ? tools
-      : (categories.find((c) => c.name === activeCategory)?.tools ?? []);
-  const visibleTools = normalizedQuery
-    ? inActiveCategory.filter(
-        (tool) =>
-          tool.name.toLowerCase().includes(normalizedQuery) ||
-          (tool.description?.toLowerCase().includes(normalizedQuery) ?? false),
-      )
-    : inActiveCategory;
+      : (categories.find((c) => c.name === activeSection)?.tools ?? []);
+  const matchingTools = toolsInSection.filter(
+    (tool) =>
+      !searching ||
+      tool.name.toLowerCase().includes(normalizedQuery) ||
+      (tool.description?.toLowerCase().includes(normalizedQuery) ?? false),
+  );
+
+  const reset = () => {
+    setQuery("");
+    setSection(null);
+  };
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) {
+      reset();
+    }
+  };
+
+  const toggleSkill = (skillID: string) => {
+    if (!skillContext) return;
+    if (selectedIDs.has(skillID)) {
+      skillContext.onSelectedSkillIdsChange(
+        skillContext.selectedSkillIds.filter((id) => id !== skillID),
+      );
+      setOpen(false);
+      reset();
+      return;
+    }
+    if (skillContext.selectedSkillIds.length >= maxSelected) {
+      return;
+    }
+    skillContext.onSelectedSkillIdsChange([
+      ...skillContext.selectedSkillIds,
+      skillID,
+    ]);
+    setOpen(false);
+    reset();
+  };
 
   const insertMention = (toolName: string) => {
     const base =
@@ -1141,118 +1205,205 @@ const ComposerToolMentionPicker: FC = () => {
         : composerText;
     aui.composer().setText(`${base}@${toolName} `);
     setOpen(false);
-    setQuery("");
+    reset();
   };
 
-  const handleOpenChange = (next: boolean) => {
-    setOpen(next);
-    if (!next) {
-      setQuery("");
-      setActiveCategory(TOOL_MENTION_ALL_CATEGORY);
-    }
-  };
+  const showSkills = hasSkills && (!searching || matchingSkills.length > 0);
+  const showTools = hasTools && (!searching || matchingTools.length > 0);
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button
+          type="button"
           variant="ghost"
           size="icon"
           data-state={open ? "open" : "closed"}
-          className="aui-composer-tool-mention-picker flex w-fit items-center gap-2 rounded-full px-2.5 py-1 text-xs font-semibold data-[state=open]:bg-muted-foreground/15 dark:border-muted-foreground/15 dark:hover:bg-muted-foreground/30"
-          aria-label="Mention a tool"
+          className="aui-composer-context-picker flex w-fit items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold data-[state=open]:bg-muted-foreground/15 dark:border-muted-foreground/15 dark:hover:bg-muted-foreground/30"
+          aria-label="Add context"
         >
-          <AtSign className="size-5 stroke-[1.5px]" />
+          <AtSign className="size-4 stroke-[1.5px]" />
+          <span className="aui-composer-context-picker-label">Add context</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent
         side="top"
         align="start"
-        className="aui-composer-tool-mention-popover w-[420px] overflow-hidden p-0"
+        className="aui-composer-context-popover w-[420px] overflow-hidden p-0"
+        onEscapeKeyDown={(event) => {
+          if (query !== "") {
+            event.preventDefault();
+            setQuery("");
+          }
+        }}
       >
         <div className="flex items-center gap-2 border-b border-input px-3 py-2">
           <Search className="size-4 shrink-0 text-muted-foreground" />
           <input
             autoFocus
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search tools…"
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={
+              hasSkills && hasTools
+                ? "Search skills and tools…"
+                : hasSkills
+                  ? "Search skills…"
+                  : "Search tools…"
+            }
             className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
-            aria-label="Search tools"
+            aria-label="Search context"
           />
         </div>
         <div className="flex h-72">
-          <div className="w-36 shrink-0 overflow-y-auto border-r border-input p-2">
-            <div className="px-2 pb-1 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
-              Categories
-            </div>
-            <button
-              type="button"
-              onClick={() => setActiveCategory(TOOL_MENTION_ALL_CATEGORY)}
-              className={cn(
-                "flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs transition-colors",
-                activeCategory === TOOL_MENTION_ALL_CATEGORY
-                  ? "bg-muted font-medium text-foreground"
-                  : "text-muted-foreground hover:bg-muted/60",
-              )}
-            >
-              <span className="truncate">All</span>
-              <span className="ml-2 shrink-0 tabular-nums opacity-60">
-                {tools.length}
-              </span>
-            </button>
-            {categories.map((category) => (
-              <button
-                key={category.name}
-                type="button"
-                onClick={() => setActiveCategory(category.name)}
-                className={cn(
-                  "flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs transition-colors",
-                  activeCategory === category.name
-                    ? "bg-muted font-medium text-foreground"
-                    : "text-muted-foreground hover:bg-muted/60",
-                )}
-              >
-                <span className="truncate">{category.name}</span>
-                <span className="ml-2 shrink-0 tabular-nums opacity-60">
-                  {category.tools.length}
-                </span>
-              </button>
-            ))}
-          </div>
-          <div className="min-w-0 flex-1 overflow-y-auto p-2">
-            {visibleTools.length === 0 ? (
-              <div className="px-2 py-6 text-center text-xs text-muted-foreground">
-                {mcpToolsLoading ? "Loading tools…" : "No tools found"}
-              </div>
-            ) : (
-              visibleTools.map((tool) => (
+          {/* The rail is a browse aid only; a search reaches across both
+              halves, so it is hidden while one is running. */}
+          {!searching && (
+            <div className="w-36 shrink-0 overflow-y-auto border-r border-input p-2">
+              {hasSkills && (
                 <button
-                  key={tool.id}
                   type="button"
-                  onClick={() => insertMention(tool.name)}
-                  className="flex w-full items-start gap-2 rounded px-2 py-1.5 text-left transition-colors hover:bg-muted"
+                  onClick={() => setSection(CONTEXT_SKILLS_SECTION)}
+                  className={cn(
+                    "flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs transition-colors",
+                    activeSection === CONTEXT_SKILLS_SECTION
+                      ? "bg-muted font-medium text-foreground"
+                      : "text-muted-foreground hover:bg-muted/60",
+                  )}
                 >
-                  <Wrench className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-foreground">
-                      {tool.name}
-                    </span>
-                    {tool.description && (
-                      <span className="line-clamp-2 text-xs text-muted-foreground">
-                        {tool.description}
-                      </span>
-                    )}
+                  <span className="truncate">Skills</span>
+                  <span className="ml-2 shrink-0 tabular-nums opacity-60">
+                    {skillContext?.skills.length ?? 0}
                   </span>
                 </button>
-              ))
+              )}
+              {hasTools && (
+                <>
+                  <div className="px-2 pt-2 pb-1 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                    Tools
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSection(CONTEXT_ALL_TOOLS_SECTION)}
+                    className={cn(
+                      "flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs transition-colors",
+                      activeSection === CONTEXT_ALL_TOOLS_SECTION
+                        ? "bg-muted font-medium text-foreground"
+                        : "text-muted-foreground hover:bg-muted/60",
+                    )}
+                  >
+                    <span className="truncate">All</span>
+                    <span className="ml-2 shrink-0 tabular-nums opacity-60">
+                      {tools.length}
+                    </span>
+                  </button>
+                  {categories.map((category) => (
+                    <button
+                      key={category.name}
+                      type="button"
+                      onClick={() => setSection(category.name)}
+                      className={cn(
+                        "flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs transition-colors",
+                        activeSection === category.name
+                          ? "bg-muted font-medium text-foreground"
+                          : "text-muted-foreground hover:bg-muted/60",
+                      )}
+                    >
+                      <span className="truncate">{category.name}</span>
+                      <span className="ml-2 shrink-0 tabular-nums opacity-60">
+                        {category.tools.length}
+                      </span>
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+          <div className="min-w-0 flex-1 overflow-y-auto">
+            {searching && !showSkills && !showTools && (
+              <div className="px-2 py-6 text-center text-xs text-muted-foreground">
+                Nothing found
+              </div>
             )}
+            {showSkills &&
+              (searching || activeSection === CONTEXT_SKILLS_SECTION) && (
+                <>
+                  {searching && (
+                    <div className="px-4 pt-3 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                      Skills
+                    </div>
+                  )}
+                  <ContextSkillResults
+                    skillContext={skillContext}
+                    visibleSkills={matchingSkills}
+                    selectedIDs={selectedIDs}
+                    maxSelected={maxSelected}
+                    onToggle={toggleSkill}
+                  />
+                </>
+              )}
+            {showTools &&
+              (searching || activeSection !== CONTEXT_SKILLS_SECTION) && (
+                <>
+                  {searching && (
+                    <div className="px-4 pt-3 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                      Tools
+                    </div>
+                  )}
+                  <ContextToolResults
+                    tools={matchingTools}
+                    loading={mcpToolsLoading}
+                    onSelect={insertMention}
+                  />
+                </>
+              )}
           </div>
         </div>
       </PopoverContent>
     </Popover>
   );
 };
+
+function ContextToolResults({
+  tools,
+  loading,
+  onSelect,
+}: {
+  tools: MentionableTool[];
+  loading: boolean;
+  onSelect: (toolName: string) => void;
+}): React.ReactElement {
+  if (tools.length === 0) {
+    return (
+      <div className="px-2 py-6 text-center text-xs text-muted-foreground">
+        {loading ? "Loading tools…" : "No tools found"}
+      </div>
+    );
+  }
+  return (
+    <div className="p-2">
+      {tools.map((tool) => (
+        <button
+          key={tool.id}
+          type="button"
+          onClick={() => onSelect(tool.name)}
+          className="flex w-full items-start gap-2 rounded px-2 py-1.5 text-left transition-colors hover:bg-muted"
+        >
+          <Wrench className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium text-foreground">
+              {tool.name}
+            </span>
+            {tool.description && (
+              <span className="line-clamp-2 text-xs text-muted-foreground">
+                {tool.description}
+              </span>
+            )}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
 
 const ComposerSkillContextBadges: FC = () => {
   const skillContext = useElements().config.composer?.skillContext;
@@ -1292,133 +1443,27 @@ const ComposerSkillContextBadges: FC = () => {
   );
 };
 
-const ComposerSkillContextPicker: FC = () => {
-  const skillContext = useElements().config.composer?.skillContext;
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const deferredQuery = useDeferredValue(query);
-
-  // Nothing to attach → no affordance. An "Add context" button that opens an
-  // empty list is worse than no button, and the project may simply have no
-  // skills yet. Still shown while loading, so it doesn't flicker in.
-  if (
-    !skillContext ||
-    (skillContext.skills.length === 0 && !skillContext.loading)
-  ) {
-    return null;
-  }
-
-  const selectedIDs = new Set(skillContext.selectedSkillIds);
-  const normalizedQuery = deferredQuery.trim().toLowerCase();
-  const visibleSkills = normalizedQuery
-    ? skillContext.skills.filter(
-        (skill) =>
-          skill.displayName.toLowerCase().includes(normalizedQuery) ||
-          skill.name.toLowerCase().includes(normalizedQuery) ||
-          (skill.summary?.toLowerCase().includes(normalizedQuery) ?? false),
-      )
-    : skillContext.skills;
-  const maxSelected = skillContext.maxSelected ?? 10;
-
-  const handleOpenChange = (next: boolean) => {
-    setOpen(next);
-    if (!next) {
-      setQuery("");
-    }
-  };
-
-  const toggleSkill = (skillID: string) => {
-    if (selectedIDs.has(skillID)) {
-      skillContext.onSelectedSkillIdsChange(
-        skillContext.selectedSkillIds.filter((id) => id !== skillID),
-      );
-      setOpen(false);
-      setQuery("");
-      return;
-    }
-    if (skillContext.selectedSkillIds.length >= maxSelected) {
-      return;
-    }
-    skillContext.onSelectedSkillIdsChange([
-      ...skillContext.selectedSkillIds,
-      skillID,
-    ]);
-    setOpen(false);
-    setQuery("");
-  };
-
-  return (
-    <Popover open={open} onOpenChange={handleOpenChange}>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          data-state={open ? "open" : "closed"}
-          className="aui-composer-skill-context-picker flex w-fit items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold data-[state=open]:bg-muted-foreground/15 dark:border-muted-foreground/15 dark:hover:bg-muted-foreground/30"
-          aria-label="Add skill context"
-        >
-          <AtSign className="size-4 stroke-[1.5px]" />
-          <span className="aui-composer-skill-context-picker-label">
-            Add context
-          </span>
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent
-        side="top"
-        align="start"
-        className="aui-composer-skill-context-popover w-[360px] overflow-hidden p-0"
-        onEscapeKeyDown={(event) => {
-          if (query !== "") {
-            event.preventDefault();
-            setQuery("");
-          }
-        }}
-      >
-        <div className="flex items-center gap-2 border-b border-input px-3 py-2">
-          <Search className="size-4 shrink-0 text-muted-foreground" />
-          <input
-            autoFocus
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search skills…"
-            className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
-            aria-label="Search skills"
-          />
-        </div>
-        <SkillContextPickerResults
-          skillContext={skillContext}
-          visibleSkills={visibleSkills}
-          selectedIDs={selectedIDs}
-          maxSelected={maxSelected}
-          onToggle={toggleSkill}
-        />
-      </PopoverContent>
-    </Popover>
-  );
-};
-
-function SkillContextPickerResults({
+function ContextSkillResults({
   skillContext,
   visibleSkills,
   selectedIDs,
   maxSelected,
   onToggle,
 }: {
-  skillContext: SkillContextConfig;
+  skillContext: SkillContextConfig | undefined;
   visibleSkills: ComposerSkill[];
   selectedIDs: Set<string>;
   maxSelected: number;
   onToggle: (skillID: string) => void;
 }): React.ReactElement {
-  if (skillContext.loading) {
+  if (skillContext?.loading) {
     return (
       <div className="px-3 py-8 text-center text-xs text-muted-foreground">
         Loading skills…
       </div>
     );
   }
-  if (skillContext.error) {
+  if (skillContext?.error) {
     return (
       <div className="px-3 py-8 text-center text-xs text-muted-foreground">
         Unable to load skills
@@ -1536,9 +1581,7 @@ const ComposerAction: FC<{ showRunState?: boolean }> = ({
           <div className="aui-composer-add-attachment-placeholder" />
         )}
 
-        <ComposerToolMentionPicker />
-
-        <ComposerSkillContextPicker />
+        <ComposerContextPicker />
 
         {CASSETTE_RECORDING_ENABLED && <ComposerCassetteRecorder />}
       </div>
