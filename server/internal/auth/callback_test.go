@@ -64,7 +64,7 @@ func TestService_Callback(t *testing.T) {
 			require.NoError(t, instance.createTestOrganization(ctx, org, userInfo.UserID))
 		}
 
-		redirectURL := "https://dev.getgram.ai/other-org/projects/default"
+		redirectURL := "http://localhost:3000/other-org/projects/default"
 		ctx, stateParam := instance.stateWithNonce(ctx, t, redirectURL)
 
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
@@ -194,7 +194,7 @@ func TestService_Callback(t *testing.T) {
 
 		// Set admin override to one org, but state param points to a different org.
 		ctx = contextvalues.SetAdminOverrideInContext(ctx, "override-org")
-		redirectURL := "https://dev.getgram.ai/state-org/projects/default"
+		redirectURL := "http://localhost:3000/state-org/projects/default"
 		ctx, stateParam := instance.stateWithNonce(ctx, t, redirectURL)
 
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
@@ -249,7 +249,7 @@ func TestService_Callback(t *testing.T) {
 		}
 
 		// State param points to state-target org, IDP selected idp-selected org.
-		redirectURL := "https://dev.getgram.ai/state-target/projects/default"
+		redirectURL := "http://localhost:3000/state-target/projects/default"
 		ctx, stateParam := instance.stateWithNonce(ctx, t, redirectURL)
 
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
@@ -287,7 +287,7 @@ func TestService_Callback(t *testing.T) {
 		}, ""))
 
 		// State param points to the non-member customer org (e.g. link from registry).
-		redirectURL := "https://dev.getgram.ai/customer-registry/projects/default"
+		redirectURL := "http://localhost:3000/customer-registry/projects/default"
 		ctx, stateParam := instance.stateWithNonce(ctx, t, redirectURL)
 
 		result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
@@ -522,6 +522,38 @@ func TestService_Callback(t *testing.T) {
 
 		require.Equal(t, "/dashboard/projects/my-project", result.Location)
 		require.NotEmpty(t, result.SessionToken)
+	})
+
+	t.Run("callback refuses a state destination that leaves the dashboard origin", func(t *testing.T) {
+		t.Parallel()
+
+		// The state param is not signed, so an attacker can hand the callback any
+		// destination directly — this is the check the browser ultimately depends
+		// on. AIS-428 covered the first case: browsers read the leading "/\" as
+		// "//" and treat the rest as a host.
+		for _, redirectURL := range []string{
+			`/\attacker.example.net`,
+			`/\/attacker.example.net`,
+			"//attacker.example.net/phish",
+			"///attacker.example.net",
+			"https://attacker.example.net/phish",
+			"http://localhost:3000@attacker.example.net/",
+			"attacker.example.net",
+		} {
+			userInfo := defaultMockUserInfo()
+			ctx, instance := newTestAuthService(t, userInfo)
+
+			ctx, stateParam := instance.stateWithNonce(ctx, t, redirectURL)
+			result, err := instance.service.Callback(ctx, &gen.CallbackPayload{
+				Code:  "mock_code",
+				State: &stateParam,
+			})
+			require.NoError(t, err)
+			require.NotNil(t, result)
+
+			require.Equal(t, instance.authConfigs.SignInRedirectURL, result.Location, "redirect %q must fall back to the sign-in URL", redirectURL)
+			require.NotEmpty(t, result.SessionToken)
+		}
 	})
 
 	t.Run("callback with complex state URL redirects correctly", func(t *testing.T) {

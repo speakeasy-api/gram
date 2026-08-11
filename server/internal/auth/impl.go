@@ -122,6 +122,11 @@ type Service struct {
 	trialBundleSeeder   EnterpriseTrialBundleSeeder
 	auditLogger         *audit.Logger
 	trialNotifier       trialemails.Notifier
+
+	// siteOrigin is the dashboard's "scheme://host", derived from
+	// cfg.SignInRedirectURL. It is the one absolute origin a post-login redirect
+	// target is allowed to name.
+	siteOrigin string
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -169,6 +174,7 @@ func NewService(
 		trialBundleSeeder:   trialBundleSeeder,
 		auditLogger:         auditLogger,
 		trialNotifier:       trialNotifier,
+		siteOrigin:          parseSiteOrigin(cfg.SignInRedirectURL),
 	}
 }
 
@@ -366,7 +372,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 			}, nil
 		}
 
-		if dispositionFromState(payload) == dispositionAssistants {
+		if s.dispositionFromState(payload) == dispositionAssistants {
 			location, err := s.autoProvisionForAssistants(ctx, userInfo, &session)
 			if err != nil {
 				return redirectWithError(authErrInit, err)
@@ -409,11 +415,11 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	// First try the user's own orgs; for admins, fall back to a DB lookup
 	// since they may access orgs they aren't a member of.
 	if !activeOrgSelected {
-		if org, ok := activeOrganizationFromState(payload, userInfo.Organizations); ok {
+		if org, ok := s.activeOrganizationFromState(payload, userInfo.Organizations); ok {
 			activeOrgID = org.ID
 			activeOrgSelected = true
 		} else if userInfo.Admin {
-			if slug := organizationSlugFromState(payload); slug != "" {
+			if slug := s.organizationSlugFromState(payload); slug != "" {
 				if orgMeta, err := s.orgRepo.GetOrganizationMetadataBySlug(ctx, slug); err == nil {
 					activeOrgID = orgMeta.ID
 					activeOrgSelected = true
@@ -562,7 +568,13 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 		}
 	}
 
-	state := encodeStateParam(payload, nonce)
+	// Only a same-origin destination is worth carrying through the identity
+	// provider and back out into a Location header. Sanitizing here keeps a
+	// hostile value out of the state param altogether, rather than minting one
+	// and relying on the callback to disarm it later.
+	destination := safeRedirectPath(conv.PtrValOr(payload.Redirect, ""), s.siteOrigin)
+
+	state := encodeStateParam(destination, nonce)
 
 	// The company name is what marks a login as having begun on /sign-up, so it
 	// alone selects AuthKit's sign-up screen. Keeping one signal authoritative
@@ -593,18 +605,18 @@ func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *ge
 
 // organizationSlugFromState extracts the org slug from the state param's
 // final destination URL. Returns "" if the state is missing or has no org slug.
-func organizationSlugFromState(payload *gen.CallbackPayload) string {
+func (s *Service) organizationSlugFromState(payload *gen.CallbackPayload) string {
 	state := decodeStateParam(payload)
 	if state == nil {
 		return ""
 	}
-	return organizationSlugFromDestinationURL(state.FinalDestinationURL)
+	return s.organizationSlugFromDestinationURL(state.FinalDestinationURL)
 }
 
-func activeOrganizationFromState(payload *gen.CallbackPayload, organizations []sessions.Organization) (sessions.Organization, bool) {
+func (s *Service) activeOrganizationFromState(payload *gen.CallbackPayload, organizations []sessions.Organization) (sessions.Organization, bool) {
 	var empty sessions.Organization
 
-	orgSlug := organizationSlugFromState(payload)
+	orgSlug := s.organizationSlugFromState(payload)
 	if orgSlug == "" {
 		return empty, false
 	}
@@ -630,8 +642,8 @@ func activeOrganizationFromWorkOSID(workosOrgID string, organizations []sessions
 	return empty, false
 }
 
-func organizationSlugFromDestinationURL(destinationURL string) string {
-	location := relativeURL(destinationURL)
+func (s *Service) organizationSlugFromDestinationURL(destinationURL string) string {
+	location := safeRedirectPath(destinationURL, s.siteOrigin)
 	if location == "" {
 		return ""
 	}
@@ -1205,12 +1217,12 @@ func (s *Service) captureSignupTelemetry(ctx context.Context, email, orgName str
 	}
 }
 
-func dispositionFromState(payload *gen.CallbackPayload) string {
+func (s *Service) dispositionFromState(payload *gen.CallbackPayload) string {
 	state := decodeStateParam(payload)
 	if state == nil {
 		return ""
 	}
-	parsed, err := url.Parse(relativeURL(state.FinalDestinationURL))
+	parsed, err := url.Parse(safeRedirectPath(state.FinalDestinationURL, s.siteOrigin))
 	if err != nil {
 		return ""
 	}
@@ -1269,9 +1281,12 @@ type loginState struct {
 	Nonce               string `json:"nonce,omitempty"`
 }
 
-func encodeStateParam(payload *gen.LoginPayload, nonce string) string {
+// encodeStateParam packs the post-login destination and nonce into the state
+// param handed to the identity provider. The destination must already have been
+// through safeRedirectPath.
+func encodeStateParam(destination string, nonce string) string {
 	state := loginState{
-		FinalDestinationURL: conv.PtrValOr(payload.Redirect, ""),
+		FinalDestinationURL: destination,
 		Nonce:               nonce,
 	}
 
@@ -1391,9 +1406,11 @@ func (s *Service) buildCallbackURL(ctx context.Context) string {
 	return returnAddress + "/rpc/auth.callback"
 }
 
-// callbackRedirectURL determines the redirect location after authentication. It
-// only allows relative URLs to prevent open redirect attacks (see relativeURL).
-// If no redirect is found, fall back to SignInRedirectURL.
+// callbackRedirectURL determines the redirect location after authentication.
+// The state param is not signed, so a caller can hand the callback any
+// destination it likes; safeRedirectPath is what keeps that destination on the
+// dashboard's own origin. If no usable redirect is found, fall back to
+// SignInRedirectURL.
 func (s *Service) callbackRedirectURL(
 	ctx context.Context,
 	payload *gen.CallbackPayload,
@@ -1401,7 +1418,7 @@ func (s *Service) callbackRedirectURL(
 	var location string
 
 	if state := decodeStateParam(payload); state != nil {
-		location = relativeURL(state.FinalDestinationURL)
+		location = safeRedirectPath(state.FinalDestinationURL, s.siteOrigin)
 	}
 
 	if location != "" {
@@ -1412,36 +1429,4 @@ func (s *Service) callbackRedirectURL(
 	}
 
 	return s.cfg.SignInRedirectURL
-}
-
-// relativeURL converts any URL to a safe relative URL by extracting only the
-// path, query, and fragment components.
-//
-// Examples:
-//   - "/dashboard" → "/dashboard"
-//   - "/projects?id=123#section" → "/projects?id=123#section"
-//   - "http://localhost:3000/dashboard" → "/dashboard"
-//   - "https://evil-site.com/phishing" → "/phishing"
-//   - "//evil.com/phish" → ""
-//   - "invalid:///" → ""
-func relativeURL(urlStr string) string {
-	parsed, err := url.Parse(urlStr)
-	if err != nil {
-		return ""
-	}
-
-	isRelative := parsed.Host == "" && parsed.Scheme == ""
-	if isRelative {
-		return urlStr
-	}
-
-	rel := parsed.Path
-	if parsed.RawQuery != "" {
-		rel += "?" + parsed.RawQuery
-	}
-	if parsed.Fragment != "" {
-		rel += "#" + parsed.Fragment
-	}
-
-	return rel
 }
