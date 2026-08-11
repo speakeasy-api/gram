@@ -67,6 +67,38 @@ describe("pay-as-you-go pricing", () => {
   });
 });
 
+describe("pay-as-you-go rate adjustment", () => {
+  it("scales every band rate up by an uplift percentage", () => {
+    const adjusted = paygLines(80 * B, 10);
+    const list = paygLines(80 * B);
+    // The uplift moves rates, never band boundaries — same slices, dearer.
+    expect(adjusted.map((l) => l.tokens)).toEqual(list.map((l) => l.tokens));
+    adjusted.forEach((line, i) => {
+      expect(line.ratePerMillion).toBeCloseTo(
+        (list[i]?.ratePerMillion ?? 0) * 1.1,
+        9,
+      );
+    });
+    expect(sumLines(adjusted)).toBeCloseTo(22850 * 1.1, 6);
+  });
+
+  it("scales every band rate down by a discount percentage", () => {
+    expect(sumLines(paygLines(80 * B, -15))).toBeCloseTo(22850 * 0.85, 6);
+  });
+
+  it("leaves list rates untouched at zero adjustment", () => {
+    expect(paygLines(80 * B, 0)).toEqual(paygLines(80 * B));
+  });
+
+  it("floors rates at zero rather than pricing negative past -100%", () => {
+    // A -150% swing is nonsense input; free is the least-wrong reading.
+    for (const line of paygLines(80 * B, -150)) {
+      expect(line.ratePerMillion).toBe(0);
+      expect(line.cost).toBe(0);
+    }
+  });
+});
+
 describe("committed-contract overage pricing", () => {
   it("charges the first-tier rate between 1x and 2x baseline", () => {
     const lines = overageLines(15 * B, 10 * B);
