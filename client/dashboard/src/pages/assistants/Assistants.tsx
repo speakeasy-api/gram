@@ -3,6 +3,10 @@ import { RequireScope } from "@/components/require-scope";
 import { AssistantActivitySparkline } from "@/components/assistants/activity-sparkline";
 import { AssistantOwner } from "@/components/assistants/assistant-owner";
 import { AssistantStatusToggle } from "@/components/assistants/status-toggle";
+import {
+  BRAND_MESH_SURFACE_CLASS,
+  BrandMeshLayers,
+} from "@/components/brand-mesh";
 import { CardContextMenu } from "@/components/card-context-menu";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
@@ -310,7 +314,11 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
         params={[assistant.id]}
         className="focus-visible:ring-ring block h-full no-underline hover:no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
       >
-        <Card.Entity icon={<AssistantIcon />}>
+        <Card.Entity
+          icon={<AssistantIcon />}
+          iconRailClassName={BRAND_MESH_SURFACE_CLASS}
+          overlay={<BrandMeshLayers seed={assistant.id} />}
+        >
           {/* Header row: name + actions */}
           <div className="mb-3 flex items-start justify-between gap-2">
             <Text

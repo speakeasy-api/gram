@@ -35,7 +35,10 @@ import {
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useSession } from "@/contexts/Auth";
 import { resolveChatOwner } from "@/lib/chat-owner";
-import { BrandMeshLayers } from "@/components/brand-mesh";
+import {
+  BRAND_MESH_SURFACE_CLASS,
+  BrandMeshLayers,
+} from "@/components/brand-mesh";
 import { getIdentityTint } from "@/components/gradient-colors";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import {
@@ -78,7 +81,7 @@ export function ChatHome(): ReactElement {
     // grain. Scrolling lives on an inner wrapper so the mesh (and the back
     // affordance) stay pinned to the viewport instead of scrolling away with
     // the content.
-    <div className="from-card to-background relative isolate flex h-full flex-col bg-gradient-to-br">
+    <div className={cn(BRAND_MESH_SURFACE_CLASS, "flex h-full flex-col")}>
       <BrandMeshLayers />
       <div className="absolute top-4 left-4 z-10">
         <Link
