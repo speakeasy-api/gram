@@ -788,13 +788,19 @@ export function InsightsProvider({
     [skillsQuery.data?.pages],
   );
 
-  // Derive "Continue chat" from the server: if the assistant's most recent
-  // conversation was active within CONTINUE_WINDOW_MS, the resting pill offers
-  // to reopen it. Reading the backend (rather than client state) means it
-  // survives reloads for free. limit:1 — we only need the newest.
+  // Derive "Continue chat" from the server: if the viewer's most recent
+  // dashboard-initiated session with the assistant was active within
+  // CONTINUE_WINDOW_MS, the resting pill offers to reopen it. Reading the
+  // backend (rather than client state) means it survives reloads for free.
+  // sourceKind and userId keep out other members' sessions and other sources
+  // (Slack, cron, …), which an admin's chat:read visibility would otherwise
+  // surface here. limit:1 — we only need the newest.
+  const { user } = useSession();
   const { data: recentChatsData } = useListChats(
     {
       assistantId: managedAssistantId || undefined,
+      sourceKind: "dashboard",
+      userId: user.id,
       sortBy: SortBy.LastMessageTimestamp,
       sortOrder: SortOrder.Desc,
       limit: 1,
@@ -846,7 +852,6 @@ export function InsightsProvider({
   // their chat:read grant, so hide the composer for those rather than let a
   // send 404. Chats started from the dashboard stash the caller's email in
   // externalUserId instead of userId (see resolveCreator above).
-  const { user } = useSession();
   const isOwnChat = useCallback(
     ({
       userId,
