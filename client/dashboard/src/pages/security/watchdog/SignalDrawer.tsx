@@ -10,23 +10,16 @@ import {
 } from "@/components/ui/Sheet";
 import { Separator } from "@/components/ui/Separator";
 import { Text } from "@/components/ui/Text";
-import { useSdkClient } from "@/contexts/Sdk";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import type { RiskSignal } from "@gram/client/models/components/risksignal.js";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
-import { Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
 import { ExclusionEditor, type ExclusionSheetState } from "../exclusion-sheet";
 import { MaskedMatch, RevealAllProvider, RevealAllToggle } from "../risk-ui";
 import { getRuleTitleFallback, scoreToRating } from "../risk-utils";
 import { useDismissFinding } from "../useDismissFinding";
-import {
-  collectFindingsForRules,
-  SIGNAL_DISMISS_CAP,
-} from "./collect-findings";
 import { SCORE_TEXT_COLOR } from "./signals-helpers";
 import { SignalTrend } from "./SignalsList";
 
@@ -153,83 +146,18 @@ function EvidenceRow({
   );
 }
 
-/** Header description line: the confirmation question while the
- * false-positive decision is pending, the rule description otherwise. */
-function signalDescription(signal: RiskSignal, confirming: boolean): string {
-  if (confirming) return "False positive?";
-  return signal.description || "Findings clustered on this detection rule.";
-}
-
-/**
- * Inline confirmation shown in place of the drawer's action buttons after
- * "Mark false positive" is clicked — the rest of the signal detail stays
- * visible behind it.
- */
-function FalsePositiveConfirm({
-  count,
-  onConfirm,
-  onCancel,
-}: {
-  /** Findings actually collected for dismissal (may have hit the cap). */
-  count: number;
-  onConfirm: () => void;
-  onCancel: () => void;
-}): JSX.Element {
-  return (
-    <div className="space-y-6">
-      {/* Pulled up against the sheet header so the divider reads as the
-          header's bottom edge rather than part of the confirmation block. */}
-      <Separator className="-mt-2" />
-      <div className="flex items-start gap-3">
-        <Icon
-          name="circle-alert"
-          className="text-destructive mt-0.5 size-5 shrink-0"
-        />
-        <Text className="text-base">
-          {count === 0
-            ? "No findings to mark in the selected window."
-            : `This will mark ${count.toLocaleString()} ${
-                count === 1 ? "finding" : "findings"
-              } as false positive; they won't be displayed in the watchdog view again.`}
-          {count >= SIGNAL_DISMISS_CAP &&
-            ` Only the first ${SIGNAL_DISMISS_CAP.toLocaleString()} findings can be marked at once; run this again if more remain.`}
-        </Text>
-      </div>
-      <div className="flex items-center gap-2">
-        <Button
-          variant="primary"
-          className="w-28"
-          disabled={count === 0}
-          onClick={onConfirm}
-        >
-          <Button.Text>OK</Button.Text>
-        </Button>
-        <Button variant="tertiary" className="w-28" onClick={onCancel}>
-          <Button.Text>Cancel</Button.Text>
-        </Button>
-      </div>
-      <Separator />
-    </div>
-  );
-}
-
 /**
  * Slide-over detail for one signal: stats, top affected users, redacted
- * evidence, and the two signal-level actions — create an exclusion rule for
- * the whole rule cluster, or mark every finding in the window false positive.
+ * evidence, and the signal-level action — create an exclusion rule for the
+ * whole rule cluster.
  */
 export function SignalDrawer({
   signal,
-  from,
-  to,
   onClose,
 }: {
   signal: RiskSignal | null;
-  from: Date;
-  to: Date;
   onClose: () => void;
 }): JSX.Element {
-  const client = useSdkClient();
   const { dismiss, isOptimisticallyDismissed } = useDismissFinding();
   const [exclusionState, setExclusionState] =
     useState<ExclusionSheetState | null>(null);
@@ -237,10 +165,6 @@ export function SignalDrawer({
   // slides back in from the left — but never on the drawer's first open,
   // where the Sheet's own slide already animates the content.
   const [returningFromEditor, setReturningFromEditor] = useState(false);
-  const [pendingDismissAll, setPendingDismissAll] = useState<
-    RiskResult[] | null
-  >(null);
-  const [collecting, setCollecting] = useState(false);
 
   const closeEditor = () => {
     setExclusionState(null);
@@ -255,8 +179,7 @@ export function SignalDrawer({
   // Deliberately unwindowed: signals count findings by scan time while the
   // list endpoint filters by message event time, so a windowed evidence query
   // can come back empty for a signal that clearly has findings (scans of
-  // older messages). Latest evidence for the rule is what the drawer wants
-  // anyway; only the bulk false-positive action stays window-scoped.
+  // older messages). Latest evidence for the rule is what the drawer wants.
   const evidenceQuery = useRiskListResults({ ruleId, limit: 25 }, undefined, {
     enabled: signal !== null,
     throwOnError: false,
@@ -279,27 +202,6 @@ export function SignalDrawer({
     setExclusionState({ mode: "create", results: evidence });
   };
 
-  const collectAllFindings = async () => {
-    if (!signal) return;
-    setCollecting(true);
-    try {
-      setPendingDismissAll(
-        await collectFindingsForRules(client, [signal.ruleId], { from, to }),
-      );
-    } catch {
-      toast.error("Failed to load the signal's findings.");
-    } finally {
-      setCollecting(false);
-    }
-  };
-
-  const confirmDismissAll = () => {
-    if (!pendingDismissAll) return;
-    dismiss(pendingDismissAll);
-    setPendingDismissAll(null);
-    onClose();
-  };
-
   return (
     <>
       <Sheet
@@ -308,7 +210,6 @@ export function SignalDrawer({
           if (!open) {
             setExclusionState(null);
             setReturningFromEditor(false);
-            setPendingDismissAll(null);
             onClose();
           }
         }}
@@ -382,58 +283,18 @@ export function SignalDrawer({
                   </div>
                   <SheetTitle>{getRuleTitleFallback(signal.ruleId)}</SheetTitle>
                   <SheetDescription>
-                    {signalDescription(signal, pendingDismissAll !== null)}
+                    {signal.description ||
+                      "Findings clustered on this detection rule."}
                   </SheetDescription>
                 </SheetHeader>
                 <div className="flex flex-1 flex-col gap-6 px-4 pb-6">
-                  {/* Clicking "Mark false positive" swaps the action buttons
-                    for an inline confirmation — the rest of the signal
-                    detail stays visible; no modal, no view change. */}
-                  {pendingDismissAll ? (
-                    <FalsePositiveConfirm
-                      count={pendingDismissAll.length}
-                      onConfirm={confirmDismissAll}
-                      onCancel={() => setPendingDismissAll(null)}
-                    />
-                  ) : (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Button variant="primary" onClick={openSignalExclusion}>
-                        <Button.Text>Create exclusion rule</Button.Text>
-                      </Button>
-                      {/* Deliberately the only filled action: exclusion is the
-                        recommended path, false positive stays low-emphasis. */}
-                      <Button
-                        variant="tertiary"
-                        disabled={collecting}
-                        onClick={() => void collectAllFindings()}
-                      >
-                        {collecting && (
-                          <Button.LeftIcon>
-                            <Loader2 className="size-4 animate-spin" />
-                          </Button.LeftIcon>
-                        )}
-                        <Button.Text>Mark false positive</Button.Text>
-                      </Button>
-                    </div>
-                  )}
-                  {/* While the confirmation is up, everything below it sits
-                    under a dark scrim and is inert — the decision is the
-                    only actionable thing in the drawer. */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button variant="primary" onClick={openSignalExclusion}>
+                      <Button.Text>Create exclusion rule</Button.Text>
+                    </Button>
+                  </div>
                   <div className="relative flex-1">
-                    {pendingDismissAll !== null && (
-                      // Negative insets cancel the body's px-4/pb-6 padding and
-                      // the gap under the divider so the scrim bleeds to the
-                      // drawer's edges with no light border around it.
-                      <div className="bg-foreground/50 absolute -inset-x-4 -top-6 -bottom-6 z-10" />
-                    )}
-                    <div
-                      className={cn(
-                        "space-y-6",
-                        pendingDismissAll !== null &&
-                          "pointer-events-none select-none",
-                      )}
-                      aria-hidden={pendingDismissAll !== null}
-                    >
+                    <div className="space-y-6">
                       <Text small muted>
                         First seen {signal.firstSeen.toLocaleString()} · last{" "}
                         {signal.lastSeen.toLocaleString()}
