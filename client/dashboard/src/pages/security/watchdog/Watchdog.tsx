@@ -1,4 +1,4 @@
-import { MetricCard, MetricCardGroup } from "@/components/chart/MetricCard";
+import { StatTile, StatTileGroup } from "@/components/chart/stat-tile";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { defineFilters, useFilterState } from "@/components/filters";
 import {
@@ -461,7 +461,7 @@ function SeverityChip({
   );
 }
 
-/** MetricCard tone for the org risk score, mirroring the signal table's
+/** StatTile tone for the org risk score, mirroring the signal table's
  * severity coding: red for high/critical bands, amber for medium, plain
  * ink for low. */
 function riskScoreTone(score: number): "destructive" | "warning" | "neutral" {
@@ -558,19 +558,19 @@ function KPIRow({
 }): JSX.Element {
   if (!data && isLoading) {
     return (
-      <MetricCardGroup>
+      <StatTileGroup>
         <Skeleton className="h-[100px] flex-1" />
         <Skeleton className="h-[100px] flex-1" />
         <Skeleton className="h-[100px] flex-1" />
         <Skeleton className="h-[100px] flex-1" />
-      </MetricCardGroup>
+      </StatTileGroup>
     );
   }
   if (!data) return <></>;
 
   return (
-    <MetricCardGroup>
-      <MetricCard
+    <StatTileGroup>
+      <StatTile
         title="Org risk score"
         value={data.orgRiskScore}
         displayValue={data.orgRiskScore.toFixed(1)}
@@ -585,7 +585,7 @@ function KPIRow({
             : undefined
         }
       />
-      <MetricCard
+      <StatTile
         title="Findings · last 24h"
         value={data.findings24h}
         previousValue={data.previousFindings24h}
@@ -594,15 +594,14 @@ function KPIRow({
         icon="flag"
         comparisonLabel="vs previous 24h"
       />
-      <MetricCard
+      <StatTile
         title="Open signals"
         value={data.openSignals}
         tone="neutral"
         icon="radar"
-        accentColor={data.criticalSignals > 0 ? "red" : undefined}
         subtext={`${data.criticalSignals} critical`}
       />
-      <MetricCard
+      <StatTile
         title="Users exposed"
         value={data.usersExposed}
         previousValue={data.previousUsersExposed}
@@ -611,7 +610,7 @@ function KPIRow({
         icon="users"
         comparisonLabel="vs previous period"
       />
-    </MetricCardGroup>
+    </StatTileGroup>
   );
 }
 
