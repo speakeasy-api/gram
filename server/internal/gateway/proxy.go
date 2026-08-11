@@ -816,27 +816,39 @@ func (tp *ToolProxy) doPrompt(ctx context.Context, logger *slog.Logger, w http.R
 const externalMCPErrorSummaryLimit = 512
 
 // externalMCPErrorSummary renders the content of an errored tool result for
-// logging. The content is upstream-controlled, so it is truncated on a rune
-// boundary and stripped of invalid UTF-8 before it reaches the log.
+// logging. The content is upstream-controlled, so each part is written only up
+// to the remaining budget — the limit bounds what is built, not just what is
+// returned, so one multi-megabyte part cannot be copied whole on its way to a
+// 512-byte log field. Slicing to a byte offset can split a multi-byte rune, so
+// invalid UTF-8 is stripped before the summary reaches the log.
 func externalMCPErrorSummary(content []json.RawMessage) string {
 	if len(content) == 0 {
 		return "external MCP server reported an error with no content"
 	}
 
 	var summary strings.Builder
+	truncated := false
 	for _, part := range content {
-		if summary.Len() >= externalMCPErrorSummaryLimit {
+		remaining := externalMCPErrorSummaryLimit - summary.Len()
+		if remaining <= 0 {
+			// Budget spent with parts still to go: the tail is being dropped.
+			truncated = true
+			break
+		}
+		if len(part) > remaining {
+			summary.Write(part[:remaining])
+			truncated = true
 			break
 		}
 		summary.Write(part)
 	}
 
-	rendered := summary.String()
-	if len(rendered) > externalMCPErrorSummaryLimit {
-		return strings.ToValidUTF8(rendered[:externalMCPErrorSummaryLimit], "") + "…(truncated)"
+	rendered := strings.ToValidUTF8(summary.String(), "")
+	if truncated {
+		return rendered + "…(truncated)"
 	}
 
-	return strings.ToValidUTF8(rendered, "")
+	return rendered
 }
 
 func (tp *ToolProxy) doExternalMCP(
