@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -93,6 +94,16 @@ const statusUnreviewed = "unreviewed"
 // catalog lookup instead of losing it to the backstop.
 const gatherTimeout = 14 * time.Second
 
+// gapRetryCooldown bounds how often one gapped dossier re-attempts its gather
+// from the read path. The retry exists so an outage-time dossier heals on a
+// later view; without a floor, a persistent source outage would turn every
+// page view into another full gather — up to gatherTimeout of user-visible
+// latency apiece, aimed at sources that are already struggling. The cooldown
+// is tracked in memory per replica: its job is damping, not cross-replica
+// coordination, and a handful of replicas each retrying once a minute is
+// still a bounded trickle.
+const gapRetryCooldown = time.Minute
+
 // statusFor maps a decision onto the status its request moves to.
 var statusFor = map[string]string{
 	decisionApproved: "approved",
@@ -108,6 +119,13 @@ type Service struct {
 	features *productfeatures.Client
 	audit    *audit.Logger
 	evidence *evidence.Assembler
+
+	// gapRetryMu guards gapRetryAt.
+	gapRetryMu sync.Mutex
+
+	// gapRetryAt records when each gapped dossier last re-attempted its
+	// gather from the read path, enforcing gapRetryCooldown.
+	gapRetryAt map[uuid.UUID]time.Time
 }
 
 var (
@@ -119,14 +137,16 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 	logger = logger.With(attr.SlogComponent("mcpapproval"))
 
 	return &Service{
-		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcpapproval"),
-		logger:   logger,
-		db:       db,
-		auth:     auth.New(logger, db, sessions, authzEngine),
-		authz:    authzEngine,
-		features: features,
-		audit:    auditLogger,
-		evidence: assembler,
+		tracer:     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcpapproval"),
+		logger:     logger,
+		db:         db,
+		auth:       auth.New(logger, db, sessions, authzEngine),
+		authz:      authzEngine,
+		features:   features,
+		audit:      auditLogger,
+		evidence:   assembler,
+		gapRetryMu: sync.Mutex{},
+		gapRetryAt: make(map[uuid.UUID]time.Time),
 	}
 }
 
@@ -468,6 +488,13 @@ func storedEvidenceHasGaps(raw []byte, version int32) bool {
 // the richer stored document standing. This is still the read path: no audit
 // entry is written, and the request's status and requesters are untouched.
 func (s *Service) refreshGappedEvidence(ctx context.Context, projectID uuid.UUID, existing repo.GetApprovalRequestByTargetRow) (*gen.ApprovalRequestSummary, error) {
+	// A view landing inside the cooldown reads the gapped document as-is,
+	// so a persistent outage costs one gather per cooldown per replica
+	// rather than one per page view.
+	if !s.beginGapRetry(existing.ID) {
+		return summaryView(fromTargetRow(existing)), nil
+	}
+
 	gatherCtx, cancelGather := context.WithTimeout(ctx, gatherTimeout)
 	defer cancelGather()
 
@@ -482,12 +509,17 @@ func (s *Service) refreshGappedEvidence(ctx context.Context, projectID uuid.UUID
 		return summaryView(fromTargetRow(existing)), nil
 	}
 
+	// The write is a compare-and-set against the document this refresh read:
+	// when a concurrent refresh already replaced the evidence, the slower
+	// gather matches zero rows instead of clobbering the newer document, and
+	// the re-read below returns the winner's evidence either way.
 	queries := repo.New(s.db)
-	if err := queries.SetApprovalRequestEvidence(ctx, repo.SetApprovalRequestEvidenceParams{
-		CurrentEvidence: document,
-		EvidenceVersion: evidence.Version,
-		ID:              existing.ID,
-		ProjectID:       projectID,
+	if _, err := queries.RefreshApprovalRequestEvidence(ctx, repo.RefreshApprovalRequestEvidenceParams{
+		CurrentEvidence:     document,
+		EvidenceVersion:     evidence.Version,
+		ID:                  existing.ID,
+		ProjectID:           projectID,
+		ObservedCollectedAt: existing.EvidenceCollectedAt,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error storing evidence").LogError(ctx, s.logger)
 	}
@@ -498,6 +530,31 @@ func (s *Service) refreshGappedEvidence(ctx context.Context, projectID uuid.UUID
 	}
 
 	return summaryView(fromGetRow(row)), nil
+}
+
+// beginGapRetry reports whether a gap retry for this dossier may run now,
+// recording the attempt when it may. Entries past their cooldown are pruned
+// on the way through, so the map holds at most the gapped dossiers viewed
+// within the current window.
+func (s *Service) beginGapRetry(id uuid.UUID) bool {
+	now := time.Now()
+
+	s.gapRetryMu.Lock()
+	defer s.gapRetryMu.Unlock()
+
+	if last, seen := s.gapRetryAt[id]; seen && now.Sub(last) < gapRetryCooldown {
+		return false
+	}
+
+	for other, last := range s.gapRetryAt {
+		if now.Sub(last) >= gapRetryCooldown {
+			delete(s.gapRetryAt, other)
+		}
+	}
+
+	s.gapRetryAt[id] = now
+
+	return true
 }
 
 func (s *Service) CreateRequest(ctx context.Context, payload *gen.CreateRequestPayload) (*gen.ApprovalRequestSummary, error) {

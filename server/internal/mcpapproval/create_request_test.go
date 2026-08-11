@@ -226,7 +226,7 @@ func TestCreateRequest_StdioCommandSecretsAreRedacted(t *testing.T) {
 	require.NotContains(t, created.TargetRaw, "fabricated-not-real")
 	require.Contains(t, created.TargetRaw, "npx -y mcp-remote https://mcp.example.com/sse")
 	require.Contains(t, created.TargetRaw, "FAKE_TOKEN=<redacted>")
-	require.Contains(t, created.TargetRaw, "--header <redacted>")
+	require.Contains(t, created.TargetRaw, "--header=<redacted>")
 	require.Contains(t, created.TargetRaw, "--api-key=<redacted>")
 
 	row, err := ti.repo.GetApprovalRequest(ctx, repo.GetApprovalRequestParams{ID: uuid.MustParse(created.ID), ProjectID: ti.projectID})
