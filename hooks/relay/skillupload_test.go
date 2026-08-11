@@ -68,6 +68,7 @@ func acceptedSkillUploadResult(rawSHA256 string, contentRequired bool) ingestRes
 		authRejected: false,
 		failOpen:     nil,
 		skillCapture: &skillCapture{rawSHA256: rawSHA256, contentRequired: contentRequired},
+		diagnostic:   "",
 	}
 }
 

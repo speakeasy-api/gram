@@ -139,7 +139,7 @@ func TestUnsentPredicate(t *testing.T) {
 		http.StatusTooManyRequests: true, http.StatusRequestTimeout: true,
 		200: false, 400: false, 401: false, 403: false, 404: false,
 	} {
-		got := ingestResult{statusCode: status, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false}.unsent()
+		got := ingestResult{statusCode: status, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil, skillCapture: nil, diagnostic: ""}.unsent()
 		require.Equal(t, want, got, "unsent(status=%d)", status)
 	}
 }

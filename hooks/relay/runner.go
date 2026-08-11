@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -37,6 +38,7 @@ type Relay struct {
 	cfg    Config
 	client *client
 	login  *loginFlow
+	logger *slog.Logger
 	// backfillDeny carries a blocked verdict from a reporting-only backfilled
 	// prompt (agenthooks discards its decision) to the decision-capable event
 	// that triggered the backfill in this same process. It was the turn's
@@ -46,10 +48,15 @@ type Relay struct {
 
 // NewRelay builds a Relay from the resolved config.
 func NewRelay(cfg Config) *Relay {
+	return newRelay(cfg, newDebugLogger(cfg.DebugLog))
+}
+
+func newRelay(cfg Config, logger *slog.Logger) *Relay {
 	return &Relay{
 		cfg:          cfg,
 		client:       newClient(cfg.ServerURL),
 		login:        newLoginFlow(cfg),
+		logger:       logger,
 		backfillDeny: "",
 	}
 }
@@ -67,14 +74,19 @@ func (r *Relay) Login(ctx context.Context, force bool) error {
 // Handler failures fail open — a broken hook must never wedge the agent — and
 // the credential ratchet governs the unauthenticated case.
 func NewRunner(cfg Config) *agenthooks.Runner {
-	r := NewRelay(cfg)
-	runner := agenthooks.New(agenthooks.WithPolicy(agenthooks.Policy{
+	logger := newDebugLogger(cfg.DebugLog)
+	r := newRelay(cfg, logger)
+	options := []agenthooks.Option{agenthooks.WithPolicy(agenthooks.Policy{
 		Fail:            agenthooks.FailOpen,
 		Unsupported:     agenthooks.Degrade,
 		AskFallback:     agenthooks.FallbackNoDecision,
 		ContinuationCap: 0,
 		Timeout:         0,
-	}))
+	})}
+	if cfg.DebugLog != "" {
+		options = append(options, agenthooks.WithLogger(logger))
+	}
+	runner := agenthooks.New(options...)
 
 	runner.OnPromptSubmitted(r.onPrompt)
 	runner.OnToolPre(r.onToolPre)
@@ -131,35 +143,35 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 		r.debugf("event=%s config-error path=%s err=%s", agenthooks.EventOf(typed).NativeName, r.cfg.ConfigPath, r.cfg.ConfigError)
 		if authEstablished() {
 			msg := fmt.Sprintf("Speakeasy hooks cannot read the plugin config at %q. Reinstall the Speakeasy hooks plugin.", r.cfg.ConfigPath)
-			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: msg}, authRejected: false, failOpen: nil, skillCapture: nil}, stateBroken
+			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: msg}, authRejected: false, failOpen: nil, skillCapture: nil, diagnostic: ""}, stateBroken
 		}
-		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil}, stateNeverAuthed
+		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, diagnostic: ""}, stateNeverAuthed
 	}
 
 	// Refuse to send credentials over plaintext HTTP before resolving them,
 	// with the ratchet's usual split: never-authenticated machines skip the
 	// network silently, established machines fail closed.
 	if insecureServerURL(r.cfg.ServerURL) {
-		r.debugf("event=%s insecure-server-url server=%s", agenthooks.EventOf(typed).NativeName, r.cfg.ServerURL)
+		r.debugf("event=%s insecure-server-url server=%s", agenthooks.EventOf(typed).NativeName, redactURL(r.cfg.ServerURL))
 		if authEstablished() {
 			msg := fmt.Sprintf("Speakeasy hooks refused insecure Gram server URL %q; use https:// (or an http://localhost dev server).", r.cfg.ServerURL)
-			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: msg}, authRejected: false, failOpen: nil, skillCapture: nil}, stateBroken
+			return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: msg}, authRejected: false, failOpen: nil, skillCapture: nil, diagnostic: ""}, stateBroken
 		}
-		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil}, stateNeverAuthed
+		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, diagnostic: ""}, stateNeverAuthed
 	}
 
 	c, ok := resolveAuth(r.cfg)
 	if !ok {
 		if reauthNeeded() {
 			r.debugf("event=%s no-creds state=reauth-needed authfile=%s", agenthooks.EventOf(typed).NativeName, authFilePath())
-			return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil}, stateReauthNeeded
+			return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, diagnostic: ""}, stateReauthNeeded
 		}
 		if authEstablished() {
 			r.debugf("event=%s no-creds state=broken authfile=%s", agenthooks.EventOf(typed).NativeName, authFilePath())
-			return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil}, stateBroken
+			return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, diagnostic: ""}, stateBroken
 		}
 		r.debugf("event=%s no-creds state=never-authed authfile=%s", agenthooks.EventOf(typed).NativeName, authFilePath())
-		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil}, stateNeverAuthed
+		return ingestResult{statusCode: 0, decision: decision{}, authRejected: false, failOpen: nil, skillCapture: nil, diagnostic: ""}, stateNeverAuthed
 	}
 
 	payload := buildEnvelope(typed, hostname())
@@ -190,7 +202,10 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	res := r.send(ctx, c, payload, idemKey)
 	finalCreds := c
 	state := stateReady
-	r.debugf("event=%s type=%s server=%s authfile=%s status=%d denied=%t", agenthooks.EventOf(typed).NativeName, payload.Event.Type, r.cfg.ServerURL, authFilePath(), res.statusCode, res.decision.denied())
+	if res.diagnostic != "" {
+		r.debugf("event=%s ingest-error: %s", agenthooks.EventOf(typed).NativeName, res.diagnostic)
+	}
+	r.debugf("event=%s type=%s server=%s authfile=%s status=%d denied=%t", agenthooks.EventOf(typed).NativeName, payload.Event.Type, redactURL(r.cfg.ServerURL), authFilePath(), res.statusCode, res.decision.denied())
 	if res.authRejected && c.Source == credEnv {
 		// The configured key is authoritative and a re-login can never replace
 		// it, so name it in the failure instead of pointing at the cache flow.
@@ -222,6 +237,9 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 			finalCreds = orgCreds
 			res = r.send(ctx, orgCreds, payload, idemKey)
 			state = stateReady
+			if res.diagnostic != "" {
+				r.debugf("event=%s auth-retry=org ingest-error: %s", agenthooks.EventOf(typed).NativeName, res.diagnostic)
+			}
 			r.debugf("event=%s auth-retry=org status=%d denied=%t", agenthooks.EventOf(typed).NativeName, res.statusCode, res.decision.denied())
 		}
 	}
@@ -478,12 +496,7 @@ func (r *Relay) debugf(format string, args ...any) {
 	if r.cfg.DebugLog == "" {
 		return
 	}
-	f, err := os.OpenFile(r.cfg.DebugLog, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-	if err != nil {
-		return
-	}
-	defer func() { _ = f.Close() }()
-	fmt.Fprintf(f, format+"\n", args...)
+	r.logger.DebugContext(context.Background(), fmt.Sprintf(format, args...))
 }
 
 // loginCommand renders the shell command the nudge asks the agent to run to

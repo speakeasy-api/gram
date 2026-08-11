@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -64,6 +65,9 @@ type ingestResult struct {
 	// org_settings effects; nil when the server sent none.
 	failOpen     *bool
 	skillCapture *skillCapture
+	// diagnostic preserves a sanitized, length-capped SDK or transport failure
+	// for local logs. It is never returned to providers or persisted.
+	diagnostic string
 }
 
 // accepted reports a definitive 2xx exchange — the server stored (or
@@ -217,7 +221,7 @@ func (cl *client) send(ctx context.Context, c creds, body components.IngestReque
 		}
 	}
 
-	out := ingestResult{statusCode: res.StatusCode, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil, skillCapture: nil}
+	out := ingestResult{statusCode: res.StatusCode, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil, skillCapture: nil, diagnostic: ""}
 	if res.IngestHookResult != nil {
 		out.decision = decision{
 			Decision: string(res.IngestHookResult.Decision),
@@ -253,6 +257,7 @@ func interpretError(err error) ingestResult {
 			authRejected: status == http.StatusUnauthorized || status == http.StatusForbidden,
 			failOpen:     nil,
 			skillCapture: nil,
+			diagnostic:   "",
 		}
 	}
 	var apiErr *apierrors.APIError
@@ -269,6 +274,7 @@ func interpretError(err error) ingestResult {
 				authRejected: false,
 				failOpen:     nil,
 				skillCapture: nil,
+				diagnostic:   truncateDiagnostic(fmt.Sprintf("%s (status %d)", apiErr.Message, apiErr.StatusCode)),
 			}
 		}
 		return ingestResult{
@@ -277,9 +283,32 @@ func interpretError(err error) ingestResult {
 			authRejected: apiErr.StatusCode == http.StatusUnauthorized || apiErr.StatusCode == http.StatusForbidden,
 			failOpen:     nil,
 			skillCapture: nil,
+			diagnostic:   "",
 		}
 	}
-	return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil, skillCapture: nil}
+	return ingestResult{statusCode: 0, decision: decision{Decision: "", Reason: "", Message: ""}, authRejected: false, failOpen: nil, skillCapture: nil, diagnostic: transportDiagnostic(err)}
+}
+
+const maxDiagnosticBytes = 2048
+
+func transportDiagnostic(err error) string {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		safeURL := "<invalid URL>"
+		if _, parseErr := url.Parse(urlErr.URL); parseErr == nil {
+			safeURL = redactURL(urlErr.URL)
+		}
+		return truncateDiagnostic(fmt.Sprintf("%s %s: %v", urlErr.Op, safeURL, urlErr.Err))
+	}
+	return truncateDiagnostic(err.Error())
+}
+
+func truncateDiagnostic(message string) string {
+	if len(message) <= maxDiagnosticBytes {
+		return message
+	}
+	const suffix = "..."
+	return message[:maxDiagnosticBytes-len(suffix)] + suffix
 }
 
 func validRawSHA256(value string) bool {
