@@ -60,9 +60,10 @@ describe("parseReplayedAttachments", () => {
       },
     ]);
     expect(stripReplayedAttachmentText(legacy)).toBe("whats this image");
+    // No asset reference to point a card at, so no card — matching what the
+    // UIMessage replay path can build.
     expect(
-      toCompleteAttachments(parseReplayedAttachments(legacy), "https://x")[0]
-        ?.content,
+      toCompleteAttachments(parseReplayedAttachments(legacy), "https://x"),
     ).toEqual([]);
   });
 

@@ -120,17 +120,28 @@ export function createServerAssistantTransport(
       // File parts carry the URL our attachment adapter minted at upload time;
       // the asset id in that URL is what the assistant runtime reads the file
       // back from.
-      const attachments =
-        latest?.parts
-          .filter((p) => p.type === "file")
-          .map((p) => ({
-            assetId: chatAttachmentAssetId(p.url),
-            name: p.filename,
-          }))
-          .filter(
-            (a): a is { assetId: string; name: string | undefined } =>
-              a.assetId !== null,
-          ) ?? [];
+      const fileParts = latest?.parts.filter((p) => p.type === "file") ?? [];
+      const attachments = fileParts
+        .map((p) => ({
+          assetId: chatAttachmentAssetId(p.url),
+          name: p.filename,
+        }))
+        .filter(
+          (a): a is { assetId: string; name: string | undefined } =>
+            a.assetId !== null,
+        );
+      // A file whose URL carries no asset id was never stored in Gram, so the
+      // turn cannot reference it. Name it rather than letting the send fail as
+      // a bare "nothing to send".
+      if (attachments.length < fileParts.length) {
+        const unresolved = fileParts
+          .filter((p) => chatAttachmentAssetId(p.url) === null)
+          .map((p) => p.filename ?? "a file")
+          .join(", ");
+        throw new Error(
+          `Could not attach ${unresolved}: upload did not complete.`,
+        );
+      }
       if (!text && attachments.length === 0) {
         throw new Error("No user message to send.");
       }

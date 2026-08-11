@@ -74,31 +74,35 @@ export function toCompleteAttachments(
   attachments: ReplayedAttachment[],
   apiUrl: string,
 ): CompleteAttachment[] {
-  return attachments.map((attachment, index) => {
-    // No asset reference (an older turn): the card still shows the name and
-    // type, it just has nothing to preview.
-    const content =
-      attachment.id && attachment.projectId
-        ? [
+  // Turns sent before the block recorded an asset reference have nothing to
+  // point a card at. They are dropped rather than rendered as an empty card:
+  // the two replay paths build cards from this content, and only one of them
+  // can show a card without it — leaving them in makes the paths disagree.
+  return attachments
+    .filter((attachment) => attachment.id && attachment.projectId)
+    .map((attachment) => {
+      const content = [
+        {
+          type: "file" as const,
+          filename: attachment.name,
+          mimeType: attachment.contentType,
+          data: `${apiUrl}/rpc/assets.serveChatAttachment?${new URLSearchParams(
             {
-              type: "file" as const,
-              filename: attachment.name,
-              mimeType: attachment.contentType,
-              data: `${apiUrl}/rpc/assets.serveChatAttachment?${new URLSearchParams(
-                { id: attachment.id, project_id: attachment.projectId },
-              ).toString()}`,
+              id: attachment.id,
+              project_id: attachment.projectId,
             },
-          ]
-        : [];
-    return {
-      id: attachment.id || `${attachment.name}-${index}`,
-      type: attachment.contentType.startsWith("image/")
-        ? ("image" as const)
-        : ("file" as const),
-      name: attachment.name,
-      contentType: attachment.contentType,
-      status: { type: "complete" as const },
-      content,
-    };
-  });
+          ).toString()}`,
+        },
+      ];
+      return {
+        id: attachment.id,
+        type: attachment.contentType.startsWith("image/")
+          ? ("image" as const)
+          : ("file" as const),
+        name: attachment.name,
+        contentType: attachment.contentType,
+        status: { type: "complete" as const },
+        content,
+      };
+    });
 }
