@@ -1,6 +1,6 @@
 import { useState, type JSX } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -281,11 +281,27 @@ function OrgBottomPanel({ org }: { org: AdminOrganization }) {
   );
 }
 
+function projectsMessage(isLoading: boolean, isError: boolean): string {
+  if (isLoading) return "Loading...";
+  if (isError) return "Unable to load projects";
+  return "No projects in this organization";
+}
+
 const PROJECT_COLUMNS: Column<AdminProject>[] = [
   {
     key: "name",
     header: "Name",
-    render: (p) => <span className="text-sm">{p.name}</span>,
+    // The link, not the row, carries the keyboard path and the accessible
+    // name. It also lets the operator open the project in a new tab.
+    render: (p) => (
+      <Link
+        to="/projects/$idOrSlug"
+        params={{ idOrSlug: p.slug || p.id }}
+        className="text-sm underline-offset-4 hover:underline focus-visible:underline"
+      >
+        {p.name}
+      </Link>
+    ),
   },
   {
     key: "slug",
@@ -308,7 +324,7 @@ const PROJECT_COLUMNS: Column<AdminProject>[] = [
 
 function OrgProjectsPanel({ orgID }: { orgID: string }) {
   const navigate = useNavigate();
-  const { data, isLoading, isError, error } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["gram-admin-organization-projects", orgID],
     queryFn: () => listOrganizationProjects(orgID),
     enabled: !!orgID,
@@ -324,11 +340,7 @@ function OrgProjectsPanel({ orgID }: { orgID: string }) {
           {isLoading || projects.length === 0 ? (
             <Table.NoResultsMessage>
               <span className="text-muted-foreground text-sm">
-                {isLoading
-                  ? "Loading..."
-                  : isError
-                    ? `Error: ${(error as Error)?.message ?? "unknown"}`
-                    : "No projects in this organization"}
+                {projectsMessage(isLoading, isError)}
               </span>
             </Table.NoResultsMessage>
           ) : (
@@ -386,8 +398,14 @@ const MEMBER_COLUMNS: Column<AdminOrganizationMember>[] = [
   },
 ];
 
+function membersMessage(isLoading: boolean, isError: boolean): string {
+  if (isLoading) return "Loading...";
+  if (isError) return "Unable to load members";
+  return "No members in this organization";
+}
+
 function OrgMembersPanel({ orgID }: { orgID: string }) {
-  const { data, isLoading, isError, error } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["gram-admin-organization-members", orgID],
     queryFn: () => listOrganizationMembers(orgID),
     enabled: !!orgID,
@@ -403,11 +421,7 @@ function OrgMembersPanel({ orgID }: { orgID: string }) {
           {isLoading || members.length === 0 ? (
             <Table.NoResultsMessage>
               <span className="text-muted-foreground text-sm">
-                {isLoading
-                  ? "Loading..."
-                  : isError
-                    ? `Error: ${(error as Error)?.message ?? "unknown"}`
-                    : "No members in this organization"}
+                {membersMessage(isLoading, isError)}
               </span>
             </Table.NoResultsMessage>
           ) : (

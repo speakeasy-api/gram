@@ -161,30 +161,26 @@ function DataTableRow<T extends object>({
   onClick?: (row: T) => void;
   className?: string;
 }) {
-  const handleKeyDown = onClick
-    ? (event: React.KeyboardEvent<HTMLTableRowElement>) => {
-        // Buttons and links inside a cell handle their own keys and bubble the
-        // event up, so only act when the row itself is the focused element.
-        if (event.target !== event.currentTarget) return;
-        if (event.key !== "Enter" && event.key !== " ") return;
-        // Space would otherwise scroll the page.
-        event.preventDefault();
+  // The row itself stays a plain row: it takes no focus and it holds no
+  // `button` role, because either one breaks the table structure the
+  // assistive technology walks. A clickable row instead carries a real link
+  // in one of its cells, and that link owns the keyboard path and the
+  // accessible name. This handler only widens the mouse target.
+  const handleClick = onClick
+    ? (event: React.MouseEvent<HTMLTableRowElement>) => {
+        // The link in the cell already navigates, and it also lets the
+        // operator open the record in a new tab.
+        if ((event.target as HTMLElement).closest("a,button,input,label")) {
+          return;
+        }
         onClick(row);
       }
     : undefined;
 
   return (
     <TableRow
-      className={cn(
-        onClick &&
-          "cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
-        className,
-      )}
-      // A row keeps its implicit `row` role: `button` would break the table
-      // structure the assistive technology walks.
-      tabIndex={onClick ? 0 : undefined}
-      onClick={onClick ? () => onClick(row) : undefined}
-      onKeyDown={handleKeyDown}
+      className={cn(onClick && "cursor-pointer", className)}
+      onClick={handleClick}
     >
       {columns.map((column) => (
         <TableCell key={String(column.key)}>

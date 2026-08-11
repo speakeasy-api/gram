@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, type JSX } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import {
   keepPreviousData,
   useQuery,
@@ -29,13 +29,29 @@ function fmtDateShort(iso?: string): string {
   return d.toLocaleDateString();
 }
 
+function emptyStateMessage(isLoading: boolean, isError: boolean): string {
+  if (isLoading) return "Loading...";
+  if (isError) return "Unable to load organizations";
+  return "No organizations found";
+}
+
 // The columns and the empty list stay at module scope so the memoized rows
 // below keep their identity while the operator types in the search box.
 const ORG_COLUMNS: Column<AdminOrganization>[] = [
   {
     key: "name",
     header: "Name",
-    render: (org) => <span className="text-sm">{org.name}</span>,
+    // The link, not the row, carries the keyboard path and the accessible
+    // name. It also lets the operator open the organization in a new tab.
+    render: (org) => (
+      <Link
+        to="/organizations/$idOrSlug"
+        params={{ idOrSlug: org.slug || org.id }}
+        className="text-sm underline-offset-4 hover:underline focus-visible:underline"
+      >
+        {org.name}
+      </Link>
+    ),
   },
   {
     key: "slug",
@@ -260,7 +276,7 @@ export function OrganizationsList(): JSX.Element {
               {orgs.length === 0 ? (
                 <Table.NoResultsMessage>
                   <span className="text-muted-foreground text-sm">
-                    {isLoading ? "Loading..." : "No organizations found"}
+                    {emptyStateMessage(isLoading, isError)}
                   </span>
                 </Table.NoResultsMessage>
               ) : (
