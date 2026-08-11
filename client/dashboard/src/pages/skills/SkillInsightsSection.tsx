@@ -8,11 +8,6 @@ import {
   ErrorAlert,
 } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/Collapsible";
 import { Dialog } from "@/components/ui/Dialog";
 import { Skeleton, SkeletonTable } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
@@ -22,7 +17,6 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { SettingsSection } from "@/components/detail/settings-section";
 import { useRoutes } from "@/routes";
-import { cn } from "@/lib/utils";
 import type { SkillEfficacyInsight } from "@gram/client/models/components/skillefficacyinsight.js";
 import type { SkillEfficacyScoredSession } from "@gram/client/models/components/skillefficacyscoredsession.js";
 import type { SkillEfficacyRegressionSignal } from "@gram/client/models/components/skillefficacyregressionsignal.js";
@@ -56,8 +50,6 @@ ChartJS.register(
   Tooltip,
   Legend,
 );
-
-export const SKILL_INSIGHTS_SECTION_ID = "insights";
 
 const SCORED_SESSIONS_PAGE_SIZE = 20;
 type TrendMetric = "efficacy" | "activations" | "sessionCost";
@@ -118,9 +110,7 @@ export function SkillInsightsSection({
   versionsLoading: boolean;
   versionsError: Error | null;
 }): JSX.Element {
-  const project = useProject();
-  const { hasScope, isLoading: isRBACLoading } = useRBAC();
-  const canReadChats = !isRBACLoading && hasScope("chat:read", project.id);
+  const { isLoading: isRBACLoading } = useRBAC();
   const query = useSkillEfficacyInsights(
     {
       skillIds: [data.skill.id],
@@ -130,7 +120,7 @@ export function SkillInsightsSection({
     { throwOnError: false, enabled: !isRBACLoading },
   );
   return (
-    <SettingsSection id={SKILL_INSIGHTS_SECTION_ID}>
+    <SettingsSection>
       <SettingsSection.Header>
         <SettingsSection.Title>Insights</SettingsSection.Title>
         <SettingsSection.Description>
@@ -154,7 +144,6 @@ export function SkillInsightsSection({
         <InsightsContent
           insight={query.data.result.insights[0]}
           skillId={data.skill.id}
-          canReadChats={canReadChats}
           versionLabels={versionLabels}
         />
       )}
@@ -170,12 +159,10 @@ export function SkillInsightsSection({
 function InsightsContent({
   insight,
   skillId,
-  canReadChats,
   versionLabels,
 }: {
   insight: SkillEfficacyInsight | undefined;
   skillId: string;
-  canReadChats: boolean;
   versionLabels: Map<string, string>;
 }): JSX.Element {
   if (!insight) {
@@ -247,30 +234,20 @@ function InsightsContent({
           versionLabels={versionLabels}
         />
       </div>
-
-      <ScoredSessions
-        key={skillId}
-        skillId={skillId}
-        efficacy={efficacy}
-        canReadChats={canReadChats}
-        versionLabels={versionLabels}
-      />
     </div>
   );
 }
 
-function ScoredSessions({
+export function ScoredSessions({
   skillId,
-  efficacy,
-  canReadChats,
   versionLabels,
 }: {
   skillId: string;
-  efficacy: SkillEfficacyInsight["metrics"]["efficacy"];
-  canReadChats: boolean;
   versionLabels: Map<string, string>;
 }): JSX.Element {
-  const [open, setOpen] = useState(false);
+  const project = useProject();
+  const { hasScope, isLoading: isRBACLoading } = useRBAC();
+  const canReadChats = !isRBACLoading && hasScope("chat:read", project.id);
   const [cursors, setCursors] = useState<Array<string | undefined>>([
     undefined,
   ]);
@@ -278,16 +255,18 @@ function ScoredSessions({
   const query = useSkillEfficacyInsights(
     {
       skillIds: [skillId],
+      includeVersions: true,
       includeScoredSessions: true,
       cursor: cursors[pageIndex],
       limit: SCORED_SESSIONS_PAGE_SIZE,
     },
     undefined,
     {
-      enabled: open && canReadChats,
+      enabled: canReadChats,
       throwOnError: false,
     },
   );
+  const efficacy = query.data?.result.insights[0]?.metrics.efficacy;
   const flagRates = efficacy
     ? Object.entries(efficacy.flagCounts)
         .filter(([, count]) => count > 0)
@@ -298,30 +277,15 @@ function ScoredSessions({
     : [];
 
   return (
-    <Collapsible
-      open={open}
-      onOpenChange={setOpen}
-      className="overflow-hidden border"
-    >
-      <CollapsibleTrigger className="hover:bg-muted/30 flex w-full items-center justify-between gap-4 p-4 text-left">
-        <span className="block">
-          <Text as="span" variant="subheading" className="block">
-            Scored sessions
-          </Text>
-          <Text as="span" small muted className="block">
-            Judge rationale and raw flags for recent sampled sessions.
-          </Text>
-        </span>
-        <Icon
-          name="chevron-right"
-          className={cn(
-            "text-muted-foreground h-4 w-4 transition-transform",
-            open && "rotate-90",
-          )}
-        />
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <div className="space-y-3 border-t p-4">
+    <SettingsSection>
+      <SettingsSection.Header>
+        <SettingsSection.Title>Scored sessions</SettingsSection.Title>
+        <SettingsSection.Description>
+          Judge rationale and raw flags for recent sampled sessions.
+        </SettingsSection.Description>
+      </SettingsSection.Header>
+      <SettingsSection.Panel>
+        <SettingsSection.Body>
           {flagRates.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {flagRates.map(({ flag, rate }) => (
@@ -386,9 +350,9 @@ function ScoredSessions({
               </Button>
             </div>
           )}
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
+        </SettingsSection.Body>
+      </SettingsSection.Panel>
+    </SettingsSection>
   );
 }
 
@@ -433,9 +397,7 @@ export function RegressionWarning({
         </p>
         {signal.predecessorVersionId && (
           <Button size="sm" variant="secondary" asChild>
-            <Link
-              to={`${routes.skills.detail.href(skillId)}#version-${signal.predecessorVersionId}`}
-            >
+            <Link to={routes.skills.detail.versions.href(skillId)}>
               Review version to restore
             </Link>
           </Button>

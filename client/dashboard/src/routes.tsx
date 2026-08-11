@@ -18,7 +18,14 @@ import OrgMemory from "./components/observe/OrgMemory";
 import { ChatConversation, ChatHome, ChatRoot } from "./pages/chat/Chat";
 import Skills from "./pages/Skills";
 import SkillsList from "./pages/skills/SkillsList";
-import SkillDetail from "./pages/skills/SkillDetail";
+import SkillContent from "./pages/skills/SkillContent";
+import SkillDetailRoot from "./pages/skills/SkillDetailRoot";
+import SkillFeedback from "./pages/skills/SkillFeedback";
+import SkillOverview from "./pages/skills/SkillOverview";
+import SkillScoredSessions from "./pages/skills/SkillScoredSessions";
+import SkillSettings from "./pages/skills/SkillSettings";
+import SkillUsage from "./pages/skills/SkillUsage";
+import SkillVersionHistory from "./pages/skills/SkillVersionHistory";
 import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import UserSessions from "./pages/org/UserSessions";
@@ -383,7 +390,44 @@ const ROUTE_STRUCTURE = {
       detail: {
         title: "Skill",
         url: ":skillId",
-        component: SkillDetail,
+        component: SkillDetailRoot,
+        subPages: {
+          overview: {
+            title: "Skill Overview",
+            url: "overview",
+            component: SkillOverview,
+          },
+          content: {
+            title: "Skill Content",
+            url: "content",
+            component: SkillContent,
+          },
+          usage: {
+            title: "Skill Usage",
+            url: "usage",
+            component: SkillUsage,
+          },
+          scoredSessions: {
+            title: "Scored Sessions",
+            url: "scored-sessions",
+            component: SkillScoredSessions,
+          },
+          feedback: {
+            title: "Agent Feedback",
+            url: "feedback",
+            component: SkillFeedback,
+          },
+          versions: {
+            title: "Skill Version History",
+            url: "versions",
+            component: SkillVersionHistory,
+          },
+          settings: {
+            title: "Settings",
+            url: "settings",
+            component: SkillSettings,
+          },
+        },
       },
     },
   },
