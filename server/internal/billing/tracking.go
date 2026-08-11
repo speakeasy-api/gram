@@ -95,6 +95,18 @@ func ModelUsageSourceStrings() []string {
 	return out
 }
 
+// GramHostedInferenceSources lists every TAGGED hook_source value that
+// Gram-server-run completions carry: the registered customer-facing surfaces
+// (playground, elements, gram, slack, risk-analysis) plus the internal-only
+// tags (assistants, skill-efficacy, skill-suggestions, chat-analysis). This is
+// the "inference spend" INCLUSION list — the completions Gram itself pays for
+// while reacting to or serving a customer. It deliberately omits the empty
+// string: as an inclusion filter over raw telemetry an untagged row is
+// ambiguous, so only explicitly Gram-tagged spend is summed.
+func GramHostedInferenceSources() []string {
+	return append(ModelUsageSourceStrings(), string(ModelUsageSourceAssistants), string(ModelUsageSourceSkillEfficacy), string(ModelUsageSourceSkillSuggestions), string(ModelUsageSourceChatAnalysis))
+}
+
 // GramHostedHookSourceStrings lists every hook_source value Gram-server-run
 // completions are tagged with: the registered surfaces, the internal assistants
 // and skill-efficacy tags, and the empty string for rows recorded before Gram
@@ -104,7 +116,7 @@ func ModelUsageSourceStrings() []string {
 // traffic, and everything Gram itself spends (reactive scanning inference
 // and user-initiated hosted chat alike) is out of scope.
 func GramHostedHookSourceStrings() []string {
-	return append(ModelUsageSourceStrings(), string(ModelUsageSourceAssistants), string(ModelUsageSourceSkillEfficacy), string(ModelUsageSourceSkillSuggestions), string(ModelUsageSourceChatAnalysis), "")
+	return append(GramHostedInferenceSources(), "")
 }
 
 type ModelUsageEvent struct {
