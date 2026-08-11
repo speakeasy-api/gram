@@ -6,6 +6,7 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import { useState } from "react";
 import type {
   EvidenceAdvisories,
+  EvidenceAdvisoryItem,
   EvidenceAuthority,
   EvidenceCapability,
   EvidenceDocument,
@@ -824,12 +825,31 @@ function AdvisoriesSection({
           </span>
         )}
       </div>
-      <ul className="space-y-1">
-        {advisories.advisories.map((advisory) => (
-          <li
-            key={advisory.id}
-            className="border-border border px-2.5 py-1.5 text-xs"
-          >
+      <AdvisoryList advisories={advisories.advisories} />
+    </EvidenceGroup>
+  );
+}
+
+/** How many advisory rows show before the rest collapses behind the toggle. */
+const ADVISORY_PREVIEW_COUNT = 3;
+
+function AdvisoryList({
+  advisories,
+}: {
+  advisories: EvidenceAdvisoryItem[];
+}): JSX.Element {
+  const [expanded, setExpanded] = useState(false);
+  const collapsible = advisories.length > ADVISORY_PREVIEW_COUNT;
+  const visible =
+    collapsible && !expanded
+      ? advisories.slice(0, ADVISORY_PREVIEW_COUNT)
+      : advisories;
+
+  return (
+    <div className="border-border border">
+      <ul className="divide-border divide-y">
+        {visible.map((advisory) => (
+          <li key={advisory.id} className="px-3 py-1.5 text-xs">
             <div className="flex items-center justify-between gap-3">
               <span className="font-mono">{advisory.id}</span>
               {advisory.severity && (
@@ -842,7 +862,26 @@ function AdvisoriesSection({
           </li>
         ))}
       </ul>
-    </EvidenceGroup>
+      {collapsible && (
+        <button
+          type="button"
+          onClick={() => setExpanded((current) => !current)}
+          className="text-muted-foreground hover:text-foreground border-border flex w-full items-center justify-center gap-1 border-t px-3 py-1 text-xs"
+        >
+          {expanded ? (
+            <>
+              Show fewer
+              <ChevronUp className="size-3" />
+            </>
+          ) : (
+            <>
+              Show all {advisories.length} advisories
+              <ChevronDown className="size-3" />
+            </>
+          )}
+        </button>
+      )}
+    </div>
   );
 }
 
