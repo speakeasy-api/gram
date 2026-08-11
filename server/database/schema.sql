@@ -4718,20 +4718,12 @@ ON risk_results (project_id, chat_message_id);
 CREATE INDEX IF NOT EXISTS risk_results_project_chat_content_part_idx
 ON risk_results (project_id, chat_content_part_id);
 
--- The skill_version_id anchor needs the same index cover its chat siblings
--- have. Leads with skill_version_id rather than project_id because the
--- ON DELETE CASCADE from skill_versions looks rows up by that column alone;
--- without it every version delete seq-scans this table. Trailing
--- risk_policy_id and risk_policy_version serve the per-version, per-policy
--- lookups (findings for this version, has this version already been scanned
--- under the current policy version).
--- Partial: the column is NULL on every chat-anchored row, which is nearly
--- all of them.
---
--- UNIQUE because one skill version is scanned at most once per policy version.
--- The writer gate is not atomic against concurrent uploads of the same content;
--- this makes that race collapse to one row while allowing rescans after a
--- policy configuration change bumps its version.
+-- Leads with skill_version_id so the ON DELETE CASCADE from skill_versions
+-- doesn't seq-scan this table. Partial because the column is NULL on every
+-- chat-anchored row, which is nearly all of them. UNIQUE because one skill
+-- version is scanned at most once per policy version: the writer gate is not
+-- atomic against concurrent uploads of the same content, and this collapses
+-- that race to one row while allowing rescans after a policy version bump.
 CREATE UNIQUE INDEX IF NOT EXISTS risk_results_skill_version_policy_version_key
 ON risk_results (skill_version_id, risk_policy_id, risk_policy_version)
 WHERE skill_version_id IS NOT NULL;
