@@ -35,9 +35,12 @@ const NON_GRAPHIC_REGEX = /[^\p{L}\p{M}\p{N}\p{P}\p{S}\p{Zs}\u200c\u200d]/u;
 const LETTER_OR_DIGIT_REGEX = /[\p{L}\p{N}]/gu;
 
 /**
- * Collapses every run of whitespace to a single space and trims the ends,
- * matching the server's own normalization. Pasted names routinely carry a
- * non-breaking or ideographic space, both of which JavaScript's `\s` covers.
+ * Collapses every run of whitespace to a single space and trims the ends.
+ *
+ * Deliberately broader than the server, which only collapses `\p{Zs}` and
+ * rejects a tab or newline outright: pasting a name out of a spreadsheet should
+ * clean up rather than fail, and the form submits this result, so the server
+ * never sees the characters it would refuse.
  */
 export function normalizeOrgName(value: string): string {
   return value.replace(/\s+/gu, " ").trim();

@@ -236,6 +236,41 @@ func TestProcessWorkOSOrganizationEvents_OrganizationCreateUsesWorkOSIDWhenNameH
 	require.Equal(t, "event_01HZNOSLUG", cursor)
 }
 
+// A single URL-safe character is too little to identify an organization by, so
+// a name yielding one falls back to the WorkOS ID like an empty one does.
+func TestProcessWorkOSOrganizationEvents_OrganizationCreateUsesWorkOSIDWhenNameYieldsOneCharacter(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newOrgEventsTestConn(t, "workos_org_events_org_one_char_slug")
+	logger := testenv.NewLogger(t)
+
+	const workosOrgID = "org_01HZONECHAR"
+	const orgName = "X 顶尖科技"
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			{
+				ID:        "event_01HZONECHAR",
+				Event:     "organization.created",
+				CreatedAt: time.Now(),
+				Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"` + orgName + `",` +
+					`"updated_at":"2026-05-06T12:00:00Z"}`),
+			},
+		},
+	})
+
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache)
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZONECHAR", res.LastEventID)
+
+	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.NoError(t, err)
+	require.Equal(t, orgName, row.Name)
+	require.Equal(t, "org-01hzonechar", row.Slug)
+}
+
 func TestProcessWorkOSOrganizationEvents_OrganizationExternalIDMissingLocallyCreates(t *testing.T) {
 	t.Parallel()
 

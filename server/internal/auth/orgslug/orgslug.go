@@ -44,6 +44,17 @@ func Base(name string) (string, error) {
 	return "org-" + suffix, nil
 }
 
+// StableBase applies the same floor as Base but falls back to seed instead of
+// randomness, so repeated calls for one organization agree. Callers pass a
+// stable ASCII identifier such as a WorkOS organization ID; a seed that itself
+// slugifies to fewer than minSlugChars characters cannot produce a usable base.
+func StableBase(name, seed string) string {
+	if s := Slugify(name); len(s) >= minSlugChars {
+		return s
+	}
+	return Slugify(seed)
+}
+
 const maxSlugAttempts = 10
 
 func FindUnique(ctx context.Context, lookup Lookup, base string) (string, error) {

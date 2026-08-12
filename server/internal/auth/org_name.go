@@ -83,6 +83,12 @@ func generateLegibleOrgName() string {
 // maxOrgNameLength is measured in Unicode code points, not bytes.
 const maxOrgNameLength = 100
 
+// maxRawOrgNameBytes bounds the input before any of it is copied. A name at
+// maxOrgNameLength occupies at most four bytes per code point, so this leaves
+// ample room for surrounding whitespace while keeping an unauthenticated caller
+// from making the server allocate a normalized copy of an arbitrary payload.
+const maxRawOrgNameBytes = 4 * maxOrgNameLength * 10
+
 // minOrgNameLettersOrNumbers keeps punctuation-only values from becoming
 // organization names.
 const minOrgNameLettersOrNumbers = 2
@@ -100,6 +106,10 @@ const (
 func validateOrgName(name string) (string, error) {
 	invalidChars := func() error {
 		return oops.E(oops.CodeInvalid, errors.New("organization name contains invalid characters"), "organization name contains invalid characters")
+	}
+
+	if len(name) > maxRawOrgNameBytes {
+		return "", oops.E(oops.CodeInvalid, errors.New("organization name is too long"), "organization name is too long")
 	}
 
 	if !utf8.ValidString(name) {

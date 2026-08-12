@@ -416,12 +416,9 @@ func createOrganizationFromWorkOSEvent(ctx context.Context, repo *orgrepo.Querie
 		return nil
 	}
 
-	slug := orgslug.Slugify(payload.Name)
-	if slug == "" {
-		// WorkOS organization IDs are stable ASCII identifiers, so this keeps
-		// the advisory-lock key deterministic across duplicate deliveries.
-		slug = orgslug.Slugify(payload.ID)
-	}
+	// Seeded with the WorkOS organization ID rather than randomness so the
+	// advisory-lock key below is the same across duplicate deliveries.
+	slug := orgslug.StableBase(payload.Name, payload.ID)
 	if err := repo.LockOrganizationSlug(ctx, slug); err != nil {
 		return fmt.Errorf("lock organization slug %q: %w", slug, err)
 	}

@@ -53,3 +53,20 @@ func TestBaseGeneratesWhenTheNameYieldsNoUsableSlug(t *testing.T) {
 		require.Regexp(t, `^org-[a-z1-9]{8}$`, base, "name %q must get a generated base", name)
 	}
 }
+
+func TestStableBaseUsesTheSlugWhenThereIsOne(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "acme-inc", orgslug.StableBase("Acme Inc", "org_01HZACME"))
+}
+
+// StableBase must apply the same two-character floor as Base, so a name that
+// yields a single character falls back rather than becoming a one-letter slug.
+func TestStableBaseFallsBackToTheSeed(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{"", "顶尖科技", "アクメ株式会社", "X 株式会社", "- _ -"} {
+		require.Equal(t, "org-01hzacme", orgslug.StableBase(name, "org_01HZACME"),
+			"name %q must fall back to the seed", name)
+	}
+}

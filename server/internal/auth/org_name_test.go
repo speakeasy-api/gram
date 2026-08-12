@@ -142,6 +142,16 @@ func TestValidateOrgName_Normalizes(t *testing.T) {
 	}
 }
 
+// The signup parameter is unauthenticated, so an oversized value must be
+// refused on sight rather than normalized first.
+func TestValidateOrgName_RejectsOversizedInputBeforeNormalizing(t *testing.T) {
+	t.Parallel()
+
+	validated, err := validateOrgName(strings.Repeat(" ", maxRawOrgNameBytes+1))
+	require.ErrorContains(t, err, "organization name is too long")
+	require.Empty(t, validated)
+}
+
 func TestValidateOrgName_LengthLimitCountsRunes(t *testing.T) {
 	t.Parallel()
 
