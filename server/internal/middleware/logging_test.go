@@ -107,9 +107,24 @@ func TestLogSafeURL(t *testing.T) {
 			want: "/rpc/organizations.listMembers?user_id=abc123",
 		},
 		{
-			name: "semicolon inside a redacted value still redacted",
+			name: "parameter merely containing a denylisted name untouched",
+			in:   "/rpc/auth.login?xemail=1&emails_enabled=true",
+			want: "/rpc/auth.login?xemail=1&emails_enabled=true",
+		},
+		{
+			name: "semicolon inside a redacted value takes the whole value",
 			in:   "/rpc/auth.login?email=dev%40acme.corp;x=1",
-			want: "/rpc/auth.login?email=REDACTED;x=1",
+			want: "/rpc/auth.login?email=REDACTED",
+		},
+		{
+			name: "search value full of semicolons redacted to the end",
+			in:   "/rpc/chat.listChats?search=select;from;users",
+			want: "/rpc/chat.listChats?search=REDACTED",
+		},
+		{
+			name: "semicolons in a redacted value do not reach a later parameter",
+			in:   "/rpc/chat.listChats?search=a;b;c&limit=10",
+			want: "/rpc/chat.listChats?search=REDACTED&limit=10",
 		},
 		{
 			name: "semicolon used as a separator still redacted",

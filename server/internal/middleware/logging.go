@@ -138,39 +138,43 @@ func logSafeURL(u *url.URL) string {
 // and drops the malformed pairs outright, so a logged URL stops matching the
 // request it describes.
 //
-// Both "&" and ";" end a pair here. Go stopped accepting ";" as a separator,
-// so treating it as one is deliberately stricter than the parser: it keeps a
-// value from smuggling a second parameter past the check.
+// Only "&" separates parameters here, matching the parser. ";" is handled
+// inside a parameter instead, by redactRegion.
 func redactRawQuery(raw string) (string, bool) {
+	// A denylisted name has to appear literally somewhere for any pair to need
+	// rewriting, so a query without one settles here without allocating. A
+	// substring hit can be a false positive (?xemail=1), which costs only the
+	// scan below, and that then finds nothing to change.
+	possible := false
+	for name := range redactedQueryParams {
+		if strings.Contains(raw, name) {
+			possible = true
+			break
+		}
+	}
+
+	if !possible {
+		return raw, false
+	}
+
 	var b strings.Builder
+	b.Grow(len(raw))
 	changed := false
 
 	for start := 0; start <= len(raw); {
-		end := start
-		for end < len(raw) && raw[end] != '&' && raw[end] != ';' {
-			end++
+		end := strings.IndexByte(raw[start:], '&')
+		if end < 0 {
+			end = len(raw)
+		} else {
+			end += start
 		}
 
-		pair := raw[start:end]
-		key, _, hasValue := strings.Cut(pair, "=")
-		name, err := url.QueryUnescape(key)
-		if err != nil {
-			// An unescapable key cannot match a denylist entry by its decoded
-			// name, so compare the raw spelling rather than skipping the pair.
-			name = key
-		}
-
-		switch {
-		case hasValue && redactedQueryParams[name]:
-			b.WriteString(key)
-			b.WriteString("=REDACTED")
-			changed = true
-		default:
-			b.WriteString(pair)
-		}
+		region, redacted := redactRegion(raw[start:end])
+		b.WriteString(region)
+		changed = changed || redacted
 
 		if end < len(raw) {
-			b.WriteByte(raw[end])
+			b.WriteByte('&')
 		}
 		start = end + 1
 	}
@@ -180,6 +184,44 @@ func redactRawQuery(raw string) (string, bool) {
 	}
 
 	return b.String(), true
+}
+
+// redactRegion redacts one "&"-delimited slice of a query, reporting whether
+// it changed anything.
+//
+// Go stopped accepting ";" as a parameter separator, so a semicolon now sits
+// inside whatever value contains it and ParseQuery discards that pair whole.
+// Both facts have to hold at once here: a denylisted name appearing after a
+// semicolon still has to be caught, because the parser would have hidden the
+// pair entirely, and a denylisted value that merely contains semicolons has to
+// be replaced past them rather than truncated at the first one. So the scan
+// looks at every ";"-separated segment, and the first denylisted name it finds
+// consumes the rest of the region.
+func redactRegion(region string) (string, bool) {
+	for start := 0; start <= len(region); {
+		end := strings.IndexByte(region[start:], ';')
+		if end < 0 {
+			end = len(region)
+		} else {
+			end += start
+		}
+
+		key, _, hasValue := strings.Cut(region[start:end], "=")
+		name, err := url.QueryUnescape(key)
+		if err != nil {
+			// An unescapable key cannot match a denylist entry by its decoded
+			// name, so compare the raw spelling rather than skipping the pair.
+			name = key
+		}
+
+		if hasValue && redactedQueryParams[name] {
+			return region[:start] + key + "=REDACTED", true
+		}
+
+		start = end + 1
+	}
+
+	return region, false
 }
 
 func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.Handler {
