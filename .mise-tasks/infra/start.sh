@@ -122,14 +122,43 @@ else
 fi
 
 # run_bounded <seconds> <command...>
-# Runs the command via `gum spin` (gum is provided by mise), which aborts it
-# after <seconds> and propagates its exit code (124 on timeout). This bounds
-# each probe so a hung `docker compose exec` or Docker Engine call cannot block
-# past the deadline.
+# Runs the command, aborting it after <seconds> and returning 124 in that case.
+# This bounds each probe so a hung `docker compose exec` or Docker Engine call
+# cannot block past the deadline.
+#
+# Deliberately implemented without `gum spin` (or anything else that draws to
+# the terminal). `git:workboot` runs as a BACKGROUND process group under wt's
+# post-start hook, and a background process that reads the controlling terminal
+# is stopped with SIGTTIN. `gum spin` is a TUI, so it was suspended on its first
+# probe -- and with it its own `--timeout` timer -- leaving the boot hung in
+# "booting" with healthy containers and no further output. macOS ships no
+# `timeout(1)`, hence the hand-rolled poll.
 run_bounded() {
     local secs="$1"
     shift
-    gum spin --timeout "${secs}s" --show-output -- "$@"
+
+    "$@" &
+    local pid=$!
+
+    # Poll at 200ms so a probe that answers immediately still returns
+    # immediately. bash reaps exited background jobs, so `kill -0` failing is a
+    # reliable "it finished" signal here.
+    local ticks=$((secs * 5))
+    local i=0
+    while [ "$i" -lt "$ticks" ] && kill -0 "$pid" 2>/dev/null; do
+        sleep 0.2
+        i=$((i + 1))
+    done
+
+    if kill -0 "$pid" 2>/dev/null; then
+        kill -TERM "$pid" 2>/dev/null
+        sleep 1
+        kill -KILL "$pid" 2>/dev/null
+        wait "$pid" 2>/dev/null
+        return 124
+    fi
+
+    wait "$pid"
 }
 
 # wait_for <display-name> <compose-service> <check command...>
