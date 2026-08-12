@@ -85,11 +85,11 @@ describe("ChallengesTab loading state", () => {
     expect(screen.queryByText("No denied access attempts")).toBeNull();
   });
 
-  it("shows a skeleton (not the empty state) while switching filters under keepPreviousData", () => {
-    // Mirrors keepPreviousData: the previous filter's rows linger in `data`
-    // (so `isLoading` is false) while the new filter's request is in flight
-    // (`isPlaceholderData` is true). The stable reference keeps the accumulate
-    // effect from repopulating after the filter switch resets `accumulated`.
+  it("shows a skeleton (not the empty state) while a filter switch is in flight under keepPreviousData", () => {
+    // Mirrors keepPreviousData mid-switch: the previous filter's rows linger in
+    // `data` (so `isLoading` is false) while the new filter's request is still
+    // in flight. Those rows belong to the old filter, so there is nothing to
+    // show for the new one yet — the skeleton must render, not the empty state.
     bucketsResult = {
       data: { buckets: [bucket("b1")], total: 39 },
       isLoading: false,
@@ -99,15 +99,29 @@ describe("ChallengesTab loading state", () => {
 
     render(<ChallengesTab />);
 
-    // The lingering (placeholder) rows render for the current filter — no skeleton yet.
-    expect(screen.queryByTestId("skeleton-table")).toBeNull();
+    expect(screen.getByTestId("skeleton-table")).toBeTruthy();
+    expect(screen.queryByText("No denied access attempts")).toBeNull();
+  });
 
-    // Switch to the "All" filter: `accumulated` resets and, because the data is
-    // still placeholder, the skeleton must show instead of the empty state.
+  it("does not flash the empty state when switching to a filter whose rows are already cached", () => {
+    // Rows served straight from the query cache: real data (not placeholder) and
+    // not loading, with a background refetch in flight. The filter switch resets
+    // `accumulated` during render and the accumulate effect only refills it after
+    // paint, so the rows must be derived during render to avoid an empty frame.
+    bucketsResult = {
+      data: { buckets: [bucket("b1")], total: 39 },
+      isLoading: false,
+      isFetching: true,
+      isPlaceholderData: false,
+    };
+
+    render(<ChallengesTab />);
+    expect(screen.queryByText("No denied access attempts")).toBeNull();
+
     fireEvent.click(screen.getByRole("button", { name: /^All/ }));
 
-    expect(screen.getByTestId("skeleton-table")).toBeTruthy();
     expect(screen.queryByText("No challenges found")).toBeNull();
+    expect(screen.queryByTestId("skeleton-table")).toBeNull();
   });
 
   it("keeps the empty state (no skeleton) during a background refetch of a filter with no results", () => {
