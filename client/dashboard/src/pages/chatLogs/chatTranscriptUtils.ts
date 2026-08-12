@@ -31,8 +31,11 @@ export function toolMetaRows({
 // Two letters for the avatar fallback: the first two name parts of an email
 // local-part (jane.doe → JD), else the first two characters.
 export function userInitials(id: string | undefined): string {
-  if (!id) return "?";
-  const handle = id.includes("@") ? id.slice(0, id.indexOf("@")) : id;
+  const normalized = id?.trim();
+  if (!normalized) return "?";
+  const handle = normalized.includes("@")
+    ? normalized.slice(0, normalized.indexOf("@"))
+    : normalized;
   const parts = handle.split(/[._\-\s]+/).filter(Boolean);
   if (parts.length >= 2) return (parts[0]![0]! + parts[1]![0]!).toUpperCase();
   return handle.slice(0, 2).toUpperCase();

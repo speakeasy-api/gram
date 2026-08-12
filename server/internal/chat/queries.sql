@@ -1240,15 +1240,19 @@ RETURNING summary, summary_generated_at;
 SELECT
   calls.tool_calls,
   calls.tool_call_summaries,
-  COALESCE(results.content, '')::text AS result_content
+  results.content::text AS result_content
 FROM chat_messages AS calls
-LEFT JOIN chat_messages AS results
+JOIN chat_messages AS results
   ON results.chat_id = calls.chat_id
   AND results.project_id = calls.project_id
   AND results.tool_call_id = @tool_call_id
+  AND results.generation = calls.generation
+  AND results.role = 'tool'
 WHERE calls.id = @message_id
   AND calls.chat_id = @chat_id
   AND calls.project_id = @project_id::uuid
+  AND calls.role = 'assistant'
+ORDER BY results.created_at ASC, results.seq ASC, results.id ASC
 LIMIT 1;
 
 -- name: CreateChatMessageReturningID :one

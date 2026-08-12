@@ -21,12 +21,18 @@ import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import {
   argsToString,
   messageText,
+  rowHasRiskFlag,
   type MessageRow,
   type ToolRow,
   type TranscriptRow,
 } from "./transcript";
 import { RiskBadge, RevealSecretButton } from "./chatRisk";
-import { resultsAreSensitive, useRowReveal } from "./chatHelpers";
+import {
+  getMatchStrings,
+  highlightMatches,
+  resultsAreSensitive,
+  useRowReveal,
+} from "./chatHelpers";
 import { toolSectionRiskMatches, type ToolRiskField } from "./toolRisk";
 import { CreateExclusionContext } from "./exclusionContext";
 import { useDismissFinding } from "@/pages/security/useDismissFinding";
@@ -35,6 +41,35 @@ import type { ClaudeToolUsage } from "@gram/client/models/components/claudetoolu
 import type { ClaudeTurnUsage } from "@gram/client/models/components/claudeturnusage.js";
 import { userInitials } from "./chatTranscriptUtils";
 import { useSummarizeToolCallMutation } from "@gram/client/react-query/summarizeToolCall.js";
+
+const summaryQueue: Array<{ key: string; start: () => void }> = [];
+const scheduledSummaries = new Set<string>();
+let activeSummaries = 0;
+const maxConcurrentSummaries = 4;
+
+function scheduleSummary(key: string, run: () => Promise<unknown>): () => void {
+  if (scheduledSummaries.has(key)) return () => undefined;
+  scheduledSummaries.add(key);
+  const start = () => {
+    activeSummaries += 1;
+    void run()
+      .catch(() => undefined)
+      .finally(() => {
+        activeSummaries -= 1;
+        scheduledSummaries.delete(key);
+        summaryQueue.shift()?.start();
+      });
+  };
+  if (activeSummaries < maxConcurrentSummaries) start();
+  else summaryQueue.push({ key, start });
+  return () => {
+    const index = summaryQueue.findIndex((job) => job.key === key);
+    if (index >= 0) {
+      summaryQueue.splice(index, 1);
+      scheduledSummaries.delete(key);
+    }
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -97,11 +132,13 @@ function CompactMessageRow({
   const textRef = useRef<HTMLParagraphElement>(null);
   const text = messageText(row.message.content);
   const riskResults = ctx.riskResultsByMessage.get(row.message.id);
-  const flagged = (riskResults?.length ?? 0) > 0;
-  const sensitive = flagged && resultsAreSensitive(riskResults!);
+  const hasDetailedRisk = (riskResults?.length ?? 0) > 0;
+  const flagged = rowHasRiskFlag(row) || hasDetailedRisk;
+  const sensitive = hasDetailedRisk && resultsAreSensitive(riskResults!);
   const { revealed, setRevealed } = useRowReveal(sensitive);
   const isUser = row.entryType === "user";
   const displayId = ctx.userLabelOverride ?? ctx.userLabel;
+  const matches = hasDetailedRisk ? getMatchStrings(riskResults!) : [];
 
   useLayoutEffect(() => {
     if (expanded) return;
@@ -149,14 +186,17 @@ function CompactMessageRow({
             flagged && "text-red-700 dark:text-red-400",
           )}
         >
-          {text}
+          {hasDetailedRisk
+            ? highlightMatches(text, matches, sensitive && !revealed, sensitive)
+            : text}
         </p>
 
         {/* Gradient + "show more" — fades in on row hover when truncated */}
         {truncatable && !expanded && (
           <button
             type="button"
-            className="from-background absolute right-0 bottom-0 bg-gradient-to-l from-60% to-transparent py-px pl-10 text-[11px] text-transparent opacity-0 transition-opacity group-hover/msg:text-current group-hover/msg:opacity-100 hover:underline"
+            aria-expanded={false}
+            className="from-background absolute right-0 bottom-0 bg-gradient-to-l from-60% to-transparent py-px pl-10 text-[11px] text-transparent opacity-0 transition-opacity group-hover/msg:text-current group-hover/msg:opacity-100 hover:underline focus-visible:text-current focus-visible:opacity-100"
             onClick={() => setExpanded(true)}
           >
             show more
@@ -169,13 +209,14 @@ function CompactMessageRow({
             {expanded && truncatable && (
               <button
                 type="button"
+                aria-expanded={true}
                 className="text-muted-foreground hover:text-foreground text-[11px] transition-colors hover:underline"
                 onClick={() => setExpanded(false)}
               >
                 show less
               </button>
             )}
-            {flagged && <RiskBadge results={riskResults!} />}
+            {hasDetailedRisk && <RiskBadge results={riskResults!} />}
             {sensitive && (
               <RevealSecretButton
                 results={riskResults!}
@@ -217,8 +258,9 @@ function EffectsToolRow({
   const resultResults = row.resultMessage
     ? ctx.riskResultsByMessage.get(row.resultMessage.id)
     : undefined;
-  const flagged =
+  const hasDetailedRisk =
     (callResults?.length ?? 0) > 0 || (resultResults?.length ?? 0) > 0;
+  const flagged = rowHasRiskFlag(row) || hasDetailedRisk;
 
   const requestRisk = toSectionRisk(
     callResults,
@@ -238,23 +280,29 @@ function EffectsToolRow({
   const toolUseId = row.toolCall?.id ?? row.resultMessage?.toolCallId ?? "";
   const usage = ctx.claudeToolUsageByToolUseId.get(toolUseId);
   const turn = usage ? ctx.claudeTurnByPromptId.get(usage.promptId) : undefined;
-  const canSummarize = Boolean(row.callMessage?.id && toolUseId);
+  const canSummarize = Boolean(
+    row.callMessage?.id && row.resultMessage?.id && toolUseId,
+  );
 
   useEffect(() => {
-    if (!row.callMessage?.id || !toolUseId) return;
-    summarize.mutate({
-      request: {
-        summarizeToolCallRequestBody: {
-          id: ctx.chatId,
-          messageId: row.callMessage.id,
-          toolCallId: toolUseId,
-        },
-      },
-    });
+    if (!canSummarize || !row.callMessage?.id) return;
+    return scheduleSummary(
+      `${ctx.chatId}:${row.callMessage.id}:${toolUseId}`,
+      () =>
+        summarize.mutateAsync({
+          request: {
+            summarizeToolCallRequestBody: {
+              id: ctx.chatId,
+              messageId: row.callMessage!.id,
+              toolCallId: toolUseId,
+            },
+          },
+        }),
+    );
     // One mutation instance belongs to one stable tool row. Including the
     // mutation object would restart this effect as its state changes.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctx.chatId, row.callMessage?.id, toolUseId]);
+  }, [canSummarize, ctx.chatId, row.callMessage?.id, toolUseId]);
 
   const destructive = summarize.data?.impact === "destructive";
 
@@ -272,7 +320,7 @@ function EffectsToolRow({
         <span className="min-w-0 flex-1 truncate text-sm font-medium">
           {name}
         </span>
-        {flagged && (
+        {hasDetailedRisk && (
           <RiskBadge
             results={[...(callResults ?? []), ...(resultResults ?? [])]}
           />

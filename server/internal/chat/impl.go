@@ -2133,6 +2133,10 @@ type toolCallSummaryRecord struct {
 	Impact  string `json:"impact"`
 }
 
+// Keep long-lived model requests from consuming more than a small, dedicated
+// share of the database pool while the cross-replica advisory lock is held.
+var toolCallSummarySlots = make(chan struct{}, 4)
+
 func (s *Service) SummarizeToolCall(ctx context.Context, payload *gen.SummarizeToolCallPayload) (*gen.SummarizeToolCallResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -2156,6 +2160,13 @@ func (s *Service) SummarizeToolCall(ctx context.Context, payload *gen.SummarizeT
 		if err := s.logChatAccess(ctx, authCtx, chat); err != nil {
 			return nil, err
 		}
+	}
+
+	select {
+	case toolCallSummarySlots <- struct{}{}:
+		defer func() { <-toolCallSummarySlots }()
+	case <-ctx.Done():
+		return nil, oops.E(oops.CodeUnexpected, ctx.Err(), "wait for tool summary capacity").LogError(ctx, s.logger)
 	}
 
 	// A session-level advisory lock serializes this call across server replicas
@@ -2216,12 +2227,12 @@ func (s *Service) SummarizeToolCall(ctx context.Context, payload *gen.SummarizeT
 		arguments = toolCall.Function.Arguments
 	}
 	input, err := json.Marshal(struct {
-		ToolName  string          `json:"tool_name"`
-		Arguments json.RawMessage `json:"arguments"`
-		Result    string          `json:"result"`
+		ToolName  string `json:"tool_name"`
+		Arguments string `json:"arguments"`
+		Result    string `json:"result"`
 	}{
 		ToolName:  name,
-		Arguments: arguments,
+		Arguments: truncateRunes(string(arguments), maxSummarizeMessageRunes),
 		Result:    truncateRunes(row.ResultContent, maxSummarizeMessageRunes),
 	})
 	if err != nil {

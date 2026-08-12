@@ -1323,6 +1323,12 @@ function ChatDetailPanel({
     else transcript.loadRest();
   }, [windowed, transcript]);
 
+  useEffect(() => {
+    if (view === "effects" && !fullyLoaded && !loadingAllMessages) {
+      loadAllMessages();
+    }
+  }, [view, fullyLoaded, loadingAllMessages, loadAllMessages]);
+
   const userLabelOverride = chat ? userLabel : undefined;
 
   const rowCtx = useMemo<RowContext>(
@@ -1448,7 +1454,7 @@ function ChatDetailPanel({
         onRiskyOnlyChange={setRiskyOnly}
         showRiskyOnly={canViewRisk}
         searchBar={
-          riskWindowed ? undefined : (
+          riskWindowed || view === "effects" ? undefined : (
             <ThreadSearchBar
               value={searchInput}
               onChange={setSearchInput}
@@ -1562,22 +1568,21 @@ function ChatDetailPanel({
                     : "No messages to display."
             }
           />
+          {view === "effects" && (
+            <div className="bg-background absolute inset-0 z-10 flex flex-col">
+              <EffectsView
+                chatId={chatId}
+                rows={visibleRows}
+                riskResultsByMessage={riskResultsByMessage}
+                claudeToolUsageByToolUseId={claudeToolUsageByToolUseId}
+                claudeTurnByPromptId={claudeTurnByPromptId}
+                userLabel={chat?.externalUserId}
+                userLabelOverride={userLabelOverride}
+                isLoading={chatLoading || loadingAllMessages}
+              />
+            </div>
+          )}
         </CreateExclusionContext.Provider>
-
-        {view === "effects" && (
-          <div className="bg-background absolute inset-0 z-10 flex flex-col">
-            <EffectsView
-              chatId={chatId}
-              rows={transcriptRows}
-              riskResultsByMessage={riskResultsByMessage}
-              claudeToolUsageByToolUseId={claudeToolUsageByToolUseId}
-              claudeTurnByPromptId={claudeTurnByPromptId}
-              userLabel={chat?.externalUserId}
-              userLabelOverride={userLabelOverride}
-              isLoading={chatLoading}
-            />
-          </div>
-        )}
 
         {view === "tools" && (
           <div className="bg-background absolute inset-0 z-10 flex flex-col">
