@@ -156,27 +156,40 @@ func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, aut
 		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
 	}
 
-	// The Platform MCP read toolset is rollout-gated per organization. The
-	// attachment decision in the assistants service uses the same flag, but
-	// the assistant token lives inside the runner VM, so the serve path
-	// re-checks rather than trusting attachment. Fail closed on evaluation
-	// errors.
-	if slug == platformtools.PlatformMCPReadToolsetSlug {
-		if s.features == nil {
-			return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
-		}
-		enabled, err := s.features.IsFlagEnabled(ctx, feature.FlagAssistantPlatformMCP,
+	// The two managed-only toolsets are rollout variants of each other: an org
+	// reaches exactly one, never both. The attachment decision in the
+	// assistants service resolves the same variant, but the assistant token
+	// lives inside the runner VM, so the serve path re-resolves rather than
+	// trusting attachment. A variant that cannot be resolved falls back to
+	// legacy, matching attachment, so an outage never leaves the managed
+	// assistant with no toolset at all.
+	variant := feature.VariantAssistantToolsLegacy
+	if s.features != nil {
+		resolved, err := feature.FlagVariant(ctx, s.features, feature.FlagAssistantPlatformMCP,
 			authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
 		if err != nil {
-			s.logger.WarnContext(ctx, "evaluate assistant platform mcp flag", attr.SlogError(err))
-			return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
-		}
-		if !enabled {
-			return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+			s.logger.WarnContext(ctx, "resolve assistant platform mcp variant", attr.SlogError(err))
+		} else {
+			variant = feature.AssistantToolsVariant(resolved)
 		}
 	}
 
+	if slug != wantedToolsetSlug(variant) {
+		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+	}
+
 	return nil
+}
+
+// wantedToolsetSlug maps a resolved rollout variant to the single managed-only
+// platform toolset that variant serves. Keep in lockstep with
+// assistantPlatformSlugs in the assistants service — the two must agree or a
+// toolset is attached at bootstrap and then 404s on every request.
+func wantedToolsetSlug(variant feature.Variant) string {
+	if variant == feature.VariantAssistantToolsPlatformMCP {
+		return platformtools.PlatformMCPReadToolsetSlug
+	}
+	return platformtools.ManagedAssistantPlatformToolsetSlug
 }
 
 func (s *Service) handlePlatformToolsetRequest(

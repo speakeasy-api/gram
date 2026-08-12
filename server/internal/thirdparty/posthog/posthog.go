@@ -143,6 +143,34 @@ func (p *Posthog) EvaluateFlag(ctx context.Context, flag feature.Flag, distinctI
 	return feature.EvaluationDisabled, nil
 }
 
+// FlagVariant returns the variant key a multivariate flag resolves to for
+// distinctID, or "" when posthog is disabled, the flag is off, the flag does
+// not exist, or it is a boolean flag (no variant). Callers map "" to their own
+// fail-safe default.
+func (p *Posthog) FlagVariant(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) (feature.Variant, error) {
+	if p == nil || p.disabled || p.client == nil {
+		p.logger.InfoContext(ctx, "posthog is disabled, returning no variant")
+		return "", nil
+	}
+
+	result, err := p.client.GetFeatureFlagResult(posthog.FeatureFlagPayload{
+		Key:        string(flag),
+		DistinctId: distinctID,
+		Groups:     posthogGroups(groups),
+	})
+	if errors.Is(err, posthog.ErrFlagNotFound) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("get feature flag variant: %w", err)
+	}
+	if result == nil || !result.Enabled || result.Variant == nil {
+		return "", nil
+	}
+
+	return feature.Variant(*result.Variant), nil
+}
+
 func (p *Posthog) evaluateLocalFlag(flag feature.Flag, distinctID string, groups map[string]string) (feature.Evaluation, error) {
 	sendFeatureFlagEvents := false
 	flags, err := p.client.GetAllFlags(posthog.FeatureFlagPayloadNoKey{
