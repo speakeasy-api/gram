@@ -22,6 +22,7 @@ SET status = 'completed'
   , updated_at = clock_timestamp()
 WHERE id = $4
   AND project_id = $5
+  AND status = 'running'
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, mcp_approval_request_id, status, report, report_version, model, prompt_version, requested_by, started_at, completed_at, error, created_at, updated_at, deleted_at, deleted
 `
@@ -34,6 +35,10 @@ type CompleteResearchReportParams struct {
 	ProjectID     uuid.UUID
 }
 
+// Only a run still in flight can complete, mirroring the failure update
+// below: a late result whose activity was already given up on must not turn
+// a failed or interrupted report back into a completed one, which would hide
+// the failure behind a report nobody is sure describes this run.
 func (q *Queries) CompleteResearchReport(ctx context.Context, arg CompleteResearchReportParams) (McpResearchReport, error) {
 	row := q.db.QueryRow(ctx, completeResearchReport,
 		arg.Report,
@@ -511,44 +516,6 @@ func (q *Queries) GetBypassRequestForPromotion(ctx context.Context, arg GetBypas
 	return i, err
 }
 
-const getResearchReport = `-- name: GetResearchReport :one
-SELECT id, organization_id, project_id, mcp_approval_request_id, status, report, report_version, model, prompt_version, requested_by, started_at, completed_at, error, created_at, updated_at, deleted_at, deleted
-FROM mcp_research_reports
-WHERE id = $1
-  AND project_id = $2
-  AND deleted IS FALSE
-`
-
-type GetResearchReportParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-}
-
-func (q *Queries) GetResearchReport(ctx context.Context, arg GetResearchReportParams) (McpResearchReport, error) {
-	row := q.db.QueryRow(ctx, getResearchReport, arg.ID, arg.ProjectID)
-	var i McpResearchReport
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.McpApprovalRequestID,
-		&i.Status,
-		&i.Report,
-		&i.ReportVersion,
-		&i.Model,
-		&i.PromptVersion,
-		&i.RequestedBy,
-		&i.StartedAt,
-		&i.CompletedAt,
-		&i.Error,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
-}
-
 const getResearchReportForDecision = `-- name: GetResearchReportForDecision :one
 SELECT id
 FROM mcp_research_reports
@@ -613,29 +580,6 @@ func (q *Queries) GetRunningResearchReport(ctx context.Context, arg GetRunningRe
 		&i.Deleted,
 	)
 	return i, err
-}
-
-const hasRunningResearchReport = `-- name: HasRunningResearchReport :one
-SELECT EXISTS(
-  SELECT 1
-  FROM mcp_research_reports
-  WHERE mcp_approval_request_id = $1
-    AND project_id = $2
-    AND status = 'running'
-    AND deleted IS FALSE
-)
-`
-
-type HasRunningResearchReportParams struct {
-	McpApprovalRequestID uuid.UUID
-	ProjectID            uuid.UUID
-}
-
-func (q *Queries) HasRunningResearchReport(ctx context.Context, arg HasRunningResearchReportParams) (bool, error) {
-	row := q.db.QueryRow(ctx, hasRunningResearchReport, arg.McpApprovalRequestID, arg.ProjectID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
 }
 
 const listApprovalRequestTargets = `-- name: ListApprovalRequestTargets :many
