@@ -368,6 +368,21 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
+-- name: LockApprovalRequestForResearch :one
+-- Serializes research starts for one request. Starting a run is a
+-- check-then-insert — is one already running, if not create one — and the
+-- gap between those two is a paid agent run: two clicks that both read "none
+-- running" both spend. Taking this lock first makes the second caller wait
+-- and then see the first caller's row. The durable form of this is a partial
+-- unique index on (mcp_approval_request_id) WHERE status = 'running', which
+-- needs its own migration.
+SELECT id
+FROM mcp_approval_requests
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+FOR UPDATE;
+
 -- name: GetRunningResearchReport :one
 SELECT *
 FROM mcp_research_reports
