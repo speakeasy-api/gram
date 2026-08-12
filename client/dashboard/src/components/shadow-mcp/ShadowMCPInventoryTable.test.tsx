@@ -1516,7 +1516,7 @@ describe("ShadowMCPInventoryTable", () => {
       ).disabled,
     ).toBe(true);
     fireEvent.click(sheet.getByRole("radio", { name: /Deny/ }));
-    fireEvent.click(sheet.getByRole("button", { name: "Deny Request" }));
+    await clickEnabledSheetSubmit("Deny Request");
 
     await waitFor(() => {
       expect(resolveInventoryRequest).toHaveBeenCalledWith({
