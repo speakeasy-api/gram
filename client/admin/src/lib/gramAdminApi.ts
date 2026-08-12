@@ -55,6 +55,7 @@ export async function gramAdminFetch<T>(
     const returnTo = encodeURIComponent(
       window.location.pathname + window.location.search,
     );
+    redirectingToLogin = true;
     window.location.href = `/admin/auth.login?return_to=${returnTo}&prompt=none`;
     // Setting window.location starts the navigation but does not stop the code
     // that follows it. Throw to unwind the in-flight call.
@@ -78,11 +79,17 @@ export async function gramAdminFetch<T>(
   return (await res.json()) as T;
 }
 
-// True when gramAdminFetch has already sent the browser to the login page. The
-// request failed, but no caller should report it, because a top-level
-// navigation has started.
-export function isRedirectingToLogin(error: unknown): boolean {
-  return error instanceof GramAdminError && error.status === 401;
+// True once gramAdminFetch has sent the browser to the login page. The document
+// is on its way out, so no caller should report the failure that caused it.
+//
+// The module records the navigation instead of reading it back off the failed
+// query, because React Query clears the error of a query that holds no data on
+// the next refetch, and a refetch on window focus would then reopen the gate
+// while the browser is still leaving.
+let redirectingToLogin = false;
+
+export function isRedirectingToLogin(): boolean {
+  return redirectingToLogin;
 }
 
 // Identity of the admin operator that owns the current session. The backend
@@ -93,9 +100,9 @@ export type AdminSessionInfo = {
   name?: string;
 };
 
-// The only way to read the session, so no caller can bypass the shared cache
-// entry or drift on staleTime. The backend ends the session, never the client,
-// so a refetch would find nothing new.
+// The backend ends the session, never the client, so staleTime keeps a good
+// session from refetching. A failed check holds no data, which React Query
+// always treats as stale, so it still retries on focus and on reconnect.
 export const adminSessionQuery = queryOptions({
   queryKey: ["adminSession"],
   queryFn: () => gramAdminFetch<AdminSessionInfo>("/admin/session.get"),

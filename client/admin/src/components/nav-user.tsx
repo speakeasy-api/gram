@@ -21,7 +21,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSkeleton,
   useSidebar,
 } from "@/components/ui/sidebar";
 
@@ -43,18 +42,9 @@ export function NavUser(): JSX.Element {
 
   const logoutMutation = useMutation({ mutationFn: logout });
 
-  if (session.isPending) {
-    return (
-      <SidebarMenu>
-        <SidebarMenuItem>
-          <SidebarMenuSkeleton showIcon />
-        </SidebarMenuItem>
-      </SidebarMenu>
-    );
-  }
-
-  // A failed background refetch keeps the last session, so the menu only gives
-  // up when it holds nothing to render.
+  // AuthGate settles the session before the router mounts, so there is no
+  // loading state to render here. A failed background refetch keeps the last
+  // session, so the menu only gives up when it holds nothing to render.
   if (!session.data) {
     return (
       <SidebarMenu>

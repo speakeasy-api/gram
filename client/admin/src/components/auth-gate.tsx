@@ -12,9 +12,12 @@ import { adminSessionQuery, isRedirectingToLogin } from "@/lib/gramAdminApi";
 export function AuthGate({ children }: { children: ReactNode }): JSX.Element {
   const session = useQuery(adminSessionQuery);
 
-  // Only a login redirect holds the placeholder. Other failures render the
-  // app, because each page reports its own errors.
-  if (session.isPending || isRedirectingToLogin(session.error)) {
+  // isFetched, not isPending: a query that failed with no data returns to
+  // pending on every refetch, so isPending would unmount the router again
+  // later. isFetched asks only whether the first check answered.
+  //
+  // Other failures render the app, because each page reports its own errors.
+  if (!session.isFetched || isRedirectingToLogin()) {
     return <Placeholder />;
   }
 
