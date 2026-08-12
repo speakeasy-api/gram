@@ -74,7 +74,7 @@ func (c *CollectOpenRouterCreditsMetrics) Do(ctx context.Context, args CollectOp
 	g.SetLimit(openRouterCreditsPollConcurrency)
 	for i, row := range rows {
 		g.Go(func() error {
-			used, upstreamLimit, err := c.openRouter.GetKeyUsage(gctx, row.ApiKey)
+			used, upstreamLimit, err := c.openRouter.GetKeyUsage(gctx, row.ApiKey.String)
 			if err != nil {
 				// Skip on a per-org failure so one bad key does not blank the
 				// whole batch. The error is logged for diagnosis and swallowed

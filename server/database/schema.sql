@@ -1978,7 +1978,15 @@ CREATE TABLE IF NOT EXISTS openrouter_api_keys (
   -- and 402 the customer's chat surface.
   key_type TEXT NOT NULL DEFAULT 'chat',
 
-  key TEXT NOT NULL,
+  -- Plaintext upstream OpenRouter key. Deprecated in favor of key_encrypted:
+  -- new rows dual-write both columns during the expand phase, and the
+  -- platform-admin encrypt action clears this column once the encrypted copy
+  -- is verified. Kept nullable until a later contract migration drops it.
+  key TEXT,
+  -- AES-256-GCM encrypted upstream OpenRouter key, encrypted at rest and
+  -- never returned by the API. Nullable while pre-encryption rows are
+  -- migrated; reads prefer this column and fall back to key.
+  key_encrypted TEXT,
   key_hash TEXT NOT NULL,
   monthly_credits BIGINT NOT NULL DEFAULT 0,
   disabled BOOLEAN NOT NULL DEFAULT FALSE,
