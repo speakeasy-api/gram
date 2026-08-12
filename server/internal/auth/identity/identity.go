@@ -468,7 +468,7 @@ func (r *Resolver) upsertOrgFromMembership(ctx context.Context, m workos.Member)
 
 	slug := orgslug.Slugify(org.Name)
 	if slug == "" {
-		slug = m.OrganizationID
+		slug = orgslug.Slugify(m.OrganizationID)
 	}
 
 	existingOrg, err := r.orgRepo.GetOrganizationMetadata(ctx, gramOrgID)
