@@ -38,7 +38,7 @@ const (
 	OnboardingClientClaudeCowork OnboardingClientFamily = "claude_cowork"
 	OnboardingClientCodex        OnboardingClientFamily = "codex"
 	OnboardingClientCursor       OnboardingClientFamily = "cursor"
-	OnboardingClientVSCode       OnboardingClientFamily = "vscode"
+	OnboardingClientOpencode     OnboardingClientFamily = "opencode"
 )
 
 type OnboardingWorkflow struct {
@@ -253,7 +253,23 @@ func (s *OnboardingService) RecordCatalogExplored(ctx context.Context, principal
 	if err != nil {
 		return fmt.Errorf("record platform mcp catalog exploration: %w", err)
 	}
-	if rows == 0 {
+	if rows > 0 {
+		return nil
+	}
+
+	// The insert's uniqueness grain includes the active connection generation,
+	// so a zero-row conflict can only be an idempotent replay for this exact
+	// connection generation. Re-check the durable fact to distinguish that from
+	// the guarded INSERT's unavailable/revoked connection path.
+	recorded, err := platformrepo.New(s.db).HasPlatformMCPOnboardingCatalogExplored(ctx, platformrepo.HasPlatformMCPOnboardingCatalogExploredParams{
+		OrganizationID:       principal.OrganizationID,
+		ConnectionID:         uuid.NullUUID{UUID: connectionID, Valid: true},
+		ConnectionGeneration: uuid.NullUUID{UUID: generation, Valid: true},
+	})
+	if err != nil {
+		return fmt.Errorf("check platform mcp catalog exploration evidence: %w", err)
+	}
+	if !recorded {
 		return ErrUnavailable
 	}
 	return nil
@@ -494,7 +510,7 @@ func onboardingConnectionsFromRows(rows []platformrepo.ListPlatformMCPSubjectCon
 
 func validOnboardingClient(client OnboardingClientFamily) bool {
 	switch client {
-	case OnboardingClientClaudeCode, OnboardingClientClaudeCowork, OnboardingClientCodex, OnboardingClientCursor, OnboardingClientVSCode:
+	case OnboardingClientClaudeCode, OnboardingClientClaudeCowork, OnboardingClientCodex, OnboardingClientCursor, OnboardingClientOpencode:
 		return true
 	default:
 		return false

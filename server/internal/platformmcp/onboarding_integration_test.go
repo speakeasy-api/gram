@@ -69,6 +69,7 @@ func TestOnboardingServicePersistsWorkflowAndUsesSubjectQualifiedEvidence(t *tes
 	require.NotNil(t, configurationCopied.Workflow.AgentConfigurationCopiedAt)
 
 	require.NoError(t, service.RecordCatalogExplored(ctx, principal))
+	require.NoError(t, service.RecordCatalogExplored(ctx, principal), "replaying catalogue search for the same live connection generation is idempotent")
 	explored, err := service.Get(ctx, principal.OrganizationID, principal.UserID)
 	require.NoError(t, err)
 	require.True(t, explored.CatalogExplored)
@@ -127,7 +128,7 @@ func TestOnboardingServiceValidatesClientFamily(t *testing.T) {
 	_, err = service.RecordInstallIntent(ctx, principal.OrganizationID, principal.UserID, OnboardingClientFamily("unknown"))
 	require.ErrorIs(t, err, ErrOnboardingInvalid)
 
-	_, err = service.RecordInstallIntent(ctx, principal.OrganizationID, principal.UserID, OnboardingClientVSCode)
+	_, err = service.RecordInstallIntent(ctx, principal.OrganizationID, principal.UserID, OnboardingClientOpencode)
 	require.NoError(t, err)
 
 	workflow, err := platformrepo.New(conn).GetActivePlatformMCPOnboardingWorkflow(ctx, platformrepo.GetActivePlatformMCPOnboardingWorkflowParams{
@@ -135,5 +136,5 @@ func TestOnboardingServiceValidatesClientFamily(t *testing.T) {
 		InitiatingSubjectUrn: userSubjectURN(principal.UserID),
 	})
 	require.NoError(t, err)
-	require.Equal(t, string(OnboardingClientVSCode), workflow.ClientFamily)
+	require.Equal(t, string(OnboardingClientOpencode), workflow.ClientFamily)
 }

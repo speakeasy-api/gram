@@ -94,6 +94,44 @@ type RegistryCatalog struct {
 	descriptors map[string]registryCatalogDescriptor
 }
 
+type CatalogDescriptorLoader func(ctx context.Context) ([]CatalogDescriptor, error)
+
+type DynamicRegistryCatalog struct {
+	client *externalmcp.RegistryClient
+	load   CatalogDescriptorLoader
+}
+
+func NewDynamicRegistryCatalog(client *externalmcp.RegistryClient, load CatalogDescriptorLoader) *DynamicRegistryCatalog {
+	return &DynamicRegistryCatalog{client: client, load: load}
+}
+
+func (c *DynamicRegistryCatalog) Search(ctx context.Context, query string) ([]CatalogCandidate, error) {
+	catalog, err := c.current(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return catalog.Search(ctx, query)
+}
+
+func (c *DynamicRegistryCatalog) Inspect(ctx context.Context, providerKey, catalogRef string) (CatalogDetails, error) {
+	catalog, err := c.current(ctx)
+	if err != nil {
+		return CatalogDetails{}, err
+	}
+	return catalog.Inspect(ctx, providerKey, catalogRef)
+}
+
+func (c *DynamicRegistryCatalog) current(ctx context.Context) (*RegistryCatalog, error) {
+	if c == nil || c.client == nil || c.load == nil {
+		return nil, ErrCatalogUnavailable
+	}
+	descriptors, err := c.load(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load platform mcp catalog descriptors: %w", err)
+	}
+	return NewRegistryCatalog(c.client, descriptors), nil
+}
+
 func NewRegistryCatalog(client *externalmcp.RegistryClient, descriptors []CatalogDescriptor) *RegistryCatalog {
 	return NewRegistryCatalogSources([]RegistryCatalogSource{{Client: client, Descriptors: descriptors}})
 }

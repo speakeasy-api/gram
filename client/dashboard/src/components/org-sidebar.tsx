@@ -24,6 +24,7 @@ import { SidebarUserMenu } from "./sidebar-user-menu";
 import { TrialStatusCard } from "./trial-status-card";
 import { WorkspaceSwitcher } from "./workspace-switcher";
 import { useIsPlatformAdmin } from "@/contexts/Auth";
+import { usePlatformMcpDashboardVisibility } from "@/hooks/usePlatformMcpDashboardVisibility";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -64,6 +65,8 @@ export function OrgSidebar({
     throwOnError: false,
   });
   const isPlatformAdmin = useIsPlatformAdmin();
+  const { enabled: isPlatformMcpDashboardEnabled } =
+    usePlatformMcpDashboardVisibility();
   const isDeviceAgentEnabled =
     telemetry.isFeatureEnabled("gram-device-agent") ?? false;
   const isUserSessionsEnabled =
@@ -75,7 +78,7 @@ export function OrgSidebar({
     orgRoutes.domains,
     orgRoutes.logs,
     orgRoutes.skills,
-    orgRoutes.platformMcp,
+    ...(isPlatformMcpDashboardEnabled ? [orgRoutes.platformMcp] : []),
     orgRoutes.aiIntegrations,
     orgRoutes.webhooks,
     orgRoutes.externalServices,
@@ -121,7 +124,7 @@ export function OrgSidebar({
     orgRoutes.domains,
     orgRoutes.logs,
     orgRoutes.skills,
-    orgRoutes.platformMcp,
+    ...(isPlatformMcpDashboardEnabled ? [orgRoutes.platformMcp] : []),
     orgRoutes.aiIntegrations,
     orgRoutes.webhooks,
     orgRoutes.externalServices,
@@ -193,10 +196,14 @@ export function OrgSidebar({
                   { item: orgRoutes.domains, scope: orgReadOrAdmin },
                   { item: orgRoutes.logs, scope: orgReadOrAdmin },
                   { item: orgRoutes.skills, scope: "org:admin" },
-                  {
-                    item: orgRoutes.platformMcp,
-                    scope: "org:admin",
-                  },
+                  ...(isPlatformMcpDashboardEnabled
+                    ? [
+                        {
+                          item: orgRoutes.platformMcp,
+                          scope: "org:admin" as const,
+                        },
+                      ]
+                    : []),
                   { item: orgRoutes.aiIntegrations, scope: orgReadOrAdmin },
                   { item: orgRoutes.webhooks, scope: orgReadOrAdmin },
                   ...(productFeatures?.customerManagedEncryptionKeysEnabled ===

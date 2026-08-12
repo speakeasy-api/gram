@@ -52,6 +52,7 @@ type oauthPageData struct {
 	RedirectURI      string
 	State            string
 	CSRFToken        string
+	ScriptNonce      string
 	AutoClose        bool
 }
 
@@ -818,6 +819,13 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 }
 
 func (s *OAuthHTTP) renderOAuthPage(w http.ResponseWriter, data oauthPageData) {
+	scriptNonce, err := opaqueToken()
+	if err != nil {
+		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not render authorization page")
+		return
+	}
+	data.ScriptNonce = scriptNonce
+
 	var page strings.Builder
 	if err := oauthPageTemplate.Execute(&page, data); err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not render authorization page")
@@ -825,9 +833,17 @@ func (s *OAuthHTTP) renderOAuthPage(w http.ResponseWriter, data oauthPageData) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; img-src data:; script-src 'sha256-jqxtvDkBbRAl9Hpqv68WdNOieepg8tJSYu1xIy7zT34='; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+	w.Header().Set("Content-Security-Policy", oauthPageContentSecurityPolicy(data.RedirectURI, scriptNonce))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write([]byte(page.String()))
+}
+
+func oauthPageContentSecurityPolicy(redirectURI, scriptNonce string) string {
+	formAction := "'self'"
+	if uri, err := url.Parse(redirectURI); err == nil && (uri.Scheme == "http" || uri.Scheme == "https") && uri.Host != "" {
+		formAction += " " + uri.Scheme + "://" + uri.Host
+	}
+	return "default-src 'none'; style-src 'unsafe-inline'; img-src data:; script-src 'nonce-" + scriptNonce + "'; base-uri 'none'; form-action " + formAction + "; frame-ancestors 'none'"
 }
 
 func writeOAuthError(w http.ResponseWriter, status int, code, description string) {

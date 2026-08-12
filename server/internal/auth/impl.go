@@ -117,6 +117,7 @@ type Service struct {
 	envRepo             *envRepo.Queries
 	orgRepo             *orgRepo.Queries
 	authzProvisioner    *authz.Provisioner
+	organizationSeeder  OrganizationFeatureSeeder
 	trialBundleSeeder   EnterpriseTrialBundleSeeder
 	auditLogger         *audit.Logger
 	trialNotifier       trialemails.Notifier
@@ -137,6 +138,7 @@ func NewService(
 	posthogClient *posthog.Posthog,
 	nonceStore cache.Cache,
 	authzProvisioner *authz.Provisioner,
+	organizationSeeder OrganizationFeatureSeeder,
 	trialBundleSeeder EnterpriseTrialBundleSeeder,
 	auditLogger *audit.Logger,
 	trialNotifier trialemails.Notifier,
@@ -162,6 +164,7 @@ func NewService(
 		envRepo:             envRepo.New(db),
 		orgRepo:             orgRepo.New(db),
 		authzProvisioner:    authzProvisioner,
+		organizationSeeder:  organizationSeeder,
 		trialBundleSeeder:   trialBundleSeeder,
 		auditLogger:         auditLogger,
 		trialNotifier:       trialNotifier,
@@ -1121,6 +1124,13 @@ func (s *Service) persistProvisionedOrganization(
 		WorkOSMembershipID: provisionedOrg.WorkOSMembershipID,
 	}); err != nil {
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("provision organization access: %w", err)
+	}
+
+	if s.organizationSeeder == nil {
+		return orgRepo.OrganizationMetadatum{}, errors.New("organization feature seeder is not configured")
+	}
+	if err := s.organizationSeeder(ctx, tx, org.ID); err != nil {
+		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("seed organization default entitlements: %w", err)
 	}
 
 	if opts.ProvisionTrial {

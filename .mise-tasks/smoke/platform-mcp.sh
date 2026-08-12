@@ -8,16 +8,14 @@
 set -euo pipefail
 
 phase="${1:-read-only}"
-feature_name="platform_mcp"
-rollout_flag="platform-mcp-rollout"
-registration_flag="platform-mcp-catalog-registration"
+platform_mcp_feature="platform_mcp"
 
 fail() {
   echo "platform-mcp smoke: $*" >&2
   exit 1
 }
 
-require_local_fixture_targets() {
+require_local_targets() {
   [ "${GRAM_ENVIRONMENT:-}" = "local" ] || fail "setup requires GRAM_ENVIRONMENT=local"
   [ "${GRAM_SERVER_URL:-}" != "" ] || fail "GRAM_SERVER_URL is required"
   [ "${GRAM_DATABASE_URL:-}" != "" ] || fail "GRAM_DATABASE_URL is required"
@@ -87,7 +85,7 @@ local_session() {
 }
 
 setup() {
-  require_local_fixture_targets
+  require_local_targets
   session="$(local_session)"
   info="$(curl --fail --silent --show-error --cacert "$NODE_EXTRA_CA_CERTS" \
     --header "Gram-Session: $session" "$GRAM_SERVER_URL/rpc/auth.info")"
@@ -100,26 +98,15 @@ setup() {
   curl --fail --silent --show-error --cacert "$NODE_EXTRA_CA_CERTS" \
     --header "Content-Type: application/json" \
     --header "Gram-Session: $session" \
-    --data '{"feature_name":"platform_mcp","enabled":true}' \
+    --data "{\"feature_name\":\"$platform_mcp_feature\",\"enabled\":true}" \
     "$GRAM_SERVER_URL/rpc/productFeatures.set" >/dev/null
 
   redis_password="${GRAM_REDIS_CACHE_PASSWORD:-xi9XILbY}"
   docker compose exec -T gram-cache redis-cli -p 35299 -a "$redis_password" \
-    DEL "feature:${organization_id}:${feature_name}:" >/dev/null
+    DEL "feature:${organization_id}:${platform_mcp_feature}:" >/dev/null
 
-  csv_tmp="$(mktemp)"
-  trap 'rm -f "$csv_tmp"' RETURN
-  awk -F, -v OFS=, -v organization_id="$organization_id" \
-    -v rollout_flag="$rollout_flag" -v registration_flag="$registration_flag" '
-      NR == 1 { print; next }
-      !($1 == organization_id && ($2 == rollout_flag || $2 == registration_flag)) { print }
-    ' "$GRAM_LOCAL_FEATURE_FLAGS_CSV" > "$csv_tmp"
-  printf '%s,%s,true\n%s,%s,true\n' \
-    "$organization_id" "$rollout_flag" "$organization_id" "$registration_flag" >> "$csv_tmp"
-  mv "$csv_tmp" "$GRAM_LOCAL_FEATURE_FLAGS_CSV"
-
-  echo "Platform MCP local test gates prepared."
-  echo "Restart the local server with GRAM_PLATFORM_MCP_LOCAL_FIXTURE=1 before browser acceptance."
+  echo "Platform MCP local product features prepared."
+  echo "Restart the local server before browser acceptance."
 }
 
 read_only() {

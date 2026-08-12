@@ -57,6 +57,9 @@ func registerCatalogTools(server *mcp.Server, catalog Catalog, budget OperationB
 		}
 		candidates, err := catalog.Search(ctx, normalizeCatalogQuery(input.Query))
 		if err != nil {
+			if result, ok := operationBudgetToolResult(ErrCatalogUnavailable); ok {
+				return result, SearchCatalogOutput{}, nil
+			}
 			return nil, SearchCatalogOutput{}, ErrCatalogUnavailable
 		}
 		providerKey := normalizeCatalogProviderKey(input.ProviderKey)
@@ -118,6 +121,9 @@ func registerCatalogTools(server *mcp.Server, catalog Catalog, budget OperationB
 			return nil, CatalogDetails{}, ErrCatalogRejected
 		}
 		if err != nil {
+			if result, ok := operationBudgetToolResult(ErrCatalogUnavailable); ok {
+				return result, CatalogDetails{}, nil
+			}
 			return nil, CatalogDetails{}, ErrCatalogUnavailable
 		}
 		return nil, details, nil

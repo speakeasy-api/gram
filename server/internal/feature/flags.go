@@ -43,20 +43,22 @@ const (
 	// server-side per organization with distinctID = the issuer's org ID and
 	// no groups.
 	FlagUserSessionCIMD Flag = "gram-user-session-cimd"
-	// FlagPlatformMCPRollout gates the organization-targeted Platform MCP rollout.
-	// It is evaluated in addition to the durable Platform MCP product capability.
-	FlagPlatformMCPRollout Flag = "platform-mcp-rollout"
-	// FlagPlatformMCPCatalogRegistration independently gates Platform MCP catalog
-	// registration and provider-setup handoffs. It is evaluated after the main
-	// Platform MCP gate and is default-off during the mutation rollout.
-	FlagPlatformMCPCatalogRegistration Flag = "platform-mcp-catalog-registration"
-	// FlagAssistantPlatformMCP selects which platform toolset a project's
-	// managed (dashboard) assistant is served. It is MULTIVARIATE, not
-	// boolean: the matched variant names the toolset, and the two variants are
-	// mutually exclusive — an org on one never sees the other's tools. See
-	// VariantAssistantToolsLegacy / VariantAssistantToolsPlatformMCP. Targeted
-	// by PostHog organization group (org slug), like FlagBudgets. Evaluated
-	// server-side only; removed once one variant wins.
+
+	// FlagPlatformMCP controls the engineering rollout of Platform MCP. The
+	// durable platform_mcp product feature remains the organization-admin opt-in
+	// once this release flag permits access.
+	FlagPlatformMCP Flag = "platform-mcp"
+	// FlagPlatformMCPDashboard controls dashboard discovery and onboarding for
+	// Platform MCP. It is presentation-only; runtime authorization requires
+	// FlagPlatformMCP and the durable organization product feature.
+	FlagPlatformMCPDashboard Flag = "platform-mcp-dashboard"
+
+	// FlagAssistantPlatformMCP grants a project's managed (dashboard)
+	// assistant the Platform MCP read toolset — the "platform" platform
+	// toolset re-serving the Platform MCP read tools over the assistant
+	// runtime channel. Targeted by PostHog organization group (org slug),
+	// like FlagBudgets. Evaluated server-side only; removed once the toolset
+	// is GA.
 	FlagAssistantPlatformMCP Flag = "assistant-platform-mcp"
 	// FlagRiskOverviewFromClickHouse serves the risk overview endpoint from
 	// ClickHouse risk_findings instead of Postgres risk_results. Per-org
@@ -85,29 +87,3 @@ const (
 	// can't strand it on stale hooks.
 	FlagHooksRollout Flag = "hooks-rollout"
 )
-
-// Variants of FlagAssistantPlatformMCP. Anything else — no variant, an
-// unrecognized key, an unavailable provider, or an evaluation error — resolves
-// to VariantAssistantToolsLegacy, which is the pre-rollout behaviour, so a
-// PostHog outage can never strip the managed assistant's tools.
-const (
-	// VariantAssistantToolsLegacy serves the managed assistant the
-	// "managed-assistant" platform toolset (logs, chats, users, risk,
-	// deployments, skills, plugins, docs, changelog).
-	VariantAssistantToolsLegacy Variant = "legacy"
-	// VariantAssistantToolsPlatformMCP serves the managed assistant the
-	// "platform" toolset — the Platform MCP read tools — INSTEAD of the
-	// legacy toolset, not in addition to it.
-	VariantAssistantToolsPlatformMCP Variant = "platformmcp"
-)
-
-// AssistantToolsVariant normalizes a resolved variant to one of the two known
-// keys, collapsing everything unrecognized onto the legacy default. Both the
-// attach path (assistants service) and the serve path (mcp service) must agree
-// on this mapping or a toolset would be attached and then 404 at request time.
-func AssistantToolsVariant(variant Variant) Variant {
-	if variant == VariantAssistantToolsPlatformMCP {
-		return VariantAssistantToolsPlatformMCP
-	}
-	return VariantAssistantToolsLegacy
-}

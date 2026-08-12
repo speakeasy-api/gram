@@ -2,6 +2,7 @@ package platformmcp
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -27,6 +28,11 @@ func TestOperationBudgetToolResultMapsRegistrationInputErrors(t *testing.T) {
 			err:  ErrReadinessRegistrationNotFound,
 			code: "registration_not_found",
 		},
+		{
+			name: "catalog unavailable",
+			err:  ErrCatalogUnavailable,
+			code: unavailableCode,
+		},
 	}
 
 	for _, test := range tests {
@@ -43,6 +49,10 @@ func TestOperationBudgetToolResultMapsRegistrationInputErrors(t *testing.T) {
 			var body operationBudgetResult
 			require.NoError(t, json.Unmarshal([]byte(text.Text), &body))
 			require.Equal(t, test.code, body.Code)
+			if errors.Is(test.err, ErrCatalogUnavailable) {
+				require.Equal(t, "catalog_unavailable", body.Reason)
+				require.Contains(t, body.Message, "Catalogue is temporarily unavailable")
+			}
 		})
 	}
 }

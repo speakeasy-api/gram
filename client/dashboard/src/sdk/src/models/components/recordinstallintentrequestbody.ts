@@ -14,7 +14,7 @@ export const ClientFamily = {
   ClaudeCowork: "claude_cowork",
   Codex: "codex",
   Cursor: "cursor",
-  Vscode: "vscode",
+  Opencode: "opencode",
 } as const;
 /**
  * Manual-install client family.

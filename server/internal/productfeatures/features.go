@@ -22,9 +22,10 @@ const (
 	FeatureSkills                     Feature = "skills"
 	FeatureSkillCaptureMetadataOnly   Feature = "skill_capture_metadata_only"
 	FeatureAIPlatformPushIntegrations Feature = "ai_platform_push_integrations"
-	// FeaturePlatformMCP enables the organization-level Platform MCP capability.
-	// The runtime also requires a separate rollout gate before admitting traffic.
+	// FeaturePlatformMCP enables the organization-level Platform MCP capability,
+	// including manual setup and authenticated MCP access.
 	FeaturePlatformMCP Feature = "platform_mcp"
+
 	// FeatureCustomerManagedEncryptionKeys gates the organization's ability to bring its
 	// own cloud KMS keys: the external credentials Gram uses to reach them and,
 	// later, the keys themselves. Distinct from FeatureCustomModelKeys, which

@@ -23,6 +23,7 @@ export function PlatformMCPSetupStep({
         <PlatformMCPOnboardingContent
           currentProjectSlug={currentProjectSlug}
           embeddedInProjectSetup
+          onSetupComplete={onComplete}
         />
       </RequireScope>
       <div className="flex justify-between border-t pt-6">

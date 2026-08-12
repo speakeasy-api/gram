@@ -4302,8 +4302,8 @@ func ValidateRecordInstallIntentRequestBody(body *RecordInstallIntentRequestBody
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_family", "body"))
 	}
 	if body.ClientFamily != nil {
-		if !(*body.ClientFamily == "claude_code" || *body.ClientFamily == "claude_cowork" || *body.ClientFamily == "codex" || *body.ClientFamily == "cursor" || *body.ClientFamily == "vscode") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_family", *body.ClientFamily, []any{"claude_code", "claude_cowork", "codex", "cursor", "vscode"}))
+		if !(*body.ClientFamily == "claude_code" || *body.ClientFamily == "claude_cowork" || *body.ClientFamily == "codex" || *body.ClientFamily == "cursor" || *body.ClientFamily == "opencode") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_family", *body.ClientFamily, []any{"claude_code", "claude_cowork", "codex", "cursor", "opencode"}))
 		}
 	}
 	return
