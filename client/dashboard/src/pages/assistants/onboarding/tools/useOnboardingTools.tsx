@@ -2190,6 +2190,7 @@ function buildAssistantTools(deps: ToolDeps) {
                     status: "active",
                   },
                 });
+                draft.invalidateAll();
               } else {
                 const created = await sdk.triggers.create({
                   createTriggerInstanceForm: {
