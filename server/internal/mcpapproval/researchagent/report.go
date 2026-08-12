@@ -51,9 +51,28 @@ type Document struct {
 	// citations.
 	Claims []Claim `json:"claims,omitempty"`
 
+	// Injections are pages that tried to instruct the agent reading them,
+	// one entry per page the judge flagged. Filled by the runner from the
+	// judge's verdicts, never by the model — the finding has to survive an
+	// extraction pass that has just read the material trying to suppress it.
+	//
+	// This is a finding about the server, not only a defence: a vendor page
+	// that attempts to steer a reviewer is among the strongest signals the
+	// dossier can carry, so the attack is recorded as evidence.
+	Injections []InjectionFinding `json:"injections,omitempty"`
+
 	// Run records what produced this report. Filled by the runner, never by
 	// the model.
 	Run RunMeta `json:"run"`
+}
+
+// InjectionFinding is one fetched page the judge called an injection attempt.
+type InjectionFinding struct {
+	// URL is the page it came from.
+	URL string `json:"url"`
+
+	// Rationale is the judge's own account of what the page tried to do.
+	Rationale string `json:"rationale,omitempty"`
 }
 
 // Coverage describes the independent-coverage situation.
@@ -111,6 +130,14 @@ type RunMeta struct {
 	// DroppedUncitedClaims counts web-tier claims removed at validation for
 	// carrying no citation.
 	DroppedUncitedClaims int `json:"dropped_uncited_claims,omitempty"`
+
+	// PagesJudged counts fetched pages the injection judge reached a verdict
+	// on; JudgeFailures counts those it could not. The pair is the honest
+	// denominator for the injections list: no injections out of eight pages
+	// judged is a result, no injections out of eight pages where the judge
+	// never answered is not.
+	PagesJudged   int `json:"pages_judged,omitempty"`
+	JudgeFailures int `json:"judge_failures,omitempty"`
 }
 
 // extractionSchema is the JSON schema the extraction pass is held to. Kept as
