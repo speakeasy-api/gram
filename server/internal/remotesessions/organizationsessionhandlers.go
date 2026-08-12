@@ -147,6 +147,14 @@ func (s *Service) RevokeSession(ctx context.Context, payload *orgsessionsgen.Rev
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
+	// Best-effort upstream revocation, post-commit. Same rationale as the
+	// project-scoped RevokeRemoteSession; see upstreamrevoke.go.
+	s.revoker.RevokeDetached(ctx, RevokedCredentials{
+		RemoteSessionClientID: revoked.RemoteSessionClientID,
+		AccessTokenEncrypted:  revoked.AccessTokenEncrypted,
+		RefreshTokenEncrypted: revoked.RefreshTokenEncrypted,
+	})
+
 	return nil
 }
 
@@ -288,10 +296,11 @@ func (s *Service) RevokeAllClientSessions(ctx context.Context, payload *orgsessi
 	}
 	client := clientRow.RemoteSessionClient
 
-	revokedCount, err := txRepo.SoftDeleteRemoteSessionsByClientID(ctx, client.ID)
+	revoked, err := txRepo.SoftDeleteRemoteSessionsByClientID(ctx, client.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "revoke all remote sessions").LogError(ctx, logger)
 	}
+	revokedCount := int64(len(revoked))
 
 	if err := s.auditLogger.LogRemoteSessionClientRevokeSessions(ctx, dbtx, audit.LogRemoteSessionClientRevokeSessionsEvent{
 		OrganizationID:         authCtx.ActiveOrganizationID,
@@ -309,6 +318,11 @@ func (s *Service) RevokeAllClientSessions(ctx context.Context, payload *orgsessi
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
+
+	// Best-effort upstream revocation, post-commit and bounded. RevokedCount
+	// above reports the local tombstones, which are what the caller asked for
+	// and what has definitely happened; the upstream results land in metrics.
+	s.revoker.RevokeAllDetached(ctx, revokedCredentials(revoked))
 
 	return &orgsessionsgen.RevokeAllRemoteSessionsResult{RevokedCount: int(revokedCount)}, nil
 }

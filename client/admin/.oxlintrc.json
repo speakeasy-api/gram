@@ -1,0 +1,70 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "react", "import"],
+  "env": {
+    "browser": true,
+    "es2022": true,
+    "node": true
+  },
+  "ignorePatterns": ["dist", "node_modules", "src/routeTree.gen.ts"],
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "no-unused-vars": [
+      "error",
+      {
+        "args": "all",
+        "argsIgnorePattern": "^_",
+        "caughtErrors": "all",
+        "caughtErrorsIgnorePattern": "^_",
+        "destructuredArrayIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "ignoreRestSiblings": true
+      }
+    ],
+
+    "typescript/no-explicit-any": "error",
+    "typescript/no-inferrable-types": "error",
+    "typescript/no-empty-object-type": "error",
+    "typescript/explicit-module-boundary-types": [
+      "error",
+      {
+        "allowTypedFunctionExpressions": true,
+        "allowHigherOrderFunctions": true,
+        "allowDirectConstAssertionInArrowFunctions": true
+      }
+    ],
+    "typescript/switch-exhaustiveness-check": "error",
+    "typescript/strict-void-return": "error",
+
+    "react/exhaustive-deps": "error",
+    "react/rules-of-hooks": "error",
+    "react/only-export-components": ["error", { "allowConstantExport": true }],
+
+    "import/no-default-export": "off"
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/*.config.{ts,js,mts,mjs}",
+        "vite.config.ts",
+        "src/main.tsx"
+      ],
+      "rules": {
+        "typescript/explicit-module-boundary-types": "off"
+      }
+    },
+    {
+      "files": ["src/components/ui/**/*.{ts,tsx}", "src/hooks/use-mobile.ts"],
+      // Vendored stock shadcn/ui primitives, written by `pnpm dlx shadcn add`.
+      // They are kept byte-for-byte so a future shadcn update is a straight
+      // overwrite, and stock shadcn neither annotates component return types
+      // nor splits its cva variant exports into separate files.
+      "rules": {
+        "typescript/explicit-module-boundary-types": "off",
+        "react/only-export-components": "off"
+      }
+    }
+  ]
+}

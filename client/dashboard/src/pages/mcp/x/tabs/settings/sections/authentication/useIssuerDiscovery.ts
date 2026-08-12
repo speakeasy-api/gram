@@ -18,6 +18,7 @@ export type UseIssuerDiscoveryInitial = {
   responseTypesSupported: string[];
   tokenEndpointAuthMethodsSupported: string[];
   clientIdMetadataDocumentSupported: boolean;
+  revocationEndpoint: string;
   serviceDocumentation: string;
   opPolicyUri: string;
   opTosUri: string;
@@ -95,6 +96,7 @@ function useIssuerDiscoveryImpl(
               initial.tokenEndpointAuthMethodsSupported,
             clientIdMetadataDocumentSupported:
               initial.clientIdMetadataDocumentSupported,
+            revocationEndpoint: initial.revocationEndpoint,
             serviceDocumentation: initial.serviceDocumentation,
             opPolicyUri: initial.opPolicyUri,
             opTosUri: initial.opTosUri,
@@ -138,6 +140,7 @@ function useIssuerDiscoveryImpl(
           draft.tokenEndpointAuthMethodsSupported ?? [],
         clientIdMetadataDocumentSupported:
           draft.clientIdMetadataDocumentSupported,
+        revocationEndpoint: draft.revocationEndpoint ?? "",
         serviceDocumentation: draft.serviceDocumentation ?? "",
         opPolicyUri: draft.opPolicyUri ?? "",
         opTosUri: draft.opTosUri ?? "",

@@ -7,17 +7,6 @@ import { Text } from "@/components/ui/Text";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { HumanizeDateTime } from "@/lib/dates";
 import {
-  SKILL_ADOPTION_SECTION_ID,
-  SKILL_TIMELINE_SECTION_ID,
-} from "@/pages/skills/SkillActivitySections";
-import {
-  SKILL_DISTRIBUTIONS_SECTION_ID,
-  SKILL_FRONTMATTER_SECTION_ID,
-  SKILL_MANIFEST_SECTION_ID,
-  SKILL_VERSIONS_SECTION_ID,
-} from "@/pages/skills/SkillDetail";
-import { SKILL_INSIGHTS_SECTION_ID } from "@/pages/skills/SkillInsightsSection";
-import {
   SkillClassificationBadge,
   SkillSourceBadge,
 } from "@/pages/skills/skill-badges";
@@ -28,19 +17,18 @@ import { useSkillDistributionsInfinite } from "@gram/client/react-query/skillDis
 import { Badge } from "@/components/ui/Badge";
 import {
   Activity,
-  Braces,
-  ChartNoAxesColumn,
-  ChartSpline,
   FileText,
   History,
-  Puzzle,
+  LayoutDashboard,
+  ListChecks,
+  MessageSquareText,
+  Settings,
 } from "lucide-react";
 import * as React from "react";
-import { useLocation, useParams } from "react-router";
+import { useParams } from "react-router";
 
 export function SkillDetailSidebarNav(): React.JSX.Element | null {
   const routes = useRoutes();
-  const location = useLocation();
   const { skillId } = useParams<{ skillId: string }>();
 
   const skillQuery = useSkill({ id: skillId ?? "" }, undefined, {
@@ -62,50 +50,57 @@ export function SkillDetailSidebarNav(): React.JSX.Element | null {
   const distributionCount =
     distributionsQuery.data?.pages.flatMap((page) => page.result.distributions)
       .length ?? 0;
-  const hasFrontmatter =
-    Object.keys(latestVersion?.frontmatter ?? {}).filter(
-      (key) => key !== "name" && key !== "description",
-    ).length > 0;
-
-  const detailHref = routes.skills.detail.href(skillId);
-  const activeSectionId = location.hash.replace("#", "");
-  const sectionItem = (
-    sectionId: string,
-    title: string,
-    Icon: React.ComponentType<{ className?: string }>,
-    isDefault = false,
-  ): DetailSidebarNavItem => ({
-    key: sectionId,
-    title,
-    Icon,
-    href: `${detailHref}#${sectionId}`,
-    active:
-      activeSectionId === sectionId || (isDefault && activeSectionId === ""),
-  });
 
   const items: DetailSidebarNavItem[] = [
-    sectionItem(
-      SKILL_ADOPTION_SECTION_ID,
-      "Adoption and drift",
-      ChartNoAxesColumn,
-      true,
-    ),
-    sectionItem(SKILL_TIMELINE_SECTION_ID, "Activation timeline", Activity),
-    sectionItem(SKILL_INSIGHTS_SECTION_ID, "Insights", ChartSpline),
-    sectionItem(SKILL_MANIFEST_SECTION_ID, "SKILL.md", FileText),
-    ...(hasFrontmatter
-      ? [sectionItem(SKILL_FRONTMATTER_SECTION_ID, "Frontmatter", Braces)]
-      : []),
-    ...(latestVersion
-      ? [
-          sectionItem(
-            SKILL_DISTRIBUTIONS_SECTION_ID,
-            "Plugin distributions",
-            Puzzle,
-          ),
-          sectionItem(SKILL_VERSIONS_SECTION_ID, "Version history", History),
-        ]
-      : []),
+    {
+      key: "overview",
+      title: "Overview",
+      Icon: LayoutDashboard,
+      href: routes.skills.detail.overview.href(skillId),
+      active: routes.skills.detail.overview.active,
+    },
+    {
+      key: "content",
+      title: "Skill Content",
+      Icon: FileText,
+      href: routes.skills.detail.content.href(skillId),
+      active: routes.skills.detail.content.active,
+    },
+    {
+      key: "usage",
+      title: "Usage",
+      Icon: Activity,
+      href: routes.skills.detail.usage.href(skillId),
+      active: routes.skills.detail.usage.active,
+    },
+    {
+      key: "scored-sessions",
+      title: "Scored Sessions",
+      Icon: ListChecks,
+      href: routes.skills.detail.scoredSessions.href(skillId),
+      active: routes.skills.detail.scoredSessions.active,
+    },
+    {
+      key: "feedback",
+      title: "Agent Feedback",
+      Icon: MessageSquareText,
+      href: routes.skills.detail.feedback.href(skillId),
+      active: routes.skills.detail.feedback.active,
+    },
+    {
+      key: "versions",
+      title: "Version History",
+      Icon: History,
+      href: routes.skills.detail.versions.href(skillId),
+      active: routes.skills.detail.versions.active,
+    },
+    {
+      key: "settings",
+      title: "Settings",
+      Icon: Settings,
+      href: routes.skills.detail.settings.href(skillId),
+      active: routes.skills.detail.settings.active,
+    },
   ];
 
   const cardContent = skill && (
@@ -167,7 +162,7 @@ export function SkillDetailSidebarNav(): React.JSX.Element | null {
       backLabel="Back to all skills"
       cardContent={cardContent}
       items={items}
-      itemsTitle="Sections"
+      itemsTitle="Configuration"
     />
   );
 }

@@ -1368,6 +1368,18 @@ func NewCreateRiskPolicyBypassRequestEndpoint(s Service, authAPIKeyFn security.A
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
 		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"agent_user"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
 			return nil, err
 		}
 		return s.CreateRiskPolicyBypassRequest(ctx, p)

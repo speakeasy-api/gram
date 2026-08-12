@@ -444,6 +444,7 @@ var ChatOverview = Type("ChatOverview", func() {
 	Attribute("assistant_name", String, "The name of the assistant that produced this chat, if any")
 	Attribute("num_messages", Int, "The number of messages in the chat")
 	Attribute("source", String, "The source of the chat: Elements, Playground, ClaudeCode (inferred from messages)")
+	Attribute("originating_client", String, "The supported client that originated a chat routed through the source, when known")
 	Attribute("created_at", String, func() {
 		Description("When the chat was created.")
 		Format(FormatDateTime)

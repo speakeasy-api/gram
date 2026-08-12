@@ -12,6 +12,7 @@ const snapshot = {
   responseTypesSupported: ["code"],
   tokenEndpointAuthMethodsSupported: ["client_secret_basic"],
   clientIdMetadataDocumentSupported: true,
+  revocationEndpoint: "https://idp.example.com/revoke",
   serviceDocumentation: "https://docs.example.com",
   opPolicyUri: "https://example.com/policy",
   opTosUri: "https://example.com/tos",
@@ -68,6 +69,7 @@ describe("buildUpdateIssuerForm", () => {
     expect(form.responseTypesSupported).toBeUndefined();
     expect(form.tokenEndpointAuthMethodsSupported).toBeUndefined();
     expect(form.clientIdMetadataDocumentSupported).toBeUndefined();
+    expect(form.revocationEndpoint).toBeUndefined();
     expect(form.serviceDocumentation).toBeUndefined();
     expect(form.opPolicyUri).toBeUndefined();
     expect(form.opTosUri).toBeUndefined();
@@ -81,6 +83,7 @@ describe("buildUpdateIssuerForm", () => {
 
     expect(form.scopesSupported).toEqual(["openid", "profile"]);
     expect(form.clientIdMetadataDocumentSupported).toBe(true);
+    expect(form.revocationEndpoint).toBe("https://idp.example.com/revoke");
     expect(form.serviceDocumentation).toBe("https://docs.example.com");
   });
 

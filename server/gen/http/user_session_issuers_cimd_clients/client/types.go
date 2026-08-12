@@ -25,6 +25,13 @@ type CreateUserSessionIssuerCimdClientRequestBody struct {
 	ClientIDMetadataURI string `form:"client_id_metadata_uri" json:"client_id_metadata_uri" xml:"client_id_metadata_uri"`
 }
 
+// VerifyURLRequestBody is the type of the "userSessionIssuersCimdClients"
+// service "verifyURL" endpoint HTTP request body.
+type VerifyURLRequestBody struct {
+	// The https URL to probe.
+	ClientIDMetadataURI string `form:"client_id_metadata_uri" json:"client_id_metadata_uri" xml:"client_id_metadata_uri"`
+}
+
 // ListPresetsResponseBody is the type of the "userSessionIssuersCimdClients"
 // service "listPresets" endpoint HTTP response body.
 type ListPresetsResponseBody struct {
@@ -36,10 +43,27 @@ type ListPresetsResponseBody struct {
 // endpoint HTTP response body.
 type CreateUserSessionIssuerCimdClientResponseBody struct {
 	Client *UserSessionIssuerCimdClientResponseBody `form:"client,omitempty" json:"client,omitempty" xml:"client,omitempty"`
-	// Set when Gram could not fetch or validate the document at this URL. The
-	// entry was still saved; the URL will be admitted, but a client presenting it
-	// will fail at authorization time until the document is reachable and valid.
-	ProbeWarning *string `form:"probe_warning,omitempty" json:"probe_warning,omitempty" xml:"probe_warning,omitempty"`
+}
+
+// VerifyURLResponseBody is the type of the "userSessionIssuersCimdClients"
+// service "verifyURL" endpoint HTTP response body.
+type VerifyURLResponseBody struct {
+	// True when the document was fetched and passed every check the authorization
+	// server applies. A client presenting this URL will not be rejected for its
+	// document.
+	Verified *bool `form:"verified,omitempty" json:"verified,omitempty" xml:"verified,omitempty"`
+	// Why the probe ended as it did.
+	Outcome *string `form:"outcome,omitempty" json:"outcome,omitempty" xml:"outcome,omitempty"`
+	// Status the document endpoint returned; omitted when no response was received.
+	HTTPStatus *int `form:"http_status,omitempty" json:"http_status,omitempty" xml:"http_status,omitempty"`
+	// Stable machine label for the rule that rejected the document, e.g.
+	// client_id_mismatch. Set only for invalid_url and invalid_document.
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
+	// Human-readable explanation, safe to display to the operator.
+	Detail *string `form:"detail,omitempty" json:"detail,omitempty" xml:"detail,omitempty"`
+	// The document's client_name, set only when verified. Lets an operator confirm
+	// the URL names the client they intended.
+	ClientName *string `form:"client_name,omitempty" json:"client_name,omitempty" xml:"client_name,omitempty"`
 }
 
 // ListUserSessionIssuerCimdClientsResponseBody is the type of the
@@ -434,6 +458,196 @@ type CreateUserSessionIssuerCimdClientUnexpectedResponseBody struct {
 // "userSessionIssuersCimdClients" service "createUserSessionIssuerCimdClient"
 // endpoint HTTP response body for the "gateway_error" error.
 type CreateUserSessionIssuerCimdClientGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyURLUnauthorizedResponseBody is the type of the
+// "userSessionIssuersCimdClients" service "verifyURL" endpoint HTTP response
+// body for the "unauthorized" error.
+type VerifyURLUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyURLForbiddenResponseBody is the type of the
+// "userSessionIssuersCimdClients" service "verifyURL" endpoint HTTP response
+// body for the "forbidden" error.
+type VerifyURLForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyURLBadRequestResponseBody is the type of the
+// "userSessionIssuersCimdClients" service "verifyURL" endpoint HTTP response
+// body for the "bad_request" error.
+type VerifyURLBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyURLNotFoundResponseBody is the type of the
+// "userSessionIssuersCimdClients" service "verifyURL" endpoint HTTP response
+// body for the "not_found" error.
+type VerifyURLNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyURLConflictResponseBody is the type of the
+// "userSessionIssuersCimdClients" service "verifyURL" endpoint HTTP response
+// body for the "conflict" error.
+type VerifyURLConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyURLUnsupportedMediaResponseBody is the type of the
+// "userSessionIssuersCimdClients" service "verifyURL" endpoint HTTP response
+// body for the "unsupported_media" error.
+type VerifyURLUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyURLInvalidResponseBody is the type of the
+// "userSessionIssuersCimdClients" service "verifyURL" endpoint HTTP response
+// body for the "invalid" error.
+type VerifyURLInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyURLInvariantViolationResponseBody is the type of the
+// "userSessionIssuersCimdClients" service "verifyURL" endpoint HTTP response
+// body for the "invariant_violation" error.
+type VerifyURLInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyURLUnexpectedResponseBody is the type of the
+// "userSessionIssuersCimdClients" service "verifyURL" endpoint HTTP response
+// body for the "unexpected" error.
+type VerifyURLUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// VerifyURLGatewayErrorResponseBody is the type of the
+// "userSessionIssuersCimdClients" service "verifyURL" endpoint HTTP response
+// body for the "gateway_error" error.
+type VerifyURLGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1070,6 +1284,15 @@ func NewCreateUserSessionIssuerCimdClientRequestBody(p *usersessionissuerscimdcl
 	return body
 }
 
+// NewVerifyURLRequestBody builds the HTTP request body from the payload of the
+// "verifyURL" endpoint of the "userSessionIssuersCimdClients" service.
+func NewVerifyURLRequestBody(p *usersessionissuerscimdclients.VerifyURLPayload) *VerifyURLRequestBody {
+	body := &VerifyURLRequestBody{
+		ClientIDMetadataURI: p.ClientIDMetadataURI,
+	}
+	return body
+}
+
 // NewListPresetsListCimdClientPresetsResultOK builds a
 // "userSessionIssuersCimdClients" service "listPresets" endpoint result from a
 // HTTP "OK" response.
@@ -1241,9 +1464,7 @@ func NewListPresetsGatewayError(body *ListPresetsGatewayErrorResponseBody) *goa.
 // "userSessionIssuersCimdClients" service "createUserSessionIssuerCimdClient"
 // endpoint result from a HTTP "OK" response.
 func NewCreateUserSessionIssuerCimdClientResultOK(body *CreateUserSessionIssuerCimdClientResponseBody) *usersessionissuerscimdclients.CreateUserSessionIssuerCimdClientResult {
-	v := &usersessionissuerscimdclients.CreateUserSessionIssuerCimdClientResult{
-		ProbeWarning: body.ProbeWarning,
-	}
+	v := &usersessionissuerscimdclients.CreateUserSessionIssuerCimdClientResult{}
 	v.Client = unmarshalUserSessionIssuerCimdClientResponseBodyToTypesUserSessionIssuerCimdClient(body.Client)
 
 	return v
@@ -1397,6 +1618,171 @@ func NewCreateUserSessionIssuerCimdClientUnexpected(body *CreateUserSessionIssue
 // userSessionIssuersCimdClients service createUserSessionIssuerCimdClient
 // endpoint gateway_error error.
 func NewCreateUserSessionIssuerCimdClientGatewayError(body *CreateUserSessionIssuerCimdClientGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyURLVerifyCimdURLResultOK builds a "userSessionIssuersCimdClients"
+// service "verifyURL" endpoint result from a HTTP "OK" response.
+func NewVerifyURLVerifyCimdURLResultOK(body *VerifyURLResponseBody) *usersessionissuerscimdclients.VerifyCimdURLResult {
+	v := &usersessionissuerscimdclients.VerifyCimdURLResult{
+		Verified:   *body.Verified,
+		Outcome:    *body.Outcome,
+		HTTPStatus: body.HTTPStatus,
+		Reason:     body.Reason,
+		Detail:     *body.Detail,
+		ClientName: body.ClientName,
+	}
+
+	return v
+}
+
+// NewVerifyURLUnauthorized builds a userSessionIssuersCimdClients service
+// verifyURL endpoint unauthorized error.
+func NewVerifyURLUnauthorized(body *VerifyURLUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyURLForbidden builds a userSessionIssuersCimdClients service
+// verifyURL endpoint forbidden error.
+func NewVerifyURLForbidden(body *VerifyURLForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyURLBadRequest builds a userSessionIssuersCimdClients service
+// verifyURL endpoint bad_request error.
+func NewVerifyURLBadRequest(body *VerifyURLBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyURLNotFound builds a userSessionIssuersCimdClients service
+// verifyURL endpoint not_found error.
+func NewVerifyURLNotFound(body *VerifyURLNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyURLConflict builds a userSessionIssuersCimdClients service
+// verifyURL endpoint conflict error.
+func NewVerifyURLConflict(body *VerifyURLConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyURLUnsupportedMedia builds a userSessionIssuersCimdClients service
+// verifyURL endpoint unsupported_media error.
+func NewVerifyURLUnsupportedMedia(body *VerifyURLUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyURLInvalid builds a userSessionIssuersCimdClients service verifyURL
+// endpoint invalid error.
+func NewVerifyURLInvalid(body *VerifyURLInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyURLInvariantViolation builds a userSessionIssuersCimdClients
+// service verifyURL endpoint invariant_violation error.
+func NewVerifyURLInvariantViolation(body *VerifyURLInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyURLUnexpected builds a userSessionIssuersCimdClients service
+// verifyURL endpoint unexpected error.
+func NewVerifyURLUnexpected(body *VerifyURLUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyURLGatewayError builds a userSessionIssuersCimdClients service
+// verifyURL endpoint gateway_error error.
+func NewVerifyURLGatewayError(body *VerifyURLGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1954,6 +2340,26 @@ func ValidateCreateUserSessionIssuerCimdClientResponseBody(body *CreateUserSessi
 	return
 }
 
+// ValidateVerifyURLResponseBody runs the validations defined on
+// VerifyURLResponseBody
+func ValidateVerifyURLResponseBody(body *VerifyURLResponseBody) (err error) {
+	if body.Verified == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("verified", "body"))
+	}
+	if body.Outcome == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("outcome", "body"))
+	}
+	if body.Detail == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("detail", "body"))
+	}
+	if body.Outcome != nil {
+		if !(*body.Outcome == "valid" || *body.Outcome == "invalid_url" || *body.Outcome == "unreachable" || *body.Outcome == "unparseable" || *body.Outcome == "invalid_document") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.outcome", *body.Outcome, []any{"valid", "invalid_url", "unreachable", "unparseable", "invalid_document"}))
+		}
+	}
+	return
+}
+
 // ValidateListUserSessionIssuerCimdClientsResponseBody runs the validations
 // defined on ListUserSessionIssuerCimdClientsResponseBody
 func ValidateListUserSessionIssuerCimdClientsResponseBody(body *ListUserSessionIssuerCimdClientsResponseBody) (err error) {
@@ -2478,6 +2884,246 @@ func ValidateCreateUserSessionIssuerCimdClientUnexpectedResponseBody(body *Creat
 // validations defined on
 // createUserSessionIssuerCimdClient_gateway_error_response_body
 func ValidateCreateUserSessionIssuerCimdClientGatewayErrorResponseBody(body *CreateUserSessionIssuerCimdClientGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyURLUnauthorizedResponseBody runs the validations defined on
+// verifyURL_unauthorized_response_body
+func ValidateVerifyURLUnauthorizedResponseBody(body *VerifyURLUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyURLForbiddenResponseBody runs the validations defined on
+// verifyURL_forbidden_response_body
+func ValidateVerifyURLForbiddenResponseBody(body *VerifyURLForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyURLBadRequestResponseBody runs the validations defined on
+// verifyURL_bad_request_response_body
+func ValidateVerifyURLBadRequestResponseBody(body *VerifyURLBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyURLNotFoundResponseBody runs the validations defined on
+// verifyURL_not_found_response_body
+func ValidateVerifyURLNotFoundResponseBody(body *VerifyURLNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyURLConflictResponseBody runs the validations defined on
+// verifyURL_conflict_response_body
+func ValidateVerifyURLConflictResponseBody(body *VerifyURLConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyURLUnsupportedMediaResponseBody runs the validations defined
+// on verifyURL_unsupported_media_response_body
+func ValidateVerifyURLUnsupportedMediaResponseBody(body *VerifyURLUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyURLInvalidResponseBody runs the validations defined on
+// verifyURL_invalid_response_body
+func ValidateVerifyURLInvalidResponseBody(body *VerifyURLInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyURLInvariantViolationResponseBody runs the validations defined
+// on verifyURL_invariant_violation_response_body
+func ValidateVerifyURLInvariantViolationResponseBody(body *VerifyURLInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyURLUnexpectedResponseBody runs the validations defined on
+// verifyURL_unexpected_response_body
+func ValidateVerifyURLUnexpectedResponseBody(body *VerifyURLUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateVerifyURLGatewayErrorResponseBody runs the validations defined on
+// verifyURL_gateway_error_response_body
+func ValidateVerifyURLGatewayErrorResponseBody(body *VerifyURLGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

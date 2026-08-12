@@ -4935,6 +4935,10 @@ func EncodeCreateRiskPolicyBypassRequestRequest(encoder func(*http.Request) goah
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
 		body := NewCreateRiskPolicyBypassRequestRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
 			return goahttp.ErrEncodingError("risk", "createRiskPolicyBypassRequest", err)

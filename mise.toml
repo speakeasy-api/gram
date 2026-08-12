@@ -26,7 +26,22 @@ gomigrate = "4.19.1"
 gum = "0.17.0"
 jq = "1.8.2"
 melange = "0.56.5"
+# Authoritative Node pin. `.node-version` mirrors it and must be kept in sync:
+# aube resolves its own runtime and cannot read this file, so without that
+# mirror it falls through to whatever `node` is first on PATH.
 nodejs = "24.16.0"
+aube = "1.38.1"
+# Kept for `changeset publish` only, which shells out to a package manager by
+# name and has no aube branch — it picks between pnpm, yarn and npm. Both
+# versions resolve to pnpm here, off different inputs: 2.31.0 (what we pin)
+# asks package-manager-detector, which answers pnpm because pnpm-lock.yaml is
+# on disk; 3.0.0 asks manypkg for the workspace tool, which answers pnpm
+# because pnpm-workspace.yaml is. aube keeps writing both files in place, so
+# releases need a real pnpm on PATH either way.
+#
+# Publishing via npm instead is not a drop-in: our public packages carry
+# `workspace:` and `catalog:` specifiers that pnpm rewrites at pack time and
+# npm would ship verbatim.
 "github:pnpm/pnpm" = "11.19.0"
 watchexec = "2.5.1"
 uv = "0.12.1"
@@ -202,7 +217,8 @@ GRAM_ENABLE_OTEL_METRICS = 1
 ################################
 ## Local development settings ##
 ################################
-JAEGER_WEB_PORT = "16686"
+GRAFANA_PORT = "13000"
+TEMPO_HTTP_PORT = "13200"
 PROMETHEUS_PORT = "9099"
 LITELLM_PORT = "4001"
 GRAM_LOG_PRETTY = { default = "1" }
@@ -289,7 +305,18 @@ GRAM_ADMIN_PORT = "8083"
 GRAM_ADMIN_SERVER_ADDRESS = ":{{env.GRAM_ADMIN_PORT}}"
 GRAM_ADMIN_CONTROL_PORT = "8084"
 GRAM_ADMIN_CONTROL_ADDRESS = ":{{env.GRAM_ADMIN_CONTROL_PORT}}"
-GRAM_ADMIN_SERVER_URL = "https://{{env.GRAM_ADMIN_HOST}}:{{env.GRAM_ADMIN_PORT}}"
+GRAM_ADMIN_DASHBOARD_PORT = "5174"
+## Where the admin API itself listens. Only the admin dashboard dev proxy
+## dials this; browsers never do.
+GRAM_ADMIN_BACKEND_URL = "https://{{env.GRAM_ADMIN_HOST}}:{{env.GRAM_ADMIN_PORT}}"
+## The browser-facing admin origin, and therefore the origin the OIDC redirect
+## URI is built from. In production the SPA and the admin API share one origin
+## behind one ingress. Locally the Vite dev server is that origin, because it
+## proxies /admin through to GRAM_ADMIN_BACKEND_URL.
+GRAM_ADMIN_SERVER_URL = "https://{{env.GRAM_ADMIN_HOST}}:{{env.GRAM_ADMIN_DASHBOARD_PORT}}"
+## AdminOriginCheck rejects every unsafe method whose Origin is not listed, and
+## the flag has no default, so local writes 403 without this.
+GRAM_ADMIN_ALLOWED_ORIGINS = "{{env.GRAM_ADMIN_SERVER_URL}}"
 GRAM_ADMIN_ENCRYPTION_KEY = "unset"
 GRAM_ADMIN_OIDC_EMULATOR_HOST = "localhost"
 GRAM_ADMIN_OIDC_EMULATOR_PORT = "4000"

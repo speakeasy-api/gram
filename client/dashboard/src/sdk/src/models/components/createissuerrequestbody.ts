@@ -67,6 +67,10 @@ export type CreateIssuerRequestBody = {
    */
   responseTypesSupported?: Array<string> | undefined;
   /**
+   * Upstream RFC 7009 revocation endpoint; absent for issuers that advertise none.
+   */
+  revocationEndpoint?: string | undefined;
+  /**
    * Scopes advertised by the issuer.
    */
   scopesSupported?: Array<string> | undefined;
@@ -105,6 +109,7 @@ export type CreateIssuerRequestBody$Outbound = {
   project_id?: string | undefined;
   registration_endpoint?: string | undefined;
   response_types_supported?: Array<string> | undefined;
+  revocation_endpoint?: string | undefined;
   scopes_supported?: Array<string> | undefined;
   service_documentation?: string | undefined;
   slug: string;
@@ -133,6 +138,7 @@ export const CreateIssuerRequestBody$outboundSchema: z.ZodMiniType<
     projectId: z.optional(z.string()),
     registrationEndpoint: z.optional(z.string()),
     responseTypesSupported: z.optional(z.array(z.string())),
+    revocationEndpoint: z.optional(z.string()),
     scopesSupported: z.optional(z.array(z.string())),
     serviceDocumentation: z.optional(z.string()),
     slug: z.string(),
@@ -153,6 +159,7 @@ export const CreateIssuerRequestBody$outboundSchema: z.ZodMiniType<
       projectId: "project_id",
       registrationEndpoint: "registration_endpoint",
       responseTypesSupported: "response_types_supported",
+      revocationEndpoint: "revocation_endpoint",
       scopesSupported: "scopes_supported",
       serviceDocumentation: "service_documentation",
       tokenEndpoint: "token_endpoint",

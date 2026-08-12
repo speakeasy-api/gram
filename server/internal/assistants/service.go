@@ -2806,16 +2806,18 @@ func (s *ServiceCore) currentRuntimeMCPServers(ctx context.Context, assistant as
 
 // assistantPlatformSlugs returns the platform toolset slugs granted to this
 // assistant's runtime. Every assistant gets the base assistants toolset; the
-// project's managed assistant additionally gets the managed-only toolset,
-// which must never be reachable by any other assistant.
+// project's managed assistant additionally gets exactly one managed-only
+// toolset — legacy or Platform MCP, per the rollout variant — which must never
+// be reachable by any other assistant.
 func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assistantRecord) ([]string, error) {
 	platformSlugs := []string{platformtools.AssistantsPlatformToolsetSlug}
 	switch managed, mErr := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, assistant.ProjectID); {
 	case mErr == nil:
 		if managed.ID == assistant.ID {
-			platformSlugs = append(platformSlugs, platformtools.ManagedAssistantPlatformToolsetSlug)
-			if s.platformMCPReadEnabled(ctx, assistant.ProjectID) {
+			if s.assistantToolsVariant(ctx, assistant.ProjectID) == feature.VariantAssistantToolsPlatformMCP {
 				platformSlugs = append(platformSlugs, platformtools.PlatformMCPReadToolsetSlug)
+			} else {
+				platformSlugs = append(platformSlugs, platformtools.ManagedAssistantPlatformToolsetSlug)
 			}
 		}
 	case errors.Is(mErr, pgx.ErrNoRows):
@@ -2826,27 +2828,27 @@ func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assi
 	return platformSlugs, nil
 }
 
-// platformMCPReadEnabled reports whether the organization owning projectID is
-// cleared for the Platform MCP read toolset rollout. Evaluation mirrors the
-// Platform MCP organization gate: distinct ID is the org ID with the org-slug
-// PostHog group. Errors fail closed but never abort the turn — a flag-provider
-// outage must not take down bootstrap or reconcile, so the toolset is simply
-// withheld until evaluation recovers.
-func (s *ServiceCore) platformMCPReadEnabled(ctx context.Context, projectID uuid.UUID) bool {
+// assistantToolsVariant reports which managed-assistant platform toolset the
+// organization owning projectID is on. Evaluation mirrors the Platform MCP
+// organization gate: distinct ID is the org ID with the org-slug PostHog
+// group. Every failure path returns the legacy variant but never aborts the
+// turn — a flag-provider outage must not take down bootstrap or reconcile, nor
+// silently strip the managed assistant's tools.
+func (s *ServiceCore) assistantToolsVariant(ctx context.Context, projectID uuid.UUID) feature.Variant {
 	if s.featureFlags == nil {
-		return false
+		return feature.VariantAssistantToolsLegacy
 	}
 	project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, projectID)
 	if err != nil {
-		s.logger.WarnContext(ctx, "resolve organization for platform mcp read toolset", attr.SlogError(err))
-		return false
+		s.logger.WarnContext(ctx, "resolve organization for assistant tools variant", attr.SlogError(err))
+		return feature.VariantAssistantToolsLegacy
 	}
-	enabled, err := s.featureFlags.IsFlagEnabled(ctx, feature.FlagAssistantPlatformMCP, project.ID, feature.OrgProjectGroups(project.Slug, ""))
+	variant, err := feature.FlagVariant(ctx, s.featureFlags, feature.FlagAssistantPlatformMCP, project.ID, feature.OrgProjectGroups(project.Slug, ""))
 	if err != nil {
-		s.logger.WarnContext(ctx, "evaluate assistant platform mcp flag", attr.SlogError(err))
-		return false
+		s.logger.WarnContext(ctx, "resolve assistant platform mcp variant", attr.SlogError(err))
+		return feature.VariantAssistantToolsLegacy
 	}
-	return enabled
+	return feature.AssistantToolsVariant(variant)
 }
 
 // turnUserID returns the Gram user whose identity a turn should act under.
