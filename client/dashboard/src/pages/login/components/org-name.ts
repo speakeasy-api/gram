@@ -35,15 +35,11 @@ const NON_GRAPHIC_REGEX = /[^\p{L}\p{M}\p{N}\p{P}\p{S}\p{Zs}\u200c\u200d]/u;
 const LETTER_OR_DIGIT_REGEX = /[\p{L}\p{N}]/gu;
 
 /**
- * Collapses every run of whitespace to a single space and trims the ends.
- *
- * Deliberately broader than the server, which only collapses `\p{Zs}` and
- * rejects a tab or newline outright: pasting a name out of a spreadsheet should
- * clean up rather than fail, and the form submits this result, so the server
- * never sees the characters it would refuse.
+ * Collapses Unicode space separators and trims ASCII spaces. Other whitespace
+ * remains intact so validation can reject controls just like the server does.
  */
 export function normalizeOrgName(value: string): string {
-  return value.replace(/\s+/gu, " ").trim();
+  return value.replace(/\p{Zs}+/gu, " ").replace(/^ +| +$/gu, "");
 }
 
 /** The error to show for `value`, or undefined when it is acceptable. */

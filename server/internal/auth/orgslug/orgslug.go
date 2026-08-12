@@ -45,14 +45,17 @@ func Base(name string) (string, error) {
 }
 
 // StableBase applies the same floor as Base but falls back to seed instead of
-// randomness, so repeated calls for one organization agree. Callers pass a
-// stable ASCII identifier such as a WorkOS organization ID; a seed that itself
-// slugifies to fewer than minSlugChars characters cannot produce a usable base.
-func StableBase(name, seed string) string {
+// randomness, so repeated calls for one organization agree.
+func StableBase(name, seed string) (string, error) {
 	if s := Slugify(name); len(s) >= minSlugChars {
-		return s
+		return s, nil
 	}
-	return Slugify(seed)
+
+	fallback := Slugify(seed)
+	if len(fallback) < minSlugChars {
+		return "", fmt.Errorf("derive stable fallback slug from %q", seed)
+	}
+	return fallback, nil
 }
 
 const maxSlugAttempts = 10

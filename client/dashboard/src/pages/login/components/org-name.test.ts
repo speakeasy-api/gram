@@ -49,6 +49,10 @@ describe("validateOrgName", () => {
   );
 
   it.each([
+    ["a newline", "Acme\nInc"],
+    ["a tab", "Acme\tInc"],
+    ["a line separator", "Acme\u2028Inc"],
+    ["a byte-order mark", "Acme\ufeffInc"],
     ["a bidi override", "Acme\u202eInc"],
     ["a zero-width space", "Acme\u200bInc"],
     ["a private-use code point", "Acme\uf8ffInc"],
@@ -94,9 +98,14 @@ describe("normalizeOrgName", () => {
     ["Acme   Inc", "Acme Inc"],
     ["Acme\u00a0Inc", "Acme Inc"],
     ["字节\u3000跳动", "字节 跳动"],
-    ["Acme\nInc", "Acme Inc"],
-    ["Acme\tInc", "Acme Inc"],
   ])("normalizes %j to %j", (input, want) => {
     expect(normalizeOrgName(input)).toBe(want);
   });
+
+  it.each(["Acme\nInc", "Acme\tInc", "Acme\u2028Inc", "Acme\ufeffInc"])(
+    "preserves non-space-separator whitespace in %j for validation",
+    (input) => {
+      expect(normalizeOrgName(input)).toBe(input);
+    },
+  );
 });

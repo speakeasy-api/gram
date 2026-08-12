@@ -57,16 +57,25 @@ func TestBaseGeneratesWhenTheNameYieldsNoUsableSlug(t *testing.T) {
 func TestStableBaseUsesTheSlugWhenThereIsOne(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, "acme-inc", orgslug.StableBase("Acme Inc", "org_01HZACME"))
+	base, err := orgslug.StableBase("Acme Inc", "org_01HZACME")
+	require.NoError(t, err)
+	require.Equal(t, "acme-inc", base)
 }
 
-// StableBase must apply the same two-character floor as Base, so a name that
-// yields a single character falls back rather than becoming a one-letter slug.
 func TestStableBaseFallsBackToTheSeed(t *testing.T) {
 	t.Parallel()
 
 	for _, name := range []string{"", "顶尖科技", "アクメ株式会社", "X 株式会社", "- _ -"} {
-		require.Equal(t, "org-01hzacme", orgslug.StableBase(name, "org_01HZACME"),
-			"name %q must fall back to the seed", name)
+		base, err := orgslug.StableBase(name, "org_01HZACME")
+		require.NoError(t, err)
+		require.Equal(t, "org-01hzacme", base, "name %q must fall back to the seed", name)
 	}
+}
+
+func TestStableBaseRejectsAnUnusableSeed(t *testing.T) {
+	t.Parallel()
+
+	base, err := orgslug.StableBase("顶尖科技", "_")
+	require.ErrorContains(t, err, "stable fallback")
+	require.Empty(t, base)
 }
