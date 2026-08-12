@@ -1,6 +1,6 @@
 import { SettingsSection } from "@/components/detail/settings-section";
 import { RequireScope } from "@/components/require-scope";
-import { ErrorAlert } from "@/components/ui/Alert";
+import { Alert, AlertDescription, ErrorAlert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -12,6 +12,7 @@ import type { SkillVersion } from "@gram/client/models/components/skillversion.j
 import { useSkillVersionsInfinite } from "@gram/client/react-query/skillVersions.js";
 import { type Column, Table } from "@/components/ui/Table";
 import { lazy, Suspense, useEffect, useState } from "react";
+import { ErrorBoundary } from "react-error-boundary";
 import { useParams } from "react-router";
 import { RestoreSkillVersionDialog } from "./RestoreSkillVersionDialog";
 import { SkillValidationErrors } from "./SkillValidationErrors";
@@ -355,14 +356,24 @@ function VersionDiff({
         Diff · {older.canonicalSha256.slice(0, 8)} →{" "}
         {newer.canonicalSha256.slice(0, 8)}
       </Text>
-      <Suspense fallback={<div className="h-80 w-full" />}>
-        <SkillTextDiff
-          oldContent={older.content}
-          newContent={newer.content}
-          oldLabel={older.canonicalSha256.slice(0, 8)}
-          newLabel={newer.canonicalSha256.slice(0, 8)}
-        />
-      </Suspense>
+      <ErrorBoundary
+        fallback={
+          <Alert variant="warning">
+            <AlertDescription>
+              Unable to load the diff. Try again.
+            </AlertDescription>
+          </Alert>
+        }
+      >
+        <Suspense fallback={<div className="h-80 w-full" />}>
+          <SkillTextDiff
+            oldContent={older.content}
+            newContent={newer.content}
+            oldLabel={older.canonicalSha256.slice(0, 8)}
+            newLabel={newer.canonicalSha256.slice(0, 8)}
+          />
+        </Suspense>
+      </ErrorBoundary>
     </div>
   );
 }
