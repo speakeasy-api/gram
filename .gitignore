@@ -68,7 +68,6 @@ gram.code-workspace
 dist/
 **/.claude/settings.local.json
 **/.claude/.gram-install-prompted
-.vercel
 cover.*
 *gram.deploy.json
 .tmp-melange/
