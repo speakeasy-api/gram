@@ -8,15 +8,23 @@ set -euo pipefail
 # pystreams pins the spaCy model (en-core-web-lg) to a GitHub release asset, so
 # every sync that misses the uv cache fetches it straight from github.com.
 # GitHub intermittently refuses those connections — HTTP/2 "refused stream", or
-# a reset mid-transfer — and uv gives up after 3 attempts inside ~8s, which is
-# too short to ride out a refusal that clears in seconds. The result is CI jobs
-# failing for reasons unrelated to the change under test, including in the merge
-# queue where this task runs for every PR.
+# a reset mid-transfer — and uv's default budget of 3 in-process retries spans
+# only ~8s, too short to ride out a refusal that clears in seconds. The result
+# is CI jobs failing for reasons unrelated to the change under test, including
+# in the merge queue where this task runs for every PR.
 #
-# Retry the whole sync with exponential backoff, but only when the failure looks
-# like a transport problem: a genuine failure (a stale lockfile under --locked,
-# an unresolvable dependency) must still fail fast and loudly rather than
-# burning the backoff budget first.
+# Two layers of defense:
+#
+# 1. Raise uv's own per-request retry budget. Its backoff is exponential, so 6
+#    retries spans roughly a minute in-process (measured: 4 retries ≈ 16s).
+# 2. Re-run the whole sync with exponential backoff on top. A fresh process gets
+#    fresh connections, which in-process retries don't guarantee when an HTTP/2
+#    connection has gone bad.
+#
+# The outer retry only fires when the failure looks like a transport problem: a
+# genuine failure (a stale lockfile under --locked, an unresolvable dependency)
+# must still fail fast and loudly rather than burning the backoff budget first.
+export UV_HTTP_RETRIES="${UV_HTTP_RETRIES:-6}"
 attempts="${UV_SYNC_ATTEMPTS:-4}"
 delay="${UV_SYNC_RETRY_DELAY:-5}"
 
